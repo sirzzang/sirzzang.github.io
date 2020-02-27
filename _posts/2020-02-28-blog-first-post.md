@@ -1,6 +1,6 @@
 ---
 title : "블로그 시작하기"
-excerpt : "인생 첫 Studylog를 만들기었습니다."
+excerpt : "인생 최초로 blog를 만들었습니다."
 categories:
 - Blog
 tags:
