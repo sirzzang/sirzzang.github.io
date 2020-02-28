@@ -67,7 +67,7 @@ tags:
 
   
 
-![blog-BOJ10799](images/blog-BOJ10799.jpg)
+![blog-BOJ10799]({{site.url}}/assets/imageblog-BOJ10799.jpg)
 
 * 다시 접근한 풀이 방법은 다음과 같다.
   * 첫째, 오른쪽 괄호가 레이저인지, 쇠막대의 끝인지 판단한다. 바로 앞에 나오는 괄호의 형태를 보면 알 수 있다.
