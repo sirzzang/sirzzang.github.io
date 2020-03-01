@@ -65,7 +65,13 @@ tags:
 
   
 
-![blog-BOJ10799]({{ site.url }}/assets/images/blog-BOJ10799.jpg)
+  ![쇠막대기 문제 풀이]({{site.url}}/assets/images/blog-BOJ10799.jpg)
+
+  *싹 다 갈아 엎은(유산슬?) 풀이*
+
+  
+
+  
 
 * 다시 접근한 풀이 방법은 다음과 같다.
   * 첫째, 오른쪽 괄호가 레이저인지, 쇠막대의 끝인지 판단한다. 바로 앞에 나오는 괄호의 형태를 보면 알 수 있다.
@@ -83,20 +89,21 @@ tags:
 * 레이저의 끝을 나타내는 오른쪽 괄호이면, stack의 top을 pop하고, stack의 길이 만큼 조각의 개수를 누적한다. 쇠막대의 끝을 나타내는 오른쪽 괄호이면, stack의 top을 pop하고, 누적된 조각의 개수에 1을 더한다.
 
 ```python
-sticks = input()
+import sys
+sticks = sys.stdin.readline().strip('\n')
 
+stack = []
 pieces = 0
-left = 0
 
 for i in range(len(sticks)):
     if sticks[i] == "(":
-        left += 1
+        stack.append(sticks[i])
     else:
         if sticks[i-1] == "(": # 레이저("()")인 경우
-            left -= 1
-            pieces += left
+            stack.pop() # 레이저 짝 제거
+            pieces += len(stack)
         else: # 쇠막대의 끝인 경우
-            left -= 1 # 쇠막대 짝 제거
+            stack.pop() # 쇠막대 짝 제거
             pieces += 1
 
 print(pieces)
