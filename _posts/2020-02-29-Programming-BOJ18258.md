@@ -62,11 +62,11 @@ tags:
 
 ---
 
-* 문제를 처음 풀 때, 시간초과문제가 있었다.
+* 문제를 처음 풀 때, 시간초과 문제가 있었다.
 
   * [큐 2 FAQ](https://www.acmicpc.net/board/view/45080)를 참고하니, list에서 특정 위치에 있는 원소를 제거하면 안 된다는 말이 있었다. 큐의 pop에서 내가 구현한 `pop(0)`이 문제가 된다는 말인 것 같다.
   * 입력이 최대 2,000,000까지 들어오므로, 연산을 비효율적으로 구현하면 시간 초과가 난다. **O(1)의 시간복잡도**를 가지도록 풀이를 구현해야 한다.
-  * 시간복잡도가 무엇인지 정확하게 알지 못하지만, 일단 구글링을 통해 [Python 자료형별 시간복잡도](https://deepwelloper.tistory.com/72)를 알 수 있었다.  **시간복잡도가 O(1)인 `pop()`과 달리, `pop(특정 위치)`는 시간복잡도가 O(n)이다. ** 뒤에 있는 원소들을 일일이 왼쪽으로 미느라 시간이 낭비되기 때문이라고 한다.
+  * 시간복잡도가 무엇인지 정확하게 알지 못하지만, 일단 구글링을 통해 [Python 자료형별 시간복잡도](https://deepwelloper.tistory.com/72)를 알 수 있었다.  **시간복잡도가 O(1)인 `pop()`과 달리, `pop(특정 위치)`는 시간복잡도가 O(n)이다.** 뒤에 있는 원소들을 일일이 왼쪽으로 미느라 시간이 낭비되기 때문이라고 한다.
 
   
 
@@ -75,15 +75,15 @@ tags:
     * front_index : pop해 올 원소의 위치. 즉, 해당 queue에서 맨 앞 index.
     * queue_length : queue의 길이.
   * front_index와 queue_length가 영향을 미치는 연산을 생각한다. 
-    * pop : 스택 문제([BOJ 10828](https://www.acmicpc.net/problem/10828))와 달리, 실제로 원소를 빼지는 않는다. 연산이 수행될 때, front_index를 한 칸씩 뒤로 밀고, queue_length를 1씩 감소시킨다.
-    * size : queue_length를 그대로 출력한다.
-    * empty : queue_length가 0이면 1을, 아니면 0을 출력한다.
-    * front : front_index를 이용하여 queue 원소를 indexing한다.
-    * back : front_index + queue_length - 1이 가장 마지막에 있는 원소 위치가 된다. list의 index가 0부터 시작하므로, 1을 빼주어야 한다.
+    * _pop_ : 스택 문제([BOJ 10828](https://www.acmicpc.net/problem/10828))와 달리, 실제로 원소를 빼지는 않는다. 연산이 수행될 때, **front_index를 한 칸씩 뒤로 밀고, queue_length를 1씩 감소**시킨다.
+    * _size_ : queue_length를 그대로 출력한다.
+    * _empty_ : queue_length가 0이면 1을, 아니면 0을 출력한다.
+    * _front_ : front_index를 이용하여 queue 원소를 indexing한다.
+    * _back_ : **front_index + queue_length - 1이 가장 마지막에 있는 원소 위치가 된다**. list의 index가 0부터 시작하므로, 1을 빼주어야 한다.
 
   
 
-* 문제 풀이 과정에서 겪었던 다음과 같은 시행착오([217188ab](https://github.com/sirzzang/Baekjoon_problems/blob/master/큐%2C%20덱/큐_큐2_BOJ18258.py))를 겪었다.
+* 문제 풀이 과정에서 다음과 같은 시행착오([217188ab](https://github.com/sirzzang/Baekjoon_problems/blob/master/큐%2C%20덱/큐_큐2_BOJ18258.py))를 겪었다.
 
 
 
@@ -253,11 +253,11 @@ for i in clist:
 		deq.append(i[1])
 ```
 
-* collections 모듈에서 deque를 import했다. 실제 코딩테스트에서 모듈을 import할 수 있을지는 더 알아봐야 겠지만, deque에 대해서 알아볼 필요는 있다고 본다.
+* collections 모듈을 import해 deque를 사용했다. 실제 코딩테스트에서 모듈을 import할 수 있을지 몰라서, 내장함수와 자료구조만으로 구현하는 방식을 사용했는데, deque를 사용해도 되는지 알아봐야 겠다.
 
 
 
 ## 배운 점, 더 생각해 볼 것
 
-* [시간복잡도](https://www.ics.uci.edu/~pattis/ICS-33/lectures/complexitypython.txt), [빅오표기법](https://brenden.tistory.com/2) 공부하자.
+* [시간복잡도](https://www.ics.uci.edu/~pattis/ICS-33/lectures/complexitypython.txt), [Big-O표기법](https://brenden.tistory.com/2) 공부하자.
 * [deque](https://dongdongfather.tistory.com/72) 공부하자.
