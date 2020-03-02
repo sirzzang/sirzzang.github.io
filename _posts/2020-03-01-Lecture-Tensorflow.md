@@ -35,5 +35,5 @@ last_modified_at: 2020-03-01
 ## DeepLearning
 
 1. Deep Learning 기초
-2. [Convolutional Neural Network]({{site.url}}//Lecture/Tensorflow-CNN-concept/)
+2. [Convolutional Neural Network]({{site.url}}/til/Lecture-Tensorflow-CNN-concept/)
 
