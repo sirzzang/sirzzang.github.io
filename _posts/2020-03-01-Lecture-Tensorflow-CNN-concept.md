@@ -7,9 +7,12 @@ header:
   teaser: /assets/images/blog-Lecture-Tensorflow.jpg
 
 categories:
-  - TIL
+  - LECTURE
 tags:
-  - 학습 과정
+  - Python
+  - Deep Learning
+  - CNN
+  - Tensorflow
 last_modified_at: 2020-03-01
 ---
 

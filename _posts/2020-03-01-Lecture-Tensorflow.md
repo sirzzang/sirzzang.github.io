@@ -7,9 +7,12 @@ header:
   teaser: /assets/images/blog-Lecture-Tensorflow.jpg
 
 categories:
-  - TIL
+  - LECTURE
 tags:
-  - 학습 과정
+  - Python
+  - Machine Learning
+  - Deep Learning
+  - 멀티캠퍼스
 last_modified_at: 2020-03-01
 ---
 
@@ -35,5 +38,5 @@ last_modified_at: 2020-03-01
 ## DeepLearning
 
 1. Deep Learning 기초
-2. [Convolutional Neural Network]({{site.url}}/til/Lecture-Tensorflow-CNN-concept/)
+2. [Convolutional Neural Network]({{site.url}}/lecture/Lecture-Tensorflow-CNN-concept/)
 
