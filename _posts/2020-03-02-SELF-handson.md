@@ -45,7 +45,7 @@ last_modified_at: 2020-03-02
 
 ## Part 1. 머신러닝
 
-1. 한눈에 보는 머신러닝
+1. [한눈에 보는 머신러닝]({{site.url}}/self/SELF-handson-chap1/)
 2. 머신러닝 프로젝트 처음부터 끝까지
 3. 분류
 4. 모델 훈련
