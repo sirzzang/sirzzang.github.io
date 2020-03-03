@@ -47,11 +47,19 @@ last_modified_at: 2020-03-02
 
 1. [한눈에 보는 머신러닝]({{site.url}}/self/SELF-handson-chap1/)
 2. 머신러닝 프로젝트 처음부터 끝까지
+   * 실습 파일
+   * [머신러닝 프로젝트 체크리스트]({{site.url}}/self/SELF-handson-ml-checklist/)
+
 3. 분류
+
 4. 모델 훈련
+
 5. 서포트 벡터 머신
+
 6. 결정 트리
+
 7. 앙상블 학습과 랜덤 포레스트
+
 8. 차원 축소
 
 
