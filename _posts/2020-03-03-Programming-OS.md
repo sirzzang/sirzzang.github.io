@@ -1,0 +1,60 @@
+---
+title:  "[Python] OS 모듈 정리"
+excerpt: "OS 모듈의 주요 사용법을 정리합니다."
+toc: true
+toc_sticky: true
+header:
+  teaser: /assets/images/blog-Programming.jpg
+
+categories:
+  - Programming
+tags:
+  - Python
+  - OS
+last_modified_at: 2020-03-03
+---
+
+
+
+
+
+
+
+# _"OS 사용법 정리"_
+
+> 공모전을 진행하거나 책을 보며 자습할 때, 가장 많이 보이는 모듈 중 하나로 OS가 있습니다.  [OS 모듈](https://docs.python.org/3/library/os.html)은 컴퓨터의 운영체제에서 제공되는 여러 기능을 Python에서 수행할 수 있도록 하는 기본 모듈입니다.
+>
+> 특히, 파일이나 폴더를 다룰 때에 이 모듈이 유용하게 쓰이기 때문에, 찾아보고 정리해두려 합니다.
+
+
+
+*이 글이 마지막으로 수정된 시각은 {{ page.last_modified_at }} 입니다.*
+
+
+
+
+
+## 경로 구하기
+
+* os.getcwd() : 현재 경로.
+* os.listdir() : 특정 경로에 존재하는 파일과 디렉터리 목록.
+  * 인자를 전달하지 않을 경우 현재 경로의 목록 반환.
+  * 인자로 경로를 전달할 경우, 해당 경로의 목록 반환.
+
+
+
+## os.path
+
+> 코드 내에서 직접 파일을 다루는 경우 사용. 경로 반환, 추출 등 파일, 디렉토리 경로와 관련된 함수 제공([참고](https://yeo0.github.io/pg/2018/11/21/%ED%8C%8C%EC%9D%B4%EC%8D%AC-os.path-%EB%AA%A8%EB%93%88/)).
+
+
+
+* os.path.abspath() : 절대경로 반환. 인자로 파일 혹은 폴더 이름 전달.
+* os.path.basename() : 경로의 기본 이름 반환. 절대경로를 인자로 전달.
+* os.path.dirname() : 파일/디렉토리 경로 반환.
+* os.path.exists() : 입력 받은 경로가 존재하면 `True`, 아니면 `False` 반환. **코드 내에 파일 저장 명령이 이미 존재할 때, 파일 저장을 반복적으로 진행하는 것을 막기 위해 사용**.
+* os.path.isdir() : 입력 인자가 디렉토리이면 `True`, 아니면 `False` 반환.
+  * isfile() : 파일인지 확인.
+  * isabs() : 절대경로인지 확인.
+* os.path.join() : 각각의 경로를 하나로 이어줌.
+* os.path.split() : directory와 파일로 분리.
