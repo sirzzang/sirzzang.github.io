@@ -10,7 +10,7 @@ categories:
   - Programming
 tags:
   - Python
-last_modified_at: 2020-03-01
+last_modified_at: 2020-03-03
 ---
 
 
@@ -31,7 +31,7 @@ last_modified_at: 2020-03-01
 
 
 
-## 1) 입출력
+## 1. 입출력
 
 ---
 
@@ -62,7 +62,7 @@ last_modified_at: 2020-03-01
 
 
 
-## 2) 자료구조
+## 2. 자료구조
 
 ---
 
@@ -138,7 +138,7 @@ last_modified_at: 2020-03-01
 
 
 
-## 3) 함수
+## 3. 함수
 
 ### map
 
@@ -263,7 +263,16 @@ last_modified_at: 2020-03-01
 
   
 
+## 4. 기타
 
+
+
+### any, all을 사용한 조건문
+
+* if any(*조건* for element in iterable) : iterable 안의 element 중 하나라도 조건을 만족한다면,
+* if all(*조건* for element in iterable) : iterable의 모든 element가 조건을 만족한다면,
+
+ 
 
 
 

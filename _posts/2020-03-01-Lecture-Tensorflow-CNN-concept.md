@@ -7,7 +7,7 @@ header:
   teaser: /assets/images/blog-Lecture-Tensorflow.jpg
 
 categories:
-  - LECTURE
+  - Lecture
 tags:
   - Python
   - Deep Learning

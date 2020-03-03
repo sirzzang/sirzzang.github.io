@@ -49,7 +49,7 @@ N과 K가 주어지면 (N, K)-요세푸스 순열을 구하는 프로그램을 �
 
 ---
 
-* 처음에는 문제를 제대로 이해하지 못했다([b0b4edd](https://github.com/sirzzang/Baekjoon_problems/commit/b0b4eddca9f7f70a4c92eaded93c9ed09a5c301e)).
+* 처음에는 문제를 제대로 이해하지 못했다([b0b4edd](https://github.com/sirzzang/Baekjoon_problems/commit/53b2496ac902e9ea35993b4de349e1590b0276b7).
   * 제거하는 사람의 index를 저장하고, 그 앞에 사람들까지를 queue에 push해서 풀면 될 거라고 생각했다.
   * 그 동안 queue 문제를 풀 때 시간 제한 문제가 있었기 때문에, 이전과 같이 front_index, queue_length를 이용해 구현하고자 했다.
   * 마지막에 남은 사람들이 k보다 작을 때 index error가 난다는 것을 발견했고, 예제 입력, 출력만 보고 남은 사람들을 순서대로 작성했다.
