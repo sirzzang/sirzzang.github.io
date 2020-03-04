@@ -2,6 +2,8 @@
 title: "About My Studylog"
 permalink: /about/
 layout: single
+header:
+	image: /assets/images/blog-title.jpg
 ---
 
 
@@ -13,3 +15,4 @@ layout: single
 
 
 강의, 자습을 통해 새롭게 깨달은 내용, 공부한 내용을 정리하는 `Studylog`입니다. 기억보다는 기록을 통해, 조금씩 나아지는 삶을 살기 위해 시작했습니다.
+

@@ -46,10 +46,11 @@ last_modified_at: 2020-03-02
 ## Part 1. 머신러닝
 
 1. [한눈에 보는 머신러닝]({{site.url}}/self/SELF-handson-chap1/)
-2. 머신러닝 프로젝트 처음부터 끝까지
-   * 실습 파일
+2. [머신러닝 프로젝트 처음부터 끝까지]({{site.url}}/self/SELF-handson-chap2/)
    * [머신러닝 프로젝트 체크리스트]({{site.url}}/self/SELF-handson-ml-checklist/)
-
+   * [실습 파일](https://github.com/sirzzang/Hands-on-Machine-Learning/blob/master/handon-ml-chap2-ML_endtoend_housing.ipynb)
+* 연습문제 풀이
+   
 3. 분류
 
 4. 모델 훈련
