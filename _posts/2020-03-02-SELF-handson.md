@@ -50,7 +50,7 @@ last_modified_at: 2020-03-02
    * [머신러닝 프로젝트 체크리스트]({{site.url}}/self/SELF-handson-ml-checklist/)
    * [실습 파일](https://github.com/sirzzang/Hands-on-Machine-Learning/blob/master/handon-ml-chap2-ML_endtoend_housing.ipynb)
 * 연습문제 풀이
-   
+  
 3. 분류
 
 4. 모델 훈련
