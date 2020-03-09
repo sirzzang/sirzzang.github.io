@@ -20,9 +20,9 @@ last_modified_at: 2020-03-08
 
 # AI프렌즈 온도 추정 경진대회 기본 모델링_1
 
-[작업 파일 1 : label 만들기]([https://github.com/sirzzang/data_competition/blob/master/%5Btemperature%5DY18_fillna_byStats.ipynb](https://github.com/sirzzang/data_competition/blob/master/[temperature]Y18_fillna_byStats.ipynb))
+[작업 파일 1 : label 만들기](https://github.com/sirzzang/data_competition/blob/master/[temperature]Y18_fillna_byStats.ipynb)
 
-[작업 파일 2 : 평균값으로 채운 훈련세트에 대해 모델링 진행 후 점수 확인]()
+[작업 파일 2 : 채운 훈련세트에 대해 모델링 진행 후 점수 확인]()
 
 [작업 파일 3 : 중간값으로 채운 훈련세트에 대해 모델링 진행 후 점수 확인]()
 

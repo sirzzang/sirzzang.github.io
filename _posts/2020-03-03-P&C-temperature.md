@@ -44,9 +44,9 @@ last_modified_at: 2020-03-03
 
 ## 개인 작업 진행 내용
 
-0. [개인 데이터 탐색]({{site.url}}p&c/P&C-temperature-data-exploration1/)
+0. [개인 데이터 탐색]({{site.url}}/p&c/P&C-temperature-data-exploration1/)
 
-1. [Y18 label 채운 후 기본 모델링]({{site.url}}p&c/P&C-temperature-raw-modeling1/)
+1. [Y18 label 채운 후 기본 모델링]({{site.url}}/p&c/P&C-temperature-raw-modeling1/)
 
 
 
