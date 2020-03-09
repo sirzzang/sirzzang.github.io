@@ -1,6 +1,6 @@
 ---
 title:  "[DACON] AI프렌즈 시즌1 온도 추정 경진대회"
-excerpt: "한 줄 요약 : 핸즈온 머신러닝 책으로 공부한 내용입니다."
+excerpt: "세 번째 DACON 공모전 참여"
 toc: true
 toc_sticky: true
 categories:
@@ -24,8 +24,6 @@ last_modified_at: 2020-03-03
 
 
 
-세 번째로 참여하는 DACON 공모전입니다.
-
 개인 작업 진행 내용과 회의 내용을 나누어 정리합니다.
 
 공모전이 마무리된 뒤, 가채점 순위와 최종 순위 및 소감을 정리할 예정입니다.
@@ -46,9 +44,9 @@ last_modified_at: 2020-03-03
 
 ## 개인 작업 진행 내용
 
-0. [개인 데이터 탐색]({{site.url}}/P&C/P&C-temperature-data-exploration1/)
+0. [개인 데이터 탐색]({{site.url}}p&c/P&C-temperature-data-exploration1/)
 
-1. [Y18 label 채운 후 기본 모델링]({{site.url}}/P&C/P&C-temperature-raw-modeling1/)
+1. [Y18 label 채운 후 기본 모델링]({{site.url}}p&c/P&C-temperature-raw-modeling1/)
 
 
 
