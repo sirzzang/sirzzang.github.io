@@ -2,8 +2,7 @@
 title: "About My Studylog"
 permalink: /about/
 layout: single
-header:
-	image: /assets/images/blog-header.jpeg
+
 ---
 
 
