@@ -2,16 +2,15 @@
 title: "[DACON] AI프렌즈 시즌1 온도 추정 경진대회 - 데이터 탐색_1"
 excerpt: 온도 추정 경진대회의 데이터 탐색 내용입니다.
 categories:
-
 - P&C
-  toc : true
-  tags:
+toc : true
+tags:
 - 공모전
 - 데이터탐색
 - 기후
 - 온도
 - 센서
-  last_modified_at: 2020-03-04
+last_modified_at: 2020-03-04
 ---
 
 
