@@ -20,9 +20,13 @@ last_modified_at: 2020-03-08
 
 # AI프렌즈 온도 추정 경진대회 기본 모델링_1
 
-[작업 파일 1 : label 만들기](https://github.com/sirzzang/data_competition/blob/master/[temperature]Y18_fillna_byStats.ipynb)
+[작업 파일 1](https://github.com/sirzzang/data_competition/blob/master/[DACON]온도추정경진대회/[temperature]Y18_fillna_byStats.ipynb) : label 만들기
 
-[작업 파일 2 : 채운 훈련세트에 대해 모델링 진행 후 점수 확인]()
+[작업 파일 2](https://github.com/sirzzang/data_competition/blob/master/[DACON]온도추정경진대회/[temperature]test_modeling_1(Y18_mean).ipynb) : 평균값으로 채운 훈련세트에 대해 모델링 진행 후 점수 확인
+
+​	\- [작업파일 2-1](https://github.com/sirzzang/data_competition/blob/master/%5BDACON%5D%EC%98%A8%EB%8F%84%EC%B6%94%EC%A0%95%EA%B2%BD%EC%A7%84%EB%8C%80%ED%9A%8C/%5Btemperature%5Dtest_modeling_2(Y18_mean).ipynb) : 평균값 + id를 시간으로 바꾸고 모델링 진행 후 점수 확인.
+
+​	\- 작업파일 2-2 : 평균값 + id를 시간으로 바꾸고 + 누적 강수량, 일사량 해체 후 점수 확인. 
 
 [작업 파일 3 : 중간값으로 채운 훈련세트에 대해 모델링 진행 후 점수 확인]()
 
@@ -203,55 +207,86 @@ last_modified_at: 2020-03-08
 
 
 
-**id 빼놓고 진행해서 다시 했다. 정신을 차리자!**
-
-
-
 1. Decision Tree Model
    * 파라미터 탐색은 진행하지 않았다. Random Forest 모델에서 파라미터 탐색을 하는 것이 나을 것이라 판단했다.
-   * 10겹 교차검증을 진행한 결과, 음의 MSE 점수가 -1.3789 정도였다.
+   * 10겹 교차검증을 진행한 결과, neg MSE 점수가 -1.3789 정도였다.
 
 
 
 2. Random Forest Model
 
+   2-1. 처음에 id를 넣고 학습을 진행했다. 
+
    * 파라미터 탐색을 진행했다.
-
+   
      * `n_estimators` : 200, 500, 1000.
-     * `max_features` : 20, 30, 40.
-     * `bootstrap` : True, False. 다만, False일 경우 n_estimators가 200인 경우는 제외했다.
-
+  * `max_features` : 20, 30, 40.
+     
+* `bootstrap` : True, False. 다만, False일 경우 n_estimators가 200인 경우는 제외했다.
+     
    * 가장 좋은 파라미터 조합으로 `bootstrap`은 `False`, `n_estimators`가 500, `max_features`가 20인 것으로 나왔다. 이 때의 모델을 저장한다.
-
+   
      * `bootstrap` 옵션은 확실히 False일 때가 좋아 보인다. 유의미하게 score가 상승한다. 그러나, `max_features`가 40, 즉, 모든 feature를 다 사용할 때는 score가 확 커진다. 
-     * `max_features` 옵션 역시, 20개 전후가 가장 좋아 보인다. 모든 경우에 대해서 30, 40개일 때보다 20개일 때가 더 점수가 좋다.
-     * `n_estimators` 옵션은 일단 많다고 좋은 것 같지는 않다. 200에서 500으로 갈 때는 점수가 상승하나, 500에서 1000으로 갈 때 유의미하게 점수가 좋아지지는 않는다.
-
+  * `max_features` 옵션 역시, 20개 전후가 가장 좋아 보인다. 모든 경우에 대해서 30, 40개일 때보다 20개일 때가 더 점수가 좋다.
+     
+* `n_estimators` 옵션은 일단 많다고 좋은 것 같지는 않다. 200에서 500으로 갈 때는 점수가 상승하나, 500에서 1000으로 갈 때 유의미하게 점수가 좋아지지는 않는다.
+     
    * 가장 좋은 파라미터 조합에서 bootstrap은 고정시켜 놓고, n_estimators와 max_features를 바꿔 가며 최적의 파라미터 조합을 테스트했다.
 
      * `n_estimators` = 500으로 고정하고, `max_features`를 10에서 30까지 바꿨다. 
+     
+        * 확실히, feature 수가 많을수록 검증 set에서 성능이 하락한다.
+       * 그 결과, `max_features` = 12일 때 가장 좋았으며, train_score와 test_score의 변화는 다음과 같다. train_score의 점수와 test_score의 점수가 굉장히 다른 것을 보니, **과적합**이 있는 것 같다.
 
-       * 확실히, feature 수가 많을수록 검증 set에서 성능이 하락한다.
-       * 그 결과, ???일 때 가장 좋았으며, train_score와 test_score의 변화는 다음과 같다. train_score의 점수와 test_score의 점수가 굉장히 다른 것을 보니, 과적합이 있는 것 같다.
+       ![overfitting?]({{site.url}}/assets/images/adjusting_max_features_0.png)
 
-       (그림)
-
-       * 특성 중요도를 파악한 결과, 다음과 같았다.
-
-       (표)
+       * 특성 중요도를 파악한 결과, 대부분이 기온, 습도였다. *강한 상관관계*가 있다고 드러난 속성들이었기 때문에, **Random Forest 모델에서도 중요한 특성으로 이들을 선택하는 것이 흥미로웠다.**
 
 
+   2-2. 문득, 특성 중요도를 파악하다, id를 넣고 학습시킨 것을 발견했다. 급한 마음에 처음부터 학습을 다시 시켰으나, 갑자기 다음과 같은 궁금증이 떠올랐다.
 
-id까지 넣고 같이 돌려보면???????????????????
+   >  **"*id를 시간을 나타내는 특성으로서 활용하면 되지 않을까? 왜 id가 학습에 중요한 것으로 나타났을까?*"**
 
-
-
+   2-3. 일단 id를 제외하고 위의 과정을 반복했다. 그런데 2-1의 best parameter 조합에서는 -0.30으로 나타나던 mean_test_score가 갑자기 -0.35가 되었다. DACON 리더보드에 올린 결과, **5.4197504594점**이 나왔다.
 
 
 
+* baseline 코드가 6.6435191177점이었다는 것을 감안하면, 더 높게 나온 리더보드 점수로 감안할 때, Random Forest 모형을 사용해 회귀를 진행한 것이 크게 틀린 방향은 아니었다.
+* 여전히 id를 뺀 후에 점수가 낮아진 것에 미련이 남는다. 혹시 id를 포함한다면, 혹은 id를 다른 방식으로 변환하여 학습에 사용한다면 점수가 높아질 수 있지 않을까?
 
 
 
+3. Linear Regression Model
+   * 기본 파라미터로, 모든 특성을 활용해 학습을 진행했다.
+   * 10겹 교차검증을 통해 얻은 neg_MSE 점수가 Random Forest 모델보다 낮게 나와 더 작업을 진행하지 않았다.
+
+
+
+4. SVR Model
+   * kernel = linear로 설정했다.
+   * `C`, `gamma` 값을 조정해 grid search를 진행했는데, 시간이 무척(x100) 오래 걸린다.
+   * 10겹 교차검증을 진행한 결과 neg_MSE 점수가 -2.23점 정도였다. Linear Regression Model과 크게 다르지 않았다. 그런데 test set에 넣었을 때 점수가 무려(...!) *7492095.366064896점*이 나왔다. 도대체 무슨 일인지 어디서 잘못된 것 같다.
+
+
+
+
+
+# 느낀 점
+
+소기의 성과가 있었으나 여전히 과적합이 있고, feature engineering이 진행되지 않았다. 차원 축소, 특성 조합 등의 방법을 생각해보아야 한다.
+
+
+
+
+
+# 더 진행해야 할 작업
+
+* 중간값으로 채운 파일에 대해 동일한 작업 진행하기.
+* 서포트 벡터 머신 회귀 모형 조정하기. + PCA 적용할 수 있는지 공부해 보기.
+* 코드 함수화, 파이프라인화하기.
+* 조금 더 깊은 단계의 회귀 모형 찾아보기.
+* 시각화 단계 다시 돌아가서 진행하기.
+* 베이스라인 코드 뜯어 보기.
 
 
 
@@ -260,7 +295,8 @@ id까지 넣고 같이 돌려보면???????????????????
 
 # 논의하고 싶은 내용
 
-
+* 10분 간격으로 측정된 데이터이고, id가 측정된 분 단위를 나타내므로 시각을 나타낼 수 있지 않을까? 예컨대, id가 144개씩 묶이면 하루가 되기 때문에, id를 144로 나눠서 나머지가 작으면 아침이고, 크면 밤이라고 생각할 수 있을 것이다. 그렇다면 이것은 기온, 나아가 측정 온도에 영향을 미칠 수 있지 않을까?
+* 베이스라인 코드가 Y15, Y16 속성을 활용해 Y18을 예측했다. 이를 발전시킬 수는 없을까?
 
 
 
