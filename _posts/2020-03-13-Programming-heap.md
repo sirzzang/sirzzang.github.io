@@ -94,9 +94,9 @@ tags:
 
 종종 완전이진트리를 검색하면, 포화이진트리가 나오는데, 둘은 엄연히 다른 개념이다. 
 
-|           완전이진트리<br />(Complete Binary Tree)           |           포화 이진 트리<br />(Full Binary Tree)           |
-| :----------------------------------------------------------: | :--------------------------------------------------------: |
-| ![완전이진트리]({{site.url}}/assets/images/completebinary.png) | ![포화이진트리]({{site.url/assets/images/fullbinary.png}}) |
+|           완전이진트리<br />(Complete Binary Tree)           |            포화 이진 트리<br />(Full Binary Tree)            |
+| :----------------------------------------------------------: | :----------------------------------------------------------: |
+| ![완전이진트리]({{site.url}}/assets/images/completebinary.png) | ![포화이진트리]({{site.url}}/assets/images/fullbinary.png}}) |
 
 <sup>그림 출처 : https://ratsgo.github.io/data%20structure&algorithm/2017/10/21/tree/ </sup>
 
