@@ -380,8 +380,8 @@ def Partition(a, begin, end):
 
 
 <details>
-    <summary>접기/펼치기</summary>
-    <div markdown="1">
+<summary>접기/펼치기</summary>
+<div markdown="1">
 
 ```python
 
@@ -410,10 +410,7 @@ def Partition(a, begin, end):
 ```
 
 
-​       
-​    
-​    </div>
-
+</div>
 </details>
 
 
