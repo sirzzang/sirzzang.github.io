@@ -49,7 +49,7 @@ tags:
 
 # 파이썬으로 구현하는 알고리즘_정렬 알고리즘
 
-
+</br>
 
 
 
@@ -65,14 +65,21 @@ tags:
 | :------: | :------: | :------: | :-----------: | :------------------------------------------------ | ----------- |
 |   버블   |  O(n^2)  |  O(n^2)  |  비교, 교환   | 코딩이 가장 쉬움.                                 | 안정        |
 |   선택   |  O(n^2)  |  O(n^2)  |  비교, 교환   | 교환의 횟수가 버블, 삽입보다 적음.                | 불안정      |
-|    퀵    | O(nlogn) |  O(n^2)  |   분할 정복   | 최악의 경우 O(n^2)이지만, 평균적으로는 가장 빠름. | 불안정      |
 |   삽입   |  O(n^2)  |  O(n^2)  |  비교, 교환   | n의 개수가 적을 때 효과적.                        | 안정        |
+|    퀵    | O(nlogn) |  O(n^2)  |   분할 정복   | 최악의 경우 O(n^2)이지만, 평균적으로는 가장 빠름. | 불안정      |
 |   병합   | O(nlogn) | O(nlogn) |   분할 정복   | 연결 리스트의 경우 가장 효율적.                   | 안정        |
 |  카운팅  |  O(n+k)  |  O(n+k)  |    비교환     | n이 비교적 작을 때만 가능.                        | 안정        |
 
 
 
  일단 위에 등장하지 않은 정렬에 대해서는 [여기](https://ratsgo.github.io/data%20structure&algorithm/2017/10/19/sort/)를 참고하며 공부하자.
+
+
+
+</br>
+
+</br>
+
 
 
 
@@ -97,6 +104,8 @@ tags:
  입력 리스트 내부에서 정렬이 이루어지는 알고리즘이다. 정렬 도중 별도 저장 공간을 필요로 하지 않는다.
 
 
+
+</br>
 
 
 
@@ -252,7 +261,7 @@ def SelectAlgorithm(list, k):
 
 ```python
 def SelectionSort(a):
-    for i in range(0, len(a)-1):
+    for i in range(len(a)-1):
         min_idx = i
         # 최솟값 인덱스 찾기
         for j in range(i+1, len(a)):
@@ -262,6 +271,35 @@ def SelectionSort(a):
         a[i], a[min_idx] = a[min_idx], a[i]
     return a
 ```
+
+
+
+## 삽입 정렬
+
+
+
+연결 리스트를 사용한 정렬 방법.
+
+도서관 사서가 책을 정렬할 때 일반적으로 활용되는 정렬 방식.
+
+자료 배열의 모든 원소들을 앞에서부터 차례대로 이미 정렬된 부분과 비교하여, 자신의 위치를 찾아냄으로써 정렬 완성.
+
+삽입 정렬 과정
+
+정렬할 자료를 부분집합 S, U로 나눔.
+
+- S: 정렬된 앞 부분 원소들
+- U : 아직 정렬되지 않은 나머지 우너소들
+
+저ㅗㅇ렬되지 않은 부분집합 U의 원소를 하나씩 꺼내서 이미 정렬되어 있는 부분집합 S의 마지막 원소부터 비교하면서 위치 찾아 삽입. 
+
+반복.
+
+삽입 정렬을 반복하면서 부분집합 S의 원소는 하나씩 늘리고 부분집합 U의 원소는 하나씩 감소.
+
+부분집합 U가 공집합이 되면 삽입정렬 완성.
+
+
 
 
 
@@ -279,7 +317,7 @@ def SelectionSort(a):
 
 
 
-![quick sort]({{site.url}}/assets/images/quick-sort.png)
+![quick sort]({{site.url}}/assets/images/quick-sort.png){: width="70%" height="70%"}
 
 <center><sup>이미지 출처 : https://www.fun-coding.org/Chapter12-selectionsorting.html</sup></center>
 
@@ -377,11 +415,8 @@ def Partition(a, begin, end):
 
  위와 같은 내용을 아래와 같이 구현할 수도 있다.
 
-<details>
-    <summary> 접기/펼치기 </summary>
-    <div markdown ="1">
 ```python
-  def QuickSort(a, begin, end):
+def QuickSort(a, begin, end):
 	if begin < end :
     	p = Partition(a, begin, end)
    		QuickSort(a, begin, p-1)
@@ -404,15 +439,6 @@ def Partition(a, begin, end):
     a[pivot_idx], a[R] = a[R], a[pivot_idx]
     return R 
 ```
-    </div>
-
-
-</details>
-
-
-
-
-
 
 
 
@@ -443,6 +469,118 @@ def QuickSort(a):
 
 
 
+## 병합 정렬
+
+
+
+여러 정렬된 자료의 집합을 병합해ㅔ 한 개의 정렬된 집합으로 만듦.
+
+분할정복 알고리즘 활용
+
+자료를 최소 단위 문제까지 나눈 후 차례대로 정렬하여 최종 결과를 얻음. top-down 접근 방식.
+
+O(nlogn)
+
+연결 리스트 사용해 구현.
+
+
+
+동작 과정
+
+1. 분할 : 전체 자료 집합을 최소 부분집합이 될 때까지 분할 작업 계속 진행.
+
+(그림)
+
+2. 병합 : 2개의 부분집합을 정렬하면서 하나의 집합으로 병합. 모든 부분집합이 1개로 병합될 때까지 반복.
+
+(그림)
+
+
+
+69 10 30 2 16 8 31 22를 병합 정렬하는 과정
+
+분할
+
+전체 자료 집합에 대해 최소 크기 부분집합이 될 때까지 분할 작업 계속 : 크기가 1인 부분집합이 될 때까지 : 69 10 30 2 16 8 31 22
+
+병합
+
+2개의 부분집합을 정렬하면서 하나의 집합으로 병합
+
+10 69 / 2 30/ 8 16/ 22 31/
+
+2 10 30 69/ 8 16 22 31
+
+2 8 10 16 22 30 31 69
+
+
+
+
+
+알고리즘
+
+분할: 재귀 호출 과정에서는 리스트의 길이가 1인 경우와 아닌 경우를 구분. 리스트의 경우가 1이면 종료 조건으로 입력된 리스트 그대로 반환. 길이가 1이 될 때까지 병합정렬 재귀 호출.
+
+그렇지 않다면 분할에서 오른쪽과 왼쪽에 대해 재귀 호출.
+
+그 결과로 반환된 리스트는 정렬된 상태가 된다.
+
+두 개의 리스트를 머지 함수를 이용해 하나의 리스트로 반환.
+
+
+
+```python
+def MergeSort(a):
+    if len(a) <= 1: # 사이즈가 0이나 1인 경우 바로 리턴.
+        return a
+    
+    # 1. 분할 부분
+    mid = len(a)//2
+    left = a[:mid]
+    right = a[mid:]
+    # 리스트의 길이가 1이 될 때까지 재귀 호출
+    left = MergeSort(left)
+    right = MergeSort(right)
+    
+    # 2. 정복 부분 : 분할된 리스트 병합
+    return Merge(left, right)
+```
+
+
+
+병합
+
+병합 과정 구현 시 사용되는 리스트 자료 구조로는 배열리스트와 연결리스트가 있음. 배열 사용 시 분리/병합 과정에서 빈번한 자료 비교 연산과 이동 연산 발생으로 비효율적. 따라서 연결 리스트로 구현함으로써 배열 사용시 단점 극복하여 효과적인 극복 가능.
+
+
+
+연결 리스트로 저장된 자료들에 대한 병합 과정
+
+```python
+def Merge(left, right):
+    result = [] # 두 개의 분할된 리스트를 병합하여 result를 만듦.
+    
+    while len(left) > 0 and len(right) > 0 : # 양 쪽 리스트에 원소가 남아 있다면
+        # 두 하위 리스트의 첫 원소를 비교해 작은 것부터 result에 추가.
+        if left[0] <= right[0]:
+            result.append(left.pop(0))
+        else:
+            result.append(right.pop(0))
+            
+    if len(left) > 0 : # 왼쪽 리스트에 원소 남아 있으면
+        result.extend(left)
+    if len(right) > 0 : # 오른쪽 리스트에 원소 남아 있으면
+        result.extend(right)
+        
+    return result
+```
+
+
+
+
+
+
+
 
 
 
@@ -459,10 +597,10 @@ def QuickSort(a):
 
  정렬을 수행하는 방법은 다음과 같다.
 
-1. 항목의 개수를 저장할 COUNTS 배열을 만든다. 
+1. 항목의 개수를 저장할 **COUNTS 배열**을 만든다. 
    * 이 때 COUNTS를 세기 위한 충분한 공간을 할당하려면, 주어진  집합에서 가장 큰 정수를 알아야 한다.
    * 또한 COUNTS는 정수 항목들로 직접 인덱스되는 배열이어야 한다.
-2. 주어진 자료 집합(DATA)에서 각 항목 i가 총 몇 개 있는지 세고, COUNTS의 i번째 칸에 저장한다.
+2. 주어진 자료 집합(DATA)에서 **각 항목 i가 총 몇 개 있는지** 세고, **COUNTS의 i번째 칸에 저장**한다.
 3. COUNTS에서 앞에서 뒤로 가며, i번째 칸의 숫자를 i+1번째 칸에 누적한다. 이 조정 작업이 완료되면, COUNTS 배열의 값은 정렬 후 반환할 배열 TEMP에서 인덱스가 나타내는 i라는 항목이 TEMP 배열의 몇 번째 칸에 들어가야 하는지 보여준다.
 4. 주어진 집합 DATA의 마지막 항목부터 정렬한다.
    * 정렬해야 할 각 항목의 값을 i라고 한다.
@@ -512,31 +650,24 @@ def QuickSort(a):
 * 한 단계를 마치면 마지막에 정렬이 종료된 원소가 위차하므로, 단계를 거칠수록 정렬의 범위가 1씩 작아진다.
 
 ```python
-def CountingSort(A, k):
-    # A : 입력 리스트. 
-    # k: A의 항목 중 최댓값.
-    # TEMP : 정렬될 결과 리스트.
-    # COUNTS: 카운트 리스트.
-    
-    COUNTS = [0]*(k+1)
-    TEMP = [0]*len(A)
-    
-    # 개수 세서 COUNTS에 저장
+def CountingSort(A):
+
+    counts = [0] * (max(A)+1)
+    temp = [0] * len(A)
+
+    # 개수 세서 COUNTS에 저장.
     for a in A:
-        COUNTS[a] += 1
-    # 인덱스로 구현한다면 for i in A: C[A[i]] += 1와 동일
+        counts[a] += 1 # 인덱스로 구현한다면 for i in A: C[A[i]] += 1와 동일.
         
     # COUNTS 조정.
-    for i in range(1, len(COUNTS):
-       COUNTS[i] += COUNTS[i-1]
-    # for i in range(len(COUNTS)) : COUNTS[i+1] == COUNTS[i]와 동일
+    for i in range(len(counts)-1):
+        counts[i+1] += counts[i]
     
-    for i in range(len(TEMP)-1, -1, -1):
-        # reversed(range(len(TEMP)))와 동일
-        TEMP[COUNTS[A[i]]-1] = A[i]
-        COUNTS[A[i]] -= 1
+    for i in range(len(temp)-1, -1, -1): # reversed(range(len(TEMP)))와 동일
+        temp[counts[A[i]]-1] = A[i]
+        counts[A[i]] -= 1
     
-    return TEMP
+    return temp
 ```
 
 
