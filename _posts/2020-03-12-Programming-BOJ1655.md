@@ -221,5 +221,5 @@ for x in map(int, stdin):
 
 ## 배운 점, 더 생각해 볼 것
 
-* 문제를 낑낑대며 풀고 나니, 중간값 구하는 알고리즘이 있었다. 원래 중간값은 힙을 이용해 구하는 것이라 하는데, 알고리즘의 기본 아이디어가 내가 생각한 것과 비슷해서 기분이 좋았다.
+* 문제를 낑낑대며 풀고 나니, 중간값 구하는 알고리즘이 있었다. [그 중 하나](https://o-tantk.github.io/posts/finding-median/)가 힙을 이용해 구하는 것이라 하는데, 알고리즘의 기본 아이디어가 내가 생각한 것과 비슷해서 기분이 좋았다.
 * 다른 풀이에서 `next` 함수를 처음 보았다. [공부하면](https://dojang.io/mod/page/view.php?id=2408) [좋을 것](https://python.bakyeono.net/chapter-7-4.html) [같다](https://docs.python.org/ko/3/library/functions.html).
