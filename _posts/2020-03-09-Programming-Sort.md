@@ -377,21 +377,17 @@ def Partition(a, begin, end):
 
  위와 같은 내용을 아래와 같이 구현할 수도 있다.
 
-
-
 <details>
-<summary>접기/펼치기</summary>
-<div markdown="1">
-
+    <summary> 접기/펼치기 </summary>
+    <div markdown ="1">
 ```python
+  def QuickSort(a, begin, end):
+	if begin < end :
+    	p = Partition(a, begin, end)
+   		QuickSort(a, begin, p-1)
+    	QuickSort(a, p+1, end) # 인덱스 체크하기
+	return a
 
-    def QuickSort(a, begin, end):
-    if begin < end :
-        p = Partition(a, begin, end)
-        QuickSort(a, begin, p-1)
-        QuickSort(a, p+1, end) # 인덱스 체크하기
-    return a
-        
 def Partition(a, begin, end):
     pivot_idx = (begin + end) // 2 # 피봇 인덱스
     L = begin
@@ -408,10 +404,15 @@ def Partition(a, begin, end):
     a[pivot_idx], a[R] = a[R], a[pivot_idx]
     return R 
 ```
+    </div>
 
 
-</div>
 </details>
+
+
+
+
+
 
 
 
