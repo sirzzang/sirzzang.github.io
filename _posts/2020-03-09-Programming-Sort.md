@@ -75,7 +75,7 @@ tags:
 | ----------------- | ----------------- | ----------------- |
 | 2 5 1 *3* 4 **3** | 1 2 *3* **3** 4 5 | 1 2 **3** *3* 4 5 |
 
-![stablenotstable]({{site.url}}/assets/images/stablenotstable.png)
+![stablenotstable]({{site.url}}/assets/images/stablenotstable.png){: width="50%" height="50%"}
 
 
 
@@ -95,7 +95,7 @@ tags:
 
  인접한 두 원소를 비교하며 자리를 계속 교환하는 정렬 방식이다. 모든 원소에 대해 **인접한 두 값을 비교**해서, **앞의 값이 뒤의 값보다 크면(혹은 작으면) 자리를 교환**한다. 한 단계가 끝나면 가장 큰(혹은 작은) 원소가 제일 마지막 자리에 정렬된다.
 
-![버블정렬]({{site.url}}/assets/images/Bubble-sort.gif)
+![버블정렬]({{site.url}}/assets/images/Bubble-sort.gif){:.aligncenter}
 
 <center><sup>이미지 출처 : https://www.fun-coding.org/Chapter12-bubblesorting.html</sup></center>
 
@@ -201,7 +201,7 @@ def SelectAlgorithm(list, k):
 
 
 
-![selection sort]({{site.url}}/assets/images/Selection-Sort.gif)
+![selection sort]({{site.url}}/assets/images/Selection-Sort.gif){:.aligncenter}
 
 <center><sup>이미지 출처 : https://www.fun-coding.org/Chapter12-selectionsorting.html</sup></center>
 
@@ -266,7 +266,7 @@ def SelectionSort(a):
 
 
 
-![insertion sort]({{site.url}}/assets/images/insertion-sort.gif)
+![insertion sort]({{site.url}}/assets/images/insertion-sort.gif){:.aligncenter}
 
 <center><sup>출처 : http://ejklike.github.io/2017/03/04/sorting-algorithms-with-python.html</sup></center>
 
@@ -337,13 +337,9 @@ def InsertionSort(a):
 
 
 
-![quick sort]({{site.url}}/assets/images/quick-sort.png){: width="70%" height="70%"}
+![quick sort]({{site.url}}/assets/images/quick-sort.png){: width="70%" height="60%"}{:.aligncenter}
 
 <center><sup>이미지 출처 : https://www.fun-coding.org/Chapter12-selectionsorting.html</sup></center>
-
-![quick sort 2]({{site.url}}/assets/images/quick2.png)
-
-<center><sup>이미지 출처 : https://koreanfoodie.me/107</sup></center>
 
 한 단계가 완료될 때마다 피봇의 위치가 확정된다.
 
@@ -615,6 +611,12 @@ def Merge(left, right):
 
  
 
+![카운팅정렬]({{site.url}}/assets/images/counting-sort.png){:.aligncenter}
+
+<center><sup>이미지 출처 : https://m.blog.naver.com/PostView.nhn?blogId=dnpc7848&logNo=221439395086&categoryNo=15&proxyReferer=https%3A%2F%2Fwww.google.com%2F</sup></center>
+
+
+
  정렬을 수행하는 방법은 다음과 같다.
 
 1. 항목의 개수를 저장할 **COUNTS 배열**을 만든다. 
@@ -627,12 +629,6 @@ def Merge(left, right):
    * COUNTS의 i번째 칸에 있는 수를 room_number한다.
    * TEMP의 room_number칸에 i를 삽입한다.
    * COUNTS의 i번째 칸에 있는 수를 1 감소시킨다.
-
-
-
-![카운팅정렬]({{site.url}}/assets/images/counting-sort.png)
-
-<center><sup>이미지 출처 : https://m.blog.naver.com/PostView.nhn?blogId=dnpc7848&logNo=221439395086&categoryNo=15&proxyReferer=https%3A%2F%2Fwww.google.com%2F</sup></center>
 
 
 
