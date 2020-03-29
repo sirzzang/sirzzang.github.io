@@ -5,11 +5,10 @@ header:
   teaser: /assets/images/blog-Programming.jpg
 
 categories:
-  - Programming
+  - Python
 toc : true
 tags:
   - Python
-  - Programming
   - 알고리즘
   - 정렬
   - 버블정렬

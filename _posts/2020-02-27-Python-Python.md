@@ -7,7 +7,7 @@ header:
   teaser: /assets/images/blog-Programming.jpg
 
 categories:
-  - Programming
+  - Python
 tags:
   - Python
 last_modified_at: 2020-03-11

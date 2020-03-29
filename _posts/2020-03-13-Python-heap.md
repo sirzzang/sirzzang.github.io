@@ -4,11 +4,10 @@ excerpt:
 header:
   teaser: /assets/images/blog-Programming.jpg
 categories:
-  - Programming
+  - Python
 toc : true
 tags:
   - Python
-  - Programming
   - 자료구조
   - 우선순위 큐
   - 힙

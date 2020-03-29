@@ -5,10 +5,9 @@ header:
   teaser: /assets/images/blog-Programming.jpg
 
 categories:
-  - Programming
+  - Python
 tags:
   - Python
-  - Programming
   - 자료구조
   - 연결 리스트
 ---
