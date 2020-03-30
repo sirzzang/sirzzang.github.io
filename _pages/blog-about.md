@@ -7,7 +7,7 @@ layout: single
 
 
 
-## Eraser's Studylog
+## Eraser's StudyLog
 
 > "즐겁게 공부하고, 꾸준히 정리하고, 시나브로 성장하자."
 
@@ -17,5 +17,5 @@ layout: single
 
 
 
-공모전 참가, 프로젝트 기록 등은 Eraser's Projectlog
+공모전 참가, 프로젝트 기록 등은 [ProjectLog](https://projectlog-eraser.tistory.com/)에 따로 기록합니다.
 
