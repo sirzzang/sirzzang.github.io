@@ -1,5 +1,5 @@
 ---
-title: "About My Studylog"
+title: "About My StudyLog"
 permalink: /about/
 layout: single
 

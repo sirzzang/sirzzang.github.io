@@ -1,8 +1,6 @@
 ---
 title:  "[Scraping] NomadCoders_Making Job Scrapper with Python"
 excerpt:
-toc: true
-toc_sticky: true
 header:
   teaser: /assets/images/nomad_scrapper.png
 categories:
@@ -107,10 +105,6 @@ last_modified_at: 2020-03-21
    * 이를 이용해 `except` 절에서 `AttributeError`를 처리하도록 했다.
 
    
-
-```python
-
-```
 
 ### 꼭 기억하고 싶은 코드 리뷰
 
