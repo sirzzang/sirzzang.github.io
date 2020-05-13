@@ -1,6 +1,5 @@
 ---
 title:  "[한국어 임베딩] 1. 서론"
-excerpt: "한 줄 요약 : 머신러닝의 개념을 이해하자."
 toc: true
 toc_sticky: true
 header:
@@ -92,7 +91,7 @@ last_modified_at: 2020-04-03
 
 
 
-## 3. 전이 학습
+### 3. 전이 학습
 
 
 

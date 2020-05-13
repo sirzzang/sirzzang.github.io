@@ -1,6 +1,5 @@
 ---
 title:  "[Python] Selenium을 공부하자!"
-excerpt: "Selenium을 사용할 때면 인간의 위대함을 느낀다."
 toc: true
 toc_sticky: true
 header:
@@ -64,7 +63,7 @@ driver = webdriver.Chrome('설치 경로')
 
 
 
-## 2. Webdriver Options
+### 2. Webdriver Options
 
   
 
