@@ -57,11 +57,11 @@ def plus(a, b):
 
  함수 정의 시 사용한 매개변수의 개수와 다른 인자를 전달하면, 아래와 같은 `TypeError`가 발생한다.
 
-![positional argument error]({{site.url}}/assets/images/argserror.png){: width="60%" height="60%"}
+![positional argument error]({{site.url}}/assets/images/argserror.png){: width="60%" height="60%"}{: .center}
 
  또한, 정의되지 않은 키워드 인자를 전달할 때도, 아래와 같은 `TypeError`가 발생한다.
 
-![keyword argument error]({{site.url}}/assets/images/kwargserror.png){: width="60%" height="60%"}
+![keyword argument error]({{site.url}}/assets/images/kwargserror.png){: width="60%" height="60%"}{: .center}
 
 
 
