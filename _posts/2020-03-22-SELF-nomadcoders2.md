@@ -22,11 +22,7 @@ last_modified_at: 2020-03-21
 
 ## 2. Get Ready for Django
 
-
-> 파일
->
-
- 파이썬의 Django 프레임워크를 이용하면 쉽게 웹 애플리케이션을 개발할 수 있다. Django는 웹 앱을 개발하기 위한 ~~아주 멋진~~ class들의 모임이다. 따라서 Django를 이용하여 웹 앱을 개발하기 위해서는 다음의 기본적인 개념들을 알아야 한다.
+ 파이썬의 Django 프레임워크를 이용하면 쉽게 웹 애플리케이션을 개발할 수 있다. Django는 웹 앱을 개발하기 위한 ~~*아주 멋진*~~ class들의 모임이다. 따라서 Django를 이용하여 웹 앱을 개발하기 위해서는 다음의 기본적인 개념들을 알아야 한다.
 
 
 
@@ -61,11 +57,11 @@ def plus(a, b):
 
  함수 정의 시 사용한 매개변수의 개수와 다른 인자를 전달하면, 아래와 같은 `TypeError`가 발생한다.
 
-![positional argument error]({{site.url}}/assets/images/argserror.png)
+![positional argument error]({{site.url}}/assets/images/argserror.png){: width="60%" height="60%"}
 
  또한, 정의되지 않은 키워드 인자를 전달할 때도, 아래와 같은 `TypeError`가 발생한다.
 
-![keyword argument error]({{site.url}}/assets/images/kwargserror.png)
+![keyword argument error]({{site.url}}/assets/images/kwargserror.png){: width="60%" height="60%"}
 
 
 
