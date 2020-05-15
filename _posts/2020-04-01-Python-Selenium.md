@@ -1,5 +1,6 @@
 ---
 title:  "[Python] Selenium을 공부하자!"
+excerpt : "셀레늄은 위대하다."
 toc: true
 toc_sticky: true
 header:
@@ -311,6 +312,10 @@ actions.perform()
 
  element를 찾아서 특정 동작을 할 때 오류가 날 수 있다. 이 때 키보드의 여러 키들을 객체로서 사용할 수 있도록 한다. 다 적지는 못하고, [documentation](https://www.selenium.dev/selenium/docs/api/py/webdriver/selenium.webdriver.common.keys.html)을 참고하자.
 
+
+
+**엔터 키로 클릭**
+
  다음은 특정 요소를 찾아 엔터 키를 눌러서 클릭을 대체하는 예시 코드이다.
 
 ```python
@@ -321,6 +326,44 @@ driver = webdriver.Chrome('설치 경로')
 element = driver.find_element_by_id('some id')
 element.send_keys(Keys.ENTER)
 
+```
+
+
+
+**마지막 페이지까지 스크롤 다운**
+
+ `return document.body.scrollHeight`로 전체 페이지의 스크롤 height를 반환한다([참고](https://www.w3schools.com/jsref/prop_element_scrollheight.asp)). 키보드의 END 키를 이용하여 스크롤 다운한다. ([참고](https://stackoverflow.com/questions/51690101/why-execute-scriptreturn-document-body-scrollheight-with-python-selenium-ret/51702698) : 유튜브와 같은 사이트에서는 작동하지 않을 수도 있으므로 `scrollHeight` 객체 선택 시 다른 방법 사용.)
+
+```python
+(...)
+    while True:
+        height = driver.execute_script("return document.body.scrollHeight")
+        time.sleep(wait_time)
+        driver.find_element_by_tag_name('body').send_keys(Keys.END)
+```
+
+
+
+
+
+### Colab에서 Selenium 사용하기
+
+* 크롬 브라우저 최신 확인.
+* 우분투 업데이트 필수.
+
+```python
+# 크롬 드라이버 설치
+!apt-get update # 우분투 환경 업데이트
+!wget https://chromedriver.storage.googleapis.com/83.0.4103.39/chromedriver_linux64.zip  && unzip chromedriver_linux64
+!apt install chromium-chromedriver
+!pip install selenium
+
+# driver 설정
+chrome_options = Options()
+chrome_options.add_argument('--headless')
+chrome_options.add_argument('--no-sandbox')
+chrome_options.add_argument('--disable-dev-shm-usage')
+driver = webdriver.Chrome("/usr/bin/chromedriver", options=chrome_options)
 ```
 
 

@@ -1,5 +1,5 @@
 ---
-title:  "[Programmers] 포켓몬"
+title:  "[Programmers] 하노이의 탑"
 excerpt:
 header:
   teaser: /assets/images/blog-Programming.jpg
