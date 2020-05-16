@@ -10,9 +10,5 @@ taxonomy: Project
 
 
 
-
-
-
-
-프로젝트, 공모전 기록 : https://projectlog-eraser.tistory.com/
+[Eraser's Projectlog](https://projectlog-eraser.tistory.com/)
 
