@@ -54,11 +54,13 @@ class Car():
 
 
 
-**6) 생성자 메서드**
 
- class로부터 instance가 **만들어질 때** 그 객체가 갖게 될 여러 속성을 정해준다. 초기화 메서드라고도 하며, class로부터 instance가 생성되는 즉시 호출된다. `__init__` 함수로 사용한다.
 
- 파이썬 생성자 규칙과 동일하게, 첫 인자는 무조건 instance 자신을 지칭하는 self가 되어야 한다. 그리고 정의할 속성들 앞에는 반드시 'self'가 붙어야 한다.
+**6) 생성자**
+
+ class로부터 instance가 **만들어질 때** 그 객체가 갖게 될 여러 속성을 정해준다. 초기화 메서드라고도 하며, class로부터 instance가 생성되는 즉시 호출된다. `__init__` 함수를 사용한다.
+
+ 파이썬 메서드이므로, 첫 인자는 무조건 instance 자신을 지칭하는 self가 되어야 한다. 그리고 정의할 속성들 앞에는 반드시 'self'가 붙어야 한다.
 
  여태까지 설계했던 자동차 class와 달리, 이제는 생성자를 통해 자동차 class로부터 만들어질 자동차 instance들이 생성자를 통해 생성되는 속성을 갖게 설계할 수 있다.
 
@@ -130,6 +132,8 @@ class Car():
 >>> bmw = Car()
 >>> print(bmw.color, bmw.price) # BLACK $1000
 ```
+
+
 
 
 
@@ -275,5 +279,5 @@ class Convertible(Car):
 
 * 새롭게 속성을 추가하고 싶어서 다음과 같이 `__init__` 메서드를 재정의하면, 부모 class에서 생성되는 속성이 사라진다.
 
-![convertible attribute error]({{site.url}}/assets/images/convertibleerror.ong){: width="60%" height="60%"}{: .center}
+![convertible attribute error]({{site.url}}/assets/images/convertibleerror.ong){: width="60%" height="60%"}{: .aligncenter}
 

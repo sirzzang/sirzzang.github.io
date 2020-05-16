@@ -28,7 +28,9 @@ last_modified_at: 2020-03-21
 
 ### 2.2. OOP_1
 
-> [*객체지향 참고1*]([http://www.incodom.kr/%ED%8C%8C%EC%9D%B4%EC%8D%AC/%EA%B0%9D%EC%B2%B4%EC%A7%80%ED%96%A5%ED%8A%B9%EC%A7%95]) | [*객체지향 참고2*]([http://schoolofweb.net/blog/posts/%ED%8C%8C%EC%9D%B4%EC%8D%AC-oop-part-1-%EA%B0%9D%EC%B2%B4-%EC%A7%80%ED%96%A5-%ED%94%84%EB%A1%9C%EA%B7%B8%EB%9E%98%EB%B0%8Doop%EC%9D%80-%EB%AC%B4%EC%97%87%EC%9D%B8%EA%B0%80-%EC%99%9C-%EC%82%AC%EC%9A%A9%ED%95%98%EB%8A%94%EA%B0%80/])
+> [*객체지향 참고1*]([http://www.incodom.kr/%ED%8C%8C%EC%9D%B4%EC%8D%AC/%EA%B0%9D%EC%B2%B4%EC%A7%80%ED%96%A5%ED%8A%B9%EC%A7%95]) 
+>
+> [*객체지향 참고2*]([http://schoolofweb.net/blog/posts/%ED%8C%8C%EC%9D%B4%EC%8D%AC-oop-part-1-%EA%B0%9D%EC%B2%B4-%EC%A7%80%ED%96%A5-%ED%94%84%EB%A1%9C%EA%B7%B8%EB%9E%98%EB%B0%8Doop%EC%9D%80-%EB%AC%B4%EC%97%87%EC%9D%B8%EA%B0%80-%EC%99%9C-%EC%82%AC%EC%9A%A9%ED%95%98%EB%8A%94%EA%B0%80/])
 
 
 
@@ -39,7 +41,7 @@ last_modified_at: 2020-03-21
 * class : 만들 제품의 설계도. 제품이 어떤 특징을 갖는지, 어떻게 작동하는지 안내하는 *blueprint*.
 * instance(s) : 설계도(class)를 기반으로 만든 제품(들). 설계도에 안내되어 있는 속성과 작동 방식을 가짐.
 
- 즉, OOP를 통해 class를 설계하면, 그 class를 기반으로 무한히 많은 instance들을 만들 수 있다. class에서 instance를 생성하는 것을 **instantiation**이라고 한다.
+ 즉, class를 설계하면, 그 class를 기반으로 무한히 많은 instance들을 만들 수 있다. class에서 instance를 생성하는 것을 **instantiation**이라고 한다.
 
 
 
@@ -150,11 +152,11 @@ class Car():
 
 - 메서드에 자기 자신을 호출하는 인자가 없을 경우, 다음과 같이 `TypeError`가 발생한다.
 
-![self error]({{site.url}}/assets/images/selferror.png){: width="60%" height="60%"}{: .center}
+![self error]({{site.url}}/assets/images/selferror.png){: width="60%" height="60%"}{: .aligncenter}
 
 * 인자로 *potato* 를 주더라도 메서드는 작동한다(..!)
 
-![potato]({{site.url}}/assets/images/potato.png){: width="60%" height="60%"}{: .center}
+![potato]({{site.url}}/assets/images/potato.png){: width="60%" height="60%"}{: .aligncenter}
 
 
 

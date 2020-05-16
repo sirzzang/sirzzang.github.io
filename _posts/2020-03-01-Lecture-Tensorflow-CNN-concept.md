@@ -1,5 +1,5 @@
 ---
-title:  "[DeepLearning] CNN의 개념"
+title:  "[DL] CNN_1. 개념"
 excerpt: "한 줄 요약 : CNN 모델의 개념을 알아본다."
 toc: true
 toc_sticky: true
@@ -26,21 +26,7 @@ last_modified_at: 2020-03-01
 
 
 
----
 
-> 이미지 출처
-
-https://poddeeplearning.readthedocs.io/ko/latest/CNN/CAM%20-%20Class%20Activation%20Map/
-https://towardsdatascience.com/simple-introduction-to-convolutional-neural-networks-cdf8d3077bac
-https://pythonkim.tistory.com/52
-https://excelsior-cjh.tistory.com/180
-https://deep-learning-basic.readthedocs.io/ko/latest/Convolutional%20Neural%20Network/1.%20Convolutional%20Neural%20Network/
-http://taewan.kim/post/cnn/
-https://egg-money.tistory.com/92?category=805672
-
-
-
----
 
 ## 1. CNN 개념
 
