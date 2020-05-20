@@ -1,3 +1,4 @@
+---
 title:  "[Programmers] 큰 수 만들기"
 excerpt: "1일 1문제풀이 4일차"
 header:
@@ -6,12 +7,15 @@ toc: true
 categories:
 
   - Programming
-tags:
+    tags:
   - Python
   - Programming
   - Programmers
   - 그리디
   - 스택
+---
+
+
 
 > [문제 출처](https://programmers.co.kr/learn/courses/30/lessons/42583)
 

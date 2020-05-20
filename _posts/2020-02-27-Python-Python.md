@@ -305,7 +305,11 @@ last_modified_at: 2020-03-11
 
 
 
-## 예외 처리를 위한 try, except <sub>[공식문서](https://docs.python.org/ko/3/tutorial/errors.html)</sub>
+## 예외 처리를 위한 try, except
+
+[documentation](https://docs.python.org/ko/3/tutorial/errors.html)
+
+
 
 코드를 실행할 때 발생하는 에러(*ex. `NameError`, `ValueError`, `TypeError` 등*)를 예외라고 한다. 이와 같이 코드 실행 중 예외가 일어났을 때, try와 except를 통해 코드 스크립트 실행 중단을 방지하고, 예외를 처리하는 프로그램을 만들 수 있다.
 
@@ -400,6 +404,63 @@ except Exception as e:
 인벤토리 :  ['item0', 'item1', 'item2', 'item3']
 에러가 발생했습니다. 에러 메시지는 :  인벤토리 에러
 ```
+
+
+
+## itertools 모듈
+
+공식 문서
+
+
+
+ 이터러블한 데이터를 처리하는 데 유용한 함수와 제너레이터를 포함하고 있다.
+
+
+
+### 1) groupby
+
+ 반복 가능한 객체 내의 값들을 key, value에 따라 분류한다. 공식 문서의 예제를 살펴 보면 다음과 같다.
+
+```python
+s = 'AAAABBBCCDAABBB'
+keys = [k for k, g in groupby(s)] # A, B, C, D, A, B
+groups = [list(g) for k, g in groupby(s)] # AAAA BBB CC D
+```
+
+
+
+ key function을 이용하여 그룹별로 가져올 수도 있다. key function에는 `lambda` 함수, `itemgetter` 함수 등 다양한 함수가 들어갈 수 있다. 사용자 정의 함수를 사용해도 된다.
+
+```python
+from itertools import groupby
+from pprint import pprint
+
+d = [('Seoul','Gangnamgu'),
+     ('Incheon','Junggu'),
+     ('Daejeon','Yuseonggu'),
+     ('Incheon','Donggu'),
+     ('Seoul','Seongbukgu'),
+     ('Busan','Sasangu'),
+     ('Gwangju','Seogu'),
+     ('Gwangju','Chipyeongdong')
+     ]
+
+category = {}
+for k, g in groupby(d, lambda x:x[0]):
+    listg = [x[1] for x in list(g)]
+    category[k] = listg
+    
+>>>pprint(category)
+{'Busan': ['Sasangu'],
+ 'Daejeon': ['Yuseonggu'],
+ 'Gwangju': ['Seogu', 'Chipyeongdong'],
+ 'Incheon': ['Donggu'],
+ 'Seoul': ['Seongbukgu']}
+```
+
+
+
+
 
 
 
