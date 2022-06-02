@@ -9,6 +9,7 @@ header:
 tags:
   - Git
   - config
+  - ignorecase
 ---
 
 
@@ -21,7 +22,7 @@ tags:
 
 
 
-![git-repo-uppercase]({{site.url}}/assets/images/git-config-uppercase.png)
+![git-repo-uppercase]({{site.url}}/assets/images/git-config-uppercase.png){: .align-center}
 
  예전에 폴더 명을 소문자(`network`)에서 대문자(`Network`)로 변경한 적이 있는데, 그 이후로 로컬 저장소에서 `network` 폴더는 보이지 않지만, 원격 저장소에는 계속해서 남아 있었다. 당시 폴더명 변경이 원격 저장소에 반영되지 않아 급하게 구글링한 후 `git config core.ignorecase false` 명령어를 사용한 뒤, 확인하지 않고 그대로 두다가 이제서야 해결했다.
 
@@ -218,3 +219,4 @@ $ git push origin main
 
 - [git config](https://git-scm.com/docs/git-config#Documentation/git-config.txt-useremail)
 - [git 최초 설정](https://git-scm.com/book/ko/v2/%EC%8B%9C%EC%9E%91%ED%95%98%EA%B8%B0-Git-%EC%B5%9C%EC%B4%88-%EC%84%A4%EC%A0%95)
+
