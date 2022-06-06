@@ -21,7 +21,7 @@ tags:
 
 # fgciwrap + Python 삽질기
 
- 회사에서 Nginx와 fastcgi 모듈을 이용해 서버를 개발하던 중, 502 Bad Gateway 에러를 종종 마주했다. ![tcpdump](https://sirzzang.github.io/dev/Dev-tcpdump/) 를 이용해 확인한 결과 fcgiwrap 프로세스에서 Python 스크립트를 실행할 수 없거나, 실행하였는데 요청이 올바르게 처리되지 않는 경우, fcgiwrap process socket 쪽에서 먼저 연결을 종료하는 것을 확인할 수 있었다.
+ 회사에서 Nginx와 fastcgi 모듈을 이용해 서버를 개발하던 중, 502 Bad Gateway 에러를 종종 마주했다. [tcpdump](https://sirzzang.github.io/dev/Dev-tcpdump/){: .btn .btn--primary} 를 이용해 확인한 결과 fcgiwrap 프로세스에서 Python 스크립트를 실행할 수 없거나, 실행하였는데 요청이 올바르게 처리되지 않는 경우, fcgiwrap process socket 쪽에서 먼저 연결을 종료하는 것을 확인할 수 있었다.
 
  위와 같은 상황이 크게 어떤 경우에 발생할 수 있는지, 해당 경우에 fcgiwrap 프로그램이 어떤 에러 메시지를 출력하는지 정리해 보고자 한다.
 
