@@ -94,7 +94,8 @@ upstream prematurely cloased FastCGI stdout while reading response header from u
 
  Python 스크립트에서 파일 시스템의 파일을 읽어야 하는 경우에 위와 같은 에러가 발생했다. Python CGI 스크립트에서 발생한 에러를 추적할 수 있도록 cgitb 라이브러리를 이용해 해당 경우의 에러 메시지를 출력해 보았는데, 아래와 같이 `upload/0/4/3/...` 파일에 접근하려고 했으나 `Permission Denied` 에러가 발생했음을 확인할 수 있다.
 
-![python-cgi-permissiondenied]({{site.url}}/assets/images/python-cgi-permissiondenied.png){: width="500"}{: .align-center}
+![python-cgi-error]({{site.url}}/assets/images/python-cgi-permissiondenied.png)
+
 
  fcgiwrap을 실행하는 user는 `www-data`이기 때문에, fcgiwrap 프로세스에서 Python 스크립트를 실행하는 user 역시 `www-data`이다. 그런데 Python 스크립트에서 접근하려고 하는 파일의 소유자는 `nginx`이며, 소유 권한이 `-rw-------`. 따라서 Python 스크립트를 실행하는 user를 `nginx`로 바꿔 주거나, 스크립트에서 접근하고자 하는 파일의 소유 권한을 변경해 주면 된다.
 
