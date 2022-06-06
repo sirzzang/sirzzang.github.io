@@ -12,7 +12,7 @@ tags:
   - Python
   - Nginx
   - CGI
-  - 502
+  - "502"
   - shebang
 ---
 
