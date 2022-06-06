@@ -14,7 +14,6 @@ tags:
   - CGI
   - 502
   - shebang
-
 ---
 
 
