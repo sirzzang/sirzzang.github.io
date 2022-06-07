@@ -40,8 +40,6 @@ tags:
 
 **'Elasticsearch is a distributed, RESTful search and analytics engine capable of addressing a growing number of use cases.'** *- [Elasticsearch](https://www.elastic.co/elasticsearch/)*
 
-<br>
-
  Elasticsearch는 자바 Apache Lucene 기반의 검색 엔진이다. 검색 엔진은 가진 데이터 중 특정 데이터를 검색할 수 있는 기능을 제공하는 프로그램이다. 
 
  문서를 수집하고, 수집된 문서를 검색이 쉽도록 **색인**하고, 저장된 색인으로부터 질의에 해당하는 문서를 **검색**하여 결과로 제공한다. 색인된 데이터 기반의 각종 집계도 지원한다.
@@ -62,7 +60,7 @@ tags:
 
 <br>
 
-![elasticsearch-inverted-indexing]({{site.url}}/assets/images/elk-stack-01.png){: .align-center width="450"}
+![elasticsearch-inverted-indexing]({{site.url}}/assets/images/elk-stack-01.png){: .align-center}
 
  개념적으로, 위 그림에서 오른쪽 위의 표처럼 데이터를 저장해 놓는 방식이다. 오른쪽 아래의 표에서와 같이 기존 RDBMS에서처럼 데이터를 저장했다면, 사용자가 `database`를 질의했을 때 (최악의 경우) 모든 문서를 훑어야 하지만, 역 인덱싱 방식을 사용하면 O(1)의 시간 복잡도로 문서를 검색할 수 있다.
 
@@ -78,7 +76,7 @@ tags:
 
  다음으로, REST API를 지원한다. HTTP 메서드 PUT, POST, GET, DELETE 등을 통해 사용자가 질의할 수 있다. 따라서 문서에 대한 쿼리, 집계 모두 HTTP 요청, 응답으로 가능하다. Elasticsearch 내부적으로 저장되어 있는 문서 데이터의 형태도 HTTP 요청 및 응답에 적합한 json 형태이다.
 
-![elasticsearch-rest-api]({{site.url}}/assets/images/elk-stack-02.png){: .align-center width="500"}
+![elasticsearch-rest-api]({{site.url}}/assets/images/elk-stack-02.png){: .align-center}
 
 <center><sup>Elasticsearch 포트는 보통 9200, 9300을 사용한다. 9200은 HTTP 통신을 위해, 9300은 클러스터 노드 간 TCP 통신을 위해 사용한다.</sup></center>
 
@@ -101,8 +99,6 @@ tags:
 ## Logstash
 
 **'Logstash is a free and open server-side data processing pipeline that ingests data from a multitude of sources, transforms it, and then sends it to your favorite "stash."'** *- [Logstash](https://www.elastic.co/logstash/)*
-
-<br>
 
  Logstash는 서버 데이터를 수집, 변환, 전송하는 데이터 처리 파이프라인으로, Jruby(JVM 기반 Ruby)로 개발되었다. 
 
@@ -166,11 +162,9 @@ $ echo "logstash pipeline message" | nc localhost 5000 -w0
 
 **'Kibana is a free and open user interface that lets you visualize your Elasticsearch data and navigate the Elastic Stack.'** *- [Kibana](https://www.elastic.co/kibana/)*
 
-<br>
-
  Kibana는 Elasticsearch에 있는 데이터를 시각화할 수 있도록 하는 웹 브라우저 기반의 시각화 플랫폼이다. Elasticsearch에 있는 인덱스의 패턴을 찾아서, 데이터를 확인(Discover)하거나, 시각화할 수 있도록 한다.
 
-![kibana-discover]({{site.url}}/assets/images/elk-stack-05.png){: .align-center width="400"}
+![kibana-discover]({{site.url}}/assets/images/elk-stack-05.png){: .align-center}
 
 <center><sup>Kibana Discover 탭을 통해 Elasitsearch에 저장된 데이터를 확인할 수 있다.</sup></center>
 
@@ -178,7 +172,7 @@ $ echo "logstash pipeline message" | nc localhost 5000 -w0
 
  Elasticsearch와 REST API를 통해 통신하므로, HTTP 요청을 통해 시각화에 필요한 데이터를 요청하고, 응답으로 온 데이터를 시각화한다.
 
-![kibana-request-response]({{site.url}}/assets/images/elk-stack-06.png){: .align-center width="500"}
+![kibana-request-response]({{site.url}}/assets/images/elk-stack-06.png){: .align-center}
 
 <center><sup>Kibana에서 시각화 시 Elasticsearch에 대한 요청 및 Elasticsearch로부터의 응답을 확인할 수 있다.</sup></center>
 
@@ -215,7 +209,7 @@ $ echo "logstash pipeline message" | nc localhost 5000 -w0
 
 <br>  예컨대, ELK stack을 활용해 다음과 같은 로그 모니터링 시스템을 구축할 수 있을 것이다.
 
-![elk-log-monitoring]({{site.url}}/assets/images/elk-stack-07.png){: .align-center width="450"}
+![elk-log-monitoring]({{site.url}}/assets/images/elk-stack-07.png){: .align-center}
 
 <br>
 
