@@ -1,6 +1,6 @@
 ---
 title:  "[CGI] fcgiwrap으로 Python 스크립트를 실행하며 겪었던 문제 해결하기"
-excerpt: fcgiwrap 프로세스에서 FastCGI 방식으로 Python 스크립트를 실행할 때 마주했던 문제들
+excerpt: FastCGI 방식으로 Python 스크립트를 실행할 때 마주했던 문제들
 categories:
   - Dev
 toc: true
@@ -52,9 +52,9 @@ print()
 print("<h1>Hello, World!</h1>")
 ```
 
- shebang이 있는 스크립트는 프로그램으로서 실행된다. 프로그램 로더가 스크립트 첫 줄의 셔뱅에 지정된 인터프리터 지시자를 이용해 구문을 분석하고, 스크립트를 실행한다. 즉, 지정된 인터프리터 프로그램을 대신 실행하기 위해, 그 인터프리터 경로를 넘겨주는 것이다.
+ shebang이 있는 스크립트는 프로그램으로서 실행된다. 프로그램 로더가 스크립트 첫 줄의 셔뱅에 지정된 인터프리터 지시자를 이용해 구문을 분석하고, 스크립트를 실행한다. 즉, 특정 프로그램이 지정된 인터프리터 프로그램을 대신 실행할 수 있도록, 그 인터프리터 경로를 넘겨주는 것이다.
 
-  fcgiwrap 프로세스가 shell에서 Python 인터프리터가 설치된 경로인 `usr/bin/python3을 실행해 Python 터미널을 띄우고, 해당 Python 프로그램이 그 다음 줄부터 스크립트를 해석하며 프로그램을 동작시키는 것이다.
+  fcgiwrap 프로세스가 shell에서 Python 인터프리터가 설치된 경로인 `usr/bin/python3`을 실행해 Python 터미널을 띄우고, 해당 Python 프로그램이 그 다음 줄부터 스크립트를 해석하며 프로그램을 동작시키는 것이다.
 
 > *참고*: `#`를 사용하는 이유
 >
@@ -71,7 +71,7 @@ print("<h1>Hello, World!</h1>")
   - 다만, 컨테이너 상에서 경로가 제대로 잡히지 않을 수 있기 때문에(*TODO*), 환경변수 상에 지정되어 있는 python 경로를 Shebang 문자열에 명시하는 것이 좋다. 컨테이너 환경이 아니더라도, 실제 Shebang 문자열을 작성할 때는 인터프리터 실행 환경이 모두 다를 수 있기 때문에, 인터프리터 절대 경로를 그대로 명시하는 것보다는 **환경변수에 명시된 경로**를 사용하는 것이 더 권장된다고 한다
 - Python 스크립트 실행 권한 부여: `chmod 755 upload_test.py `
   - Python 스크립트에 실행 권한을 부여한다. 특히 컨테이너 환경에서 스크립트 소유자와 fcgiwrap 소유자가 다를 수 있기 때문에, 그룹과 다른 사용자에 대해 읽기 및 실행 권한을 부여하는 것이 안전하다
-  - 나의 경우는 Dockerfile 이미지 작성 시, 스크립트가 저장되어 있는 폴더를 마운트한 후, RUN chmod 755 -R scripts/` 레이어를 추가함으로써 해결했다
+  - 나의 경우는 Dockerfile 이미지 작성 시, 스크립트가 저장되어 있는 폴더를 마운트한 후, 이미지에 `RUN chmod 755 -R scripts/` 레이어를 추가함으로써 해결했다
 
 
 
@@ -99,7 +99,7 @@ upstream prematurely cloased FastCGI stdout while reading response header from u
  fcgiwrap을 실행하는 user는 `www-data`이기 때문에, fcgiwrap 프로세스에서 Python 스크립트를 실행하는 user 역시 `www-data`이다. 그런데 Python 스크립트에서 접근하려고 하는 파일의 소유자는 `nginx`이며, 소유 권한이 `-rw-------`. 따라서 Python 스크립트를 실행하는 user를 `nginx`로 바꿔 주거나, 스크립트에서 접근하고자 하는 파일의 소유 권한을 변경해 주면 된다.
 
 - fcgiwrap user 변경: `spawn-fcgi -u 102 -g 102 -U 102 -G 102`
-  - 해당 개발 환경에서 파일 소유 권한을 가진 user, group의 id가 무엇인지 확인한 후, `spawn-fcgi` 명령어 옵션을 통해 fcgiwrap 프로세스를 ㄴspawn하는 user, group을 변경한다 
+  - 해당 개발 환경에서 파일 소유 권한을 가진 user, group의 id가 무엇인지 확인한 후, `spawn-fcgi` 명령어 옵션을 통해 fcgiwrap 프로세스를 spawn하는 user, group을 변경한다 
 - 파일 시스템 내 해당 파일 권한 변경: `chmod +rw /upload/0/4/3...`
 
 
