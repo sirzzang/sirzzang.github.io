@@ -14,12 +14,6 @@ tags:
   - controller
 ---
 
-
-
-# Spring Boot 컨트롤러 URL 분리
-
-
-
  스프링을 이용해 API 서버 개발을 하다, API 버전 관리를 위한 url prefix를 분리하여 설정하기 위한 방법을 알아 보았다. 분리의 필요성은 다음과 같다.
 
 - 모든 API 엔드포인트에 동일한 url prefix가 적용되고 있으나, 모든 컨트롤러의 `RequestMapping` 엔드포인트마다 일일이 작성하고 있음
@@ -27,9 +21,66 @@ tags:
 
 <br>
 
-## 어플리케이션 설정 이용
+# 어플리케이션 설정
 
-### 커스텀 설정 값
+
+
+
+
+## 서블릿 설정 항목 이용
+
+`server.servlet.context-path` 속성을 이용해도 된다.
+
+- `application.yml`
+
+  ```yaml
+  server:
+  	servlet:
+  		context-path: /api/v1
+  ```
+
+- `application.properties`
+
+  ```properties
+  server.servlet.context-path: /api/v1
+  ```
+
+
+
+## Spring Data REST 설정 이용
+
+ [Spring Data Rest](spring.io/projects/spring-data-rest)를 이용해서 설정할 수도 있다.
+
+- 의존성
+
+  - Gradle
+
+    ```groovy
+    dependencies {
+      implementation 'org.springframework.boot:spring-boot-starter-data-rest'
+    }
+    ```
+
+  - Maven
+
+    ```xml
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-rest</artifactId>
+    </dependency>
+    ```
+
+- 어플리케이션 프로퍼티 설정
+
+  ```properties
+  spring.data.rest.basePath=/api/v1
+  ```
+
+
+
+
+
+## 커스텀 설정 값 이용
 
  아래와 같이 어플리케이션 프로퍼티 설정 시 `api prefix` 관련 속성을 설정하고, 요청 매핑 시 해당 설정 값을 읽어 오도록 컨트롤러 코드를 작성한다.
 
@@ -70,31 +121,11 @@ tags:
 
 
 
-### 설정 항목 이용
-
-`server.servlet.context-path` 속성을 이용해도 된다.
-
-- `application.yml`
-
-  ```yaml
-  server:
-  	servlet:
-  		context-path: /api/v1
-  ```
-
-- `application.properties`
-
-  ```properties
-  server.servlet.context-path: /api/v1
-  ```
-
-
-
-
-
-
-
 <br>
+
+# 자바 코드 이용
+
+
 
 ## 어노테이션 이용
 
@@ -171,41 +202,6 @@ tags:
   ```
 
  어노테이션을 설정하는 것과 동일한 특징을 지닌다. 어떤 방법을 선택할지는 취향 차이일 듯하다.
-
-<br>
-
-## Spring Data REST 이용
-
- [Spring Data Rest](spring.io/projects/spring-data-rest)이용 시, 쉽게(!) 설정할 수 있다. 자바 코드 상에서 해주어야 하는 것 없이, url prefix를 관리할 수 있다.
-
-- 의존성
-
-  - Gradle
-
-    ```groovy
-    dependencies {
-      implementation 'org.springframework.boot:spring-boot-starter-data-rest'
-    }
-    ```
-
-  - Maven
-
-    ```xml
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-data-rest</artifactId>
-    </dependency>
-    ```
-
-- 어플리케이션 프로퍼티 설정
-
-  ```properties
-  spring.data.rest.basePath=/api/v1
-  ```
-
-
-
-
 
 
 
