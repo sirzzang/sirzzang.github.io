@@ -1,6 +1,6 @@
 ---
-title:  "[Spring] API url prefix 분리"
-excerpt: API 버전 관리를 위한 url prefix를 설정하는 방법
+title:  "[Spring] url prefix 설정"
+excerpt: Spring에서 API 버전 관리를 위한 url prefix를 설정하는 방법
 categories:
   - Dev
 toc: true
@@ -28,6 +28,8 @@ tags:
 <br>
 
 ## 어플리케이션 설정 이용
+
+### 커스텀 설정 값
 
  아래와 같이 어플리케이션 프로퍼티 설정 시 `api prefix` 관련 속성을 설정하고, 요청 매핑 시 해당 설정 값을 읽어 오도록 컨트롤러 코드를 작성한다.
 
@@ -65,6 +67,32 @@ tags:
 
 - url prefix를 한 곳에서 관리할 수 있다. 쉽게 변경할 수 있다
 - 컨트롤러에서 요청 매핑 시 url prefix 설정 값을 읽어 와야 하기는 하다
+
+
+
+### 설정 항목 이용
+
+`server.servlet.context-path` 속성을 이용해도 된다.
+
+- `application.yml`
+
+  ```yaml
+  server:
+  	servlet:
+  		context-path: /api/v1
+  ```
+
+- `application.properties`
+
+  ```properties
+  server.servlet.context-path: /api/v1
+  ```
+
+
+
+
+
+
 
 <br>
 
@@ -185,4 +213,4 @@ tags:
 
 ## 결론
 
- 위와 같은 방법을 이용하여 api 버전에 대한 url prefix를 일일이 작성하지 않고도 요청 매핑 엔드 포인트를들을 관리할 수 있다. API 버전 별 인가가 달라질 때에도 유용할 것으로 보인다. 개인적으로는 어노테이션 혹은 공통 컨트롤러를 사용하는 것이 좋아 보이긴 하나, 어떤 방식을 택하든 url prefix를 관리할 수 있다는 것에 초점을 두어 개발 시 수고로움을 덜어 보자.
+ 위와 같은 방법을 이용하여 api 버전에 대한 url prefix를 일일이 작성하지 않고도 요청 매핑 엔드 포인트를들을 관리할 수 있다. API 버전 별 인가가 달라질 때에도 유용할 것으로 보인다. 개인적으로는 어노테이션 혹은 공통 컨트롤러를 사용해 보고 싶긴 하나, 어떤 방식이든 url prefix를 관리할 수 있다는 것에 초점을 두어 개발 시 수고로움을 덜어 보자.
