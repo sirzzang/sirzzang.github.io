@@ -29,7 +29,7 @@ tags:
 
 ## 서블릿 설정 항목 이용
 
-`server.servlet.context-path` 속성을 이용해도 된다.
+`server.servlet.context-path` 속성을 이용하면 된다.
 
 - `application.yml`
 
@@ -51,7 +51,7 @@ tags:
 
  [Spring Data Rest](spring.io/projects/spring-data-rest)를 이용해서 설정할 수도 있다.
 
-- 의존성
+- 의존성 설정
 
   - Gradle
 
@@ -207,6 +207,8 @@ tags:
 
 <br>
 
-## 결론
+# 결론
+
+
 
  위와 같은 방법을 이용하여 api 버전에 대한 url prefix를 일일이 작성하지 않고도 요청 매핑 엔드 포인트를들을 관리할 수 있다. API 버전 별 인가가 달라질 때에도 유용할 것으로 보인다. 개인적으로는 어노테이션 혹은 공통 컨트롤러를 사용해 보고 싶긴 하나, 어떤 방식이든 url prefix를 관리할 수 있다는 것에 초점을 두어 개발 시 수고로움을 덜어 보자.
