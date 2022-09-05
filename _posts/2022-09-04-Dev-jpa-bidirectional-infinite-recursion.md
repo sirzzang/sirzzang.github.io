@@ -23,6 +23,8 @@ tags:
 
 
 
+<br>
+
 # 구현
 
  문제가 발생하기 전, 구현된 내용은 아래와 같다.
@@ -50,10 +52,9 @@ public class User {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long userId;
+    private String name;
   
-  	private String name;
-
-		...
+    ...
 
     // 회원별 펫
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "user")
@@ -79,7 +80,6 @@ public class Pet {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long petId;
-  
  		private String name;
 
     // 사용자
@@ -133,12 +133,10 @@ public class PetServiceImpl implements PetService {
 
     @Override
     public CreatePetResponseDto createPet(String username, CreatePetRequestDto createPetRequestDto) {
-
-				.. // 등록 로직 생략
       
-        return CreatePetResponseDto.builder()
+	      return CreatePetResponseDto.builder()
                 // 생략
-                .user(petEntity.getUser()) // 반려동물 엔티티에서 사용자 엔티티를 참조해 응답 DTO 객체를 생성한다.
+                .user(petEntity.getUser()) // 반려동물 엔티티에서 사용자 엔티티를 참조해 응답 DTO 객체를 생성함
                 .build();
     }
   
@@ -149,7 +147,7 @@ public class PetServiceImpl implements PetService {
 
 
 
-
+<br>
 
 # 문제
 
@@ -157,7 +155,7 @@ public class PetServiceImpl implements PetService {
 
 ## 상황
 
- 위와 같이 구현 시, 결과적으로 *~~그 유명한...~~* `StackOverflow` 에러가 발생한다. 오류 메시지를 읽다 보면, `JsonMappingException`을 발견할 수 있다. JSON으로 매핑하는 데에 있어 무언가 문제가 발생한 듯하다.
+ 위와 같이 구현 시, 결과적으로 *~~그 유명한...~~* `StackOverflow` 에러가 발생한다. 
 
 ```java
 java.lang.StackOverflowError: null
@@ -190,31 +188,27 @@ java.lang.StackOverflowError: null
 
 
 
- 응답 데이터 반환 시 `CreateResponseDto`를 HTTP 응답 시 필요한 JSON 객체로 직렬화하지 못해 발생한 문제이다. 조금 더 자세히 살펴 보자.
+응답 데이터 반환 시 `CreateResponseDto`를 HTTP 응답에 필요한 JSON 객체로 직렬화하지 못해 발생한 문제다. 조금 더 자세히 살펴 보자.
 
-- 응답 반환 시 생성해야 하는 `CreateResponseDto` 객체의 필드로 `User` 엔티티가 있다
-
-- Jackson 라이브러리의 `HttpMessageConverter`는 `CreateResponseDto` 객체 직렬화 과정에서 `User` 엔티티의 직렬화를 시도한다
-
-  > 스프링 프레임워크는 HTTP 통신 과정에서의 요청 및 응답에 사용되는 객체의 직렬화와 역직렬화를 위해 Jackson 라이브러리를 이용한다.
-
-- `HttpMessageConverter`는 `User` 엔티티의 `pets` 필드가 참조하는 `Pet` 엔티티의 직렬화를 시도한다
-
-- `HttpMessageConverter`는 `Pet` 엔티티의 `user` 필드가 참조하는 `User` 엔티티의 직렬화를 시도한다
-
-- `HttpMessageConverter`는 `User` 엔티티의 `pets` 필드가 참조하는 `Pet` 엔티티의 직렬화를 시도한다
-
-- `HttpMessageConverter`는 `Pet` 엔티티의 `user` 필드가 참조하는 `User` 엔티티의 직렬화를 시도한다
-
+- 응답 반환 시 생성해야 하는 `CreateResponseDto` 객체의 필드에 `User` 엔티티가 있다
+- Jackson 라이브러리의 HttpMessageConverter는 `CreateResponseDto` 객체 직렬화 과정에서 `User` 엔티티의 직렬화를 시도한다
+- HttpMessageConverter는 `User` 엔티티의 `pets` 필드가 참조하는 `Pet` 엔티티의 직렬화를 시도한다
+- HttpMessageConverter는 `Pet` 엔티티의 `user` 필드가 참조하는 `User` 엔티티의 직렬화를 시도한다
+- HttpMessageConverter는 `User` 엔티티의 `pets` 필드가 참조하는 `Pet` 엔티티의 직렬화를 시도한다
+- HttpMessageConverter는 `Pet` 엔티티의 `user` 필드가 참조하는 `User` 엔티티의 직렬화를 시도한다
 - ... (무한 반복)
 
+> 스프링 프레임워크는 HTTP 통신 과정에서의 요청 및 응답을 위한 객체의 직렬화 및 역직렬화를 위해 Jackson 라이브러리를 이용한다.
 
 
- 결과적으로 양방향으로 매핑된 도메인 객체를 응답 객체에 담아 반환하고자 하니, 엔티티 간에 서로가 서로의 필드를 계속해서 참조하며 JSON 직렬화가 되지 않아 나타난 문제이다. 문제 해결을 위해, 이 원인을 계층적으로 나누어 다음과 같이 파악해 보자.
+
+ 결과적으로 양방향으로 **매핑된 도메인 객체를 응답 객체에 담아 반환하고자 하니, 엔티티 간에 서로가 서로의 필드를 계속해서 참조하며 JSON 직렬화가 되지 않아** 나타난 문제이다. 문제 해결을 위해, 원인을 계층적으로 나누어 파악해 보자.
 
 - 도메인 엔티티가 양방향 매핑이 되어 있다. 굳이 양방향으로 매핑하지 않으면 순환 참조 문제가 나타날 일이 없다
 - 도메인 엔티티를 응답 데이터에 그대로 담아 반환한다. 도메인 엔티티를 그대로 반환하지 않았다면, 응답 데이터 직렬화를 위해 도메인 엔티티를 순환해서 참조해야 하는 상황 자체가 일어나지 않았을 것이다
-- 응답 반환 시 JSON 직렬화가 되지 않는다. 필드가 순환참조되는 경우에 JSON 직렬화를 할 수 있는 방법을 적용했다면, 직렬화 불가 문제가 나타나지 않았을 것이다
+- 응답 반환 시 JSON 직렬화가 되지 않는다. 필드가 순환참조되는 경우에 JSON 직렬화를 할 수 있는 방법을 적용했다면, 직렬화 불가로 인한 문제가 나타나지 않았을 것이다
+
+<br>
 
 
 
@@ -231,7 +225,7 @@ java.lang.StackOverflowError: null
 
 ![jpa-bidirectional-objects-2]({{site.url}}/assets/images/jpa-bidirectional-objects-2.png){: .align-center}
 
- 다만, 요구사항 분석을 통해 도출된 서비스 명세가 있고, 이를 바꾸기 어려운 경우라면 적용하기 어렵다. 그럼에도 불구하고, 가장 근본적인 해결책이다. 
+ 가장 근본적인 해결책이지만, 요구사항 분석을 통해 도출된 서비스 명세가 있고, 이를 바꾸기 어려운 경우라면 적용하기 어려울 수 있다.
 
 
 
@@ -289,10 +283,8 @@ public class User {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long userId;
-  
-  	private String name;
-
-		...
+  private String name;
+  ...
 
     // 회원별 펫
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "user")
@@ -366,8 +358,8 @@ public class User {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long userId;
   
-  	...
-
+  ...
+    
     // 회원별 펫
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "user")
     @JsonManagedReference // 적용한 어노테이션
@@ -389,16 +381,15 @@ public class Pet {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long petId;
-  
- 		private String name;
+  private String name;
 
     // 사용자
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
-  	@JsonBackReference // 적용한 어노테이션
+  @JsonBackReference // 적용한 어노테이션
     private User user;
 
-		...
+  ...
 
 }
 ```
@@ -409,10 +400,10 @@ public class Pet {
 
  어노테이션을 사용하면서 엔티티 내 모든 필드를 응답으로 반환하지 않고자 한다면, `User` 엔티티에서 JSON 직렬화 시 무시할 속성을 찾아 보아도 될 듯하다.
 
-
+<br>
 
 # 결론
 
- 결국 엔티티를 어떻게 설계할 것인가, 응답을 어떻게 줄 것인가를 애초부터 올바르게 설계하는 것이 가장 중요하다는 것을 다시 한 번 깨닫는다. 일단 문제가 발생한 상황이기 때문에, 기존 구현과 서비스 명세를 해치지 않는 선에서 세 번째 방법을 선택해 문제를 해결하긴 했지만, 애초에 응답 데이터 설계 단계에서 왜 엔티티를 그대로 반환하고자 했는지 돌아볼 필요가 있다.
+ 결국 엔티티를 어떻게 설계할 것인가, 응답을 어떻게 줄 것인가를 애초부터 올바르게 설계하는 것이 가장 중요하다는 것을 다시 한 번 깨닫는다. 기존 구현과 서비스 명세를 해치지 않는 선에서 세 번째 방법을 선택해 문제를 해결하긴 했지만, 애초에 응답 데이터 설계 단계에서 왜 엔티티를 그대로 반환하고자 했는지 돌아볼 필요가 있다. 나아가 양방향 매핑 없이 로직을 짤 수 있지 않았을지도 고민해 보아야 한다.
 
- 한편, 지금은 응답 데이터 형식과 관련해 문제가 발생했지만, 비즈니스 로직을 작성하는 부분에서도 충분히 순환 참조가 발생할 수 있을 것이라 보인다. 양방향 연관관계를 기계적으로 남발하지 말고, 정말 참조할 필요가 있는지 설계 단계에서부터 충분히 검토하고, 양방향 참조를 사용하기로 결정했다면 도메인 엔티티 간 순환 참조가 일어나지 않도록 양방향 연관관계 편의 메서드 순환 참조를 체크할 필요가 있어 보인다.
+ 한편, 지금 당장은 응답 데이터 형식과 관련해 문제가 발생했지만, 비즈니스 로직을 작성하는 부분에서도 충분히 순환 참조로 인한 문제가 발생할 수 있을 것이라 보인다. 때문에 양방향 연관관계를 남발하지 말고, 설계 단계에서부터 양방향 참조의 필요성을 검토할 필요가 있다. 검토 후에도 양방향 참조가 필요해 사용하기로 결정했다면, 양방향 연관관계 편의 메서드를 작성하고, 해당 메서드 내에서 도메인 엔티티 간 순환 참조가 일어나지는 않는지 체크해야 할 것이다.
