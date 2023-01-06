@@ -1,6 +1,6 @@
 ---
 title:  "2022년 회고-1"
-excerpt: "주니어 개발차의 2년차 회고"
+excerpt: "주니어 개발자의 2년차 회고"
 toc: true
 categories:
   - etc
@@ -11,19 +11,19 @@ use_math: true
 
 
 
-{: .notice--warning}
 
-\#첫줄 #첫회고 #드디어
+
+{: .notice--warning}
 
  **드디어**. `언젠가 한 번 써야지`하고 미뤄만 두던 회고록이다.  2022년 회고치고는 조금 늦은 감이 없지 않아 있지만, 늦었다고 생각한 때가 가장 빠른 때라고 하니, 용기를 내서 작성해 보기로.
 
 <br>
 
-# TL; DR
+# Abstract
 
  돌아 보니 참 정신 없던 한 해였다. 추리고 추려서 세 줄로 요약하자면.
 
-1. 스스로를 백엔드 개발자라고 소개할 수 있게 되었다. 그리고 팀장을 해 봤다.
+1. 스스로를 백엔드 개발자라고 소개한다. 그리고 팀장을 해 봤다.
 2. 이직했다. 새로운 회사에 둥지를 틀었다.
 3. 2번의 이사를 했다. 연어마냥 본가로 돌아왔다.
 
@@ -45,9 +45,9 @@ use_math: true
 
 
 
-![keit-system]({{site.url}}/assets/images/keit-system.png){: .align-center width="500"}
+![keit-system]({{site.url}}/assets/images/keit-system.png){: .align-center}
 
-![keit-visual]({{site.url}}/assets/images/keit-visual.png){: .align-center width="500"}
+![keit-visual]({{site.url}}/assets/images/keit-visual.png){: .align-center}
 
 
 
@@ -125,9 +125,12 @@ use_math: true
 
 그 외에 이것들도 했다.
 
-- Spring, JPA 공부. Java Backend 개발자에게 필수인 것. 김영한 님의 인프런 강의와 백기선 님의 유튜브 동영상을 자주 봤다. 대단하신 분들..
-- 3차례의 세미나. 이미지 서버 개발 내용, 이미지 서버 부하테스트 내용, 경로탐색 엔진의 경로탐색 알고리즘에 대해 세미나를 진행했다.
+- Spring, JPA 공부. 김영한 님의 인프런 강의와 백기선 님의 유튜브 동영상을 자주 봤다. 대단하신 분들..
+- 3차례의 세미나. 주제는 미디어 서비스 개발 과정, 미디어 서비스 부하테스트 결과, 경로탐색 엔진 OSRM의 경로탐색 알고리즘.
 
+
+
+<br>
 
 
 
