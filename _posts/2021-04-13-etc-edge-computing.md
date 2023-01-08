@@ -3,7 +3,7 @@ title:  "엣지 컴퓨팅"
 excerpt: "엣지 컴퓨팅에 대해 알아 보자."
 toc: true
 categories:
-  - etc
+  - Etc
 tags:
   - 엣지
   - 클라우드

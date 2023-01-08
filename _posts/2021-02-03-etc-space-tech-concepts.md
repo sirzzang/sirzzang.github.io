@@ -4,7 +4,7 @@ excerpt: "공간의 개념에서 3D, VR, AR를 정의해 보자."
 toc: false
 toc_sticky: false
 categories:
-  - etc
+  - Etc
 tags:
   - 3D
   - VR
