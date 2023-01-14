@@ -9,6 +9,7 @@ tags:
   - Go
   - slice
   - nil
+toc: true
 ---
 
 
@@ -17,8 +18,6 @@ Go를 공부하다 nil slice와 empty slice의 차이가 궁금해져 알아 보
 
 - nil slice: 초기화하지 않은 slice
 - empty slice: 초기화되었으나 길이가 0인 slice
-
-<br>
 
 # slice 내부 구조
 
@@ -44,10 +43,6 @@ slice는 필드가 3개인 구조체로, 24 byte의 크기를 가진다.
 
 ![slice-structure]({{site.url}}/assets/images/slice-structure.png){: .align-center width="400"}
 
-
-
-<br>
-
 ## nil slice
 
  slice가 `nil`이라는 것은 slice 구조체가 가리키는 배열이 없음을 의미한다. 아래 그림에서와 같이 slice 타입 변수가 가리키는 slice 구조체의 `Data` 필드가 가리키는 배열이 없는 것이다.
@@ -58,8 +53,6 @@ slice는 필드가 3개인 구조체로, 24 byte의 크기를 가진다.
 
 - 따라서 슬라이스 구조체의 각 필드는 해당 필드 타입의 zero value로 초기화된다.
 - `Data`, `Len`, `Cap` 필드 값 모두 0이 된다.
-
-<br>
 
 ## empty slice
 
@@ -74,8 +67,6 @@ slice는 필드가 3개인 구조체로, 24 byte의 크기를 가진다.
 # 코드로 살펴 보기
 
 실제 코드로 nil slice와 empty slice의 차이를 확인할 수 있다.
-
-<br>
 
 ## nil slice
 
@@ -103,8 +94,6 @@ func main() {
 ```
 
 
-
-<br>
 
 ## empty slice
 
@@ -136,8 +125,6 @@ func main() {
 * `nil`과 비교하면 `false`이다.
 * 슬라이스 구조체가 가리키는 배열 포인터 주소 값이 0이 아니다.
 
-> 아래 코드에서 두 슬라이스가 같은 배열을 가리키는 것은 애초에 `[]int`가 메모리에 올라가 있기 때문이다. 어쨌든 둘 다 empty slice임에 초점을 맞추면 된다.
-
 ```go
 package main
 
@@ -168,21 +155,16 @@ func main() {
 
 `nil` slice와 empty slice는 가리키는 배열이 있는지 여부에서 차이가 나지만, 길이와 용량이 모두 0이기 때문에 비슷하게 동작하는 경우도 있다.
 
-* `len()`, `cap()` 함수를 사용할 수 있다.
+- `len()`, `cap()` 함수를 사용할 수 있다.
+- `range`를 사용할 수 있다. 다만, iteration이 일어나지는 않는다.
+- 길이가 0이기 때문에, 접근할 수 있는 요소가 없다. 접근하려고 할 경우, 런타임 에러가 발생한다.
 
-* `range`를 사용할 수 있다. 다만, iteration이 일어나지는 않는다.
-
-* 길이가 0이기 때문에, 접근할 수 있는 요소가 없다. 접근하려고 할 경우, 런타임 에러가 발생한다.
-
-  ```
-  panic: runtime error: index out of range [1] with length 0
-  ```
+```
+panic: runtime error: index out of range [1] with length 0
+```
 
 * 길이가 0이기 때문에, 그 내용을 바꿀 수는 없다. 만약, append 함수를 사용한다면, 두 경우 모두 길이가 0이기 때문에 새로운 배열을 할당하고, 기존 슬라이스 값을 바꾼다.
-
 * 슬라이싱할 수 있다. 다만, nil slice는 슬라이싱 후에도 nil slice이나, empty slice는 슬라이싱 후에도 여전히 nil slice가 아니라 empty slice이다.
-
-<br>
 
 ## nil slice
 
@@ -215,8 +197,6 @@ func main() {
 
 }
 ```
-
-<br>
 
 ## empty slice
 
