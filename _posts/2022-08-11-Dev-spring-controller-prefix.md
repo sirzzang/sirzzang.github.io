@@ -14,7 +14,9 @@ tags:
   - controller
 ---
 
- 스프링을 이용해 API 서버 개발을 하다, API 버전 관리를 위한 url prefix를 분리하여 설정하기 위한 방법을 알아 보았다. 분리의 필요성은 다음과 같다.
+ 
+
+스프링을 이용해 API 서버 개발을 하다, API 버전 관리를 위한 url prefix를 분리하여 설정하기 위한 방법을 알아 보았다. 분리의 필요성은 다음과 같다.
 
 - 모든 API 엔드포인트에 동일한 url prefix가 적용되고 있으나, 모든 컨트롤러의 `RequestMapping` 엔드포인트마다 일일이 작성하고 있음
 - url prefix 변경 시, 모든 컨트롤러의 `RequestMapping` 엔드포인트 설정 값을 변경해 주어야 함
