@@ -1,11 +1,11 @@
 ---
-title:  "[알고리즘] 정렬 - 삽입정렬"
+title:  "[Algorithm] 삽입정렬"
 excerpt:
 header:
   teaser: /assets/images/blog-Programming.jpg
 
 categories:
-  - Programming
+  - CS
 toc : true
 tags:
   - Python
@@ -16,19 +16,9 @@ tags:
 
 
 
+# 개요
 
 
----
-
-
-
-
-
-# 파이썬으로 구현하는 알고리즘_삽입 정렬
-
-
-
-## 삽입 정렬
 
 
 
@@ -41,6 +31,12 @@ tags:
 ![insertion sort]({{site.url}}/assets/images/insertion-sort.gif){:.aligncenter}
 
 <center><sup>출처 : http://ejklike.github.io/2017/03/04/sorting-algorithms-with-python.html</sup></center>
+
+
+
+# 원리
+
+
 
 
 

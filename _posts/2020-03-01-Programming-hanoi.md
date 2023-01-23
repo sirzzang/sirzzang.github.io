@@ -1,27 +1,21 @@
 ---
-title:  "[재귀] 하노이의 탑"
+title:  "하노이의 탑"
 excerpt:
 header:
   teaser: /assets/images/blog-Programming.jpg
 categories:
-  - Programming
+  - Algorithm
 tags:
   - Python
   - 재귀
   - 하노이의 탑
 ---
 
----
 
 
+# 문제
 
 
-
-# 하노이의 탑
-
-
-
-## 문제
 
 
 
@@ -30,9 +24,11 @@ tags:
 * 한 번에 하나의 원판만 옮긴다.
 * 큰 원판이 작은 원판 위에 있을 수 없다.
 
+<br>
+
+# 원리
 
 
-## 원리
 
 
 
@@ -48,9 +44,11 @@ tags:
 2. 맨 아래 원반을 **목적지 기둥**으로 옮긴다.
 3. 보조 기둥에 옮겨 놓았던 원반을 옮긴 **맨 아래 원반 위**로 옮긴다.
 
+<br>
+
+# 구현
 
 
-## 구현
 
 
 
@@ -64,7 +62,7 @@ tags:
 
 
 
-### 1. 이동 경로
+## 이동 경로
 
 ```python
 def Hanoi(n, start, end, spare):
@@ -97,11 +95,11 @@ def Hanoi(n, start, end, spare):
 
 
 
-### 2. 횟수
+## 횟수
 
 
 
-***방법 1***
+### 구현 1
 
  시작 기둥에 몇 개의 원판이 있는지만 주어진다. 
 
@@ -117,8 +115,6 @@ def Hanoi(n, start, end, spare):
 
 >>> Hanoi(4, 'A', 'C', 'B') # 31
 ```
-
-
 
  다음과 같이 구현해도 된다.
 
@@ -143,7 +139,7 @@ def main(n):
 
 
 
-***방법 2***
+## 구현 2
 
  각 기둥의 원판이 숫자, 문자 등의 리스트로 주어진다. 보조 기둥, 목적지 기둥은 비어 있는 리스트로 주어진다. 한 원판을 옮길 때마다 시작 기둥에서 `pop` 메서드를 사용해 목적지 기둥에 옮긴다. 시작 기둥에 옮겨야 할 원판이 남아 있는 경우에 재귀 호출이 이루어진다. ([참고](https://scipython.com/book/chapter-2-the-core-python-language-i/examples/the-tower-of-hanoi/))
 

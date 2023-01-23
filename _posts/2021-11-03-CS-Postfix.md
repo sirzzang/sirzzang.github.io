@@ -1,8 +1,8 @@
 ---
-title:  "[알고리즘] 후위표기법 연산"
+title:  "[Algorithm] 후위표기법 연산"
 excerpt: 
 categories:
-  - Programming
+  - CS
 toc: false
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -14,6 +14,8 @@ tags:
 ---
 
 
+
+# 개요
 
  계산을 위한 수식을 작성하는 방법에 다음의 세 가지가 있다.
 
@@ -48,7 +50,7 @@ tags:
 
 
 
- 후위표기법 변환을 위해 연산자 우선 순위를 정의하고, 연산자 우선 순위에 맞게 괄호를 치는 것이 중요하다. [스택](https://sirzzang.github.io/programming/Programming-Stack/) 자료 구조를 사용한다. 알고리즘은 다음과 같다.
+ 후위표기법 변환을 위해 연산자 우선 순위를 정의하고, 연산자 우선 순위에 맞게 괄호를 치는 것이 중요하다. 스택 자료 구조를 사용한다. 알고리즘은 다음과 같다.
 
 - 피연산자: 그대로 후위표기식에 출력
 - 괄호

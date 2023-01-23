@@ -1,11 +1,11 @@
 ---
-title:  "[알고리즘] 정렬 - 카운팅정렬"
+title:  "[Algorithm] 카운팅정렬"
 excerpt:
 header:
   teaser: /assets/images/blog-Programming.jpg
 
 categories:
-  - Programming
+  - CS
 toc : true
 tags:
   - Python
@@ -17,14 +17,6 @@ tags:
 
 
 
-
----
-
-
-
-
-
-# 파이썬으로 구현하는 알고리즘_카운팅 정렬
 
 
 
@@ -41,6 +33,10 @@ tags:
 ![카운팅정렬]({{site.url}}/assets/images/counting-sort.png){:.aligncenter}
 
 <center><sup>이미지 출처 : https://m.blog.naver.com/PostView.nhn?blogId=dnpc7848&logNo=221439395086&categoryNo=15&proxyReferer=https%3A%2F%2Fwww.google.com%2F</sup></center>
+
+
+
+
 
 
 

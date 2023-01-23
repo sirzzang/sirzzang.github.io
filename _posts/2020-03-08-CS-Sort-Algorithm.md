@@ -1,11 +1,11 @@
 ---
-title:  "[알고리즘] 정렬"
+title:  "[Algorithm] 정렬"
 excerpt: 정렬 알고리즘을 살펴보기 전에
 header:
   teaser: /assets/images/blog-Programming.jpg
 
 categories:
-  - Programming
+  - CS
 toc : true
 tags:
   - Python
@@ -20,6 +20,14 @@ tags:
 
 
  **정렬**이란,  2개 이상의 자료를 특정 기준에 의해 작은 값부터 큰 값(오름차순)이나 혹은 그 반대로(내림차순) 재배열하는 작업을 의미한다. 
+
+
+
+# 종류
+
+
+
+
 
  대표적인 정렬 알고리즘으로 버블정렬, 카운팅정렬, 선택정렬, 퀵정렬, 삽입정렬, 병합정렬 등이 있다. 각각의 정렬을 비교하면 다음과 같다(출처 : SW Expert Academy Learn [5차시](https://swexpertacademy.com/main/learn/course/lectureVideoPlayer.do)). 
 
@@ -40,7 +48,12 @@ tags:
 
 <br>
 
-**안정 vs. 불안정**
+# 분류
+
+
+
+
+## 안정 vs. 불안정
 
 * 정렬 후에 기존의 순서가 보장되면 안정 정렬, 그렇지 않으면 불안정 정렬.
 * 즉, **중복 값**이 있을 때, 그 중복된 값의 순서가 바뀌지 않으면 안정 정렬, 바뀌면 불안정 정렬이다.
@@ -51,9 +64,9 @@ tags:
 
 ![stablenotstable](C:/Users/sir95/Desktop/sirzzang.github.io/_posts/{{site.url}}/assets/images/stablenotstable.png){: width="50%" height="50%"}
 
-<br>
 
-**in-place 정렬**
+
+## in-place
 
 * 입력 리스트 내부에서 정렬이 이루어지는 알고리즘.
 * 정렬 도중 별도 저장 공간을 필요로 하지 않는다.

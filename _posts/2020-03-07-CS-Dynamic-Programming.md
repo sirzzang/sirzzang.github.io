@@ -1,27 +1,19 @@
 ---
-title:  "[알고리즘] 동적 계획법"
+title:  "[Algorithm] 동적 계획법"
 excerpt:
 header:
   teaser: /assets/images/blog-Programming.jpg
 
 categories:
-  - Programming
+  - CS
 toc : true
 tags:
-  - Python
   - 알고리즘
   - 동적계획법
   - DP
+  - Python
 use_math : True
 ---
-
-
-
-
-
-
-
-# 동적 계획법
 
 
 
@@ -29,9 +21,7 @@ use_math : True
 
 
 
-
-
-## 1. 정의
+# 정의
 
 
 
@@ -39,11 +29,9 @@ use_math : True
 
  그리디 알고리즘과 비슷하게, 이 알고리즘 역시 문제를 해결하기 위한 논리에 가깝다. 그리디 알고리즘이 그랬듯, 완전 탐색을 조금 더 효율적으로 하기 위한 문제 해결 방법이기도 하다.
 
+<br>
 
-
-
-
-### 구현
+# 구현
 
 
 
@@ -59,15 +47,13 @@ use_math : True
 
 
 
+<br>
+
+# 특징
 
 
 
-
-## 2. 특징
-
-
-
-### 적용할 수 있는 문제
+## 적용할 수 있는 문제
 
 
 
@@ -92,11 +78,9 @@ use_math : True
 
 
 
----
 
 
-
-### 비교
+## 비교
 
 
 
@@ -138,21 +122,19 @@ use_math : True
 
 
 
----
+<br>
 
 
 
-## 3. 적용
+# 적용
 
 
 
-
-
-### 피보나치 수열
+## 피보나치 수열
 
  
 
-(유명한) [피보나치 수열](https://ko.wikipedia.org/wiki/%ED%94%BC%EB%B3%B4%EB%82%98%EC%B9%98_%EC%88%98)을 구하는 문제를 생각해 보자.
+[피보나치 수열](https://ko.wikipedia.org/wiki/%ED%94%BC%EB%B3%B4%EB%82%98%EC%B9%98_%EC%88%98)을 구하는 문제를 생각해 보자.
 
 ![DP vs. DivideConquer]({{site.url}}/assets/images/fibonacci_rabbit.png){:.aligncenter}
 
@@ -160,7 +142,7 @@ use_math : True
 
 
 
-**재귀함수를 사용한 구현**
+### 재귀함수를 사용한 구현
 
 
 
@@ -190,7 +172,7 @@ def fibo(n):
 
 
 
-**메모이제이션을 추가한 구현**
+### 메모이제이션을 추가한 구현
 
  재귀로 구현한 함수에 메모이제이션을 더해 시간복잡도를 `O(n)`으로 줄일 수 있다.
 
@@ -225,9 +207,7 @@ def fibo_memo(n):
 
 
 
-
-
-**동적 계획법을 사용한 구현**
+### 동적 계획법을 사용한 구현
 
 
 
@@ -270,7 +250,7 @@ def fibo_DP(n):
 
 
 
-### 초기화
+## 초기화
 
 
 

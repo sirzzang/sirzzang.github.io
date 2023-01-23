@@ -1,10 +1,10 @@
 ---
-title:  "[알고리즘] 이분탐색"
+title:  "[Algorithm] 이분탐색"
 excerpt:
 header:
   teaser: /assets/images/blog-Programming.jpg
 categories:
-  - Programming
+  - CS
 toc : true
 tags:
   - Python
@@ -35,7 +35,7 @@ tags:
 
 <br>
 
-# 구현
+# 원리
 
 
 
@@ -49,13 +49,17 @@ tags:
   * `mid` 값보다 `target`이 작다면 `right`을 `mid-1`로 이동시켜, 왼쪽 구간에서 탐색한다.
 * `target`이 없다면, `None`을 반환한다.
 
-<br>
+
+
+# 구현
 
  위의 과정을 반복과 재귀를 사용하여 모두 구현할 수 있다. 왼쪽 인덱스와 오른쪽 인덱스 값을 어떻게 이동시켜주느냐의 관점에서 차이가 있다.
 
-<br>
 
-**반복**
+
+## 반복
+
+
 
 ```python
 def binary_search(array, target):
@@ -76,9 +80,11 @@ def binary_search(array, target):
     return None # 찾는 값이 없을 때
 ```
 
-<br>
 
-**재귀**
+
+## 재귀
+
+
 
 ```python
 def binary_search(array, target, left, right):
@@ -94,8 +100,6 @@ def binary_search(array, target, left, right):
     else: # 오른쪽 구간에 대해 재귀 호출
         binary_search(array, target, mid+1, right) 
 ```
-
-<br>
 
 # 파이썬 bisect 모듈
 
@@ -119,8 +123,6 @@ bisect(my_list, 25) # 5
 bisect(my_list, 26) # 5
 ```
 
-<br>
-
  삽입하고자 할 때는 `insort_left`, `insort_right`, `insort` 함수를 사용하면 된다. 리스트에 삽입이 된다는 것만 다를 뿐, 기본 동작 원리는 `bisect_`로 시작하는 함수와 동일하다.
 
 <br>
@@ -129,16 +131,12 @@ bisect(my_list, 26) # 5
 
  이분 탐색을 반복할 수록, 탐색할 자료의 개수가 절반으로 줄어든다. 따라서 $$N$$개의 자료가 있을 때, 총 $$K$$번 자료를 검색한다면, 남은 자료의 개수는 $$N \cdot {\frac {1} {2}}^K$$이다. 최악의 경우, 탐색 종료 시점에 남는 자료의 개수가 1이 되어야 하므로, $$K=log_2^N$$이 된다. 따라서, 시간복잡도는 $O(logN)$이다.
 
-<br>
 
-<br>
 
-*주절주절*
-
-* 프로그래머스 [징검다리 건너기](https://programmers.co.kr/learn/courses/30/lessons/64062) 문제 풀다가, 배열 내에 중복된 자료가 있을 때는 어떻게 이분 탐색을 해야 하는지 궁금해 졌다. [이 글](https://eine.tistory.com/entry/%EC%9D%B4%EC%A7%84-%ED%83%90%EC%83%89-%EC%9D%B4%EB%B6%84-%ED%83%90%EC%83%89binary-search-%EA%B5%AC%ED%98%84%EC%8B%9C-%EA%B3%A0%EB%A0%A4%ED%95%A0-%EA%B2%83%EB%93%A4)을 참고하니 `upper_bound`와 `lower_bound`를 구한 뒤, `lower_bound`부터 `upper_bound`까지 훑어서 해당 크기의 모든 원소를 탐색하면 된다고 한다.
-
-* 자료가 정렬이 되어 있어야 한다면, (내장 정렬 함수를 사용하지 않는다고 가정했을 때) 정렬 알고리즘에 따라서도 효율성이 달라질 수 있으..려나?
-
-* [이코테 이진탐색 강의](https://www.youtube.com/watch?v=94RC-DsGMLo)를 참고하니, 다음의 경우에는 반드시 이분 탐색을 떠올려야 한다고.
-  * 최적화 문제를 결정 문제(`예` 혹은 `아니오`)로 바꾸어 해결하는 **파라메트릭 서치**(*parametric search*)가 필요한 경우
-  * 탐색 범위가 큰 경우(예컨대, 0부터 10억 까지의 정수 중 하나)
+> 참고
+>
+> * 프로그래머스 [징검다리 건너기](https://programmers.co.kr/learn/courses/30/lessons/64062) 문제 풀다가, 배열 내에 중복된 자료가 있을 때는 어떻게 이분 탐색을 해야 하는지 궁금해 졌다. [이 글](https://eine.tistory.com/entry/%EC%9D%B4%EC%A7%84-%ED%83%90%EC%83%89-%EC%9D%B4%EB%B6%84-%ED%83%90%EC%83%89binary-search-%EA%B5%AC%ED%98%84%EC%8B%9C-%EA%B3%A0%EB%A0%A4%ED%95%A0-%EA%B2%83%EB%93%A4)을 참고하니 `upper_bound`와 `lower_bound`를 구한 뒤, `lower_bound`부터 `upper_bound`까지 훑어서 해당 크기의 모든 원소를 탐색하면 된다고 한다.
+> * 자료가 정렬이 되어 있어야 한다면, (내장 정렬 함수를 사용하지 않는다고 가정했을 때) 정렬 알고리즘에 따라서도 효율성이 달라질 수 있으..려나?
+> * [이코테 이진탐색 강의](https://www.youtube.com/watch?v=94RC-DsGMLo)를 참고하니, 다음의 경우에는 반드시 이분 탐색을 떠올려야 한다고.
+>   * 최적화 문제를 결정 문제(`예` 혹은 `아니오`)로 바꾸어 해결하는 **파라메트릭 서치**(*parametric search*)가 필요한 경우
+>   * 탐색 범위가 큰 경우(예컨대, 0부터 10억 까지의 정수 중 하나)

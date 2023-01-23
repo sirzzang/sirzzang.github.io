@@ -1,11 +1,11 @@
 ---
-title:  "[알고리즘] 정렬 - 병합정렬"
+title:  "[Algorithm] 병합정렬"
 excerpt:
 header:
   teaser: /assets/images/blog-Programming.jpg
 
 categories:
-  - Programming
+  - CS
 toc : true
 tags:
   - Python
@@ -15,14 +15,6 @@ tags:
 ---
 
 
-
-
-
-# 파이썬으로 구현하는 알고리즘_병합 정렬
-
-
-
-## 병합 정렬
 
 
 

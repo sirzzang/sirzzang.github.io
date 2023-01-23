@@ -1,5 +1,5 @@
 ---
-title: "[강의 연습문제] 개미수열"
+title: "개미수열"
 excerpt: 
 header:
   teaser: /assets/images/blog-Programming.jpg
@@ -7,7 +7,6 @@ toc: true
 categories:
   - Programming
 tags:
-  - BOJ
   - Python
   - Programming
   - 문자열

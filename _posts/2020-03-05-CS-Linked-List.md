@@ -1,11 +1,11 @@
 ---
-title:  "[자료구조] 연결 리스트(Linked List)"
+title:  "[Data Structure] 연결 리스트(Linked List)"
 excerpt:
 header:
   teaser: /assets/images/blog-Programming.jpg
 
 categories:
-  - Programming
+  - CS
 tags:
   - Python
   - 자료구조
@@ -14,29 +14,7 @@ tags:
 
 
 
-
-
-
-
-
-
-# 파이썬으로 구현하는 자료구조_Linked List
-
-
-
-*출처*
-
-\- [SW Expert Academy](https://swexpertacademy.com/main/learn/course/subjectDetail.do?courseId=AVuPDN86AAXw5UW6&subjectId=AWOVJ1r6qfkDFAWg)
-
-\- [생활코딩](https://opentutorials.org/module/1335/8821)
-
-\- [Visualgo.net](https://visualgo.net/en/list)
-
-\- [GeeksforGeeks](https://www.geeksforgeeks.org/data-structures/linked-list/)
-
-\- [tutorialspoint](https://www.tutorialspoint.com/python_data_structure/python_advanced_linked_list.htm)
-
-\- [초보몽키의 개발공부로그](https://wayhome25.github.io/cs/2017/04/17/cs-19/)
+ 연결 리스트란, 각 노드가 데이터와 포인터를 가지고 연결되어 있는 방식으로 데이터를 저장하는 자료 구조이다. 데이터를 담고 있는 노드들이 포인터를 통해 서로 연결된다.
 
 
 
@@ -46,7 +24,36 @@ tags:
 
 
 
-## 파이썬의 리스트
+
+
+## 순차 리스트
+
+
+
+> 파이썬의 내장 자료 구조인 리스트는 동적 배열로 작성된 리스트이다. 즉, 위에서도 보았듯 크기 변경이 가능하고, 다양한 데이터 타입을 모두 저장할 수 있는 리스트이다. 
+>
+> 이제부터는 이후에 구현할 연결 리스트와 구별하기 위해, 파이썬의 리스트를 "순차 리스트"라고 지칭한다. 
+
+
+
+순차 리스트는 배열을 기반으로 구현한 리스트이다.
+
+
+
+순차 리스트에서의 작업은 다음과 같다.
+
+* 초기화 및 생성 : 변수에 값을 초기화함으로써 생성한다.
+
+* 데이터 접근 : 인덱스를 이용해 원하는 위치의 데이터를 변경하고 참조할 수 있다. 우측에서부터 카운팅한 인덱스로 음수 인덱스를 사용할 수도 있다.
+* 자료의 이동, 삽입 및 삭제 연산 : 원소의 접근 및 이동으로써 구현된다.
+
+
+
+이러한 순차 리스트는 연산 특징으로 인해, **원소의 개수가 많고, 삽입/삭제 연산이 빈번한 작업에서는 소요되는 시간이 크게 증가**한다는 단점을 갖는다.
+
+
+
+### 파이썬의 리스트
 
 
 
@@ -74,31 +81,6 @@ tags:
 구체적으로 다른 언어의 자료구조 중 특히 **순차 리스트**가 파이썬의 내장 자료구조인 리스트라고 볼 수 있다. 따라서 연결 리스트에 대해 알기 위해서는, 순차 리스트에 대해 먼저 알아야 한다.
 
 
-
-## 순차 리스트
-
-
-
-> 파이썬의 내장 자료 구조인 리스트는 동적 배열로 작성된 리스트이다. 즉, 위에서도 보았듯 크기 변경이 가능하고, 다양한 데이터 타입을 모두 저장할 수 있는 리스트이다. 
->
-> 이제부터는 이후에 구현할 연결 리스트와 구별하기 위해, 파이썬의 리스트를 "순차 리스트"라고 지칭한다. 
-
-
-
-순차 리스트는 배열을 기반으로 구현한 리스트이다.
-
-
-
-순차 리스트에서의 작업은 다음과 같다.
-
-* 초기화 및 생성 : 변수에 값을 초기화함으로써 생성한다.
-
-* 데이터 접근 : 인덱스를 이용해 원하는 위치의 데이터를 변경하고 참조할 수 있다. 우측에서부터 카운팅한 인덱스로 음수 인덱스를 사용할 수도 있다.
-* 자료의 이동, 삽입 및 삭제 연산 : 원소의 접근 및 이동으로써 구현된다.
-
-
-
-이러한 순차 리스트는 연산 특징으로 인해, **원소의 개수가 많고, 삽입/삭제 연산이 빈번한 작업에서는 소요되는 시간이 크게 증가**한다는 단점을 갖는다..
 
 
 
@@ -482,7 +464,7 @@ delete temp, tail = pre
 
 
 
-
+<br>
 
 # 구현
 
@@ -724,6 +706,23 @@ class LinkedList:
         return self.num_of_data
 ```
 
+
+
+
+
+*출처*
+
+\- [SW Expert Academy](https://swexpertacademy.com/main/learn/course/subjectDetail.do?courseId=AVuPDN86AAXw5UW6&subjectId=AWOVJ1r6qfkDFAWg)
+
+\- [생활코딩](https://opentutorials.org/module/1335/8821)
+
+\- [Visualgo.net](https://visualgo.net/en/list)
+
+\- [GeeksforGeeks](https://www.geeksforgeeks.org/data-structures/linked-list/)
+
+\- [tutorialspoint](https://www.tutorialspoint.com/python_data_structure/python_advanced_linked_list.htm)
+
+\- [초보몽키의 개발공부로그](https://wayhome25.github.io/cs/2017/04/17/cs-19/)
 
 
 
