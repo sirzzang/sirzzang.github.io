@@ -1,6 +1,6 @@
 ---
 title: "[Programmers] 마법의 엘리베이터"
-excerpt: 그리디, 완전 탐색, DFS
+excerpt: 그리디, 완전 탐색, DFS, 백트래킹
 header:
   teaser: /assets/images/blog-Programming.jpg
 toc: true

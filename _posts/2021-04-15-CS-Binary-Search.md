@@ -1,6 +1,6 @@
 ---
 title:  "[Algorithm] 이분탐색"
-excerpt:
+excerpt: 이분탐색 혹은 이진탐색
 header:
   teaser: /assets/images/blog-Programming.jpg
 categories:

@@ -1,6 +1,6 @@
 ---
 title: "[Programmers] 멀리 뛰기"
-excerpt: 
+excerpt: 우선순위 큐, 완전 탐색
 header:
   teaser: /assets/images/blog-Programming.jpg
 toc: true
@@ -9,6 +9,7 @@ categories:
 tags:
   - Python
   - Programmers
+  - heapq
 ---
 
 
