@@ -14,10 +14,14 @@ toc: true
 
 
 
+<br>
+
 Go를 공부하다 nil slice와 empty slice의 차이가 궁금해져 알아 보았다. slice가 `nil`인 것과 비어 있는 것은 엄밀히 다른 개념이지만, 관찰되는 것만 보면 비슷하기 때문에 혼동하기 쉽다.
 
 - nil slice: 초기화하지 않은 slice
 - empty slice: 초기화되었으나 길이가 0인 slice
+
+<br>
 
 # slice 내부 구조
 
