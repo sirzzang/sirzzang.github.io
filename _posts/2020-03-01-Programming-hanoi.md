@@ -1,10 +1,10 @@
 ---
 title:  "하노이의 탑"
-excerpt:
+excerpt: "재귀, 피보나치 수열"
 header:
   teaser: /assets/images/blog-Programming.jpg
 categories:
-  - Algorithm
+  - Programming
 tags:
   - Python
   - 재귀

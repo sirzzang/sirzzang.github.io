@@ -1,6 +1,6 @@
 ---
 title: "[Programmers] 외톨이 문자"
-excerpt: 
+excerpt: "문자열, groupby, counter"
 header:
   teaser: /assets/images/blog-Programming.jpg
 toc: true
@@ -10,7 +10,6 @@ tags:
   - Python
   - Programmers
   - 문자열
-
 ---
 
 

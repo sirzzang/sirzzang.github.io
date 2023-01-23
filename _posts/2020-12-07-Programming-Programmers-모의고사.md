@@ -1,6 +1,6 @@
 ---
 title: "[Programmers] 모의고사"
-excerpt: 
+excerpt: 구현
 header:
   teaser: /assets/images/blog-Programming.jpg
 toc: true
@@ -9,7 +9,6 @@ categories:
 tags:
   - Python
   - Programmers
-  - 문자열
 ---
 
 

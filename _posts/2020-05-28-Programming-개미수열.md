@@ -1,6 +1,6 @@
 ---
 title: "개미수열"
-excerpt: 
+excerpt: 문자열, 스택, 구현 
 header:
   teaser: /assets/images/blog-Programming.jpg
 toc: true

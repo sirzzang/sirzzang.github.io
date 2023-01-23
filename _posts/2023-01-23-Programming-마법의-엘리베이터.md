@@ -1,6 +1,6 @@
 ---
 title: "[Programmers] 마법의 엘리베이터"
-excerpt: 
+excerpt: 그리디, 완전 탐색, DFS
 header:
   teaser: /assets/images/blog-Programming.jpg
 toc: true
@@ -10,8 +10,6 @@ tags:
   - Go
   - Programmers
   - 그리디
-
-
 ---
 
 
