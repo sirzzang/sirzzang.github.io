@@ -29,13 +29,11 @@ tags:
 
 
 ```go
-// import "fmt"
-
 func solution(storey int) int {
     
     answer := 0
     
-    // 그리디하게 가 보자
+    // 그리디하게 탐색
     for {
         if storey == 0 {
             break
