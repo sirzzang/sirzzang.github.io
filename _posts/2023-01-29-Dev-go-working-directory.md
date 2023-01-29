@@ -46,9 +46,7 @@ toc: true
   func (app *application) Home(w http.ResponseWriter, r *http.Request) {
   	
   	var td = make(map[string]any)
-    
     // 생략
-    
   	_ = app.render(w, r, "home.page.gohtml", &TemplateData{Data: td})
   }
   
@@ -61,9 +59,7 @@ toc: true
   		http.Error(w, "Bad Request", http.StatusBadRequest)
   		return err
   	}
-  
   	// 생략
-    
   	err = parsedTemplate.Execute(w, td)
   	if err != nil {
   		return err
@@ -81,7 +77,9 @@ toc: true
 
 
 
- Go html 템플릿 파일(`.gohtml`)들은 모두 프로젝트 루트 디렉토리 아래의 `templates` 폴더에 저장되어 있다. 그리고 `handlers.go`에서는 템플릿들이 보관되어 있는 경로를 `pathToTemplates`라는 변수의 값으로 지정해 두었으며, 해당 경로는 루트 디렉토리로부터의 상대 경로를 나타내도록 설정되어 있다.
+ Go html 템플릿 파일(`.gohtml`)들은 모두 프로젝트 루트 디렉토리 아래의 `templates` 폴더에 저장되어 있다.
+
+ 그리고 `handlers.go`에서는 템플릿들이 보관되어 있는 경로를 `pathToTemplates`라는 변수의 값으로 지정해 두었으며, 해당 경로는 루트 디렉토리로부터의 상대 경로를 나타내도록 설정되어 있다.
 
 
 
@@ -97,7 +95,7 @@ toc: true
 
  아무 생각 없이 `go run` 커맨드로 코드를 실행하다가, 갑자기 `/` 경로로 접속해 봤는데 404 Bad Request가 발생한다.
 
-![go-webapp-404-error]({{site.url}}/assets/images/go-webapp-404-error.png){: .align-center width="400"}
+![go-webapp-404-error]({{site.url}}/assets/images/go-webapp-404-error.png){: .align-center width="500"}
 
  `handlers.go` 소스 코드의 `render` 함수에서 템플릿 파일을 파싱하지 못하면 404 Bad Request 에러가 나도록 했기 때문에, 템플릿을 찾지 못하는 것이 아닌가 의심해 볼 수 있다.
 
@@ -137,10 +135,9 @@ toc: true
   	log.Printf("Working directory: %s", dir)
     
     // 생략
-  
   }
   ```
-
+  
 - 실행 결과
 
   | 루트 디렉토리에서 실행 시                                    | `/cmd/web` 디렉토리에서 실행 시                              |
@@ -158,12 +155,11 @@ toc: true
  ~~그 전까지 잘 실행되던 게 안 되어서 갑자기 당황했지만~~ 아주 간단하게 해결된다.
 
 - 루트 디렉토리에서 `go run ./cmd/web` 커맨드를 이용해 실행
-
 - `handlers.go`에서 `pathToTemplates` 변수의 값을 절대 경로를 이용해 지정
 
-  ```go
-  var pathToTemplates = "/Users/eraser/tutorial/go-webapp/templates/"
-  ```
+```go
+var pathToTemplates = "/Users/eraser/tutorial/go-webapp/templates/"
+```
 
  다만, 두 번째 해결 방법의 경우 소스 코드에 절대 경로가 그대로 들어가기 때문에 좋은 방식인지는 모르겠다.
 
@@ -178,5 +174,5 @@ toc: true
 - 실행 경로를 항상 주의 깊게 살피자
 - 코드 내에서 런타임에 결정되는 실행 경로와 상관 없이 특정 경로 값을 이용하고 싶은 경우, 어떻게 하는 것이 좋을지 고민해 보자
   - 어플리케이션 실행 시 command를 이용할 수 있지 않을까
-  - 지금은 개발 단계니까 이렇게 실행하지만, 개발 완료 후 어플리케이션 설정 관련 config에서 설정해볼 수 있지 않을까
+  - 지금은 개발 단계지만, 개발 완료 후 어플리케이션 설정 관련 config에서 설정해볼 수 있지 않을까
 
