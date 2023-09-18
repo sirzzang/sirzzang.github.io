@@ -25,7 +25,7 @@ ERROR: ServiceError - Failed to deploy application.
 
 # 상황
 
-현재 백엔드 서버 어플리케이션은 Elastic Beanstalk을 이용해 EC2 인스턴스에 target 브랜치 가장 최근 commit을 기준으로 아래 Dockerfile을 이용해 Docker Image를 만들어 배포되고 있다. 
+현재 백엔드 서버 어플리케이션은 Elastic Beanstalk을 이용해 EC2 인스턴스에 target 브랜치의 가장 최근 commit을 기준으로 Docke Image를 배포해 컨테이너를 실행한다. Docker Image를 만들기 위한 Dockerfile은 아래와 같다.
 
 ```dockerfile
 FROM golang:1.19-alpine
@@ -61,17 +61,20 @@ Elastic Beanstalk Full Log를 다운로드하면, 아래와 같은 디렉토리 
 
 ![aws-elasticbeanstalk-ebengine-log]({{site.url}}/assets/images/aws-elasticbeanstalk-ebengine-log.png){: .align-center}
 
-Dockerfile을 실행하던 중, OOM 에러가 발생했음을 알 수 있다.
+Dockerfile을 실행해 Docker Image를 빌드하던 중, OOM 에러가 발생했음을 알 수 있다.
 
 <br>
 
 # 해결
 
-해결책은 아주 간단했다. EC2 인스턴스의 메모리를 늘려 주었다. 기존에는 `t2.micro` 메모리를 이용하고 있었는데, 해당 메모리 크기는 1GiB이다. `t3.small`을 이용하도록 변경했다. 해당 메모리 기본 크기는 2GiB이다.
+해결책은 아주 간단했다. EC2 인스턴스의 메모리를 늘려 주었다. 
+
+- 기존에는 `t2.micro` 메모리를 이용하고 있었는데, 해당 메모리 크기는 1GiB이다.
+- `t3.small`을 이용하도록 변경했다. 해당 메모리 기본 크기는 2GiB이다.
 
 ![aws-ec2-memory]({{site.url}}/assets/images/aws-ec2-memory.png)
 
-이후 배포에 성공했다. 해결책은 간단했지만, 어플리케이션 빌드 과정에서 OOM 에러가 발생하는 것은 처음 보는 것이었다. 로컬에서는 항상 PC 혹은 노트북의 메모리를 이용했기 때문에, 개발 과정에서 잘못해 실행 중인 어플리케이션에서 OOM 에러를 본 적은 있어도 빌드 과정에서 본 적은 없었다. 클라우드 환경에서 배포했기 때문에 얻을 수 있었던 신박한(?) 경험이다. 
+이후 배포에 성공했다. 해결책은 간단했지만, 어플리케이션 빌드 과정에서 OOM 에러가 발생하는 것은 처음 보는 것이었다. 로컬에서는 항상 PC 혹은 노트북의 메모리를 이용했기 때문에, 실행 중인 어플리케이션에서 OOM 에러를 본 적은 있어도 빌드 과정에서 본 적은 없었다. 클라우드 환경에서 배포했기 때문에 얻을 수 있었던 신박한(?) 경험이다. 
 
 > *참고*: SWAP 메모리를 이용한 해결 방법
 >
@@ -94,11 +97,13 @@ Dockerfile을 실행하던 중, OOM 에러가 발생했음을 알 수 있다.
 
  두 가지 문구가 있었는데, 갑자기 배포에 실패해서 판단력이 흐려졌는지 어쨌는지, 두 번째 문구에 꽂혀 버렸다. 배포가 실패했다는 첫 번째 문구는 무시한 채.
 
- 어쨌든 읽어 보니 뭔가 어플리케이션 배포 버전이 안 맞는다는 것 같다. 이 문구로 구글링을 해서 이것 저것 링크를 발견했는데, 버전을 맞춰서 배포를 해야 한다거나, Elastic Beanstalk에서 업로드한 기존 배포 파일을 삭제해 줘야 한다거나, 하는 등의 해결책들이 있었다. 그래서 시도했던 일들은 다음과 같은 것들이 있다.
+ 읽어 보니 뭔가 어플리케이션 배포 버전이 안 맞는다는 것 같다. 이 문구로 구글링을 해서 이것 저것 링크를 발견했는데, 버전을 맞춰서 배포를 해야 한다거나, Elastic Beanstalk에서 업로드한 기존 배포 파일을 삭제해 줘야 한다거나, 하는 등의 해결책들이 있었다. 그래서 시도했던 일들은 다음과 같은 것들이 있다.
 
 - S3에 있는 elastic beanstalk 관련 config 파일 삭제해 보기
 - S3에 있는 elastic beanstalk 업로드 파일 삭제해 보기
 - deployment id 찾아 보기
 - ...
 
- 지금 생각해 보면, 애초에 OOM 에러 때문에 배포가 실패했던 것이 근본 원인이다. 그 덕분에 Elastic Beanstalk 환경에서 가장 최근에 배포에 성공한 application version에서의 deployment id와, 현재 배포하고자 하는 application version의 deployment id가 달라서 application version이 맞지 않을 수밖에 없는 것이다. 한참 동안 삽질했는데, 결국 로그를 잘 읽는 것이 답이었다.
+ 지금 생각해 보면, 애초에 OOM 에러 때문에 배포가 실패했던 것이 근본 원인이다. 그 덕분에 Elastic Beanstalk 환경에서 가장 최근에 배포에 성공한 application version에서의 deployment id와, 현재 배포하고자 하는 application version의 deployment id가 달라서 application version이 맞지 않을 수밖에 없는 것이다. 
+
+ 한참 동안 삽질했는데, **결국 로그를 잘 읽는 것이 답이었다**.
