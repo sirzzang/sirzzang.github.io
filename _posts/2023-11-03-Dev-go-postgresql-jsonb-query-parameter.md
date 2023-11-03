@@ -57,7 +57,7 @@ SELECT * FROM users;
 
  예컨대, 현재 시각이 금요일 오전 9시 30분이고, 위 사진 기준 `testuser1`의 로그인이 허용되어 있는지 확인하기 위해서는 다음과 같은 쿼리를 사용하면 된다.
 
-```postgresql
+```sql
 SELECT (schedule -> 'Fri' -> 9) AS login_allowed
 FROM users
 WHERE username='testuser1';
@@ -74,25 +74,25 @@ WHERE username='testuser1';
 
 > jsonb 타입에 대해 사용할 수 있는 PostgreSQL 연산자 및 내장 함수는 https://www.postgresql.org/docs/9.5/functions-json.html를 참고하면 확인할 수 있다.
 
- 다만, 위의 쿼리로 반환된 `0`이라는 값이 integer가 아님에 주의해야 한다(실제 첨부한 결과 사진에서도 확인할 수 해당 값의 타입이 `integer`가 아니라 `jsonb`임을 확인할 수 있다). PostgreSQL에서 `jsonb` 타입은 INSERT 수행 당시의 text 값을 그대로 저장하기 때문에, 반환된 `jsonb` 타입을 활용하기 위해서는 형변환이 필요할 수 있다.
+ 다만, 위의 쿼리로 반환된 `0`이라는 값이 integer가 아님에 주의해야 한다(실제 첨부한 결과 사진에서도 쿼리 결과 값의 타입이 `integer`가 아니라 `jsonb`임을 확인할 수 있다). PostgreSQL에서 `jsonb` 타입은 INSERT 수행 당시의 text 값을 그대로 저장하기 때문에, 반환된 `jsonb` 타입을 활용하기 위해서는 형변환이 필요할 수 있다.
 
 <br>
 
  위의 과정을 이용해 전체 테이블에서 현재 시각 기준 로그인이 허용되어 있지 않은 사용자를 조회하기 위해서는 아래와 같이 쿼리를 작성하면 된다.
 
-```postgresql
+```sql
 SELECT id, username, schedule
 FROM users
 WHERE schedule -> 'Fri' -> 9 = '0'; -- text와 비교
 ```
 
-```postgresql
+```sql
 SELECT id, username, schedule
 FROM users
 WHERE (schedule -> 'Fri' -> 9)::int = 0; -- schedule 값을 integer로 형변환한 후, 0과 비교
 ```
 
-```postgresql
+```sql
 SELECT id, username, schedule
 FROM users
 WHERE (schedule -> 'Fri' -> 9)::int = false::int; -- 의미를 명확히 하기 위해, false를 0으로 형변환하여 비교
@@ -102,7 +102,7 @@ WHERE (schedule -> 'Fri' -> 9)::int = false::int; -- 의미를 명확히 하기 
 
 상술한 이유에 따라, 아래와 같이 쿼리를 작성하면 `WHERE` 절에서 jsonb 타입과 integer 타입을 비교할 수 없기 때문에, 에러가 발생한다.
 
-```postgresql
+```sql
 SELECT id, username, is_blocked, schedule
 FROM users
 WHERE schedule -> 'Fri' -> 9 = 0; -- jsonb 타입과 integer 타입의 비교
@@ -251,7 +251,7 @@ if err != nil {
 
 <br>
 
- 조금 더 명확히 하기 위해, `users` 테이블에 아래와 같이 더 데이터를 넣어 본 뒤, 동일한 코드로 테스트를 수행하면, 2개의 레코드를 조회해 오는 것을 확인할 수 있다.
+ 조금 더 명확히 하기 위해, `users` 테이블에 아래와 같이 더미 데이터를 넣어 본 뒤, 동일한 코드로 테스트를 수행하면, 2개의 레코드를 조회해 오는 것을 확인할 수 있다.
 
 ```sql
 INSERT INTO users (username, is_blocked, schedule)
