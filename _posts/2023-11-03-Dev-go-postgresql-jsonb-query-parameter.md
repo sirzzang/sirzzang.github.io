@@ -1,6 +1,6 @@
 ---
 title:  "[Go] Query Parameter를 이용해 PostgreSQL json 타입의 데이터 조회하기"
-excerpt: Go를 이용해 PostgreSQL jsonb 타입의 데이터를 조회하며 겪었던 문제
+excerpt: Go를 이용해 PostgreSQL jsonb 타입의 데이터를 조회할 때, query parameter 설정에 주의해야 한다.
 categories:
   - Dev
 toc: true
@@ -13,7 +13,7 @@ tags:
   - jsonb
 ---
 
- 회사에서 Go와 PostgreSQL을 이용해 인증, 인가를 담당하는 Account 서버를 개발하던 중, `jsonb` 타입의 데이터를 조회하며 겪은 문제에 대해 기록하고자 한다. PostgreSQL에서 지원하는 jsonb 타입, PostgreSQL의 쿼리 매개변수 처리 방법 등에 대해 공부할 수 있는 좋은 기회였다.
+ 회사에서 Go와 PostgreSQL을 이용해 인증, 인가를 담당하는 Account 서버를 개발하던 중, `jsonb` 타입의 데이터를 조회하며 겪은 문제에 대해 기록하고자 한다. 
 
 <br>
 
@@ -326,3 +326,17 @@ func (p *PostgresRepository) GetUsersByIsBlockedTrueOrCurrentScheduleFalse() ([]
 ```
 
 ![jsonb-integer-success]({{site.url}}/assets/images/jsonb-integer-success.png)
+
+
+
+<br>
+
+# 결론
+
+
+
+Backend 개발은 거의 모든 부분에서 **데이터베이스**와 연관되어 있다고 해도 과언이 아니다. 데이터베이스에 도메인 데이터를 저장하고, 이를 가공하는 일이 업무의 주를 차지하곤 한다.
+
+ 그럼에도 불구하고 개인적으로 프로그래밍 언어, 백엔드 개발 프레임워크 등에 비해 데이터베이스를 주의 깊게 학습하지는 않는 듯하다. ORM 기술을 이용하면 쿼리를 작성할 일이 그렇게 많지 않기도 하고, 직접 쿼리를 작성해 개발한다고 하더라도 간단한 SQL을 이용해 처리할 수 있는 경우가 대부분이다. 물론 테이블 설계, 테이블 간 조인 등에 대해서는 고민할 기회가 종종 있으나, DBMS에서 지원하는 데이터 타입, 내장함수, DBMS 연동 방법 등에 대해서는 크게 살펴보지 않았던 것이 사실이다.
+
+ 그런 의미에서 이번 경험은 PostgreSQL에서 지원하는 jsonb 타입, PostgreSQL의 쿼리 매개변수 처리 방법 등에 대해 공부할 수 있는 좋은 기회였다. `당연히 되겠거니` 하고 관성적으로 쿼리를 작성해 왔는데, 이에서 벗어나 해당 쿼리가 동작하는 과정에서 데이터 타입, 내장함수 등의 구현이 어떻게 되는지에 대해서도 살펴 보려는 습관을 들일 필요가 있다.
