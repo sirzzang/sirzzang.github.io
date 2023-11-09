@@ -45,7 +45,7 @@ eraser@Eraser-laptop:/usr/sbin$ ls -al | grep tcpdump
 
 <br>
 
- 손쉬운 해결책은 `sudo` 명령어를 붙여 root 권한으로 프로그램을 실행하는 것이다. 혹은 `su`를 통해 root 계정으로 로그인해서 tcpdump 프로그램을 사용해도 된다. 그렇지만 이렇게 권한 에러를 마주칠 때는 [**이 때**](https://sirzzang.github.io/dev/Dev-osgi-permission-denied-error/)처럼 파일 소유 그룹에 사용자를 추가해주는 것이 더 정석적인 해결책 같다. **[이 글]**(https://www.linuxtutorial.co.uk/tcpdump-eth0-you-dont-have-permission-to-capture-on-that-device/)을 참고해 아래와 같이 해결했다.
+ 손쉬운 해결책은 `sudo` 명령어를 붙여 root 권한으로 프로그램을 실행하는 것이다. 혹은 `su`를 통해 root 계정으로 로그인해서 tcpdump 프로그램을 사용해도 된다. 그렇지만 이렇게 권한 에러를 마주칠 때는 [**이 때**](https://sirzzang.github.io/dev/Dev-osgi-permission-denied-error/)처럼 파일 소유 그룹에 사용자를 추가해주는 것이 더 정석적인 해결책 같다. [이 글](https://www.linuxtutorial.co.uk/tcpdump-eth0-you-dont-have-permission-to-capture-on-that-device/)을 참고해 아래와 같이 해결했다.
 
 - `pcap` 그룹 생성 후, tcpdump를 사용하고자 하는 root가 아닌 사용자를 `pcap` 그룹에 추가
 

@@ -96,7 +96,7 @@ upstream prematurely cloased FastCGI stdout while reading response header from u
 ![python-cgi-error]({{site.url}}/assets/images/python-cgi-permissiondenied.png)
 
 
- fcgiwrap을 실행하는 user는 `www-data`이기 때문에, fcgiwrap 프로세스에서 Python 스크립트를 실행하는 user 역시 `www-data`이다. 그런데 Python 스크립트에서 접근하려고 하는 파일의 소유자는 `nginx`이며, 소유 권한이 `-rw-------`. 따라서 Python 스크립트를 실행하는 user를 `nginx`로 바꿔 주거나, 스크립트에서 접근하고자 하는 파일의 소유 권한을 변경해 주면 된다.
+ fcgiwrap을 실행하는 user는 `www-data`이기 때문에, fcgiwrap 프로세스에서 Python 스크립트를 실행하는 user 역시 `www-data`이다. 그런데 Python 스크립트에서 접근하려고 하는 파일의 소유자는 `nginx`이며, 소유 권한은 `-rw-------`이다. 따라서 Python 스크립트를 실행하는 user를 `nginx`로 바꿔 주거나, 스크립트에서 접근하고자 하는 파일의 소유 권한을 변경해 주면 된다.
 
 - fcgiwrap user 변경: `spawn-fcgi -u 102 -g 102 -U 102 -G 102`
   - 해당 개발 환경에서 파일 소유 권한을 가진 user, group의 id가 무엇인지 확인한 후, `spawn-fcgi` 명령어 옵션을 통해 fcgiwrap 프로세스를 spawn하는 user, group을 변경한다 
