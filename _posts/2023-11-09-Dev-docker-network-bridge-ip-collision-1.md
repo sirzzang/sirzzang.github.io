@@ -45,7 +45,7 @@ OpenLDAP 컨테이너를 R550 서버에 배포한 뒤, 갑자기 개인 PC에서
 
 ![r550-not-dead-2]({{site.url}}/assets/images/r550-not-dead-2.png){: .align-center}
 
-<center><sup>정리하다 보니, 로그인이 되는 시점의 터미널 출력에서부터 문제의 원인이 보인다. <sup></center>
+<center><sup>정리하다 보니, 로그인이 되는 시점의 터미널 출력에서부터 문제의 원인이 보인다. </sup></center>
 
 
 
