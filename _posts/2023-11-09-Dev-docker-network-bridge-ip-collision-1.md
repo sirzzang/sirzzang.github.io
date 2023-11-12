@@ -33,6 +33,8 @@ tags:
 
 
 
+<br>
+
 # 문제
 
 OpenLDAP 컨테이너를 R550 서버에 배포한 뒤, 갑자기 개인 PC에서 R550 서버로 SSH 접속이 되지 않는 문제가 발생했다. 문제를 인지한 후, R650 서버와 R550 서버에 핑을 날려 봤는데, R550 서버에만 가지 않는다.
@@ -201,8 +203,6 @@ Docker Network의 동작을 고려하여, OpenLDAP 컨테이너를 실행한 뒤
   - OpenLDAP 컨테이너가 생성되는 순간, Host에 Virtual Ethernet Interface `veth4ac7512`가 할당되며 이것이 생성된 Bridge 네트워크와 바인딩된다.
   - OpenLDAP 컨테이너 내부에서 `eth0` 인터페이스가 할당되고, 이 인터페이스가 Host의 Virtual Ethernet Interface `veth4ac7512`와 바인딩된다.
 
-
-
 > *참고*: `docker0` 인터페이스
 >
 > 호스트에서 확인할 수 있는 `docker0` 인터페이스는 docker 설치 시 기본으로 설치되는 `bridge`라는 이름의 Bridge 네트워크이다.
@@ -251,7 +251,42 @@ Docker Network의 동작을 고려하여, OpenLDAP 컨테이너를 실행한 뒤
 >
 > - 해당 게이트웨이는 호스트에서 `ifconfig`를 통해 확인할 수 있는 `docker0` 인터페이스이다.
 >
-> - 해당 포스트에서는 OpenLDAP 컨테이너를 가정하기 때문에 위와 같이 도식화되었으나, 일반적으로 docker container를 Bridge 모드로 실행할 경우, 기본적으로 생성되어 있는 `bridge` 네트워크에 바인딩된다.
+>   ```bash
+>   br-80cb5a0c07bc: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+>           inet 172.22.0.1  netmask 255.255.0.0  broadcast 172.22.255.255
+>           inet6 fe80::42:a4ff:fe3f:b900  prefixlen 64  scopeid 0x20<link>
+>           ether 02:42:a4:3f:b9:00  txqueuelen 0  (Ethernet)
+>           RX packets 10  bytes 280 (280.0 B)
+>           RX errors 0  dropped 0  overruns 0  frame 0
+>           TX packets 1053  bytes 44674 (44.6 KB)
+>           TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+>   
+>   docker0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+>           inet 172.17.0.1  netmask 255.255.0.0  broadcast 172.17.255.255
+>           ether 02:42:56:eb:d5:1c  txqueuelen 0  (Ethernet)
+>           RX packets 0  bytes 0 (0.0 B)
+>           RX errors 0  dropped 0  overruns 0  frame 0
+>           TX packets 0  bytes 0 (0.0 B)
+>           TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+>   
+>   eno8303: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+>           inet 172.42.10.112  netmask 255.255.255.0  broadcast 172.42.10.255
+>           inet6 fe80::2288:10ff:febb:932  prefixlen 64  scopeid 0x20<link>
+>           ether 20:88:10:bb:09:32  txqueuelen 1000  (Ethernet)
+>           RX packets 6352084  bytes 2470991108 (2.4 GB)
+>           RX errors 0  dropped 1217831  overruns 0  frame 0
+>           TX packets 3397947  bytes 1084531860 (1.0 GB)
+>           TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+>           device interrupt 17
+>   ```
+>
+> -  일반적으로 docker container를 `docker` 커맨드를 이용하여 Bridge 모드의 네트워크를 이용하도록 실행할 경우, 기본적으로 생성되어 있는 `bridge` 네트워크에 바인딩된다.
+>
+>   ```bash
+>   docker run --network bridge[이미지]
+>   ```
+
+
 
 
 
@@ -267,8 +302,6 @@ Docker Network의 동작을 고려하여, OpenLDAP 컨테이너를 실행한 뒤
 
 
 <br>
-
-
 
 ## 원인
 
