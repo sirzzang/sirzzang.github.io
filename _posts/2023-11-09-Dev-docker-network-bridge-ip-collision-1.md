@@ -1,6 +1,6 @@
 ---
-title:  "[Docker] Docker Bridge Network 사용 시 IP 대역대 충돌 - 1. 문제"
-excerpt: Docker Bridge Network를 사용해 컨테이너를 배포할 때, IP 대역 충돌에 주의해야 한다.
+title:  "[Docker] Docker Bridge Network 사용 시 IP 충돌 - 1. 문제"
+excerpt: Docker Bridge Network를 사용해 컨테이너를 배포할 때 발생할 수 있는 IP 대역대 충돌 문제
 categories:
   - Dev
 toc: true
