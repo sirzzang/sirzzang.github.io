@@ -26,7 +26,7 @@ tags:
 
 결과적으로, 위 문제 상황에서는 Docker Compose를 통해 OpenLDAP 컨테이너를 실행할 때마다 Bridge 타입의 새로운 Docker Network가 생성되었고, 하필 문제가 발생한 시점에는 Docker 엔진의 할당 원리에 의해 차례로 IP 대역이 할당되다가 `172.22.0.0/16` 대역이 할당된 것이다. *공교롭게도* 이 타이밍에 할당된 IP 대역이 로컬 PC가 사용하는 IP 주소 대역과 일치해 버렸다. 그래서 로컬 PC의 요청 패킷에 대한 응답 패킷은 되돌아 오지 못하고, R550 서버 내부에 격리되어 생성된 Docker Network로 들어가 버린다. 
 
- Docker Container를 중지한 뒤, 다시 SSH 접속을 시도하면, 문제 없이 잘 동작함을 확인할 수 있다.
+ 참으로 공교로운 타이밍이다. 그러나 Docker Network의 동작 원리에 대해 알고 있었다면, 문제의 원인을 짚어내는 게 그렇게 어렵지는 않았을 것이라는 생각도 든다. Docker Container를 중지한 뒤, 다시 SSH 접속을 시도하면, 문제 없이 잘 동작함을 확인할 수 있다.
 
 ![stop-openldap-container]({{site.url}}/assets/images/stop-openldap-container.png){: .align-center}
 

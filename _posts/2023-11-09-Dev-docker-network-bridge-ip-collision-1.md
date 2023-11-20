@@ -433,11 +433,5 @@ $ docker network inspect bridge1
 >
 > ![docker-network-prune]({{site.url}}/assets/images/docker-network-prune.png){: .width="500"}
 
-<br>
-
-결과적으로, 위 문제 상황에서는 Docker Compose를 통해 OpenLDAP 컨테이너를 실행할 때마다 Bridge 타입의 새로운 Docker Network가 생성되었고, IP 대역 할당 원리에 의해 차례로 IP 대역이 할당되다가 `172.22.0.0/16` 대역이 할당될 시점이 된 것이다. 
-
- 참으로 공교로운 타이밍이다. 그러나 Docker Network의 동작 원리에 대해 알고 있었다면, 문제의 원인을 짚어내는 게 그렇게 어렵지는 않았을 것이라는 생각도 든다.
-
 
 
