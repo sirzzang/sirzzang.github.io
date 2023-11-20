@@ -14,7 +14,23 @@ tags:
   - Bridge
 ---
 
+<br>
+
  이전 포스트에 이어, Docker를 이용해 컨테이너를 배포할 때, Bridge Network를 사용하는 경우 발생할 수 있는 IP 대역대 충돌 문제를 해결한 과정을 기록하고자 한다.
+
+<br>
+
+# TL;DR
+
+
+
+결과적으로, 위 문제 상황에서는 Docker Compose를 통해 OpenLDAP 컨테이너를 실행할 때마다 Bridge 타입의 새로운 Docker Network가 생성되었고, 하필 문제가 발생한 시점에는 Docker 엔진의 할당 원리에 의해 차례로 IP 대역이 할당되다가 `172.22.0.0/16` 대역이 할당된 것이다. *공교롭게도* 이 타이밍에 할당된 IP 대역이 로컬 PC가 사용하는 IP 주소 대역과 일치해 버렸다. 그래서 로컬 PC의 요청 패킷에 대한 응답 패킷은 되돌아 오지 못하고, R550 서버 내부에 격리되어 생성된 Docker Network로 들어가 버린다. 
+
+ Docker Container를 중지한 뒤, 다시 SSH 접속을 시도하면, 문제 없이 잘 동작함을 확인할 수 있다.
+
+![stop-openldap-container]({{site.url}}/assets/images/stop-openldap-container.png){: .align-center}
+
+![ping-after-docker-container-down]({{site.url}}/assets/images/ping-after-docker-container-down.png){: .align-center}
 
 <br>
 
@@ -55,7 +71,7 @@ Docker Container를 다시 실행하면 된다. Docker 엔진이 IP 대역대를
 
 새롭게 컨테이너를 실행했을 때, 아까와 동일하게 `XXXX-openldap_default` 네트워크가 생성되는 것을 확인할 수 있다.
 
-![restart-docker-container]({{site.url}}/assets/images/restart-docker-container.png){: .align-center}{. width="500"}
+![restart-docker-container]({{site.url}}/assets/images/restart-docker-container.png){: .align-center}{:width="500"}
 
 새롭게 사용하고 있는 Docker Brdige 네트워크를 검사해 보면, 해당 브릿지 네트워크가 `172.23.0.0/16` IP 대역대를 사용하고 있음을 확인할 수 있다.
 
@@ -147,3 +163,4 @@ $ docker network inspect 160ca
 
  개발 환경이었기에 해프닝으로 치고 넘어갈 수 있지만, 실제 운영 환경에서는 큰 문제가 될 수도 있다. 요컨대, 이렇게 Bridge Network 대역이 클라이언트의 IP 대역과 동일하게 Docker Container가 배포되었다고 해 보자. 클라이언트가 보낸 요청에 대한 응답이 클라이언트에게 돌아가지 않을 수도 있고, 클라이언트가 서버에 접속도 못할 수 있다. 아찔한 일이 아닐 수 없다.
 
+ 참으로 공교로운 타이밍이다. 그러나 Docker Network의 동작 원리에 대해 알고 있었다면, 문제의 원인을 짚어내는 게 그렇게 어렵지는 않았을 것이라는 생각도 든다.
