@@ -47,7 +47,77 @@ tags:
 
 <br>
 
- ## 1안
+
+
+## 1안
+
+Docker Container를 다시 실행하면 된다. Docker 엔진이 IP 대역대를 차례로 할당하기 때문에, 다시 실행하면 `172.22.X.X`와 겹치지 않는 다음 대역대의 네트워크가 할당된다.
+
+새롭게 컨테이너를 실행했을 때, 아까와 동일하게 `XXXX-openldap_default` 네트워크가 생성되는 것을 확인할 수 있다.
+
+![restart-docker-container]({{site.url}}/assets/images/restart-docker-container.png){: .align-center}{. width="500"}
+
+새롭게 사용하고 있는 Docker Brdige 네트워크를 검사해 보면, 해당 브릿지 네트워크가 `172.23.0.0/16` IP 대역대를 사용하고 있음을 확인할 수 있다.
+
+```bash
+$ docker network inspect 160ca
+[
+    {
+        "Name": "gaia-openldap_default",
+        "Id": "160ca8630a4247f6f0fa316e5274355bff45c75517a5032cfbde3701ab0a07e5",
+        "Created": "2023-11-08T05:09:20.161718881Z",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": [
+                {
+                    "Subnet": "172.23.0.0/16", # 겹치지 않는 네트워크 대역대
+                    "Gateway": "172.23.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {
+            "e6724619d39bc00357044f7dc5939d0bc09170d27a5c777e34fdad4e5abcbe0d": {
+                "Name": "openldap",
+                "EndpointID": "b705a1af644b3a78336214a0b833dbf3e871df9cba3fa5711cf29ea224428bba",
+                "MacAddress": "02:42:ac:17:00:02",
+                "IPv4Address": "172.23.0.2/16",
+                "IPv6Address": ""
+            }
+        },
+        "Options": {},
+        "Labels": {
+            "com.docker.compose.network": "default",
+            "com.docker.compose.project": "gaia-openldap",
+            "com.docker.compose.version": "2.21.0"
+        }
+    }
+]
+```
+
+
+
+<br>
+
+로컬 PC의 IP 대역대와 겹치지 않는다. 문제가 해결되었는지 확인하기 위해, 로컬 PC에서 SSH 접속을 시도해 본다.
+
+![restart-docker-container-result]({{site.url}}/assets/images/restart-docker-container-result.png){: .align-center}{: .width="500"}
+
+문제는 해결되었지만, 별로 좋은 해결책은 아니다. 어쩌다가 운 나쁘게 문제가 발생했던 것처럼, 어쩌다가 운 좋게 얻어 걸릴 수도 있는 방법이다.
+
+<br>
+
+
 
 
 
