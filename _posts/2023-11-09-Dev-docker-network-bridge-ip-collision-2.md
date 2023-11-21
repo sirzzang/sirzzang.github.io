@@ -26,7 +26,7 @@ tags:
 
  참으로 얄궂은 타이밍이지만, Docker Network의 동작 원리에 대해 알고 있었다면, 문제의 원인을 짚어내는 게 그렇게 어렵지는 않았을 것이라는 생각도 든다.
 
- Docker Container를 중지한 뒤, 다시 SSH 접속을 시도하면, 문제 없이 잘 동작함을 확인할 수 있다.
+ Docker Container를 중지한 뒤, 다시 핑을 날려 보면, 문제 없이 잘 동작함을 확인할 수 있다.
 
 ![stop-openldap-container]({{site.url}}/assets/images/stop-openldap-container.png){: .align-center}
 
@@ -125,11 +125,7 @@ $ docker network inspect 160ca
 
 <br>
 
-로컬 PC의 IP 대역대와 겹치지 않는다. 문제가 해결되었는지 확인하기 위해, 로컬 PC에서 SSH 접속을 시도해 본다.
-
-![restart-docker-container-result]({{site.url}}/assets/images/restart-docker-container-result.png){: .align-center}{: .width="500"}
-
-문제는 해결되었지만, 별로 좋은 해결책은 아니다. 어쩌다가 운 나쁘게 문제가 발생했던 것처럼, 어쩌다가 운 좋게 얻어 걸릴 수도 있는 방법이다.
+로컬 PC의 IP 대역대와 겹치지 않는다. 문제가 해결되었는지 확인하기 위해, 로컬 PC에서 핑을 날려 보면 성공한다. 문제는 해결되었지만, **별로 좋은 해결책은 아니다**. 어쩌다가 운 나쁘게 문제가 발생했던 것처럼, 어쩌다가 운 좋게 얻어 걸릴 수도 있는 방법이다.
 
 <br>
 
