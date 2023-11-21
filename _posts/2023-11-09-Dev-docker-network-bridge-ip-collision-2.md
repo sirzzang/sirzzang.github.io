@@ -61,6 +61,8 @@ tags:
   - Bridge Network 대역대 변경(4안)
 - Host 모드 사용(5안)
 
+이 대안들 중 어떤 것을 사용하더라도, 앞에서 발생했던 문제는 발생하지 않는다. 즉, 로컬 PC에서 핑을 날릴 때 응답이 돌아오고, SSH 접속도 된다.
+
 <br>
 
 
@@ -134,6 +136,160 @@ $ docker network inspect 160ca
 
 
 ## 2안
+
+로컬 PC와 겹치지 않는 대역으로 브릿지 네트워크를 만든 뒤, Docker Compose가 이 네트워크를 이용하여 Docker Container를 실행하도록 한다. 자동으로 네트워크를 생성하지 않고, 이미 생성된 네트워크를 사용하게 된다.
+
+- Docker Network 생성
+
+  ```bash
+  docker network create --driver=bridge --subnet=172.20.0.0/16 --ip-range=172.20.5.0/24 --gateway=172.20.0.1 bridge_network_test
+  ```
+
+  - `--driver`: 네트워크 드라이버 모드
+  - `--subnet`: 할당할 서브넷. CIDR 형태로 작성
+  - `--ip-range`: 서브넷 안에서 IP 주소를 할당할 대역
+  - `--gateway`: Docker Network 게이트웨이 주소
+
+- 생성한 Docker Network 확인
+
+  ![docker-network-test]({{site.url}}/assets/images/docker-network-test.png){: .align-center}
+
+  ```bash
+  $ docker network inspect e9d0f
+  [
+      {
+          "Name": "bridge_network_test",
+          "Id": "e9d0fb6a0d8446d6fe4b302b1e786a4a99222bef289335e62ab82a75c607beec",
+          "Created": "2023-11-08T05:25:11.012806083Z",
+          "Scope": "local",
+          "Driver": "bridge",
+          "EnableIPv6": false,
+          "IPAM": {
+              "Driver": "default",
+              "Options": {},
+              "Config": [
+                  {
+                      "Subnet": "172.20.0.0/16",
+                      "IPRange": "172.20.5.0/24",
+                      "Gateway": "172.20.0.1"
+                  }
+              ]
+          },
+          "Internal": false,
+          "Attachable": false,
+          "Ingress": false,
+          "ConfigFrom": {
+              "Network": ""
+          },
+          "ConfigOnly": false,
+          "Containers": {},
+          "Options": {},
+          "Labels": {}
+      }
+  ]
+  ```
+
+ 
+
+이제 아래와 같이 Docker Compose 파일을 변경한다.
+
+```yaml
+version: "3.8"
+services:
+  openldap:
+    image: osixia/openldap:latest
+    restart: always
+    networks:
+      - bridge_network_test # 사용할 네트워크
+    ports:
+      - 3899:389
+      - 6366:636
+    environment: # 생략
+    tty: true
+    stdin_open: true
+    volumes: # 생략
+    command:
+      - --copy-service
+      - --loglevel=debug
+networks:
+  bridge_network_test:
+    external: true
+```
+
+- `services.[서비스명].networks`: 사용할 네트워크를 지정한다
+- `networks.[네트워크명].external`: Docker Compose 파일 외부에 있는 네트워크를 사용하도록 설정한다
+  - 해당 옵션을 `true`로 설정할 경우, Docker Compose가 네트워크를 만들지 않는다
+
+
+
+<br>
+
+OpenLDAP 컨테이너를 다시 실행한 뒤 확인해 보자. 생성한 `bridge_network_test`를 검사하면, 실행된 OpenLDAP 컨테이너가 `172.20.5.0` IP를 할당 받아 실행된 것을 확인할 수 있다.
+
+![docker-network-test-result]({{site.url}}/assets/images/docker-network-test-result.png){: .align-center}
+
+ R550 호스트 네트워크를 살펴 보면, `bridge_network_test`를 만들 때 사용했던 네트워크 대역이 `br-e9d0fb6a0d84`로서 생성되어 있음을 확인할 수 있다.
+
+```bash
+$ ifconfig
+br-e9d0fb6a0d84: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500 # bridge_network_test
+        inet 172.20.0.1  netmask 255.255.0.0  broadcast 172.20.255.255
+        inet6 fe80::42:91ff:fe31:4f44  prefixlen 64  scopeid 0x20<link>
+        ether 02:42:91:31:4f:44  txqueuelen 0  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 5  bytes 526 (526.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+docker0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        inet 172.17.0.1  netmask 255.255.0.0  broadcast 172.17.255.255
+        ether 02:42:56:eb:d5:1c  txqueuelen 0  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+eno8303: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.42.10.112  netmask 255.255.255.0  broadcast 172.42.10.255
+        inet6 fe80::2288:10ff:febb:932  prefixlen 64  scopeid 0x20<link>
+        ether 20:88:10:bb:09:32  txqueuelen 1000  (Ethernet)
+        RX packets 6371081  bytes 2475931760 (2.4 GB)
+        RX errors 0  dropped 1217831  overruns 0  frame 0
+        TX packets 3411198  bytes 1085830427 (1.0 GB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        device interrupt 17
+
+eno8403: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether 20:88:10:bb:09:33  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        device interrupt 18
+
+lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+        inet 127.0.0.1  netmask 255.0.0.0
+        inet6 ::1  prefixlen 128  scopeid 0x10<host>
+        loop  txqueuelen 1000  (Local Loopback)
+        RX packets 10333003  bytes 1195162378 (1.1 GB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 10333003  bytes 1195162378 (1.1 GB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+veth88e0dbe: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet6 fe80::ac2c:71ff:fee5:dc69  prefixlen 64  scopeid 0x20<link>
+        ether ae:2c:71:e5:dc:69  txqueuelen 0  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 15  bytes 1322 (1.3 KB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+```
+
+
+
+<br>
+
+
 
 
 
