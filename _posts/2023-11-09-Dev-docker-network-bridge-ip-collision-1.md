@@ -43,9 +43,9 @@ OpenLDAP 컨테이너를 R550 서버에 배포한 뒤, 갑자기 개인 PC에서
 
  컨테이너를 배포하는 과정에서 문제가 있어서 서버를 죽인 것인가(...) 했는데, 로컬에서 R650 서버로 SSH 접속한 뒤, R650 서버에서 R550 서버로 SSH 접속해 본 결과, 문제가 없이 접속되는 것을 보니 서버가 죽지는 않았다.
 
-![r550-not-dead-1]({{site.url}}/assets/images/r550-not-dead-1.png){:width="500"}{: .align-center}
+![r550-not-dead-1]({{site.url}}/assets/images/r550-not-dead-1.png){:width="600"}{: .align-center}
 
-![r550-not-dead-2]({{site.url}}/assets/images/r550-not-dead-2.png){:width="500"}{: .align-center}
+![r550-not-dead-2]({{site.url}}/assets/images/r550-not-dead-2.png){:width="600"}{: .align-center}
 
 <center><sup>정리하다 보니, 로그인이 되는 시점의 터미널 출력에서부터 문제의 원인이 보인다. </sup></center>
 
@@ -162,7 +162,7 @@ docker network inspect 80cb5a0c
         "Options": {},
         "Labels": {
             "com.docker.compose.network": "default",
-            "com.docker.compose.project": "gaia-openldap",
+            "com.docker.compose.project": "XXXX-openldap",
             "com.docker.compose.version": "2.21.0"
         }
     }
@@ -309,7 +309,7 @@ Docker Network의 동작을 고려하여, OpenLDAP 컨테이너를 실행한 뒤
 
  이를 확인하기 위해 호스트의 라우팅 테이블을 `route` 커맨드를 통해 확인해 보았다. 문제 상황 당시 시점에서 확인한 결과는 아니지만, Docker의 Bridge Network가 라우팅 테이블에 등록된다는 사실을 확인하기 위해 R650 호스트의 상황을 참조해 보았다.
 
-![r650-routing-table]({{site.url}}/assets/images/r650-routing-table.png){: .width="500"}{: .align-center}
+![r650-routing-table]({{site.url}}/assets/images/r650-routing-table.png){: .width="600"}{: .align-center}
 
 `br`로 시작하는 Docker Bridge 네트워크 인터페이스들이 모두 라우팅테이블에 등록되어 있다. 이것은 **해당 IP 대역의 IP 주소를 가진 패킷은 호스트 내부의 라우팅 테이블에서 처리된다**는 것을 의미한다.
 
@@ -359,7 +359,7 @@ Docker 엔진이 Bridge 네트워크가 생성될 때마다 그 대역을 할당
 
  실제로 Docker Network를 생성하며, IP 대역대가 어떻게 할당되는지 확인해 볼 수 있다. 아무런 Docker Network도 생성하지 않은 최초 상태에서 기본으로 생성되어 있는 Bridge 네트워크 `bridge`의 gateway는 `172.17.0.1`로, `172.17.0.0/16` 대역을 사용한다.
 
-![docker-network-default]({{site.url}}/assets/images/docker-network-default.png){: .width="500"}{: .align-center} 
+![docker-network-default]({{site.url}}/assets/images/docker-network-default.png){: .width="600"}{: .align-center} 
 
 ```json
 [
@@ -419,7 +419,7 @@ $ docker network create bridge1
 $ docker network inspect bridge1
 ```
 
-![docker-network-bridge1]({{site.url}}/assets/images/docker-network-bridge1.png){: .width="500"}{: .align-center}
+![docker-network-bridge1]({{site.url}}/assets/images/docker-network-bridge1.png){: .width="600"}{: .align-center}
 
 계속해서 Docker Network를 생성한다. `172.31.0.0/16` 대역을 넘어간 이후, `192.168.0.0/20` 대역부터 네트워크 대역이 할당됨을 확인할 수 있다.
 

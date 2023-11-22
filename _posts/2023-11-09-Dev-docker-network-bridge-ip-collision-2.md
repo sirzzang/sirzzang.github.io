@@ -54,12 +54,12 @@ tags:
 이를 바탕으로, 문제를 해결할 수 있는 방법을 다음과 같이 정리해 볼 수 있다.
 
 - Bridge 모드 사용
-  - Docker Container 재실행(1안)
+  - Docker Container 재실행(**1안**)
   - Bridge Network 지정해서 실행
-    - Bridge Network를 직접 생성한 후, Docker Compose에서 해당 네트워크를 이용하여 Container를 실행하도록 지정(2안)
-    - Docker Compose가 Docker Container를 실행할 때 사용할 Bridge Network 대역을 직접 지정(3안)
-  - Bridge Network 대역대 변경(4안)
-- Host 모드 사용(5안)
+    - Bridge Network를 직접 생성한 후, Docker Compose에서 해당 네트워크를 이용하여 Container를 실행하도록 지정(**2안**)
+    - Docker Compose가 Docker Container를 실행할 때 사용할 Bridge Network 대역을 직접 지정(**3안**)
+  - Bridge Network 대역대 변경(**4안**)
+- Host 모드 사용(**5안**)
 
 이 대안들 중 어떤 것을 사용하더라도, 앞에서 발생했던 문제는 발생하지 않는다. 즉, 로컬 PC에서 핑을 날릴 때 응답이 돌아오고, SSH 접속도 된다.
 
@@ -81,7 +81,7 @@ Docker Container를 다시 실행하면 된다. Docker 엔진이 IP 대역대를
 $ docker network inspect 160ca
 [
     {
-        "Name": "gaia-openldap_default",
+        "Name": "XXXX-openldap_default",
         "Id": "160ca8630a4247f6f0fa316e5274355bff45c75517a5032cfbde3701ab0a07e5",
         "Created": "2023-11-08T05:09:20.161718881Z",
         "Scope": "local",
@@ -116,7 +116,7 @@ $ docker network inspect 160ca
         "Options": {},
         "Labels": {
             "com.docker.compose.network": "default",
-            "com.docker.compose.project": "gaia-openldap",
+            "com.docker.compose.project": "XXXX-openldap",
             "com.docker.compose.version": "2.21.0"
         }
     }
@@ -216,9 +216,9 @@ networks:
     external: true
 ```
 
-- `services.[서비스명].networks`: 사용할 네트워크를 지정한다
+- `services.[서비스명].networks`: 해당 서비스 컨테이너가 사용할 네트워크를 지정한다
 - `networks.[네트워크명].external`: Docker Compose 파일 외부에 있는 네트워크를 사용하도록 설정한다
-  - 해당 옵션을 `true`로 설정할 경우, Docker Compose가 네트워크를 만들지 않는다
+  - 해당 옵션을 `true`로 설정할 경우, Docker Compose가 네트워크를 만들지 않는다([external 항목](https://docs.docker.com/compose/compose-file/06-networks/#external))
 
 
 
@@ -295,9 +295,156 @@ veth88e0dbe: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
 
 ## 3안
 
+위와 거의 비슷하나, Docker Compose에 의해 만들어지는 Docker Network를 지정한 뒤, 해당 네트워크에 바인딩하여 Docker Container를 실행한다.  아래와 같이 Docker Compose 파일을 작성해 주면 된다.
+
+```yaml
+version: "3.8"
+services:
+  openldap:
+    image: osixia/openldap:latest
+    restart: always
+    networks:
+      my_bridge_network:
+    ports:
+      - 3899:389
+      - 6366:636
+    environment: # 생략
+    tty: true
+    stdin_open: true
+    volumes: # 생략
+    command:
+      - --copy-service
+      - --loglevel=debug
+networks:
+  my_bridge_network:
+    ipam:
+    	driver: bridge
+      config:
+        - subnet: 172.20.0.0/16
+          ip_range: 172.20.5.0/24
+          gateway: 172.20.0.1
+```
+
+- `service.[서비스명].networks`: 사용할 네트워크를 지정한다. 해당 서비스가 바인딩될 `my_bridge_network`를 지정했다.
+- `networks.my_bridge_network`: Docker Compose는 해당 네트워크를 생성한다
+  - `ipam`: IP 주소 관리(IP Address Management)를 위한 설정 항목이다. `docker network` 커맨드에 설정했던 옵션과 동일한 값을 설정해 준다
+
+<br>
+
+Docker Compose를 이용하여 OpenLDAP 컨테이너를 실행한 뒤, Docker Network를 확인한다. Docker Compose에 의해 만들어진 `my_bridge_network`가 생성됨을 확인할 수 있다.
+
+![my-bridge-network]({{site.url}}/assets/images/my-bridge-network.png){: .align-center}{: .width="500"}
+
+```bash
+$ docker network inspect 2debf2
+[
+    {
+        "Name": "XXXX-openldap_my_bridge_network",
+        "Id": "2debf2abcbbe72fe6d0d6f6ec637eb2ecbf209b26e639eeaa961a38cfb19c87b",
+        "Created": "2023-11-08T05:39:14.171038051Z",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": [
+                {
+                    "Subnet": "172.20.0.0/16",
+                    "IPRange": "172.20.5.0/24",
+                    "Gateway": "172.20.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {
+            "f96a6af007ef249b63b160dec8da144fd1f4a2936c7faf8d0be74e92232d8e89": {
+                "Name": "XXXX-openldap-openldap-1",
+                "EndpointID": "61effc55ab1739ff63a1694efacf6a090e988eb52ba6ebf26b88008dc106cc9a",
+                "MacAddress": "02:42:ac:14:05:00",
+                "IPv4Address": "172.20.5.0/16",
+                "IPv6Address": ""
+            }
+        },
+        "Options": {},
+        "Labels": {
+            "com.docker.compose.network": "my_bridge_network",
+            "com.docker.compose.project": "XXXX-openldap",
+            "com.docker.compose.version": "2.21.0"
+        }
+    }
+]
+```
+
+2안과 마찬가지로 R550 호스트에서도 해당하는 네트워크 인터페이스를 찾을 수 있으며, 로컬 PC에서 핑을 날릴 수 있다.
+
+<br>
+
 
 
 ## 4안
+
+Docker 설정에 의해, 엔진이 할당하는 Bridge Network의 대역을 변경하는 방법이다. 지금까지 나왔던 방법에 비해 더 근본적인 방법이라 보이지만, 서버 설정을 변경해야 하기 때문에, 실제로 진행하지는 못했다. 다만, 참고 자료를 통해 어떤 방법을 사용할 수 있는지 알아 본 방법을 정리해 두고자 한다.
+
+### dockerd 커맨드 이용
+
+Docker daemon 제어를 위한 `dockerd` 커맨드를 이용해, Bridge 네트워크가 할당되는 영역을 조정해 준다. `--default-address-pool` 옵션을 이용하면 된다. 다만, 해당 커맨드를 이용해 설정 변경을 적용하기 위해서는 Docker Network에 등록되어 있는 다른 네트워크들을 모두 먼저 제거해야 한다고 한다.
+
+```bash
+dockerd --default-address-pools base=10.10.0.0/16,size=24
+```
+
+![dockerd-options]({{site.url}}/assets/images/dockerd-options.png){: .align-center}
+
+
+
+### docker daemon 설정 변경
+
+Docker Daemon 설정 파일에서 [Default Bridge Network 관련 설정](https://docs.docker.com/engine/reference/commandline/dockerd/#daemon-configuration-file)을 [변경해 준다](https://docs.docker.com/network/drivers/bridge/#configure-the-default-bridge-network). Docker Daemon 설정 파일은 `/etc/docker/daemon.json`이다. 해당 위치에 설정 파일이 없을 수도 있는데, 생성하면 된다고 한다.
+
+```json
+{
+  "allow-nondistributable-artifacts": [],
+  "api-cors-header": "",
+  "authorization-plugins": [],
+  "bip": "",
+  "bridge": "",
+  "cgroup-parent": "",
+  "containerd": "/run/containerd/containerd.sock",
+  "containerd-namespace": "docker",
+  "containerd-plugin-namespace": "docker-plugins",
+  "data-root": "",
+  "debug": true,
+  // 여기를 변경하면 된다고 한다
+  "default-address-pools": [
+    {
+      "base": "172.30.0.0/16",
+      "size": 24
+    },
+    {
+      "base": "172.31.0.0/16",
+      "size": 24
+    }
+  ],
+  // 생략
+}
+```
+
+
+
+
+
+
+
+
+
+<br>
 
 
 
