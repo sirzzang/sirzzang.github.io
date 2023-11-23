@@ -452,14 +452,113 @@ Docker Daemon 설정 파일에서 [Default Bridge Network 관련 설정](https:/
 
 
 
+Docker Compose가 컨테이너를 실행할 때, 호스트 모드로 실행하라고 하면 된다. Docker Compose 파일을 아래와 같이 수정하면 된다. 
 
+```yaml
+version: "3.8"
+services:
+  openldap:
+    image: osixia/openldap:latest
+    restart: always
+    network_mode: host
+    environment: # 생략
+    tty: true
+    stdin_open: true
+    volumes: # 생략   
+    command:
+      - --copy-service
+      - --loglevel=debug
+```
+
+- 실행되는 컨테이너가 호스트의 네트워크 스택을 동일하게 사용하기 때문에, 호스트 포트를 컨테이너 포트로 매핑하는 것이 의미가 없다. 따라서 `ports` 항목을 삭제한다.
+
+- 아래와 같이, `docker run` 커맨드를 `--network=host` 옵션과 함께 실행하는 것과 동일한 방식이다.
+
+  ```bash
+  docker run --rm -d --network host --name my_nginx nginx
+  ```
+
+
+
+<br>
+
+컨테이너를 실행한 뒤 Docekr Network를 확인하면, 기본으로 존재하던 네트워크 외에, 아무 것도 존재하지 않음을 확인할 수 있다.
+
+![docker-ip-collision-resolved-by-network-mode-host]({{site.url}}/assets/images/docker-ip-collision-resolved-by-network-mode-host.png){: .align-center}
+
+<br>
+
+Docker Network의 `host` 네트워크 검사 시, OpenLDAP 컨테이너가 붙어 있음을 확인할 수 있다.
+
+```bash
+$ docker network inspect host
+[
+    {
+        "Name": "host",
+        "Id": "5d6b793cdb0087324dae16f2edd53558c324287a876993d34518ffbdb1027d9f",
+        "Created": "2023-10-24T07:23:02.114324605Z",
+        "Scope": "local",
+        "Driver": "host",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": []
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {
+            # 생략
+            "4c212084412a4ec316864a62737c57452a8633f0ea06b6463765b37c1ab77e79": {
+                "Name": "XXXX-openldap-openldap-1",
+                "EndpointID": "9242b59c942f9c30c2e9cdbee991db83db0c6397721a588817cd5ce294a4ad48",
+                "MacAddress": "",
+                "IPv4Address": "",
+                "IPv6Address": ""
+            },
+            "59e5500bcba45f28e4eb995d9bf66cfa85cfbfc0ae59aa135269ebf7e2748ccf": {
+                "Name": "gaia-postgres-postgres-1",
+                "EndpointID": "d5166059bee0ffb3feb8ea9bd09801441fa0f2f6cae2797d18ee8369f764f30f",
+                "MacAddress": "",
+                "IPv4Address": "",
+                "IPv6Address": ""
+            },
+            # 생략
+        },
+        "Options": {},
+        "Labels": {}
+    }
+]
+```
+
+서버 호스트의 네트워크 인터페이스를 검사할 경우에도, 아무런 Docker Bridge 네트워크 관련 인터페이스를 찾을 수 없다.
+
+![host-ifconfig-after-network-mode-host]({{site.url}}/assets/images/host-ifconfig-after-network-mode-host.png){: .align-center}
 
 <br>
 
 # 결론
 
+ 개발 환경이었기에 해프닝으로 치고 넘어갈 수 있지만, 실제 운영 환경에서는 큰 문제가 될 수도 있는 상황이다. \
+
+- 요컨대, 이렇게 Bridge Network 대역이 클라이언트의 IP 대역과 동일하게 Docker Container가 배포되었다고 해 보자. 클라이언트가 보낸 요청에 대한 응답이 클라이언트에게 돌아가지 않을 수도 있고, 클라이언트가 서버에 접속도 못할 수 있다. 아찔한 일이 아닐 수 없다.
+- 참으로 공교로운 타이밍이지만, Docker Network의 동작 원리에 대해 좀 더 잘 알고 있었더라면, 문제가 일어나지 않았거나, 문제가 일어난 후 원인을 더 빠르게 찾아낼 수 있었을 것이란 생각이 든다.
+
+ 어찌 되었건, 결과적으로는 팀장님과 의논을 통해 Host 모드로 컨테이너를 실행함으로써 문제를 해결했다. 
+
+- Bridge Network 대역대를 바꿀 수도 있으나, 개발 환경일 때와 달리 운영 환경일 때도 이 방법을 선택할 수는 없다. 시스템이 운영되는 환경이 Site 별로 모두 다를 텐데, 각각의 Site 별로 네트워크 설정이 어떻게 되어 있을지 알 수 없기 때문이다. 
+- 시스템 운영 환경 별 네트워크 설정이 잘 되어 있다는 가정 하에, Host 네트워크 스택을 그대로 이용하는 것이 좋다고 판단했다. 다만 이 경우 Host 별로 포트 관리가 필요할 수는 있다.
 
 
- 개발 환경이었기에 해프닝으로 치고 넘어갈 수 있지만, 실제 운영 환경에서는 큰 문제가 될 수도 있다. 요컨대, 이렇게 Bridge Network 대역이 클라이언트의 IP 대역과 동일하게 Docker Container가 배포되었다고 해 보자. 클라이언트가 보낸 요청에 대한 응답이 클라이언트에게 돌아가지 않을 수도 있고, 클라이언트가 서버에 접속도 못할 수 있다. 아찔한 일이 아닐 수 없다.
 
- 참으로 공교로운 타이밍이다. 그러나 Docker Network의 동작 원리에 대해 알고 있었다면, 문제의 원인을 짚어내는 게 그렇게 어렵지는 않았을 것이라는 생각도 든다.
+<br>
+
+
+
+네트워크는 항상 어렵지만, 어렵다고 미뤄만 둔다면 이런 문제를 수도 없이 겪게될 것이다. 정말로 공부를 해야 한다.
+
