@@ -14,6 +14,8 @@ tags:
   - Bridge
 ---
 
+<br>
+
  회사에서 Docker를 이용해 컨테이너를 배포한 뒤, Bridge Network 사용으로 인해 발생했던 문제 및 그 원인을 기록하고자 한다. 인증, 인가를 담당하는 Account 서버에서는 오픈소스 LDAP 서버 구현체인 [OpenLDAP](https://www.openldap.org/)을 사용하는데, OpenLDAP 서버를 팀 내 개발 서버에 컨테이너로 배포하고자 했을 때 겪은 문제이다.
 
 <br>

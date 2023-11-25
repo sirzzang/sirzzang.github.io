@@ -13,6 +13,8 @@ tags:
   - jsonb
 ---
 
+<br>
+
  회사에서 Go와 PostgreSQL을 이용해 인증, 인가를 담당하는 Account 서버를 개발하던 중, `jsonb` 타입의 데이터를 조회하며 겪은 문제에 대해 기록하고자 한다. 
 
 <br>
