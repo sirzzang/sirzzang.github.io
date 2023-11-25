@@ -39,7 +39,6 @@ tags:
 이 문제를 해결하기 위한 방법은 크게 Docker Network를 Bridge 모드로 사용하는 방법과 Host 모드로 사용하는 방법으로 나누어 볼 수 있다.
 
 - Bridge 모드로 사용할 경우, Docker Container가 연결되는 Docker Bridge Network 대역대가 충돌 가능성이 있는 IP 대역대가 되지 않도록 조정해 주면 된다.
-
 - Host 모드로 사용할 경우, Docker Container가 호스트 네트워크 스택을 사용하기 때문에, 그냥 실행해 주면 된다.
 
   > *참고*: Host IP 충돌 가능성은 없을까?
@@ -406,7 +405,7 @@ dockerd --default-address-pools base=10.10.0.0/16,size=24
 
 ### docker daemon 설정 변경
 
-Docker Daemon 설정 파일에서 [Default Bridge Network 관련 설정](https://docs.docker.com/engine/reference/commandline/dockerd/#daemon-configuration-file)을 [변경해 준다](https://docs.docker.com/network/drivers/bridge/#configure-the-default-bridge-network). Docker Daemon 설정 파일은 `/etc/docker/daemon.json`이다. 해당 위치에 설정 파일이 없을 수도 있는데, 생성하면 된다고 한다.
+Docker Daemon 설정 파일에서 [Default Bridge Network 관련 설정](https://docs.docker.com/engine/reference/commandline/dockerd/#daemon-configuration-file)을 [변경해 준다](https://docs.docker.com/network/drivers/bridge/#configure-the-default-bridge-network). Docker Daemon 설정 파일은 `/etc/docker/daemon.json`이다. 해당 위치에 설정 파일이 없을 수도 있는데, 생성하면 된다.
 
 ```json
 {
@@ -421,7 +420,7 @@ Docker Daemon 설정 파일에서 [Default Bridge Network 관련 설정](https:/
   "containerd-plugin-namespace": "docker-plugins",
   "data-root": "",
   "debug": true,
-  // 여기를 변경하면 된다고 한다
+  // 여기를 변경하면 된다
   "default-address-pools": [
     {
       "base": "172.30.0.0/16",
@@ -544,10 +543,7 @@ $ docker network inspect host
 
 # 결론
 
- 개발 환경이었기에 해프닝으로 치고 넘어갈 수 있지만, 실제 운영 환경에서는 큰 문제가 될 수도 있는 상황이다. \
-
-- 요컨대, 이렇게 Bridge Network 대역이 클라이언트의 IP 대역과 동일하게 Docker Container가 배포되었다고 해 보자. 클라이언트가 보낸 요청에 대한 응답이 클라이언트에게 돌아가지 않을 수도 있고, 클라이언트가 서버에 접속도 못할 수 있다. 아찔한 일이 아닐 수 없다.
-- 참으로 공교로운 타이밍이지만, Docker Network의 동작 원리에 대해 좀 더 잘 알고 있었더라면, 문제가 일어나지 않았거나, 문제가 일어난 후 원인을 더 빠르게 찾아낼 수 있었을 것이란 생각이 든다.
+ 개발 환경이었기에 해프닝으로 치고 넘어갈 수 있지만, 실제 운영 환경에서는 큰 문제가 될 수도 있는 상황이다. 요컨대, 이렇게 Bridge Network 대역이 클라이언트의 IP 대역과 동일하게 Docker Container가 배포되었다고 해 보자. 클라이언트가 보낸 요청에 대한 응답이 클라이언트에게 돌아가지 않을 수도 있고, 클라이언트가 서버에 접속도 못할 수 있다. 아찔한 일이 아닐 수 없다.
 
  어찌 되었건, 결과적으로는 팀장님과 의논을 통해 Host 모드로 컨테이너를 실행함으로써 문제를 해결했다. 
 
