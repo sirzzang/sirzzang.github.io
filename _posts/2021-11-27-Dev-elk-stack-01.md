@@ -1,5 +1,5 @@
 ---
-title:  "[ELK] ELK stack_1. 개요"
+title:  "[ELK] ELK stack"
 excerpt: 로그 모니터링, 빅데이터 분석 등에 자주 활용되는 스택
 toc: true
 categories:
@@ -12,7 +12,7 @@ tags:
   - 모니터링
 ---
 
-
+<br>
 
  최근 회사에서 어플리케이션 로그 모니터링 시스템을 구축하며 ELK stack을 활용한 경험이 있다. 이 과정에서 ELK stack에 대해 공부한 내용을 정리해 보고자 한다. 
 
