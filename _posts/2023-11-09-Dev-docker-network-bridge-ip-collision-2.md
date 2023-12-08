@@ -73,7 +73,7 @@ Docker Container를 다시 실행하면 된다. Docker 엔진이 IP 대역대를
 
 새롭게 컨테이너를 실행했을 때, 아까와 동일하게 `XXXX-openldap_default` 네트워크가 생성되는 것을 확인할 수 있다.
 
-![restart-docker-container]({{site.url}}/assets/images/restart-docker-container.png){: .align-center}{:width="500"}
+![restart-docker-container]({{site.url}}/assets/images/restart-docker-container.png){: .align-center}{: width="500"}
 
 새롭게 사용하고 있는 Docker Brdige 네트워크를 검사해 보면, 해당 브릿지 네트워크가 `172.23.0.0/16` IP 대역대를 사용하고 있음을 확인할 수 있다.
 
