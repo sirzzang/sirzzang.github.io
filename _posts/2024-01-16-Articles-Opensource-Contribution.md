@@ -50,7 +50,7 @@ use_math: true
 
 오타와 관련된 PR 중 merge된 것이 여럿 보였고, 오픈 소스에 기여하는 것은 오타를 수정하는 것부터라는 말도 들었던 터라, 오타를 수정해 PR을 작성했다. 
 
-![grule-typo-pull-request]({{site.url}}/assets/image-20240116213435225.png)
+![grule-typo-pull-request]({{site.url}}/assets/grule-typo-pull-request.png)
 
 결과적으로는 merge되지 않았다. 아직까지도 열려 있는 상태다. 가장 최근에 merge된 PR이 2023년 9월이라 관리가 되지 않고 있는 것 같지는 않다. 다만 관련 이슈를 작성하지 않았고, PR 본문도 성의 없이 작성한 탓이 어느 정도 있지 않을까 생각한다.
 
