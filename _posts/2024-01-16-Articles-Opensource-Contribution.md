@@ -1,5 +1,5 @@
 ---
-title:  "작고 소중한 오픈 소스 기여 후기"
+title:  "나의 작고 소중한 오픈 소스 기여 후기"
 excerpt: "How to contribute to open source"
 toc: true
 categories:
@@ -10,7 +10,7 @@ tags:
 use_math: true
 ---
 
-야심차게 맞았던 2023년의 목표 중 하나였던 **오픈 소스 기여해 보기**. 비록 2023년이 가기 전에 성취하지는 못했지만, 지금에서라도 달성했다. 개발자로서 언젠가는 꼭 한 번 해 보고 싶다고 생각했던 일이었기에, 그 기록을 남기고 싶어 글을 쓰게 되었다.
+야심차게 맞았던 2023년의 목표 중 하나였던 **오픈 소스 기여해 보기**. 비록 2023년이 가기 전에 성취하지는 못했지만, 2024년 벽두에나마 달성했다. 개발자로서 언젠가는 꼭 한 번 해 보고 싶다고 생각했던 일이었기에, 그 기록을 남기고 싶어 글을 쓰게 되었다.
 
 <br>
 
@@ -25,7 +25,7 @@ use_math: true
    - 원격 오픈 소스 코드 리포지토리를 Upstream으로 설정한다.
    - 로컬 소스 코드 리포지토리에서 작업한 후, Commit한다.
    - Commit 내역을 Remote 소스 코드 리포지토리로 Push한다.
-3. Issue를 등록하고, PR을 작성한다.
+3. Remote 소스 코드 리포지토리에서 Upstream 소스 코드 리포지토리로 PR을 작성한다.
 
 이 과정에서, 대부분의 오픈 소스는 Contribution Guide를 제공한다. 코드 작성 방법에서부터 테스트 통과 및 빌드 확인에 이르기까지, 가이드 범위는 다양하다. 작업의 큰 골자는 위에서 작성한 것과 같으나, 작업 내용이 해당 오픈 소스에서 명시하고 있는 가이드를 따랐는지 꼭 확인해야 한다.
 
@@ -36,7 +36,7 @@ use_math: true
 
 # 실패기
 
-첫 번째 기여 시도는 [grule-rule-engine](https://github.com/hyperjumptech/grule-rule-engine)에 대한 것이었다. 회사 팀원 분이 go의 오픈 소스 rule engine인 `grule-rule-engine`을 이용해 개발을 하고 계신데, 코드를 리뷰하던 중 우연히 해당 소스 코드의 주석에서 [오타를 발견했다](https://github.com/hyperjumptech/grule-rule-engine/blob/master/pkg/JsonResource.go#L35).
+첫 번째 기여 시도는 [grule-rule-engine](https://github.com/hyperjumptech/grule-rule-engine)에 대한 것이었다. 회사 팀원 분이 go의 오픈 소스 rule engine인 `grule-rule-engine`을 이용해 개발을 하고 계신데, 코드를 리뷰하던 중 우연히 `grule-rule-engine` 소스 코드의 주석에서 [오타를 발견했다](https://github.com/hyperjumptech/grule-rule-engine/blob/master/pkg/JsonResource.go#L35).
 
 ![grule-typo]({{site.url}}/assets/images/grule-typo.png){: .align-center}{: width="400"}
 
