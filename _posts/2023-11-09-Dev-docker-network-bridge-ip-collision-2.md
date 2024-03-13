@@ -473,6 +473,13 @@ Docker Daemon 설정 파일에서 [Default Bridge Network 관련 설정](https:/
 >           TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
 >   ...
 >   ```
+>   
+> - 주의
+>
+>   - 기존의 설정 하에서 브릿지 네트워크를 생성해 동작하고 있던 컨테이너의 경우, docker daemon 설정을 변경하더라도 기존의 브릿지 네트워크를 잡아서 동작하게 된다.
+>   - 따라서 문제가 되던 컨테이너를 중지한 후, 도커 네트워크를 정리한 뒤에(`docker prune`을 이용하면 간단하다), 다시 컨테이너를 실행하도록 하자.
+
+
 
 
 
