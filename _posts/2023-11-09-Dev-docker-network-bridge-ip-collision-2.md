@@ -433,6 +433,49 @@ Docker Daemon 설정 파일에서 [Default Bridge Network 관련 설정](https:/
 
 
 
+> *참고*: docker daemon 설정 적용 변경기
+>
+> 다른 서버에서도 계속 관련 문제가 반복되어 daemon 설정을 변경해 주었다.
+>
+> - `/etc/docker/daemon.json` 생성 후 default address pool 지정
+>
+>   ```json
+>   {
+>           "bip": "10.0.0.1/24",
+>           "default-address-pools": [
+>                   {
+>                           "base": "10.10.0.1/16",
+>                           "size": 28
+>                   }
+>           ]
+>   }
+>   ```
+>
+> - docker 재시작
+>
+>   ```bash
+>   user@r650:/etc/docker$ sudo systemctl restart docker
+>   ```
+>
+> - ip 대역 확인
+>
+>   ```bash
+>   user@r650:~$ ifconfig
+>   
+>   ...
+>   docker0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+>           inet 10.0.0.1  netmask 255.255.255.0  broadcast 10.0.0.255
+>           inet6 fe80::42:25ff:fedd:1b9a  prefixlen 64  scopeid 0x20<link>
+>           ether 02:42:25:dd:1b:9a  txqueuelen 0  (Ethernet)
+>           RX packets 407  bytes 32558 (32.5 KB)
+>           RX errors 0  dropped 0  overruns 0  frame 0
+>           TX packets 456  bytes 4148963 (4.1 MB)
+>           TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+>   ...
+>   ```
+
+
+
 
 
 
