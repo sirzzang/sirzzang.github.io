@@ -1,5 +1,5 @@
 ---
-title:  "[k8s] Kubernetes 환경에서 PyTorch 공유 메모리 설정하기"
+title:  "<<TODO>> [k8s] Kubernetes 환경에서 PyTorch 공유 메모리 설정하기"
 excerpt: Kubernetes 환경에서 PyTorch 멀티 프로세스로 Data Loader를 이용할 때 발생할 수 있는 문제 
 categories:
   - Dev
@@ -20,7 +20,7 @@ tags:
 
 
 
-![kubernetes-pytorch-dataloader-shm-error]({{site.url}}/assets/images/kubernetes-pytorch-dataloader-shm-error.png){: .align-center}{: width="400"}
+![kubernetes-pytorch-dataloader-shm-error]({{site.url}}/assets/images/kubernetes-pytorch-dataloader-shm-error.png){: .align-center}
 
 - k8s 환경에서 YoloX 모델 학습을 위한 컨테이너 실행
   - Argo Workflow를 이용해 데이터 추출, 전처리 등의 과정이 실행되고 난 뒤, 마지막에 실행
