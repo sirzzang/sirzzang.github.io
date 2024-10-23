@@ -16,7 +16,7 @@ tags:
 
 <br>
 
-[DL GPU 개발환경 구축](https://sirzzang.github.io/ai/AI-DL-settings/)을 WSL에서 진행해 보자.
+DL GPU 개발환경 구축([윈도우 버전](https://sirzzang.github.io/ai/AI-DL-settings/))을 WSL에서 진행해 보자.
 
 - GPU: NVIDIA Geforce RTX 3060
   - compute possibility: 8.6
@@ -32,16 +32,16 @@ tags:
 # NVIDIA GPU 드라이버 설치
 
 - NVIDIA 그래픽 드라이버 설치
-
   - 설치 링크: [https://www.nvidia.com/en-us/drivers/]
-
 - `nvidia-utils` 패키지 설치
-
   ```bash
   sudo apt install nvidia-utils-510
   ```
 
-  
+
+
+
+<br>
 
 # CUDA 설치
 
@@ -52,18 +52,14 @@ GPU의 [compute possibility](https://developer.nvidia.com/cuda-gpus)에 맞는 C
   - [CUDA 별로 지원되는 GPU 사양](https://en.wikipedia.org/wiki/CUDA#GPUs_supported)에 맞는 CUDA 버전을 선택하면 됨
   - PyTorch 2.0 이상에서 CUDA 11.7을 필요로 하기 때문에 해당 버전 선택
 
-
-
 NVIDIA에서 CUDA 설치 시 WSL 환경을 지원하고 있다.
 
 - 설치 링크: [cuda 11.7 download archive](https://developer.nvidia.com/cuda-11-7-0-download-archive)
 
 - 아래와 같이 target platform 선택
-
   ![wsl-cuda-target-platform]({{site.url}}/assets/images/cuda-wsl.png){: .align-center}
 
 - 선택 후 가이드에 따라 아래 명령어 진행
-
   ```bash
   wget https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/cuda-wsl-ubuntu.pin
   sudo mv cuda-wsl-ubuntu.pin /etc/apt/preferences.d/cuda-repository-pin-600
@@ -75,11 +71,9 @@ NVIDIA에서 CUDA 설치 시 WSL 환경을 지원하고 있다.
   ```
 
 - cuda 11.7 설치되어 있는지 확인
-
   ![cuda-check]({{site.url}}/assets/images/cuda-check.png){: .align-center}
 
 - 환경 변수 설정
-
   ```bash
   export PATH=/usr/local/cuda-11.7/bin:$PATH
   export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-11.7/lib64:$LD_LIBRARY_PATH
@@ -94,6 +88,8 @@ NVIDIA에서 CUDA 설치 시 WSL 환경을 지원하고 있다.
   ![nvcc-check]({{site.url}}/assets/images/nvcc-check.png){: .align-center}
 
 
+
+<br>
 
 # cuDNN 설치
 
@@ -113,6 +109,21 @@ NVIDIA에서 CUDA 설치 시 WSL 환경을 지원하고 있다.
   $ sudo apt-get install libcudnn8-samples=8.5.0.96-1+cuda11.7
   ```
 
+- 설치된 cuDNN 버전 확인
+
+  - `/usr/include/x86_64-linux-gnu/cudnn_version_v8.h`
+
+  ```bash
+  eraser@DESKTOP-FAIGO7U:~$ cat /usr/include/x86_64-linux-gnu/cudnn_version_v8.h | grep CUDNN
+  #ifndef CUDNN_VERSION_H_
+  #define CUDNN_VERSION_H_
+  #define CUDNN_MAJOR 8
+  #define CUDNN_MINOR 5
+  #define CUDNN_PATCHLEVEL 0
+  #define CUDNN_VERSION (CUDNN_MAJOR * 1000 + CUDNN_MINOR * 100 + CUDNN_PATCHLEVEL)
+  #endif /* CUDNN_VERSION_H *
+  ```
+
 > *참고*: cuDNN 8.5.0 설치의 이유
 >
 > cuDNN archive 링크에서 찾으면, CUDA 11.x 버전에 맞는 cuDNN 버전은 꽤 많은 것으로 나온다. 다만, 해당 버전들 중, `libcudnn` 설치 시 CUDA 11.7 버전에 맞는 것이 없다고 확인된 버전들이 있어서, `libcudnn` deb 파일 리스트를 보고, CUDA 11.7 버전에 호환되는 `libcudnn` 파일이 있는 것을 확인해 설치했다.
@@ -125,20 +136,9 @@ NVIDIA에서 CUDA 설치 시 WSL 환경을 지원하고 있다.
 >
 > <center><sup>CUDA 11.7에 맞는 libcudnn이 있는 버전을 찾음</sup></center>
 
-- 설치된 cuDNN 버전 확인
 
-  - /usr/include/x86_64-linux-gnu/cudnn_version_v8.h
 
-    ```bash
-    eraser@DESKTOP-FAIGO7U:~$ cat /usr/include/x86_64-linux-gnu/cudnn_version_v8.h | grep CUDNN
-    #ifndef CUDNN_VERSION_H_
-    #define CUDNN_VERSION_H_
-    #define CUDNN_MAJOR 8
-    #define CUDNN_MINOR 5
-    #define CUDNN_PATCHLEVEL 0
-    #define CUDNN_VERSION (CUDNN_MAJOR * 1000 + CUDNN_MINOR * 100 + CUDNN_PATCHLEVEL)
-    #endif /* CUDNN_VERSION_H *
-    ```
+
 
 
 
