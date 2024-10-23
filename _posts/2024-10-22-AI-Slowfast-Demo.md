@@ -1,0 +1,453 @@
+---
+title:  "[AI] SlowFast Demo 실행"
+excerpt: "<<Video Understanding>> 사전 훈련된 SlowFast 모델을 돌려 보자."
+toc: true
+toc_sticky: true
+categories:
+  - AI
+tags:
+  - Video Understanding
+  - SlowFast
+---
+
+
+
+
+
+[SlowFast](https://github.com/facebookresearch/SlowFast) 모델을 일단 그냥 돌려만 보자. 개발 환경을 구성한 뒤
+
+- 하드웨어 사양
+  - Windows 11
+  - RTX 3060
+- 개발 환경
+  - WSL
+  - Conda environment
+- Prerequisites
+  - [GPU 환경 설정](https://sirzzang.github.io/ai/AI-DL-settings-linux/)
+    - CUDA 11.7
+    - cuDNN 8.5.0
+  - Pretrained model 다운로드
+    - [Model Zoo](https://github.com/facebookresearch/SlowFast/blob/main/MODEL_ZOO.md)에서 필요한 모델 다운로드
+
+
+
+# 개발 환경 구성
+
+> *참고*: Python 패키지 외의 프로그램
+>
+> gcc, ffmpeg도 필요하나, Python 패키지가 아니므로 아래 내용에서 제외. 설치가 제대로 되어 있는지 확인
+>
+> - gcc >= 4.9
+>
+>   ```bash
+>   $ gcc --version
+>   gcc (Ubuntu 11.3.0-1ubuntu1~22.04) 11.3.0
+>   Copyright (C) 2021 Free Software Foundation, Inc.
+>   This is free software; see the source for copying conditions.  There is NO
+>   warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+>   ```
+>
+> - ffmpeg: 4.0이 선호되나, 돌려 본 결과 다른 버전이어도 크게 상관은 없어 보임
+>
+>   - 만약 설치되지 않았다고 한다면, PyAV 설치 시 같이 설치됨
+>
+>   ```bash
+>   $ ffmpeg -version
+>   ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers
+>   built with gcc 11 (Ubuntu 11.2.0-19ubuntu1)
+>   configuration: --prefix=/usr --extra-version=0ubuntu0.22.04.1 --toolchain=hardened --libdir=/usr/lib/x86_64-linux-gnu --incdir=/usr/include/x86_64-linux-gnu --arch=amd64 --enable-gpl --disable-stripping --enable-gnutls --enable-ladspa --enable-libaom --enable-libass --enable-libbluray --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libcodec2 --enable-libdav1d --enable-libflite --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack --enable-libmp3lame --enable-libmysofa --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librabbitmq --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libsrt --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvidstab --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx265 --enable-libxml2 --enable-libxvid --enable-libzimg --enable-libzmq --enable-libzvbi --enable-lv2 --enable-omx --enable-openal --enable-opencl --enable-opengl --enable-sdl2 --enable-pocketsphinx --enable-librsvg --enable-libmfx --enable-libdc1394 --enable-libdrm --enable-libiec61883 --enable-chromaprint --enable-frei0r --enable-libx264 --enable-shared
+>   libavutil      56. 70.100 / 56. 70.100
+>   libavcodec     58.134.100 / 58.134.100
+>   libavformat    58. 76.100 / 58. 76.100
+>   libavdevice    58. 13.100 / 58. 13.100
+>   libavfilter     7.110.100 /  7.110.100
+>   libswscale      5.  9.100 /  5.  9.100
+>   libswresample   3.  9.100 /  3.  9.100
+>   libpostproc    55.  9.100 / 55.  9.100
+>   ```
+
+
+
+Anaconda 환경 및 해당 환경에 설치한 `pip`를 이용해 필요한 Python 패키지를 설치한다. 필요한 패키지는 [Requirements](https://github.com/facebookresearch/SlowFast/blob/main/INSTALL.md#requirements)에서 확인할 수 있다.
+
+```bash
+$ conda create -n slowfast-env python=3.10
+$ conda activate slowfast-env
+(slowfast-env) $ conda install pip 
+```
+
+- PyTorch >= 1.3, torchvision
+
+  - CUDA, cuDNN 버전에 맞는 PyTorch 버전 설치
+  - 해당 PyTorch 버전에 맞는 torchvision 설치
+    - 참고: [torchvision installation](https://pypi.org/project/torchvision/)
+
+  ```bash
+  (slowfast-env) $ conda install pytorch==2.0.1 torchvision==0.15.2 pytorch-cuda=11.7 -c pytorch -c nvidia
+  ```
+
+- fvcore
+
+  - SlowFast 공식 문서에서는 `pip install 'git+https://github.com/facebookresearch/fvcore'`로 설치하라고 안내되어 있음
+  - [fvcore Github](https://github.com/facebookresearch/fvcore/) 참고하여 아래 명령어로 설치
+
+  ```bash
+  (slowfast-env) $ conda install -c fvcore -c iopath -c conda-forge fvcore
+  ```
+
+- PyYaml, tqdm
+
+  - fvcore가 설치되면 정상적으로 같이 설치됨
+
+- PyAV
+
+  ```bash
+  (slowfast-env) $ conda install av -c conda-forge
+  ```
+
+- iopath
+
+  ```bash
+  (slowfast-env) $ conda install -c iopath iopath
+  ```
+
+- tensorboard
+
+  - 공식 문서에는 `pip install tensorboard`로 안내되어 있음
+
+  ```bash
+  (slowfast-env) $ conda install tensorboardx
+  (slowfast-env) $ conda install tensorboard
+  ```
+
+- PyTorchVideo
+
+  - 공식 문서에는 `pip install pytorchvideo`로 안내되어 있으나, 해당 방식으로 설치하면 `ImportError: cannot import name 'cat_all_gather' from 'pytorchvideo.layers.distributed'` 발생
+
+  - [관련 이슈](https://github.com/facebookresearch/SlowFast/issues/663) 참고하여 [pytorchvideo](https://github.com/facebookresearch/pytorchvideo) repository clone 후 설치 진행
+
+    ```bash
+    (slowfast-env) $ git clone https://github.com/facebookresearch/pytorchvideo.git
+    (slowfast-env) $ cd pytorchvideo
+    (slowfast-env) $ pip install -e .
+    ```
+
+- simplejson
+
+  ```bash
+  (slowfast-env) $ pip install simplejson
+  ```
+
+- psutil
+
+  ```bash
+  (slowfast-env) $ pip install psutil
+  ```
+
+- opencv
+
+  ```bash
+  (slowfast-env) $ pip install opencv-python
+  ```
+
+- detectron
+
+  - [Detectron 2](https://github.com/facebookresearch/detectron2) repository clone 후 설치 진행
+
+  ```bash
+  (slowfast-env) $ git clone https://github.com/facebookresearch/detectron2.git
+  (slowfast-env) $ cd detectron2
+  (slowfast-env) $ pip install -e .
+  ```
+
+- moviepy
+
+  - optional이나, 설치 진행
+
+  ```bash
+  (slowfast-env) $ conda install -c conda-forge moviepy
+  ```
+
+- Fairscale
+
+  ```bash
+  (slowfast-env) $ pip install 'git+https://github.com/facebookresearch/fairscale'
+  ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Config
+
+
+
+
+
+# Demo 실행
+
+
+
+
+
+
+
+## Troubleshooting
+
+
+
+
+
+# 결과
+
+
+
+
+
+
+
+# 참고
+
+```bash
+# This file may be used to create an environment using:
+# $ conda create --name <env> --file <this file>
+# platform: linux-64
+_libgcc_mutex=0.1=conda_forge
+_openmp_mutex=4.5=2_gnu
+absl-py=2.1.0=py310h06a4308_0
+antlr4-python3-runtime=4.9.3=pypi_0
+aom=3.9.1=hac33072_0
+av=12.3.0=py310hfb821dd_0
+black=24.10.0=pypi_0
+blas=1.0=mkl
+bottleneck=1.3.7=py310ha9d4c09_0
+brotli-python=1.0.9=py310h6a678d5_8
+bzip2=1.0.8=h5eee18b_6
+c-ares=1.19.1=h5eee18b_0
+ca-certificates=2024.9.24=h06a4308_0
+cairo=1.18.0=h3faef2a_0
+certifi=2024.8.30=py310h06a4308_0
+charset-normalizer=3.3.2=pyhd3eb1b0_0
+click=8.1.7=pypi_0
+cloudpickle=3.1.0=pypi_0
+colorama=0.4.6=pyhd8ed1ab_0
+contourpy=1.3.0=pypi_0
+cuda-cudart=11.7.99=0
+cuda-cupti=11.7.101=0
+cuda-libraries=11.7.1=0
+cuda-nvrtc=11.7.99=0
+cuda-nvtx=11.7.91=0
+cuda-runtime=11.7.1=0
+cuda-version=12.6=3
+cycler=0.12.1=pypi_0
+cython=3.0.11=pypi_0
+dataclasses=0.8=pyh6d0b6a4_7
+dav1d=1.2.1=hd590300_0
+decorator=5.1.1=pyhd8ed1ab_0
+detectron2=0.6=dev_0
+expat=2.6.3=h5888daf_0
+fairscale=0.4.13=pypi_0
+ffmpeg=6.1.1=gpl_he44c6f3_112
+filelock=3.13.1=py310h06a4308_0
+font-ttf-dejavu-sans-mono=2.37=hab24e00_0
+font-ttf-inconsolata=3.000=h77eed37_0
+font-ttf-source-code-pro=2.038=h77eed37_0
+font-ttf-ubuntu=0.83=h77eed37_3
+fontconfig=2.14.2=h14ed4e7_0
+fonts-conda-ecosystem=1=0
+fonts-conda-forge=1=0
+fonttools=4.54.1=pypi_0
+freetype=2.12.1=h4a9f257_0
+fribidi=1.0.10=h36c2ea0_0
+fvcore=0.1.5.post20221221=pyhd8ed1ab_0
+gmp=6.3.0=hac33072_2
+gmpy2=2.1.2=py310heeb90bb_0
+gnutls=3.7.9=hb077bed_0
+graphite2=1.3.13=h59595ed_1003
+grpcio=1.62.2=py310h6a678d5_0
+harfbuzz=8.5.0=hfac3d4d_0
+hydra-core=1.3.2=pypi_0
+icu=73.2=h59595ed_0
+idna=3.7=py310h06a4308_0
+imageio=2.36.0=pyh12aca89_1
+imageio-ffmpeg=0.5.1=pyhd8ed1ab_0
+intel-openmp=2023.1.0=hdb19cb5_46306
+iopath=0.1.9=pypi_0
+jinja2=3.1.4=py310h06a4308_0
+jpeg=9e=h5eee18b_3
+kiwisolver=1.4.7=pypi_0
+lame=3.100=h7b6447c_0
+lcms2=2.12=h3be6417_0
+ld_impl_linux-64=2.40=h12ee557_0
+lerc=3.0=h295c915_0
+libabseil=20240116.2=cxx17_he02047a_1
+libass=0.17.1=h8fe9dca_1
+libcublas=11.10.3.66=0
+libcufft=10.7.2.124=h4fbf590_0
+libcufile=1.11.1.6=0
+libcurand=10.3.7.77=0
+libcusolver=11.4.0.1=0
+libcusparse=11.7.4.91=0
+libdeflate=1.17=h5eee18b_1
+libdrm=2.4.123=hb9d3cd8_0
+libexpat=2.6.3=h5888daf_0
+libffi=3.4.4=h6a678d5_1
+libgcc=14.2.0=h77fa898_1
+libgcc-ng=14.2.0=h69a702a_1
+libgfortran-ng=11.2.0=h00389a5_1
+libgfortran5=11.2.0=h1234567_1
+libglib=2.80.2=hf974151_0
+libgomp=14.2.0=h77fa898_1
+libgrpc=1.62.2=h2d74bed_0
+libhwloc=2.11.1=default_hecaa2ac_1000
+libiconv=1.17=hd590300_2
+libidn2=2.3.4=h5eee18b_0
+libnpp=11.7.4.75=0
+libnsl=2.0.1=hd590300_0
+libnvjpeg=11.8.0.2=0
+libopenvino=2024.1.0=h2da1b83_7
+libopenvino-auto-batch-plugin=2024.1.0=hb045406_7
+libopenvino-auto-plugin=2024.1.0=hb045406_7
+libopenvino-hetero-plugin=2024.1.0=h5c03a75_7
+libopenvino-intel-cpu-plugin=2024.1.0=h2da1b83_7
+libopenvino-intel-gpu-plugin=2024.1.0=h2da1b83_7
+libopenvino-intel-npu-plugin=2024.1.0=he02047a_7
+libopenvino-ir-frontend=2024.1.0=h5c03a75_7
+libopenvino-onnx-frontend=2024.1.0=h07e8aee_7
+libopenvino-paddle-frontend=2024.1.0=h07e8aee_7
+libopenvino-pytorch-frontend=2024.1.0=he02047a_7
+libopenvino-tensorflow-frontend=2024.1.0=h39126c6_7
+libopenvino-tensorflow-lite-frontend=2024.1.0=he02047a_7
+libopus=1.3.1=h7f98852_1
+libpciaccess=0.18=hd590300_0
+libpng=1.6.39=h5eee18b_0
+libprotobuf=4.25.3=h08a7969_0
+libsqlite=3.46.0=hde9e2c9_0
+libstdcxx=14.2.0=hc0a3c3a_1
+libstdcxx-ng=14.2.0=h4852527_1
+libtasn1=4.19.0=h5eee18b_0
+libtiff=4.5.1=h6a678d5_0
+libunistring=0.9.10=h27cfd23_0
+libuuid=2.38.1=h0b41bf4_0
+libva=2.21.0=h4ab18f5_2
+libvpx=1.14.1=hac33072_0
+libwebp-base=1.3.2=h5eee18b_1
+libxcb=1.15=h0b41bf4_0
+libxcrypt=4.4.36=hd590300_1
+libxml2=2.12.7=hc051c1a_1
+libzlib=1.2.13=h4ab18f5_6
+lz4-c=1.9.4=h6a678d5_1
+markdown=3.4.1=py310h06a4308_0
+markupsafe=2.1.3=py310h5eee18b_0
+matplotlib=3.9.2=pypi_0
+mkl=2023.1.0=h213fc3f_46344
+mkl-service=2.4.0=py310h5eee18b_1
+mkl_fft=1.3.10=py310h5eee18b_0
+mkl_random=1.2.7=py310h1128e8f_0
+moviepy=1.0.3=pyhd8ed1ab_1
+mpc=1.1.0=h10f8cd9_1
+mpfr=4.0.2=hb69a4c5_1
+mpmath=1.3.0=py310h06a4308_0
+mypy-extensions=1.0.0=pypi_0
+ncurses=6.4=h6a678d5_0
+nettle=3.9.1=h7ab15ed_0
+networkx=3.2.1=py310h06a4308_0
+numexpr=2.8.7=py310h85018f9_0
+numpy=1.26.4=py310h5f9d8c6_0
+numpy-base=1.26.4=py310hb5e798b_0
+ocl-icd=2.3.2=hd590300_1
+omegaconf=2.3.0=pypi_0
+opencv-python=4.10.0.84=pypi_0
+openh264=2.4.1=h59595ed_0
+openjpeg=2.5.2=he7f1fd0_0
+openssl=3.3.2=hb9d3cd8_0
+p11-kit=0.24.1=hc5aa10d_0
+packaging=24.1=py310h06a4308_0
+pandas=2.2.2=py310h6a678d5_0
+parameterized=0.9.0=pypi_0
+pathspec=0.12.1=pypi_0
+pcre2=10.43=hcad00b1_0
+pillow=10.4.0=py310h5eee18b_0
+pip=24.2=py310h06a4308_0
+pixman=0.43.2=h59595ed_0
+platformdirs=4.3.6=pypi_0
+portalocker=2.10.1=py310hff52083_1
+proglog=0.1.10=pyhaa61c55_0
+protobuf=4.25.3=py310h12ddb61_0
+psutil=6.1.0=pypi_0
+pthread-stubs=0.4=hb9d3cd8_1002
+pugixml=1.14=h59595ed_0
+pybind11-abi=4=hd3eb1b0_1
+pycocotools=2.0.8=pypi_0
+pyparsing=3.2.0=pypi_0
+pysocks=1.7.1=py310h06a4308_0
+python=3.10.13=hd12c33a_1_cpython
+python-dateutil=2.9.0post0=py310h06a4308_2
+python-tzdata=2023.3=pyhd3eb1b0_0
+python_abi=3.10=2_cp310
+pytorch=2.0.1=py3.10_cuda11.7_cudnn8.5.0_0
+pytorch-cuda=11.7=h778d358_5
+pytorch-mutex=1.0=cuda
+pytorchvideo=0.1.5=dev_0
+pytz=2024.1=py310h06a4308_0
+pyyaml=6.0.2=py310ha75aee5_1
+re2=2022.04.01=h295c915_0
+readline=8.2=h5eee18b_0
+requests=2.32.3=py310h06a4308_0
+scipy=1.13.1=py310h5f9d8c6_0
+setuptools=75.1.0=py310h06a4308_0
+simplejson=3.19.3=pypi_0
+six=1.16.0=pyhd3eb1b0_1
+snappy=1.2.1=ha2e4443_0
+sqlite=3.45.3=h5eee18b_0
+svt-av1=2.1.0=hac33072_0
+sympy=1.13.2=py310h06a4308_0
+tabulate=0.9.0=pyhd8ed1ab_1
+tbb=2021.13.0=h84d6215_0
+tensorboard=2.17.0=py310h06a4308_0
+tensorboard-data-server=0.7.0=py310h52d8a92_1
+tensorboardx=2.6.2.2=py310h06a4308_0
+termcolor=2.5.0=pyhd8ed1ab_0
+tk=8.6.14=h39e8969_0
+tomli=2.0.2=pypi_0
+torchtriton=2.0.0=py310
+torchvision=0.15.2=py310_cu117
+tqdm=4.66.5=pyhd8ed1ab_0
+typing-extensions=4.11.0=py310h06a4308_0
+typing_extensions=4.11.0=py310h06a4308_0
+tzdata=2024b=h04d1e81_0
+urllib3=2.2.3=py310h06a4308_0
+werkzeug=3.0.3=py310h06a4308_0
+wheel=0.44.0=py310h06a4308_0
+x264=1!164.3095=h166bdaf_2
+x265=3.5=h924138e_3
+xorg-fixesproto=5.0=hb9d3cd8_1003
+xorg-kbproto=1.0.7=hb9d3cd8_1003
+xorg-libice=1.1.1=hb9d3cd8_1
+xorg-libsm=1.2.4=he73a12e_1
+xorg-libx11=1.8.9=h8ee46fc_0
+xorg-libxau=1.0.11=hb9d3cd8_1
+xorg-libxdmcp=1.1.5=hb9d3cd8_0
+xorg-libxext=1.3.4=h0b41bf4_2
+xorg-libxfixes=5.0.3=h7f98852_1004
+xorg-libxrender=0.9.11=hd590300_0
+xorg-renderproto=0.11.1=hb9d3cd8_1003
+xorg-xextproto=7.3.0=hb9d3cd8_1004
+xorg-xproto=7.0.31=hb9d3cd8_1008
+xz=5.4.6=h5eee18b_1
+yacs=0.1.8=pyhd8ed1ab_0
+yaml=0.2.5=h7f98852_2
+zlib=1.2.13=h4ab18f5_6
+zstd=1.5.6=hc292b87_0
+```
+
