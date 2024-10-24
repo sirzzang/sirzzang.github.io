@@ -176,11 +176,29 @@ $ conda activate slowfast-env
 
 
 
+<br>
+
+
+
+## 추가 패키지 설치
+
+위에서 공식 안내된 패키지를 다 설치했더라도, 실제 실행하면 설치되어 있지 않다고 나오는 패키지들이 있다. 아래 패키지들을 추가로 설치해 준다.
+
+- scipy
+- pandas
+- sklearn
 
 
 
 
 
+<br>
+
+# Dataset
+
+
+
+<br>
 
 
 
@@ -190,13 +208,128 @@ $ conda activate slowfast-env
 
 # Config
 
+사용할 사전학습 모델을 돌리기 위해 필요한 config 파일을 수정한다.
+
+- 사용할 모델: `SLOWFAST_64x2_R101_50_50.pkl`
+- config 위치: `configs/AVA/c2/SLOWFAST_64x2_R101_50_50.yaml`
+
+```yaml
+TRAIN:
+  ENABLE: False
+  DATASET: ava
+  BATCH_SIZE: 1
+  EVAL_PERIOD: 1
+  CHECKPOINT_PERIOD: 1
+  AUTO_RESUME: True
+  # CHECKPOINT_FILE_PATH: path to pretrain model
+  CHECKPOINT_TYPE: caffe2
+DATA:
+  NUM_FRAMES: 64
+  SAMPLING_RATE: 2
+  TRAIN_JITTER_SCALES: [256, 320]
+  TRAIN_CROP_SIZE: 224
+  TEST_CROP_SIZE: 256
+  INPUT_CHANNEL_NUM: [3, 3]
+DETECTION:
+  ENABLE: True
+  ALIGNED: False
+AVA:
+  ANNOTATION_DIR: /mnt/d/projects/ava
+  FRAME_DIR: /mnt/d/projects/ava/frames
+  FRAME_LIST_DIR: /mnt/d/projects/ava/frame_lists
+  LABEL_MAP_FILE: /mnt/d/projects/ava/annotations/ava_action_list_v2.1_for_activitynet_2018.pbtxt
+  GROUNDTRUTH_FILE: /mnt/d/projects/ava/annotations/ava_val_v2.1.csv
+  BGR: False
+  DETECTION_SCORE_THRESH: 0.8
+  TEST_PREDICT_BOX_LISTS: ["/mnt/d/projects/ava/annotations/ava_val_predicted_boxes.csv"]
+  EXCLUSION_FILE: /mnt/d/projects/ava/annotations/ava_val_excluded_timestamps_v2.1.csv
+  TRAIN_GT_BOX_LISTS: ["/mnt/d/projects/ava/annotations/ava_train_v2.1.csv"]
+SLOWFAST:
+  ALPHA: 4
+  BETA_INV: 8
+  FUSION_CONV_CHANNEL_RATIO: 2
+  FUSION_KERNEL_SZ: 5
+RESNET:
+  ZERO_INIT_FINAL_BN: True
+  WIDTH_PER_GROUP: 64
+  NUM_GROUPS: 1
+  DEPTH: 101
+  TRANS_FUNC: bottleneck_transform
+  STRIDE_1X1: False
+  NUM_BLOCK_TEMP_KERNEL: [[3, 3], [4, 4], [6, 6], [3, 3]]
+  SPATIAL_DILATIONS: [[1, 1], [1, 1], [1, 1], [2, 2]]
+  SPATIAL_STRIDES: [[1, 1], [2, 2], [2, 2], [1, 1]]
+NONLOCAL:
+  LOCATION: [[[], []], [[], []], [[6, 13, 20], []], [[], []]]
+  GROUP: [[1, 1], [1, 1], [1, 1], [1, 1]]
+  INSTANTIATION: dot_product
+  POOL: [[[2, 2, 2], [2, 2, 2]], [[2, 2, 2], [2, 2, 2]], [[2, 2, 2], [2, 2, 2]], [[2, 2, 2], [2, 2, 2]]]
+BN:
+  USE_PRECISE_STATS: False
+  NUM_BATCHES_PRECISE: 200
+SOLVER:
+  MOMENTUM: 0.9
+  WEIGHT_DECAY: 1e-7
+  OPTIMIZING_METHOD: sgd
+MODEL:
+  NUM_CLASSES: 80
+  ARCH: slowfast
+  MODEL_NAME: SlowFast
+  LOSS_FUNC: bce
+  DROPOUT_RATE: 0.5
+  HEAD_ACT: sigmoid
+DATA_LOADER:
+  NUM_WORKERS: 0
+  PIN_MEMORY: True
+NUM_GPUS: 1
+NUM_SHARDS: 1
+RNG_SEED: 0
+OUTPUT_DIR: .
+DATA:
+  PATH_TO_DATA_DIR: /mnt/d/projects/ava
+TEST:
+  ENABLE: False
+  DATASET: ava
+  BATCH_SIZE: 1
+  CHECKPOINT_FILE_PATH: /mnt/d/projects/model_zoo/SLOWFAST_64x2_R101_50_50.pkl
+  DATASET: ava
+DEMO:
+  ENABLE: True
+  LABEL_FILE_PATH: /mnt/d/projects/ava/ava_classnames.json
+  INPUT_VIDEO: /mnt/d/projects/ava/videos_15min/4k-rTF3oZKw.mp4
+  OUTPUT_FILE: /mnt/d/projects/4k-rTF3oZKw_output.mp4
+  COMMON_CLASS_NAMES: ['watch (a person)', 'talk to (e.g., self, a person, a group)', 'listen to (a person)', 'touch (an object)', 'carry/hold (an object)', 'walk', 'sit', 'lie/sleep', 'bend/bow (at the waist)']
+TENSORBOARD:
+  ENABLE: True
+```
+
+- `TRAIN.ENABLE`: 데모 목적으로 돌려 보기만 할 것이므로 `False`
+- `TEST.ENABLE` 데모 목적으로 돌려 보기만 할 것이므로 `False`
+- `DEMO`: 데모 목적으로 돌려 보기 위한 것으로, 아래 항목들을 추가해 주어야 함
+  - `LABEL_FILE_PATH`
+  - `INPUT_VIDEO`
+  - `OUTPUT_FILE`
+- `NUM_GPUS`: 개발 환경 상의 GPU 환경에 맞게 설정 변경
+- `AVA`: 위의 Dataset 준비 항목에서 준비한 데이터셋 경로에 맞추어 아래 값들 변경
+  - `ANNOTATION_DIR`
+  - `FRAME_DIR`
+  - `FRAME_LIST_DIR`
+  - `LABEL_MAP_FILE`
+  - `GROUND_TRUTH_FILE`
+  - `TEST_PREDICT_BOX_LISTS`
+  - `EXCLUSION_FILE`
+  - `TRAIN_GT_BOX_LISTS`
 
 
 
+<br>
 
 # Demo 실행
 
-
+```bash
+$ python tools/run_net.py \
+	--cfg ./configs/AVA/c2/SLOWFAST_64x2_R101_50_50.yaml
+```
 
 
 
@@ -204,7 +337,49 @@ $ conda activate slowfast-env
 
 ## Troubleshooting
 
+실제로 돌리려고 할 때, 코드 단을 수정해서 해결해 주어야 하는 에러들이 있었다. 
 
+> *참고*: 코드 수정 외의 방식으로 해결해야 했던 에러들
+>
+> - `Could not load library libcudnn_cnn_infer.so.8. Error: [libcuda.so](http://libcuda.so/): cannot open shared object file: No such file or directory`
+>
+>   - `LD_LIBRARY_PATH` 환경 변수에 `libcuda.so` 파일 경로 추가
+>
+>     ```bash
+>     export LD_LIBRARY_PATH=/usr/lib/wsl/lib:/usr/local/cuda-11.7/lib64:$LD_LIBRARY_PATH
+>     ```
+>
+>   - `libcuda.so` 파일 경로 확인
+>
+>     ```bash
+>     sudo find /usr/ -name 'libcuda.so.*'
+>     ```
+>
+>     ![libcuda-ld-library-path]({{site.url}}/assets/images/libcuda-ld-library-path.png){: .align-center}
+>
+> - `CUDA error: invalid device ordinal`
+>
+>   - `NUM_GPUS` 설정이 제대로 되었는지 확인
+
+
+
+### ModuleNotFoundError: No module named 'vision’
+
+
+
+### ModuleNotFoundError: No module named 'torch._six’
+
+
+
+### ValueError: Trying to pause a Timer that is already paused!
+
+
+
+### TypeError: AVAMeter.log_iter_stats() missing 1 required positional argument: 'cur_iter’
+
+
+
+<br>
 
 
 
@@ -216,7 +391,13 @@ $ conda activate slowfast-env
 
 
 
+<br>
+
 # 참고
+
+
+
+## requirements.txt
 
 ```bash
 # This file may be used to create an environment using:
