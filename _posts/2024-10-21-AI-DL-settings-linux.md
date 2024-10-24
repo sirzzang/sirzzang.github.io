@@ -16,7 +16,7 @@ tags:
 
 <br>
 
-DL GPU 개발환경 구축([윈도우 버전](https://sirzzang.github.io/ai/AI-DL-settings/))을 WSL에서 진행해 보자.
+DL GPU 개발환경 구축(참고: [윈도우 버전](https://sirzzang.github.io/ai/AI-DL-settings/))을 WSL에서 진행해 보자.
 
 - GPU: NVIDIA Geforce RTX 3060
   - compute possibility: 8.6
@@ -32,7 +32,7 @@ DL GPU 개발환경 구축([윈도우 버전](https://sirzzang.github.io/ai/AI-D
 # NVIDIA GPU 드라이버 설치
 
 - NVIDIA 그래픽 드라이버 설치
-  - 설치 링크: [https://www.nvidia.com/en-us/drivers/]
+  - 설치 링크: [NVIDIA drivers](https://www.nvidia.com/en-us/drivers/)
 - `nvidia-utils` 패키지 설치
   ```bash
   sudo apt install nvidia-utils-510
@@ -55,10 +55,8 @@ GPU의 [compute possibility](https://developer.nvidia.com/cuda-gpus)에 맞는 C
 NVIDIA에서 CUDA 설치 시 WSL 환경을 지원하고 있다.
 
 - 설치 링크: [cuda 11.7 download archive](https://developer.nvidia.com/cuda-11-7-0-download-archive)
-
 - 아래와 같이 target platform 선택
   ![wsl-cuda-target-platform]({{site.url}}/assets/images/cuda-wsl.png){: .align-center}
-
 - 선택 후 가이드에 따라 아래 명령어 진행
   ```bash
   wget https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/cuda-wsl-ubuntu.pin
@@ -72,19 +70,15 @@ NVIDIA에서 CUDA 설치 시 WSL 환경을 지원하고 있다.
 
 - cuda 11.7 설치되어 있는지 확인
   ![cuda-check]({{site.url}}/assets/images/cuda-check.png){: .align-center}
-
 - 환경 변수 설정
   ```bash
   export PATH=/usr/local/cuda-11.7/bin:$PATH
   export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-11.7/lib64:$LD_LIBRARY_PATH
   ```
-
 - cuda 버전 확인
-
   ```bash
   nvcc --version
   ```
-
   ![nvcc-check]({{site.url}}/assets/images/nvcc-check.png){: .align-center}
 
 
@@ -97,9 +91,7 @@ NVIDIA에서 CUDA 설치 시 WSL 환경을 지원하고 있다.
   - 설치 링크: [cuDNN archive](https://developer.nvidia.com/rdp/cudnn-archive)
   - 위 링크에서 CUDA 버전에 맞는 것을 찾으면 됨
 - cuDNN 설치 가이드에 따라 아래 명령어 진행
-
   - 설치 가이드: [cudnn-895 install guide](https://docs.nvidia.com/deeplearning/cudnn/archives/cudnn-895/install-guide/index.html)
-
   ```bash
   $ sudo dpkg -i cudnn-local-repo-ubuntu2204-8.5.0.96_1.0-1_amd64.deb
   $ sudo cp sudo cp /var/cudnn-local-repo-ubuntu2204-8.5.0.96/cudnn-local-7ED72349-keyring.gpg /usr/share/keyrings/
@@ -110,9 +102,7 @@ NVIDIA에서 CUDA 설치 시 WSL 환경을 지원하고 있다.
   ```
 
 - 설치된 cuDNN 버전 확인
-
   - `/usr/include/x86_64-linux-gnu/cudnn_version_v8.h`
-
   ```bash
   eraser@DESKTOP-FAIGO7U:~$ cat /usr/include/x86_64-linux-gnu/cudnn_version_v8.h | grep CUDNN
   #ifndef CUDNN_VERSION_H_
@@ -154,7 +144,6 @@ import torch
 print(torch.cuda.is_available())
 print(torch.__version__)
 ```
-
 ```bash
 (gaze-env) eraser@DESKTOP-FAIGO7U:~/projects$ python3 test.py
 True
