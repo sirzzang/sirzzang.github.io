@@ -12,9 +12,11 @@ tags:
 
 
 
+<br>
 
 
-[SlowFast](https://github.com/facebookresearch/SlowFast) 모델을 일단 그냥 돌려만 보자. 개발 환경을 구성한 뒤
+
+[SlowFast](https://github.com/facebookresearch/SlowFast) 모델을 일단 그냥 돌려만 보자. 
 
 - 하드웨어 사양
   - Windows 11
@@ -31,14 +33,14 @@ tags:
 
 
 
+<br>
+
 # 개발 환경 구성
 
 > *참고*: Python 패키지 외의 프로그램
 >
-> gcc, ffmpeg도 필요하나, Python 패키지가 아니므로 아래 내용에서 제외. 설치가 제대로 되어 있는지 확인
->
+> gcc, ffmpeg도 필요하나, Python 패키지가 아니므로 아래 내용에서 제외한다.
 > - gcc >= 4.9
->
 >   ```bash
 >   $ gcc --version
 >   gcc (Ubuntu 11.3.0-1ubuntu1~22.04) 11.3.0
@@ -46,11 +48,8 @@ tags:
 >   This is free software; see the source for copying conditions.  There is NO
 >   warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 >   ```
->
 > - ffmpeg: 4.0이 선호되나, 돌려 본 결과 다른 버전이어도 크게 상관은 없어 보임
->
 >   - 만약 설치되지 않았다고 한다면, PyAV 설치 시 같이 설치됨
->
 >   ```bash
 >   $ ffmpeg -version
 >   ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers
@@ -67,9 +66,7 @@ tags:
 >   ```
 
 
-
 Anaconda 환경 및 해당 환경에 설치한 `pip`를 이용해 필요한 Python 패키지를 설치한다. 필요한 패키지는 [Requirements](https://github.com/facebookresearch/SlowFast/blob/main/INSTALL.md#requirements)에서 확인할 수 있다.
-
 ```bash
 $ conda create -n slowfast-env python=3.10
 $ conda activate slowfast-env
@@ -77,55 +74,43 @@ $ conda activate slowfast-env
 ```
 
 - PyTorch >= 1.3, torchvision
-
   - CUDA, cuDNN 버전에 맞는 PyTorch 버전 설치
   - 해당 PyTorch 버전에 맞는 torchvision 설치
     - 참고: [torchvision installation](https://pypi.org/project/torchvision/)
-
   ```bash
   (slowfast-env) $ conda install pytorch==2.0.1 torchvision==0.15.2 pytorch-cuda=11.7 -c pytorch -c nvidia
   ```
 
 - fvcore
-
   - SlowFast 공식 문서에서는 `pip install 'git+https://github.com/facebookresearch/fvcore'`로 설치하라고 안내되어 있음
   - [fvcore Github](https://github.com/facebookresearch/fvcore/) 참고하여 아래 명령어로 설치
-
   ```bash
   (slowfast-env) $ conda install -c fvcore -c iopath -c conda-forge fvcore
   ```
 
 - PyYaml, tqdm
-
   - fvcore가 설치되면 정상적으로 같이 설치됨
 
 - PyAV
-
   ```bash
   (slowfast-env) $ conda install av -c conda-forge
   ```
 
 - iopath
-
   ```bash
   (slowfast-env) $ conda install -c iopath iopath
   ```
 
 - tensorboard
-
   - 공식 문서에는 `pip install tensorboard`로 안내되어 있음
-
   ```bash
   (slowfast-env) $ conda install tensorboardx
   (slowfast-env) $ conda install tensorboard
   ```
 
 - PyTorchVideo
-
   - 공식 문서에는 `pip install pytorchvideo`로 안내되어 있으나, 해당 방식으로 설치하면 `ImportError: cannot import name 'cat_all_gather' from 'pytorchvideo.layers.distributed'` 발생
-
   - [관련 이슈](https://github.com/facebookresearch/SlowFast/issues/663) 참고하여 [pytorchvideo](https://github.com/facebookresearch/pytorchvideo) repository clone 후 설치 진행
-
     ```bash
     (slowfast-env) $ git clone https://github.com/facebookresearch/pytorchvideo.git
     (slowfast-env) $ cd pytorchvideo
@@ -133,27 +118,22 @@ $ conda activate slowfast-env
     ```
 
 - simplejson
-
   ```bash
   (slowfast-env) $ pip install simplejson
   ```
 
 - psutil
-
   ```bash
   (slowfast-env) $ pip install psutil
   ```
 
 - opencv
-
   ```bash
   (slowfast-env) $ pip install opencv-python
   ```
 
 - detectron
-
   - [Detectron 2](https://github.com/facebookresearch/detectron2) repository clone 후 설치 진행
-
   ```bash
   (slowfast-env) $ git clone https://github.com/facebookresearch/detectron2.git
   (slowfast-env) $ cd detectron2
@@ -161,23 +141,17 @@ $ conda activate slowfast-env
   ```
 
 - moviepy
-
   - optional이나, 설치 진행
-
   ```bash
   (slowfast-env) $ conda install -c conda-forge moviepy
   ```
 
 - Fairscale
-
   ```bash
   (slowfast-env) $ pip install 'git+https://github.com/facebookresearch/fairscale'
   ```
 
-
-
 <br>
-
 
 
 ## 추가 패키지 설치
@@ -188,22 +162,12 @@ $ conda activate slowfast-env
 - pandas
 - sklearn
 
-
-
-
-
 <br>
 
 # Dataset
 
 
-
 <br>
-
-
-
-
-
 
 
 # Config
@@ -302,7 +266,6 @@ DEMO:
 TENSORBOARD:
   ENABLE: True
 ```
-
 - `TRAIN.ENABLE`: 데모 목적으로 돌려 보기만 할 것이므로 `False`
 - `TEST.ENABLE` 데모 목적으로 돌려 보기만 할 것이므로 `False`
 - `DEMO`: 데모 목적으로 돌려 보기 위한 것으로, 아래 항목들을 추가해 주어야 함
@@ -321,7 +284,6 @@ TENSORBOARD:
   - `TRAIN_GT_BOX_LISTS`
 
 
-
 <br>
 
 # Demo 실행
@@ -333,34 +295,24 @@ $ python tools/run_net.py \
 
 
 
-
-
 ## Troubleshooting
 
 실제로 돌리려고 할 때, 코드 단을 수정해서 해결해 주어야 하는 에러들이 있었다. 
 
 > *참고*: 코드 수정 외의 방식으로 해결해야 했던 에러들
->
 > - `Could not load library libcudnn_cnn_infer.so.8. Error: [libcuda.so](http://libcuda.so/): cannot open shared object file: No such file or directory`
->
 >   - `LD_LIBRARY_PATH` 환경 변수에 `libcuda.so` 파일 경로 추가
->
 >     ```bash
 >     export LD_LIBRARY_PATH=/usr/lib/wsl/lib:/usr/local/cuda-11.7/lib64:$LD_LIBRARY_PATH
 >     ```
->
 >   - `libcuda.so` 파일 경로 확인
->
 >     ```bash
 >     sudo find /usr/ -name 'libcuda.so.*'
 >     ```
->
 >     ![libcuda-ld-library-path]({{site.url}}/assets/images/libcuda-ld-library-path.png){: .align-center}
 >
 > - `CUDA error: invalid device ordinal`
->
 >   - `NUM_GPUS` 설정이 제대로 되었는지 확인
-
 
 
 ### ModuleNotFoundError: No module named 'vision’
