@@ -14,9 +14,7 @@ tags:
 
 <br>
 
-
-
-[SlowFast](https://github.com/facebookresearch/SlowFast) 모델을 일단 그냥 돌려만 보자. 
+[SlowFast](https://github.com/facebookresearch/SlowFast) 모델을 일단 그냥 돌려만 보자. 사전 학습된 모델 가중치 파일을 이용해 돌려만 보는 건 Demo로 가능하다.
 
 - 하드웨어 사양
   - Windows 11
@@ -24,12 +22,15 @@ tags:
 - 개발 환경
   - WSL
   - Conda environment
-- Prerequisites
-  - [GPU 환경 설정](https://sirzzang.github.io/ai/AI-DL-settings-linux/)
-    - CUDA 11.7
-    - cuDNN 8.5.0
-  - Pretrained model 다운로드
+  - Prerequisites
+    - [GPU 환경 설정](https://sirzzang.github.io/ai/AI-DL-settings-linux/)
+      - CUDA 11.7
+      - cuDNN 8.5.0
+- 사용할 모델 및 데이터셋
+  - 모델: [SLOWFAST_32x2_R101_50_50_v2.1.pkl](https://dl.fbaipublicfiles.com/pyslowfast/model_zoo/ava/SLOWFAST_32x2_R101_50_50_v2.1.pkl)
     - [Model Zoo](https://github.com/facebookresearch/SlowFast/blob/main/MODEL_ZOO.md)에서 필요한 모델 다운로드
+
+  - 데이터셋: AVA
 
 
 
@@ -166,6 +167,9 @@ $ conda activate slowfast-env
 
 # Dataset
 
+SlowFast Dataset Preparation(참고: [DATASET.md](https://github.com/facebookresearch/SlowFast/blob/main/slowfast/datasets/DATASET.md))에 안내된 대로 데이터셋을 준비한다. Action Recognition을 위해 사용할 수 있는 공개 데이터셋 여러 가지가 있는데, 그 중에서도 AVA 데이터셋(참고: [AVA Dataset](https://research.google.com/ava/))을 이용한다. 해당 데이터셋이 아니더라도, 다른 데이터셋을 사용하더라도 위의 문서에 안내된 대로 따르면 된다.
+
+
 
 <br>
 
@@ -174,21 +178,22 @@ $ conda activate slowfast-env
 
 사용할 사전학습 모델을 돌리기 위해 필요한 config 파일을 수정한다.
 
-- 사용할 모델: `SLOWFAST_64x2_R101_50_50.pkl`
-- config 위치: `configs/AVA/c2/SLOWFAST_64x2_R101_50_50.yaml`
+- 사용할 모델: 
+- config 위치: `demo/AVA/SLOWFAST_32x2_R101_50_50.yaml`
 
 ```yaml
 TRAIN:
   ENABLE: False
   DATASET: ava
-  BATCH_SIZE: 1
+  BATCH_SIZE: 16
   EVAL_PERIOD: 1
   CHECKPOINT_PERIOD: 1
   AUTO_RESUME: True
-  # CHECKPOINT_FILE_PATH: path to pretrain model
-  CHECKPOINT_TYPE: caffe2
+  CHECKPOINT_FILE_PATH: /mnt/d/projects/model_zoo/SLOWFAST_32x2_R101_50_50_v2.1.pkl  #path to pretrain model
+  CHECKPOINT_TYPE: caffe2 # https://github.com/facebookresearch/SlowFast/issues/653#issuecomment-1568273996
 DATA:
-  NUM_FRAMES: 64
+  PATH_TO_DATA_DIR: /mnt/d/projects/ava
+  NUM_FRAMES: 32
   SAMPLING_RATE: 2
   TRAIN_JITTER_SCALES: [256, 320]
   TRAIN_CROP_SIZE: 224
@@ -242,46 +247,114 @@ MODEL:
   LOSS_FUNC: bce
   DROPOUT_RATE: 0.5
   HEAD_ACT: sigmoid
+TEST:
+  ENABLE: False
+  DATASET: ava
+  BATCH_SIZE: 8
 DATA_LOADER:
-  NUM_WORKERS: 0
+  NUM_WORKERS: 2
   PIN_MEMORY: True
 NUM_GPUS: 1
 NUM_SHARDS: 1
 RNG_SEED: 0
 OUTPUT_DIR: .
-DATA:
-  PATH_TO_DATA_DIR: /mnt/d/projects/ava
-TEST:
-  ENABLE: False
-  DATASET: ava
-  BATCH_SIZE: 1
-  CHECKPOINT_FILE_PATH: /mnt/d/projects/model_zoo/SLOWFAST_64x2_R101_50_50.pkl
-  DATASET: ava
+# TENSORBOARD:
+#   MODEL_VIS:
+#     TOPK: 2
 DEMO:
   ENABLE: True
   LABEL_FILE_PATH: /mnt/d/projects/ava/ava_classnames.json
   INPUT_VIDEO: /mnt/d/projects/ava/videos_15min/4k-rTF3oZKw.mp4
   OUTPUT_FILE: /mnt/d/projects/4k-rTF3oZKw_output.mp4
-  COMMON_CLASS_NAMES: ['watch (a person)', 'talk to (e.g., self, a person, a group)', 'listen to (a person)', 'touch (an object)', 'carry/hold (an object)', 'walk', 'sit', 'lie/sleep', 'bend/bow (at the waist)']
-TENSORBOARD:
-  ENABLE: True
+  # WEBCAM: 0
+  DETECTRON2_CFG: "COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml"
+  DETECTRON2_WEIGHTS: detectron2://COCO-Detection/faster_rcnn_R_50_FPN_3x/137849458/model_final_280758.pkl
+
 ```
-- `TRAIN.ENABLE`: 데모 목적으로 돌려 보기만 할 것이므로 `False`
-- `TEST.ENABLE` 데모 목적으로 돌려 보기만 할 것이므로 `False`
-- `DEMO`: 데모 목적으로 돌려 보기 위한 것으로, 아래 항목들을 추가해 주어야 함
-  - `LABEL_FILE_PATH`
-  - `INPUT_VIDEO`
-  - `OUTPUT_FILE`
-- `NUM_GPUS`: 개발 환경 상의 GPU 환경에 맞게 설정 변경
-- `AVA`: 위의 Dataset 준비 항목에서 준비한 데이터셋 경로에 맞추어 아래 값들 변경
+기존에 제공되는 config 파일에서 변경한 부분은 다음과 같다.
+
+- `NUM_GPUS`: GPU 개수에 맞게 변경
+
+- `TRAIN`
+
+  - `CHECKPOINT_FILE_PATH`
+  - `CHECKPOINT_TYPE`: pytorch로 두고 돌렸더니 육안으로 확인하기에도 성능이 너무 낮아, [이 이슈의 댓글](https://github.com/facebookresearch/SlowFast/issues/653#issuecomment-1568273996)을 참고해 `caffe2`로 변경했다.
+
+- `DATA`
+
+  - `PATH_TO_DATA_DIR`
+
+- `AVA`
+
   - `ANNOTATION_DIR`
   - `FRAME_DIR`
   - `FRAME_LIST_DIR`
   - `LABEL_MAP_FILE`
   - `GROUND_TRUTH_FILE`
-  - `TEST_PREDICT_BOX_LISTS`
+  - `TEST_PREDICT_VOX_LISTS`
   - `EXCLUSION_FILE`
   - `TRAIN_GT_BOX_LISTS`
+
+- `TENSORBOARD`: 관련 config key가 없다는 에러가 발생해 해당 항목 모두 주석 처리
+
+  > *참고*: 관련 에러
+  >
+  > ```bash
+  > (slowfast-env) eraser@DESKTOP-FAIGO7U:~/projects/SlowFast$ python tools/run_net.py      --cfg ./demo/AVA/SLOWFAST_32x2_R101_50_50.yaml
+  > config files: ['./demo/AVA/SLOWFAST_32x2_R101_50_50.yaml']
+  > Traceback (most recent call last):
+  > File "/home/eraser/projects/SlowFast/tools/run_net.py", line 50, in <module>
+  > main()
+  > File "/home/eraser/projects/SlowFast/tools/run_net.py", line 21, in main
+  > cfg = load_config(args, path_to_config)
+  > File "/home/eraser/projects/SlowFast/slowfast/utils/parser.py", line 78, in load_config
+  > cfg.merge_from_file(path_to_config)
+  > File "/home/eraser/yes/envs/slowfast-env/lib/python3.10/site-packages/fvcore/common/config.py", line 121, in merge_from_file
+  > self.merge_from_other_cfg(loaded_cfg)
+  > File "/home/eraser/yes/envs/slowfast-env/lib/python3.10/site-packages/fvcore/common/config.py", line 132, in merge_from_other_cfg
+  > return super().merge_from_other_cfg(cfg_other)
+  > File "/home/eraser/yes/envs/slowfast-env/lib/python3.10/site-packages/yacs/config.py", line 217, in merge_from_other_cfg
+  > _merge_a_into_b(cfg_other, self, self, [])
+  > File "/home/eraser/yes/envs/slowfast-env/lib/python3.10/site-packages/yacs/config.py", line 478, in _merge_a_into_b
+  > _merge_a_into_b(v, b[k], root, key_list + [k])
+  > File "/home/eraser/yes/envs/slowfast-env/lib/python3.10/site-packages/yacs/config.py", line 478, in _merge_a_into_b
+  > _merge_a_into_b(v, b[k], root, key_list + [k])
+  > File "/home/eraser/yes/envs/slowfast-env/lib/python3.10/site-packages/yacs/config.py", line 491, in _merge_a_into_b
+  > raise KeyError("Non-existent config key: {}".format(full_key))
+  > KeyError: 'Non-existent config key: TENSORBOARD.MODEL_VIS.TOPK'
+  > ```
+
+- `DEMO`
+
+  - `LABEL_FILE_PATH`
+
+  - `INPUT_VIDEO`
+
+  - `OUTPUT_FILE`
+
+  - `WEBCAM`: 카메라 영상을 이용하는 게 아니므로 관련 항목 주석 처리
+
+    > *참고*: 관련 에러
+    >
+    > ```bash
+    > (slowfast-env) eraser@DESKTOP-FAIGO7U:~/projects/SlowFast$ python tools/run_net.py      --cfg ./demo/AVA/SLOWFAST_32x2_R101_50_50.yaml
+    > config files: ['./demo/AVA/SLOWFAST_32x2_R101_50_50.yaml']
+    > [ WARN:0@0.498] global cap_v4l.cpp:999 open VIDEOIO(V4L2:/dev/video0): can't open camera by index
+    > [ERROR:0@0.498] global obsensor_uvc_stream_channel.cpp:158 getStreamChannelGroup Camera index out of range
+    > Traceback (most recent call last):
+    >   File "/home/eraser/projects/SlowFast/tools/run_net.py", line 50, in <module>
+    >     main()
+    >   File "/home/eraser/projects/SlowFast/tools/run_net.py", line 46, in main
+    >     demo(cfg)
+    >   File "/home/eraser/projects/SlowFast/tools/demo_net.py", line 111, in demo
+    >     frame_provider = VideoManager(cfg)
+    >   File "/home/eraser/projects/SlowFast/slowfast/visualization/demo_loader.py", line 48, in __init__
+    >     raise IOError("Video {} cannot be opened".format(self.source))
+    > OSError: Video 0 cannot be opened\
+    > ```
+
+ 
+
 
 
 <br>
@@ -331,13 +404,19 @@ $ python tools/run_net.py \
 
 
 
+
+
+### KeyError: 'Non-existent config key: TENSORBOARD.MODEL_VIS.TOPK'
+
 <br>
 
 
 
 # 결과
 
+![4k-rTF3oZKw_output_cut1]({{site.url}}/assets/images/4k-rTF3oZKw_output_cut1.gif){: .align-center}
 
+![4k-rTF3oZKw_output_cut2]({{site.url}}/assets/images/4k-rTF3oZKw_output_cut2.gif){: .align-center}
 
 
 
