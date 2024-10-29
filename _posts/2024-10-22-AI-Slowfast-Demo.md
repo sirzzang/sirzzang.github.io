@@ -370,14 +370,49 @@ $ python tools/run_net.py \
 > - `CUDA error: invalid device ordinal`
 >   - `NUM_GPUS` 설정이 제대로 되었는지 확인
 
+<br>
 
 ### ModuleNotFoundError: No module named 'vision’
+`tools/run_net.py`의 import 문 경로 수정
+
+```python
+#!/usr/bin/env python3
+# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
+
+"""Wrapper to train and test a video classification model."""
+from slowfast.config.defaults import assert_and_infer_cfg
+from slowfast.utils.misc import launch_job
+from slowfast.utils.parser import load_config, parse_args
+from demo_net import demo # import 경로 수정
+from test_net import test # import 경로 수정
+from train_net import train # import 경로 수정
+from visualization import visualize # import 경로 수정
+```
+- 관련 이슈: https://github.com/facebookresearch/SlowFast/issues/718
+
+
+
+<br>
 
 
 
 ### ModuleNotFoundError: No module named 'torch._six’
 
+`datasets/multigrid_helper.py`의 pytorch 버전 확인 코드 수정
 
+```python
+TORCH_MAJOR = int(torch.__version__.split(".")[0])
+TORCH_MINOR = int(torch.__version__.split(".")[1])
+
+if TORCH_MAJOR >= 2 or (TORCH_MAJOR == 1 and TORCH_MINOR >= 8): # torch version 2 이상일 때 추가
+    _int_classes = int
+else:
+    from torch._six import int_classes as _int_classes
+```
+- 관련 이슈: https://github.com/facebookresearch/SlowFast/pull/649
+  - pytorch 특정 버전 이상에서 `_six` 모듈 사라짐(참고: https://stackoverflow.com/questions/69170518/potential-bug-when-upgrading-to-pytorch-1-9-importerror-cannot-import-name-int)
+
+<br>
 
 ### ValueError: Trying to pause a Timer that is already paused!
 
@@ -386,10 +421,6 @@ $ python tools/run_net.py \
 ### TypeError: AVAMeter.log_iter_stats() missing 1 required positional argument: 'cur_iter’
 
 
-
-
-
-### KeyError: 'Non-existent config key: TENSORBOARD.MODEL_VIS.TOPK'
 
 <br>
 
