@@ -416,9 +416,31 @@ else:
 
 ### ValueError: Trying to pause a Timer that is already paused!
 
+`tools/run_net.py`에서 `test_meter.iter_toc()` 부분의 코드를 아래와 같이 변경
+```python
+try:
+    test_meter.iter_toc()
+except:
+    pass
+```
+- 관련 이슈: https://github.com/facebookresearch/SlowFast/issues/599
+
+
+
 
 
 ### TypeError: AVAMeter.log_iter_stats() missing 1 required positional argument: 'cur_iter’
+
+`tools/run_net.py`에서 `test_meter.log_iter_stats(cur_iter)` 부분 코드를 아래와 같이 변경
+```python
+if not cfg.VIS_MASK.ENABLE:
+    # Update and log stats.
+    test_meter.update_stats(preds.detach(), labels.detach(), video_idx.detach())
+    test_meter.log_iter_stats(None, cur_iter)
+    
+    test_meter.iter_tic()
+```
+
 
 
 
