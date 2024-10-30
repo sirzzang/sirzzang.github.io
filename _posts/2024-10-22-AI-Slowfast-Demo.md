@@ -140,12 +140,11 @@ $ conda activate slowfast-env
   (slowfast-env) $ pip install -e .
   ```
 
-- moviepy
-  - optional이나, 설치 진행
+- moviepy: optional이나, 설치 진행
   ```bash
   (slowfast-env) $ conda install -c conda-forge moviepy
   ```
-
+  
 - Fairscale
   ```bash
   (slowfast-env) $ pip install 'git+https://github.com/facebookresearch/fairscale'
@@ -388,7 +387,7 @@ from test_net import test # import 경로 수정
 from train_net import train # import 경로 수정
 from visualization import visualize # import 경로 수정
 ```
-- 관련 이슈: https://github.com/facebookresearch/SlowFast/issues/718
+- 관련 이슈: [No module named 'vision'](https://github.com/facebookresearch/SlowFast/issues/718)
 
 
 
@@ -409,8 +408,8 @@ if TORCH_MAJOR >= 2 or (TORCH_MAJOR == 1 and TORCH_MINOR >= 8): # torch version 
 else:
     from torch._six import int_classes as _int_classes
 ```
-- 관련 이슈: https://github.com/facebookresearch/SlowFast/pull/649
-  - pytorch 특정 버전 이상에서 `_six` 모듈 사라짐(참고: https://stackoverflow.com/questions/69170518/potential-bug-when-upgrading-to-pytorch-1-9-importerror-cannot-import-name-int)
+- 관련 이슈: [fix import torch._six error for pytorch 2.0](https://github.com/facebookresearch/SlowFast/pull/649)
+  - pytorch 특정 버전 이상에서 `_six` 모듈 사라짐(참고: [pytorch int import error](https://stackoverflow.com/questions/69170518/potential-bug-when-upgrading-to-pytorch-1-9-importerror-cannot-import-name-int))
 
 <br>
 
@@ -423,9 +422,9 @@ try:
 except:
     pass
 ```
-- 관련 이슈: https://github.com/facebookresearch/SlowFast/issues/599
+- 관련 이슈: [a bug about test_net.py](https://github.com/facebookresearch/SlowFast/issues/599)
 
-
+<br>
 
 
 
