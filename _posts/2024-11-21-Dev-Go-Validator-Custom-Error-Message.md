@@ -32,7 +32,7 @@ type AddTrainMetricRequest struct {
 - [validator의 baked in validations](https://github.com/go-playground/validator?tab=readme-ov-file#baked-in-validations)
 - [validator의 custom validation](https://github.com/go-playground/validator/blob/master/_examples/custom-validation/main.go)
 
-
+<br>
 
 나의 경우 HTTP handler에서 `ShouldBindJSON`을 이용해 Request Body를 원하는 타입의 구조체로 바인딩하고, 이 과정에서 에러 발생 시 해당 에러를 그대로 사용자에게 전달했다. 
 
@@ -48,6 +48,7 @@ func (h *Handler) AddTrainMetric(c *gin.Context) {
 }
 ```
 
+<br>
 
 
 그런데 이렇게 validator가 반환하는 에러 메시지를 그대로 사용자에게 전달하다 보니, 사용자가 에러를 직관적으로 이해하지 못한다는 문제점이 있었다.
@@ -325,7 +326,7 @@ func main() {
 ```
 - [validator translation](https://github.com/go-playground/validator/blob/master/_examples/translations/main.go)
 
-
+<br>
 
 gin에 접목하기 위해서는 gin의 binding validator에 translator를 등록해 주면 된다. 위의 코드에서의 과정을 gin의 binding validator를 대상으로 해 주면 된다.
 ```go
@@ -354,7 +355,7 @@ en_translations.RegisterDefaultTranslations(v, trans)
 - [gin examples about validator.v9 Translations & Custom Errors](https://github.com/gin-gonic/gin/issues/2167)
 - 위에서 등록한 custom translation은 `startswith=http|starswith=https` 태그에 대한 것이다. 해당 태그에 대한 기본 에러 메시지 translation이 없어 직접 작성했다.
 
-
+<br>
 
 이후 HTTP Handler에서는 `ValidationErrors` 타입의 값에 담긴 `FieldError` 타입의 값들에 대해 `Translate` 메서드를 호출해 주면 된다. 위에서 생성한 translator를 이용한다.
 ```go
@@ -406,6 +407,8 @@ func (h *Handler) AddProject(c *gin.Context) {
     }
 }
 ```
+
+~~이제 코드를 정리하자~~
 
 
 
