@@ -1,5 +1,5 @@
 ---
-title:  "<<TODO>> [k8s] Kubernetes 환경에서 PyTorch 공유 메모리 설정하기"
+title:  "[k8s] Kubernetes 환경에서 PyTorch 공유 메모리 설정하기"
 excerpt: Kubernetes 환경에서 PyTorch 멀티 프로세스로 Data Loader를 이용할 때 발생할 수 있는 문제 
 categories:
   - Dev
@@ -13,6 +13,8 @@ tags:
 ---
 
 
+
+<br>
 
 # 문제
 
@@ -49,6 +51,8 @@ tags:
 
 
 
+<br>
+
 # 해결
 
 
@@ -64,6 +68,8 @@ tags:
   - memory 타입의 emptyDir 이용해 shared Memory 크기 설정
 
 
+
+<br>
 
 ## emptyDir 이용 shared memory 크기 변경
 

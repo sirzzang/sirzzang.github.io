@@ -181,6 +181,8 @@ type FieldError interface {
 
 
 
+<br>
+
 따라서 `ShouldBindJSON`에서 반환된 에러가 `ValidationErrors` 타입인지 확인하고, 이 경우 사용자가 이해할 수 있는 메시지로 변환하면 된다. 다음과 같은 두 가지 방법을 이용할 수 있다.
 - Custom Helper Function
 - Translator 이용
