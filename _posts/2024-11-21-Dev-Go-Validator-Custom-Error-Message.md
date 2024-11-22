@@ -97,6 +97,7 @@ func (ve ValidationErrors) Error() string {
 }
 ```
 - [ValidationErrors](https://pkg.go.dev/github.com/go-playground/validator#ValidationErrors)
+  - `Error()` 메서드에 대한 주석을 보니, 해당 에러가 반환하는 에러 메시지는 개발 및 디버깅 용일 뿐, production 용으로는 적절하지 못하다고 아주 *친절하게* 설명되어 있다. ~~그런데도 그걸 사용자에게 그대로 반환했던 나 자신:)~~
 
 ```go
 type FieldError interface {
@@ -189,7 +190,7 @@ type FieldError interface {
 
 ## Custom Helper Function
 
-조금 무식하지만, 필드 에러를 일일이 확인해 에러 메시지로 만들어 주는 방법이다. 어떤 Helper Function을 만들지는 구현자의 자유이지만, 나는 아래와 같은 방식을 사용해 봤다.
+조금 무식하지만, 필드 에러를 일일이 확인해 에러 메시지로 만들어 주는 방법이다. 어떤 Helper Function을 만들지는 구현자의 자유이지만, 나는 임의로 아래와 같은 방식을 사용해 봤다.
 ```go
 const (
 	FieldErrorRequired   = "required"
@@ -343,17 +344,19 @@ if ok {
 }
 
 // custom translation
-v.RegisterTranslation("startswith=http|startswith=https", trans, func(ut ut.Translator) error {
-	return ut.Add("startswith=http|startswith=https", "{0} must start with 'http' or 'https'", true)
+v.RegisterTranslation("startswith", trans, func(ut ut.Translator) error {
+	return ut.Add("startswith", "{0} must start with '{1}'", true)
 }, func(ut ut.Translator, fe validator.FieldError) string {
-	t, _ := ut.T("startswith=http|startswith=https", fe.Field())
+	t, _ := ut.T("startswith", fe.Field(), fe.Param())
 	return t
 })
 
 en_translations.RegisterDefaultTranslations(v, trans)
 ```
 - [gin examples about validator.v9 Translations & Custom Errors](https://github.com/gin-gonic/gin/issues/2167)
-- 위에서 등록한 custom translation은 `startswith=http|starswith=https` 태그에 대한 것이다. 해당 태그에 대한 기본 에러 메시지 translation이 없어 직접 작성했다.
+- 위에서 등록한 custom translation은 `startswith` 태그에 대한 것이다. 해당 태그에 대한 기본 에러 메시지 translation이 없어 직접 작성했다.
+  - [strings validator tag](https://github.com/go-playground/validator?tab=readme-ov-file#strings)에 보면 `startswith`에 대한 내용을 확인할 수 있다.
+
 
 <br>
 
@@ -368,7 +371,6 @@ type AddProjectRequest struct {
 	Name    string `json:"name" binding:"required,min=1,max=3"`
 	Sources []int  `json:"source_ids" binding:"required,min=1"`
 	Classes []int  `json:"class_ids" binding:"required,min=1"`
-	Path    string `json:"path" binding:"required,min=1,startswith=http|startswith=https"`
 }
 
 func (h *Handler) AddProject(c *gin.Context) {
@@ -408,6 +410,8 @@ func (h *Handler) AddProject(c *gin.Context) {
 }
 ```
 
+<br>
+
 ~~이제 코드를 정리하자~~
 
 
@@ -416,7 +420,7 @@ func (h *Handler) AddProject(c *gin.Context) {
 
 # 결론
 
-사용자에게 친절한 정보를 전달하는 것은 매우 중요하다. 개발자 입장에서야 읽기 편한 에러 메시지라고 해도, 받아 보는 사람 입장에서는 `이게 뭐야` 할 수 있다. 친절한 개발자가 되도록 노력하자.
+사용자에게 친절한 정보를 전달하는 것은 매우 중요하다. 이 코드를 직접 구현한 개발자 입장에서야 읽기 편한 에러 메시지라고 해도, 받아 보는 사람 입장에서는 `이게 뭐야` 할 수 있다. 친절한 개발자가 되도록 노력하자.
 
 
 
