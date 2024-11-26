@@ -179,18 +179,22 @@ func decodeJSON(r io.Reader, obj any) error {
 >
 > json decoding 과정을 거치기 때문에, binding 과정에서 validation 단계에 가기 전, decoding에 실패하면 ~~당연히~~ 에러 처리 된다. 예컨대, 위의 예에서 `AddServer` 핸들러가 decoding할 수 없는 JSON을 보내 보면 아래와 같이 `400 Bad Request` 처리 된다.
 >
-> 
->```bash
->curl -X 'POST'   'http://localhost:8080/api/servers'   -H 'accept: application/json'   -H 'Content-Type: application/json'   -d '{
+>
+> ```bash
+> curl -X 'POST' \
+> 	'http://localhost:9090/api/servers' \
+>     -H 'accept: application/json' \
+>     -H 'Content-Type: application/json' \
+>     -d '{
 > "servers": [
->  {
->      "ip": "string",
->       "name": "string"
->     }
->    }' 
->    {"message":"invalid request body","data":"invalid character '}' after array element"}
+> {
+>   "ip": "string",
+>    "name": "string"
+>  }
+> }' 
+> {"message":"invalid request body","data":"invalid character '}' after array element"}
 > ```
-> 
+>
 
 <br>
 
