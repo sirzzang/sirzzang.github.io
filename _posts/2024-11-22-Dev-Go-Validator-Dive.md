@@ -119,7 +119,7 @@ type Binding interface {
 
 <br>
 
-`binding.JSON`은 `binding.Binding` 인터페이스를 구현한 `jsonBinding` 타입 인스턴스이다. `Bind` 호출 시, `decodeJSON`을 이용해 binding을 진행한다. 우선 request 및 request body가 `nil`인지 확인하고, json decoding을 진행한 뒤, `validate` 함수를 호출한 결과를 호출한다.
+`binding.JSON`은 `binding.Binding` 인터페이스를 구현한 `jsonBinding` 타입 인스턴스이다. `Bind` 호출 시, `decodeJSON`을 이용해 binding을 진행한다. 우선 request 및 request body가 `nil`인지 확인하고, json decoding을 진행한 뒤, `validate` 함수를 호출한다.
 
 ```go
 var (
@@ -182,7 +182,7 @@ func decodeJSON(r io.Reader, obj any) error {
 >
 > ```bash
 > curl -X 'POST' \
-> 	'http://localhost:9090/api/servers' \
+> 'http://localhost:9090/api/servers' \
 >     -H 'accept: application/json' \
 >     -H 'Content-Type: application/json' \
 >     -d '{
