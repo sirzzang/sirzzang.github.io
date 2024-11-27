@@ -31,18 +31,20 @@ tags:
 
 # 개요
 
-![submodule-concept]({{site.url}}/assets/images/submodule-concept.png){: .align-center }
-
-<center><sup>이미지 출처: https://medium.com/day34/git-submodule-9f0ab0b79826</sup></center>
-
 Git Submodule이란, Git 저장소 안(하위)에 디렉토리로 분리해 넣은 또 다른 Git 저장소이다. 
 
 - 상위 저장소: main repository
 - 디렉토리로 분리되어 들어간 하위 저장소: submodule
 
+![submodule-concept]({{site.url}}/assets/images/submodule-concept.png){: .align-center }
+
+<center><sup>이미지 출처: https://medium.com/day34/git-submodule-9f0ab0b79826</sup></center>
+
+
+
 <br>
 
-프로젝트 수행 시 다른 프로젝트를 함께 사용해야 하는 경우를 위해 Git에서 제공하는 기능이다. 외부에서 개발한 라이브러리나, 내부 여러 프로젝트에서 공통으로 사용할 라이브러리 코드를 관리하고 동기화할 필요가 있을 때 주로 사용한다.
+프로젝트에서 다른 프로젝트를 함께 사용해야 하는 경우를 위해 Git에서 제공하는 기능이다. 외부에서 개발한 라이브러리나, 내부 여러 프로젝트에서 공통으로 사용할 라이브러리 코드를 관리하고 동기화할 필요가 있을 때 주로 사용한다.
 
 이 때, main repository와 submodule은 각각 독립적인 프로젝트로 관리된다. 따라서 **두 저장소의 커밋은 동기화되지 않고, 별도로 관리**된다. 이것이 의미하는 바는 다음과 같다.
 
