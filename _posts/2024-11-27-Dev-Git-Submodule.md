@@ -33,6 +33,8 @@ tags:
 
 ![submodule-concept]({{site.url}}/assets/images/submodule-concept.png){: .align-center }
 
+<center><sup>이미지 출처: https://medium.com/day34/git-submodule-9f0ab0b79826</sup></center>
+
 Git Submodule이란, Git 저장소 안(하위)에 디렉토리로 분리해 넣은 또 다른 Git 저장소이다. 
 
 - 상위 저장소: main repository
