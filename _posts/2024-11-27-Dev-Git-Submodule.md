@@ -435,11 +435,11 @@ eraser@ubuntu-2204:~/temp/main-repo/submodule-repo$ git branch
 
 <br>
 
-`git submodule update` 명령어는 main repository의 당시 시점 기준 snapshot에 박혀 있는 submodule의 커밋 정보를 바탕으로 checkout하게 된다. 따라서 로컬 환경에 submodule을 `git submodule update` 커맨드를 이용해 설정했다면, submodule 디렉토리는 해당 커밋을 바라 보고 있는 상태로 남게 된다. 특정 브랜치를 보고 있는 게 아니기 때문에, `Detached HEAD`가 된다.
+로컬 main repository의 submodule을 설정할 때, main repository의 당시 시점 기준 snapshot에 박혀 있는 submodule의 커밋 정보를 바탕으로 checkout하여 설정하게 된다. 따라서 submodule 디렉토리는 해당 커밋을 바라 보고 있는 상태로 남는다. 특정 브랜치를 보고 있는 게 아니기 때문에, `Detached HEAD`가 된다.
 
-- [Detached HEAD](https://gitolite.com/detached-head.html): Git이 브랜치가 아니라, 커밋을 직접적으로 가리키고 있는 상태이
+- [Detached HEAD](https://gitolite.com/detached-head.html): Git이 브랜치가 아니라, 커밋을 직접적으로 가리키고 있는 상태
 
- 이 상태대로 라면, submodule 디렉토리 안에는 변경 내용을 추적하는 브랜치가 없게 된다. 따라서 이후에 `git submodule update` 커맨드를 실행했을 때, 혹시라도 main repository 내 submodule에서 작업을 진행하게 된다면, 해당 작업 내용을 잃어 버릴 수 있게 된다.
+ 이 상태라면, submodule 디렉토리 안에는 변경 내용을 추적하는 브랜치가 없게 된다. 따라서 이후에 `git submodule update` 커맨드를 실행했을 때, 혹시라도 main repository 내 submodule에서 작업을 진행하게 된다면, 해당 작업 내용을 잃어 버릴 수 있게 된다.
 
 <br>
 
@@ -526,7 +526,7 @@ eraser@ubuntu-2204:~/temp/main-repo$ git commit -m 'apply submodule update'
 
 ### update with `--remote`
 
-~~생각하는 모든 것은 다 있기 때문에~~ 위의 과정을 진행하는 것이 너무 번거롭다면, main repository에서 `--remote` 옵션을 주어 `git submodule update`  커맨드를 실행하면 된다.
+위의 과정을 진행하는 것이 너무 번거롭다면, main repository에서 `--remote` 옵션을 주어 `git submodule update`  커맨드를 실행하면 된다. ~~생각하는 모든 것은 다 있기 때문에~~ 
 
 ```bash
 eraser@ubuntu-2204:~/temp/submodule-test/main-repo$ git submodule update --remote
