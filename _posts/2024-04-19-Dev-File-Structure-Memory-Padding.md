@@ -87,14 +87,14 @@ Recording 서비스가 저장하는 파일 중 일부 헤더 속성 크기를 1 
 
 ```go
 type MHeader struct {
-    A         uint8 // 1 -> 1
+	A         uint8 // 1 -> 1
 	B         [36]uint8 // 36 -> 37, 1바이트 정렬 객체의 배열이기 때문에 그대로 정렬됨
 	C         uint8 // 1 -> 38
 	D         uint8 // 1 -> 39
-    // padding // 1 -> 40
+	// padding // 1 -> 40
 	E         uint32 // 4 -> 44, 4의 배수로 끝나는 주소에 정렬되도록 해야 함
 	F         uint8 // 1 -> 45,
-    // padding // 3 -> 48 
+	// padding // 3 -> 48 
 	G         int32 // 4 -> 52, 4의 배수로 끝나는 주소에 정렬되도록 해야 함 
 	H         int32 // 4 -> 56
 	I         int32 // 4 -> 60
@@ -134,6 +134,8 @@ const MHeaderSize = unsafe.Sizeof(MHeader{}) // 64
 
 
 <br>
+
+# 결론
 
 해결은 간단했지만, 아래와 같은 점을 배울 수 있었다.
 
