@@ -35,7 +35,7 @@ tags:
 
 ![submodule-concept]({{site.url}}/assets/images/submodule-concept.png){: .align-center }
 
-<center><sup>이미지 출처: https://medium.com/day34/git-submodule-9f0ab0b79826</sup></center>
+<center><sup>이미지 출처: [https://medium.com/day34/git-submodule-9f0ab0b79826](https://medium.com/day34/git-submodule-9f0ab0b79826)</sup></center>
 
 <br>
 
@@ -351,27 +351,223 @@ Submodule path 'submodule-repo': checked out 'ea76cfc7e1e8e8d8899ec0fc53401499a9
 
 ## Submodule을 포함한 Project Update
 
+submodule이 업데이트되었을 때 submodule을 포함하고 있는 프로젝트는 어떻게 업데이트해야 할까.
+
+<br>
+
+먼저 submodule을 업데이트해 보자.
+
+```bash
+eraser@ubuntu-2204:~/temp/submodule-test/submodule-repo$ echo "new commit" >> update.txt
+eraser@ubuntu-2204:~/temp/submodule-test/submodule-repo$ git status
+On branch master
+Your branch is up to date with 'origin/master'.
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+        update.txt
+
+nothing added to commit but untracked files present (use "git add" to track)
+
+eraser@ubuntu-2204:~/temp/submodule-test/submodule-repo$ git add update.txt
+eraser@ubuntu-2204:~/temp/submodule-test/submodule-repo$ git commit -m 'add update.txt'
+[master a83002d] add update.txt
+ 1 file changed, 1 insertion(+)
+ create mode 100644 update.txt
+eraser@ubuntu-2204:~/temp/submodule-test/submodule-repo$ git push origin master
+Enumerating objects: 4, done.
+Counting objects: 100% (4/4), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (2/2), done.
+Writing objects: 100% (3/3), 285 bytes | 285.00 KiB/s, done.
+Total 3 (delta 0), reused 0 (delta 0), pack-reused 0
+To github.com:sirzzang/submodule-repo.git
+   ea76cfc..a83002d  master -> master
+```
+
+submodule 원격 저장소의 가장 최신 커밋이 변경되었음을 확인할 수 있다.
+
+![update-submodule]({{site.url}}/assets/images/update-submodule.png){: .align-center}
+
+- [commit 참고](https://github.com/sirzzang/submodule-repo/commit/a83002d8461be9d29cd080adfffcab8bb1489b43)
+
+<br>
+
+main repository에서 submodule의 상태를 확인할 경우, main repository의 submodule은 여전히 기존 커밋을 가리키고 있는 것을 확인할 수 있다.
+
+```bash
+eraser@ubuntu-2204:~/temp/submodule-test/main-repo$ git submodule status
+ ea76cfc7e1e8e8d8899ec0fc53401499a9505802 submodule-repo (heads/master)
+```
+
+두 프로젝트가 별개로 관리되는 것이기 때문에, 당연한 현상이다.
+
+<br>
+
+main repository에서 submodule의 상태를 업데이트하기 위해서는 우선 submodule 디렉토리로 이동해야 한다. 이동 후, 추적하고 있는 branch로 checkout한다.
+
+- main repository에서 submodule을 추가하고, `git submodule update` 명령어를 실행해([여기](https://sirzzang.github.io/dev/Dev-Git-Submodule/#update)에서와 같이) main repository에 submodule을 설정한 경우, submodule 로컬 저장소의 상태는 `Detached HEAD`임
+- 이 상태에서는 변경 사항 추적에 어려움이 있을 수 있기 때문에, checkout하는 것을 권장
+
+이후 branch를 업데이트하기 위해 다음의 두 가지 단계를 거친다. 아래 두 단계는 모두 다 submodule 디렉토리로 이동 후, 추적하고 있는 branch로 checkout해 `Detached HEAD` 상태가 아님을 가정한다.
+
+- branch fetch: `git fetch`	
+- branch merge: `git merge`
+
+그게 귀찮다면, main repository에서 `git submodule update` 커맨드를 `--remote` 옵션과 함께 실행하면 된다.
+
+- `git submodule update --remote`
+
+
+
+<br>
+
+
+
+
+
+### submodule branch checkout
+
+main repository의 submodule 디렉토리로 이동해, 현재 상태를 확인해 보자.
+
+```bash
+eraser@ubuntu-2204:~/temp/main-repo/submodule-repo$ git branch
+* (HEAD detached at ea76cfc)
+  master
+```
+
+![submodule-head-detached]({{site.url}}/assets/images/submodule-head-detached.png){: .align-center}
+
+<br>
+
+`git submodule update` 명령어는 main repository의 당시 시점 기준 snapshot에 박혀 있는 submodule의 커밋 정보를 바탕으로 checkout하게 된다. 따라서 로컬 환경에 submodule을 `git submodule update` 커맨드를 이용해 설정했다면, submodule 디렉토리는 해당 커밋을 바라 보고 있는 상태로 남게 된다. 
+
+ 이 상태대로 라면, submodule 디렉토리 안에는 변경 내용을 추적하는 브랜치가 없게 된다. 따라서 이후에 `git submodule update` 커맨드를 실행했을 때, 혹시라도 main repository 내 submodule에서 작업을 진행하게 된다면, 해당 작업 내용을 잃어 버릴 수 있게 된다. ~~읽기 전용으로만 사용하겠다면 뭐 그러려니 하겠지만, 그것이 Git을 의도대로 잘 활용하는 것인지는 잘 모르겠다.~~
+
+<br>
+
+ 그러므로, 아래와 같이 submodule에서 추적하고 싶은 브랜치로 checkout하자.
+
+```bash
+eraser@ubuntu-2204:~/temp/main-repo/submodule-repo$ git checkout master
+eraser@ubuntu-2204:~/temp/main-repo/submodule-repo$ git branch
+* master
+```
+
+
+
+<br>
+
+
+
+
+
 
 
 
 
 ### fetch
 
+이후 submodule 디렉토리의 브랜치를 fetch한다.
+
+```bash
+eraser@ubuntu-2204:~/temp/main-repo/submodule-repo$ git fetch
+remote: Enumerating objects: 4, done.
+remote: Counting objects: 100% (4/4), done.
+remote: Compressing objects: 100% (2/2), done.
+remote: Total 3 (delta 0), reused 3 (delta 0), pack-reused 0 (from 0)
+Unpacking objects: 100% (3/3), 265 bytes | 132.00 KiB/s, done.
+From github.com:sirzzang/submodule-repo
+   ea76cfc..a83002d  master     -> origin/master
+```
+
+<br>
+
+
+
 
 
 ### merge
 
+추적하고자 하는 submodule 원격 branch를 merge한다.
 
+```bash
+eraser@ubuntu-2204:~/temp/main-repo/submodule-repo$ git merge origin/master
+Updating ea76cfc..a83002d
+Fast-forward
+ update.txt | 1 +
+ 1 file changed, 1 insertion(+)
+ create mode 100644 update.txt
+```
+
+<br>
+
+이후 main repository에서 `git status`를 통해 repository 상태를 확인할 경우, submodule 디렉토리에 대한 변경 사항이 발생한 것을 확인할 수 있다. 역시나, 디렉토리 하나가 통째로 변경 사항으로 취급된다.
+
+![git-status-after-submodule-update]({{site.url}}/assets/images/git-status-after-submodule-update.png){: .align-center}
+
+![git-diff-after-submodule-update]({{site.url}}/assets/images/git-diff-after-submodule-update.png){: .align-center}
+
+<br>
+
+main repository에서도 변경 사항 추적을 위해 커밋을 생성하고, 원격 저장소로 푸시한다.
+
+```bash
+eraser@ubuntu-2204:~/temp/main-repo$ git add .
+eraser@ubuntu-2204:~/temp/main-repo$ git commit -m 'apply submodule update'
+[master a661bc9] apply submodule update
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+```
+
+- [commit 참고](https://github.com/sirzzang/main-repo/commit/d4f520e988b65013efed622fe21f6e112feb3961)
+
+
+
+<br>
 
 
 
 ### update with `--remote`
+
+~~생각하는 모든 것은 다 있기 때문에~~ 위의 과정을 진행하는 것이 너무 번거롭다면, main repository에서 `--remote` 옵션을 주어 `git submodule update`  커맨드를 실행하면 된다.
+
+```bash
+eraser@ubuntu-2204:~/temp/submodule-test/main-repo$ git submodule update --remote
+remote: Enumerating objects: 4, done.
+remote: Counting objects: 100% (4/4), done.
+remote: Compressing objects: 100% (2/2), done.
+remote: Total 3 (delta 0), reused 3 (delta 0), pack-reused 0 (from 0)
+Unpacking objects: 100% (3/3), 265 bytes | 265.00 KiB/s, done.
+From github.com:sirzzang/submodule-repo
+   ea76cfc..a83002d  master     -> origin/master
+Submodule path 'submodule-repo': checked out 'a83002d8461be9d29cd080adfffcab8bb1489b43'
+```
+
+submodule 최신 커밋 상태로 checkout되는 것을 확인할 수 있다.
+
+
+
+<br>
 
 
 
 
 
 ## 기타
+
+<br>
+
+
+
+### 추적할 브랜치를 특정하고 싶을 때
+
+<br>
+
+
+
+### submodule 제거
+
+<br>
 
 
 
@@ -381,3 +577,16 @@ Submodule path 'submodule-repo': checked out 'ea76cfc7e1e8e8d8899ec0fc53401499a9
 
 # 활용
 
+
+
+## 라이브러리 프로젝트
+
+<br>
+
+
+
+## 민감 정보 관리
+
+`.env`, `config` 등으로 관리하던 민감 정보를 submodule로 관리할 수 있다. 복수의 프로젝트에서 공통으로 사용하는 여러 상수나, 환경 설정 정보 등을 분리할 수 있을 뿐만 아니라, 버전 관리도 되고, 접근 권한도 관리할 수 있다. 라이브러리 코드 관리에만 사용하는 방법을 생각했는데, 신박한 활용 방법인 듯 하다.
+
+- [https://velog.io/@junho5336/Git-Submodule을-사용해보자](https://velog.io/@junho5336/Git-Submodule%EC%9D%84-%EC%82%AC%EC%9A%A9%ED%95%B4%EB%B3%B4%EC%9E%90)
