@@ -19,14 +19,6 @@ tags:
 
 <br>
 
-# 배경
-
-
-
-<br>
-
-
-
 
 
 # 개요
@@ -542,11 +534,7 @@ Submodule path 'submodule-repo': checked out 'a83002d8461be9d29cd080adfffcab8bb1
 
 submodule 최신 커밋 상태로 checkout되는 것을 확인할 수 있다.
 
-
-
 <br>
-
-
 
 
 
@@ -572,7 +560,7 @@ submodule 최신 커밋 상태로 checkout되는 것을 확인할 수 있다.
 
 <br>
 
-# 활용
+# 활용 예
 
 
 
