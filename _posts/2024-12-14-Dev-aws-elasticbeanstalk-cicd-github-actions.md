@@ -25,7 +25,7 @@ tags:
 
 ![aws-backend-structure]({{site.url}}/assets/images/aws-backend-structure.png){: .align-center}
 
-현재 AWS에 EC2와 Load Balancer를 이용한 dev 환경, prod 환경을 구성했는데, 일일이 세팅해주지 않고, Elastic Beanstalk을 사용했다. 각각의 환경에 앱을 배포할 때는 Elastic Beanstalk CLI인 Elastic Beanstalk CLI를 이용하는데, 브랜치 전략은 논외로 하고, dev 환경에서는 dev 브랜치의 소스 코드를, prod 환경에서는 prod 브랜치의 소스 코드를 배포한다. 
+현재 AWS에 EC2와 Load Balancer를 이용한 dev 환경, prod 환경을 구성했는데, 환경 세팅 및 관리를 위해 Elastic Beanstalk을 사용했다. 각각의 환경에 앱을 배포할 때는 Elastic Beanstalk CLI인 Elastic Beanstalk CLI를 이용하는데, 브랜치 전략은 논외로 하고, dev 환경에서는 dev 브랜치의 소스 코드를, prod 환경에서는 prod 브랜치의 소스 코드를 배포한다. 
 
 - [AWS Elastic Beanstalk](https://aws.amazon.com/elasticbeanstalk/?gclid=CjwKCAiA9vS6BhA9EiwAJpnXw6pyJtPI1IYrXZDRR-bvyVSkxW2GSGoxoJhRMsSKY_mdWkzO8Em44BoCF_oQAvD_BwE&trk=3d211853-d899-491e-bd5a-fb5f17de6f0f&sc_channel=ps&ef_id=CjwKCAiA9vS6BhA9EiwAJpnXw6pyJtPI1IYrXZDRR-bvyVSkxW2GSGoxoJhRMsSKY_mdWkzO8Em44BoCF_oQAvD_BwE:G:s&s_kwcid=AL!4422!3!651510175878!e!!g!!elasticbeanstalk!19835789747!147297563979)
 - [Elastic Beanstalk CLI](https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/eb-cli3.html)
@@ -35,7 +35,7 @@ tags:
 Elastic Beanstalk 환경은 Docker 환경으로, Dockerfile을 이용해 이미지를 직접 빌드하는 방식으로 서버 앱을 구동한다.
 
 - [Elastic Beanstalk Docker 환경](https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/create_deploy_docker.container.console.html)
-- [Dockerfile을 이용해 Elastic Beanstalk에서 이미지 관리하기](https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/single-container-docker-configuration.html#single-container-docker-configuration.dockerfile)
+- [Dockerfile을 이용해 Elastic Beanstalk의 이미지 관리하기](https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/single-container-docker-configuration.html#single-container-docker-configuration.dockerfile)
   - Dockerfile은 프로젝트 최상단 루트에 있어야 함
 
 <br>
@@ -56,7 +56,7 @@ Upload Complete.
 Elastic Beanstalk CLI를 이용해 앱을 배포하면, 위와 같이 소스 코드를 압축해 배포를 위한 `zip` 파일로 만들어 S3에 업로드한 뒤, 해당 배포 파일을 이용해 구동한다.
 
 - `zip` 파일은 단순히 소스 코드를 압축해 놓은 것
-- 해당 배포 파일 내에 Dockerfile이 최상단에 위치해 있고, Elastic Beanstalk은 해당 파일을 이용해 이미지를 빌드하고 컨테이너를 실행함
+- 배포를 위한 해당 `zip` 파일 내에 Dockerfile이 최상단에 위치해 있고, Elastic Beanstalk은 해당 파일을 이용해 이미지를 빌드하고 컨테이너를 실행함
 
 
 
@@ -80,7 +80,7 @@ Github Repository에서 개발 워크플로우를 자동화할 수 있도록 Git
 
 <br>
 
-위의 그림에서와 같이 repository에서 event가 발생할 경우, 1개 이상의 step으로 정의된 job으로 이루어진 workflow가 실행된다. 물론, 이벤트 없이 특정 스케쥴이 되었을 때 실행하는 것이나, 수동으로 실행하는 것도 가능하다.
+위의 그림에서와 같이 Repository에서 Event가 발생할 경우, 1개 이상의 Step으로 정의된 Job으로 이루어진 Workflow가 실행된다. 물론, Event 없이 특정 스케쥴이 되었을 때 실행하는 것이나, 수동으로 실행하는 것도 가능하다.
 
 - Event: Repository에 발생하는 이벤트로, 정의할 수 있는 이벤트는 [공식 문서의 이벤트 목록](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows)을 통해 확인할 수 있음
   - PR 생성
@@ -92,14 +92,14 @@ Github Repository에서 개발 워크플로우를 자동화할 수 있도록 Git
   - 한 repository 안에 여러 개의 Workflow가 정의될 수 있음
   - 특정 Workflow에서 다른 Workflow를 참조하거나 재사용할 수 있음
 - Job: 1개 이상의 Step으로 구성된 Workflow 구성 단위
-  - 하나의 Job은 하나의 동일한 Runner에서 실행되는 workflow step 모음
-- Runner: Workflow를 실행하는 서버로, 하나의 Runner는 한 번에 하나의 Job이 실행됨
+  - 하나의 Job은 하나의 동일한 Runner에서 실행되는 Workflow Step 모음
+- Runner: Workflow를 실행하는 서버로, 하나의 Runner는 한 번에 하나의 Job을 실행함
   * Github에서 제공하는 host
     * Ubuntu Linux
     * Microsoft Windows
     * macOS
     * 그 외 [large runners](https://docs.github.com/en/actions/using-github-hosted-runners/using-larger-runners)
-  * [self hosted runner](https://docs.github.com/en/actions/hosting-your-own-runners) 사용 가능: 다른 운영 체제나, 특정 하드웨어 설정이 필요한 경우
+  * [self-hosted runner](https://docs.github.com/en/actions/hosting-your-own-runners) 사용 가능: 다른 운영 체제나, 특정 하드웨어 설정이 필요한 경우
 - Step: Job에서 실행되는 각각의 태스크로, 미리 정의한 스크립트 혹은 Github Platform에 정의되어 있는 action을 이용할 수 있음
   - action: [Github Marketplace](https://github.com/marketplace)에서 미리 정의된 custom application
   - 하나의 Job에 정의된 각각의 Step은 동일한 Runner에서 실행되기 때문에, Step 간 데이터 공유 가능
@@ -108,7 +108,7 @@ Github Repository에서 개발 워크플로우를 자동화할 수 있도록 Git
 
 # 적용
 
-Github Actions를 이용해 Elastic Beanstalk에 소스 코드를 배포하는 Workflow를 만들어 보고자 한다. dev 환경에 배포될 `dev` 브랜치에 Commit이 Push되었을 때, prod 환경에 배포될 `prod` 브랜치에는 Pull Request가 Merge되었을 때를 가정하여 만들어 Workflow를 만들어 보려고 한다. 아래에서는 dev 환경에 대한 Workflow를 기준으로 기록한다.
+Github Actions를 이용해 Elastic Beanstalk에 소스 코드를 배포하는 Workflow를 만들어 보려고 한다. dev 환경에 배포될 `dev` 브랜치에 Commit이 Push되었을 때, prod 환경에 배포될 `prod` 브랜치에는 Pull Request가 Merge되었을 때를 가정하여 Workflow를 만들어 보려고 한다. 아래에서는 dev 환경에 대한 Workflow를 기준으로 기록한다.
 
 Workflow를 만들기 위해서는 크게 아래와 같은 단계를 거치면 된다.
 
@@ -258,8 +258,9 @@ Elastic Beanstalk에도 환경 업데이트가 진행되고 있음을 확인해 
 
 # 결론
 
-eb cli를 이용해 일일이 수동으로 배포해 주어야 하는 불편함을 덜었음에 매우 만족한다. 다만, Github Actions의 가격 정책 상, private repository에는 사용 제한이 있기 때문에, 어떻게 과금을 최소화할 수 있을지 생각해 보아야 할 듯하다.
+eb cli를 이용해 일일이 수동으로 배포해 주어야 하는 불편함을 덜었음에 매우 만족한다. 다만, Github Actions의 가격 정책 상, private repository에는 사용 제한이 있기 때문에, 어떻게 과금을 최소화할 수 있을지 생각해 보아야 할 듯하다. 실행 시간은 쉽사리 넘기지 않을 수 있을 것 같은데, Storage 한도는 좀 빡빡할 수도 있을 것 같다.
 
 - [Github Actions Billing](https://docs.github.com/en/billing/managing-billing-for-your-products/managing-billing-for-github-actions/about-billing-for-github-actions)
 
-실행 시간은 쉽사리 넘기지 않을 수 있을 것 같은데, Storage 한도는 좀 빡빡할 수도 있을 것 같다.
+
+
