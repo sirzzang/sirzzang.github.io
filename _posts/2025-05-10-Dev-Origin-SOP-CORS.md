@@ -1,5 +1,5 @@
 ---
-title:  "[Dev] Origin에 대한 고찰 - 정의, SOP, CORS"
+title:  "[Web Development] Origin에 대한 고찰 - 정의, SOP, CORS"
 excerpt: Origin에 대해 알아 보자
 categories:
   - Dev
@@ -16,7 +16,7 @@ tags:
 
 <br>
 
- 웹 서비스 개발을 하다 보면 심심치 않게 CORS라는 녀석을 마주하곤 한다. 프런트엔드 개발의 세계에 처음 발을 내딛었 때 서버에 API 연결을 하면서 처음 마주쳤었는데, 그 때는 백엔드 개발자가 `CORS 설정을 해 주면 된다`고만 해서 넘어갔던 기억이다. 백엔드 개발자의 길을 걷고 있는 지금은, 반대로 내가 CORS 설정을 해 주어야 하는 일이 잦아졌다. 
+ 웹 서비스 개발을 하다 보면 심심치 않게 CORS라는 녀석을 마주하곤 한다. 프런트엔드 개발의 세계에 처음 발을 내딛었을 때 서버에 API 연결을 하면서 처음 마주쳤었는데, 그 때는 백엔드 개발자가 `CORS 설정을 해 주면 된다`고만 해서 넘어갔던 기억이 있다. 백엔드 개발자의 길을 걷고 있는 지금은, 반대로 내가 CORS 설정을 해 주어야 하는 일이 잦아졌다. 
 
  그 때나 지금이나 CORS는 심심치 않게 마주할 수 있는 토픽인데, 정확히 개념을 정리한 적은 없는 것 같아, 공부한 내용을 정리해 보고자 한다.
 
@@ -26,7 +26,7 @@ tags:
 
 # Origin
 
- 웹 개발에서 Origin이란 웹 페이지의 리소스 출처를 의미한다. 웹 보안을 위해 도입된 개념으로, 웹 페이지의 출처를 의미한다. 브라우저가 웹 페이지에 접근할 때 사용하는 URL을 이용해 알아서 판단한다.
+ 웹 개발에서 Origin이란 웹 페이지의 리소스 출처를 의미한다. 웹 보안을 위해 도입된 개념으로, 웹 페이지의 출처를 의미한다.
 
 <br>
 
@@ -46,16 +46,16 @@ tags:
 
 <br>
 
-그렇다면 브라우저는 Origin을 어떻게 해석할까. 브라우저는 URL 문자열을 scheme, host, port, path, query string, fragment 등의 각 구성 요소로 해석한다. 그리고 Origin의 정의에 따라, scheme, host, port만을 활용해, Origin을 판단한다. 이 셋 중 **하나라도 다르면, 브라우저는 다른 Origin이라고 판단**한다.
+그렇다면 브라우저는 Origin을 어떻게 해석할까. 브라우저는 URL 문자열을 scheme, host, port, path, query string, fragment 등의 각 구성 요소로 해석한다. 그리고 scheme, host, port만을 활용해, Origin을 판단한다. 이 셋 중 **하나라도 다르면, 브라우저는 다른 Origin이라고 판단**한다.
 
- 즉, 브라우저 입장에서 아래 `https://www.example.com`과 같은 Origin은 `https://www.example.com` 뿐이다. 다시 말해, 아래의 Origin은 모두 다른 Origin이다.
+ 즉, 브라우저 입장에서 `https://www.example.com`과 같은 Origin은 `https://www.example.com` 뿐이다. 다시 말해, 아래의 Origin은 모두 다른 Origin이다.
 
 - `http://www.example.com`: scheme이 다름
 - `http://www.example.net`: host가 다름
 - `https://www.example.com:4443`: port가 다름
   - `https://example.com`의 경우, scheme이 https이므로, 기본 포트는 443
 
-그렇다면, 도메인이 IP 주소로 변환되는 경우에는 어떻게 판단할까. 기본적으로 브라우저는 Origin을 판단하기 위해 URL을 해석하기만 할 뿐, 해석된 URL의 host가 도메인일 경우, 해당 도메인을 IP 주소로 변환(resolve)하는 것까지는 하지 않는다. 따라서, `example.com`이 `93.184.216.34`로 resolve된다고 하더라도, `http://example.com`과 `http://93.184.216.34`는 다른 Origin이다.
+그렇다면, 도메인이 IP 주소로 변환되는 경우에는 어떻게 판단할까. 기본적으로 브라우저는 Origin을 판단하기 위해 URL을 해석하기만 할 뿐, 도메인을 IP 주소로 변환(resolve)하는 것까지는 하지 않는다. 따라서, `example.com`이 `93.184.216.34`로 resolve된다고 하더라도, `http://example.com`과 `http://93.184.216.34`는 다른 Origin이다.
 
 <br>
 
@@ -84,7 +84,7 @@ tags:
 
  이렇게 웹 브라우저 단에서 **동일한 출처의 리소스와만 상호작용하도록 제한하는 정책**을 Same Origin Policy라고 한다. 다시 말해, 서로 다른 출처로부터의 리소스 로드를 제한하는 것이다. 다른 Origin 리소스에 대해 보수적으로 접근해, 사용자를 악성 리소스로부터 보호하고자 하는 것이다. 
 
-> 지금 리소스랑 다른 Origin으로 요청하면, 그냥 브라우저가 막아 버린다.
+> 지금 리소스 Origin이랑 다른 Origin으로 요청하면, 그냥 브라우저가 막아 버린다.
 
 
 
@@ -93,6 +93,8 @@ tags:
 ## Cross Origin 접근 제한 정책
 
  해당 정책의 맥락에서, 다른 출처로부터의 리소스를 Cross Origin 리소스라고 한다. 또한, 다른 출처로의 리소스 요청을 Cross Origin 요청이라고 한다. 예컨대, `http://example.com`에서 `http://api.example.com`에 요청을 보내서 리소스를 얻어 와야 하는 경우, 이 요청은 Cross Origin 요청이 된다. 
+
+<br>
 
  Same Origin Policy 하에서, Cross Origin에 대한 요청은 아래와 같이 제한된다([참고: Cross Origin Network Access](https://developer.mozilla.org/en-US/docs/Web/Security/Same-origin_policy#cross-origin_network_access))
 
@@ -112,6 +114,8 @@ tags:
   - `<iframe>` 태그로 임베드되는 것
     * cross-origin 프레이밍을 막기 위해서는 `X-Frame-Options` 헤더를 사용할 수 있음
 - Cross Origin Read: 허용되지 않음
+
+<br>
 
 위에서 더 나아가, 조금 더 엄격한 Cross Origin 접근 제한 정책을 적용할 수도 있다고 한다.
 
@@ -182,7 +186,7 @@ tags:
 
 사전 요청 없이, 요청 자체에 CORS 헤더를 담아 보내고, 응답에 CORS 헤더를 보내는 경우이다.
 
-![cors-simple-request-flow]({{site.url}}/assets/images/cors-simple-request-flow.png){: .align-center}![image-20250518191038139](assets/image-20250518191038139.png)
+![cors-simple-request-flow]({{site.url}}/assets/images/cors-simple-request-flow.png){: .align-center}
 
 <center><sup>그림 출처: https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS</sup></center>
 
@@ -463,10 +467,10 @@ tags:
 <br>
 
 - *참고*
-  - https://developer.mozilla.org/en-US/docs/Web/Security/Same-origin_policy
-  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS
-  - https://medium.com/@lifthus531/cors%EC%97%90-%EB%8C%80%ED%95%9C-%EA%B9%8A%EC%9D%80-%EC%9D%B4%ED%95%B4-8c84c2137c83
-  - https://velog.io/@kansun12/%ED%94%84%EB%A1%A0%ED%8A%B8%EC%97%94%EB%93%9C-CORS
+  - [https://developer.mozilla.org/en-US/docs/Web/Security/Same-origin_policy](https://developer.mozilla.org/en-US/docs/Web/Security/Same-origin_policy)
+  - [https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS)
+  - [https://medium.com/@lifthus531/cors%EC%97%90-%EB%8C%80%ED%95%9C-%EA%B9%8A%EC%9D%80-%EC%9D%B4%ED%95%B4-8c84c2137c83](https://medium.com/@lifthus531/cors%EC%97%90-%EB%8C%80%ED%95%9C-%EA%B9%8A%EC%9D%80-%EC%9D%B4%ED%95%B4-8c84c2137c83)
+  - [https://velog.io/@kansun12/%ED%94%84%EB%A1%A0%ED%8A%B8%EC%97%94%EB%93%9C-CORS](https://velog.io/@kansun12/%ED%94%84%EB%A1%A0%ED%8A%B8%EC%97%94%EB%93%9C-CORS)
 
 
 
