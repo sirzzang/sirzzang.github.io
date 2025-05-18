@@ -30,7 +30,7 @@ tags:
 
 <br>
 
-![url-origin]({{site.url}}/assets/url-origin.png){: .align-center}
+![url-origin]({{site.url}}/assets/images/url-origin.png){: .align-center}
 
  Origin은 아래와 같은 세 가지의 요소로 구성된다.
 
