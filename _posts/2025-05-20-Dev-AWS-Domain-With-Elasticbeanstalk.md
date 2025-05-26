@@ -24,12 +24,12 @@ tags:
 
 # 개요
 
-- API 서버: AWS elastic beanstalk을 이용해 배포되어 있음
+- API 서버: AWS Elastic Beanstalk을 이용해 배포되어 있음
 - 메인 도메인: [GoDaddy](https://kr.godaddy.com/) 서비스에서 구매함
-- 작업 내용: AWS route 53 서비스를 이용해 메인 도메인에 대한 하위 도메인을 AWS elastic beanstalk 환경에 연동함
-  - route 53 호스팅 영역 생성
-  - 해당 호스팅 영역과 elastic beanstalk 환경 연결
-  - GoDaddy에 route 53 네임서버 레코드 설정
+- 작업 내용: [AWS Route 53](https://aws.amazon.com/ko/route53/) 서비스를 이용해 메인 도메인에 대한 하위 도메인을 AWS elastic beanstalk 환경에 연동함
+  - Route 53 호스팅 영역 생성
+  - 해당 호스팅 영역과 Elastic Beanstalk 환경 연결
+  - GoDaddy에 Route 53 네임서버 레코드 설정
 
 <br>
 
