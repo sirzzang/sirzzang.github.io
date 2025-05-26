@@ -53,7 +53,7 @@ tags:
 
 > *참고*: elastic beanstalk에서 부여한 도메인 사용 시
 >
-> ![elasticbeanstalk-https-certificate-manager-error-1]({{site.url}}/assets/images/elasticbeanstalk-https-certificate-manager-error-1.png){: .align-center}
+> ![elasticbeanstalk-https-certificate-manager-error]({{site.url}}/assets/images/elasticbeanstalk-https-certificate-manager-error.png){: .align-center}
 >
 > Elastic Beanstalk 환경 생성 시, 기본으로 부여되는 도메인이 있는데, 해당 도메인을 사용하면 에러가 발생한다.
 
@@ -81,13 +81,15 @@ tags:
 
 ![elasticbeanstalk-https-certificate-manager-4]({{site.url}}/assets/images/elasticbeanstalk-https-certificate-manager-5.png){: .align-center}
 
+DNS 레코드가 생성이 완료되었는지 확인한다.
+
 <br>
 
 ## 3. Elastic Beanstalk Listener 등록
 
 
 
-![elasticbeanstalk-https-listener-3]({{site.url}}/assets/images/elasticbeanstalk-https-listener-3.png){: .align-center}
+![elasticbeanstalk-https-listener]({{site.url}}/assets/images/elasticbeanstalk-https-listener.png){: .align-center}
 
 이제 Elastic Beanstalk 환경에 https 연결을 위해 443 포트에 대한 Listener 설정을 해 준다. 보안을 위해, HTTP 연결에 대한 listener 설정은 해제한다.
 
