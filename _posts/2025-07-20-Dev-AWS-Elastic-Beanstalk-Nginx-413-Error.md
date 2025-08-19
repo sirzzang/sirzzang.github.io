@@ -46,7 +46,7 @@ Nginx 이용 시, Request Body의 최대 크기 제한으로 인해 나타나는
 
 <br>
 
-Elastic Beanstalk은 어플리케이션 리버스 프록시 서버로 Nginx를 이용한다. 실제로 EC2에 직접 접속해 보면, 아래와 같은 nginx 설정으로 nginx가 구동되고 있는 것을 확인할 수 있다.
+Elastic Beanstalk은 어플리케이션 [리버스 프록시 서버로 Nginx를 이용](https://docs.aws.amazon.com/ko_kr/elasticbeanstalk/latest/dg/java-se-nginx.html)한다. 실제로 EC2에 직접 접속해 보면, 아래와 같은 nginx 설정으로 nginx가 구동되고 있는 것을 확인할 수 있다.
 
 ```bash
 eraser@DESKTOP-FAIGO7U~:$ ssh -i "keypair.pem" <ec2_username>@<ec2_public_ip>
@@ -99,6 +99,17 @@ drwxr-xr-x.  2 root root     6 Feb 11 02:00 default.d
 -rw-r--r--.  1 root root   664 Feb 11 02:00 uwsgi_params
 -rw-r--r--.  1 root root   664 Feb 11 02:00 uwsgi_params.default
 -rw-r--r--.  1 root root  3610 Feb 11 02:00 win-utf
+```
+
+
+
+<br>
+
+이 때, 리버스 프록시로 사용하는 Nginx가 사용하는 파일 업로드 설정이 1MB여서 이러한 상황이 발생한다. EC2에 접속하여 nginx 설정 파일을 확인해 보면, 파일 업로드에 대한 설정은 크게 적용되어 있지 않음을 알 수 있는데, 이 경우 Nginx 기본 설정 값인 1MB가 적용된다.
+
+- [nginx client_max_body_size 설정](https://nginx.org/en/docs/http/ngx_http_core_module.html#client_max_body_size): 클라이언트가 너무 큰 사이즈의 요청을 보내지 못하도록 request의 Content-Length 헤더값이 client_max_body_size에 설정된 값을 넘을 수 없도록 제한함
+
+```bash
 [ec2-user@ip-172-31-19-40 nginx]$ cat nginx.conf
 # Elastic Beanstalk Nginx Configuration File
 
@@ -155,6 +166,92 @@ http {
 ```
 
 
+
+
+
+<br>
+
+# 해결
+
+Nginx를 프록시 혹은 리버스 프록시로 사용하다 보면 흔하게 겪는 문제로, Nginx 설정을 변경해 주면 된다. 다만, 직접 Nginx를 컨트롤할 수 없기 때문에, AWS 인프라 상에서 변경할 수 있는 방법을 찾아야 한다. 아래와 같은 방법을 생각해 볼 수 있다.
+
+- Elastic Beanstalk 배포 후, EC2에 접속하여 Nginx 설정을 변경함
+- Elastic Beanstalk 배포 과정에서, Nginx 설정을 변경함
+
+애초에 인프라 관리의 번거로움을 덜기 위해 Elastic Beanstalk을 사용했는데, 첫 번째 방법을 채택하는 것은 매우 비효율적이기 때문에, 두 번째 방법을 선택했다. 
+
+<br>
+
+결론적으로, Nginx 설정을 변경하기 위해(참고: [Configuring Nginx](https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/platforms-linux-extend.proxy.html) 아래와 같이 Elastic Beanstalk에 업로드하는 어플리케이션 배포 패키지 내에 설정 파일을 두면 된다.
+
+```bash
+.platform/
+  ├─ nginx/conf.d/
+  |	 └─custom.conf # nginx 설정 파일
+  └─ 00_nginx.config # elastic beanstalk 실행 설정 파일
+```
+
+- custom.conf
+  ```bash
+  client_max_body_size 10M;
+  ```
+- 00_nginx.config
+  ```yaml
+  container_commands:
+      00_reload_nginx:
+          command: "service nginx reload"
+  ```
+
+
+
+<br>
+
+## .platform 
+
+`.platform` 디렉토리는 Elastic Beanstalk에 의해서 인식되는 특별한 용도의 hook을 모아 놓는다. 즉, EB 환경의 배포 라이프라사이클 각 단계에서 적용할 수 있는 platform customization hook이 위치한다.
+
+ Elastic Beanstalk 환경 플랫폼 별로 다를 수 있으나, 다음과 같은 하위 디렉토리가 있을 수 있다. 
+
+- `.platform/hooks/`: EB lifecycle 단계(prebuild, postbuild, predeploy, postdeploy)마다 특정 스크립트를 실행할 수 있음
+- `.platform/nginx/conf.d`: default nginx 추가 설정을 위한 config 파일 디렉토리
+- `.platform/nginx/nginx.conf`: Nginx 기본 설정 변경
+  - 다만, 이 파일을 직접적으로 변경하는 것은 권장되지 않고, `nginx/conf.d` 디렉토리를 이용하는 것이 안전함
+
+- `.platform/*.config`: EB 컨테이너 커맨드, 패키지 등 실행 관련 설정 파일
+  - YAML 형식으로, `container_commands`, `packages`, `files`, `services` 등의 키를 가질 수 있음
+  - config 파일의 numeric prefix는 실행 순서를 컨트롤함
+    - EB 프로세스는 lexical order에 따라 .config 파일들을 실행함
+    - 실행 순서를 강제하기 위해, config 파일에 numeric prefix를 붙이는 scheme이 사용됨
+    - 예를 들어, 아래와 같은 구조를 사용할 수 있음
+      ```bash
+      .platform/
+        ├─ 00_nginx.config   # reload nginx first
+        ├─ 01_packages.config   # install extra OS packages
+        ├─ 02_app.config        # run app-specific setup
+        └─ nginx/conf.d/custom.conf
+      ```
+
+
+
+<br>
+
+# 결론
+
+
+
+결과적으로 문제를 어떻게 해결하기 위한 설정 파일 구조를 뜯어 보면 다음과 같다.
+- `.platform`: EB 환경 커스텀 디렉토리
+  - `nginx/conf.d/`: Nginx config 디렉토리
+    - `custom.conf`: 문제가 발생했던 client_max_body_size 관련 설정을 변경한 설정 파일
+  - `00_nginx_config`: EB 배포 과정에서 적용하고자 하는 설정 사항
+    - numeric prefix로 실행 순서를 제어하나, 현재 상황에서는 한 개만 있음
+
+
+
+<br>
+
+AWS는 편리하긴 하지만, 문제 해결을 하기 위해서는 공식 문서~~(와 GPT)~~의 도움을 잘 받아야 한다.
+- https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/platforms-linux-extend.html
 
 
 
