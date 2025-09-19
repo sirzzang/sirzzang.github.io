@@ -101,14 +101,14 @@ Docker 엔진 설정 파일을 수정해 private registry와 네트워킹 환경
 
 ```
 
-- `bip`, `default-address-pools
+- `bip`, `default-address-pools`
   - Docker bridge 네트워크와 기본 네트워크 풀을 직접 지정 (기본 `172.17.0.0/16` 과 충돌 방지)
 - `default-runtime`
   - NVIDIA GPU가 있는 환경에서 기본 runtime을 `nvidia`로 지정
-- **`insecure-registries`**
+- `insecure-registries`
   - `<registry-domain>:<registry-port>` 연결 시 TLS 인증서 검증을 생략
   - HTTPS 인증서를 적용하지 않았거나 self-signed 인증서를 사용하는 경우 반드시 필요
-- **`registry-mirrors`**
+- `registry-mirrors`
   - 기본 Docker Hub 대신 private registry를 이미지 pull 시도 우선 경로로 사용
 
 <br>
@@ -132,10 +132,10 @@ configs:
 
 ```
 
-- **`mirrors`** : K3s 클러스터 내 docker 이미지 미러링 설정
+- `mirrors` : K3s 클러스터 내 docker 이미지 미러링 설정
   - `docker.io`(Docker Hub) 요청을 private registry로 미러링
 
-- **`configs` → `tls.insecure_skip_verify`**
+- `configs.tls.insecure_skip_verify`
   - self-signed 또는 HTTP 기반 registry의 인증서 검증을 생략
 
 
