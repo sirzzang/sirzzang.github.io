@@ -1,5 +1,5 @@
 ---
-title:  "<<TODO>> [Docker] Docker Private Registry 구축"
+title:  "[Docker] Docker Private Registry 구축"
 excerpt: 간단한 도커 사설 저장소 구축하기
 categories:
   - Dev
@@ -14,10 +14,8 @@ tags:
 
 
 
-- [docker private registry](https://hub.docker.com/_/registry):Docker에서 공개한 레포지토리 공식 이미지
-- [joxit docker registry ui](https://github.com/Joxit/docker-registry-ui): Docker registry에 간단한게 사용할 수 있는 UI
-
-
+- [docker private registry](https://hub.docker.com/_/registry): Docker에서 공개한 레포지토리 공식 이미지
+- [joxit docker registry ui](https://github.com/Joxit/docker-registry-ui): 간단한 오픈 소스 Docker Registry UI
 
 <br>
 
