@@ -1,5 +1,5 @@
 ---
-title:  "<<TODO>> [K8s] Kubernetes 환경에서 NVIDIA GPU 사용하기"
+title:  "<<TODO>> [Kubernetes] Kubernetes 환경에서 NVIDIA GPU 사용하기"
 excerpt: Kubernetes 환경에서 GPU 사용할 수 있도록 설정하기
 categories:
   - Dev

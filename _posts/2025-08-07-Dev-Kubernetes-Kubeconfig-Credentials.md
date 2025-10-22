@@ -1,5 +1,5 @@
 ---
-title:  "[K8s] K3s 클러스터 API 액세스 에러 해결"
+title:  "[Kubernetes] Kubernetes 클러스터 API 액세스 에러 해결"
 excerpt: kubeconfig 인증서 만료로 인한 클러스터 API 사용 불가 문제를 해결하는 방법
 categories:
   - Dev
@@ -7,8 +7,9 @@ toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
-  - K8s
-  - K3s
+  - k8s
+  - k3s
+  - kubernetes
   - Rancher
 ---
 

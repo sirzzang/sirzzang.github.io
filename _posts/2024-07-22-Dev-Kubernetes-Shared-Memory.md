@@ -1,5 +1,5 @@
 ---
-title:  "[k8s] Kubernetes 환경에서 PyTorch 공유 메모리 설정하기"
+title:  "[Kubernetes] Kubernetes 환경에서 PyTorch 공유 메모리 설정하기"
 excerpt: Kubernetes 환경에서 PyTorch 멀티 프로세스로 Data Loader를 이용할 때 발생할 수 있는 문제 
 categories:
   - Dev
@@ -8,6 +8,8 @@ header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
   - k8s
+  - k3s
+  - kubernetes
   - gpu
   - pytorch
 ---
