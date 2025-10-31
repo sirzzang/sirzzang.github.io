@@ -1,5 +1,5 @@
 ---
-title:  "파일 저장 기능을 개발하며 고민했던 점들-1"
+title:  "파일 저장 기능을 개발하며 고민했던 점들"
 excerpt: "go의 write 관련 함수를 살펴보게 된 건에 대하여"
 toc: true
 categories:
@@ -18,7 +18,7 @@ use_math: true
 
  회사에서 실시간으로 영상을 수신해 저장하는 레코딩 서버를 구현하며, 파일 쓰기 시 에러 처리를 어떻게 하는 것이 좋을지 고민한 과정을 기록하고자 한다.
 
-
+![recorder-file-write]({{site.url}}/assets/images/recorder-file-write.png)
 
 <br>
 
