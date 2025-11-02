@@ -252,36 +252,24 @@ nvidia-smi
 
 ## (Optional) Linux 기존 NVIDIA Driver 삭제
 
-Ubuntu나 다른 Linux 배포판에 기본적으로 Nouveau라는 오픈소스 NVIDIA 드라이버가 포함되어 있는데, 이것이 설치되어 있고 활성화되어 있다면 아래와 같이 삭제해 주어야 한다.
+Ubuntu나 다른 Linux 배포판에 기본적으로 Nouveau라는 오픈소스 NVIDIA 드라이버가 포함되어 있는데, 이것이 설치되어 있고 활성화되어 있다면 아래와 같이 삭제해 주어야 한다. 
+목적은, **시스템에서 기존 NVIDIA 드라이버 및 커널 모듈을 완전히 제거**하고, **Nouveau 충돌을 방지하여 새 드라이버 설치를 위한 깨끗한 환경을 만드는 것**이다.
 
 - Nouveau
-
   - 커널에 내장된 오픈소스 드라이버
   - 별도로 설치하지 않아도 배포 기본 설치파일에 깔려서 동작함
   - 성능이 낮고, CUDA, TensorRT, GPU 연산을 지원하지 않음
 
-- NVIDIA GPU Driver를 사용해야 AI 모델 학습 및 추론에 필요한 CUDA, GPU 가속, TensorRT 등의 기능을 사용할 수 있음
-
+- NVIDIA GPU Driver를 사용해야 AI 모델 학습 및 추론에 필요한 GPU 기능 사용 가능
 - 만약 Nouveau가 설치되어 있다면, 커널에서 해당 드라이버가 GPU를 이미 점유하고 있기 때문에, 공식 NVIDIA 드라이버가 커널 모듈을 제대로 로드하지 못함
-
   - 즉, 동시에 커널에 로드됨으로써 **GPU 충돌**이 발생할 수 있음
-
-  - 위의 과정을 거쳐 NVIDIA Driver를 설치했는데 `nvidia-smi`가 실패한다면, 이 이유에 의해 충돌이 발생하는 것일 수 있음
+  - 위의 과정을 거쳐 NVIDIA Driver를 설치했는데 아래와 같이 `nvidia-smi`가 실패한다면, GPU 드라이버 충돌 의심
 
     ```bash
     $ nvidia-smi
     NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver.
     ```
-
-- 이와 같은 상황에서는 아래와 같이 기본 driver를 삭제하고, 다시 재설치해주면 된다
-
-
-
-<br>
-
-목적은, **시스템에서 기존 NVIDIA 드라이버 및 커널 모듈을 완전히 제거**하고, **Nouveau 충돌을 방지하여 새 드라이버 설치를 위한 깨끗한 환경을 만드는 것**이다.
-
-
+- 이와 같은 상황에서는 아래와 같이 기본 driver를 삭제하고, 다시 재설치해주면 됨
 
 <br>
 
