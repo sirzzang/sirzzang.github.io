@@ -1,5 +1,5 @@
 ---
-title:  "[Kubernetes] K3s 환경에서 Argo Workflow Artifact 기능 사용하기"
+title:  "[Kubernetes] Argo Workflow Artifact 기능 사용하기"
 excerpt: K3s 환경에 배포된 Argo Workflow에서 Object Storage를 Artifact 저장소로 설정하는 방법 
 categories:
   - Dev

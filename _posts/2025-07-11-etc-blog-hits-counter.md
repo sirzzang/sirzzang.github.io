@@ -1,6 +1,6 @@
 ---
 title:  "블로그 hits counter 변경"
-toc: true
+toc: false
 categories:
   - Etc
 tags:
@@ -22,17 +22,6 @@ tags:
 
 내가 현재 github.io 블로그에서 사용하는 jekyll 테마인 Minimal Mistakes는 페이지 레이아웃을 `_layouts/single.html`에 정의한다. 나는 해당 레이아웃에서 hit count를 표현할 수 있도록 아래와 같은 부분을 커스텀해 추가했다.
 
-```html
-<div>
-<!-- 생략 -->
-    <img style="width: 1500;" src="http://hits.dwyl.com/{{ site.url | remove_first: 'https://' | remove_first: 'http://' | replace: '/', '' }}/{{ page_urls[1] }}/{{ page_urls[2] }}.svg" alt="hit count image">
-{% include post_pagination.html %}
-    
-<!-- 생략 -->
-</div>
-
-```
-
 - [hits url 추가 부분](https://github.com/sirzzang/sirzzang.github.io/blob/97a83f7c715f3d357fcb898c9614c3275947b05a/_layouts/single.html#L78)
 
 
@@ -40,18 +29,6 @@ tags:
 <br>
 
 MyHits 서비스를 사용해 표현할 수 있도록, MyHits에서 사용하는 URL 형식에 맞게 바꿔 주면 된다.
-
-```html
-<div>
-<!-- 생략 -->
-    {% assign full_url = site.url | append: page_urls[1] | append: '/' | append: page_urls[2]  %}
-    <img src="https://myhits.vercel.app/api/hit/{{ full_url | url_encode }}?color=green&label=hits&size=small" alt="hit count">
-{% include post_pagination.html %}
-    
-<!-- 생략 -->
-</div>
-
-```
 
 - [변경 내용 커밋](https://github.com/sirzzang/sirzzang.github.io/commit/d7f08a588f60e9bf61ab7192d7e5fd6b503a15ff)
 

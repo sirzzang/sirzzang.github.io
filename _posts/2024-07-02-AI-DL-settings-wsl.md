@@ -1,5 +1,5 @@
 ---
-title:  "[AI] DL GPU 개발환경 구축 - WSL"
+title:  "[AI] DL GPU 개발환경 구축: WSL"
 excerpt: "WSL에서 GPU 개발 환경을 구축해 보자."
 toc: true
 toc_sticky: true

@@ -1,5 +1,5 @@
 ---
-title:  "[AI] DL GPU 개발환경 구축"
+title:  "[AI] DL GPU 개발환경 구축: Windows"
 excerpt: "GPU를 사용하는 Tensorflow, PyTorch 개발환경을 구축해 보자."
 toc: true
 toc_sticky: true
@@ -16,10 +16,6 @@ last_modified_at: 2020-10-20
 ---
 
 <br>
-
-# _GPU로 DL 돌리기_
-
-
 
  Tensorflow, PyTorch 등 딥러닝 프레임워크를 GPU 환경에서 사용해 보자. *내 기준*  Tensorflow 환경 구축이 더 어려웠기 때문에, Tensorflow 환경을 구축한 후 PyTorch를 설치하는 방식을 택했다.
 

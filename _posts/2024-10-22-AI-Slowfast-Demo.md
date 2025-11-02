@@ -23,7 +23,7 @@ tags:
   - WSL
   - Conda environment
   - Prerequisites
-    - [GPU 환경 설정](https://sirzzang.github.io/ai/AI-DL-settings-linux/)
+    - [GPU 환경 설정](https://sirzzang.github.io/ai/AI-DL-settings-wsl/)
       - CUDA 11.7
       - cuDNN 8.5.0
 - 사용할 모델 및 데이터셋
