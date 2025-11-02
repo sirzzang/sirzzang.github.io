@@ -5,57 +5,116 @@ permalink: /about/
 
 <br>
 
-뭐든지 배우고 싶은 주니어 백엔드 개발자 송이레입니다. 찾아 주셔서 감사합니다🙇‍♀️ Hi, I'm Ieere Song(a.k.a Eraser). Thank you for visiting👋
-<br>
-
-
-
-# Interests
-
-- Clean Architecture, Clean Code
-- Pipeline: ML/DL Pipeline, 서비스 백엔드에서 발생하는 대용량 데이터 처리
-- 배우고 경험한 내용을 글과 그림으로 정리하기
-- 서비스에 대한 철학을 갖기
+안녕하세요! 👋 **데이터를 다루는 것에서 시작해 AI를 서비스로 연결하는 백엔드 개발자** 송이레(a.k.a. Eraser)입니다.
+찾아주셔서 감사합니다! 
 
 <br>
 
-# Experience
+## 🌱 저는 이렇게 성장해 왔어요
 
-> **Project Blog** [Eraser's Projectlog](https://projectlog-eraser.tistory.com/)
+처음에는 **데이터 분석**으로 시작했습니다. 숫자와 그래프 속에서 패턴을 찾는 게 재미있었거든요. 자연스럽게 **AI 모델**에 대해 배우게 되었고, 이 모델들을 실제로 사용자가 쓸 수 있는 서비스로 만들고 싶어서 **백엔드 개발**을 시작했습니다.
+
+지금은 AI와 백엔드의 교차점에서 **MLOps 시스템**을 만들고 있습니다. AI 모델이 세상에 나오기까지 필요한 모든 과정 - 데이터 수집부터 모델 학습, 배포, 운영까지 - 을 자동화하는 시스템을 설계하고 개발하는 일이죠.
+
+**Python → Java → Go**로 주 언어를 바꿔가며, 각 상황에 맞는 최적의 도구를 사용하는 법을 배웠습니다. 클라우드와 쿠버네티스를 만지작거리며 인프라도 이해하게 되었고요.
+
+<br>
+
+## 💼 이런 일들을 해왔어요
+
+### **Innodep Inc.** (2022.09 ~ 현재)
+
+**MSA 기반 통합 보안 플랫폼 개발**
+- Go를 메인 언어로 사용하는 마이크로서비스 아키텍처 기반 영상 관제 시스템 개발
+- RTSP 스트림 레코딩, 자체 미디어 파일 포맷(GMF) 설계
+- LDAP 연동 인증 시스템, JWT 기반 권한 관리 구축
+- Ansible로 다중 호스트 환경 시간 동기화 자동화
+- API Gateway Open API 개발
+
+**MLOps 플랫폼 개발**
+- 폐쇄망 환경에서 K3s 기반 온프레미스 MLOps 시스템 구축
+- 2000+ 채널 영상 데이터 자동 수집 → 라벨링 → 학습 → 배포 전자동화 파이프라인 구현
+- 이기종 GPU 환경 대응 및 워크로드 분산 처리
+- 엣지-클라우드 통합 하이브리드 환경에서 MQTT 기반 디바이스 통신
+- Argo Workflow로 복잡한 학습 파이프라인 오케스트레이션
+
+### **BeWell** (Side Project, 2023.09 ~ 2025.01)
+
+**여성 건강 관리 서비스 백엔드**
+- Go + AWS Elastic Beanstalk 기반 헬스케어 서비스 아키텍처 설계 및 개발
+- OAuth 2.0(Google, Apple) 소셜 로그인과 자체 JWT 시스템 통합
+- Sendbird 채팅 API 연동, Stripe 결제 시스템 구현
+- GitHub Actions 기반 CI/CD 파이프라인 구축
+- AWS Lambda 서버리스 아키텍처로 AI 리포트 자동 생성
+
+### **Tmax A&C** (2020.09 ~ 2022.08)
+
+**간편결제 서비스 개발**
+- Kubernetes 환경에 ELK Stack 기반 로그 모니터링 시스템 구축
+- Nginx 기반 이미지 스토리지 서버 개발
+- Python Flask AI 모델 서빙 API 개발
+
+**블록체인 기반 식재료 운송 플랫폼**
+- Tibero 데이터베이스 연동 및 ODBC 설정
+- AI 모델 엔드포인트 개발
+- Kibana 대시보드로 운송 과정 실시간 모니터링
+
+<br>
+
+## 🔧 기술 스택
+
+- **Backend**: Go, Python, Java  
+- **Cloud & Container**: Kubernetes(K3s), Docker, AWS(EC2, RDS, S3, Lambda, Elastic Beanstalk)  
+- **MLOps**: Argo Workflow, MinIO, Triton Inference Server  
+- **Database**: PostgreSQL, MySQL, Tibero  
+- **Infra & Monitoring**: ELK Stack, Ansible, Prometheus, Grafana  
+- **Messaging**: NATS, MQTT  
+- **Protocol**: RTSP, ONVIF, LDAP, OAuth 2.0  
+
+<br>
+
+## 🌟 요즘 관심사
+
+- **고성능 백엔드 시스템**: API 응답 속도와 처리량을 끌어올리는 최적화
+- **MLOps 파이프라인 고도화**: 데이터 수집부터 모델 서빙까지 끊김없는 자동화
+- **GPU 리소스 최적화**: 한정된 AI 컴퓨팅 자원을 효율적으로 활용하는 방법
+- **지속 가능한 플랫폼**: 개발자가 행복하게 쓸 수 있는 도구 만들기
+<br>
+그리고...
+<br>
+**생성형 AI와 LLM을 활용한 생산성 향상**에도 관심이 많습니다. 
+ChatGPT, Claude, Cursor 같은 도구들을 적극적으로 활용해서 반복 작업을 줄이고, 더 본질적인 문제에 집중하려고 노력합니다.
 
 
+<br>
 
-## Work
+## 📝 배우고 나누기
 
-* **Tmax Commerce** (2020.09.~)
+모르는 걸 알아가고, 기록하는 걸 좋아합니다.
 
-  * **웹앱 개발**
-    
-    * React.js 기반 디지털 마케팅 플랫폼 버튼 디자인 템플릿, 테이블 템플릿 개발
-    * React.js, Electron 기반 사내 카페 POS 앱 현장 주문 기능, 결제 내역 조회 기능, 영수증 출력 기능 개발
-    
-  * **「유통이력 관리 및 제품 인증 서비스를 위한 블록체인 플랫폼 개발」 프로젝트 참여**
+- **기술 블로그**: [GitHub 블로그](https://sirzzang.github.io), [Tistory 블로그](https://projectlog-eraser.tistory.com/)
+- **오픈소스 기여**: Go 오픈소스 LDAP 패키지 [go-ldap](https://github.com/go-ldap/ldap)에 Search Scope 상수 추가 ([Issue](https://github.com/go-ldap/ldap/issues/481), [PR](https://github.com/go-ldap/ldap/pull/480))
+- **특허 출원**: 지능형 선별관제 시스템을 위한 카메라 클러스터링 기반의 경량 신경망 모델 학습 방법 (10-2024-0198736, 2024.12.27 출원)
+- **멘토링**: 한국산업기술진흥원 [K-Girls Day 멘토링](https://www.etnews.com/20251020000175)
 
-    ![keit-backend]({{site.url}}/assets/images/keit.png){: .align-center}
-    
-    * Flask 기반 AI 모델링 서버 개발
-    * ELK stack 기반 AI 모델링 시각화 대시보드 개발
+<br>
 
-  * **백엔드 개발**
+## 🎯 제가 가치있게 생각하는 것들
 
-    * ELK stack 기반 Springboot Application 로그 모니터링 시스템 구축 및 사내 데이터센터 클라우드 환경에 배포
+- **문제를 해결하는 것**: 복잡하고 어려운 문제일수록 더 재미있습니다
+- **함께 성장하는 것**: 팀원들과 지식을 나누고 배우는 과정이 좋습니다
+- **계속 배우는 것**: 새로운 기술을 익히고 시도해보는 걸 두려워하지 않습니다
 
-## Projects
+<br>
 
-* **웹 반응 데이터를 활용한 주 52시간 근무제 영향평가 분석**(2020.03.~2020.04.)
-  * BeautifulSoup, Selenium 라이브러리를 이용한 네이버 뉴스 기사 및 댓글, 커뮤니티 글 및 댓글 웹 크롤링
-  * Pandas, KoNLPy 라이브러리를 이용한 자연어 전처리
-  * Keras, Hugging Face 라이브러리를 이용한 순환신경망, BERT 기반 감성 분석 모델
+## 📫 연락하기
 
-* **2020 빅콘테스트 데이터분석 챔피언리그**(2020.08.~2020.09.)
-  * Pandas, Numpy를 이용한 데이터 전처리 및 집계
-  * Matplotlib, Seaborn을 이용한 데이터 시각화
-  * XGBoost, Prophet, DeepCtr 라이브러리를 이용한 판매량 예측 모델링
+궁금한 게 있거나 같이 일하고 싶으시다면 편하게 연락주세요!
 
+- **Email**: sir950123@gmail.com
+- **GitHub**: [github.com/sirzzang](https://github.com/sirzzang)
+- **LinkedIn**: [linkedin.com/in/sirzzang](https://www.linkedin.com/in/sirzzang/)
 
+<br>
 
+> 새로운 도전과 협업의 기회를 항상 환영합니다 🚀
