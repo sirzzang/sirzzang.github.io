@@ -31,7 +31,7 @@ K8s 환경에서 GPU가 있는 노드를 사용하기 위해서는 Kubernetes ve
 
 - GPU 노드 Prerequisites
   - NVIDIA driver 설치
-  - [NVIDIA Docker](https://github.com/NVIDIA/nvidia-Docker) 혹은 [NVIDIA Container Toolkit](https://github.com/NVIDIA/nvidia-container-toolkit) 설치: **NVIDIA Container Toolkit**을 설치할 예정
+  - NVIDIA Container Runtime 설정: [NVIDIA Docker](https://github.com/NVIDIA/nvidia-Docker) 혹은 [NVIDIA Container Toolkit](https://github.com/NVIDIA/nvidia-container-toolkit) 설치 → **NVIDIA Container Toolkit**을 설치할 예정
     - NVIDIA Docker는 현재 deprecated로, NVIDIA Container Toolkit을 사용할 것을 권장하고 있음
       - 게다가, NVIDIA Docker는 윈도우 환경에서 활용할 수 없음
     - NVIDIA Container Toolkit 설치를 위한 [NVIDIA 공식 가이드](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
@@ -136,7 +136,7 @@ service DevicePlugin {
 
 
 
-Kubernetes에 배포하기 앞서, 컨테이너 환경에서 GPU를 인식할 수 있도록 해야 한다.
+Kubernetes에 배포하기 앞서, 컨테이너 환경에서 GPU를 인식할 수 있도록 해야 한다. 컨테이너 런타임이 GPU를 인식할 수 있도록 해야 한다.
 
 ```bash
 [GPU Hardware]
@@ -369,14 +369,16 @@ sudo reboot
 
 
 
-## NVIDIA Container Toolkit 설치
+## NVIDIA Container Runtime 설정
 
 컨테이너에서 GPU를 사용할 수 있도록 NVIDIA Container Toolkit을 설치하고, 컨테이너 런타임의 설정을 변경한다.
 
-- NVIDIA Container Toolkit: 컨테이너 내부에서 GPU를 쓸 수 있도록 드라이버 연결
+- NVIDIA Container Toolkit: 컨테이너 내부에서 GPU를 쓸 수 있도록 설정하기 위한 도구 모음
 - Container Runtime: 컨테이너 실행 환경
   - Docker, containerd 등: Docker 사용
 - Nvidia-ctk: Docker runtime 설정 자동화
+
+> 결국 Kubernetes는 컨테이너 런타임에서 실행되는 컨테이너 관리를 위한 도구이기 때문에, 컨테이너 런타임이 GPU를 인식하는 것이 우선이다.
 
 <br>
 
