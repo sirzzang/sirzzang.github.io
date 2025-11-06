@@ -98,7 +98,7 @@ Whitelabel Error Page
 
   ```java
   //
-  // Source code recreated from a .class file by IntelliJ IDEA
+  // Source code Recreated from a .class file by IntelliJ IDEA
   // (powered by FernFlower decompiler)
   //
   
@@ -142,7 +142,7 @@ Whitelabel Error Page
 
   ```java
   //
-  // Source code recreated from a .class file by IntelliJ IDEA
+  // Source code Recreated from a .class file by IntelliJ IDEA
   // (powered by FernFlower decompiler)
   //
   

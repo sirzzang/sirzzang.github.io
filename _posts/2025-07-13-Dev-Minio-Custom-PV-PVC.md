@@ -319,7 +319,7 @@ spec:
 ```
 
 - 매니페스트 작성
-  - PV node selector: SSD 설치한 노드로 선택해야 함
+  - PV `nodeSelector`: SSD 설치한 노드로 선택해야 함
 
 <br>
 
