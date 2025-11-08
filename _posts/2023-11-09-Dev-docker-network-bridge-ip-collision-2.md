@@ -328,7 +328,7 @@ networks:
 
 Docker Compose를 이용하여 OpenLDAP 컨테이너를 실행한 뒤, Docker Network를 확인한다. Docker Compose에 의해 만들어진 `my_bridge_network`가 생성됨을 확인할 수 있다.
 
-![my-bridge-network]({{site.url}}/assets/images/my-bridge-network.png){: .align-center}{: .width="500"}
+![my-bridge-network]({{site.url}}/assets/images/my-bridge-network.png){: .align-center}{: width="500"}
 
 ```bash
 $ docker network inspect 2debf2

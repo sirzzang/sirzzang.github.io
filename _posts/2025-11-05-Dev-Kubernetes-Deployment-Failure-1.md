@@ -247,7 +247,7 @@ Pending 파드 발견
 
 그렇게 스케쥴링이 시작되면, 아래와 같이 작동한다.
 
-![kubernetes-scheduling]({{site.url}}/assets/images/kubernetes-scheduling.png){: .width="500"}{:. align-center}
+![kubernetes-scheduling]({{site.url}}/assets/images/kubernetes-scheduling.png){: width="500"}{:. align-center}
 
 - 일반 스케쥴링: 클러스터 내에서 대상 파드를 배치할 수 있는 노드 탐색
   - 필터링: 각 노드 별로 모든 노드 조건에 대해 만족하는지 확인. 하나라도 실패 시 탈락

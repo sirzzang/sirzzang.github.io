@@ -411,7 +411,7 @@ Docker 엔진이 Bridge 네트워크가 생성될 때마다 그 대역을 할당
 $ docker network create bridge1
 ```
 
-![docker-network-after-creating-bridge1]({{site.url}}/assets/images/docker-network-after-creating-bridge1.png){: .width="500"}{: .align-center}
+![docker-network-after-creating-bridge1]({{site.url}}/assets/images/docker-network-after-creating-bridge1.png){: width="500"}{: .align-center}
 
 
 
@@ -425,7 +425,7 @@ $ docker network inspect bridge1
 
 계속해서 Docker Network를 생성한다. `172.31.0.0/16` 대역을 넘어간 이후, `192.168.0.0/20` 대역부터 네트워크 대역이 할당됨을 확인할 수 있다.
 
-![docker-network-after-creating-bridge20]({{site.url}}/assets/images/docker-network-after-creating-bridge20.png){: .width="500"}{: .align-center}
+![docker-network-after-creating-bridge20]({{site.url}}/assets/images/docker-network-after-creating-bridge20.png){: width="500"}{: .align-center}
 
 ![docker-network-bridge16-bridge20]({{site.url}}/assets/images/docker-network-bridge16-bridge20.png){: .align-center}
 
@@ -433,7 +433,7 @@ $ docker network inspect bridge1
 >
 > 위의 실험을 진행한 후, 사용하지 않는 네트워크를 모두 삭제하기 위해 `prune` 커맨드를 이용하면 좋다. 현재 사용되고 있지 않은 모든 네트워크를 삭제해 준다.
 >
-> ![docker-network-prune]({{site.url}}/assets/images/docker-network-prune.png){: .width="500"}
+> ![docker-network-prune]({{site.url}}/assets/images/docker-network-prune.png){: width="500"}
 
 
 
