@@ -615,7 +615,7 @@ numpy-base=1.26.4=py310hb5e798b_0
 ocl-icd=2.3.2=hd590300_1
 omegaconf=2.3.0=pypi_0
 opencv-python=4.10.0.84=pypi_0
-openh264=2.4.1=h59595ed_0
+openH.264=2.4.1=h59595ed_0
 openjpeg=2.5.2=he7f1fd0_0
 openssl=3.3.2=hb9d3cd8_0
 p11-kit=0.24.1=hc5aa10d_0
