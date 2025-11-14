@@ -347,17 +347,20 @@ mode: standalone
 
 Helm을 이용해 MinIO를 배포할 경우 사용되는 values.yaml에서 `persistence` 항목 변경 후 재배포
 
-- `distributed` 모드로 배포하면 Helm이 자동으로 PVC를 생성하고 `/` 하위 디렉토리를 PV로 사용
+- `distributed` 모드로 배포하면 ~~`Helm이 자동으로 PVC를 생성하고 `/` 하위 디렉토리를 PV로 사용~~ ([다른 글]()에서 더 자세히 알아볼 예정이나, 이 표현보다는) 반드시 동적 프로비저닝을 통해 여러 개의 PVC를 자동 생성해야 함
   - [distributed 모드에서는 statefulset으로 배포됨](https://github.com/minio/minio/blob/master/helm/minio/templates/statefulset.yaml#L1)
-    - [`persistence.existingClaim`에 PVC를 지정하더라도 무시됨](https://github.com/minio/minio/blob/master/helm/minio/templates/statefulset.yaml#L251)
-      - `export`라는 이름으로 PersistentVolumeClaim을 자동으로 생성
-      - 해당 PVC는 K3s defualt stoage class를 이용해 PV를 제공함
-      - 이 경우  `/` 파티션에 있는 `/var/lib/rancher/k3s` 하위 디렉토리를 PV로 이용하게 됨
-- `standalone` 모드에서만 기존 PVC를 사용 가능
+  - [`persistence.existingClaim`에 PVC를 지정하더라도 무시됨](https://github.com/minio/minio/blob/master/helm/minio/templates/statefulset.yaml#L251)
+    - `export`라는 이름으로 PersistentVolumeClaim을 자동으로 생성
+    - 해당 PVC는 K3s default stoage class를 이용해 PV를 제공함
+      - ([다른 글]()에서 더 자세히 알아보겠으나) default storage class 경로를 마운트한 SSD 경로로 잡아 주거나, 해당 SSD를 storage class로 등록했더라면 distributed 모드에서도 사용 가능했을 것
+    - K3s default storage class의 경우  `/` 파티션에 있는 `/var/lib/rancher/k3s` 하위 디렉토리를 PV로 이용하게 됨
+- ~~`standalone` 모드에서만 기존 PVC를 사용 가능~~ ([다른 글]()에서 더 자세히 알아볼 예정이나 이건 틀린 표현이었고) `standalone` 모드에서 기존 PVC의 사용을 지원함
   - [standalone 모드에서는 deployment로 배포됨](https://github.com/minio/minio/blob/master/helm/minio/templates/deployment.yaml#L1)
-    - [`persistence.existingClaim`에 PVC 지정 시, 명시된 PVC를 사용함](https://github.com/minio/minio/blob/master/helm/minio/templates/deployment.yaml#L197)
-- 결과적으로, values.yaml의 mode 값이 `distributed`인 경우, **persistence.existingClaim** 값을 주고 배포하더라도, `/` 파티션 하위에 `export-0`, `export-1` 등의 이름으로 생성되는 디렉토리를 PV로 이용하게 됨
-  - PV 디렉토리가 위치하는 노드도 원하는 노드인지 역시 보장되지 않음
+    - 다만, Helm 차트 버전에 따라 다름. Statefulset으로 배포되는 버전도 있음 
+  - [`persistence.existingClaim`에 PVC 지정 시, 명시된 PVC를 사용함](https://github.com/minio/minio/blob/master/helm/minio/templates/deployment.yaml#L197)
+- 결과적으로, values.yaml의 mode 값이 `distributed`인 경우, **persistence.existingClaim** 값을 주고 배포하더라도, `/` 파티션 하위에 k3s default storage class에 의해 `export-0`, `export-1` 등의 이름으로 생성되는 디렉토리를 PV로 이용하게 됨
+  - PV 디렉토리가 위치하는 노드가 원하는 노드인지 역시 보장되지 않음
+  - values.yaml의 기본값이 `distributed`이므로, 해당 값을 바꾸지 않은 상태에서는 `persistence.existingClaim` 값을 아무리 지정하더라도 무시됨
 
 
 

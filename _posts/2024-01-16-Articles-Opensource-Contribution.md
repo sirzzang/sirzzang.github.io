@@ -38,7 +38,7 @@ use_math: true
 
 첫 번째 기여 시도는 [grule-rule-engine](https://github.com/hyperjumptech/grule-rule-engine)에 대한 것이었다. 회사 팀원 분이 go의 오픈 소스 rule engine인 `grule-rule-engine`을 이용해 개발을 하고 계신데, 코드를 리뷰하던 중 우연히 `grule-rule-engine` 소스 코드의 주석에서 [오타를 발견했다](https://github.com/hyperjumptech/grule-rule-engine/blob/master/pkg/JsonResource.go#L35).
 
-![grule-typo]({{site.url}}/assets/images/grule-typo.png){: .align-center}{: width="400"}
+![grule-typo]({{site.url}}/assets/images/grule-typo.png){: .align-center}
 
 <center><sup>format이 fromat으로 작성되어 있다.</sup></center>
 
@@ -54,7 +54,7 @@ use_math: true
 
 ~~결과적으로는 merge되지 않았다. 아직까지도 열려 있는 상태다.관련 이슈를 작성하지 않았고, PR 본문도 성의 없이 작성한 탓이 어느 정도 있지 않을까 생각한다.~~
 
-![grule-pr-merged]({{site.url}}/assets/images/grule-pr-merged.png){: .align-center}{: width="400"}
+![grule-pr-merged]({{site.url}}/assets/images/grule-pr-merged.png){: .align-center}
 
 오랜만에 다시 확인해 보니, 이 때 작성했던 PR이 merge되었다. 업무 과정에서 사용했던 오픈 소스에 아주 작지만 기여를 할 수 있었던 첫 번째 경험이라 생각하니, 기분이 좋다.
 
