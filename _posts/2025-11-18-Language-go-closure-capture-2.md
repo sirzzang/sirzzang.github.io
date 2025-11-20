@@ -1,5 +1,5 @@
 ---
-title:  "[Go] Closure Capture"
+title:  "[Go] Closure Capture - 2. Closure Capture"
 excerpt: go의 클로저 캡처에 대해 알아 보자
 categories:
   - Language
@@ -12,95 +12,95 @@ tags:
 toc: true
 ---
 
+<br>
+
+
+이제 클로저의 기본 개념을 이해했으니, **클로저 캡처(Closure Capture)**에 대해 자세히 알아보자. 클로저가 외부 변수를 어떻게 캡처하는지, 그리고 Go에서의 클로저 캡처 방식이 어떤 버그를 일으킬 수 있는지 살펴볼 것이다.
 
 
 # 개념
 
- 클로저 캡처란, **클로저가 자신이 정의된 환경의 변수를 참조하거나 복사하여 사용하는 것**을 의미한다.
+클로저 캡처(Closure Capture)란, **클로저가 자신이 정의된 환경의 변수를 참조하거나 복사하여 사용하는 것**을 의미한다.
+
+직역해 보자면, `클로저가 붙잡다/포획하다` 정도로 해석할 수 있을 것이다. 즉, **함수가 자신의 외부 스코프에 있는 변수를 기억하고 접근할 수 있게 하는 메커니즘**을 의미한다.
+- 함수가 자신이 선언된 환경(lexical scope)을 함께 가지고 다니며 사용할 수 있게 됨
+- 자신의 로컬 변수에만 접근할 수 있는 일반 함수와 달리, 클로저는 자신이 태어난 시점에 주변 환경에 있던 변수까지도 들고 다니며 사용할 수 있음
+
+
 
 <br>
 
-## 클로저
+# Go의 클로저 캡처
 
-클로저(Closure)란, **외부 환경을 캡처한 함수** 혹은 **외부 환경을 참조하는 함수**이다.
+## 클로저 캡처 범위
 
-- 클로저 = 함수 + 캡처된 환경
-- 함수(함수 자체)와, 캡처된 환경(변수들)이 필요함
-
-<br>
-
-아래 함수에서 `makeCounter`가 반환하는 익명 함수가 클로저이다. 
+Go에서 클로저가 캡처할 수 있는 스코프의 범위는 **렉시컬 스코프 체인을 따라 접근 가능한 모든 외부 변수**이다. 즉, 클로저는 자신이 선언된 지점에서 접근 가능한 모든 외부 변수를 캡처할 수 있다.
+- 직접 둘러싼 함수의 변수
+- 여러 단계 위 함수들의 변수(조부모, 증조부모 등)
+- 패키지 레벨 변수
 
 ```go
-func makeCounter() func() int {
-    count := 0  // 외부 환경
+var global = "global"
+
+func level1() {
+    a := "level1"
     
-    // 이 익명 함수가 클로저
-    return func() int {
-        count++  // 클로저 자신의 로컬 변수가 아닌데도, 접근할 수 있음
-        return count
+    level2 := func() {
+        b := "level2"
+        
+        level3 := func() {
+            c := "level3"
+            
+            level4 := func() {
+                fmt.Println(global)  // 패키지 레벨
+                fmt.Println(a)       // level1
+                fmt.Println(b)       // level2
+                fmt.Println(c)       // level3
+            }
+            
+            level4()
+        }
+        
+        level3()
+    }
+    
+    level2()
+}
+```
+
+그러나, 형제 혹은 자식 함수의 변수, 다른 패키지의 private 변수는 접근할 수 없다.
+```go
+func main() {
+    sibling1 := func() {
+        x := 1  // sibling2가 접근 불가
+    }
+    
+    sibling2 := func() {
+        fmt.Println(x)  // 컴파일 에러
     }
 }
 ```
 
-- 클로저 vs. 일반 함수
+즉, 정리하면 다음과 같다.
+```
+전역 스코프 (패키지)
+│
+└── func outer()                    ← 가능
+    │
+    ├── func middle()               ← 가능
+    │   │
+    │   └── func inner()            ← 가능
+    │       │
+    │       └── 클로저                ← 위의 모든 스코프 접근 가능!
+    │           │                      (outer, middle, inner, 전역)
+    │           └──  func child()   ← 불가: 자식
+    └── func sibling()              ← 불가: 형제
+```
 
-  ```go
-  // 일반 함수 - 클로저가 아님
-  func add(a, b int) int {
-      return a + b
-  }
-  
-  
-  func makeAdder(x int) func(int) int {
-    	// 클로저 - 외부 변수 x를 capture
-      return func(y int) int {
-          return x + y  // x를 capture
-      }
-  }
-  ```
-
-- 클로저 vs. 익명 함수: 익명 함수라고 다 클로저인 것은 아님
-
-  ```go
-  // 이건 그냥 익명 함수 (클로저 아님)
-  func() {
-      fmt.Println("Hello")
-  }()
-  
-  // 이건 클로저 (외부 변수 name을 capture)
-  name := "이레이저"
-  func() {
-      fmt.Println(name)  // capture 발생
-  }()
-  ```
-
-  
 
 <br>
 
-Go 공식 문서에서 [function literals](https://go.dev/ref/spec#Function_literals)에 대한 부분에, 아래와 같은 클로저에 대한 표현을 찾을 수 있다.
-
-> Function literals are *closures*: they may refer to variables defined in a surrounding function. Those variables are then shared between the surrounding function and the function literal, and they survive as long as they are accessible.
-
-엄밀한 정의라고 보기는 어렵지만, 함수 리터럴이 외부 변수를 참조(capture)할 때 클로저가 될 수 있음을 설명하고 있다. 결과적으로는 외부 변수를 캡처하는 함수 리터럴을 클로저라고 할 수 있는 것이다.
-
-<br>
-
-
-
-## 클로저 캡처
-
-클로저에 대한 이해를 바탕으로 클로저 캡처(Closure Capture)를 직역해 보자면, `클로저가 붙잡다/포획하다` 정도로 해석할 수 있을 것이다. 즉, **함수가 자신의 외부 스코프에 있는 변수를 기억하고 접근할 수 있게 하는 메커니즘**을 의미한다.
-
-- 함수가 자신이 선언된 환경(lexical scope)을 함께 가지고 다니며 사용할 수 있게 됨
-- 자신의 로컬 변수에만 접근할 수 있는 일반 함수와 달리, 클로저는 자신이 태어난 시점에 주변 환경에 있던 변수까지도 들고 다니며 사용할 수 있음
-
-<br>
-
-
-
-# Go의 클로저 캡처
+## 변수 캡처 방식
 
 Go에서의 클로저 변수 캡처 방식은 변수 값을 복사하는 것이 아니라, 변수 자체를 공유하는 것이다. 즉, Go에서의 클로저 캡처 방식은 **참조** 기반이라는 것이다.
 
@@ -124,10 +124,9 @@ func main() {
 <br>
 
 
+### 루프 버그
 
-## (1.22 이전) 루프 버그
-
-가장 흔하게 go에서 루프 안에서 goroutine이나 함수를 생성할 때 발생하는 버그이다.
+가장 흔한 것으로, go에서 루프 안에서 goroutine이나 함수를 생성할 때 발생하는 버그이다.
 
 ```go
 for i := 0; i < 5; i++ {
@@ -137,7 +136,7 @@ for i := 0; i < 5; i++ {
 }
 ```
 
-* 그러면 개념적으로는 어떤 고루틴이 먼저 끝날지 모르기 때문에, 0, 1, 2, 3, 4가 실행 순서만 달리 하여 출력되어야 할 것 같지만
+* 어떤 고루틴이 먼저 끝날지 모르기 때문에, 0, 1, 2, 3, 4가 실행 순서만 달리 하여 출력되어야 할 것 같지만
 
   ```go
   // 예상 출력(순서 랜덤)
@@ -166,7 +165,7 @@ for i := 0; i < 5; i++ {
 클로저 캡처가 변수 자체를 참조한다는 것을 생각하면 이해할 수 있다.
 
 ![closure-capture-loop]({{site.url}}/assets/images/closure-capture-loop.png){: .align-center}
-<sup><center>모든 goroutine이 같은 루프 변수 i를 참조</center></sup>
+<center><sup>모든 goroutine이 같은 루프 변수 i를 참조</sup></center>
 
 * goroutine으로 실행되는 클로저 안의 `i`는 루프 변수 `i` 자체를 참조한다.
 
@@ -263,10 +262,7 @@ Go 1.22+ 버전에서부터 이와 같은 문제가 해결되었다고 한다.
 <br>
 
 
-
-
-
-## 원본 값 변경 버그
+### 원본 값 변경 버그
 
 클로저를 실행했을 때, 원본 값이 변경될 수도 있다. 아래와 같은 예시에서 함수를 실행하면, 클로저 캡처에 의해 원본이 바뀌어 버린다.
 
@@ -394,9 +390,6 @@ for i, device := range devices {
     }()
 }
 ```
-
-
-
 
 
 
