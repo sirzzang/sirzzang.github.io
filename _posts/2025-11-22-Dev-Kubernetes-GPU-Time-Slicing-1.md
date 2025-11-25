@@ -16,10 +16,6 @@ tags:
 
 
 
-회사에서 Co-DETR 추론 처리량을 향상시키기 위해 GPU Time Slicing을 적용한 과정에 대해 정리한다.
-
-
-
 <br>
 
 # 개요
