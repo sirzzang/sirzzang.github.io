@@ -16,7 +16,7 @@ tags:
 
 
 
-~~도대체 거의 1년 가까이 된 내용을 왜 이제서야 작성하게 되었는지 반성하며~~ 회사에서 Deployment를 재배포하다가 쿠버네티스의 스케쥴링과 Deployment 업데이트 전략에 대해 공부하게 된 내용을 작성한다.
+~~도대체 거의 1년 가까이 된 내용을 왜 이제서야 작성하게 되었는지 반성하며~~ 회사에서 Deployment를 재배포하다가 쿠버네티스의 스케줄링과 Deployment 업데이트 전략에 대해 공부하게 된 내용을 작성한다.
 
 
 
@@ -127,7 +127,7 @@ RollingUpdateStrategy:  25% max unavailable, 25% max surge # rolling update 항�
 그러니, 내 상황에서는 **일단 새로운 파드를 생성하고 난 뒤에**, 기존 파드가 종료될 것이다. 
 
 <br>
-그리고 새로운 파드를 생성하려고 할 때는 스케쥴링 프로세스를 따를 것이다. 스케쥴러에 빙의해 보자. 
+그리고 새로운 파드를 생성하려고 할 때는 스케줄링 프로세스를 따를 것이다. 스케줄러에 빙의해 보자. 
 - 필터링: 모든 노드를 살펴 본다
   - `트래커노드`: 탈락
     - `nodeSelector`, cpu, memory 등 다른 조건은 만족했을 수 있음
@@ -147,7 +147,7 @@ RollingUpdateStrategy:  25% max unavailable, 25% max surge # rolling update 항�
 > 0/10 nodes are available: 1 Insufficient nvidia.com/gpu, 9 node(s) didn't match Pod's node affinity/selector. preemption: 0/10 nodes are available: 1 No preemption victims found for incoming pod, 9 Preemption is not helpful for scheduling..
 
 * `0/10 nodes are available: 1 Insufficient nvidia.com/gpu, 9 node(s) didn't match Pod's node affinity/selector.`: 10개 노드 중 어디에도 파드를 배치할 수 없음
-  * 일반 스케쥴링 실패 이유에 대한 분류
+  * 일반 스케줄링 실패 이유에 대한 분류
     * 1 Insufficient nvidia.com/gpu: 1개 노드에서 GPU가 부족함 → `트래커노드`. nodeSelctor는 만족하지만, GPU 리소스가 부족
     * 9 node(s) didn’t match Pod’s node affinity: 9개 노드에서는 `nodeSelector` 불일치 
   * 즉, `nodeSelector`를 해당 노드로 걸어 놨으니까, 다른 노드들은 당연히 `ndoeSelector` 불일치이고, 일치하는 노드에 파드 배치하려고 봤더니 GPU가 부족하다
@@ -157,7 +157,7 @@ RollingUpdateStrategy:  25% max unavailable, 25% max surge # rolling update 항�
       - 기존 파드와 새 파드가 우선순위가 같기 때문
     * 9 Preemption is not helpful for scheduling: 다른 노드는 선점을 해 봤자, 도움이 안 된다(not helpful) → 다른 노드에서 preemption에 의해 아무리 파드를 종료해서 리소스를 확보해도, `nodeSelector` 조건 때문에 거기에 배치할 수가 없다
   * 즉, 선점으로 해보려고 해도 불가능하다
-* 즉, 일반적인 방식으로 스케쥴링하고, 필요하면 preemption해야 하는데, 불가능하다!
+* 즉, 일반적인 방식으로 스케줄링하고, 필요하면 preemption해야 하는데, 불가능하다!
 
 
 
@@ -219,7 +219,7 @@ spec:
 
 # 결과
 
-배포 후 재시작해주었더니 잘 동작한다. 혹시나 이전에 스케쥴링에 실패 중이던 파드가 Pending 상태로 남아 있을 수 있기 때문에, `kubectl rollout restart`로 재시작해주는 게 좋다.
+배포 후 재시작해주었더니 잘 동작한다. 혹시나 이전에 스케줄링에 실패 중이던 파드가 Pending 상태로 남아 있을 수 있기 때문에, `kubectl rollout restart`로 재시작해주는 게 좋다.
 
 ```bash
 $ kubectl apply -f tracker-deployment.yaml
@@ -235,7 +235,7 @@ $ kubectl rollout restart deployment -n <namespace> <namespace>-object-tracker
 - 애초에 이렇게 GPU가 제한되어 있는데 `nodeSelector`를 쓴 게 잘못 아닐까?
   - 내 상황에서는, 노드셀렉터를 쓴 거 자체가 잘못이라기 보다는, Deployment 배포 전략을 잘못 채택한 게 잘못이었다고 봐야 함
   - 배포 전략을 명확히 설정하지 않아 잡혔던 기본값이, 해당 노드의 제한된 리소스와 맞지 않았던 것
-- `nodeSelector`를 사용하여 배포하는건 오히려 스케쥴러의 선택의 폭을 줄여서 안 좋은 게 아닐까?
+- `nodeSelector`를 사용하여 배포하는건 오히려 스케줄러의 선택의 폭을 줄여서 안 좋은 게 아닐까?
   - 상황에 따라 다름
   - 그리고 오히려, 다음의 경우는 `nodeSelector`를 명시적으로 사용하는 게 도움이 됨
     - GPU 모델 지정

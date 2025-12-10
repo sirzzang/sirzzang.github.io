@@ -80,7 +80,7 @@ Github Repository에서 개발 워크플로우를 자동화할 수 있도록 Git
 
 <br>
 
-위의 그림에서와 같이 Repository에서 Event가 발생할 경우, 1개 이상의 Step으로 정의된 Job으로 이루어진 Workflow가 실행된다. 물론, Event 없이 특정 스케쥴이 되었을 때 실행하는 것이나, 수동으로 실행하는 것도 가능하다.
+위의 그림에서와 같이 Repository에서 Event가 발생할 경우, 1개 이상의 Step으로 정의된 Job으로 이루어진 Workflow가 실행된다. 물론, Event 없이 특정 스케줄이 되었을 때 실행하는 것이나, 수동으로 실행하는 것도 가능하다.
 
 - Event: Repository에 발생하는 이벤트로, 정의할 수 있는 이벤트는 [공식 문서의 이벤트 목록](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows)을 통해 확인할 수 있음
   - PR 생성

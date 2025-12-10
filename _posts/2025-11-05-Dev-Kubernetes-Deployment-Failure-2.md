@@ -16,7 +16,7 @@ tags:
 
 
 
-~~도대체 거의 1년 가까이 된 내용을 왜 이제서야 작성하게 되었는지 반성하며~~ 회사에서 Deployment를 재배포하다가 쿠버네티스의 스케쥴링과 Deployment 업데이트 전략에 대해 공부하게 된 내용을 작성한다. [스케쥴링 전략에 이어서](https://sirzzang.github.io/dev/Dev-Kubernetes-Deployment-Failure-1/)
+~~도대체 거의 1년 가까이 된 내용을 왜 이제서야 작성하게 되었는지 반성하며~~ 회사에서 Deployment를 재배포하다가 쿠버네티스의 스케줄링과 Deployment 업데이트 전략에 대해 공부하게 된 내용을 작성한다. [스케줄링 전략에 이어서](https://sirzzang.github.io/dev/Dev-Kubernetes-Deployment-Failure-1/)
 
 
 

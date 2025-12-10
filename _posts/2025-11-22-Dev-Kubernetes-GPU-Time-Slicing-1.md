@@ -29,15 +29,28 @@ tags:
 
 특수하다는 것에는, 이렇게 쿠버네티스가 GPU를 스케줄 대상 자원으로 인식할 수 없다는 맥락 외에, 더 나아가, 쿠버네티스가 GPU를 **독점 자원**으로 취급한다는 의미가 담겨 있다.
 
-독점 자원이란, **쿠버네티스에서 파드를 할당할 때 하나의 파드에 하나의 GPU만 할당한다**는 의미이다. 스케줄러가 애초에 GPU를 요청하는 여러 개의 파드를 하나의 GPU만 있는 노드에 배치해 주지 않는다는 것이다. 결과적으로 쿠버네티스 환경에서는 애초에 하나의 프로세스만 GPU를 사용하게 된다.
+독점 자원이란, **쿠버네티스에서 파드를 할당할 때 하나의 파드에 하나의 GPU만 할당한다**는 의미이다. 스케줄러가 애초에 GPU를 요청하는 여러 개의 파드를 하나의 GPU만 있는 노드에 배치해 주지 않는다는 것이다. 결과적으로 쿠버네티스 환경에서는 애초에 하나의 프로세스만 GPU를 사용하게 된다. 
+<br>
 
-그런데, 이 얼마나 낭비인가. GPU가 얼마나 비싼데, 한 번에 하나의 파드만 GPU를 사용하게 한다니. 그 하나의 파드가 너무 무거운 작업을 진행한다면 어쩔 수 없지만, 추론과 같이 상대적으로 가볍고, 학습에 비해 돌아가는 시간이 짧다면, 당연히 이런 생각이 들 수밖에 없다: `아니, 이거 어떻게 좀 여러 개가 다 GPU 쓰게 못하나?`
-
+## GPU 분할의 필요성
+그런데 **작업이 가볍거나 간헐적일 때** GPU를 여러 워크로드가 나눠 쓸 수 있다면 비용 대비 효율이 크게 올라간다. 아래와 같은 사례를 예로 들 수 있다.
+- AI 추론 서빙: 나의 사례
+  - RTX 4090 GPU 1대가 있고, 2개의 추론 파드를 서빙해야 함
+  - 각 모델은 GPU 메모리 7GB 정도만 사용 (RTX 4090은 24GB)
+  - GPU 분할 없이는 RTX 4090 GPU 1대가 더 필요함
+  - GPU 분할 시, 기존 1대의 GPU만을 이용해 서빙할 수 있음
+- 개발/테스트 환경
+  - 개발자 10명이 각자 모델 학습 실험 중
+  - 대부분 시간은 코드 작성 및 데이터 전처리 (GPU 미사용)
+  - 실제 학습은 하루에 2-3시간 정도
+  - 현재: 각자 GPU 할당 받기 위해 대기 → 생산성 저하
+  - 만약 GPU를 분할하여 사용할 수 있다면, 10명이 GPU 3-4개를 유동적으로 공유할 수 있음
 
 
 <br>
+## GPU 분할 기법
 
-그래서 쿠버네티스 환경에서 GPU를 분할하기 위한 기법은 정녕 없을까. 그렇지 않다. 아래와 같이 두 가지의 방법이 있다.
+그래서 쿠버네티스 환경에서 GPU를 분할하기 위한 기법은 정녕 없을까. 그렇지 않다. 아래와 같이 두 가지 방법이 있다.
 
 * MIG(Multi-Instance GPU): 하드웨어적 분할. 말 그대로 GPU를 하드웨어적으로 여러 개의 인스턴스로 나눠 사용함. 물리적 분할
 * Time Slicing: 소프트웨어적 공유. 하나의 GPU를 여러 개의 파드가 시분할하여 나눠 사용함. 논리적인 분할
@@ -73,6 +86,10 @@ MIG의 경우, 하드웨어적 분할이라는 데서 짐작할 수 있겠지만
 
 GPU Context Switching 방식으로는 Cooperative Context Switching, Preemptive Context Switching이 있다.
 
+<br>
+
+### Cooperative Context Switching
+
 ```text
 Time: 0s ────────────────────────────────────────────────→   60s
 Process A: |══════════════════════|                         (30초)
@@ -80,12 +97,13 @@ Process B:                        |═══════════════
            ↑                      ↑
         시작                Context Switch (A 완료 후)
 ```
+* 작업이 스스로 양보 (자발적)
+* 커널 완료 시 전환
+* 강제 중단 불가
+* 다른 프로세스는 기존 프로세스가 끝날 때까지 대기
 
-* Cooperative Context Switching
-  * 작업이 스스로 양보 (자발적)
-  * 커널 완료 시 전환
-  * 강제 중단 불가
-  * 다른 프로세스는 기존 프로세스가 끝날 때까지 대기
+<br>
+### Preemptive Context Switching
 
 ```text
 Time: 0s ────────────────────────────────────────────→ 60s
@@ -94,37 +112,39 @@ Process B:     |███|   |███|   |███|   |███|   |██�
            ↑   ↑   ↑   ↑
            시작   preemption  ...  →  Context Switch
 ```
-
-* Preemptive Context Switching
-  * 외부에서 강제 중단(preempt)
-    > 선점이라는 말 어감에서 볼 수 있듯, 실행 중인 작업을 강제로 빼앗아 다른 작업에게 넘긴다는 의미이다.
-  * 외부에서 강제로 중단하기 위한 하드웨어 기능이 필요 → NVIDIA GPU에서는 Compute Preemption이라는 기능으로 구현됨
-  * 종류
-    * Event-based Preemption: 특정 이벤트 발생 시 전환
-      * 예: 높은 우선순위 작업 도착
-    * Time-based Preemption: 시간 기반 주기적 전환
-      * timer interrupt 사용
-  * 한 프로세스 커널 실행 중에도 여러 차례 context switching이 발생할 수 있음
+* 외부에서 강제 중단(preempt)
+  > 선점이라는 말 어감에서 볼 수 있듯, 실행 중인 작업을 강제로 빼앗아 다른 작업에게 넘긴다는 의미이다.
+* 외부에서 강제로 중단하기 위한 하드웨어 기능이 필요 → NVIDIA GPU에서는 Compute Preemption이라는 기능으로 구현됨
+* 종류
+  * Event-based Preemption: 특정 이벤트 발생 시 전환
+    * 예: 높은 우선순위 작업 도착
+  * Time-based Preemption: 시간 기반 주기적 전환
+    * timer interrupt 사용
+* 한 프로세스 커널 실행 중에도 여러 차례 context switching이 발생할 수 있음
 
 <br>
+
 
 ## 동작 원리
 
 조금 더 계층적으로 나눠서, Time Slicing이 어떻게 동작하는지 알아 보자.
-> 아래에서 등장하는 warp라는 것은, 나중에 GPU 구조에 대해 더 자세히 알아 봐야 하겠지만, 일단 GPU가 한 번에 실행하는 스레드 묶음이라고 알아 두자.
-
 * 어플리케이션 코드: GPU 커널 호출
+  * GPU Kernel: GPU에서 실행되는 함수
 * GPU Kernel: GPU Driver 호출
-  * GPU에서 실행될 함수
   * 단순히 작업을 정의할 뿐, 스케줄링이나 중단에 대해 전혀 모름
 * GPU Driver: Time Slicing 구현 주체
   * 스케줄링 정책 결정
   * 언제 preemption할지 결정: timer 관리
   * GPU에게 명령 전송
   * context 상태 추적 및 관리
+    * context: 프로세스가 GPU를 사용하기 위해 필요한 모든 상태 정보
+      * Program Counter: 프로그램을 어디까지 실행헀는지
+      * Register 값: 계산 중간 결과
+      * 메모리 할당 상태
 * GPU 하드웨어: preemption 관련 하드웨어 기능 있어야 함
   * Driver 명령 받아 실행
   * 실제로 warp 중단
+    * warp: GPU가 동시에 실행하는 32개의 스레드 묶음. GPU가 한 번에 처리하는 작업 묶음 최소 단위
   * 실제로 상태 저장, 복원
 
 
@@ -179,7 +199,7 @@ Context Switching (가장 넓은 개념)
 
 <br>
 
-사실 그냥 아래 선 정도로만 이해해 두어도 좋을 듯하다.
+사실 그냥 아래 내용 정도로만 이해해 두어도 좋을 듯하다.
 * **Context Switching이 발생한다고 해서, 모두 Time Slicing인 것은 아님**
 * 진정한 의미에서 GPU Time Slicing 기능은 Preemptive Context Switching, 그 중에서도 Time-based Preemptive Switching을 위한 하드웨어 기능이 제공되는 GPU에서만 가능
   * NVIDIA GPU의 경우에는 이와 같은 하드웨어 기능을 Compute Preemption이라고 부르며, Pascal 아키텍처 이후의 GPU들이 해당 방식을 지원함
@@ -197,14 +217,30 @@ Context Switching (가장 넓은 개념)
 GPU Time Slicing을 적용했을 때 나타날 수 있는 문제점은 다음과 같다.
 - Context Switching 오버헤드
 - 메모리 OOM
-  > 참고: Time Slicing과 메모리 OOM
-  >
-  > - GPU Driver에서 Time Slicing 과정에서 나타날 수 있는 메모리 오버플로우는 방지하지 않음
-  > - OS도 똑같이 시분할하다가 OOM 날 수는 있지만, GPU Driver는 조금 덜 친절하다
-  >   * OS (CPU/RAM): virtual memory(swap)로 어느 정도 버팀, OOM Killer 발동, 프로세스 강제 종료
-  >   * GPU Driver (GPU): virtual memory 없음, OOM 시 바로 실패 반환(예를 들어, NVIDIA CUDA runtime의 경우, cudaMalloc() 에러 반환), 어플리케이션이 직접 처리해야 함
-  > - 사실 이건 GPU 구조에 대해 더 자세히 파봐야 하나, 지금은 그게 중요한 게 아니니까 여기까지만 알아 두도록 하자.
-  > - 결론적으로 CPU나 GPU나 둘 다 물리 메모리가 부족하면 터지는 건 어쩔 수 없으나, CPU의 time slicing에서는 OS에 시스템 차원에서 어느 정도 보호 메커니즘이 있으나, GPU는 조금 더 직접적으로 실패해 버린다고 이해하면 될 듯하다.
+
+### Context Switching 오버헤드
+
+Time Slicing은 공짜가 아니다. 프로세스를 전환할 때마다 비용이 발생한다.
+* 상태 저장/복원: 레지스터, 메모리 상태를 저장하고 다시 불러 와야 함
+* 캐시 무효화: 다른 프로세스로 전환 시 L1/L2 캐시가 비워져서 성능 저하
+
+그리고 Time slice가 짧을수록 전환이 잦아져 위에서 말한 오버헤드가 증가한다. 보통 10~20% 정도의 오버헤드가 발생한다고 하니, **Context Switching 오버헤드 < 리소스 공유의 이득**인 경우에만 유용하다.
+
+<br>
+
+### 메모리 OOM
+
+Time Slicing은 GPU 메모리 오버플로우를 방지하지 않는다. CPU의 Time Slicing과 비교하면 다음과 같다.
+
+| 구분 | CPU (OS) | GPU (Driver) |
+|------|----------|--------------|
+| Virtual Memory | Swap으로 버퍼링 가능 | 지원 안 함 |
+| OOM 발생 시 | OOM Killer가 프로세스 종료 | 즉시 실패 반환 (예: `cudaMalloc()` 에러) |
+| 보호 수준 | 시스템 차원의 보호 메커니즘 | 애플리케이션이 직접 처리 |
+
+> 결론적으로, CPU와 GPU 모두 물리 메모리 부족 시 문제가 발생하지만, GPU는 OS 수준의 보호 없이 더 직접적으로 실패한다.
+
+
 
 <br>
 
@@ -257,7 +293,7 @@ Fault Isolation이란, 하드웨어, 시스템 설계에서 사용되는 개념�
 
 <br>
 
-## MIG의 Fault Isolation
+### MIG의 Fault Isolation
 
 MIG는 하드웨어 수준에서 GPU를 물리적으로 분할하므로 완전한 격리를 제공한다. 따라서, 하드웨어 수준에서 Fault Isolation이 제공된다.
 

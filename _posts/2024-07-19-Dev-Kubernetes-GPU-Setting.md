@@ -15,7 +15,7 @@ tags:
 
 
 
-![kubernetes-gpu]({{site.url}}/assets/images/kubernetes-gpu.png){: .width="300"}{: .align-center}
+![kubernetes-gpu]({{site.url}}/assets/images/kubernetes-gpu.png){: width="300"}{: .align-center}
 
 <center><sup>무지한 자가 삽질하게 된 건에 대하여...</sup></center>
 
@@ -58,7 +58,7 @@ Kubernetes 클러스터 환경에서 GPU를 활용할 수 있도록 해 주는 �
 
 ## Kubernetes Device Plugin
 
-Kubernetes에서 시스템 하드웨어 리소스를 사용하기 위해서는 kubelet에 **하드웨어 리소스를 등록**하여 파드를 해당 리소스가 있는 노드에 스케쥴할 수 있게 해야 한다. 이를 위해 Kubernetes는 클러스터의 kubelet에게 시스템 하드웨어 리소스를 알릴 수 있도록 Device Plugin framework를 제공한다. 각 하드웨어 리소스 공급 업체는 Kubernetes가 제공하는 Device Plugin framework를 구현하기만 하면 된다.
+Kubernetes에서 시스템 하드웨어 리소스를 사용하기 위해서는 kubelet에 **하드웨어 리소스를 등록**하여 파드를 해당 리소스가 있는 노드에 스케줄할 수 있게 해야 한다. 이를 위해 Kubernetes는 클러스터의 kubelet에게 시스템 하드웨어 리소스를 알릴 수 있도록 Device Plugin framework를 제공한다. 각 하드웨어 리소스 공급 업체는 Kubernetes가 제공하는 Device Plugin framework를 구현하기만 하면 된다.
 
  말하자면 인터페이스인 셈인데, 공식 문서를 잠깐 참고하면, gRPC 기반 서비스인 것으로 보인다.
 
@@ -116,13 +116,17 @@ service DevicePlugin {
 ![kubernetes-gpu-structure]({{site.url}}/assets/images/kubernetes-gpu-structure.png)
 
 1. GPU Hardware: 실제 물리 GPU 장치. GPU 물리 연산 수행
-2. NVIDIA Driver: 커널 모듈. OS, GPU 하드웨어 통신
-3. NVIDIA Container Toolkit: GPU 장치를 컨테이너에 노출하도록 지원
-4. nvidia-container-runtime: 컨테이너 엔진(Docker, containerd 등) 런타임에 GPU 지원 연결. 컨테이너 실행 시 GPU 환경 전달
-5. Dockerd/containerd: 컨테이너 런타임
+2. NVIDIA Driver: 커널 레벨 드라이버 모듈. OS와 GPU 하드웨어 간 통신 담당. **GPU 메모리 관리 및 명령 실행**
+3. NVIDIA Container Runtime: 컨테이너 엔진(Docker, containerd 등) 런타임에 GPU 지원 연결
+   - **컨테이너 실행 시 GPU 환경 관련 정보 전달**
+   - 컨테이너 실행 시 GPU 접근 권한 설정
+4. Dockerd/containerd: 컨테이너 런타임. CRI를 통해 Kubelet과 통신. **NVIDIA Container Toolkit**을 통해 NVIDIA Runtime 자동 연결
+   - Docker: `/etc/daemon.json`에서 default runtime 지정
+   - containerd: `/etc/containerd/config.toml`에서 nvidia runtime 설정
+5. Kubelet: NVIDIA Device Plugin과 통신. CRI를 통해 Container Runtime에 GPU 할당 정보 전달
 6. NVIDIA Device Plugin: Kubernetes GPU 리소스 등록
-   - GPU가 있는 노드에서 GPU 리소스를 탐지함
-   - `nvidia.com/gpu` 형태로 kubelet에 등록
+   - **ListAndWatch**: 노드의 GPU 탐지 및 `nvidia.com/gpu` 형태로 kubelet에 등록. kubelet에 실시간 상태 전달
+   - **Allocate**: Pod 스케줄링 시 특정 GPU 할당, 환경변수 설정 등등
 
 
 
@@ -145,13 +149,23 @@ Kubernetes에 배포하기 앞서, 컨테이너 환경에서 GPU를 인식할 �
      ↓
 [nvidia-container-runtime] 
      ↓
-[Docker Engine]
+[Docker/containerd]
      ↓
 [Container (ex: CUDA image)]
 ```
 
 
-
+> **참고: k3s와 Docker Runtime**
+>
+> k3s는 기본적으로 containerd를 사용하지만, `--docker` 플래그를 통해 Docker를 런타임으로 사용할 수 있다. 본 글의 환경은 Docker 런타임을 사용하도록 설정된 k3s 클러스터이다. 그래서 앞으로의 설정 역시 Docker 컨테이너 런타임 기반으로 진행된다.
+>
+> 다만, 이 경우 몇 가지 주의할 점이 있다:
+> - GPU Operator 등 containerd 기반으로 동작하는 도구들이 예상대로 동작하지 않을 수 있음
+> - k3s의 경량화 이점을 충분히 살리지 못함 (Docker 데몬이 추가로 실행되므로)
+>
+> 실제로 레거시 환경이나 기존 인프라와의 호환성을 위해 이렇게 구성된 클러스터가 종종 있고, 내가 사용한 클러스터 환경도 그 중 하나였다. 
+>
+> 만약 새로운 환경을 구축한다면, k3s 기본 런타임인 containerd를 사용하고, 그에 맞는 NVIDIA Container Runtime 설정을 적용하는 것을 권장한다.
 
 
 
@@ -174,7 +188,7 @@ Kubernetes에 배포하기 앞서, 컨테이너 환경에서 GPU를 인식할 �
 
 ```bash
 chmod +x ./NVIDIA-Linux-x86_64-XXX.XXX.XX.run
-sudh sh ./NVIDIA-Linux-x86_64-XXX.XXX.XX.run
+sudo sh ./NVIDIA-Linux-x86_64-XXX.XXX.XX.run
 ```
 
 <br>
@@ -184,7 +198,7 @@ sudh sh ./NVIDIA-Linux-x86_64-XXX.XXX.XX.run
 Ubuntu apt repository를 이용해서 설치해도 된다.
 
 ```bash
-sudo add-apt-repository ppa:graphics-driers/ppa
+sudo add-apt-repository ppa:graphics-drivers/ppa
 sudo apt update
 sudo apt install nvidia-driver-XXX
 ```
@@ -385,9 +399,9 @@ sudo reboot
 ### (Optional) Docker 설치 및 사용자 권한 설정
 
 ```bash
-sudo apt install Docker.io
-sudo service Docker restart
-sudo usermod -aG Docker $USER
+sudo apt install docker.io
+sudo service docker restart
+sudo usermod -aG docker $USER
 ```
 
 
@@ -418,12 +432,12 @@ sudo apt-get install -y nvidia-container-toolkit
 `nvidia-ctk`를 이용하여 Docker 런타임을 변경한다.
 
 ```bash
-sudo nvidia-ctk runtime configure --runtime=Docker
+sudo nvidia-ctk runtime configure --runtime=docker
 ```
 
 - `nvidia-ctk`: NVIDIA Container Toolkit 설정 CLI
 
-- `/etc/Docker/daemon.json` 파일이 수정됨: NVIDIA 런타임 등록
+- `/etc/docker/daemon.json` 파일이 수정됨: NVIDIA 런타임 등록
 
   ```json
   {
@@ -447,13 +461,13 @@ sudo nvidia-ctk runtime configure --runtime=Docker
 Docker가 설정 파일을 다시 읽을 수 있도록, Docker를 재시작한다.
 
 ```bash
-sudo systemctl restart Docker
+sudo systemctl restart docker
 ```
 
 재시작 후, GPU가 컨테이너 내부에서 보이는지 확인한다.
 
 ```bash
-sudo Docker run --rm --runtime=nvidia --gpus all nvidia/cuda:11.6.2-base-ubuntu20.04 nvidia-smi
+sudo docker run --rm --runtime=nvidia --gpus all nvidia/cuda:11.6.2-base-ubuntu20.04 nvidia-smi
 # 출력 결과가 보여야 함
 ```
 
@@ -524,6 +538,8 @@ XXXXXXX02     Ready    <none>                 23h    v1.27.9+k3s1
 <br>
 
 ```bash
+$ helm repo add nvdp https://nvidia.github.io/k8s-device-plugin
+$ helm repo update
 $ helm upgrade -i nvdp nvdp/nvidia-device-plugin \
 	--namespace nvidia-device-plugin \
 	--create-namespace \
@@ -557,13 +573,20 @@ nvdp-nvidia-device-plugin   0         0         0       0            0          
   - trouble shooting 참고 링크: https://github.com/NVIDIA/k8s-device-plugin/issues/708
   
 
+> **참고: NFD(Node Feature Discovery)를 이용한 자동 라벨링**
+>
+> [NFD(Node Feature Discovery)](https://github.com/kubernetes-sigs/node-feature-discovery)를 사용하면 GPU 노드에 자동으로 라벨을 부여할 수 있다. NFD는 노드의 하드웨어 특성을 감지하여 `feature.node.kubernetes.io/pci-10de.present=true`(NVIDIA GPU 벤더 ID) 등의 라벨을 자동으로 추가한다.
+>
+> GPU Operator를 사용하는 경우에도 NFD가 함께 배포되어 GPU 관련 라벨이 자동으로 설정된다. 본 글에서는 수동 라벨링 방식을 설명하지만, 대규모 클러스터 환경에서는 NFD를 활용한 자동화를 권장한다.
+
+
 <br>
 
 ```bash
  $ kubectl label nodes XXXXXXX02 nvidia.com/gpu.present=true
 ```
 
-- 클러스터에 추가하고자 하는 GPU  node에 해당 라벨 추가
+- 클러스터에 추가하고자 하는 GPU node에 해당 라벨 추가
 
   - 노드 정보 확인
 
@@ -575,7 +598,7 @@ nvdp-nvidia-device-plugin   0         0         0       0            0          
                         beta.kubernetes.io/instance-type=k3s
                         beta.kubernetes.io/os=linux
                         kubernetes.io/arch=amd64
-                        kubernetes.io/hostname=innonew02
+                        kubernetes.io/hostname=XXXXXXX02
                         kubernetes.io/os=linux
                         node.kubernetes.io/instance-type=k3s
                         nvidia.com/gpu.present=true # 라벨 추가됨
@@ -584,12 +607,12 @@ nvdp-nvidia-device-plugin   0         0         0       0            0          
                         flannel.alpha.coreos.com/backend-type: vxlan
                         flannel.alpha.coreos.com/kube-subnet-manager: true
                         flannel.alpha.coreos.com/public-ip: 172.40.10.22
-                        k3s.io/hostname: innonew02
+                        k3s.io/hostname: XXXXXXX02
                         k3s.io/internal-ip: 172.40.10.22
                         k3s.io/node-args: ["agent","--Docker"]
                         k3s.io/node-config-hash: AITGS3UENG3OLFRETTJ3T6FVBFULREX5XXK5TORDBNAAOFCPL2DQ====
                         k3s.io/node-env:
-                          {"K3S_DATA_DIR":"/var/lib/rancher/k3s/data/dd87b6b4674aaf5776fcb1cec91f293bca5b6bbdb02dac95e866c2cf6a86ab4e","K3S_NODE_NAME":"innonew02","...
+                          {"K3S_DATA_DIR":"/var/lib/rancher/k3s/data/dd87b6b4674aaf5776fcb1cec91f293bca5b6bbdb02dac95e866c2cf6a86ab4e","K3S_NODE_NAME":"XXXXXXX02","...
                         management.cattle.io/pod-limits: {"cpu":"150m","ephemeral-storage":"1Gi","memory":"192Mi"}
                         management.cattle.io/pod-requests: {"cpu":"100m","ephemeral-storage":"50Mi","memory":"128Mi","pods":"8"}
                         node.alpha.kubernetes.io/ttl: 0
@@ -615,7 +638,31 @@ nvdp-nvidia-device-plugin   1         1         1       1            1          
 
 # 쿠버네티스 클러스터 GPU 사용 확인
 
+## GPU 리소스 등록 확인
 
+NVIDIA Device Plugin이 정상적으로 배포되면, GPU 노드에 `nvidia.com/gpu` 리소스가 등록된다. 아래 명령어로 확인할 수 있다.
+
+```bash
+$ kubectl describe node <GPU_NODE> | grep -A 5 "Allocatable"
+Allocatable:
+  cpu:                8
+  ephemeral-storage:  95551679124
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             32780872Ki
+  nvidia.com/gpu:     1  # GPU 리소스 등록 확인
+```
+
+- `nvidia.com/gpu` 항목이 표시되면 정상적으로 GPU 리소스가 등록된 것
+
+
+<br>
+
+## 테스트 파드 배포
+
+아래는 GPU 동작을 확인하기 위한 테스트용 파드 예시이다.
+
+> **참고**: 아래 예시에서 사용하는 `vectoradd-cuda10.2` 이미지는 테스트 목적의 샘플 이미지이다. 실제 워크로드에서는 필요한 CUDA 버전에 맞는 이미지를 사용해야 한다.
 
 ```yaml
 apiVersion: v1
@@ -640,7 +687,7 @@ spec:
 $ kubectl apply -f gpu-test.yaml
 ```
 
-- GPU 사용하는 테스트 파드 배포: 정상적으로 실행된다면, toleration에 의해 GPU가 있는 노드에 스케쥴링됨
+- GPU 사용하는 테스트 파드 배포: 정상적으로 실행된다면, toleration에 의해 GPU가 있는 노드에 스케줄링됨
 
 <br>
 
