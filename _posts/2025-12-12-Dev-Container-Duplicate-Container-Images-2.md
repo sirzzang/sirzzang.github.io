@@ -38,7 +38,7 @@ tags:
 
 ```
 Layer 3 (top)   ──┐
-Layer 2         ──┼──→  Unified filesystem view
+Layer 2         ──┼──  Unified filesystem view
 Layer 1 (base)  ──┘
 ```
 
@@ -48,9 +48,9 @@ Layer 1 (base)  ──┘
 [Container Filesystem]
 Writable Layer (per container)  ←─ Writable, changes
     │
-Image Layer 3        ←──┐
-Image Layer 2        ←──┼───────── Read-only, shared
-Image Layer 1 (base) ←──┘
+Image Layer 3        ──┐
+Image Layer 2        ──┼───────── Read-only, shared
+Image Layer 1 (base) ──┘
 ```
 - **이미지 레이어**: 읽기 전용이며, 여러 컨테이너가 공유할 수 있음
 - **쓰기 레이어**: 컨테이너별로 변경 사항을 기록하기 위한 레이어
@@ -65,7 +65,7 @@ Union file system은 컨테이너가 추구하는 설계 철학을 기술적으�
 1. **불변성(Immutability)**: 서로 다른 컨테이너가 베이스 이미지 레이어를 공유하나, 읽기 전용이기 때문에 이미지의 불변성이 보장된다.
   ```
   Container A (writable layer)  ──┐
-                                  ├──→  Shared image layers (read-only)
+                                  ├── Shared image layers (read-only)
   Container B (writable layer)  ──┘
   ```
 2. **디스크 효율성**: 같은 베이스 이미지를 쓰는 컨테이너가 100개 실행되더라도, 베이스 레이어는 한 번만 저장하면 된다.
@@ -80,15 +80,18 @@ Union file system은 컨테이너가 추구하는 설계 철학을 기술적으�
 
 ```
 Upper (writable)    ──┐
-                      ├──→  Merged (unified single view)
+                      ├──  Merged (unified single view)
 Lower (read-only)   ──┘
 ```
+<br>
 
-OverlayFS의 구조는 아래와 같은 디렉토리로 이루어진다.
+OverlayFS는 아래와 같은 디렉토리 구조로 이루어진다.
 - Lower: **읽기 전용** 베이스 레이어
 - Upper: 변경 사항이 기록되는 **쓰기 가능** 레이어
 - Work: 파일 변경 작업 시 중간 상태를 숨기기 위해 사용하는 임시 디렉토리
 - Merged: Lower와 Upper를 합친 통합된 파일시스템 뷰 (컨테이너가 보는 뷰)
+
+<br>
 
 변경 사항이 발생하면 Lower는 건드리지 않고, Upper에만 기록된다. 이를 **Copy-on-Write (CoW)** 방식이라 한다.
 - **파일 읽기**: Lower에서 직접 읽는다.
@@ -97,8 +100,9 @@ OverlayFS의 구조는 아래와 같은 디렉토리로 이루어진다.
 
 > 참고: OverlayFS는 범용
 >
-> 컨테이너 위주로 이야기하고 있어 관심이 쏠리기 쉽지만, OverlayFS는 컨테이너 전용이 아니다. OverlayFS는 범용 Union File System 구현체인데, 컨테이너 엔진이 이미지 관리를 위해 OverlayFS를 사용하는 것이다. 
-> 컨테이너 외에도 Live CD/USB(베이스는 읽기 전용, 변경사항만 메모리에), Embedded 시스템, 루트 파일시스템 보호 등에서도 사용된다.
+> - 컨테이너 위주로 이야기하고 있어 관심이 쏠리기 쉽지만, OverlayFS는 컨테이너 전용이 아니다. 
+> - OverlayFS는 범용 Union File System 구현체인데, 컨테이너 엔진이 이미지 관리를 위해 OverlayFS를 사용하는 것이다. 
+> - 컨테이너 외에도 Live CD/USB(베이스는 읽기 전용, 변경사항만 메모리에), Embedded 시스템, 루트 파일시스템 보호 등에서도 사용된다.
 
 <br>
 
@@ -114,19 +118,20 @@ OverlayFS의 구조는 아래와 같은 디렉토리로 이루어진다.
 > - 스토리지 드라이버: 데이터 저장 방식 정의
 > - 데이터베이스 드라이버: 애플리케이션 ↔ DB 간 통신 
 
-스토리지 드라이버의 역할은 다음과 같다.
+<br>
 ```
 Container Runtime
       ↓
-Storage Driver (overlay2, btrfs, devicemapper, zfs, vfs, etc.)
+Storage Driver
       ↓
 Filesystem (ext4, xfs, etc.)
       ↓
 Disk (hardware)
 ```
-1. 레이어를 디스크에 저장 (일반 파일시스템 사용)
-2. 컨테이너 실행 시 OverlayFS를 통해 레이어들을 마운트
-3. 통합된 파일시스템 뷰 제공
+스토리지 드라이버의 역할은 다음과 같다:
+1. **컨테이너 런타임이 pull한** 레이어를 디스크에 저장 (일반 파일시스템 사용)
+2. **컨테이너 런타임의 요청에 따라** 컨테이너 실행 시 OverlayFS를 통해 레이어들을 마운트
+3. **컨테이너 프로세스에게** 통합된 파일시스템 뷰 제공
 
 <br>
 
@@ -141,6 +146,8 @@ OverlayFS는 커널에 내장된 파일시스템이므로, 사용하려면 `moun
 2. **컨테이너 관점**: 컨테이너 프로세스가 시작될 때, 마운트 포인트 디렉토리가 컨테이너의 루트 파일 시스템(`/`)으로 설정됨
   - 컨테이너 내부에서 `/`를 보면, 실제로는 호스트의 마운트 포인트 디렉토리 내용을 보는 것임
 
+<br>
+
 컨테이너 실행 시, 컨테이너 런타임이 스토리지 드라이버를 이용해 내부적으로 다음과 같은 마운트 작업을 수행한다.
 ```bash
 mount -t overlay overlay \
@@ -148,10 +155,12 @@ mount -t overlay overlay \
   /merged # 마운트 포인트
 ```
 
+<br>
+
 컨테이너 실행 시 아래와 같은 일이 일어난다.
 1. 호스트 커널이 OverlayFS를 호스트의 `마운트 포인트`에 마운트
 2. 컨테이너 프로세스 시작 시, 호스트의 `마운트 포인트`를 컨테이너 파일 시스템 루트(`/`)로 설정
-3. 결과:
+결과는 다음과 같다.
 ```
 호스트:    마운트포인트/bin/bash
                  ↓
@@ -175,17 +184,18 @@ mount -t overlay overlay \
 
 > 참고: containerd는 "스토리지 드라이버" 대신 **"snapshotter"**라는 용어를 사용하지만, 역할은 동일하다.
 
-즉, 컨테이너 시스템은 이미지 레이어를 관리하기 위해 모두 공통적으로 OverlayFS를 활용하지만:
-
-- 각 시스템별로 OverlayFS 기반의 자체 스토리지 드라이버 구현체를 가지고 있으며,
-- 각 구현체별로 레이어 디렉토리 구조, 메타데이터 관리 방식, 저장 경로 등이 다르다.
+<br>
 
 | 런타임 | 스토리지 드라이버 명칭 | 저장 경로 | 레이어 식별 | 마운트 포인트 |
 |--------|------------------------|----------|------------|--------------|
 | dockerd | overlay2 | `/var/lib/docker/overlay2/` | layer-id (해시) | `merged/` |
 | containerd | overlayfs snapshotter | `/var/lib/containerd/.../overlayfs/` | 숫자 ID | `fs/` |
 
+즉, 컨테이너 시스템은 이미지 레이어를 관리하기 위해 모두 공통적으로 OverlayFS를 활용하지만:
 
+- 각 시스템별로 OverlayFS 기반의 자체 스토리지 드라이버 구현체를 가지고 있으며,
+- 각 구현체별로 레이어 디렉토리 구조, 메타데이터 관리 방식, 저장 경로 등이 다르다.
+<br>
 dockerd가 사용하는 overlay2를 예로 들면, overlay2는 dockerd에서 **OverlayFS라는 커널 기능을 컨테이너 레이어 관리 목적에 맞게 활용하기 위해 만든 스토리지 드라이버**라고 할 수 있다.
 
 ```
@@ -224,7 +234,7 @@ $ ls -al /var/lib/docker/overlay2/{layer-id}/
 # lower 파일: 하위 레이어들이 `:` 로 구분되어 나열됨
 # l/ 디렉토리는 긴 layer-id를 짧게 표현한 심볼릭 링크
 $ cat /var/lib/docker/overlay2/{layer-id}/lower
-l/MRT27FB56...:l/W4RDG2UV...:l/XX4MFEJP...:...  # 15개 레이어
+l/MRT27FB56...:l/W4RDG2UV...:l/XX4MFEJP...:...  
 
 # diff/ 내부: 이 레이어에서 변경된 파일들만 존재
 $ ls -al /var/lib/docker/overlay2/{layer-id}/diff/usr/local/bin
@@ -328,9 +338,9 @@ $ ls -al /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/5
 | crictl | CRI 호환 런타임 | CRI 인터페이스 |
 
 ```
-crictl  ──→  CRI 인터페이스  ──→  containerd (또는 CRI-O 등)
-ctr     ──→  containerd API  ──→  containerd
-docker  ──→  Docker API      ──→  dockerd  ──→  containerd
+crictl  →  CRI 인터페이스     →  CRI 호환 런타임(containerd, CRI-O 등)
+ctr     →  containerd API  →  containerd
+docker  →  Docker API      →  dockerd     →  containerd
 ```
 
 <br>
@@ -341,14 +351,12 @@ Docker 데몬(`dockerd`)과 통신하는 CLI이다. `dockerd`가 내부적으로
 
 ## ctr
 
-containerd 네이티브 API로 직접 통신하는 저수준 CLI이다. containerd 패키지에 포함되어 있으며, Docker 설치 시 containerd가 함께 설치되면서 ctr도 같이 설치된다.
-
-containerd의 모든 네임스페이스에 접근할 수 있어, 디버깅 용도로 사용된다.
+containerd 네이티브 API로 직접 통신하는 저수준 CLI이다. containerd 패키지에 포함되어 있으며, Docker 설치 시 containerd가 함께 설치되면서 ctr도 같이 설치된다. containerd의 모든 네임스페이스에 접근할 수 있다.
 
 > *참고*: moby 네임스페이스의 이미지 조회
 >
-> 위에서 dockerd는 자체적으로 moby 네임스페이스에 이미지를 저장한다고 했다. dockerd
->  
+> [1편에서 설명했듯이]({% post_url 2025-12-12-Dev-Container-Duplicate-Container-Images-1 %}#containerd의-네임스페이스), dockerd는 containerd를 사용할 때 `moby` 네임스페이스를 사용하지만, 이미지는 containerd가 아닌 `/var/lib/docker`에서 자체 관리한다. 따라서 `ctr`로 moby 네임스페이스를 조회해도 Docker 이미지를 볼 수 없다.
+>
 > ```bash
 > # moby 네임스페이스의 이미지 조회 (dockerd의 containerd 소켓 사용)
 > $ sudo ctr -n moby images ls
@@ -376,7 +384,8 @@ k8s/k3s 환경에서는 **crictl**을 사용하는 것이 적합하다.
 - 쿠버네티스가 CRI를 통해 containerd와 통신하므로, crictl을 사용하면 **쿠버네티스가 보는 것과 동일한 뷰**를 볼 수 있다.
 - ctr을 사용할 경우, containerd의 모든 네임스페이스를 볼 수 있어 쿠버네티스에서 사용하지 않는 이미지까지 보일 수 있다.
 
+<br>
 ---
 
-> 다음 글에서는 이 배경 지식을 바탕으로, 동일한 이미지가 왜 중복 저장되고 다른 크기로 보이는지 실제 분석 과정을 다룬다.
+*다음 글에서는 이 배경 지식을 바탕으로, 동일한 이미지가 왜 중복 저장되고 다른 크기로 보이는지 실제 분석 과정을 다룬다.*
 

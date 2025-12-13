@@ -13,7 +13,7 @@ tags:
   - container-image
   - oci
   - container-runtime
-  
+
 ---
 
 동일한 이미지를 `docker`와 `crictl`로 확인했을 때 크기가 다르게 나타난 현상을 분석하면서, 컨테이너 이미지와 런타임의 동작 원리를 정리했다. 이 글에서는 **이미지와 컨테이너에 대한 간단한 배경 지식**을 정리해 본다.
@@ -35,14 +35,7 @@ tags:
 > * [Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/containers/images/): A container image represents binary data that encapsulates an application and all its software dependencies.
 > * [Docker 공식 문서](https://docs.docker.com/get-started/docker-overview/#images): An image is a read-only template with instructions for creating a Docker container.
 
-조금 구체적으로는, OCI 표준(OCI Image Spec)에 따라 구성된 아래 세 가지 요소의 조합을 의미한다. 
-- Manifest: 이미지 목차. 어떤 config와 layers로 구성되는가
-- Config JSON: 이미지 실행 설정
-  - 이미지 파일 시스템 레이어 정보: 어떤 Layer들을 가지고 있는가
-  - 이미지 메타데이터: 환경변수, 기본 실행 명령어, 진입점
-- Layers: 파일 시스템 변경 사항
-  - 이전 Layer 대비 변경 사항(추가, 수정, 삭제 등)들이 `tar.gz` 형태로 압축되어 저장됨
-  - 층층이 쌓아 올려져, 최종 **컨테이너 파일 시스템**을 구성함
+<br>
 
 ```bash
 Image: OCI Image Spec 준수
@@ -53,6 +46,16 @@ Image: OCI Image Spec 준수
     ├── layer2.tar.gz (sha256:bbb...)
     └── layer3.tar.gz (sha256:ccc...)
 ```
+
+조금 더 구체적으로는, **OCI 표준(OCI Image Spec)에 따라 구성된 아래 세 가지 요소의 조합**을 의미한다. 
+- Manifest: 이미지 목차. 어떤 config와 layers로 구성되는가
+- Config JSON: 이미지 실행 설정
+  - 이미지 파일 시스템 레이어 정보: 어떤 Layer들을 가지고 있는가
+  - 이미지 메타데이터: 환경변수, 기본 실행 명령어, 진입점
+- Layers: 파일 시스템 변경 사항
+  - 이전 Layer 대비 변경 사항(추가, 수정, 삭제 등)들이 `tar.gz` 형태로 압축되어 저장됨
+  - 층층이 쌓아 올려져, 최종 **컨테이너 파일 시스템**을 구성함
+
 
 > 참고: OCI 표준이 정의하는 것
 >
@@ -75,6 +78,8 @@ Config JSON       →  sha256(config) = 이미지 ID
 Layers (tar.gz들)
 ```
 
+<br>
+
 이미지 ID는 `docker build` 등 빌드 도구를 이용한 **이미지 빌드 시점에 결정**된다.
 1. 각 레이어 생성: 레이어별 sha256 해시 계산
 2. config JSON 생성: 위에서 생성한 레이어 해시 포함
@@ -86,6 +91,8 @@ Layers (tar.gz들)
 
 이미지가 동일하다는 것은 이미지 ID가 동일하다는 것이다. 그리고 **동일한 이미지 ID를 가진 이미지는 바이트 단위로 완전히 동일한 이미지**임이 보장된다.
 
+<br>
+
 이것이 보장되는 이유는 SHA256 해시의 특성 때문이다:
 - **결정론적 해시**: 같은 입력 데이터는 항상 같은 해시값을 생성한다
 - **충돌 저항성**: 입력 데이터가 1비트라도 다르면 완전히 다른 해시값이 나온다. 해시 충돌(서로 다른 입력이 같은 해시를 생성) 확률이 극히 낮아 실질적으로 불가능하다
@@ -94,6 +101,8 @@ Layers (tar.gz들)
 - 각 레이어(`tar.gz`)의 내용이 sha256 해시로 식별됨
 - config JSON은 이 레이어 해시들을 포함하여 생성됨
 - 이미지 ID는 config JSON의 sha256 해시임
+
+<br>
 
 따라서 **이미지 ID가 같다면 → config JSON이 같고 → config JSON이 같다면 포함된 레이어 해시들이 같고 → 레이어 해시가 같다면 레이어 내용이 바이트 단위로 동일**함이 보장되는 것이다.
 
@@ -117,9 +126,13 @@ Layers (tar.gz들)
 >- kaniko: 데몬리스, CI/CD 환경에 적합
 >- buildah: Podman 생태계, 스크립트 빌드 가능
 
+<br>
+
 따라서, 아래와 같은 경우에는 이미지 ID가 같지 않을 수 있다.
 - 같은 Dockerfile을 가지고 이미지를 재빌드하는 경우
 - 같은 Dockerfile을 다른 빌드 도구를 이용해 빌드하는 경우
+
+<br>
 
 다만, **일단 한 번 빌드되어 결정된 이미지 ID는 불변이다**. 따라서 **한 번 빌드된 이미지를 어떤 레지스트리에 push/pull하는 것은 이미지 ID가 동일함을 보장**하지만, 같은 도구 혹은 다른 도구로 Dockerfile을 빌드 혹은 재빌드하는 것은 동일한 이미지 ID를 보장하지 않는다.
 
@@ -138,9 +151,7 @@ Container = 이미지(읽기 전용) + 쓰기 가능 레이어 + 격리된 프�
 
 # 컨테이너 런타임
 
- 컨테이너 런타임이란, **컨테이너를 생성·실행·관리하는 시스템**을 말한다. 이미지를 기반으로 격리된 프로세스를 생성하고, 그 생명주기를 관리하는 역할을 한다. 넓은 의미에서는 컨테이너 관리뿐만 아니라, 이미지 pull/push, 네트워킹, 스토리지 관리까지 포함한다.
-
- 대표적으로 `dockerd`와 `containerd`가 있다.
+ 컨테이너 런타임이란, **컨테이너를 생성·실행·관리하는 시스템**을 말한다. 이미지를 기반으로 격리된 프로세스를 생성하고, 그 생명주기를 관리하는 역할을 한다. 넓은 의미에서는 컨테이너 관리뿐만 아니라, 이미지 pull/push, 네트워킹, 스토리지 관리까지 포함한다. 대표적으로 `dockerd`와 `containerd`가 있다.
 
 ## dockerd
 
@@ -158,10 +169,6 @@ Container = 이미지(읽기 전용) + 쓰기 가능 레이어 + 격리된 프�
 │  └──────────────────────────────────┘ │
 └───────────────────────────────────────┘
 ```
-
-주요 특징은 다음과 같다.
-- 컨테이너 실행: containerd에 위임
-- 이미지 저장: `/var/lib/docker`에서 자체 관리
 
 > 참고: 왜 이런 구조가 되었는가?
 >
@@ -230,4 +237,4 @@ containerd는 이미지를 두 단계로 관리한다:
 
 ---
 
-> 다음 글에서는 이 배경 지식을 바탕으로, 컨테이너 레이어가 어떻게 파일 시스템에서 관리되고, 컨테이너 런타임과 어떻게 통신할 수 있는지에 대해 다룬다.
+*다음 글에서는 이 배경 지식을 바탕으로, 컨테이너 레이어가 어떻게 파일 시스템에서 관리되고, 컨테이너 런타임과 어떻게 통신할 수 있는지에 대해 다룬다.*
