@@ -188,7 +188,7 @@ mount -t overlay overlay \
 
 | 런타임 | 스토리지 드라이버 명칭 | 저장 경로 | 레이어 식별 | 마운트 포인트 |
 |--------|------------------------|----------|------------|--------------|
-| dockerd | overlay2 | `/var/lib/docker/overlay2/` | layer-id (해시) | `merged/` |
+| Docker runtime (dockerd) | overlay2 | `/var/lib/docker/overlay2/` | layer-id (해시) | `merged/` |
 | containerd | overlayfs snapshotter | `/var/lib/containerd/.../overlayfs/` | 숫자 ID | `fs/` |
 
 즉, 컨테이너 시스템은 이미지 레이어를 관리하기 위해 모두 공통적으로 OverlayFS를 활용하지만:
@@ -213,9 +213,9 @@ overlay2 (dockerd storage driver)
 
 호스트에서 실제로 각 컨테이너 런타임의 스토리지 드라이버가 생성한 디렉토리 구조를 확인해 볼 수 있다.
 
-### dockerd (overlay2)
+### Docker runtime (dockerd) - overlay2
 
-dockerd는 overlay2를 통해 각 레이어를 관리한다. 각 레이어는 layer-id로 식별되며, `merged/` 디렉토리가 OverlayFS 마운트 포인트 역할을 한다.
+Docker runtime(dockerd)은 overlay2를 통해 각 레이어를 관리한다. 각 레이어는 layer-id로 식별되며, `merged/` 디렉토리가 OverlayFS 마운트 포인트 역할을 한다.
 - 호스트 마운트 경로: `/var/lib/docker/overlay2/{container-layer-id}/merged/`
 
 <br>
