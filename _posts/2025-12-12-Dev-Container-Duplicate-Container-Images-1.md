@@ -98,9 +98,9 @@ Layers (tar.gz들)
 - **충돌 저항성**: 입력 데이터가 1비트라도 다르면 완전히 다른 해시값이 나온다. 해시 충돌(서로 다른 입력이 같은 해시를 생성) 확률이 극히 낮아 실질적으로 불가능하다
 
 빌드 과정에서의 SHA256 해시 체인을 보자:
-- 각 레이어(`tar.gz`)의 내용이 sha256 해시로 식별됨
+- 각 레이어(`tar.gz`)의 내용이 SHA256 해시로 식별됨
 - config JSON은 이 레이어 해시들을 포함하여 생성됨
-- 이미지 ID는 config JSON의 sha256 해시임
+- 이미지 ID는 config JSON의 SHA256 해시임
 
 <br>
 
@@ -226,7 +226,7 @@ containerd는 이미지를 두 단계로 관리한다:
 | 역할 | 풀스택 컨테이너 플랫폼 | 순수 컨테이너 런타임 |
 | 빌드 기능 | O | X |
 | 이미지 저장 경로 | `/var/lib/docker` | `/var/lib/containerd` |
-| Kubernetes 연동 | 과거 dockershim 필요 (현재 제거됨) | CRI로 직접 연동 |
+| Kubernetes 연동 | cri-dockerd(과거 dockershim, 현재 제거됨) | CRI로 직접 연동 |
 
 > 참고: dockerd의 네임스페이스
 > - dockerd는 자체적으로 네임스페이스 개념이 없지만, 내부적으로 containerd를 사용할 때 `moby` 네임스페이스를 사용함

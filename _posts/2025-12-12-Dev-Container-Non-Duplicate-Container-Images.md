@@ -29,7 +29,7 @@ example/my-app    1.0-prod    56371aef8cc2    1.81GB
 
 분석 결과는 다음과 같다.
 
-1. **중복 저장 아님**: `docker` CLI와 `crictl` CLI가 **같은 런타임(Docker의 containerd)**을 보고 있었음
+1. **중복 저장 아님**: `docker` CLI와 `crictl` CLI가 **같은 런타임(Docker runtime)**을 보고 있었음
 2. **런타임 설정**: k3s가 `--docker` 플래그로 실행되어 Docker runtime을 사용하도록 설정됨
 3. **crictl 설정**: crictl이 cri-dockerd를 통해 Docker runtime을 바라보도록 설정되어 있음
 4. **실제 중복 저장**: 서로 다른 런타임(Docker runtime과 k3s 내장 containerd)이 각각 이미지를 pull할 때만 발생
@@ -129,13 +129,13 @@ k3s 내장 containerd 디렉토리가 존재하지 않았다. 대신 `cri-docker
 >
 > k3s가 내장 containerd를 사용하도록 설정되어 있다면(`--docker` 플래그 없이 실행), `/var/lib/rancher/k3s/agent/containerd/` 디렉토리가 생성되고 이미지가 여기에 저장된다. 이 디렉토리 구조와 이미지 저장 방식에 대한 자세한 내용은 [이전 글]({% post_url 2025-12-12-Dev-Container-Duplicate-Container-Images-3 %}#서버-환경-설명)에서 확인할 수 있다.
  
+<br>
+
 ```bash
 # cri-dockerd 디렉토리 구조 확인
 $ sudo ls -al /var/lib/rancher/k3s/agent/cri-dockerd/
 drwxr-xr-x 2 root root 4096 sandbox
 ```
-
-<br>
 
 cri-dockerd 디렉토리 구조를 확인해 보니 `sandbox` 디렉토리만 존재했다. 이 디렉토리는 쿠버네티스 Pod의 샌드박스(sandbox) 정보를 저장하는 곳으로, cri-dockerd가 각 Pod의 네트워크 네임스페이스와 관련된 메타데이터를 관리하기 위해 사용한다.
 
@@ -182,6 +182,8 @@ Docker가 사용하는 containerd만 실행 중이었고, k3s 내장 containerd�
 
 ## 왜 같은 이미지가 보였는가?
 
+`docker` CLI와 `crictl` CLI가 **같은 Docker runtime**을 보고 있었기 때문에, 같은 이미지가 보였던 것이다. 실제로는 중복 저장이 아니었다. 
+
 정리하면 다음과 같다.
 
 | 항목 | 내용 |
@@ -189,10 +191,7 @@ Docker가 사용하는 containerd만 실행 중이었고, k3s 내장 containerd�
 | k3s 런타임 설정 | `--docker` 플래그로 Docker runtime 사용 |
 | crictl 엔드포인트 | `unix:///run/k3s/cri-dockerd/cri-dockerd.sock` |
 | cri-dockerd 역할 | Docker를 CRI 호환 런타임으로 변환하는 어댑터 |
-| 실제 런타임 | Docker의 containerd (`/run/containerd/containerd.sock`) |
 | 이미지 저장 위치 | `/var/lib/docker/overlay2` (하나만 존재) |
-
-**결론**: `docker` CLI와 `crictl` CLI가 **같은 Docker runtime의 containerd**를 보고 있었기 때문에, 같은 이미지가 보였던 것이다. 실제로는 중복 저장이 아니었다.
 
 <br>
 
@@ -208,9 +207,9 @@ Docker가 사용하는 containerd만 실행 중이었고, k3s 내장 containerd�
 - 변경 후: k3s 내장 containerd가 `/var/lib/rancher/k3s/agent/containerd`에 이미지 저장
 - 결과: 같은 이미지가 두 경로에 각각 저장됨
 
-## 케이스 2: 두 런타임이 동시에 실행 중
+<br>
 
-다른 노드에서 확인한 사례:
+## 케이스 2: 두 런타임이 동시에 실행 중
 
 ```bash
 # 두 개의 containerd 인스턴스가 실행 중
@@ -219,11 +218,13 @@ root  /usr/bin/dockerd --containerd=/run/containerd/containerd.sock
 root  /var/lib/rancher/k3s/.../containerd-shim-runc-v2 -namespace k8s.io -address /run/k3s/containerd/containerd.sock
 ```
 
-이 경우:
+두 런타임이 동시에 실행 중일 때:
 - Docker의 containerd: `/run/containerd/containerd.sock` (namespace: `moby`)
 - k3s 내장 containerd: `/run/k3s/containerd/containerd.sock` (namespace: `k8s.io`)
 
-두 런타임이 각각 이미지를 pull하면, 같은 이미지가 두 벌 저장된다.
+아래와 같은 경우에 중복 저장이 발생할 수 있다:
+- 로컬에서 `docker build`를 통해 이미지를 빌드한 후, k3s로 같은 이미지를 사용하는 파드 배포
+- 로컬에서 테스트용으로 `docker pull`을 통해 이미지를 pull한 후, k3s로 같은 이미지를 사용하는 파드 배포
 
 <br>
 
@@ -358,4 +359,4 @@ Docker 자체는 CRI 인터페이스를 따르지 않지만, **cri-dockerd**라�
 
 ---
 
-*처음에는 중복 저장 문제인 줄 알았지만, 실제로는 같은 런타임을 다른 CLI로 보고 있던 것이었다. 때로는 비슷해 보이는 현상도 자세히 살펴보면 다른 원인일 수 있다. 문제를 해결하는 과정에서 컨테이너 런타임의 구조와 k3s의 런타임 설정에 대해 더 깊이 이해할 수 있었다*
+*처음에는 중복 저장 문제인 줄 알았지만, 실제로는 같은 런타임을 다른 CLI로 보고 있던 것이었다. 때로는 비슷해 보이는 현상도 자세히 살펴보면 다른 원인일 수 있다.*
