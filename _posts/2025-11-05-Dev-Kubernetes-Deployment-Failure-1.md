@@ -210,9 +210,9 @@ status:
 ### 스케줄러 큐
 쿠버네티스 스케줄러는 아래와 같이 3개의 큐를 관리한다.
 ```
-Active Queue  ──────► 스케줄러가 꺼내서 스케줄링 시도
-Backoff Queue ──────► 타이머 만료 시 → Active Queue로 이동
-Unschedulable Queue ► 클러스터 이벤트 발생 시 → Active Queue로 이동
+Active Queue  ───────► 스케줄러가 꺼내서 스케줄링 시도
+Backoff Queue ───────► 타이머 만료 시 ────────► Active Queue로 이동
+Unschedulable Queue ─► 클러스터 이벤트 발생 시 ─► Active Queue로 이동
 ```
 
 <br>
@@ -284,8 +284,7 @@ Active Queue에서 파드 꺼냄
 ### 메인 스케줄링 프로세스
 
 ![kubernetes-scheduling]({{site.url}}/assets/images/kubernetes-scheduling.png){: width="600"}{: .align-center}
-> 그림에서는 단일 큐로 표현했지만, 실제로는 Active Queue, Backoff Queue, Unschedulable Queue 3개로 구성된다.
-
+- 스케줄링 대상 파드: Active Queue에 있는 파드
 - 전체 단계
   1. PreFilter: 스케줄링 전 사전 처리 
   2. Filter: 모든 노드 동시 체크 (병렬)
@@ -324,12 +323,17 @@ Active Queue에서 파드 꺼냄
       - NodePorts: 포트 충돌 유무
   - PostFilter 단계: 모든 노드가 Filter 실패 시에만 실행되는 조건부 extension point. 개별 플러그인으로 구성됨
     - 선점(Preemption): 낮은 우선순위 파드를 축출하여 노드 확보
-
   - Score 단계(스코어링): 필터링 통과 노드에 점수 부여 후 최고 점수 노드 선택
     - ImageLocality: 이미지가 이미 있는 노드 선호
     - NodeResourcesBalancedAllocation: 리소스 밸런스
     - InterPodAffinity: 파드 간 친화성
     - ...
+- 스케줄링 프로세스 주요 단계에 따른 큐 복귀 분류 기준
+  - Backoff Queue: 노드는 선택되었으나, 이후 단계에서 실패(Score 이후)
+    - 이미 노드를 선택한 상태에서 바인딩 단계에 이르기까지 일시적 문제로 실패한 경우
+  - Unschedulable Queue: 노드 선택 실패
+    - 애초에 배치 가능한 노드를 찾지 못한 경우
+    - 클러스터에 구조적 변경이 필요함
 
 <br>
 
@@ -340,8 +344,6 @@ Active Queue에서 파드 꺼냄
 > 물론, 동점이 나온 걸 어떻게 파악하는가에 대해서는 조금 더 공부해 봐야 한다. 일단 지금은 여기까지만!
 
 <br>
-
-
 
 ### PostFilter 단계
 
@@ -380,14 +382,31 @@ nominatedNodeName이 설정된 파드는 다시 스케줄링 큐로 돌아가며
 
 ### Pending 상태와 스케줄링 재시도
 
-PostFilter 단계마저 실패하면 파드는 Pending 상태가 된다. 애초에 파드는 생성된 직후에 Pending 상태가 된다고 했기 때문에, 스케줄링에 실패하면 그렇게 Pending 상태가 되는 것이다. 반대로, 생성된 후, 스케줄링에 성공해 바인딩되어 컨테이너가 시작한 파드는, Running 상태가 된다.
+Filter 단계에서 모든 노드가 실패하면 PostFilter가 실행된다. PostFilter(선점 등의 플러그인)에서 적합한 후보 노드를 찾으면 `nominatedNodeName`이 설정되고, 파드는 큐로 돌아가서 재스케줄링을 시도한다. 반면, PostFilter에서도 후보 노드를 찾지 못하면 파드는 UnschedulableQueue로 이동한다.
 
-이렇게 Pending 상태로 남아 있는 파드들은, 다음과 같은 클러스터 이벤트 발생 시 자동으로 재스케줄링이 시도된다.
+이 모든 과정에서 파드는 Pending 상태를 유지한다. 파드는 **생성된 직후부터 Pending 상태**이며, 스케줄링에 성공해 바인딩되고 컨테이너가 시작되어야 비로소 Running 상태가 된다.
 
+UnschedulableQueue에 있는 Pending 파드들은 다음과 같은 클러스터 이벤트 발생 시 자동으로 재스케줄링이 시도된다:
 * 새로운 노드가 클러스터에 추가됨
 * 기존 파드가 종료되어 리소스가 확보됨
 * 노드의 taint가 제거되거나 상태가 변경됨
 * 리소스 쿼터가 조정됨
+
+<br>
+
+> 참고: Pending 상태의 범위
+> 
+> 넓은 범위에서 Pending 상태에 있는 파드들은 아래와 같이 분류해 볼 수 있다.
+> - 스케줄링 큐에 있는 파드들: `spec.nodeName`이 비어 있음
+>   - Active Queue
+>   - Backoff Queue
+>   - Unschedulable Queue
+> - 스케줄링 큐에 없는 파드들
+>   - 수동으로 `spec.nodeName`이 지정됨: 스케줄러가 관여하지 않음
+>   - 스케줄링 완료, 컨테이너 시작 전
+>   - 이미지 pull 중
+>   - init container 실행 중
+
 
 <br>
 

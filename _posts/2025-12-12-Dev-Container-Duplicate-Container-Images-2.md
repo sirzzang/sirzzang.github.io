@@ -157,9 +157,12 @@ mount -t overlay overlay \
 
 <br>
 
-컨테이너 실행 시 아래와 같은 일이 일어난다.
+컨테이너 실행 시, 아래와 같은 일이 일어난다.
 1. 호스트 커널이 OverlayFS를 호스트의 `마운트 포인트`에 마운트
 2. 컨테이너 프로세스 시작 시, 호스트의 `마운트 포인트`를 컨테이너 파일 시스템 루트(`/`)로 설정
+
+<br>
+
 결과는 다음과 같다.
 ```
 호스트:    마운트포인트/bin/bash
@@ -195,7 +198,9 @@ mount -t overlay overlay \
 
 - 각 시스템별로 OverlayFS 기반의 자체 스토리지 드라이버 구현체를 가지고 있으며,
 - 각 구현체별로 레이어 디렉토리 구조, 메타데이터 관리 방식, 저장 경로 등이 다르다.
+
 <br>
+
 dockerd가 사용하는 overlay2를 예로 들면, overlay2는 dockerd에서 **OverlayFS라는 커널 기능을 컨테이너 레이어 관리 목적에 맞게 활용하기 위해 만든 스토리지 드라이버**라고 할 수 있다.
 
 ```
@@ -369,7 +374,7 @@ containerd 네이티브 API로 직접 통신하는 저수준 CLI이다. containe
 
 ## crictl
 
-CRI(Container Runtime Interface) 인터페이스를 통해 통신하는 디버깅 도구이다. containerd 전용이 아니라, CRI를 구현한 모든 런타임(containerd, CRI-O 등)과 통신할 수 있는 범용 도구이다.
+CRI(Container Runtime Interface) 인터페이스를 통해 통신하는 CLI이다. containerd 전용이 아니라, CRI를 구현한 모든 런타임(containerd, CRI-O 등)과 통신할 수 있는 범용 도구이다.
 
 쿠버네티스/CRI 생태계 도구로, k3s 설치 시 함께 설치된다.
 
