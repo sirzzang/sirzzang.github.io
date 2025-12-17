@@ -159,7 +159,27 @@ RollingUpdateStrategy:  25% max unavailable, 25% max surge # rolling update 항�
   * 즉, 선점으로 해보려고 해도 불가능하다
 * 즉, 일반적인 방식으로 스케줄링하고, 필요하면 preemption해야 하는데, 불가능하다!
 
+<br>
 
+## Unschedulable Queue로의 이동
+
+결국 이 상황은, 해당 파드가 [Unschedulable Queue]({% post_url 2025-11-05-Dev-Kubernetes-Deployment-Failure-1 %}#스케줄러-큐)로 이동하게 되는 전형적인 케이스다. [스케줄링 프로세스]({% post_url 2025-11-05-Dev-Kubernetes-Deployment-Failure-2 %}#스케줄링-프로세스-주요-단계에-따른-큐-복귀)에서 살펴 보았듯, 스케줄러는 실패 유형에 따라 파드를 다른 큐로 이동시킨다, **애초에 배치 가능한 노드를 찾지 못해 노드 선택 자체가 실패한 경우, 파드는 Unschedulable Queue로 이동**하게 된다고 했다.
+
+<br>
+
+Unschedulable Queue에 있는 파드들은 현재 클러스터 구조상 스케줄링이 불가능한, 즉 **구조적 실패** 상태에 놓인 파드들이다. 이 케이스가 바로 그 상황에 해당한다:
+- 모든 노드가 `nodeSelector` 불일치 → 9개 노드 탈락
+- 유일하게 `nodeSelector`가 일치하는 노드는 GPU 리소스 부족 → `트래커노드` 탈락
+- 선점(PostFilter)을 시도해 봐도 희생시킬 파드 없음 → 선점 실패
+
+<br>
+
+이 파드가 Unschedulable Queue에서 빠져나오려면, 다음과 같은 클러스터 이벤트가 발생해야 한다:
+- `트래커노드`에서 기존 파드가 종료되어 GPU 리소스가 확보됨
+- 새로운 GPU 노드가 추가되고 `nodeSelector` 조건이 변경됨
+- 해당 노드의 GPU 리소스가 증가함
+
+그러나 현재 상황에서는 기존 파드가 종료되지 않는 한(`maxUnavailable: 0`이므로), 혹은 클러스터 노드 구조가 변경되지 않는 한 이러한 이벤트가 발생할 수 없다. 이것이 바로 내 파드가 Pending 상태에 갇혀 있었던 이유다.
 
 <br>
 
@@ -188,6 +208,18 @@ RollingUpdateStrategy:  25% max unavailable, 25% max surge # rolling update 항�
 ## 채택
 
 사실 트래커의 경우, 다운타임이 생겨도 문제가 없는 상황이다. 또한, 어차피 GPU를 1개 점유하는데, 다른 노드들의 GPU는 이 노드보다 더 사양이 좋아 더 무거운 작업에 사용해야 하기 때문에 굳이 다른 노드에서 띄울 이유도 없다. 그러니, 기존 파드를 종료하고 새 파드가 뜨게 하는 방안을 택했다.
+
+<br>
+
+앞서 분석했듯, 이 상태를 해결하기 위한 핵심은, **Unschedulable Queue에서 빠져나올 수 있는 클러스터 이벤트를 발생시키는 것**이다. 이를 위해 내가 택한 구조적 해결 방안은, 기존 파드를 종료시키는 것이었다:
+- `maxUnavailable: 1`로 설정하면 기존 파드를 먼저 종료할 수 있게 되고, 
+- 기존 파드가 종료되면 GPU 리소스가 확보되며,
+- 이 리소스 확보 이벤트가 발생하면, 
+- Unschedulable Queue에 있던 새 파드가 Active Queue로 이동하여 스케줄링이 재시도되고, 
+- 이번에는 GPU 리소스가 확보되어 있으므로,
+- 정상적으로 스케줄링에 성공하게 된다.
+
+<br>
 
 `Recreate`를 선택해도 되지만, 나중에 GPU를 논리적으로 분할(time slicing)하여 사용하려고 했었기 때문에, 확장성 측면에서 `RollingUpdate`를 선택하기로 했다. 대신, 배포 매니페스트에 주석을 잘 달았다.
 
