@@ -1,5 +1,5 @@
 ---
-title:  "[Container] Docker와 containerd 이미지 관리 비교 - 4. 같은 이미지가 중복 저장된 것처럼 보였지만"
+title:  "[Container] Docker와 containerd 이미지 관리 비교 - 4. 같은 이미지이지만 중복 저장이 아닌 경우"
 excerpt: docker와 crictl에서 같은 이미지가 보이는 현상이 실제 중복 저장인지 확인해 보자.
 categories:
   - Dev
