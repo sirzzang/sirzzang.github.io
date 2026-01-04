@@ -1,5 +1,5 @@
 ---
-title:  "[Go] go-github SDK 패턴을 적용한 리팩토링 - 2. 실전 적용"
+title:  "[Go] go-github SDK 패턴을 적용한 리팩토링 - 2. 적용"
 excerpt: go-github SDK 패턴을 Internal API Client에 실제로 적용해 보자.
 categories:
   - Dev

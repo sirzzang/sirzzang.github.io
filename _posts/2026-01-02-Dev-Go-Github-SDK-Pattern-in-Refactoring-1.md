@@ -81,13 +81,12 @@ GoF 패턴처럼 학술적으로 정립된 것이 아니라, Go 커뮤니티에�
 
 <br>
 
-Facade 패턴 + Composite + DI가 결합된 형태의 패턴이라고 볼 수 있다.
+Facade 패턴과 DI가 결합된 형태의 패턴이라고 볼 수 있다.
 
 | 패턴 | 목적 | 차이점 |
 | --- | --- | --- |
 | **SDK-style Client** | API 클라이언트 구조화 | Service들이 Client 리소스 공유 |
 | **Facade** | 복잡한 시스템 단순화 | 내부 구현 숨김에 집중 |
-| **Service Locator** | 런타임 서비스 조회 | 동적 등록/조회 가능 |
 | **Dependency Injection** | 의존성 주입 | 외부에서 주입 받음 |
 
 <br>
@@ -115,7 +114,7 @@ type Client struct {
     BaseURL *url.URL
 
     // 핵심: 단일 service 인스턴스만 생성
-    common service
+    common service // Reuse a single struct instead of allocating one for each service on the heap.
 
     // 하위 서비스: 모든 서비스는 common을 재사용
     Users         *UsersService
@@ -135,7 +134,9 @@ type service struct {
 }
 ```
 
-`common service`는 이 `service` 타입의 인스턴스다. 이를 활용해 메모리 효율성을 크게 향상시키는데, 그 원리를 살펴보자.
+`common service`는 이 `service` 타입의 인스턴스다. 이 구조체는 단순히 `Client`에 대한 참조만 가지고 있으며, 모든 서비스(`ActionsService`, `ActivityService` 등)가 이 `service` 타입을 기반으로 정의된다.
+
+이를 활용해 메모리 효율성을 크게 향상시킬 수 있는데, 그 원리는 Client 초기화 과정에서 드러난다.
 
 <br>
 
@@ -181,16 +182,19 @@ func (c *Client) initialize() {
 메모리 관점에서 보면, `common` 필드 하나만 할당하고 모든 서비스 포인터가 같은 주소를 가리킨다.
 
 ```
-            Client c
-┌─────────────────────────────┐
-│ common service              │◄──┐
-│ └─ client *Client ──────────┼──┐│
-│                             │  ││
-│ Actions *ActionsService ────┼──┘│  // 같은 주소를 가리킴
-│ Activity *ActivityService ──┼───┘  // 같은 주소를 가리킴
-│ ...                         │
-└─────────────────────────────┘
+Client c (메모리 주소: 0x1000)
+┌─────────────────────────────────────┐
+│ common service (값 타입)            │
+│ └─ client *Client → 0x1000 (순환)  │
+│                                     │
+│ Actions *ActionsService → &c.common│  // 0x1008 (같은 주소)
+│ Activity *ActivityService → &c.common│  // 0x1008 (같은 주소)
+│ Admin *AdminService → &c.common     │  // 0x1008 (같은 주소)
+│ ...                                 │
+└─────────────────────────────────────┘
 ```
+
+> **참고**: `common`은 값 타입이므로 `Client` 구조체 내부에 직접 포함되어 있다. `Actions`, `Activity` 등은 모두 `&c.common`을 포인터 캐스팅한 것이므로 동일한 메모리 주소를 가리킨다.
 
 <br>
 
