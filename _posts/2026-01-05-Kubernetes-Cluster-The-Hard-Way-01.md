@@ -554,4 +554,4 @@ rtt min/avg/max/mdev = 0.366/0.650/1.184/0.377 ms
 
 VirtualBox와 Vagrant를 이용하여 Kubernetes 실습 환경을 위한 4대의 가상 머신을 성공적으로 구성했다. 각 머신은 Debian 12를 기반으로 동작하며, 192.168.10.0/24 대역의 private network를 통해 서로 통신할 수 있다. 
 
-다음 글 [Setup The Jumpbox 단계]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04 %})에서는 이 환경을 기반으로 Kubernetes 클러스터를 직접 구축해 본다.
+다음 글 [Setup The Jumpbox 단계]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-02 %})에서는 이 환경을 기반으로 Kubernetes 클러스터를 직접 구축해 본다.
