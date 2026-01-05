@@ -354,5 +354,5 @@ ssh root@node-1 hostname
 
 이번 단계를 통해 클러스터를 구성할 모든 머신의 정보를 정리하고, 각 머신 간 SSH 접속이 가능하도록 네트워크 환경을 구성했다. `machines.txt` 파일을 통해 머신 정보를 중앙에서 관리할 수 있게 되었고, SSH 키 기반 인증과 호스트명 설정을 통해 이후 단계에서 자동화된 스크립트 실행이 가능한 기반을 마련했다.
 
-다음 글 [Provisioning a CA and Generating TLS Certificates 단계]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04 %})에서는 Kubernetes 클러스터의 보안을 위한 CA(Certificate Authority) 설정 및 TLS 인증서 생성 작업을 진행한다.
+다음 글 [Provisioning a CA and Generating TLS Certificates 단계]에서는 Kubernetes 클러스터의 보안을 위한 CA(Certificate Authority) 설정 및 TLS 인증서 생성 작업을 진행한다.
 
