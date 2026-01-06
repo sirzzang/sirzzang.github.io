@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 3. Provisioning Compute Resoures"
-excerpt: ""
+excerpt: "클러스터 구성에 필요한 모든 머신 정보를 Machine Database에 정리하고, SSH 키 기반 인증과 호스트명 설정을 통해 자동화된 스크립트 실행 기반을 마련해 보자."
 categories:
   - Kubernetes
 toc: true
@@ -8,6 +8,7 @@ header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
   - Kubernetes
+  - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-1
 
 ---

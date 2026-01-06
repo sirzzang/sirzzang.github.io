@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 1. Prerequisites"
-excerpt: ""
+excerpt: "VirtualBox와 Vagrant를 사용하여 Kubernetes 실습을 위한 4대의 가상 머신(jumpbox, server, node-0, node-1)을 구성하고 초기 설정을 완료해 보자."
 categories:
   - Kubernetes
 toc: true
@@ -8,6 +8,7 @@ header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
   - Kubernetes
+  - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-1
 ---
 
@@ -164,7 +165,7 @@ curl -O https://raw.githubusercontent.com/gasida/vagrant-lab/refs/heads/main/k8s
 
 실습에 사용할 가상 환경 구성 파일로, 총 4개의 가상 머신을 정의한다. 각 VM은 동일한 베이스 이미지(`bento/debian-12`)를 사용하며, VirtualBox 프로바이더를 통해 실행된다.
 
-```vagrantfile
+```ruby
 # Base Image : https://portal.cloud.hashicorp.com/vagrant/discover/bento/debian-12
 BOX_IMAGE = "bento/debian-12"
 BOX_VERSION = "202510.26.0"
