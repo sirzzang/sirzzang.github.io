@@ -18,9 +18,33 @@ tags:
 
 <br>
 
+> Kubernetes Cluster: 내 손으로 클러스터 구성하기
+> - (0) [Overview]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-00 %}) - 실습 소개 및 목표
+> - **(1) [Prerequisites]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-01 %}) - 가상머신 환경 구성**
+> - (2) [Set Up The Jumpbox]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-02 %}) - 관리 도구 및 바이너리 준비
+> - (3) [Provisioning Compute Resources]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-03 %}) - 머신 정보 정리 및 SSH 설정
+> - (4.1) [Provisioning a CA and Generating TLS Certificates - 개념]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-1 %}) - TLS/mTLS/X.509/PKI 이해
+> - (4.2) [Provisioning a CA and Generating TLS Certificates - ca.conf]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-2 %}) - OpenSSL 설정 파일 분석
+> - (4.3) [Provisioning a CA and Generating TLS Certificates - 실습]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-3 %}) - 인증서 생성 및 배포
+> - (5) Generating Kubernetes Configuration Files - kubeconfig 생성
+> - (6) Generating the Data Encryption Config and Key - 데이터 암호화 설정
+> - (7) Bootstrapping the etcd Cluster - etcd 클러스터 구성
+> - (8) Bootstrapping the Kubernetes Control Plane - 컨트롤 플레인 구성
+> - (9) Bootstrapping the Kubernetes Worker Nodes - 워커 노드 구성 
+> - (10) Configuring kubectl for Remote Access - kubectl 원격 접속 설정 
+> - (11) Provisioning Pod Network Routes - Pod 네트워크 라우팅 설정
+> - (12) Smoke Test - 클러스터 동작 검증
+
+<br>
+
 # TL;DR
 
 이번 글의 목표는 **실습용 가상 머신 준비**다. [Kubernetes the Hard Way 튜토리얼의 Prerequisites 단계](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/01-prerequisites.md)를 따라 진행한다.
+
+- VirtualBox와 Vagrant를 이용한 VM 프로비저닝
+- Debian 12 기반 실습 환경 초기 설정
+- Private network를 통한 VM 간 통신 구성
+
 
 ![kubernetes-the-hard-way-cluster-structure-1]({{site.url}}/assets/images/kubernetes-the-hard-way-cluster-structure-1.png)
 
@@ -100,11 +124,19 @@ NAT 네트워크 특성상 각 VM은 독립된 NAT 환경 안에 있기 때문�
 VirtualBox는 Oracle에서 개발한 오픈소스 가상화 소프트웨어다. 하나의 물리 머신에서 여러 개의 가상 머신을 실행할 수 있게 해준다.
 
 ```bash
+# (host) $
+# --cask: GUI 애플리케이션 설치를 위한 Homebrew 옵션
 brew install --cask virtualbox
 
-VBoxManage --version                                                        
+# 설치 버전 확인
+VBoxManage --version
+```
+
+**실행 결과:**
+```
 7.2.4r170995
 ```
+
 > *참고*: brew install --cask 옵션
 >
 > - Homebrew에서 GUI 애플리케이션을 설치할 때 사용하는 옵션
@@ -130,10 +162,16 @@ Vagrant는 HashiCorp에서 개발한 가상 환경 프로비저닝 및 관리 �
 - 팀원들과 동일한 개발 환경 공유 가능
 
 ```bash
+# (host) $
 # Vagrant 설치
 brew install --cask vagrant
 
+# 설치 버전 확인
 vagrant version
+```
+
+**실행 결과:**
+```
 Installed Version: 2.4.9
 Latest Version: 2.4.9
  
@@ -147,11 +185,13 @@ You're running an up-to-date version of Vagrant!
 작업용 디렉터리를 생성하고 필요한 파일을 다운로드한다. Vagrantfile과 초기 설정 스크립트가 다운로드된다.
 
 ```bash
+# (host) $
 # 작업용 디렉터리 생성
 mkdir k8s-hardway
 cd k8s-hardway
 
 # Vagrantfile, init_cfg.sh 파일 다운로드
+# -O: 원본 파일 이름 유지하며 다운로드
 curl -O https://raw.githubusercontent.com/gasida/vagrant-lab/refs/heads/main/k8s-hardway/Vagrantfile
 curl -O https://raw.githubusercontent.com/gasida/vagrant-lab/refs/heads/main/k8s-hardway/init_cfg.sh
 ```
@@ -354,64 +394,9 @@ echo ">>>> Initial Config End <<<<"
 Vagrantfile과 init_cfg.sh를 준비한 후, 다음 명령어로 가상 머신을 시작한다. 
 
 ```bash
+# (host) $
+# 정의된 모든 가상 머신(jumpbox, server, node-0, node-1) 생성 및 시작
 vagrant up
-
-# 실행 결과 (jumpbox 머신 부분만 발췌): 실제 위에서 정의한 태스크가 하나씩 실행되는 것을 볼 수 있음
-Bringing machine 'jumpbox' up with 'virtualbox' provider...
-Bringing machine 'server' up with 'virtualbox' provider...
-Bringing machine 'node-0' up with 'virtualbox' provider...
-Bringing machine 'node-1' up with 'virtualbox' provider...
-==> jumpbox: Box 'bento/debian-12' could not be found. Attempting to find and install...
-    jumpbox: Box Provider: virtualbox
-    jumpbox: Box Version: 202510.26.0
-==> jumpbox: Loading metadata for box 'bento/debian-12'
-    jumpbox: URL: https://vagrantcloud.com/api/v2/vagrant/bento/debian-12
-==> jumpbox: Adding box 'bento/debian-12' (v202510.26.0) for provider: virtualbox (arm64)
-    jumpbox: Downloading: https://vagrantcloud.com/bento/boxes/debian-12/versions/202510.26.0/providers/virtualbox/arm64/vagrant.box
-==> jumpbox: Successfully added box 'bento/debian-12' (v202510.26.0) for 'virtualbox (arm64)'!
-==> jumpbox: Preparing master VM for linked clones...
-    jumpbox: This is a one time operation. Once the master VM is prepared,
-    jumpbox: it will be used as a base for linked clones, making the creation
-    jumpbox: of new VMs take milliseconds on a modern system.
-==> jumpbox: Importing base box 'bento/debian-12'...
-==> jumpbox: Cloning VM...
-==> jumpbox: Matching MAC address for NAT networking...
-==> jumpbox: Checking if box 'bento/debian-12' version '202510.26.0' is up to date...
-==> jumpbox: Setting the name of the VM: jumpbox
-==> jumpbox: Clearing any previously set network interfaces...
-==> jumpbox: Preparing network interfaces based on configuration...
-    jumpbox: Adapter 1: nat
-    jumpbox: Adapter 2: hostonly
-==> jumpbox: Forwarding ports...
-    jumpbox: 22 (guest) => 60010 (host) (adapter 1)
-==> jumpbox: Running 'pre-boot' VM customizations...
-==> jumpbox: Booting VM...
-==> jumpbox: Waiting for machine to boot. This may take a few minutes...
-    jumpbox: SSH address: 127.0.0.1:60010
-    jumpbox: SSH username: vagrant
-    jumpbox: SSH auth method: private key
-    jumpbox: 
-    jumpbox: Vagrant insecure key detected. Vagrant will automatically replace
-    jumpbox: this with a newly generated keypair for better security.
-    jumpbox: 
-    jumpbox: Inserting generated public key within guest...
-    jumpbox: Removing insecure key from the guest if it's present...
-    jumpbox: Key inserted! Disconnecting and reconnecting using new SSH key...
-==> jumpbox: Machine booted and ready!
-==> jumpbox: Checking for guest additions in VM...
-==> jumpbox: Setting hostname...
-==> jumpbox: Configuring and enabling network interfaces...
-==> jumpbox: Running provisioner: shell...
-    jumpbox: Running: /var/folders/s5/n708zbmn0hxgm7td_wp2n3vw0000gn/T/vagrant-shell20260105-30344-59xyi0.sh
-    jumpbox: >>>> Initial Config Start <<<<
-    jumpbox: [TASK 1] Setting Profile & Bashrc
-    jumpbox: [TASK 2] Disable AppArmor
-    jumpbox: [TASK 3] Disable and turn off SWAP
-    jumpbox: [TASK 4] Install Packages
-    jumpbox: [TASK 5] Setting Root Password
-    jumpbox: [TASK 6] Setting Sshd Config
-    jumpbox: [TASK 7] Setting Local DNS Using Hosts file
-    jumpbox: >>>> Initial Config End <<<<
 ```
 
 <br>
@@ -419,12 +404,18 @@ Bringing machine 'node-1' up with 'virtualbox' provider...
 ### 확인
 
 ```bash
-# 실습용 OS 이미지 자동 다운로드 확인
-vagrant box list                     
+# (host) $
+# 다운로드된 Vagrant Box 목록 확인
+vagrant box list
+
+# 배포된 가상머신 상태 확인
+vagrant status
+```
+
+**실행 결과:**
+```
 bento/debian-12 (virtualbox, 202510.26.0, (arm64))
 
-# 배포된 가상머신 확인
-vagrant status
 Current machine states:
 
 jumpbox                   running (virtualbox)
@@ -440,27 +431,17 @@ node-1                    running (virtualbox)
 가상 머신이 모두 시작되면, jumpbox에 SSH로 접속하여 환경을 확인한다. 접속 후 자동으로 root로 전환되며, 각 호스트의 네트워크 설정과 호스트명이 올바르게 구성되었는지 확인할 수 있다.
 
 ```bash
+# (host) $
+# jumpbox 가상 머신으로 SSH 접속
 vagrant ssh jumpbox
+```
 
+**실행 결과:**
+```
 Linux jumpbox 6.1.0-40-arm64 #1 SMP Debian 6.1.153-1 (2025-09-20) aarch64
-
-This system is built by the Bento project by Chef Software
-More information can be found at https://github.com/chef/bento
-
-Use of this system is acceptance of the OS vendor EULA and License Agreements.
-
-The programs included with the Debian GNU/Linux system are free software;
-the exact distribution terms for each program are described in the
-individual files in /usr/share/doc/*/copyright.
-
-Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
-permitted by applicable law.
-
-# jumpbox root로 로그인
+# ...
 root@jumpbox:~# whoami
 root
-root@jumpbox:~# pwd
-/root
 ```
 
 ### OS 확인
@@ -468,7 +449,12 @@ root@jumpbox:~# pwd
 Debian 12 (bookworm)가 정상적으로 설치되었다.
 
 ```bash
-root@jumpbox:~# cat /etc/os-release
+# (jumpbox) #
+cat /etc/os-release
+```
+
+**실행 결과:**
+```
 PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
 NAME="Debian GNU/Linux"
 VERSION_ID="12"
@@ -488,25 +474,18 @@ BUG_REPORT_URL="https://bugs.debian.org/"
 AppArmor가 정상적으로 비활성화되었다.
 
 ```bash
-root@jumpbox:~# systemctl status apparmor
+# (jumpbox) #
+# AppArmor 서비스 상태 확인
+systemctl status apparmor
+
+# 서비스 활성화 여부 확인 (inactive 예상)
+systemctl is-active apparmor
+```
+
+**실행 결과:**
+```
 ○ apparmor.service - Load AppArmor profiles
-     Loaded: loaded (/lib/systemd/system/apparmor.service; disabled; preset: enabled)
-     Active: inactive (dead) since Mon 2026-01-05 23:09:06 KST; 12min ago
-   Duration: 16.196s
-       Docs: man:apparmor(7)
-             https://gitlab.com/apparmor/apparmor/wikis/home/
-   Main PID: 392 (code=exited, status=0/SUCCESS)
-        CPU: 691us
-
-Jan 05 23:08:50 debian-12 systemd[1]: Starting apparmor.service - Load AppArmor profiles...
-Jan 05 23:08:50 debian-12 apparmor.systemd[392]: Restarting AppArmor
-Jan 05 23:08:50 debian-12 apparmor.systemd[392]: Reloading AppArmor profiles
-Jan 05 23:08:50 debian-12 systemd[1]: Finished apparmor.service - Load AppArmor profiles.
-Jan 05 23:09:06 jumpbox systemd[1]: Stopping apparmor.service - Load AppArmor profiles...
-Jan 05 23:09:06 jumpbox systemd[1]: apparmor.service: Deactivated successfully.
-Jan 05 23:09:06 jumpbox systemd[1]: Stopped apparmor.service - Load AppArmor profiles.
-
-root@jumpbox:~# systemctl is-active apparmor
+# ...
 inactive
 ```
 
@@ -517,10 +496,14 @@ inactive
 모든 호스트가 정상적으로 등록되었다.
 
 ```bash
-root@jumpbox:~# cat /etc/hosts
-127.0.0.1       localhost
+# (jumpbox) #
+# 로컬 DNS 설정 확인
+cat /etc/hosts
+```
 
-# The following lines are desirable for IPv6 capable hosts
+**실행 결과:**
+```
+127.0.0.1       localhost
 ::1     localhost ip6-localhost ip6-loopback
 ff02::1 ip6-allnodes
 ff02::2 ip6-allrouters
@@ -537,15 +520,16 @@ ff02::2 ip6-allrouters
 DNS 설정과 네트워크 통신이 정상적으로 동작한다.
 
 ```bash
-root@jumpbox:~# ping -c 3 server.kubernetes.local
+# (jumpbox) #
+# 호스트명을 이용한 ICMP 에코 요청 테스트
+ping -c 3 server.kubernetes.local
+```
+
+**실행 결과:**
+```
 PING server.kubernetes.local (192.168.10.100) 56(84) bytes of data.
 64 bytes from server.kubernetes.local (192.168.10.100): icmp_seq=1 ttl=64 time=1.18 ms
-64 bytes from server.kubernetes.local (192.168.10.100): icmp_seq=2 ttl=64 time=0.366 ms
-64 bytes from server.kubernetes.local (192.168.10.100): icmp_seq=3 ttl=64 time=0.400 ms
-
---- server.kubernetes.local ping statistics ---
-3 packets transmitted, 3 received, 0% packet loss, time 2016ms
-rtt min/avg/max/mdev = 0.366/0.650/1.184/0.377 ms
+# ...
 ```
 
 

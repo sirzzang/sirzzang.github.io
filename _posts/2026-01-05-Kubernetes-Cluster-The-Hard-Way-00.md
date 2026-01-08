@@ -19,13 +19,29 @@ tags:
 
 <br>
 
+> Kubernetes Cluster: 내 손으로 클러스터 구성하기
+> - **(0) [Overview]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-00 %}) - 실습 소개 및 목표**
+> - (1) [Prerequisites]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-01 %}) - 가상머신 환경 구성
+> - (2) [Set Up The Jumpbox]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-02 %}) - 관리 도구 및 바이너리 준비
+> - (3) [Provisioning Compute Resources]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-03 %}) - 머신 정보 정리 및 SSH 설정
+> - (4.1) [Provisioning a CA and Generating TLS Certificates - 개념]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-1 %}) - TLS/mTLS/X.509/PKI 이해
+> - (4.2) [Provisioning a CA and Generating TLS Certificates - ca.conf]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-2 %}) - OpenSSL 설정 파일 분석
+> - (4.3) [Provisioning a CA and Generating TLS Certificates - 실습]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-3 %}) - 인증서 생성 및 배포
+> - (5) Generating Kubernetes Configuration Files - kubeconfig 생성
+> - (6) Generating the Data Encryption Config and Key - 데이터 암호화 설정
+> - (7) Bootstrapping the etcd Cluster - etcd 클러스터 구성
+> - (8) Bootstrapping the Kubernetes Control Plane - 컨트롤 플레인 구성
+> - (9) Bootstrapping the Kubernetes Worker Nodes - 워커 노드 구성 
+> - (10) Configuring kubectl for Remote Access - kubectl 원격 접속 설정 
+> - (11) Provisioning Pod Network Routes - Pod 네트워크 라우팅 설정
+> - (12) Smoke Test - 클러스터 동작 검증
+
 <br>
+
 
 [Kubernetes The Hard Way](https://github.com/kelseyhightower/kubernetes-the-hard-way/tree/master/units)를 따라 직접 클러스터를 구성해 보자.
 
 일반적으로 쿠버네티스 클러스터는 kubeadm, kubespray, Rancher 등 자동화 도구를 사용하여 설치한다. 하지만 이번 실습에서는 자동화 도구 없이 **손으로 직접 설치**하며 클러스터의 각 구성 요소를 이해하는 것을 목표로 한다. 
-
-> kubeadm, kubespray, rancher 등 자동화 설치 도구들은 본 실습에서는 다루지 않으며, 추후 자동화된 설치 방법을 학습한 후 별도로 정리할 예정이다.
 
 <br>
 
@@ -115,7 +131,26 @@ AI가 나보다 프로그래밍도 더 잘 하는 세상에, 왜 굳이 손 설�
 
 특기할 만한 구성 요소를 설명하면 다음과 같다.
 - **Jumpbox**: 클러스터 외부에서 클러스터 내부 노드들에 접근하기 위한 베스천 호스트(Bastion Host) 역할을 한다. 관리자가 클러스터 내부의 서버들에 SSH 접속하거나 파일을 전송할 때 사용한다.
+- **Server(컨트롤 플레인)**: 클러스터의 두뇌 역할을 하는 컨트롤 플레인(Control Plane) 노드이다. 클러스터 전체를 관리하고 조율하는 핵심 컴포넌트들이 설치된다.
+- **Node-0, Node-1(워커 노드)**: 실제 워크로드(Pod)가 실행되는 워커 노드(Worker Node)이다. 컨트롤 플레인의 지시에 따라 컨테이너를 실행하고 관리한다.
 - **etcd**: Kubernetes 클러스터의 모든 상태 정보를 저장하는 분산 키-값 저장소이다. 원래는 보안을 위해 HTTPS 통신을 해야 하지만, 이 가이드에서는 학습 목적으로 HTTP 통신을 사용할 수도 있다.
+
+<br>
+
+## 각 VM별 설치 컴포넌트
+
+Kubernetes 클러스터는 [여러 컴포넌트](https://v1-32.docs.kubernetes.io/docs/concepts/overview/components/)로 구성된다. 실습을 진행하면서 각 VM에 다음과 같은 컴포넌트들을 설치하게 된다.
+
+### Server: 컨트롤 플레인
+- **kube-apiserver**: 쿠버네티스 API를 노출하는 컴포넌트로, 모든 요청의 진입점 역할을 한다.
+- **kube-controller-manager**: 컨트롤러 프로세스를 실행하며, 클러스터의 상태를 원하는 상태로 유지한다.
+- **kube-scheduler**: 새로 생성된 Pod를 어떤 노드에 배치할지 결정한다.
+- **etcd**: 클러스터의 모든 데이터를 저장하는 분산 키-값 저장소이다.
+
+### Node-0, Node-1: 워커 노드
+- **kubelet**: 각 노드에서 실행되며, Pod 내 컨테이너가 실행되도록 관리한다.
+- **kube-proxy**: 네트워크 규칙을 관리하여 Pod로의 네트워크 통신을 가능하게 한다.
+- **containerd**: 컨테이너 런타임으로, 실제 컨테이너를 실행하고 관리한다.
 
 
 
@@ -126,6 +161,7 @@ AI가 나보다 프로그래밍도 더 잘 하는 세상에, 왜 굳이 손 설�
 실습을 시작하기 전에 [Kubernetes The Hard Way](https://github.com/kelseyhightower/kubernetes-the-hard-way) 레포지토리를 클론한다.
 
 ```bash
+# (host) $
 git clone https://github.com/kelseyhightower/kubernetes-the-hard-way.git
 cd kubernetes-the-hard-way
 ```
@@ -136,15 +172,16 @@ cd kubernetes-the-hard-way
 
 레포지토리에는 다음과 같은 파일과 디렉토리가 포함되어 있다:
 
+```bash
+# (jumpbox) #
+tree -L 1
+```
+
+**실행 결과:**
 ```
 kubernetes-the-hard-way/
 ├── configs/              # 설정 파일들
 ├── docs/                 # 문서 (실습 가이드)
-│   ├── 01-prerequisites.md
-│   ├── 02-client-tools.md
-│   ├── 03-compute-resources.md
-│   ├── 04-certificate-authority.md
-│   └── ...
 ├── units/                # 실습 단위별 가이드
 ├── ca.conf               # CA(인증 기관) 설정 파일
 ├── downloads-amd64.txt   # AMD64 아키텍처용 다운로드 링크

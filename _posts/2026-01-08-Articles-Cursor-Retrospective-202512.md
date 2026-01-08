@@ -23,7 +23,7 @@ tags:
 
 중요한 것은, **무의식적으로 사용했다는 것**이다. 데이터를 분석해보니 최적화 여지가 보였다. 이 글은 그 발견과 개선을 향한 첫걸음이다.
 
-> **원본 데이터 공개**: [Google Drive - 2025-12 폴더](https://drive.google.com/drive/folders/1YhXuwjRksMLKr_pZm-M6c5qZmVOzKzwL)에서 사용량 데이터 CSV 원본과 NotebookLM 분석 보고서를 확인할 수 있다. 단, NotebookLM의 집계 방식이 실제 CSV 데이터와 다소 차이가 있을 수 있으니 참고 바란다.
+> **원본 데이터 공개**: [Google Drive - 2025-12 폴더](https://drive.google.com/drive/folders/1YhXuwjRksMLKr_pZm-M6c5qZmVOzKzwL)에서 사용량 데이터 CSV 원본과 NotebookLM 분석 보고서를 확인할 수 있다. 단, NotebookLM의 집계 방식이 실제 CSV 데이터와 다소 차이가 있을 수 있다.
 
 <br>
 
@@ -171,10 +171,14 @@ Sonnet을 쓸 때는 뭔가 틀리게 말하는 경우도 종종 있었다. 예�
 
 [Cursor Teams Plan 가격 정책](https://cursor.com/docs/account/teams/pricing#how-pricing-works)은 다음과 같다.
 
-- 전체 40달러/월
-- Included 20달러 상당의 사용량 포함
-- On-Demand 20달러 상당 추가 사용 가능
-- Included 20달러 넘어도 On-Demand로 계속 사용 가능
+- 전체 40달러/월 (팀 시트 기준)
+- Included: 사용자당 20달러 상당의 사용량 포함
+  - 사용자별 개별 할당 (팀원 간 이전 불가)
+  - 매 결제 주기마다 리셋
+- On-Demand: Included 사용량 초과 시 자동 전환
+  - 별도 상한 없이 후불 청구
+  - 관리자 대시보드에서 사용자별 추적 가능
+  - Spending Limit 설정으로 제어 가능
 
 ## On-Demand vs. Included
 
@@ -270,5 +274,3 @@ Included 방식이 On-Demand에 비해 압도적인 비용 효율성을 보였�
 이번 회고를 시작으로, 주기적으로 사용량 데이터를 확인하고 회고를 진행할 예정이다. 스스로 만족할 만한 사용법을 정립해 낼 때까지.
 
 320달러는 적지 않은 금액이다. 하지만 이 비용으로 대규모 리팩토링을 완료했고, 데이터 분석을 통해 최적화 여지를 발견했다. **진짜 회고는 나중에 나온다.** 실험을 통해 실제로 비용이 줄어드는지, 품질은 유지되는지 검증할 것이다. 
-
-이 글이 같은 고민을 하는 분들께 도움이 되길 바란다.
