@@ -17,12 +17,32 @@ tags:
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 On-Premise K8s Hands-on Study 1주차 학습 내용을 기반으로 합니다.*
 
+> Kubernetes Cluster: 내 손으로 클러스터 구성하기
+> - (0) [Overview]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-00 %}) - 실습 소개 및 목표
+> - (1) [Prerequisites]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-01 %}) - 가상머신 환경 구성
+> - (2) [Set Up The Jumpbox]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-02 %}) - 관리 도구 및 바이너리 준비
+> - **(3) [Provisioning Compute Resources]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-03 %}) - 머신 정보 정리 및 SSH 설정**
+> - (4.1) [Provisioning a CA and Generating TLS Certificates - 개념]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-1 %}) - TLS/mTLS/X.509/PKI 이해
+> - (4.2) [Provisioning a CA and Generating TLS Certificates - ca.conf]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-2 %}) - OpenSSL 설정 파일 분석
+> - (4.3) [Provisioning a CA and Generating TLS Certificates - 실습]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-3 %}) - 인증서 생성 및 배포
+> - (5) Generating Kubernetes Configuration Files - kubeconfig 생성
+> - (6) Generating the Data Encryption Config and Key - 데이터 암호화 설정
+> - (7) Bootstrapping the etcd Cluster - etcd 클러스터 구성
+> - (8) Bootstrapping the Kubernetes Control Plane - 컨트롤 플레인 구성
+> - (9) Bootstrapping the Kubernetes Worker Nodes - 워커 노드 구성 
+> - (10) Configuring kubectl for Remote Access - kubectl 원격 접속 설정 
+> - (11) Provisioning Pod Network Routes - Pod 네트워크 라우팅 설정
+> - (12) Smoke Test - 클러스터 동작 검증
 
 <br>
 
 # TL;DR
 
 이번 글의 목표는 **클러스터 구성에 필요한 컴퓨트 리소스(VM) 정보 정리 및 SSH 접속 환경 설정**이다. [Kubernetes the Hard Way 튜토리얼의 Provisioning Compute Resources 단계](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/03-compute-resources.md)를 따라 진행한다.
+
+- 클러스터 머신 정보를 담은 Machine Database(`machines.txt`) 구축
+- Jumpbox에서 각 노드로의 비밀번호 없는 SSH 키 인증 설정
+- 호스트명(FQDN) 기반 네트워크 접근성 검증
 
 ![kubernetes-the-hard-way-cluster-structure-3]({{site.url}}/assets/images/kubernetes-the-hard-way-cluster-structure-3.png)
 
@@ -68,7 +88,8 @@ Pod 서브넷이란, 각 워커 노드에 할당될 Pod 네트워크 대역을 �
 `machines.txt` 파일을 생성하여 각 머신의 정보를 저장한다:
 
 ```bash
-# Machine Database 생성
+# (jumpbox) #
+# machines.txt 생성
 cat <<EOF > machines.txt
 192.168.10.100 server.kubernetes.local server
 192.168.10.101 node-0.kubernetes.local node-0 10.200.0.0/24
@@ -77,6 +98,10 @@ EOF
 
 # 생성 확인
 cat machines.txt
+```
+
+**실행 결과:**
+```
 192.168.10.100 server.kubernetes.local server
 192.168.10.101 node-0.kubernetes.local node-0 10.200.0.0/24
 192.168.10.102 node-1.kubernetes.local node-1 10.200.1.0/24
@@ -104,13 +129,16 @@ cat machines.txt
 
 따라서 간단히 설정만 확인한다.
 ```bash
+# (jumpbox) #
+# SSH 설정에서 암호 인증 및 root 로그인 허용 여부 확인
 grep "^[^#]" /etc/ssh/sshd_config | grep -E "(PasswordAuthentication|PermitRootLogin)"
-...
+```
+
+**실행 결과:**
+```
 PasswordAuthentication yes
 PermitRootLogin yes
 ```
-- `PasswordAuthentication yes`: 비밀번호 기반 인증 활성화
-- `PermitRootLogin yes`: root 계정 SSH 접근 허용
 
 <br>
 
@@ -142,28 +170,19 @@ systemctl restart sshd
 비밀번호 없이 SSH 접속을 위해 SSH 키 쌍을 생성하고 각 머신에 공개키를 분배한다. 이를 통해 이후 작업에서 매번 비밀번호를 입력할 필요 없이 자동화된 스크립트 실행이 가능하다.
 
 ```bash
-root@jumpbox:~/kubernetes-the-hard-way# ssh-keygen -t rsa -N "" -f /root/.ssh/id_rsa
-ls -l /root/.ssh
--rw------- 1 root root 2602 Jan  2 21:07 id_rsa
--rw-r--r-- 1 root root  566 Jan  2 21:07 id_rsa.pub
+# (jumpbox) #
+# SSH 키 쌍 생성 (-N "": 비밀번호 없음)
+ssh-keygen -t rsa -N "" -f /root/.ssh/id_rsa
+```
+
+**실행 결과:**
+```
 Generating public/private rsa key pair.
 Your identification has been saved in /root/.ssh/id_rsa
 Your public key has been saved in /root/.ssh/id_rsa.pub
 The key fingerprint is:
 SHA256:aDLSpbBcevXmv8+EfobiYSPjD82yEindP9rbkcxcEN4 root@jumpbox
-The key's randomart image is:
-+---[RSA 3072]----+
-|          .      |
-|         . o     |
-|  . . o   o E    |
-| . * + o   .     |
-|  =.*oo S   .    |
-|  .o++.= + +     |
-|   . .=.B B..    |
-|    .. O+*.+o    |
-|     .++=+==o    |
-+----[SHA256]-----+
-total 8
+...
 ```
 
 ### SSH 키 복사 및 authorized_keys 설정
@@ -171,14 +190,17 @@ total 8
 먼저, 생성한 공개키를 각 머신에 복사하여 비밀번호 없이 SSH 접속이 가능하도록 설정한다.
 
 ```bash
-# 공개키를 각 머신에 복사
+# (jumpbox) #
 while read IP FQDN HOST SUBNET; do
-  sshpass -p 'qwe123' ssh-copy-id -o StrictHostKeyChecking=no root@${IP}
+  # sshpass -p 'qwe123': 지정된 비밀번호로 자동 인증
+  # -o StrictHostKeyChecking=no: 처음 접속 시 호스트 키 확인(yes/no) 건너뛰기
+  # ssh-copy-id: 로컬의 id_rsa.pub 내용을 원격 서버의 authorized_keys에 추가
+  sshpass -p 'qwe123' \
+    ssh-copy-id -o StrictHostKeyChecking=no \
+    root@${IP}
 done < machines.txt
-/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/root/.ssh/id_rsa.pub"
-Number of key(s) added: 1
-...
 ```
+
 - `ssh-copy-id` 명령어
   - 로컬의 공개키(`~/.ssh/id_rsa.pub`)를 원격 서버의 `~/.ssh/authorized_keys` 파일에 자동으로 추가
   - `authorized_keys`에 공개키가 등록되면, 해당 개인키를 가진 클라이언트는 비밀번호 없이 SSH 접속 가능
@@ -191,9 +213,15 @@ Number of key(s) added: 1
 이후, authorized_keys 파일을 확인해 보자.
 
 ```bash
+# (jumpbox) #
+# 키 복사 확인
 while read IP FQDN HOST SUBNET; do
   ssh -n root@${IP} cat /root/.ssh/authorized_keys
 done < machines.txt
+```
+
+**실행 결과:**
+```
 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCb1Odbh5jtHiH/H5MOVb34XHvYU/lm45T9/4CJPkjipmQho9zyQJ2slg0+GimVKP+y3Yx633IyzFCEjUTcumYGZtFHotKnVUcEmwhZCfW9Cu9mSag5CATtdR94DOL8WDO20mQDUeJ/DkXsiHNO+uUw9JAD+RuG8LVCw9FJ7kX0U36e55X74Jd/bCYbXhmTTRWyJn09SRdmoMDqFscuQi7iv+JZmXonS+fSZfidpqRJFg/xbLtYAjyJI71qBdLe/Hmk3H/nRYAHEciQw1LRHVFFwCdvUbb0BNtGQRQJ/eJxO0IiMJ9dqHq2L1/WUN8em8YUm3dMWtft/zGK+ZF1sRuDzSKRqGsunhkER+jYrB2EwLGZEHJTJ/CbBOiq+0ZASv6UKRgyLS+tf3qk8joBLYUpxvLpt7VzpPqicTUXQ4tN2dvGWH8JRjI0b+di1NBO7npteNXwXwnzklag6d25wnuxtqScX1ShJ212ErAccBlcYmiREITmcw5Y3GcxlltIfZc= root@jumpbox
 ...
 ```
@@ -207,13 +235,20 @@ ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCb1Odbh5jtHiH/H5MOVb34XHvYU/lm45T9/4CJPkji
 SSH 키 분배가 완료되었으므로, 이제 비밀번호 없이 각 머신에 접속할 수 있다. 머신 데이터베이스에서 IP를 읽어 SSH 접속을 확인한다:
 
 ```bash
+# (jumpbox) #
+# 비밀번호 없이 각 노드의 hostname 출력 테스트
 while read IP FQDN HOST SUBNET; do
   ssh -n root@${IP} hostname
 done < machines.txt
+```
+
+**실행 결과:**
+```
 server
 node-0
 node-1
 ```
+
 <br>
 
 ## Hostname 설정
@@ -231,13 +266,14 @@ Hostname이란, **시스템의 이름을 나타내는 식별자**로, 네트워�
 앞에서와 마찬가지로, 설정이 잘 되었는지만 확인한다.
 
 ```bash
-# FQDN 확인
+# (jumpbox) #
+# 모든 노드에서 FQDN(정규화된 도메인 이름) 확인
 while read IP FQDN HOST SUBNET; do
   ssh -n root@${IP} hostname --fqdn
 done < machines.txt
 ```
 
-**출력:**
+**실행 결과:**
 ```
 server.kubernetes.local
 node-0.kubernetes.local
@@ -276,13 +312,14 @@ done < machines.txt
 역시나 우리 실습 환경에서는 이미 `/etc/hosts` 파일이 설정되어 있다. 설정 확인 및 호스트명으로 SSH 접속이 가능한지 테스트한다.
 
 ```bash
-# 각 머신의 /etc/hosts 확인
+# (jumpbox) #
+# 각 노드의 hosts 파일 내용 확인
 while read IP FQDN HOST SUBNET; do
   ssh -n root@${IP} cat /etc/hosts
 done < machines.txt
 ```
 
-**출력 (server 머신 예시):**
+**실행 결과:**
 ```
 127.0.0.1       localhost
 ::1     localhost ip6-localhost ip6-loopback
@@ -295,13 +332,14 @@ ff02::2 ip6-allrouters
 ```
 
 ```bash
-# 호스트명으로 SSH 접속 테스트
+# (jumpbox) #
+# 호스트명으로 접속 테스트
 while read IP FQDN HOST SUBNET; do
   ssh -n root@${HOST} hostname
 done < machines.txt
 ```
 
-**출력:**
+**실행 결과:**
 ```
 server
 node-0
@@ -338,6 +376,7 @@ done < machines.txt
 **검증:**
 
 ```bash
+# (jumpbox) #
 # IP로 접속 확인
 while read IP FQDN HOST SUBNET; do
   ssh -n root@${IP} hostname
@@ -347,6 +386,13 @@ done < machines.txt
 ssh root@server hostname
 ssh root@node-0 hostname
 ssh root@node-1 hostname
+```
+
+**실행 결과:**
+```
+server
+node-0
+node-1
 ```
 
 모든 머신에 IP와 호스트명 모두로 SSH 접속이 가능하면 성공이다.
