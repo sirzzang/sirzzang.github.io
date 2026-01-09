@@ -10,6 +10,7 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-1
+hidden: true
 
 ---
 
@@ -83,7 +84,7 @@ EOF
 cat machines.txt
 ```
 
-**실행 결과:**
+****
 ```
 192.168.10.100 server.kubernetes.local server
 192.168.10.101 node-0.kubernetes.local node-0 10.200.0.0/24
@@ -117,7 +118,7 @@ cat machines.txt
 grep "^[^#]" /etc/ssh/sshd_config | grep -E "(PasswordAuthentication|PermitRootLogin)"
 ```
 
-**실행 결과:**
+****
 ```
 PasswordAuthentication yes
 PermitRootLogin yes
@@ -158,7 +159,7 @@ systemctl restart sshd
 ssh-keygen -t rsa -N "" -f /root/.ssh/id_rsa
 ```
 
-**실행 결과:**
+****
 ```
 Generating public/private rsa key pair.
 Your identification has been saved in /root/.ssh/id_rsa
@@ -203,7 +204,7 @@ while read IP FQDN HOST SUBNET; do
 done < machines.txt
 ```
 
-**실행 결과:**
+****
 ```
 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCb1Odbh5jtHiH/H5MOVb34XHvYU/lm45T9/4CJPkjipmQho9zyQJ2slg0+GimVKP+y3Yx633IyzFCEjUTcumYGZtFHotKnVUcEmwhZCfW9Cu9mSag5CATtdR94DOL8WDO20mQDUeJ/DkXsiHNO+uUw9JAD+RuG8LVCw9FJ7kX0U36e55X74Jd/bCYbXhmTTRWyJn09SRdmoMDqFscuQi7iv+JZmXonS+fSZfidpqRJFg/xbLtYAjyJI71qBdLe/Hmk3H/nRYAHEciQw1LRHVFFwCdvUbb0BNtGQRQJ/eJxO0IiMJ9dqHq2L1/WUN8em8YUm3dMWtft/zGK+ZF1sRuDzSKRqGsunhkER+jYrB2EwLGZEHJTJ/CbBOiq+0ZASv6UKRgyLS+tf3qk8joBLYUpxvLpt7VzpPqicTUXQ4tN2dvGWH8JRjI0b+di1NBO7npteNXwXwnzklag6d25wnuxtqScX1ShJ212ErAccBlcYmiREITmcw5Y3GcxlltIfZc= root@jumpbox
 ...
@@ -225,7 +226,7 @@ while read IP FQDN HOST SUBNET; do
 done < machines.txt
 ```
 
-**실행 결과:**
+****
 ```
 server
 node-0
@@ -256,7 +257,7 @@ while read IP FQDN HOST SUBNET; do
 done < machines.txt
 ```
 
-**실행 결과:**
+****
 ```
 server.kubernetes.local
 node-0.kubernetes.local
@@ -302,7 +303,7 @@ while read IP FQDN HOST SUBNET; do
 done < machines.txt
 ```
 
-**실행 결과:**
+****
 ```
 127.0.0.1       localhost
 ::1     localhost ip6-localhost ip6-loopback
@@ -322,7 +323,7 @@ while read IP FQDN HOST SUBNET; do
 done < machines.txt
 ```
 
-**실행 결과:**
+****
 ```
 server
 node-0
@@ -371,7 +372,7 @@ ssh root@node-0 hostname
 ssh root@node-1 hostname
 ```
 
-**실행 결과:**
+****
 ```
 server
 node-0

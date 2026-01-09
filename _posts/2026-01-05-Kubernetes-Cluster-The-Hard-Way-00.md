@@ -157,7 +157,7 @@ cd kubernetes-the-hard-way
 tree -L 1
 ```
 
-**실행 결과:**
+****
 ```
 kubernetes-the-hard-way/
 ├── configs/              # 설정 파일들
