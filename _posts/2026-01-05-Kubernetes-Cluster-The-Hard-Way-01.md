@@ -114,7 +114,7 @@ brew install --cask virtualbox
 VBoxManage --version
 ```
 
-**실행 결과:**
+****
 ```
 7.2.4r170995
 ```
@@ -146,7 +146,7 @@ brew install --cask vagrant
 vagrant version
 ```
 
-**실행 결과:**
+****
 ```
 Installed Version: 2.4.9
 Latest Version: 2.4.9
@@ -388,7 +388,7 @@ vagrant box list
 vagrant status
 ```
 
-**실행 결과:**
+****
 ```
 bento/debian-12 (virtualbox, 202510.26.0, (arm64))
 
@@ -412,7 +412,7 @@ node-1                    running (virtualbox)
 vagrant ssh jumpbox
 ```
 
-**실행 결과:**
+****
 ```
 Linux jumpbox 6.1.0-40-arm64 #1 SMP Debian 6.1.153-1 (2025-09-20) aarch64
 # ...
@@ -429,7 +429,7 @@ Debian 12 (bookworm)가 정상적으로 설치되었다.
 cat /etc/os-release
 ```
 
-**실행 결과:**
+****
 ```
 PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
 NAME="Debian GNU/Linux"
@@ -458,7 +458,7 @@ systemctl status apparmor
 systemctl is-active apparmor
 ```
 
-**실행 결과:**
+****
 ```
 ○ apparmor.service - Load AppArmor profiles
 # ...
@@ -477,7 +477,7 @@ inactive
 cat /etc/hosts
 ```
 
-**실행 결과:**
+****
 ```
 127.0.0.1       localhost
 ::1     localhost ip6-localhost ip6-loopback
@@ -501,7 +501,7 @@ DNS 설정과 네트워크 통신이 정상적으로 동작한다.
 ping -c 3 server.kubernetes.local
 ```
 
-**실행 결과:**
+****
 ```
 PING server.kubernetes.local (192.168.10.100) 56(84) bytes of data.
 64 bytes from server.kubernetes.local (192.168.10.100): icmp_seq=1 ttl=64 time=1.18 ms

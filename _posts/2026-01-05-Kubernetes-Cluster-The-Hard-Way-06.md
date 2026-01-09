@@ -10,6 +10,7 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-1
+hidden: true
 
 ---
 
@@ -328,7 +329,7 @@ providers:
 
 <br>
 
-### aescbc provider
+#### aescbc provider
 
 **aescbc**는 AES-CBC(Advanced Encryption Standard - Cipher Block Chaining) 방식으로 데이터를 암호화하는 provider다.
 

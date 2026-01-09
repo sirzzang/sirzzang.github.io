@@ -10,6 +10,7 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-1
+hidden: true
 
 ---
 

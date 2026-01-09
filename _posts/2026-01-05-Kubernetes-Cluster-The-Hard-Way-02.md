@@ -10,6 +10,7 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-1
+hidden: true
 
 ---
 
@@ -71,7 +72,7 @@ root 계정 설정은 [이전 글의 Prerequisites 단계]({% post_url 2026-01-0
 cat /home/vagrant/.bashrc | tail -n 1
 ```
 
-**실행 결과:**
+****
 ```
 sudo su -
 ```
@@ -115,7 +116,7 @@ cd kubernetes-the-hard-way
 tree -L 2
 ```
 
-**실행 결과:**
+****
 ```
 .
 ├── ca.conf
@@ -145,7 +146,7 @@ tree -L 2
 dpkg --print-architecture 
 ```
 
-**실행 결과:**
+****
 ```
 arm64
 ```
@@ -160,7 +161,7 @@ arm64
 cat downloads-$(dpkg --print-architecture).txt
 ```
 
-**실행 결과:**
+****
 ```
 https://dl.k8s.io/v1.32.3/bin/linux/arm64/kubectl
 https://dl.k8s.io/v1.32.3/bin/linux/arm64/kube-apiserver
@@ -233,7 +234,7 @@ tar -xvf downloads/etcd-v3.6.0-rc.3-linux-${ARCH}.tar.gz \
 tree downloads/worker/
 ```
 
-**실행 결과:**
+****
 ```
 downloads/worker/
 ├── containerd
@@ -273,7 +274,7 @@ tree downloads/controller/
 tree downloads/worker/
 ```
 
-**실행 결과:**
+****
 ```
 downloads/client
 ├── etcdctl
@@ -322,7 +323,7 @@ cp downloads/client/kubectl /usr/local/bin/
 kubectl version --client
 ```
 
-**실행 결과:**
+****
 ```
 Client Version: v1.32.3
 Kustomize Version: v5.5.0
@@ -340,7 +341,7 @@ Kustomize Version: v5.5.0
 kubectl cluster-info
 ```
 
-**실행 결과:**
+****
 ```
 The connection to the server localhost:8080 was refused - did you specify the right host or port?
 ```
