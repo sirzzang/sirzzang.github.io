@@ -17,23 +17,6 @@ tags:
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 On-Premise K8s Hands-on Study 1주차 학습 내용을 기반으로 합니다.*
 
-> Kubernetes Cluster: 내 손으로 클러스터 구성하기
-> - (0) [Overview]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-00 %}) - 실습 소개 및 목표
-> - (1) [Prerequisites]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-01 %}) - 가상머신 환경 구성
-> - (2) [Set Up The Jumpbox]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-02 %}) - 관리 도구 및 바이너리 준비
-> - **(3) [Provisioning Compute Resources]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-03 %}) - 머신 정보 정리 및 SSH 설정**
-> - (4.1) [Provisioning a CA and Generating TLS Certificates - 개념]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-1 %}) - TLS/mTLS/X.509/PKI 이해
-> - (4.2) [Provisioning a CA and Generating TLS Certificates - ca.conf]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-2 %}) - OpenSSL 설정 파일 분석
-> - (4.3) [Provisioning a CA and Generating TLS Certificates - 실습]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-3 %}) - 인증서 생성 및 배포
-> - (5) Generating Kubernetes Configuration Files - kubeconfig 생성
-> - (6) Generating the Data Encryption Config and Key - 데이터 암호화 설정
-> - (7) Bootstrapping the etcd Cluster - etcd 클러스터 구성
-> - (8) Bootstrapping the Kubernetes Control Plane - 컨트롤 플레인 구성
-> - (9) Bootstrapping the Kubernetes Worker Nodes - 워커 노드 구성 
-> - (10) Configuring kubectl for Remote Access - kubectl 원격 접속 설정 
-> - (11) Provisioning Pod Network Routes - Pod 네트워크 라우팅 설정
-> - (12) Smoke Test - 클러스터 동작 검증
-
 <br>
 
 # TL;DR

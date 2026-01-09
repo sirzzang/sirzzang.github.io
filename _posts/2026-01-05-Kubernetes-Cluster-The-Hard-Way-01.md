@@ -18,25 +18,6 @@ tags:
 
 <br>
 
-> Kubernetes Cluster: 내 손으로 클러스터 구성하기
-> - (0) [Overview]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-00 %}) - 실습 소개 및 목표
-> - **(1) [Prerequisites]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-01 %}) - 가상머신 환경 구성**
-> - (2) [Set Up The Jumpbox]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-02 %}) - 관리 도구 및 바이너리 준비
-> - (3) [Provisioning Compute Resources]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-03 %}) - 머신 정보 정리 및 SSH 설정
-> - (4.1) [Provisioning a CA and Generating TLS Certificates - 개념]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-1 %}) - TLS/mTLS/X.509/PKI 이해
-> - (4.2) [Provisioning a CA and Generating TLS Certificates - ca.conf]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-2 %}) - OpenSSL 설정 파일 분석
-> - (4.3) [Provisioning a CA and Generating TLS Certificates - 실습]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-3 %}) - 인증서 생성 및 배포
-> - (5) Generating Kubernetes Configuration Files - kubeconfig 생성
-> - (6) Generating the Data Encryption Config and Key - 데이터 암호화 설정
-> - (7) Bootstrapping the etcd Cluster - etcd 클러스터 구성
-> - (8) Bootstrapping the Kubernetes Control Plane - 컨트롤 플레인 구성
-> - (9) Bootstrapping the Kubernetes Worker Nodes - 워커 노드 구성 
-> - (10) Configuring kubectl for Remote Access - kubectl 원격 접속 설정 
-> - (11) Provisioning Pod Network Routes - Pod 네트워크 라우팅 설정
-> - (12) Smoke Test - 클러스터 동작 검증
-
-<br>
-
 # TL;DR
 
 이번 글의 목표는 **실습용 가상 머신 준비**다. [Kubernetes the Hard Way 튜토리얼의 Prerequisites 단계](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/01-prerequisites.md)를 따라 진행한다.
@@ -94,10 +75,11 @@ Vagrant VM은 기본적으로 최소 2개의 네트워크 인터페이스(NIC)�
   - **용도**: Vagrant 관리 전용 (SSH 접속, 프로비저닝 등)
   - **네트워크 타입**: NAT
   - **IP 주소**: 모든 Vagrant VM에서 동일하게 `10.0.2.15` 사용
-  - **특징**: 
+  - **특징**
     - Vagrant가 VM을 제어하기 위해 예약된 인터페이스
     - 사용자가 직접 설정하거나 변경할 수 없음
     - VM 간 통신에는 사용되지 않음
+    
 2. 두 번째 NIC 이후: NIC2 (eth1 또는 enp0s8)
   - **용도**: 실제 네트워크 통신 (VM 간 통신, 호스트-VM 통신 등)
   - **네트워크 타입**: Vagrantfile에서 정의한 설정 (private_network, public_network 등)
@@ -126,7 +108,7 @@ VirtualBox는 Oracle에서 개발한 오픈소스 가상화 소프트웨어다. 
 ```bash
 # (host) $
 # --cask: GUI 애플리케이션 설치를 위한 Homebrew 옵션
-brew install --cask virtualbox
+brew install --cask virtualbox 
 
 # 설치 버전 확인
 VBoxManage --version
@@ -137,18 +119,12 @@ VBoxManage --version
 7.2.4r170995
 ```
 
-> *참고*: brew install --cask 옵션
->
-> - Homebrew에서 GUI 애플리케이션을 설치할 때 사용하는 옵션
-> - `brew install`: CLI 도구나 라이브러리 설치
-> - `brew install --cask`: `.app` 형태의 macOS 애플리케이션 설치
-> - VirtualBox는 GUI 애플리케이션이므로 `--cask` 옵션 필요
-
-설치한 VirtualBox는 7.2.4버전이다.
-- 2024년 12월에 릴리즈된 최신 버전
-- M1/M2/M3 등 Apple Silicon 지원 개선
-- 주요 버그 수정 및 성능 개선
-- 상세 변경사항: [Changelog](https://www.virtualbox.org/wiki/Changelog)
+> 참고: VirtualBox 버전
+> 설치한 VirtualBox는 7.2.4버전이다.
+> - 2024년 12월에 릴리즈된 최신 버전
+> - M1/M2/M3 등 Apple Silicon 지원 개선
+> - 주요 버그 수정 및 성능 개선
+> - 상세 변경사항: [Changelog](https://www.virtualbox.org/wiki/Changelog)
 
 <br>
 
