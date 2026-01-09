@@ -17,25 +17,6 @@ tags:
 
 <br>
 
-> Kubernetes Cluster: 내 손으로 클러스터 구성하기
-> - (0) [Overview]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-00 %}) - 실습 소개 및 목표
-> - (1) [Prerequisites]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-01 %}) - 가상머신 환경 구성
-> - (2) [Set Up The Jumpbox]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-02 %}) - 관리 도구 및 바이너리 준비
-> - (3) [Provisioning Compute Resources]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-03 %}) - 머신 정보 정리 및 SSH 설정
-> - (4.1) [Provisioning a CA and Generating TLS Certificates - 개념]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-1 %}) - TLS/mTLS/X.509/PKI 이해
-> - **(4.2) [Provisioning a CA and Generating TLS Certificates - ca.conf]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-2 %}) - OpenSSL 설정 파일 분석**
-> - (4.3) [Provisioning a CA and Generating TLS Certificates - 실습]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-3 %}) - 인증서 생성 및 배포
-> - (5) Generating Kubernetes Configuration Files - kubeconfig 생성
-> - (6) Generating the Data Encryption Config and Key - 데이터 암호화 설정
-> - (7) Bootstrapping the etcd Cluster - etcd 클러스터 구성
-> - (8) Bootstrapping the Kubernetes Control Plane - 컨트롤 플레인 구성
-> - (9) Bootstrapping the Kubernetes Worker Nodes - 워커 노드 구성 
-> - (10) Configuring kubectl for Remote Access - kubectl 원격 접속 설정 
-> - (11) Provisioning Pod Network Routes - Pod 네트워크 라우팅 설정
-> - (12) Smoke Test - 클러스터 동작 검증
-
-<br>
-
 # TL;DR
 
 이번 글의 목표는 **OpenSSL 설정 파일(ca.conf)의 구조 이해**다. [Kubernetes the Hard Way 튜토리얼의 Provisioning a CA and Generating TLS Certificates 단계](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/04-certificate-authority.md)에서 사용하는 `ca.conf` 파일을 분석한다.
