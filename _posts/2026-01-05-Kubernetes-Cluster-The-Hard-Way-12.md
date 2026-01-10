@@ -13,8 +13,6 @@ tags:
 
 ---
 
-<br>
-
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 On-Premise K8s Hands-on Study 1주차 학습 내용을 기반으로 합니다.*
 
 <br>
@@ -75,7 +73,7 @@ type: Opaque
 
 출력 결과를 살펴보면:
 
-- **type: Opaque**: Kubernetes Secret의 기본 타입이다. "불투명한"이라는 의미로, 임의의 사용자 정의 데이터를 저장할 수 있음을 나타낸다. 다른 타입으로는 `kubernetes.io/tls`(TLS 인증서), `kubernetes.io/dockerconfigjson`(Docker 레지스트리 인증) 등이 있다.
+- **type: Opaque**: Kubernetes Secret의 기본 타입이다. `불투명한`이라는 의미로, 임의의 사용자 정의 데이터를 저장할 수 있음을 나타낸다. 다른 타입으로는 `kubernetes.io/tls`(TLS 인증서), `kubernetes.io/dockerconfigjson`(Docker 레지스트리 인증) 등이 있다.
 - **data.mykey: bXlkYXRh**: 이것은 암호화가 아니라 Base64 인코딩된 값이다.
 
 Base64로 디코딩하면 원본 데이터를 확인할 수 있다.
@@ -85,13 +83,70 @@ kubectl get secret kubernetes-the-hard-way -o jsonpath='{.data.mykey}' | base64 
 mydata
 ```
 
-> **Base64 인코딩 vs 암호화**
+> 참고: **Base64 인코딩 vs 암호화**
 > 
 > `bXlkYXRh`는 Base64 인코딩된 값으로, 누구나 디코딩할 수 있다. 이것은 Kubernetes API를 통해 반환되는 데이터 형식일 뿐, **실제 암호화는 etcd 저장 시점에 적용**된다. API 응답에서 Base64로 보이는 것은 kubectl이 이미 복호화된 데이터를 Base64 인코딩해서 보여주는 것이다.
 
+<br>
+
+### kubectl로 데이터를 확인할 수 있는 이유
+
+Base64 디코딩으로 Secret 데이터를 쉽게 볼 수 있다는 점이, 이러한 의문이 들게 한다: *etcd에 암호화해서 저장해도 kubectl로 보면 평문인데, 뭐하러 저장하나?*
+
+<br>
+이러한 의문은 encryption-at-rest의 핵심을 건드린다. 결론부터 말하면, kubectl로 볼 수 있는 것은 평문이 맞다. encryption-at-rest는 그것을 막기 위한 기능이 아니기 때문이다.
+
+encryption-at-rest 암호화는 저장된 데이터를 암호화하는 것이었다. 따라서 이것이 막고자 하는 것은 **etcd를 우회해서 데이터를 읽는 경우**이다. 예를 들면, 아래와 같은 경우를 막겠다는 것이다:
+1. 디스크 및 스냅샷 유출
+   - etcd data directory 백업
+   - VM snapshot
+   - 클라우드 스토리지 스냅샷 (EBS, SAN 등)
+2. etcd 직접 접근
+   - etcd 인증서 유출
+   - etcd endpoint 유출
+   - 방화벽 설정 오류
+
+만약 암호화가 없다면 위와 같은 상황에 공격자가 Secret 등 민감 리소스를 모두 평문으로 볼 수 있게 된다. 암호화가 있으면, `k8s:enc:aescbc:v1:key1:...` 형태의 암호화된 데이터밖에 보지 못한다.
+> 이런 일이 언제 발생하느냐 싶겠지만, 퇴사자가 백업 데이터를 보유하고 있는 경우처럼 왕왕 발생한다.
+
+<br>
+
+그러니 encryption-at-rest는 아래와 같은 상황을 막지 못한다:
+- kubectl get secret으로 조회
+- kube-apiserver 접근
+- RBAC 권한을 가진 사용자의 조회
+- 클러스터 내부에서의 정상적인 접근
+
+막지 못한다기보다는, 막지 않는다는 것이 더 정확한 표현일 수 있겠다. 이것들은 모두 API 레벨에서 담당하는 보안 영역이기 때문이다.
+
+<br>
+
+원래의 의문으로 돌아가 보자. API 접근 권한이 있는 kubectl로 접속했을 때 시크릿 데이터가 평문으로 조회되어 보이는 것은 당연한 것이다. 여기서 다음과 같은 깨달음을 얻을 수 있다:
+- 폐쇄망 환경이나 온프레미스에서 물리적 통제가 확실하다면 etcd 데이터 암호화는 중요도가 낮아진다. 반대로 클라우드 환경이나 백업을 외부에 보관하는 경우 필수적이다. 
+- 클러스터 내 API 서버(`kube-apiserver`)를 거치는 정상 경로에서는 복호화된 데이터를 반환하는 것이 설계상 의도된 동작이다.
+
+<br>
+
+### API 보안과 저장소 보안의 분리
+
+> Kuberenetes를 살펴 보다 보면, 곳곳에 계층 분리와 추상화 원리가 녹아 있는 것을 확인할 수 있다. 볼 때마다 놀라울 따름이다.
+
+[앞서 살펴봤지만](https://sirzzang.github.io/kubernetes/Kubernetes-Cluster-The-Hard-Way-06/#%EC%B1%85%EC%9E%84-%EB%B6%84%EB%A6%AC-%EA%B5%AC%EC%A1%B0), 다시 한 번 짚고 넘어가자. Kubernetes는 API 보안과 저장소 보안을 철저히 분리한다. 저장 암호화는 API 레이어와 무관하다.
+
+| 계층 | 담당 | 참고 |
+|---|---|---|
+| 인증 | TLS, authentication | 신원 확인 |
+| 권한 | RBAC | API 수준 접근 제어 |
+| API 응답 | kube-apiserver | 복호화된 데이터 반환 |
+| 저장 | etcd | encryption-at-rest |
+
+
+
+<br>
+
 ## etcd에서 직접 확인
 
-etcdctl로 etcd에 저장된 실제 데이터를 확인한다. Kubernetes API를 우회하여 raw 데이터를 조회하는 방식이다.
+etcdctl로 etcd에 저장된 실제 데이터를 확인한다.
 
 ```bash
 ssh root@server \
@@ -107,7 +162,7 @@ ssh root@server \
 ...
 ```
 
-hexdump 결과를 분석하면:
+hexdump 결과를 분석해 보면 다음과 같다.
 
 | 구성 요소 | 설명 |
 | --- | --- |
@@ -118,11 +173,18 @@ hexdump 결과를 분석하면:
 | `key1` | encryption-config.yaml에서 정의한 키 이름 |
 | 이후 데이터 | 실제 암호화된 바이너리 데이터 (`.`으로 표시된 부분) |
 
-etcd key 이름(`/registry/secrets/...`)은 항상 평문으로 저장된다. 어떤 리소스인지 식별해야 하기 때문이다. 반면 value 부분은 `k8s:enc:aescbc:v1:key1:` 이후의 바이너리 데이터가 AES-CBC로 암호화되어 있어 해독 불가능하다.
+- etcd key 이름(`/registry/secrets/...`)은 항상 평문으로 저장된다. 어떤 리소스인지 식별해야 하기 때문이다.
+- etcd value 부분은 `k8s:enc:aescbc:v1:key1:` 이후의 바이너리 데이터가 AES-CBC로 암호화되어 있어 해독 불가능하다.
 
-> **etcdctl 직접 조회가 강력한 이유**
-> 
-> `etcdctl get` 명령어는 Kubernetes API를 완전히 우회하여 etcd에 저장된 raw 데이터를 직접 조회한다. RBAC, Admission Controller, API 인증 등 모든 Kubernetes 보안 계층을 건너뛰므로, etcd 접근 권한만 있으면 모든 클러스터 데이터에 접근할 수 있다. 이것이 etcd의 접근 제어가 매우 중요한 이유다.
+<br>
+
+### 주의: etcdctl 직접 조회의 위험성
+
+`etcdctl get` 명령어는 Kubernetes API를 완전히 우회하여 etcd에 저장된 raw 데이터를 직접 조회한다.
+
+사실 이건 정말 강력한 동작이다. 앞에서 이야기했던 것처럼, encryption-at-rest 원칙을 우회하는 것이기 때문이다. RBAC, Admission Controller, API 인증 등 모든 Kubernetes 보안 계층을 건너뛰고, etcd 접근 권한만 있으면 모든 클러스터 데이터에 접근할 수 있음을 보여 준다.
+
+지금은 실습 목적으로 etcdctl을 이용해 직접 조회하고 있지만, 프로덕션 레벨에서는 이것이 하나의 공격 방식이 될 수 있다. 이것은 운영 환경에서의 etcd 접근 제어가 매우 중요함을 보여주는 예시이기도 하다.
 
 <br>
 
@@ -160,11 +222,11 @@ nginx-5869d7778c-b28m4   0/1     ContainerCreating   0          14s   <none>    
 nginx-5869d7778c-gnscb   1/1     Running             0          31s   10.200.1.2   node-1   <none>           <none>
 ```
 
-kube-scheduler가 Pod를 node-0, node-1에 각각 분산 배치했다. 각 Pod는 해당 노드의 PodCIDR 대역에서 IP를 할당받는다 (node-0: 10.200.0.x, node-1: 10.200.1.x).
+kube-scheduler가 Pod를 node-0, node-1에 각각 분산 배치했다. 각 Pod는 해당 노드의 PodCIDR 대역에서 IP를 할당받는다 (node-0: `10.200.0.x`, node-1: `10.200.1.x`).
 
 ## crictl로 컨테이너 확인
 
-[crictl](https://sirzzang.github.io/dev/Dev-Container-Duplicate-Container-Images-2/#crictl)을 사용하여 각 노드에서 실행 중인 컨테이너를 직접 확인한다.
+crictl([참고: 컨테이너 런타임 CLI](https://sirzzang.github.io/dev/Dev-Container-Duplicate-Container-Images-2/#crictl))을 사용하여 각 노드에서 실행 중인 컨테이너를 직접 확인한다.
 
 ```bash
 ssh node-0 crictl ps
@@ -184,9 +246,12 @@ CONTAINER           IMAGE               CREATED             STATE               
 2549636c57fce       759581db3b0c2       2 minutes ago       Running             nginx               0                   7a27f5361d625       nginx-5869d7778c-gnscb   default
 ```
 
-> **crictl 경고 메시지**
+> 참고: **crictl 경고 메시지**
 > 
-> 경고는 crictl 설정 파일(`/etc/crictl.yaml`)이 없어서 발생한다. crictl은 여러 컨테이너 런타임(containerd, crio, docker)을 지원하므로, 어떤 런타임의 소켓에 연결할지 명시적으로 설정하는 것이 권장된다. 설정 파일 없이도 기본 엔드포인트를 순차적으로 시도하여 동작하므로 기능상 문제는 없다. 경고를 없애려면 `/etc/crictl.yaml` 파일을 생성하고 `runtime-endpoint: unix:///run/containerd/containerd.sock`를 설정하면 된다.
+> crictl 실행 시 나타나는 경고는 crictl 설정 파일(`/etc/crictl.yaml`)이 없어서 발생한다.
+>
+> crictl은 여러 컨테이너 런타임(containerd, crio, docker)을 지원하므로, 어떤 런타임의 소켓에 연결할지 명시적으로 설정하는 것이 권장된다. 
+> 설정 파일 없이도 기본 엔드포인트를 순차적으로 시도하여 동작하므로 기능상 문제는 없다. 그렇지만 경고를 없애려면 `/etc/crictl.yaml` 파일을 생성하고 `runtime-endpoint: unix:///run/containerd/containerd.sock`를 설정하면 된다.
 
 ## 프로세스 트리 확인
 
@@ -216,7 +281,7 @@ systemd,1
   |   ...
 ```
 
-프로세스 트리에서 확인해야 할 핵심 구조:
+프로세스 트리에서 확인해야 할 핵심 구조는 아래와 같다.
 
 | 프로세스 | 역할 |
 | --- | --- |
@@ -228,13 +293,17 @@ systemd,1
 | **kubelet** | 노드 에이전트. API Server와 통신하며 Pod 라이프사이클 관리 |
 | **kube-proxy** | 네트워크 프록시. Service의 ClusterIP/NodePort 트래픽 라우팅 |
 
-containerd-shim 아래에 pause와 nginx가 함께 있는 구조는 **하나의 Pod 안에서 pause 컨테이너가 네트워크 네임스페이스를 소유하고, nginx 컨테이너가 그 네임스페이스를 공유**하는 Kubernetes Pod 모델을 보여준다.
+> *참고*: containerd-shim, pause
+> 
+> containerd-shim 아래에 pause와 nginx가 함께 있는 구조는 **하나의 Pod 안에서 pause 컨테이너가 네트워크 네임스페이스를 소유하고, nginx 컨테이너가 그 네임스페이스를 공유**하는 Kubernetes Pod 모델을 보여준다. 
 
 <br>
 
 # 네트워크 구성 확인
 
 ## CNI 브릿지 확인
+
+CNI 브릿지 확인은 **Pod 네트워킹이 정상 구성되었는지** 검증하는 것이다. cni0 브릿지가 있고 Pod의 veth가 연결되어 있다면, CNI 플러그인(bridge)이 정상 동작하고 Pod가 노드 내부 네트워크에 연결된 것이다.
 
 brctl 명령어로 CNI가 생성한 Linux 브릿지를 확인한다.
 
@@ -251,7 +320,6 @@ cni0            8000.7a5a8c463ad6       no              veth105f567d
 | **STP enabled: no** | Spanning Tree Protocol 비활성화. 단순 Pod 네트워크에서는 불필요 |
 | **interfaces** | 브릿지에 연결된 veth 인터페이스들. Pod 하나당 veth 하나가 연결 |
 
-CNI 브릿지 확인은 **Pod 네트워킹이 정상 구성되었는지** 검증하는 것이다. cni0 브릿지가 있고 Pod의 veth가 연결되어 있다면, CNI 플러그인(bridge)이 정상 동작하고 Pod가 노드 내부 네트워크에 연결된 것이다.
 
 ## veth 인터페이스 확인
 
@@ -293,7 +361,7 @@ ssh node-0 ip addr
        valid_lft forever preferred_lft forever
 ```
 
-각 인터페이스의 역할:
+각 인터페이스의 역할은 다음과 같다.
 
 | 인터페이스 | IP | 설명 |
 | --- | --- | --- |
@@ -309,18 +377,20 @@ veth(Virtual Ethernet)는 **Linux 커널이 제공하는 가상 네트워크 인
 
 ```text
 [Pod 내부]                    [Host]
-eth0 (Pod) <----veth pair----> vethXXXXXX (Host) --> cni0 브릿지 --> eth1 --> 외부
+eth0 (Pod) <----veth pair---→ vethXXXXXX (Host) -→ cni0 브릿지 -→ eth1 -→ 외부
 ```
 
 - Pod가 생성될 때 CNI 플러그인이 veth 쌍을 생성
 - 한쪽 끝(eth0)은 Pod의 네트워크 네임스페이스에 배치
 - 다른 쪽 끝(vethXXXXXX)은 호스트의 cni0 브릿지에 연결
-- Pod에서 나가는 트래픽: Pod eth0 -> veth -> cni0 -> eth1 -> 외부
-- Pod로 들어오는 트래픽: 외부 -> eth1 -> cni0 -> veth -> Pod eth0
+- Pod에서 나가는 트래픽: Pod eth0 → veth → cni0 → eth1 → 외부
+- Pod로 들어오는 트래픽: 외부 → eth1 → cni0 → veth → Pod eth0
 
-> **Pod가 수백 개면 veth도 수백 개?**
+> 참고: **Pod가 수백 개면 veth도 수백 개?**
 > 
-> 맞다. Pod 하나당 veth 쌍이 하나씩 생성된다. 이것이 성능 이슈가 될 수 있어 대규모 클러스터에서는 eBPF 기반 CNI(Cilium 등)를 사용하여 veth 오버헤드를 줄이기도 한다. 일반적인 워크로드에서는 노드당 수백 개의 veth도 문제없이 처리 가능하다.
+> Pod 하나당 veth 쌍이 하나씩 생성된다. 그러니 Pod가 수백 개면, 호스트에서 네트워크 인터페이스를 확인할 때 veth도 수백 개가 된다. 
+>
+> 대부분 리눅스 커널에서 veth 생성 및 관리 비용은 크지 않기 때문에, 일반적인 워크로드에서는 노드당 수백 개의 veth도 문제없이 처리 가능하다. 다만, 대규모 클러스터(수천 Pod 이상)에서는 veth 자체보다 iptables 규칙 복잡도가 성능 병목이 되는데, 이 경우 eBPF 기반 CNI(Cilium 등)를 사용하여 iptables를 우회하고 네트워킹 성능을 개선하기도 한다.
 
 ## 노드에서 Pod IP 접근 확인
 
@@ -331,7 +401,7 @@ ssh server curl -s 10.200.1.2 | grep title
 <title>Welcome to nginx!</title>
 ```
 
-server(192.168.10.100)에서 node-1의 Pod(10.200.1.2)로 HTTP 요청이 성공했다. 이는 **Pod 네트워크 라우팅이 정상**임을 의미한다.
+server(`192.168.10.100`)에서 node-1의 Pod(`10.200.1.2`)로 HTTP 요청이 성공했다. 이는 **Pod 네트워크 라우팅이 정상**임을 의미한다.
 
 <br>
 
@@ -354,8 +424,8 @@ nginx-5869d7778c-b28m4
 ```bash
 kubectl port-forward $POD_NAME 8080:80 &
 [1] 4159
-Forwarding from 127.0.0.1:8080 -> 80
-Forwarding from [::1]:8080 -> 80
+Forwarding from 127.0.0.1:8080 → 80
+Forwarding from [::1]:8080 → 80
 ```
 
 `&`를 붙여 백그라운드로 실행하면 터미널을 계속 사용할 수 있다.
@@ -456,8 +526,8 @@ NAME              ENDPOINTS                     AGE
 endpoints/nginx   10.200.0.2:80,10.200.1.2:80   37s
 ```
 
-- **CLUSTER-IP (10.32.0.254)**: 클러스터 내부에서만 접근 가능한 가상 IP
-- **PORT(S) (80:30443/TCP)**: 서비스 포트 80이 NodePort 30443에 매핑
+- **CLUSTER-IP**(`10.32.0.254`): 클러스터 내부에서만 접근 가능한 가상 IP
+- **PORT(S)**(`80:30443/TCP`): 서비스 포트 80이 NodePort 30443에 매핑
 - **ENDPOINTS**: 실제 트래픽이 전달될 Pod IP 목록
 
 NodePort를 추출한다.
@@ -468,7 +538,7 @@ echo $NODE_PORT
 30443
 ```
 
-노드 IP와 NodePort로 접속을 테스트한다.
+노드 IP와 NodePort로 접속을 테스트한다. `node-0:30443`으로 요청하면 kube-proxy가 트래픽을 nginx Pod로 라우팅한다. NodePort 타입의 서비스로 노출했기 때문에, **어떤 노드로 요청해도 동일하게 동작**한다.
 
 ```bash
 curl -s -I http://node-0:${NODE_PORT}
@@ -483,7 +553,6 @@ ETag: "69386a3a-267"
 Accept-Ranges: bytes
 ```
 
-node-0:30443으로 요청하면 kube-proxy가 트래픽을 nginx Pod로 라우팅한다. **어떤 노드로 요청해도 동일하게 동작**한다.
 
 <br>
 
@@ -517,7 +586,9 @@ Kubernetes the Hard Way의 모든 단계를 완료했다. 클러스터의 핵심
 
 <br>
 
-# 개인적인 소회
+# 결론
+
+## 개인적인 소회
 
 그냥 따라하면 되겠지 싶었지만, 일주일 꼬박 걸렸다. 도대체 쿠버네티스란 어떤 것인가.
 
@@ -525,17 +596,17 @@ Kubernetes the Hard Way의 모든 단계를 완료했다. 클러스터의 핵심
 
 다른 무엇보다 인증과 네트워크 설정이 어려웠다. 비대칭키 인증을 이해했다고 생각했는데도, 왜 컴포넌트 구동 시에 `ca-file`, `client-key`, `client-cert` 이런 옵션이 들어가는지, `service-account-signing-key-file`은 무엇인지 한참동안 계속 생각해야 했다.
 
-네트워크 대역도 헷갈렸다. 노드 대역(192.168.10.0/24), PodCIDR(10.200.0.0/24, 10.200.1.0/24), ServiceCIDR(10.32.0.0/24)이 각각 어떤 용도이고 어떻게 연결되는지 파악하는 데 시간이 걸렸다.
+네트워크 대역도 헷갈렸다. 노드 대역(`192.168.10.0/24`), PodCIDR(`10.200.0.0/24`, `10.200.1.0/24`), ServiceCIDR(`10.32.0.0/24`)이 각각 어떤 용도이고 어떻게 연결되는지 파악하는 데 시간이 걸렸다.
 
 그래도 직접 손으로 구성해보니 kubeadm이나 managed Kubernetes가 얼마나 많은 복잡성을 감춰주는지 체감할 수 있었다. 클러스터가 "그냥 동작하는" 것이 아니라 수많은 인증서, 설정 파일, 네트워크 규칙이 맞물려 돌아간다는 것을 알게 되었다.
 
 <br>
 
-# 앞으로
+## 앞으로
 
-솔직히 프로덕션 환경에서 이렇게 한땀한땀 클러스터를 구성할 일은 거의 없다. 대부분 kubeadm, EKS, GKE 같은 도구나 managed 서비스를 사용한다. 그렇다면 나는 앞으로 이 경험을 어떻게 활용할 것인가.
+솔직히 프로덕션 환경에서 이렇게 수동으로 클러스터를 구성할 일은 거의 없다. 대부분 kubeadm, EKS, GKE 같은 도구나 managed 서비스를 사용한다. 그렇다면 나는 앞으로 이 경험을 어떻게 활용할 것인가.
 
-## 트러블슈팅 직관
+### 트러블슈팅 직관
 
 클러스터에 문제가 생겼을 때 "어디를 봐야 하는지" 감이 생긴다. 예를 들어:
 
@@ -545,16 +616,16 @@ Kubernetes the Hard Way의 모든 단계를 완료했다. 클러스터의 핵심
 
 컴포넌트 간 관계를 알아야 문제의 원인을 좁힐 수 있다.
 
-## 인증서 관련 장애 대응
+### 인증서 관련 장애 대응
 
-실무에서 가장 흔한 클러스터 장애 중 하나가 인증서 만료다. 이번 실습에서 배운 내용을 바탕으로 [인증서 만료 문제가 나타났을 때](({% post_url 2026-01-10-Dev-Kubernetes-Certificate-Trouble-Shooting %})) 당황하지 않을 것이다.
+실무에서 가장 흔한 클러스터 장애 중 하나가 인증서 만료다. 이번 실습에서 배운 내용을 바탕으로 [인증서 만료 문제가 나타났을 때](https://sirzzang.github.io/dev/Dev-Kubernetes-Certificate-Trouble-Shooting/) 당황하지 않을 것이다.
 
 - 어떤 인증서가 어떤 통신에 사용되는지 파악 가능
 - `openssl x509 -in cert.pem -noout -dates`로 만료일 확인
 - kubeconfig 파일 내 인증서 갱신 방법 이해
 - CA 인증서와 클라이언트 인증서의 관계 파악
 
-## Bastion Host 패턴과 폐쇄망 환경
+### Bastion Host 패턴과 폐쇄망 환경
 
 실습에서 jumpbox를 통해 클러스터를 관리한 것처럼, 실무에서도 보안상 직접 Control Plane에 접근하지 않고 Bastion Host(점프 서버)를 경유하는 경우가 많다. 특히 **폐쇄망(Air-gapped) 환경**에서 클러스터를 운영해야 한다면, 이번 실습 경험이 더욱 값지다.
 
@@ -564,7 +635,6 @@ Kubernetes the Hard Way의 모든 단계를 완료했다. 클러스터의 핵심
 - **바이너리 설치**: `apt install`이나 `curl`로 외부에서 다운로드 불가. 이번 실습처럼 바이너리를 직접 복사하고 배치하는 방식이 실제로 필요
 - **인증서 관리**: Let's Encrypt 같은 외부 CA 사용 불가. 자체 CA를 운영하고 인증서를 직접 발급해야 함 (이번 실습에서 한 것처럼)
 - **Bastion Host 필수**: 클러스터에 접근할 수 있는 유일한 경로. jumpbox에서 했던 것처럼 여기서 모든 관리 작업 수행
-
 
 
 이번 실습에서 경험한 것들이 폐쇄망 환경에서 그대로 적용된다:
@@ -581,7 +651,7 @@ Managed Kubernetes(EKS, GKE)는 인터넷 연결을 전제로 하기 때문에 �
 
 특히 폐쇄망에서 클러스터 장애가 발생하면 구글 검색도, Stack Overflow도 볼 수 없다. 문서를 미리 다운받아두거나, 내부 구조를 머릿속에 가지고 있어야 한다. 이번 실습이 바로 그 "머릿속 지도"를 그리는 과정이었다.
 
-## 네트워크 디버깅
+### 네트워크 디버깅
 
 Pod 간 통신이 안 될 때:
 
@@ -591,7 +661,7 @@ Pod 간 통신이 안 될 때:
 
 이런 저수준 네트워크 구조를 알아야 "어디서 패킷이 막히는지" 파악할 수 있다.
 
-## etcd 백업/복구
+### etcd 백업/복구
 
 etcd가 클러스터의 모든 상태를 저장한다는 것을 알았으니:
 
@@ -601,7 +671,9 @@ etcd가 클러스터의 모든 상태를 저장한다는 것을 알았으니:
 
 클러스터 복구가 필요한 상황에는 etcd를 먼저 떠올리자.
 
-# 결론
+<br>
+
+## 마치며
 
 Hard Way를 경험한 것은 "블랙박스를 열어본 것"이다. 문제가 생겼을 때 내부 구조를 아는 것과 모르는 것의 차이는 크다. 
 
