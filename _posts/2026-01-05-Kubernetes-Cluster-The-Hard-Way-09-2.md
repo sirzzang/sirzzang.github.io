@@ -21,16 +21,16 @@ tags:
 
 # TL;DR
 
-**Worker Node(node-0, node-1)에 containerd, CNI, kubelet, kube-proxy를 설치하고 시작한다.**
-
 이번 글의 목표는 **Worker Node 프로비저닝 및 클러스터 등록 검증**이다. [Kubernetes the Hard Way 튜토리얼의 Bootstrapping the Kubernetes Worker Nodes 단계](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/09-bootstrapping-kubernetes-workers.md)를 수행한다.
+
+이전 글에서 분석한 설정 파일들을 실제로 배치하고, Worker Node가 클러스터에 정상 등록되는지 확인한다.
 
 - 바이너리 설치: containerd, kubelet, kube-proxy, CNI 플러그인 설치
 - 커널 모듈 설정: br_netfilter 모듈 로드 및 sysctl 설정
 - 서비스 시작: systemd로 containerd, kubelet, kube-proxy 시작
 - 검증: 노드 등록 확인, 상태 점검
 
-이전 글에서 분석한 설정 파일들을 실제로 배치하고, Worker Node가 클러스터에 정상 등록되는지 확인한다.
+
 
 ![kubernetes-the-hard-way-cluster-structure-9]({{site.url}}/assets/images/kubernetes-the-hard-way-cluster-structure-9.png)
 
@@ -561,6 +561,7 @@ Worker Node 프로비저닝이 완료되었다. **드디어** Kubernetes 클러�
 | kubelet | node-0, node-1 | 노드 에이전트 |
 | kube-proxy | node-0, node-1 | 네트워크 프록시 |
 
-<br>
 
-다음 글에서는 jumpbox에서 원격으로 클러스터를 관리할 수 있도록 kubectl을 설정한다.
+<br> 
+
+다음 단계에서는 jumpbox에서 원격으로 클러스터를 관리할 수 있도록 kubectl을 설정한다.

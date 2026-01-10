@@ -84,7 +84,7 @@ EOF
 cat machines.txt
 ```
 
-****
+
 ```
 192.168.10.100 server.kubernetes.local server
 192.168.10.101 node-0.kubernetes.local node-0 10.200.0.0/24
@@ -118,7 +118,7 @@ cat machines.txt
 grep "^[^#]" /etc/ssh/sshd_config | grep -E "(PasswordAuthentication|PermitRootLogin)"
 ```
 
-****
+
 ```
 PasswordAuthentication yes
 PermitRootLogin yes
@@ -159,7 +159,7 @@ systemctl restart sshd
 ssh-keygen -t rsa -N "" -f /root/.ssh/id_rsa
 ```
 
-****
+
 ```
 Generating public/private rsa key pair.
 Your identification has been saved in /root/.ssh/id_rsa
@@ -204,7 +204,7 @@ while read IP FQDN HOST SUBNET; do
 done < machines.txt
 ```
 
-****
+
 ```
 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCb1Odbh5jtHiH/H5MOVb34XHvYU/lm45T9/4CJPkjipmQho9zyQJ2slg0+GimVKP+y3Yx633IyzFCEjUTcumYGZtFHotKnVUcEmwhZCfW9Cu9mSag5CATtdR94DOL8WDO20mQDUeJ/DkXsiHNO+uUw9JAD+RuG8LVCw9FJ7kX0U36e55X74Jd/bCYbXhmTTRWyJn09SRdmoMDqFscuQi7iv+JZmXonS+fSZfidpqRJFg/xbLtYAjyJI71qBdLe/Hmk3H/nRYAHEciQw1LRHVFFwCdvUbb0BNtGQRQJ/eJxO0IiMJ9dqHq2L1/WUN8em8YUm3dMWtft/zGK+ZF1sRuDzSKRqGsunhkER+jYrB2EwLGZEHJTJ/CbBOiq+0ZASv6UKRgyLS+tf3qk8joBLYUpxvLpt7VzpPqicTUXQ4tN2dvGWH8JRjI0b+di1NBO7npteNXwXwnzklag6d25wnuxtqScX1ShJ212ErAccBlcYmiREITmcw5Y3GcxlltIfZc= root@jumpbox
 ...
@@ -226,7 +226,7 @@ while read IP FQDN HOST SUBNET; do
 done < machines.txt
 ```
 
-****
+
 ```
 server
 node-0
@@ -257,7 +257,7 @@ while read IP FQDN HOST SUBNET; do
 done < machines.txt
 ```
 
-****
+
 ```
 server.kubernetes.local
 node-0.kubernetes.local
@@ -303,7 +303,7 @@ while read IP FQDN HOST SUBNET; do
 done < machines.txt
 ```
 
-****
+
 ```
 127.0.0.1       localhost
 ::1     localhost ip6-localhost ip6-loopback
@@ -323,7 +323,7 @@ while read IP FQDN HOST SUBNET; do
 done < machines.txt
 ```
 
-****
+
 ```
 server
 node-0
@@ -357,8 +357,6 @@ done < machines.txt
 2. **SSH 키 기반 인증**: 비밀번호 없이 모든 머신에 SSH 접속이 가능하다
 3. **호스트명 기반 접속**: IP 주소 대신 호스트명으로 접속할 수 있다
 
-**검증:**
-
 ```bash
 # (jumpbox) #
 # IP로 접속 확인
@@ -372,7 +370,7 @@ ssh root@node-0 hostname
 ssh root@node-1 hostname
 ```
 
-****
+
 ```
 server
 node-0
@@ -385,5 +383,7 @@ node-1
 
 이번 단계를 통해 클러스터를 구성할 모든 머신의 정보를 정리하고, 각 머신 간 SSH 접속이 가능하도록 네트워크 환경을 구성했다. `machines.txt` 파일을 통해 머신 정보를 중앙에서 관리할 수 있게 되었고, SSH 키 기반 인증과 호스트명 설정을 통해 이후 단계에서 자동화된 스크립트 실행이 가능한 기반을 마련했다.
 
-다음 글 [Provisioning a CA and Generating TLS Certificates 단계]에서는 Kubernetes 클러스터의 보안을 위한 CA(Certificate Authority) 설정 및 TLS 인증서 생성 작업을 진행한다.
+<br> 
+
+다음 단계에서는 Kubernetes 클러스터의 보안을 위한 CA(Certificate Authority) 설정 및 TLS 인증서 생성 작업을 진행한다.
 

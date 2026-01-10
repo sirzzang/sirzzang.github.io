@@ -22,15 +22,15 @@ hidden: true
 
 # TL;DR
 
-**Worker Node(node-0, node-1)에 containerd, CNI, kubelet, kube-proxy를 구성한다.**
-
 이번 글의 목표는 **CNI의 동작 원리 이해와 Worker Node 설정 파일 분석**이다. [Kubernetes the Hard Way 튜토리얼의 Bootstrapping the Kubernetes Worker Nodes 단계](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/09-bootstrapping-kubernetes-workers.md)를 수행한다.
+
+
+Worker Node는 실제로 Pod를 실행하는 노드다. containerd(컨테이너 런타임), kubelet(노드 에이전트), kube-proxy(네트워크 프록시), CNI 플러그인(Pod 네트워크)이 필요하다. 이번 글에서는 각 컴포넌트의 설정 파일을 분석한다.
 
 - CNI 개념: Container Network Interface의 역할과 동작 방식
 - 설정 파일 분석: CNI, kubelet, containerd, kube-proxy 설정
 - 파일 배포: jumpbox에서 Worker Node로 바이너리, 설정 파일 전송
 
-Worker Node는 실제로 Pod를 실행하는 노드다. containerd(컨테이너 런타임), kubelet(노드 에이전트), kube-proxy(네트워크 프록시), CNI 플러그인(Pod 네트워크)이 필요하다. 이번 글에서는 각 컴포넌트의 설정 파일을 분석하고, 다음 글에서 실제 배포를 진행한다.
 
 <br>
 
@@ -730,6 +730,6 @@ kube-proxy 관련 파일이 저장되는 경로다. Service 트래픽 라우팅�
 - containerd의 CNI 경로와 실제 CNI 설정/바이너리 위치가 일치해야 함
 - kubelet의 `authorization.mode: Webhook`과 [이전 글에서 설정한 RBAC]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-08-2 %}#rbac-설정)이 연계됨
 
-<br>
+<br> 
 
-다음 글에서는 이 파일들을 Worker Node에 설치하고 서비스를 시작하여 클러스터에 노드를 등록한다.
+다음 단계에서는 이 파일들을 Worker Node에 설치하고 서비스를 시작하여 클러스터에 노드를 등록한다.

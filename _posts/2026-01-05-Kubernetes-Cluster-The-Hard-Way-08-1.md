@@ -22,15 +22,15 @@ hidden: true
 
 # TL;DR
 
-**server 노드에 kube-apiserver, kube-scheduler, kube-controller-manager를 구성한다.**
 
 이번 글의 목표는 **Kubernetes Control Plane 컴포넌트 설정 파일 분석**이다. [Kubernetes the Hard Way 튜토리얼의 Bootstrapping the Kubernetes Control Plane 단계](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/08-bootstrapping-kubernetes-controllers.md)를 수행한다.
+
+Control Plane은 Kubernetes 클러스터의 두뇌 역할을 한다. API Server는 모든 요청의 진입점이고, Scheduler는 Pod 배치를 결정하며, Controller Manager는 클러스터 상태를 원하는 상태로 유지한다. 이번 단계에서는 각 컴포넌트가 어떤 옵션으로 구동되는지 이해한다.
 
 - kube-apiserver 설정: systemd unit 파일 생성 및 주요 옵션 분석
 - kube-scheduler 설정: 설정 파일(KubeSchedulerConfiguration) 및 unit 파일 분석
 - kube-controller-manager 설정: unit 파일 생성 및 주요 옵션 분석
 
-Control Plane은 Kubernetes 클러스터의 두뇌 역할을 한다. API Server는 모든 요청의 진입점이고, Scheduler는 Pod 배치를 결정하며, Controller Manager는 클러스터 상태를 원하는 상태로 유지한다. 이번 단계에서는 각 컴포넌트가 어떤 옵션으로 구동되는지 이해하고, 다음 글에서 실제 배포를 진행한다.
 
 <br>
 
@@ -97,6 +97,16 @@ EOF
 
 ### 인증 관련
 
+```bash
+ExecStart=/usr/local/bin/kube-apiserver \\
+  ...
+  --client-ca-file=/var/lib/kubernetes/ca.crt \\
+  ...
+  --tls-cert-file=/var/lib/kubernetes/kube-api-server.crt \\
+  --tls-private-key-file=/var/lib/kubernetes/kube-api-server.key \\
+  ...
+```
+
 *거듭 등장하지만*, Kubernetes는 mTLS 통신을 수행한다. API Server도 클라이언트(kubectl, kubelet 등)가 연결할 때 서버 인증서를 제시해야 하고, 동시에 클라이언트 인증서를 검증한다. 이 때 필요한 설정이다.
 
 - `--client-ca-file`: 클라이언트 인증서를 검증할 CA 인증서. 클라이언트가 제시한 인증서가 이 CA로 서명되었는지 확인
@@ -104,6 +114,13 @@ EOF
 - `--tls-private-key-file`: 서버 인증서의 개인키
 
 ### 인가 관련
+
+```bash
+ExecStart=/usr/local/bin/kube-apiserver \\
+  ...
+  --authorization-mode=Node,RBAC \\
+  ...
+```
 
 인증(Authentication)을 통과한 요청이 실제로 해당 작업을 수행할 권한이 있는지 검증하는 단계이다.
 
@@ -118,6 +135,13 @@ EOF
 
 ### Admission Control
 
+```bash
+ExecStart=/usr/local/bin/kube-apiserver \\
+  ...
+  --enable-admission-plugins=NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota \\
+  ...
+```
+
 Admission Controller는 API 요청이 etcd에 저장되기 전에 검증하거나 수정하는 플러그인이다([참고](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/)).
 - `--enable-admission-plugins`: 활성화할 Admission Controller 목록
 
@@ -130,6 +154,16 @@ Admission Controller는 API 요청이 etcd에 저장되기 전에 검증하거�
 - `ResourceQuota`: Namespace의 리소스 할당량 적용
 
 ### 네트워크 관련
+
+```bash
+ExecStart=/usr/local/bin/kube-apiserver \\
+  ...
+  --bind-address=0.0.0.0 \\
+  ...
+  --service-cluster-ip-range=10.32.0.0/24 \\
+  --service-node-port-range=30000-32767 \\
+  ...
+```
 
 API Server 네트워크 설정 관련 옵션이다. 
 
@@ -145,6 +179,13 @@ API Server 네트워크 설정 관련 옵션이다.
 
 ### etcd 연결
 
+```bash
+ExecStart=/usr/local/bin/kube-apiserver \\
+  ...
+  --etcd-servers=http://127.0.0.1:2379 \\
+  ...
+```
+
 API Server와 etcd 클러스터 간 통신 설정이다.
 
 - `--etcd-servers=http://127.0.0.1:2379`: etcd 클러스터 주소. 로컬호스트의 2379 포트
@@ -152,6 +193,15 @@ API Server와 etcd 클러스터 간 통신 설정이다.
 실습 환경에서는 HTTP 평문 통신을 사용한다. 프로덕션에서는 etcd도 TLS로 보호해야 하며, `--etcd-cafile`, `--etcd-certfile`, `--etcd-keyfile` 옵션을 추가로 설정한다.
 
 ### ServiceAccount 관련
+
+```bash
+ExecStart=/usr/local/bin/kube-apiserver \\
+  ...
+  --service-account-key-file=/var/lib/kubernetes/service-accounts.crt \\
+  --service-account-signing-key-file=/var/lib/kubernetes/service-accounts.key \\
+  --service-account-issuer=https://server.kubernetes.local:6443 \\
+  ...
+```
 
 Pod 내부의 애플리케이션이 API Server에 인증할 때 사용하는 ServiceAccount 토큰 설정이다.
 
@@ -170,6 +220,15 @@ ServiceAccount 토큰은 JWT(JSON Web Token) 형식이며, 다음과 같은 흐�
 
 ### kubelet 통신
 
+```bash
+ExecStart=/usr/local/bin/kube-apiserver \\
+  ...
+  --kubelet-certificate-authority=/var/lib/kubernetes/ca.crt \\
+  --kubelet-client-certificate=/var/lib/kubernetes/kube-api-server.crt \\
+  --kubelet-client-key=/var/lib/kubernetes/kube-api-server.key \\
+  ...
+```
+
 API Server가 kubelet과 통신할 때 사용하는 인증서 설정이다.
 
 - `--kubelet-certificate-authority`: kubelet 인증서를 검증할 CA 인증서
@@ -181,6 +240,18 @@ API Server는 kubelet의 클라이언트이자 서버다:
 - **클라이언트 역할**: API Server가 kubelet에 로그, 메트릭, exec 요청 전달
 
 ### 암호화 및 감사
+
+```bash
+ExecStart=/usr/local/bin/kube-apiserver \\
+  ...
+  --audit-log-maxage=30 \\
+  --audit-log-maxbackup=3 \\
+  --audit-log-maxsize=100 \\
+  --audit-log-path=/var/log/audit.log \\
+  ...
+  --encryption-provider-config=/var/lib/kubernetes/encryption-config.yaml \\
+  ...
+```
 
 etcd 저장 데이터 암호화와 API 요청 감사 로그 설정이다.
 
@@ -404,7 +475,7 @@ systemd unit 파일이 저장되는 경로다.
 - 인증서 파일들은 이전 단계에서 생성한 것을 참조
 - kubeconfig 파일들은 각 컴포넌트가 API Server에 인증할 때 사용
 
-<br>
+<br> 
 
-다음 글에서는 이 설정 파일들을 server 노드에 배포하고, Control Plane 컴포넌트들을 실제로 시작한다.
+다음 단계에서는 이 설정 파일들을 server 노드에 배포하고, Control Plane 컴포넌트들을 실제로 시작한다.
 

@@ -219,8 +219,8 @@ O = system:nodes         # 인증서의 Organization
 
 Kubernetes는 kubeconfig를 통해 각 컴포넌트가 API Server와 통신할 수 있도록 설정한다. Node Authorizer는 kubelet 인증서의 명명 규칙을 기반으로 자동으로 적절한 권한을 부여하여, 별도의 RBAC 설정 없이도 노드별 리소스 접근을 제한할 수 있다. 
 
-<br>
 
+<br> 
 
-다음 글에서는 지난 단계에서 생성한 인증서를 이용해 kubeconfig 파일을 생성하고 배포한다.
+다음 단계에서는 지난 단계에서 생성한 인증서를 이용해 kubeconfig 파일을 생성하고 배포한다.
 

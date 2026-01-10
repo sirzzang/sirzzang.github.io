@@ -21,19 +21,19 @@ tags:
 
 # TL;DR
 
-**server 노드에 kube-apiserver, kube-scheduler, kube-controller-manager를 배포하고 시작한다.**
-
 이번 글의 목표는 **Kubernetes Control Plane 배포 및 검증**이다. [Kubernetes the Hard Way 튜토리얼의 Bootstrapping the Kubernetes Control Plane 단계](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/08-bootstrapping-kubernetes-controllers.md)를 수행한다.
+
+이전 글에서 분석한 설정 파일들을 실제로 배포하고, Control Plane이 정상적으로 동작하는지 확인한다.
+
 
 - 파일 배포: jumpbox에서 server 노드로 바이너리, unit 파일, 설정 파일 전송
 - Control Plane 실행: systemd로 kube-apiserver, kube-scheduler, kube-controller-manager 시작
 - 동작 검증: 서비스 상태, 포트 리스닝, 클러스터 정보 확인
 - RBAC 설정: kube-apiserver가 kubelet에 접근할 수 있도록 권한 부여
 
-이전 글에서 분석한 설정 파일들을 실제로 배포하고, Control Plane이 정상적으로 동작하는지 확인한다.
+
 
 ![kubernetes-the-hard-way-cluster-structure-8]({{site.url}}/assets/images/kubernetes-the-hard-way-cluster-structure-8.png)
-
 <br>
 
 # 파일 배포
@@ -323,7 +323,7 @@ kube-apiserver가 kubelet API에 접근할 수 있도록 RBAC을 설정한다.
 
 ## kubelet의 인가 필요성
 
-Kubernetes 클러스터에서 인가(Authorization)는 대부분 API Server가 담당한다. 하지만 예외가 있다: **API Server가 kubelet에 직접 요청할 때**다.
+Kubernetes 클러스터에서 인가(Authorization)는 대부분 API Server가 담당한다. **API Server가 kubelet에 직접 요청할 때**는 그 반대다.
 
 API Server는 다음과 같은 상황에서 kubelet API에 직접 요청을 보낸다:
 
@@ -374,7 +374,7 @@ Webhook 모드에서 kubelet은 [SubjectAccessReview API](https://kubernetes.io/
 
 3. **kubelet → API Server 인가 확인** (SubjectAccessReview 요청):
    ```
-   kubelet: "어? CN=kubernetes라는 사용자가 내 /logs에 접근하려고 하네?"
+   kubelet: "CN=kubernetes라는 사용자가 내 /logs에 접근하려고 하네?"
    kubelet: "내가 이 사용자에게 권한이 있는지 어떻게 알지?"
    kubelet → API Server: SubjectAccessReview 요청
        "kubernetes라는 사용자가 nodes/log 리소스에 접근할 수 있나요?"
@@ -389,12 +389,12 @@ Webhook 모드에서 kubelet은 [SubjectAccessReview API](https://kubernetes.io/
    ```
 
 5. **kubelet 처리**: 인가 결과에 따라 요청 처리
-   - kubelet: "API Server가 허가했으니 로그를 반환하자"
-   - kubelet → API Server → kubectl: 로그 데이터 전송
+   ```
+   kubelet: "API Server가 허가했으니 로그를 반환하자"
+   kubelet → API Server → kubectl: 로그 데이터 전송
+   ```
 
-### 왜 이렇게 복잡하게?
-
-Webhook 모드의 장점:
+### Webhook 모드의 장점
 
 - **중앙 집중식 권한 관리**: 모든 인가 정책이 API Server의 RBAC에 집중됨
 - **동적 정책 변경**: RBAC 규칙만 변경하면 즉시 적용 (kubelet 재시작 불필요)
@@ -608,5 +608,7 @@ exit
 
 <br>
 
-다음 글에서는 Worker 노드(node-0, node-1)에 kubelet, kube-proxy, containerd를 구성하여 실제로 Pod를 실행할 수 있는 환경을 만든다.
+<br> 
+
+다음 단계에서는 Worker 노드(node-0, node-1)에 kubelet, kube-proxy, containerd를 구성하여 실제로 Pod를 실행할 수 있는 환경을 만든다.
 

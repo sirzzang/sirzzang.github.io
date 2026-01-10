@@ -607,6 +607,6 @@ total 24
 
 이번 실습을 통해 Kubernetes 클러스터의 mTLS 통신에 필요한 인증서들을 직접 생성하고 배포해 보았다. 각 컴포넌트의 Subject(CN, O)가 Kubernetes RBAC과 연동되는 방식, API Server 인증서에 다양한 SAN이 필요한 이유 등을 이해할 수 있었다. CA 개인키는 Control Plane 외에 배포하지 않도록 주의해야 한다.
 
-<br>
+<br> 
 
-다음 글에서는 생성한 인증서를 이용해 kubeconfig 파일을 생성한다.
+다음 단계에서는 생성한 인증서를 이용해 kubeconfig 파일을 생성한다.

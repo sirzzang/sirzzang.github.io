@@ -72,7 +72,7 @@ root 계정 설정은 [이전 글의 Prerequisites 단계]({% post_url 2026-01-0
 cat /home/vagrant/.bashrc | tail -n 1
 ```
 
-****
+
 ```
 sudo su -
 ```
@@ -116,7 +116,7 @@ cd kubernetes-the-hard-way
 tree -L 2
 ```
 
-****
+
 ```
 .
 ├── ca.conf
@@ -146,7 +146,7 @@ tree -L 2
 dpkg --print-architecture 
 ```
 
-****
+
 ```
 arm64
 ```
@@ -161,7 +161,7 @@ arm64
 cat downloads-$(dpkg --print-architecture).txt
 ```
 
-****
+
 ```
 https://dl.k8s.io/v1.32.3/bin/linux/arm64/kubectl
 https://dl.k8s.io/v1.32.3/bin/linux/arm64/kube-apiserver
@@ -234,7 +234,7 @@ tar -xvf downloads/etcd-v3.6.0-rc.3-linux-${ARCH}.tar.gz \
 tree downloads/worker/
 ```
 
-****
+
 ```
 downloads/worker/
 ├── containerd
@@ -274,7 +274,7 @@ tree downloads/controller/
 tree downloads/worker/
 ```
 
-****
+
 ```
 downloads/client
 ├── etcdctl
@@ -323,7 +323,7 @@ cp downloads/client/kubectl /usr/local/bin/
 kubectl version --client
 ```
 
-****
+
 ```
 Client Version: v1.32.3
 Kustomize Version: v5.5.0
@@ -341,7 +341,7 @@ Kustomize Version: v5.5.0
 kubectl cluster-info
 ```
 
-****
+
 ```
 The connection to the server localhost:8080 was refused - did you specify the right host or port?
 ```
@@ -365,4 +365,6 @@ The connection to the server localhost:8080 was refused - did you specify the ri
 
 이번 실습을 통해 Kubernetes 클러스터 구성에 필요한 각 컴포넌트와 그 역할을 이해할 수 있었다. 실습 환경이었으니 편하게 진행되었지만, 만약 실무 환경에서 클러스터를 구축한다면, 각 바이너리를 버전에 맞춰 다운로드하고, 압축을 풀고, 권한을 설정하는 작업을 수동으로 해야 할 것이다.
 
-다음 글 [Compute Resources 단계]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-03 %})에서는 각 머신의 리소스를 확인하고 설정하는 작업을 진행한다.
+<br> 
+
+다음 단계에서는 각 머신의 리소스를 확인하고 설정하는 작업을 진행한다.

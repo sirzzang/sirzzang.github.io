@@ -21,15 +21,14 @@ tags:
 
 # TL;DR
 
-**서로 다른 노드에 배치된 Pod 간 통신을 위해 수동 라우팅을 설정한다.**
-
 이번 글의 목표는 **Pod Network Routes 프로비저닝**이다. [Kubernetes the Hard Way 튜토리얼의 Provisioning Pod Network Routes 단계](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/11-pod-network-routes.md)를 수행한다.
 
+
+이전 단계에서 CNI 플러그인으로 bridge를 설정했는데, 이 방식은 같은 노드 내 Pod 간 통신만 지원한다. 서로 다른 노드에 배치된 Pod가 통신하려면 추가적인 라우팅 설정이 필요하다. 이번 글에서는 서로 다른 노드에 배치된 Pod 간 통신을 위해 수동 라우팅을 설정한다.
 - 각 노드의 Pod CIDR 대역 확인
 - 노드별 수동 라우팅 테이블 설정
 - 서로 다른 노드의 Pod 간 통신 경로 확보
 
-이전 단계에서 CNI 플러그인으로 bridge를 설정했는데, 이 방식은 같은 노드 내 Pod 간 통신만 지원한다. 서로 다른 노드에 배치된 Pod가 통신하려면 추가적인 라우팅 설정이 필요하다.
 
 <br>
 
@@ -274,4 +273,6 @@ default via 10.0.2.2 dev eth0
 
 이번 실습을 통해 Kubernetes Pod 네트워킹의 기본 원리를 이해할 수 있었다. CNI 플러그인이 자동으로 처리해주는 작업을 수동으로 수행하면서, 노드 간 Pod 통신이 어떻게 이루어지는지 파악했다.
 
-다음 글에서는 Smoke Test를 통해 클러스터가 정상적으로 동작하는지 검증한다.
+<br> 
+
+다음 단계에서는 Smoke Test를 통해 클러스터가 정상적으로 동작하는지 검증한다.

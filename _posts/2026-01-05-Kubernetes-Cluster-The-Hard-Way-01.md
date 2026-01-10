@@ -106,16 +106,12 @@ NAT 네트워크 특성상 각 VM은 독립된 NAT 환경 안에 있기 때문�
 VirtualBox는 Oracle에서 개발한 오픈소스 가상화 소프트웨어다. 하나의 물리 머신에서 여러 개의 가상 머신을 실행할 수 있게 해준다.
 
 ```bash
-# (host) $
+# Host
 # --cask: GUI 애플리케이션 설치를 위한 Homebrew 옵션
-brew install --cask virtualbox 
+$ brew install --cask virtualbox 
 
 # 설치 버전 확인
-VBoxManage --version
-```
-
-****
-```
+$ VBoxManage --version
 7.2.4r170995
 ```
 
@@ -146,7 +142,7 @@ brew install --cask vagrant
 vagrant version
 ```
 
-****
+
 ```
 Installed Version: 2.4.9
 Latest Version: 2.4.9
@@ -370,26 +366,14 @@ echo ">>>> Initial Config End <<<<"
 Vagrantfile과 init_cfg.sh를 준비한 후, 다음 명령어로 가상 머신을 시작한다. 
 
 ```bash
-# (host) $
 # 정의된 모든 가상 머신(jumpbox, server, node-0, node-1) 생성 및 시작
 vagrant up
-```
 
-<br>
-
-### 확인
-
-```bash
-# (host) $
 # 다운로드된 Vagrant Box 목록 확인
 vagrant box list
 
 # 배포된 가상머신 상태 확인
 vagrant status
-```
-
-****
-```
 bento/debian-12 (virtualbox, 202510.26.0, (arm64))
 
 Current machine states:
@@ -410,13 +394,9 @@ node-1                    running (virtualbox)
 # (host) $
 # jumpbox 가상 머신으로 SSH 접속
 vagrant ssh jumpbox
-```
-
-****
-```
 Linux jumpbox 6.1.0-40-arm64 #1 SMP Debian 6.1.153-1 (2025-09-20) aarch64
-# ...
-root@jumpbox:~# whoami
+...
+root@jumpbox:~# whoami # jumpbox에 접속됨
 root
 ```
 
@@ -425,13 +405,8 @@ root
 Debian 12 (bookworm)가 정상적으로 설치되었다.
 
 ```bash
-# (jumpbox) #
 cat /etc/os-release
-```
-
-****
-```
-PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)" # Debian 12 
 NAME="Debian GNU/Linux"
 VERSION_ID="12"
 VERSION="12 (bookworm)"
@@ -458,7 +433,7 @@ systemctl status apparmor
 systemctl is-active apparmor
 ```
 
-****
+
 ```
 ○ apparmor.service - Load AppArmor profiles
 # ...
@@ -472,12 +447,11 @@ inactive
 모든 호스트가 정상적으로 등록되었다.
 
 ```bash
-# (jumpbox) #
 # 로컬 DNS 설정 확인
 cat /etc/hosts
 ```
 
-****
+
 ```
 127.0.0.1       localhost
 ::1     localhost ip6-localhost ip6-loopback
@@ -501,7 +475,7 @@ DNS 설정과 네트워크 통신이 정상적으로 동작한다.
 ping -c 3 server.kubernetes.local
 ```
 
-****
+
 ```
 PING server.kubernetes.local (192.168.10.100) 56(84) bytes of data.
 64 bytes from server.kubernetes.local (192.168.10.100): icmp_seq=1 ttl=64 time=1.18 ms
@@ -515,4 +489,6 @@ PING server.kubernetes.local (192.168.10.100) 56(84) bytes of data.
 
 VirtualBox와 Vagrant를 이용하여 Kubernetes 실습 환경을 위한 4대의 가상 머신을 성공적으로 구성했다. 각 머신은 Debian 12를 기반으로 동작하며, 192.168.10.0/24 대역의 private network를 통해 서로 통신할 수 있다. 
 
-다음 글 [Setup The Jumpbox 단계]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-02 %})에서는 이 환경을 기반으로 Kubernetes 클러스터를 직접 구축해 본다.
+<br> 
+
+다음 단계에서는 이 환경을 기반으로 Kubernetes 클러스터를 직접 구축해 본다.

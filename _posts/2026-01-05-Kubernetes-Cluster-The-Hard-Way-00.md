@@ -136,9 +136,9 @@ Kubernetes 클러스터는 [여러 컴포넌트](https://v1-32.docs.kubernetes.i
 
 <br>
 
-## 레포지토리 클론
+## 레포지토리 확인
 
-실습을 시작하기 전에 [Kubernetes The Hard Way](https://github.com/kelseyhightower/kubernetes-the-hard-way) 레포지토리를 클론한다.
+실습을 시작하기 전에 [Kubernetes The Hard Way](https://github.com/kelseyhightower/kubernetes-the-hard-way) 레포지토리를 확인해 보자.
 
 ```bash
 # (host) $
@@ -157,7 +157,7 @@ cd kubernetes-the-hard-way
 tree -L 1
 ```
 
-****
+
 ```
 kubernetes-the-hard-way/
 ├── configs/              # 설정 파일들
