@@ -4,6 +4,7 @@ excerpt: "암호학의 기본 개념과 암호화 알고리즘 분류 체계에 
 categories:
   - CS
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

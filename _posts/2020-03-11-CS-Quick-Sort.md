@@ -5,6 +5,7 @@ header:
 
 categories:
   - CS
+hidden: true
 toc : true
 tags:
   - Python

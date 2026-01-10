@@ -2,7 +2,7 @@
 title:  "[Backend] 서블릿"
 excerpt: 동적 컨텐츠를 생성하기 위한 자바 서버 측 프로그램
 categories:
-  - CS
+  - Dev
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

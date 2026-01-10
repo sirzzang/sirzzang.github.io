@@ -6,6 +6,7 @@ header:
 
 categories:
   - CS
+hidden: true
 tags:
   - Python
   - 자료구조

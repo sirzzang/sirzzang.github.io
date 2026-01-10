@@ -5,6 +5,7 @@ header:
   teaser: /assets/images/blog-Programming.jpg
 categories:
   - CS
+hidden: true
 toc : true
 tags:
   - Python
