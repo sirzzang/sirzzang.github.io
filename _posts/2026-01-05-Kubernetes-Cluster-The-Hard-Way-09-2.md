@@ -289,7 +289,6 @@ systemctl start containerd kubelet kube-proxy
 
 ```bash
 systemctl status containerd --no-pager
-```
 ● containerd.service - containerd container runtime
      Loaded: loaded (/etc/systemd/system/containerd.service; enabled)
      Active: active (running) since Sat 2026-01-10 00:30:17 KST
