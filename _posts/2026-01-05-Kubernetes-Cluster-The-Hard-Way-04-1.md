@@ -320,10 +320,48 @@ X.509 인증서는 **본문(TBSCertificate) + 서명 알고리즘 + 디지털 �
 
 <br>
 
+<br>
+
+## Distinguished Name (DN)과 X.500 표준
+
+X.509 인증서의 Subject와 Issuer 필드에서 사용하는 `CN`, `O`, `OU`, `C` 같은 필드들은 **X.500 디렉토리 서비스 표준**에서 유래했다.
+
+X.500은 국제 전기통신 연합(ITU-T)이 정의한 디렉토리 서비스 표준으로, 계층적 구조로 개체를 식별하기 위한 **Distinguished Name (DN)** 체계를 제공한다. X.509는 X.500의 인증서 표준으로 만들어졌기 때문에, 동일한 DN 구조를 사용한다.
+
+### 주요 DN 필드
+
+| 필드 | 의미 | 예시 |
+|------|------|------|
+| **CN** (Common Name) | 주체의 이름 | `CN=admin`, `CN=kubernetes` |
+| **O** (Organization) | 조직명 | `O=system:masters` |
+| **OU** (Organizational Unit) | 조직 단위 | `OU=Engineering` |
+| **L** (Locality) | 지역/도시 | `L=Seattle` |
+| **ST** (State) | 주/도 | `ST=Washington` |
+| **C** (Country) | 국가 코드 | `C=US` |
+
+### LDAP와의 관계
+
+LDAP(Lightweight Directory Access Protocol)는 X.500의 경량화 버전으로, 동일한 DN 구조를 사용한다. 그래서 [LDAP 디렉토리 서비스를 사용했던 경험](https://sirzzang.github.io//articles/Articles-Opensource-Contribution/#%EC%84%B1%EA%B3%B5%EA%B8%B0)이 있다면, 인증서에서도 동일한 필드들을 보게 된다.
+
+LDAP의 DN은 아래와 같이 구성된다.
+```bash
+# LDAP DN 예시
+dn: CN=John Doe,OU=Engineering,O=Acme Corp,C=US
+```
+
+X.509 인증서의 Subject도 동일한 구조를 따른다.
+```bash
+# X.509 인증서 Subject 예시
+Subject: CN=admin, O=system:masters, C=US
+```
+
+이러한 표준화된 필드 덕분에 인증서, 디렉토리 서비스, Kerberos 등 다양한 인증/인가 시스템이 일관된 방식으로 주체를 식별할 수 있다.
+
+<br>
+
 ## 쿠버네티스에서 중요한 필드
 
-쿠버네티스 인증서에서 특히 중요한 필드가 있다. 
-> 실습에서 `ca.conf` 파일을 작성할 때 이 필드들을 직접 설정하게 된다.
+쿠버네티스 인증서에서 특히 중요한 필드가 있다. 이후 [](링크)에서 `ca.conf` 파일을 작성할 때 이 필드들을 직접 만나보게 될 것이다.
 
 ### Subject
 
@@ -398,5 +436,7 @@ PKI의 주요 구성 요소는 다음과 같다.
 
 <br>
 
-쿠버네티스는 클러스터 내 모든 통신에 mTLS를 적용하여 보안을 강화한다. 다음 글에서는 인증서 생성에 사용할 OpenSSL 설정 파일(ca.conf)의 구조를 분석한다.
+쿠버네티스는 클러스터 내 모든 통신에 mTLS를 적용하여 보안을 강화한다. <br> 
+
+다음 단계에서는 인증서 생성에 사용할 OpenSSL 설정 파일(ca.conf)의 구조를 분석한다.
 

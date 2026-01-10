@@ -21,8 +21,6 @@ tags:
 
 # TL;DR
 
-**server 노드에 etcd 클러스터를 구성하고 시작한다.**
-
 이번 글의 목표는 **Kubernetes 클러스터의 핵심 데이터 저장소인 etcd 클러스터 구성**이다. [Kubernetes the Hard Way 튜토리얼의 Bootstrapping the etcd Cluster 단계](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/07-bootstrapping-etcd.md)를 수행한다.
 
 - etcd 서비스 설정: HTTP 평문 통신으로 etcd systemd service 파일 생성
@@ -295,4 +293,6 @@ exit
 
 <br>
 
-다음 글에서는 Kubernetes Control Plane을 구성한다.
+<br> 
+
+다음 단계에서는 Kubernetes Control Plane을 구성한다.

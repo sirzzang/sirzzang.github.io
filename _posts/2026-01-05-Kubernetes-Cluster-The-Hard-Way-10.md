@@ -319,4 +319,6 @@ node-1   Ready    <none>   37m   v1.32.3
 
 이번 실습을 통해 jumpbox에서 원격으로 클러스터를 관리할 수 있는 환경을 구성했다. `kubectl config` 명령어로 kubeconfig의 각 구성 요소(cluster, user, context)를 설정하는 방법과, 기본 kubeconfig 파일 위치(`~/.kube/config`)의 역할을 이해할 수 있었다.
 
-이제 jumpbox에서 kubectl 명령어로 클러스터를 관리할 수 있다. 다음 글에서는 Pod 네트워킹을 위한 라우팅 설정을 구성한다.
+이제 jumpbox에서 kubectl 명령어로 클러스터를 관리할 수 있다. <br> 
+
+다음 단계에서는 Pod 네트워킹을 위한 라우팅 설정을 구성한다.

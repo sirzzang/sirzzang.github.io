@@ -26,7 +26,6 @@ hidden: true
 - Root CA, Admin, Worker Node, API Server 등 각 인증서 설정 이해
 - Subject 필드(CN, O)와 Kubernetes RBAC의 연동 방식
 - SAN(Subject Alternative Name) 설정의 중요성
-- 예상 소요 시간: 15분
 
 <br>
 
@@ -65,15 +64,42 @@ CA (Certificate Authority)
 
 # ca.conf
 
-실습에서는 위의 모든 인증서를 생성하기 위한 [설정 파일](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/ca.conf)을 제공해 주고 있다.
+실습에서는 위의 모든 인증서를 생성하기 위한 [설정 파일](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/ca.conf)을 제공해 주고 있다. 실습 환경의 편의를 위해 미리 정의된 파일을 사용하지만, 그 본질은 클러스터 내 모든 통신의 신원을 보장하는 정책을 한 데 모아 정의하는 데에 있다([출처: 박용연님 스터디 정리 글](https://yyeon2.medium.com/bootstrap-kubernetes-the-hard-way-48644e868550))
 
-`ca.conf`는 쿠버네티스 클러스터 내 모든 컴포넌트의 TLS 인증서를 생성하기 위한 OpenSSL 설정 파일이다. 하나의 설정 파일에 여러 인증서 설정을 섹션별로 정의해 두고, OpenSSL 명령어 실행 시 `-section` 옵션으로 해당 섹션을 참조하여 각각의 인증서를 생성한다.
+`ca.conf`는 쿠버네티스 클러스터 내 모든 컴포넌트의 TLS 인증서를 생성하기 위한 OpenSSL 설정 파일 형식을 따른다. 하나의 설정 파일에 여러 인증서 설정을 섹션별로 정의해 두고, OpenSSL 명령어 실행 시 `-section` 옵션으로 해당 섹션을 참조하여 각각의 인증서를 생성한다.
 
 단, Root CA 생성 시에는 `-section` 옵션 없이 기본 `[req]` 섹션을 사용하고, 컴포넌트 인증서들은 각자의 섹션(admin, node-0 등)을 명시적으로 지정한다.
 
 <br>
 
-## 구조
+## 섹션별 항목 설명
+
+*[박용연님의 1주차 스터디 정리 글](https://yyeon2.medium.com/bootstrap-kubernetes-the-hard-way-48644e868550)을 참고하였습니다.*
+
+### 섹션 공통 구조
+각 섹션 별로 아래와 같은 구조를 따른다.
+- `distinguished_name`: 인증서의 주체(Subject) 정보를 어디서 가져올지 지정
+- `XXX_req_extensions`: CSR을 만들 때, 추가할 확장(extension) 필드들이 어디에 있는지 지정
+
+### req_extensions
+- `basicConstraints`: CA 인증서인지 확인
+- `extendedKeyUSage`: 인증서 사용 용도 지정
+- `keyUsage`: 키의 사용 방식 지정
+- `subjectAltName`: 해당 인증서로 접근할 수 있는 DNS 이름과 IP 주소 목록(SAN, Subject Alternative Name). 항목이 많을 경우 `@`를 사용해 별도 섹션으로 분리 가능
+
+
+### distinguished_name
+인증서의 Subject 정보를 정의하는 섹션이다. `CN`, `O` 등의 필드는 X.500 표준에서 유래한 Distinguished Name(DN) 구조를 따른다.
+> DN 필드의 유래와 의미는 [이전 글(4.1)의 "Distinguished Name과 X.500 표준" 섹션](/kubernetes/Kubernetes-Cluster-The-Hard-Way-04-1/#distinguished-name-dn과-x500-표준)을 참고하자.
+
+- **`CN`** (Common Name): 사용자 이름으로 매핑. `system:node:<nodeName>`, `system:kube-scheduler` 등
+- **`O`** (Organization): 그룹 이름으로 매핑. `system:nodes`, `system:masters` 등
+
+이 필드들은 RBAC 권한 부여 시 사용되므로, 올바른 값 설정이 중요하다.
+
+<br>
+
+## 파일 구성 확인
 
 `ca.conf` 파일은 다음 8가지 부분으로 구성된다.
 
@@ -91,33 +117,42 @@ CA (Certificate Authority)
 
 ### Root CA
 
-`[req]`, `[ca_x509_extensions]`, `[req_distinguished_name]` 섹션으로 구성된다. ㄴCA 자체의 인증서를 생성하기 위한 설정이다. 
-- `basicConstraints = CA:TRUE`가 설정이 핵심으로, 이 설정이 있어야 다른 인증서에 서명할 수 있는 CA 인증서가 된다.
+CA 자체의 인증서를 생성하기 위한 부분으로, `[req]`, `[ca_x509_extensions]`, `[req_distinguished_name]` 섹션으로 구성된다. 
 
 ```bash
 [req]
 distinguished_name = req_distinguished_name
 prompt             = no                      # CSR 생성 시 대화형 입력 없음
-x509_extensions    = ca_x509_extensions      # CA 인증서 생성 시 사용할 확장
+x509_extensions    = ca_x509_extensions      # CA 인증서 생성 시 사용할 확장 필드: ca_x509_extensions
 
+# x_509_extensions에 의해 바로 아래 해당 블록을 참조함
 [ca_x509_extensions]                         # CA 인증서 설정 (Root of Trust)
 basicConstraints = CA:TRUE                   # 이 인증서가 CA임을 명시
-keyUsage         = cRLSign, keyCertSign      # 다른 인증서 서명 가능
+keyUsage         = cRLSign, keyCertSign      # CA의 핵심 권한
+                                             # - keyCertSign: 다른 인증서에 서명
+                                             # - cRLSign: 인증서 폐기 목록(CRL) 서명
 
 [req_distinguished_name]
-C   = US
-ST  = Washington
-L   = Seattle
-CN  = CA                                     # 클러스터 CA  
+C   = US                                     # Country: 국가 코드
+ST  = Washington                             # State: 주/도
+L   = Seattle                                # Locality: 지역/도시
+CN  = CA                                     # Common Name: 이름. 이 경우, CA로 클러스터 CA  
 ```
 
+- `basicConstraints = CA:TRUE`가 설정이 핵심으로, 이 설정이 있어야 다른 인증서에 서명할 수 있는 CA 인증서가 된다
+- `[req_distinguished_name]` 항목에 따라, 인증서가 생성될 때 Subject 필드에 `Subject: C=US, ST=Washington, L=Seattle, CN=CA` 값이 들어간다
+
+> Root CA는 지리적 정보(C, ST, L)를 포함하지만, 다른 컴포넌트 인증서들은 주로 CN(사용자)과 O(그룹)만 중요하다. 
 
 <br>
 
 ### Admin
 
-`[admin]`, `[admin_distinguished_name]` 섹션으로 구성된다. kubectl 사용자를 위한 인증서이다. 
-- `O = system:masters`는 쿠버네티스의 built-in 슈퍼유저 그룹이다. 이 그룹에 속한 사용자는 모든 리소스에 대한 전체 권한을 가진다.
+Admin 사용자를 위한 설정이다. `[admin]`, `[admin_distinguished_name]` 섹션으로 구성된다. 
+
+클러스터 관리자 권한을 가진 사용자(`CN=admin`)를 위한 인증서이다. 이 실습에서는 jumpbox에서 kubectl을 실행할 때 이 인증서를 사용하여 클러스터를 관리한다.
+> 실제 kubectl 설정 방법은 [10. Configuring kubectl for Remote Access]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-10 %})에서 다룬다.
+
 
 ```bash
 [admin]                                      # Admin 사용자 (kubectl)
@@ -130,12 +165,27 @@ CN = admin                                   # 쿠버네티스 사용자 이름
 O  = system:masters                          # 쿠버네티스 슈퍼유저 그룹, 모든 RBAC 인가 우회
 ```
 
+
+- `O = system:masters`는 쿠버네티스의 built-in 슈퍼유저 그룹이다. 이 그룹에 속한 사용자는 모든 리소스에 대한 전체 권한을 가진다.
+- kubectl은 여러 사용자 인증서를 전환하며 사용할 수 있지만, 이 실습에서는 단순화를 위해 admin 인증서만 사용한다.
+
 <br>
 
 ### Service Accounts
 
-`[service-accounts]`, `[service-accounts_distinguished_name]` 섹션으로 구성된다. Controller Manager가 ServiceAccount 토큰을 생성하고 서명할 때 사용하는 인증서이다.
-- 이 인증서의 키 쌍은 kube-controller-manager의 `--service-account-private-key-file` 옵션과 kube-apiserver의 `--service-account-key-file` 옵션에서 사용된다.
+
+`[service-accounts]`, `[service-accounts_distinguished_name]` 섹션으로 구성된다. 
+
+ServiceAccount 토큰의 생성(서명)과 검증에 사용되는 키 쌍이다. Pod 내부에서 실행되는 애플리케이션이 API Server와 통신할 때 인증에 사용하는 토큰을 발급하고 검증하는 데 필요하다.
+
+이후 실습 진행 과정의 kube-apiserver, kube-controller-manager 설정 과정에서 사용될 것이다.
+
+- **kube-controller-manager**: `--service-account-private-key-file`에 개인키(`.key`)를 지정하여 ServiceAccount 토큰 생성 및 서명
+- **kube-apiserver**: 
+  - `--service-account-key-file`에 공개키(`.crt`)를 지정하여 Pod가 보낸 토큰 검증
+  - `--service-account-signing-key-file`에 개인키(`.key`)를 지정하여 API Server도 토큰 발급 가능 (v1.20+)
+
+> 실제 설정은 [8.1. Bootstrapping the Kubernetes Control Plane]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-08-1 %})에서 확인할 수 있다.
 
 ```bash
 [service-accounts]                           # Service Account 서명자
@@ -146,6 +196,7 @@ req_extensions     = default_req_extensions
 [service-accounts_distinguished_name] 
 CN = service-accounts                        # ServiceAccount 토큰 서명용 인증서
 ```
+> ServiceAccount 인증서는 API Server와 통신하는 데에 사용되지 않고, 단지 Service Account 토큰을 서명하고 검증하는 데에만 사용된다. 따라서 RBAC 매핑이 필요 없어 O 필드가 필요하지 않다.
 
 <br>
 
@@ -160,8 +211,8 @@ kubelet이 API 서버와 통신하기 위한 인증서이다.
 node-0과 node-1이 동일한 구조로 정의된다.
 
 ```bash
-[node-0]                                    # Worker Node 인증서 (kubelet)
-distinguished_name = node-0_distinguished_name
+[node-0]                                       # Worker Node 인증서 (kubelet)
+distinguished_name = node-0_distinguished_name # node-0_distinguished_name 참조 
 prompt             = no
 req_extensions     = node-0_req_extensions
 
@@ -401,6 +452,8 @@ req_extensions = default   req_extensions = default
 
 ## 실제 동작
 
+![kubernetes-the-hard-way-ca-conf.png]({{site.url}}/assets/images/kubernetes-the-hard-way-ca-conf.png)
+
 OpenSSL 명령어 실행 시 `-section` 옵션으로 섹션을 지정하면, 해당 섹션에서 시작하여 참조를 따라가며 설정을 읽는다.
 
 ```bash
@@ -418,48 +471,6 @@ openssl req -new -key admin.key \
 # 5. [default_req_extensions] 섹션으로 이동 → 확장 정보 읽기
 ```
 
-```
-┌─────────────────────────────────────────────────────────┐
-│              OpenSSL ca.conf 파일                        │
-│                                                          │
-│  ┌────────────────────────────────────────────────┐    │
-│  │ [admin] 섹션                                    │    │
-│  │ distinguished_name = admin_distinguished_name   │────┼─┐
-│  │ req_extensions = default_req_extensions         │────┼─│─┐
-│  └────────────────────────────────────────────────┘    │ │ │
-│                                                          │ │ │
-│  ┌────────────────────────────────────────────────┐    │ │ │
-│  │ [admin_distinguished_name] ◄────────────────────────┼─┘ │
-│  │ CN = admin                                      │    │   │
-│  │ O  = system:masters                            │    │   │
-│  └────────────────────────────────────────────────┘    │   │
-│                                                          │   │
-│  ┌────────────────────────────────────────────────┐    │   │
-│  │ [default_req_extensions] ◄──────────────────────────┼───┘
-│  │ basicConstraints = CA:FALSE                     │    │
-│  │ extendedKeyUsage = clientAuth                   │    │
-│  │ keyUsage = critical, digitalSignature, ...      │    │
-│  └────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────┘
-              │
-              │ openssl req -new -key admin.key 
-              │             -config ca.conf 
-              │             -section admin       ◄─── 섹션 지정
-              │             -out admin.csr
-              ▼
-     ┌──────────────────┐
-     │   admin.csr      │
-     │                  │
-     │ Subject:         │
-     │   CN=admin       │ ◄─── [admin_distinguished_name]에서
-     │   O=system:masters│
-     │                  │
-     │ Extensions:      │ ◄─── [default_req_extensions]에서
-     │   basicConstraints: CA:FALSE
-     │   extendedKeyUsage: Client Authentication
-     └──────────────────┘
-```
-
 <br>
 
 # 결과
@@ -474,8 +485,6 @@ openssl req -new -key admin.key \
 
 이번 실습에서는 [Kubernetes the Hard Way 튜토리얼](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/configs/ca.conf)에서 제공하는 `ca.conf` 파일을 분석했다. 실무에서 인증서 갱신, 컴포넌트 추가, 커스텀 네트워크 환경 구성 시 이 글에서 분석한 각 섹션의 의미와 필드 설정 방법을 참고하면 된다.
 
-<br>
+<br> 
 
----
-
-다음 글에서는 이 설정 파일을 사용하여 실제로 인증서를 생성하고 확인한다.
+다음 단계에서는 이 설정 파일을 사용하여 실제로 인증서를 생성하고 확인한다.

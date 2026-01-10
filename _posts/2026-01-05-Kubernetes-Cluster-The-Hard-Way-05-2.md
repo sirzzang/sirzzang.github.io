@@ -502,7 +502,7 @@ ssh server ls -l /root/*.kubeconfig
 
 이번 실습을 통해 Kubernetes 컴포넌트가 API Server와 통신하기 위한 kubeconfig 파일을 직접 생성하고 배포해 보았다. kubeconfig의 구성 요소(clusters, users, contexts)와 각 컴포넌트별 인증서 사용 방식, Node Authorizer가 kubelet을 자동으로 인식하는 명명 규칙 등을 이해할 수 있었다. 각 노드에 필요한 kubeconfig만 선별적으로 배포하여 보안을 강화했다.
 
-<br>
+<br> 
 
-다음 글에서는 Kubernetes Secret 데이터를 암호화하기 위한 설정을 구성한다.
+다음 단계에서는 Kubernetes Secret 데이터를 암호화하기 위한 설정을 구성한다.
 

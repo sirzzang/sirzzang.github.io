@@ -429,4 +429,6 @@ ssh server ls -l /root/encryption-config.yaml
 
 <br>
 
-다음 글에서는 Kubernetes 클러스터의 핵심 데이터 저장소인 etcd 클러스터를 구성한다.
+<br> 
+
+다음 단계에서는 Kubernetes 클러스터의 핵심 데이터 저장소인 etcd 클러스터를 구성한다.
