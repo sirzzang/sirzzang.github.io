@@ -4,6 +4,7 @@ excerpt:
 categories:
   - CS
 toc: false
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

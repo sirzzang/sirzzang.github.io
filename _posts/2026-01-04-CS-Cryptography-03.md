@@ -4,6 +4,7 @@ excerpt: "대칭키 암호화의 개념과 DES, 3DES, AES 알고리즘"
 categories:
   - CS
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

@@ -6,6 +6,7 @@ header:
 
 categories:
   - CS
+hidden: true
 toc : true
 tags:
   - 알고리즘
