@@ -70,7 +70,7 @@ Managed Node 목록을 정의한 파일이다. 호스트를 그룹으로 묶거�
 
 - 호스트: 개별 서버 (`web1.example.com`)
 - 그룹: 서버들의 논리적 묶음 (`[webservers]`)
-- 변수: 호스트나 그룹에 적용되는 설정
+- 변수: 호스트나 그룹에 적용되는 상세 설정 값(접속 정보, 환경 변수 등)
 
 
 ```ini
@@ -128,32 +128,43 @@ Task가 실제로 호출하는 코드 단위로, **이미 Python으로 작성된
 - `service`: 서비스 관리
 - `shell`, `command`: 명령 실행
 
-**Playbook과 Module의 관계**
 
-혼동하기 쉬운 부분인데, Playbook(YAML)이 Python으로 변환되는 것이 아니다.
+<br>
 
-- **Playbook**: "어떤 Module을, 어떤 파라미터로 호출할지" 정의하는 YAML 파일
-- **Module**: 이미 Python으로 작성된 실행 코드
+Playbook에 작성한 Task가 실제 서버에서 어떻게 실행되는지 살펴 보자.
+
 
 ```yaml
 - name: Install nginx
-  apt:                    # <- apt 모듈 호출
+  apt:                    # <- 'apt'라는 이름의 Python 모듈을 호출해라
     name: nginx
-    state: present
+    state: present        # 모듈에 전달할 파라미터 1
 ```
 
-위 Task를 실행하면:
 
-1. **Playbook 파싱**: "apt 모듈을 `name=nginx, state=present` 파라미터로 호출해라"
-2. **모듈 찾기**: `/usr/lib/python3/dist-packages/ansible/modules/apt.py`
-3. **파라미터 변환**: JSON으로 직렬화
+
+1. **Playbook 파싱**: "apt 모듈을 `name=nginx, state=present` 파라미터로 호출해라"라고 해석
+2. **모듈 찾기**: Control 노드 내에 저장된 `/usr/lib/python3/dist-packages/ansible/modules/apt.py` 파일을 찾음
+3. **파라미터 변환**: 파라미터로 전달되어야 하는 설정값들을 JSON으로 직렬화함
    ```json
    { "name": "nginx", "state": "present" }
    ```
-4. **모듈 실행**: `python3 apt.py` + JSON 파라미터 전달
-5. **모듈 내부**: `module.params['name']`으로 파라미터 접근
+4. **모듈 실행**: `apt` 모듈과 직렬화된 JSON 파라미터를 Managed Node로 보냄
+5. **모듈 내부**: Managed Node에서 `python3 apt.py {JSON 파라미터}` 형태로 명령이 실행됨
 
-Playbook 자체가 Python으로 변환되는 것이 아니라, **Playbook이 지정한 Module(Python)이 실행**된다.
+
+<br>
+헷갈리기 쉬운 부분인데, Playbook(YAML)이 Python으로 변환되는 것이 아니다.
+| 구분 | Playbook (YAML) | Module (Python) |
+| :--- | :--- | :--- |
+| **역할** | **"무엇을"** 할지 정의 (시나리오) | **"어떻게"** 할지 구현 (실행 코드) |
+| **비유** | 식당의 **주문서** | 주문을 처리하는 **요리사** |
+| **관계** | 어떤 모듈을 쓸지 지정함 | 이미 작성된 코드가 호출됨 |
+
+
+Playbook 자체가 Python으로 변환되는 것이 아니라, **Playbook이 지정한 Module(Python)이 실행**된다. Playbook은 일종의 **호출 명세서**이다.
+
+<br>
 
 ## Handler
 
@@ -251,9 +262,13 @@ web2  : ok=3  changed=0  unreachable=0  failed=0
 # 특징
 
 Ansible은 아래와 같은 특징을 지닌다. 
-- **에이전트리스(Agentless)**: SSH 기반, 별도 에이전트 설치 불필요
-- **멱등성 지향**: 아래에서 상세히 다룸
+- **에이전트리스(Agentless)**: SSH 기반으로 별도 에이전트 설치 불필요
+- **멱등성 지향**: 
 - **YAML 기반**: 쉬운 작성과 가독성
+
+다른 특징은 [이전 글]({% post_url 2026-01-12-Kubernetes-Ansible-00 %})에서 자세히 살펴 보았으므로, 멱등성에 대해서 살펴 보자.
+
+<br>
 
 ## 멱등성: 보장이 아니라 지향
 
@@ -294,26 +309,32 @@ Ansible의 특징으로 **멱등성(Idempotency)**이 자주 언급된다. 그�
 ```
 
 
-### 그럼에도 불구하고 멱등성이 특징이라고 볼 수 있는 이유
+### Ansible과 멱등성
 
-그럼 왜 "멱등성"이 특징인가?
+이렇게 어떤 모듈은 멱등하지 않음에도 불구하고 왜 Ansible을 이야기할 때 `멱등성`이 가장 먼저 언급될까? 그 이유는 Ansible이 단순히 명령을 전달하는 도구를 넘어, **시스템을 멱등하게 유지하기 위한 철학과 기능**을 갖추고 있기 때문이다.
+
+<br>
 
 **1. 설계 철학: Desired State**
 
-Ansible은 "원하는 상태(desired state)"를 선언하는 도구다. "어떻게(how)"가 아니라 "무엇을(what)" 선언하고, 현재 상태와 비교하여 필요한 변경만 수행한다. 이 철학 자체가 멱등성을 지향한다.
+Ansible은 "원하는 상태(desired state)"를 선언하는 도구다. "어떻게(how) 시스템을 바꿀 것인가"가 아니라 "시스템이 어떤 상태(what)여야 하는지" 선언하고, 현재 상태와 비교하여 필요한 변경만 수행한다. 
+- 사용자는 원하는 최종 상태를 정의한다
+- Ansible이 현재 상태와 비교해 차이가 있을 때만 작업을 수행한다
 
-**2. 멱등성을 위한 기능 제공**
+<br>
 
-멱등하지 않은 모듈도 멱등하게 사용할 수 있는 도구를 제공한다.
+**2. 멱등성 확보를 위한 안전장치 제공**
+
+멱등성이 보장되지 않는 하위 수준의 명령(`shell`, `command` 등)을 쓸 때도, 이를 멱등하게 만들 수 있는 옵션들을 제공
 
 ```yaml
-# creates: 파일이 존재하면 실행 안 함
+# creates: 파일이 존재하면 실행 안 함(중복 설치 방지)
 - name: Run install script
   shell: /tmp/install.sh
   args:
     creates: /opt/app/installed.txt
 
-# when 조건으로 상태 확인 후 실행
+# when 조건으로 상태 확인 후 실행(상태 체크 결과를 조건문으로 활용)
 - name: Check if configured
   stat:
     path: /etc/app/config
@@ -324,19 +345,26 @@ Ansible은 "원하는 상태(desired state)"를 선언하는 도구다. "어떻�
   when: not config_stat.stat.exists
 ```
 
-**3. changed_when으로 명시적 제어**
+**3. 결과 상태의 명시적 제어**: changed_when, failed_when
+
+Ansible은 기본적으로 명령 실행 후 리턴 코드(`rc`)가 0이면 `changed`, 그 외에는 `failed`로 간주한다. 하지만, 단순히 상태를 조회하는 명령은 실제 변경이 일어나지 않았음에도 `changed`거나, 정상적인 상황임에도 에러(`failed`)로 처리될 수 있다. 
+
+이 때 `changed_when`, `failed_when`으로 명시적으로 상태를 제어할 수 있는 것이다.
 
 ```yaml
 - name: Check service status
   shell: systemctl is-active myapp
   register: result
-  changed_when: false  # 항상 ok로 표시
-  failed_when: result.rc not in [0, 3]
+  # 상태 조회일 뿐이므로, 실행되더라도 changed가 아니라 ok로 표시되게 함
+  changed_when: false 
+  # 리턴 코드가 0 혹은 3이면 정상, 그 외에는 실패
+  failed_when: result.rc not in [0, 3] 
 ```
 
 ### 결론
 
-사실 대부분의 맥락에서는 Ansible이 멱등성을 보장한다고 해도 크게 무리는 없어 보인다. 다만, 조금 더 엄밀하게 표현하고 싶다면, "Ansible은 멱등성을 보장한다"라는 표현 보다는, 아래와 같이 표현하는 것이 좋지 않을까:
+사실 대부분의 맥락에서는 Ansible이 멱등성을 보장한다고 해도 크게 무리는 없어 보인다.
+다만, 조금 더 엄밀하게 표현하고 싶다면, "Ansible은 멱등성을 보장한다"라는 표현 보다는, 아래와 같이 표현하는 것이 좋지 않을까:
 - "Ansible은 멱등성을 **지향**하는 도구다"
 - "Ansible의 **대부분의 핵심 모듈**은 멱등하다"
 - "Ansible은 멱등성을 **구현할 수 있는 기능**을 제공한다"
@@ -361,7 +389,26 @@ Ansible은 IaC(Infrastructure as Code) 도구로 분류된다. IaC란 인프라�
 
 그리고 Ansible을 IaC를 위한 자동화 도구로 소개한다.
 
-> Codifying your infrastructure gives you a template to follow for provisioning. Though this can still be accomplished manually, an automation tool, such as Red Hat Ansible Automation Platform, can do it for you. 
+> Codifying your infrastructure gives you a template to follow for provisioning. Though this can still be accomplished manually, an automation tool, such as Red Hat Ansible Automation Platform, can do it for you.
+
+<br>
+
+## Terraform과의 비교
+
+IaC 도구로는 Terraform이 가장 많이 언급되는데, Ansible과는 어떤 차이가 있을까?
+
+| 구분 | Terraform | Ansible |
+|------|-----------|---------|
+| **주요 용도** | 인프라 프로비저닝 (생성/삭제) | 구성 관리 (Configuration Management) |
+| **강점** | 클라우드 리소스 생성 (EC2, VPC 등) | 서버 설정, 애플리케이션 배포 |
+| **상태 관리** | State 파일로 현재 상태 추적 | Stateless (상태 파일 없음) |
+| **언어** | HCL (선언형) | YAML (절차형에 가까움) |
+| **실행 방식** | 선언된 상태와 실제 상태 비교 후 조정 | Task를 정의된 순서대로 실행 |
+
+간단히 말하면, **Terraform으로 인프라를 만들고, Ansible로 그 위에 소프트웨어를 설정**한다고 볼 수 있다. 실제로 두 도구를 함께 사용하는 경우가 많다. 
+
+
+
 
 # 여담
 
@@ -371,31 +418,14 @@ Ansible을 공부하면서 다른 기술들과의 유사성이 눈에 들어왔�
 
 Ansible의 반환 상태(changed, ok, failed)는 HTTP Status Code와 비슷한 구조다.
 
-| HTTP Status | Ansible 상태 | 의미 |
-|-------------|-------------|------|
-| 200 OK | ok | 성공, 변경 없음 |
-| 201 Created | changed | 성공, 상태 변경됨 |
-| 4xx, 5xx | failed | 실패 |
-| 304 Not Modified | skipped | 실행 안 함 |
-
-둘 다 **표준 규약을 정의**하고, **구현체가 적절한 코드를 반환**하는 구조다. HTTP가 "웹 통신의 표준 응답 규약"이라면, Ansible의 changed/ok/failed는 "인프라 자동화의 표준 응답 규약"이라 할 수 있다.
+둘 다 **표준 규약을 정의**하고, **구현체가 적절한 코드를 반환**하는 구조다. HTTP가 "웹 통신의 표준 응답 규약"이라면, Ansible의 changed/ok/failed는 "인프라 자동화의 표준 응답 규약"이라 할 수 있다. 
 
 멱등성 관점에서도 유사하다. REST API를 HTTP로 구현할 때 PUT/DELETE는 멱등해야 하지만 실제 구현은 개발자에 따라 다르듯, Ansible도 멱등성을 지향하지만 모든 모듈이 멱등한 건 아니다.
 
 ## Kubernetes Desired State와의 유사성
 
-Ansible과 Kubernetes는 **Desired State(원하는 상태)** 철학을 공유한다.
+Ansible과 Kubernetes는 **Desired State(원하는 상태)**를 정의한다는 점에서 닮았다. 
 
-| 비교 | Kubernetes | Ansible |
-|------|------------|---------|
-| 상태 선언 | `replicas: 3` | `state: present` |
-| 조정 방식 | 지속적 Reconciliation | 실행 시점에만 |
-| 감시 | Controller가 계속 감시 | 실행 전까지 모름 |
-| 방식 | Pull (지속적) | Push (필요할 때) |
-
-핵심 차이는 **지속성**이다. Kubernetes는 Controller가 계속 감시하며 Desired State를 유지하지만, Ansible은 Playbook 실행 시점에만 조정한다.
-
-실무에서는 **Ansible로 Kubernetes 클러스터를 구축**하고, **Kubernetes로 애플리케이션을 운영**하는 패턴이 일반적이다. Kubespray가 바로 이 패턴의 대표적인 예다.
-
-<br>
+다만, 핵심 차이는 상태를 유지하려는 지속성이다. Kubernetes는 Controller가 24시간 내내 현재 상태를 감시하며 원하는 상태로 되돌리는 Reconciliation Loop(조정 루프)가 동작하지만, Ansible은 사용자가 Playbook을 실행하는 그 시점에만 원하는 상태가 되도록 조정한다.
+ 
 

@@ -18,9 +18,7 @@ tags:
 
 # 들어 가며
 
-Kubespray는 Ansible을 기반으로 동작한다. Kubespray를 제대로 이해하려면 Ansible에 대해 먼저 알아야 한다. 그래서 Ansible에 대해 공부하기 위해 공식 문서 첫 페이지에 들어가 봤는데, 첫 장에서부터 발이 묶였다. 
-
-기술에 담긴 설계 철학이, 궁금해지지 아니할 수 없는 소개였기 때문이다.
+Kubespray는 Ansible을 기반으로 동작한다. Kubespray를 제대로 이해하려면 Ansible에 대해 먼저 알아야 한다. 
 
 <br>
 
@@ -29,8 +27,6 @@ Kubespray는 Ansible을 기반으로 동작한다. Kubespray를 제대로 이해
 어떤 기술을 접할 때, 공식 문서 첫 장을 읽는 걸 좋아하는 편이다. [Ansible 공식 문서](https://docs.ansible.com/) 첫 페이지를 보면, 깔끔한 디자인과 함께 아래 문구가 눈에 띈다.
 
 > Ansible is open-source technology that can perform virtually any IT task and remove complexity from workflows.
-
-<br>
 
 *virtually any IT task*, 거의 모든 IT 태스크를 수행할 수 있고, workflow의 복잡함을 제거한다. '자동화'라는 말은 없지만, 사실상 자동화 도구임을 알 수 있다. 실제로 Ansible로 할 수 있는 것들을 나열해 보면, 정말 거의 모든 것이다.
 
@@ -59,7 +55,9 @@ Kubespray는 Ansible을 기반으로 동작한다. Kubespray를 제대로 이해
 - **문서처럼 읽히는 코드**: 어떠한 IT 환경이든 표현할 수 있는 자동화 언어다. homelab이든 대규모 인프라든 상관없다. 배우기 쉽고, 마치 명확한 문서처럼 읽히는 아름다운 코드다.
 - **반복 작업으로부터의 해방**: 자동화 엔진으로서, 복잡성과 관계없이 내가 묘사하는 대로 IT 환경이 유지되게 해 준다. 어떤 명령이든 자동화해서 일상의 고역(*drudgery*)을 없앨 수 있다. 더 생산적일 수 있고, 진짜 중요한 문제에 집중할 수 있게 도와준다.
 
-고역이지 않게, 거의 모든 IT 환경을, 내가 원하는 대로, 복잡하지 않은 방식으로 설정할 수 있는 도구를 만들고 싶었던 것 같다.
+<br>
+
+거의 모든 IT 환경을, 내가 원하는 대로, 고역이지 않게, 복잡하지 않은 방식으로 설정할 수 있는 도구를 만들고 싶었던 것 같다.
 
 <br>
 
@@ -106,9 +104,10 @@ Ruby DSL 기반의 복잡한 문법이다. 리소스 간 의존성을 `require`,
 
 <br>
 
-Michael DeHaan은 이러한 복잡성에서 벗어나고 싶었던 것 같다.
+Michael DeHaan은 이러한 복잡성에서 벗어나고 싶었던 게 아닐까?
 
-같은 nginx 설정을 Ansible로 작성하면 아래와 같다.
+같은 nginx 설정을 Ansible로 작성하면 아래와 같다. 확실히 읽기 쉽다. 각 Task의 이름이 자연어로 되어 있고, 무엇을 하는지 명확하다. 의존성도 `notify`로 간단하게 표현된다.
+
 
 ```yaml
 # Ansible - YAML 기반, 읽기 쉬운 선언적 구조
@@ -137,7 +136,6 @@ Michael DeHaan은 이러한 복잡성에서 벗어나고 싶었던 것 같다.
         state: restarted
 ```
 
-확실히 읽기 쉽다. 각 Task의 이름이 자연어로 되어 있고, 무엇을 하는지 명확하다. 의존성도 `notify`로 간단하게 표현된다.
 
 <br>
 
@@ -145,11 +143,11 @@ Michael DeHaan은 이러한 복잡성에서 벗어나고 싶었던 것 같다.
 
 ## 핵심 신념
 
-Michael DeHaan은 Ansible을 만들 때 명확한 원칙이 있었다.
+Michael DeHaan은 Ansible을 만들 때 명확한 원칙이 있었다. 그가 인터뷰에서 했다는 말을 살펴 보면:
 
 > "If people aren't successful trying this out in about 30 minutes, they're going to move on. You have to make somebody successful within their lunch hour."
 
-그는 인터뷰에서 이렇게 말했다. "사람들이 30분 안에 성공하지 못하면 다른 도구로 넘어간다. 점심시간 안에 성공 경험을 만들어줘야 한다."
+"사람들이 30분 안에 성공하지 못하면 다른 도구로 넘어간다. 점심시간 안에 성공 경험을 만들어줘야 한다."고 한다.
 
 단순성에 대한 그의 철학은 여기서 나온다. 내부는 복잡해도 되지만, 사용자가 보는 인터페이스는 30분 안에 이해할 수 있어야 한다. 공식 문서에서 봤던 *"no matter the complexity"*의 진짜 의미가 여기에 있다. 복잡한 자동화 작업도 사용자에게는 간단해야 한다는 것이다.
 
@@ -208,7 +206,7 @@ Ansible이 선택한 Push 방식은 사용자의 학습 곡선을 낮추기도 �
 
 ## YAML 선택
 
-Ansible은 복잡한 DSL 대신 YAML을 선택했다. 문서처럼 읽히고, 선언적 구조를 가지며, 쉽게 비개발자도 이해할 수 있다. Chef와 비교해 보면 차이가 명확하다.
+Ansible은 복잡한 DSL 대신 YAML을 선택했다. 문서처럼 읽히고, 선언적 구조를 가진다. Chef와 비교해 보면 차이가 명확하다.
 
 ```ruby
 # Chef - Ruby 기반, 프로그래밍 언어 형태
