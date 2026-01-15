@@ -16,11 +16,11 @@ tags:
 
  리액트로 개발을 하면서 이것저것 만져 보다가, 컴포넌트의 상태 세터 함수에 `this`를 붙여 보았다. ~~*애초에 지금 생각해 보면 왜 했는지 모르겠는데ㅎㅎ;;*~~
 
-![js-this-error]({{site.url}}/assets/images/js-this-error-01.png){{: .align-center}}
+![js-this-error]({{site.url}}/assets/images/js-this-error-01.png){: .align-center}
 
 <center><sup>`Discount`와 `Installment`는 비슷한 컴포넌트인데, 저렇게 코드를 바꿔 보았더니</sup></center>
 
-![js-undefined-error]({{site.url}}/assets/images/js-this-error-02.png){{: .align-center}}
+![js-undefined-error]({{site.url}}/assets/images/js-this-error-02.png){: .align-center}
 
 <center><sup>`Installment` 컴포넌트에서만 닫기 버튼을 클릭할 때 위와 같은 에러가 난다!</sup></center>
 

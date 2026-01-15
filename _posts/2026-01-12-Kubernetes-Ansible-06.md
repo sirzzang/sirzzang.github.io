@@ -77,9 +77,9 @@ tags:
 > **참고**: Jinja2란?
 >
 > [Jinja2](https://jinja.palletsprojects.com/)는 Python 기반의 템플릿 엔진이다. Ansible은 Jinja2를 사용하여 변수 치환, 조건문, 반복문 등을 처리한다.
-> - `{{ }}`: 변수 출력
-> - `{% %}`: 제어문 (조건문, 반복문)
-> - `{# #}`: 주석
+> - {% raw %}`{{ }}`{% endraw %}: 변수 출력
+> - {% raw %}`{% %}`{% endraw %}: 제어문 (조건문, 반복문)
+> - {% raw %}`{# #}`{% endraw %}: 주석
 
 ```yaml
 - name: Create User {{ user }}

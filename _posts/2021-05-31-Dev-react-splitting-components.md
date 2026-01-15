@@ -136,7 +136,7 @@ const CustomDialog = (props) => {
         variant="outlined"
         color="primary"
         onClick={handleToggleDialog(true)}
-        style={{ flexGrow: 1 }}
+        style={% raw %}{{ flexGrow: 1 }}{% endraw %}
       >
         {/* index.js에서 보일 버튼 text */}
         {text}

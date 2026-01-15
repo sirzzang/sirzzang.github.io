@@ -165,7 +165,7 @@ tcpdump: listening on wlp0s20f3, link-type EN10MB (Ethernet), capture size 26214
 
  `cat`이나 `vi`를 통해 tcpdump 패킷 분석 출력 파일을 읽으려고 하면, 아래와 같이 이상한 문자가 뜬다.
 
-![tcpdump-pcap-error]({{site.url}}/assets/images/tcpdump-pcap-error.png){{: .align-center}}
+![tcpdump-pcap-error]({{site.url}}/assets/images/tcpdump-pcap-error.png){: .align-center}
 
 <br>
 

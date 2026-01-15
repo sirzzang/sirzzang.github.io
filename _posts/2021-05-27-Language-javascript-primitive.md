@@ -15,7 +15,7 @@ tags:
 
  MobX 스토어에서 상태 관리를 하다, 다음과 같은 상황을 마주했다.
 
-![variable-error]({{site.url}}/assets/images/variable-error-01.png){{: .align-center}}
+![variable-error]({{site.url}}/assets/images/variable-error-01.png){: .align-center}
 
 <br>
 
