@@ -152,7 +152,7 @@ Operating System: Ubuntu 24.04.3 LTS
 # (server) #
 htop
 ```
-![ansible-02-htop]({{site.url}}/assets/images/ansible-02-htop.png){: .align-center width="400"}
+![ansible-02-htop]({{site.url}}/assets/images/ansible-02-htop.png){: .align-center width="600"}
 - **htop**: 실시간 프로세스 모니터링 도구 (top의 개선 버전)
 - CPU, 메모리 사용률, 실행 중인 프로세스 목록을 시각적으로 확인
 - 실습 환경에서 시스템 부하를 모니터링하는 용도

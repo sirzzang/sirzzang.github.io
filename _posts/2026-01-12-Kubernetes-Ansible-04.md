@@ -413,7 +413,7 @@ ansible -m setup -a "filter=ansible_distribution*" all
 
 # 출력 색상의 의미
 
-![ansible-04-print-color]({{site.url}}/assets/images/ansible-04-print-color.png){: .align-center width="400"}
+![ansible-04-print-color]({{site.url}}/assets/images/ansible-04-print-color.png){: .align-center width="600"}
 
 Ansible 실행 결과는 상태에 따라 다른 색상으로 표시된다:
 
@@ -430,7 +430,7 @@ Ansible 실행 결과는 상태에 따라 다른 색상으로 표시된다:
 
 [Ansible 개요 글]({% post_url 2026-01-12-Kubernetes-Ansible-01 %})에서 멱등성에 대해 살펴볼 때, `shell` 모듈은 **멱등성이 보장되지 않는 대표적인 모듈**이라고 했다. 실제로 위 실습에서 `uptime`이나 `tail` 명령은 시스템에 아무런 변경을 가하지 않았음에도 결과가 모두 `CHANGED`로 표시된다.
 
-![ansible-04-shell-changed-color]({{site.url}}/assets/images/ansible-04-shell-changed-color.png){: .align-center width="400"}
+![ansible-04-shell-changed-color]({{site.url}}/assets/images/ansible-04-shell-changed-color.png){: .align-center width="600"}
 
 **이유**: `shell`과 `command` 모듈은 Ansible이 명령 실행 전후의 시스템 상태를 비교할 방법이 없다. 단순히 "명령이 실행되었다"는 사실만 알 수 있으므로, 항상 `CHANGED`를 반환한다.
 

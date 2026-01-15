@@ -199,7 +199,7 @@ Origin: /root/my-ansible/first-playbook-with-error.yml:4:7
 ansible-playbook first-playbook.yml
 ```
 
-![ansible-05-first-playbook-result]({{site.url}}/assets/images/ansible-05-first-playbook-result.png){: .align-center width="400"}
+![ansible-05-first-playbook-result]({{site.url}}/assets/images/ansible-05-first-playbook-result.png){: .align-center width="600"}
 
 **출력 해석:**
 - `PLAY [all]`: all 그룹에 대한 Play 시작
@@ -255,7 +255,7 @@ EOT
 ansible-playbook --check restart-service.yml
 ```
 
-![ansible-05-restart-service-check]({{site.url}}/assets/images/ansible-05-restart-service-check.png){: .align-center width="400"}
+![ansible-05-restart-service-check]({{site.url}}/assets/images/ansible-05-restart-service-check.png){: .align-center width="600"}
 
 > **참고**: `--check`는 Kubernetes의 `kubectl apply --dry-run`과 유사한 개념이다. 실제 변경 없이 "이렇게 변경될 것이다"를 미리 확인할 수 있다.
 
@@ -272,7 +272,7 @@ ansible-playbook restart-service.yml
 
 Ubuntu 노드(tnode1, tnode2)에서는 성공하지만, Rocky Linux 노드(tnode3)에서는 실패한다.
 
-![ansible-05-restart-service-error]({{site.url}}/assets/images/ansible-05-restart-service-error.png){: .align-center width="400"}
+![ansible-05-restart-service-error]({{site.url}}/assets/images/ansible-05-restart-service-error.png){: .align-center width="600"}
 
 - **실패 원인**: Ubuntu의 SSH 서비스명은 `ssh`이고, Rocky Linux의 SSH 서비스명은 `sshd`이다.
 

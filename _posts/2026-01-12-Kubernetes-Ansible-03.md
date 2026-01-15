@@ -470,9 +470,7 @@ Ansible 설치 시 `/etc/ansible/hosts` 파일이 기본 인벤토리로 제공�
 ```bash
 # (server) #
 cat /etc/ansible/hosts
-```
 
-```ini
 # This is the default ansible 'hosts' file.
 #
 # It should live in /etc/ansible/hosts
