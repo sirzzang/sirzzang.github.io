@@ -42,6 +42,7 @@ Ansible을 사용할 때 알아야 하는 핵심 개념들이다.
 - **Playbook, Play, Task**: 자동화 시나리오 정의
 - **Module**: 실제 작업을 수행하는 코드 단위
 - **Handler**: 변경 시 트리거되는 특수 Task
+- **Plugin**: Ansible 핵심 기능을 확장하는 모듈
 - **Role**: 재사용 가능한 Playbook 패키지
 
 ## Control Node와 Managed Node
@@ -49,10 +50,13 @@ Ansible을 사용할 때 알아야 하는 핵심 개념들이다.
 Ansible의 가장 기본적인 구성은 **Control Node**와 **Managed Node**다.
 
 - **Control Node**: Ansible이 설치되어 실행되는 서버
+  - **Ansible Core**(또는 Ansible 패키지)가 설치되어 Playbook 실행, 모듈 관리, SSH 통신 등을 담당함
   - Playbook, Inventory, 모듈을 보관하고 실행함
-  - 리눅스, macOS, BSD 계열 유닉스, WSL을 지원하는 Windows 등 Python이 설치된 환경이면 어디서든 실행할 수 있음
+  - Ansible은 Python 모듈을 이용하므로 **Python이 함께 설치**되어 있어야 함
+  - 리눅스, macOS, BSD 계열 유닉스, WSL을 지원하는 Windows 등에서 실행 가능
 - **Managed Node**: Playbook이 실행되어 실제 작업(애플리케이션 설치, 클라우드 리소스 생성 등)이 수행되는 대상 서버들
-  - Python이 설치되어 있고 SSH 연결이 가능해야 함
+  - **리눅스 또는 Windows**가 설치된 노드일 수 있음
+  - **제어 노드와 SSH 통신이 가능**해야 하며(Windows는 WinRM 사용), **Python이 설치**되어 있어야 함
 
 Ansible은 **Control Node에만** 설치된다. Managed Node에는 별도의 에이전트가 필요 없다(Agentless). Control Node에서 SSH를 통해 Managed Node에 접속하여 작업을 수행한다.
 
@@ -119,15 +123,37 @@ Playbook (playbook.yml)
         state: started
 ```
 
+Playbook에는 다양한 실행 옵션을 지정할 수 있다. 예를 들어 `serial`을 사용하면 한 번에 처리할 호스트 수를 제한할 수 있다.
+
+```yaml
+---
+- hosts: webservers
+  serial: 5  # 한 번에 5대의 머신만 업데이트
+  roles:
+    - common
+    - webapp
+
+- hosts: content_servers
+  roles:
+    - common
+    - content
+```
+
+이렇게 하면 100대의 웹서버가 있어도 5대씩 순차적으로 업데이트되므로, 전체 서비스가 중단되는 것을 방지할 수 있다.
+
 ## Module
 
-Task가 실제로 호출하는 코드 단위로, **이미 Python으로 작성된** 실행 코드다. Ansible은 수천 개의 빌트인 모듈을 제공한다.
+Task가 실제로 호출하는 코드 단위로, **이미 Python으로 작성된** 실행 스크립트다. Ansible은 수천 개의 빌트인 모듈을 제공한다.
 
 - `apt`, `yum`: 패키지 관리
 - `copy`, `template`: 파일 관리
 - `service`: 서비스 관리
 - `shell`, `command`: 명령 실행
 
+모듈의 동작 방식은 다음과 같다:
+- Control Node에서 SSH를 통해 Managed Node로 모듈을 **푸시(전송)**함
+- 모듈은 **원하는 시스템 상태를 설명하는 매개변수**를 받아 실행됨
+- 모듈 실행이 **완료되면 자동으로 제거**됨 (Managed Node에 흔적을 남기지 않음)
 
 <br>
 
@@ -191,6 +217,33 @@ handlers:
 3. 모든 Task 완료 후 Handler 실행
 4. nginx 재시작
 파일이 변경되지 않았다면 (changed=false) Handler는 실행되지 않는다.
+
+## Plugin
+
+Plugin은 Ansible의 핵심 기능을 강화하는 확장 모듈이다. Module과의 가장 큰 차이는 **실행 위치**다.
+
+| 구분 | Module | Plugin |
+|------|--------|--------|
+| **실행 위치** | Managed Node (대상 시스템) | Control Node |
+| **실행 방식** | 별도의 프로세스로 실행 | Ansible 엔진 내부에서 실행 |
+| **역할** | 대상 시스템의 상태 변경 | Ansible의 핵심 기능 확장 |
+
+Plugin의 주요 기능:
+- **데이터 변환**: 변수 처리, 템플릿 렌더링 (Jinja2 필터)
+- **로그 출력**: 실행 결과를 다양한 형식으로 출력
+- **인벤토리 연결**: 동적 인벤토리 생성 (AWS, Azure 등 클라우드 환경에서 자동으로 호스트 목록 가져오기)
+- **Connection**: SSH 외 다른 프로토콜 지원 (WinRM, Docker 등)
+
+예를 들어, AWS 동적 인벤토리 플러그인을 사용하면 EC2 인스턴스 목록을 자동으로 가져올 수 있다.
+
+```yaml
+# aws_ec2.yml (동적 인벤토리 플러그인 설정)
+plugin: amazon.aws.aws_ec2
+regions:
+  - ap-northeast-2
+filters:
+  tag:Environment: production
+```
 
 ## Role
 
@@ -263,8 +316,8 @@ web2  : ok=3  changed=0  unreachable=0  failed=0
 
 Ansible은 아래와 같은 특징을 지닌다. 
 - **에이전트리스(Agentless)**: SSH 기반으로 별도 에이전트 설치 불필요
-- **멱등성 지향**: 
 - **YAML 기반**: 쉬운 작성과 가독성
+- **멱등성 지향**
 
 다른 특징은 [이전 글]({% post_url 2026-01-12-Kubernetes-Ansible-00 %})에서 자세히 살펴 보았으므로, 멱등성에 대해서 살펴 보자.
 
@@ -405,9 +458,10 @@ IaC 도구로는 Terraform이 가장 많이 언급되는데, Ansible과는 어�
 | **언어** | HCL (선언형) | YAML (절차형에 가까움) |
 | **실행 방식** | 선언된 상태와 실제 상태 비교 후 조정 | Task를 정의된 순서대로 실행 |
 
-간단히 말하면, **Terraform으로 인프라를 만들고, Ansible로 그 위에 소프트웨어를 설정**한다고 볼 수 있다. 실제로 두 도구를 함께 사용하는 경우가 많다. 
+간단히 말하면, **Terraform으로 인프라를 만들고, Ansible로 그 위에 소프트웨어를 설정**한다고 볼 수 있다. 실제로 두 도구를 함께 사용하는 경우가 많다고 한다.
 
 
+<br>
 
 
 # 여담
