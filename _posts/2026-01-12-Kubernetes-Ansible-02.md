@@ -548,18 +548,16 @@ Private Key (비밀키)  ←→  Public Key (공개키)
 
 ### 보안상의 장점
 
-```
-Private Key (비밀키)
+**Private Key(비밀키):**
 - 절대 외부로 전송되지 않음
 - 본인만 가지고 있음
 - Control Node에만 보관
 
-Public Key (공개키)  
+**Public Key(공개키):**
 - 마음껏 배포해도 됨
 - 여러 서버에 등록 가능
 - Managed Node에 복사
 - 유출되어도 비밀키를 역산할 수 없으므로 안전
-```
 
 <br>
 
