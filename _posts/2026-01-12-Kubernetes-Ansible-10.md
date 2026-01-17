@@ -26,6 +26,7 @@ tags:
 - 실패 무시: `ignore_errors: yes`
 - 실패 후 핸들러 실행: `force_handlers: yes`
 - 실패 조건 지정: `failed_when`
+- 변경 조건 지정: `changed_when`
 - 블록 오류 처리: `block`, `rescue`, `always`
 
 <br>
@@ -1049,7 +1050,133 @@ tnode1                     : ok=2    changed=1    unreachable=0    failed=1    s
 
 <br>
 
-# 실습 6: 블록과 오류 처리 (block, rescue, always)
+# 실습 6: 작업 변경 조건 지정 (changed_when)
+
+## 개념
+
+`failed_when`이 **실패 조건**을 지정한다면, `changed_when`은 **변경 조건**을 지정한다. 일부 모듈은 실제로 변경이 발생하지 않아도 `changed` 상태를 반환하거나, 반대로 변경이 발생했는데도 `ok` 상태를 반환할 수 있다. 이럴 때 `changed_when`을 사용하여 명시적으로 변경 상태를 지정한다.
+
+**주요 사용 사례**:
+1. **핸들러 강제 실행**: `changed_when: true`로 항상 changed 상태로 만들어 핸들러 트리거
+2. **변경 상태 억제**: `changed_when: false`로 changed를 방지 (읽기 전용 작업)
+3. **조건부 변경**: 출력 내용이나 반환 코드를 기반으로 changed 판단
+
+> **참고**: [Defining "changed"](https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_error_handling.html#defining-changed)
+
+<br>
+
+## 기본 문법
+
+```yaml
+- name: Task name
+  module_name:
+    ...
+  changed_when: <조건>
+```
+
+**예시**:
+```yaml
+# 항상 changed
+- name: Always trigger handler
+  ansible.builtin.command: /usr/bin/check_status
+  changed_when: true
+
+# 항상 ok (변경 없음)
+- name: Read-only check
+  ansible.builtin.command: /usr/bin/show_info
+  changed_when: false
+
+# 조건부 changed
+- name: Check service
+  ansible.builtin.command: systemctl status httpd
+  register: result
+  changed_when: "'inactive' in result.stdout"
+```
+
+<br>
+
+## 실습: 핸들러 강제 실행
+
+`uri` 모듈은 GET 요청 시 기본적으로 `changed=false`를 반환한다 (읽기 작업이므로). 하지만 핸들러를 실행하려면 `changed=true`가 필요하다. 이럴 때 `changed_when: true`를 사용한다.
+
+> **참고**: [uri 모듈](https://docs.ansible.com/ansible/latest/collections/ansible/builtin/uri_module.html)
+> - `return_content: true`이면 HTTP 응답 본문을 반환값에 포함 (기본값: `false`)
+> - 성공/실패는 HTTP 상태 코드로 판단 (200번대: 성공, 400/500번대: 실패)
+
+```bash
+# (server) #
+cat <<'EOT' > changed-when-example.yml
+---
+- hosts: tnode1
+  tasks:
+    - name: Check web service
+      ansible.builtin.uri:
+        url: http://localhost
+        return_content: true
+      register: web_result
+      changed_when: true
+      notify: Print web content
+
+  handlers:
+    - name: Print web content
+      ansible.builtin.debug:
+        msg: "{{ web_result.content }}"
+EOT
+```
+
+**실행**:
+
+```bash
+# (server) #
+ansible-playbook changed-when-example.yml
+```
+
+```
+PLAY [tnode1] ******************************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [tnode1]
+
+TASK [Check web service] *******************************************************
+changed: [tnode1]
+
+RUNNING HANDLER [Print web content] ********************************************
+ok: [tnode1] => {
+    "msg": "Hello! Eraser\n"
+}
+
+PLAY RECAP *********************************************************************
+tnode1                     : ok=3    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+```
+
+**핵심**:
+- `changed_when: true` 없이 실행하면: `changed=0`, 핸들러 실행 안 됨
+- `changed_when: true` 추가하면: `changed=1`, 핸들러 실행됨
+
+<br>
+
+# failed_when vs changed_when
+
+failed_when과 changed_when을 비교하면 다음과 같다.
+
+| 키워드 | 목적 | 영향 | 사용 예시 |
+|--------|------|------|-----------|
+| `failed_when` | 실패 조건 지정 | 플레이 중단 (또는 ignore_errors와 함께 사용) | 특정 문자열 출력 시 실패, 특정 상태 코드 시 실패 |
+| `changed_when` | 변경 조건 지정 | 핸들러 실행 여부, PLAY RECAP의 changed 카운트 | 핸들러 강제 실행, 읽기 전용 작업 표시 |
+
+다음과 같이 함께 사용할 수도 있다.
+
+```yaml
+- name: Run script with custom status
+  ansible.builtin.shell: /usr/local/bin/check_and_fix.sh
+  register: result
+  failed_when: "'ERROR' in result.stdout"
+  changed_when: "'FIXED' in result.stdout"
+```
+
+<br>
+
+# 실습 7: 블록과 오류 처리 (block, rescue, always)
 
 ## 개념
 
