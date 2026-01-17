@@ -181,8 +181,9 @@ Playbook에 작성한 Task가 실제 서버에서 어떻게 실행되는지 살�
 
 <br>
 헷갈리기 쉬운 부분인데, Playbook(YAML)이 Python으로 변환되는 것이 아니다.
+
 | 구분 | Playbook (YAML) | Module (Python) |
-| :--- | :--- | :--- |
+| :---: | :--- | :--- |
 | **역할** | **"무엇을"** 할지 정의 (시나리오) | **"어떻게"** 할지 구현 (실행 코드) |
 | **비유** | 식당의 **주문서** | 주문을 처리하는 **요리사** |
 | **관계** | 어떤 모듈을 쓸지 지정함 | 이미 작성된 코드가 호출됨 |
@@ -397,6 +398,8 @@ Ansible은 "원하는 상태(desired state)"를 선언하는 도구다. "어떻�
   shell: /tmp/configure.sh
   when: not config_stat.stat.exists
 ```
+
+<br>
 
 **3. 결과 상태의 명시적 제어**: changed_when, failed_when
 
