@@ -24,7 +24,7 @@ tags:
 
 - 변수 종류: 그룹 변수, 호스트 변수, 플레이 변수, 추가 변수, 작업 변수
 - 우선순위: 추가 변수 > 플레이 변수 > 호스트 변수 > 그룹 변수
-- 변수 참조: `{{ 변수명 }}` (Jinja2 템플릿 문법)
+- 변수 참조: {% raw %}`{{ 변수명 }}`{% endraw %} (Jinja2 템플릿 문법)
 - 작업 변수: `register` 키워드로 Task 결과 저장
 
 <br>
@@ -72,7 +72,7 @@ tags:
 
 ## 변수 참조 문법
 
-변수는 **Jinja2 템플릿 문법**인 `{{ }}` (겹중괄호)로 참조한다.
+변수는 **Jinja2 템플릿 문법**인 {% raw %}`{{ }}`{% endraw %} (겹중괄호)로 참조한다.
 
 > **참고**: Jinja2란?
 >
@@ -154,7 +154,7 @@ changed: [tnode2]
 changed: [tnode3]
 ```
 
-실행 시, Task 이름에서 `{{ user }}`가 `ansible`로 치환된 것을 확인할 수 있다.
+실행 시, Task 이름에서 {% raw %}`{{ user }}`{% endraw %}가 `ansible`로 치환된 것을 확인할 수 있다.
 
 ![ansible-06-create-user-result]({{site.url}}/assets/images/ansible-06-create-user-result.gif){: .align-center}
 
@@ -655,7 +655,7 @@ ok: [tnode3] => {
 
 1. **변수 종류 이해**: 그룹, 호스트, 플레이, 추가, 작업 변수
 2. **우선순위 이해**: 추가 변수 > 플레이 변수 > 호스트 변수 > 그룹 변수
-3. **변수 참조**: `{{ 변수명 }}` Jinja2 문법
+3. **변수 참조**: {% raw %}`{{ 변수명 }}`{% endraw %} Jinja2 문법
 4. **작업 변수**: `register` 키워드로 Task 결과 저장 및 활용
 5. **user 모듈**: `state: present`(생성), `state: absent`(삭제)
 

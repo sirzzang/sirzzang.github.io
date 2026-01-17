@@ -595,7 +595,7 @@ tnode3                     : ok=2    changed=0    unreachable=0    failed=0    s
 # 참고: fact 전체
 
 <details>
-<summary><strong>전체 Ansible Facts 보기</strong> (클릭하여 펼치기/접기)</summary>
+<summary><strong>전체 Ansible Facts 확인</strong></summary>
 
 <div markdown="1">
 

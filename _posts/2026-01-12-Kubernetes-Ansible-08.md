@@ -23,7 +23,7 @@ tags:
 이번 글의 목표는 **Ansible 반복문(loop)의 활용법 이해**다.
 
 - 단순 반복문: `loop` + `item` 변수
-- 변수 목록 반복: `loop: "{{ 변수명 }}"`
+- 변수 목록 반복: {% raw %}`loop: "{{ 변수명 }}"`{% endraw %}
 - 사전 목록 반복: `item['키']` 또는 `item.키`
 - 반복문과 register: 반복 실행 결과를 배열로 저장
 
@@ -52,13 +52,13 @@ tags:
 ```
 
 - `loop`: 반복할 항목 목록을 지정
-- `{{ item }}`: **loop의 기본 반복 변수**로, 현재 반복 중인 항목을 참조한다
+- {% raw %}`{{ item }}`{% endraw %}: **loop의 기본 반복 변수**로, 현재 반복 중인 항목을 참조한다
 
 <br>
 
-### 기본 변수 {{ item }}
+### 기본 변수 {% raw %}`{{ item }}`{% endraw %}
 
-**중요**: `loop`를 사용할 때 기본 반복 변수는 `{{ item }}`이다. 임의로 다른 이름(예: `{{ user }}`, `{{ service }}`)을 사용할 수 없다.
+**중요**: `loop`를 사용할 때 기본 반복 변수는 {% raw %}`{{ item }}`{% endraw %}이다. 임의로 다른 이름(예: {% raw %}`{{ user }}`{% endraw %}, {% raw %}`{{ service }}`{% endraw %})을 사용할 수 없다.
 
 간단한 예제로 확인해 보자.
 
@@ -106,11 +106,11 @@ PLAY RECAP *********************************************************************
 localhost                  : ok=2    changed=0    unreachable=0    failed=0    ...
 ```
 
-각 반복에서 `(item=apple)`, `(item=banana)`, `(item=cherry)`로 표시되며, `{{ item }}` 변수가 각 항목의 값으로 치환되어 출력된다.
+각 반복에서 `(item=apple)`, `(item=banana)`, `(item=cherry)`로 표시되며, {% raw %}`{{ item }}`{% endraw %} 변수가 각 항목의 값으로 치환되어 출력된다.
 
 <br>
 
-만약 `{{ item }}` 대신 정의되지 않은 다른 변수(예: `{{ fruit }}`)를 사용하면 오류가 발생한다:
+만약 {% raw %}`{{ item }}`{% endraw %} 대신 정의되지 않은 다른 변수(예: {% raw %}`{{ fruit }}`{% endraw %})를 사용하면 오류가 발생한다:
 
 ```bash
 cat <<'EOT' > loop-basic-error.yml
@@ -178,7 +178,7 @@ localhost                  : ok=1    changed=0    unreachable=0    failed=1    s
 
 ### loop에 반복 목록 지정
 
-`loop`에는 **반복할 목록(변수 또는 리스트)**을 지정해야 한다. 흔한 실수는 `loop` 자체에 `{{ item }}`을 사용하는 것이다.
+`loop`에는 **반복할 목록(변수 또는 리스트)**을 지정해야 한다. 흔한 실수는 `loop` 자체에 {% raw %}`{{ item }}`{% endraw %}을 사용하는 것이다.
 
 ```yaml
 # 잘못된 예
@@ -211,7 +211,7 @@ Origin: /root/my-ansible/create-and-delete-users.yml:20:13
 fatal: [localhost]: FAILED! => {"changed": false, "msg": "Task failed: 'item' is undefined"}
 ```
 
-`{{ item }}`은 `loop`가 실행될 때 생성되는 변수이다. 따라서 `loop` 정의 자체에는 사용할 수 없다. `loop`에는 반드시 **반복할 목록**을 지정해야 한다.
+{% raw %}`{{ item }}`{% endraw %}은 `loop`가 실행될 때 생성되는 변수이다. 따라서 `loop` 정의 자체에는 사용할 수 없다. `loop`에는 반드시 **반복할 목록**을 지정해야 한다.
 
 ```yaml
 # 올바른 예
@@ -494,7 +494,7 @@ EOT
 ```
 
 - `vars`에서 서비스 목록을 변수로 정의
-- `loop: "{{ services }}"`로 변수 참조
+- {% raw %}`loop: "{{ services }}"`{% endraw %}로 변수 참조
 
 <br>
 
@@ -910,7 +910,7 @@ localhost                  : ok=3    changed=1    unreachable=0    failed=0    s
 
 1. **`Loop echo test` 작업**: 이전 예제와 동일하게 2개 아이템에 대해 실행됨
 2. **`Show result` 작업**: 
-   - `loop: "{{ result.results }}"`로 이전 작업의 결과 배열을 순회함
+   - {% raw %}`loop: "{{ result.results }}"`{% endraw %}로 이전 작업의 결과 배열을 순회함
    - 각 반복에서 `item.stdout` 값을 추출하여 출력함
    - 결과: `"Stdout: I can speak Korean"`, `"Stdout: I can speak English"`
 3. **값 추출**: `result.results` 배열에서 원하는 필드(`stdout`)만 깔끔하게 추출할 수 있음
@@ -1096,8 +1096,8 @@ EOT
 
 - `hosts: all` 사용 (모든 관리 노드에서 실행)
 - `vars`에 `users` 리스트 정의 (user1~user10)
-- 첫 번째 task: `name: Create user {{ item }}` → task name에 `{{ item }}` 사용 (WARNING 발생)
-- 두 번째 task: `name: Delete user` → task name에 `{{ item }}` 미사용 (WARNING 없음)
+- 첫 번째 task: {% raw %}`name: Create user {{ item }}`{% endraw %} → task name에 {% raw %}`{{ item }}`{% endraw %} 사용 (WARNING 발생)
+- 두 번째 task: `name: Delete user` → task name에 {% raw %}`{{ item }}`{% endraw %} 미사용 (WARNING 없음)
 
 > **참고**: [user 모듈 공식 문서](https://docs.ansible.com/ansible/latest/collections/ansible/builtin/user_module.html)
 
@@ -1193,9 +1193,9 @@ TASK [Create user << error 1 - 'item' is undefined >>] *************************
 changed: [tnode2] => (item=user1)
 ...
 ```
-- task name에 `{{ item }}`을 사용했으므로 WARNING 발생
-- task name은 loop 실행 **전에** 평가되므로 `{{ item }}`이 undefined
-- 하지만 모듈 파라미터(`name: "{{ item }}"`)는 loop 실행 **중에** 평가되므로 정상 작동
+- task name에 {% raw %}`{{ item }}`{% endraw %}을 사용했으므로 WARNING 발생
+- task name은 loop 실행 **전에** 평가되므로 {% raw %}`{{ item }}`{% endraw %}이 undefined
+- 하지만 모듈 파라미터({% raw %}`name: "{{ item }}"`{% endraw %})는 loop 실행 **중에** 평가되므로 정상 작동
 
 <br>
 
@@ -1205,11 +1205,11 @@ TASK [Delete user] *************************************************************
 changed: [tnode2] => (item=user1)
 ...
 ```
-- task name에 `{{ item }}`을 사용하지 않았으므로 WARNING 없음
+- task name에 {% raw %}`{{ item }}`{% endraw %}을 사용하지 않았으므로 WARNING 없음
 - 깔끔한 출력이지만, 어떤 사용자를 처리하는지 task 이름에서 확인 불가
 
 <br>
-WARNING이니까, 확인 목적으로 task name `{{ item }}`을 사용하는 방식도 종종 볼 수 있다고 한다.
+WARNING이니까, 확인 목적으로 task name에 {% raw %}`{{ item }}`{% endraw %}을 사용하는 방식도 종종 볼 수 있다고 한다.
 
 - **WARNING 있는 버전**: 디버깅이 쉽고, 실행 과정 추적이 용이
 - **WARNING 없는 버전**: 깔끔한 출력, 로그가 간결함
@@ -1350,7 +1350,7 @@ EOT
 | 항목 | `loop` + `range` | `with_sequence` |
 | :---: | :--- | :--- |
 | **스타일** | 현대적 (Ansible 2.5+) | 이전 스타일 |
-| **문법** | `loop: "{{ range(1, 101) \| list }}"` | `with_sequence: start=1 end=100` |
+| **문법** | {% raw %}`loop: "{{ range(1, 101) \| list }}"`{% endraw %} | `with_sequence: start=1 end=100` |
 | **가독성** | Python의 range와 동일하여 직관적 | start/end 매개변수로 명시적 |
 | **추천** | 권장 (일관성, 유지보수성) | 레거시 지원 |
 
