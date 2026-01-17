@@ -277,7 +277,7 @@ tnode2                     : ok=2    changed=0    unreachable=0    failed=0    s
 
 <br>
 
-# 실습 2: (도전 과제) apache2 설치 후 핸들러로 재시작
+# 실습 2: apache2 설치 후 핸들러로 재시작
 
 ## 목표
 

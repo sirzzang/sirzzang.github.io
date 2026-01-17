@@ -356,8 +356,17 @@ my-role/
 
 ## tasks/main.yml (메인 태스크)
 
-- 첫 번째 태스크인 install service에는 플레이북에서 변수로 정의한 서비스명을 함께 출력합니다. 그리고 ansible.builtin.apt 모듈을 이용하여 httpd 관련 패키지를 설치합니다. 이때 관련 패키지는 여러 개이며 loop 문을 사용합니다.
-- 서비스 설치가 끝나면 ansible.builtin.copy 모듈을 이용하여 파일을 복사하고, 복사가 끝나면 restart servie라는 핸들러를 호출합니다.
+메인 태스크는 2개의 작업으로 구성된다:
+
+**1. install service**: Apache 웹 서버 패키지 설치
+- 작업 이름에 `{{ service_title }}` 변수를 포함하여 출력
+- `ansible.builtin.apt` 모듈로 패키지 설치
+- `loop`로 `{{ httpd_packages }}` 변수의 여러 패키지를 순회 설치
+- `when` 조건으로 지원되는 배포판(`supported_distros`)에서만 실행
+
+**2. copy conf file**: HTML 파일 복사
+- `ansible.builtin.copy` 모듈로 `files/index.html`을 `/var/www/html/index.html`로 복사
+- 파일이 변경되면 `notify`로 `restart service` 핸들러 호출
 
 ```bash
 # (server) #
@@ -495,7 +504,6 @@ EOT
 ansible-playbook role-example.yml
 ```
 
-**실행 결과**:
 
 ```bash
 PLAY [tnode1] ***************************************************************************
@@ -711,14 +719,11 @@ Hello! Eraser
 1. 사전 준비
    - tnode1에 firewalld 설치
    - 외부 접속 실패 확인 (방화벽이 80 포트 차단)
-   ↓
 2. my-role2 생성
    - firewalld에 http 서비스 허용하는 롤
-   ↓
 3. roles 섹션으로 두 롤 실행
    - my-role: Apache 설치
    - my-role2: firewalld 설정
-   ↓
 4. 확인
    - 외부 접속 성공 (방화벽이 80 포트 허용)
 
@@ -729,12 +734,12 @@ Hello! Eraser
 
 먼저 tnode1에 firewalld를 설치한다. 설치 후에는 기본 보안 정책으로 인해 **외부에서 80 포트 접속이 차단**되는 것을 확인할 수 있다. 이후 Ansible 롤로 이 문제를 해결한다.
 
-**왜 사전 설치가 필요한가?**
+사전 설치가 필요한 이유는 다음과 같다:
 - `ansible.posix.firewalld` 모듈은 firewalld가 설치되어 있다는 전제하에 **설정만 변경**하는 모듈
 - firewalld가 없으면 롤 실행 시 오류 발생
 - 실제 운영 환경에서는 기본 이미지에 firewalld가 포함되어 있거나, 별도의 설치 롤을 먼저 실행
 
-**firewalld를 설치한 뒤 변화:**
+firewalld를 설치한 뒤, 기본 보안 정책이 적용되며 기존과 달리 아래와 같은 변화가 나타난다:
 
 | 시점 | 방화벽 상태 | curl tnode1 결과 |
 |------|-----------|----------------|
