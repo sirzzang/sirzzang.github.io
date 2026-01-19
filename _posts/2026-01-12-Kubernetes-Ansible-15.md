@@ -186,9 +186,10 @@ Kubernetes 클러스터 설치라는 복잡한 작업이, 읽기 쉬운 YAML로 
 
 `template` 모듈이 참조하는 Jinja2 템플릿 파일도 있다. `chrony_mode`가 `client`일 때 사용되는 템플릿이다.
 
+{% raw %}
 ```jinja2
 {# template/chrony.client.conf.j2 #}
-server {% raw %}{{ chrony_server_host }}{% endraw %} iburst
+server {{ chrony_server_host }} iburst
 keyfile /etc/chrony/chrony.keys
 driftfile /var/lib/chrony/chrony.drift
 ntsdumpdir /var/lib/chrony
@@ -198,6 +199,7 @@ maxupdateskew 100.0
 rtcsync
 makestep 1 3
 ```
+{% endraw %}
 
 {% raw %}`{{ chrony_server_host }}`{% endraw %} 변수가 실제 NTP 서버 주소로 치환된다. 플레이북에서 변수를 선언하고, 템플릿에서 그 변수를 사용하는 패턴이다.
 

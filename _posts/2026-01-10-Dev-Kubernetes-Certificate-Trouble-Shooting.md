@@ -79,46 +79,9 @@ notAfter=Jul 29 05:36:03 2025 GMT
 
 ## Kubernetes의 인증서 기반 인증 메커니즘
 
-Kubernetes는 클러스터 컴포넌트 간 통신과 클라이언트 인증을 위해 TLS(Transport Layer Security) 기반 PKI(Public Key Infrastructure)를 사용한다. 이를 이해하기 위해서는 다음 개념들을 알아야 한다.
+Kubernetes는 클러스터 컴포넌트 간 통신과 클라이언트 인증을 위해 TLS 기반 PKI를 사용한다. PKI 구조, 인증서의 역할(CA/서버/클라이언트 인증서), mTLS 인증 과정에 대한 자세한 내용은 [Kubernetes PKI 글]({% post_url 2026-01-18-Kubernetes-PKI %})을 참고하자.
 
-### PKI와 인증서의 역할
-
-PKI는 공개키 암호화를 기반으로 한 신뢰 체계다. Kubernetes 클러스터에서는 다음과 같은 구조로 동작한다.
-
-1. CA(Certificate Authority): 클러스터의 최상위 신뢰 기관
-   - 클러스터 생성 시 자체 서명된(self-signed) CA 인증서 생성
-   - 모든 컴포넌트 및 사용자 인증서에 서명
-   - CA의 개인키(private key)로 서명함으로써 해당 인증서의 신뢰성 보장
-
-2. 서버 인증서: API 서버의 신원 증명
-   - API 서버가 자신이 정당한 서버임을 클라이언트에게 증명
-   - CA에 의해 서명됨
-   - 클라이언트는 CA 인증서로 서버 인증서를 검증
-
-3. 클라이언트 인증서: 사용자 또는 클러스터 컴포넌트의 신원 증명
-   - kubectl과 같은 클라이언트가 자신의 신원을 API 서버에 증명
-   - CA에 의해 서명됨
-   - API 서버는 CA 인증서로 클라이언트 인증서를 검증
-
-### TLS Handshake 과정
-
-kubectl이 API 서버에 접근할 때의 인증 과정은 다음과 같다.
-
-1. Client → Server: ClientHello (지원하는 암호화 알고리즘 목록 전송)
-2. Server → Client: ServerHello + 서버 인증서 전송
-   - 서버 인증서에는 서버의 공개키와 CA의 서명 포함
-3. Client: 서버 인증서 검증
-   - kubeconfig의 certificate-authority-data(CA 인증서)로 서버 인증서 서명 검증
-   - 서버 인증서의 유효 기간 확인
-   - 서버 인증서의 CN(Common Name) 또는 SAN(Subject Alternative Name)이 접속 중인 서버와 일치하는지 확인
-4. Client → Server: 클라이언트 인증서 전송
-   - kubeconfig의 client-certificate-data와 client-key-data 사용
-5. Server: 클라이언트 인증서 검증 
-   - CA 인증서로 클라이언트 인증서 서명 검증
-   - 클라이언트 인증서의 유효 기간 확인 *← 문제가 되는 지점*
-   - 인증서의 Organization(O) 필드로 사용자의 그룹 확인
-   - 인증서의 Common Name(CN) 필드로 사용자 이름 확인
-6. Client, Server: 세션 키 교환 및 암호화 통신 시작
+kubectl이 API Server에 접근할 때 mTLS Handshake 과정에서 클라이언트 인증서의 유효 기간을 확인하는데, 이 단계에서 만료된 인증서가 문제가 된다.
 
 
 ### 인증서 만료가 문제가 되는 이유
