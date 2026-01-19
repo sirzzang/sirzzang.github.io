@@ -20,7 +20,7 @@ hidden: true
 
 # TL;DR
 
-이번 글의 목표는 **CA 구성 및 TLS 인증서 생성 실습에 필요한 배경지식 이해**다. [Kubernetes the Hard Way 튜토리얼의 Provisioning a CA and Generating TLS Certificates 단계](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/04-certificate-authority.md)를 수행하기 전에, TLS/mTLS/X.509/PKI 개념을 먼저 정리한다.
+이번 글의 목표는 **CA 구성 및 TLS 인증서 생성 실습에 필요한 배경지식 이해**다. [Kubernetes the Hard Way 튜토리얼의 Provisioning a CA and Generating TLS Certificates 단계](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/04-certificate-authority.md)를 수행하기 전에, TLS/mTLS/X.509/PKI 개념이 쿠버네티스에서 왜 중요한지 먼저 정리한다.
 
 - TLS: 네트워크 통신 암호화 및 서버 인증 프로토콜
 - mTLS: 클라이언트와 서버가 서로의 인증서를 검증하는 상호 인증 방식
@@ -107,71 +107,6 @@ TLS에서 클라이언트가 서버 인증서를 검증하는 과정은 다음�
 
 <br>
 
-## CA와 인증서 발급
-
-### CA(Certificate Authority)
-
-CA(Certificate Authority)는 **인증서에 서명하여 공개키의 소유자를 보증하는 기관**이다. CA가 서명한 인증서는 `이 공개키는 이 주체의 것이 맞다`는 것을 보증한다.
-
-CA의 핵심 역할:
-- 인증서 요청자의 신원 확인
-- 인증서에 디지털 서명 (CA의 개인키로 서명)
-- 인증서 폐기 목록(CRL) 관리
-
-<br>
-
-### 인증서 발급 과정 (CSR)
-
-일반적인 인증서 발급은 **CSR(Certificate Signing Request)** 방식을 따른다. 추후 실습에서 Root CA가 아닌 컴포넌트들의 인증서를 생성할 때 따르는 과정이다.
-
-
-```
-┌─────────────┐        ┌─────────────┐
-│   Subject   │        │     CA      │
-│  (요청자)    │        │  (인증기관)  │
-└──────┬──────┘        └──────┬──────┘
-       │                      │
-       │  1. Generate         │
-       │     Key Pair         │
-       │  (subject.key)       │
-       │                      │
-       │  2. Create CSR ─────>│
-       │     (subject.csr)    │
-       │     - Public Key     │
-       │     - Subject Info   │
-       │                      │
-       │                      │  3. Verify &
-       │                      │     Sign with
-       │                      │     CA's private key
-       │                      │
-       │<──── 4. Certificate ─│
-       │      (subject.crt)   │
-       │                      │
-```
-
-1. **개인키 생성**: 요청자가 자신의 개인키/공개키 쌍 생성
-2. **CSR 생성**: 공개키와 Subject 정보(CN, O 등)를 포함한 CSR 생성
-3. **CA 서명**: CA가 CSR을 검토하고, CA의 개인키로 서명
-4. **인증서 발급**: 서명된 인증서(.crt)를 요청자에게 전달
-
-<br>
-
-### Self-Signed 인증서
-
-CA 없이 자기 자신이 서명한 인증서이다. 추후 실습에서 `ca.crt`(Root CA 인증서)를 생성할 때 Self-Signed 방식을 사용한다. 이후 이 CA로 다른 컴포넌트의 인증서에 서명한다. 
-
-```
-일반 인증서: 개인키 생성 → CSR 생성 → CA에 서명 요청 → 인증서 발급
-Self-Signed: 개인키 생성 → 자기 자신이 서명 → 인증서 생성
-```
-
-다음과 같은 특징을 갖는다:
-- Issuer(발급자)와 Subject(소유자)가 동일
-- 외부 CA의 검증 없이 생성 가능
-- 신뢰 체인이 없어 브라우저에서 경고 발생
-
-<br>
-
 # mTLS
 
 ## 개요
@@ -255,107 +190,15 @@ TLS와의 차이점은 다음과 같다.
 
 # X.509
 
-## 개요
+X.509는 ITU-T에서 정의한 **공개키 인증서의 국제 표준 형식**이다. TLS에서 사용되는 인증서는 사실상 모두 X.509 형식을 따르며, 쿠버네티스도 인증서 처리 로직이 Go의 `crypto/x509` 패키지에 의존한다.
 
-X.509는 ITU-T에서 정의한 **공개키 인증서의 국제 표준 형식**이다. TLS에서 사용되는 인증서는 사실상 모두 X.509 형식을 따른다.
+- 인증서 구조와 검증 과정에 대한 자세한 내용은 [X.509 인증서 글의 인증서 구조](/cs/CS-X509-Certificate/#인증서-구조)를 참고하자.
+- DN 체계(CN, O 등)에 대한 자세한 내용은 [X.509 인증서 글의 Distinguished Name](/cs/CS-X509-Certificate/#distinguished-name-dn과-x500-표준)을 참고하자.
 
-> TLS 1.3 명세([RFC 8446](https://datatracker.ietf.org/doc/html/rfc8446#section-4.4.2))에서도 인증서 타입은 기본적으로 X.509를 사용한다고 명시되어 있다.
-
-TLS 프로토콜 자체는 확장성을 고려하여 다른 인증서 타입도 허용하도록 설계되었다. 그러나 실제로는 다음과 같은 이유로 X.509가 사실상의 표준(de facto standard)이다.
-- 전 세계 CA(DigiCert, Let's Encrypt 등)가 X.509 형식으로 인증서를 발급
-- 브라우저와 OS의 Trust Store가 X.509 형식의 루트 인증서를 저장
-- OpenSSL, GnuTLS 등 주요 TLS 구현체가 X.509를 기본으로 처리
-
-<br>
-
-쿠버네티스도 인증서 처리 로직이 Go의 `crypto/x509` 패키지에 의존한다. 그러니 이 형식을 중심으로 학습하면 된다. 
-
-<br>
-
-## 인증서 구조
-
-X.509 인증서는 **본문(TBSCertificate) + 서명 알고리즘 + 디지털 서명**으로 구성된다. 본문 안에 인증서 소유자의 공개키가 포함되어 있다.
-> 실습에서 `openssl`로 인증서를 생성하고 `openssl x509 -text`로 내용을 확인할 때, 위 구조를 직접 볼 수 있다.
-
-```
-+--------------------------------------------------+
-|        TBSCertificate (To Be Signed)             |
-+--------------------------------------------------+
-| 1. Version: v3                                   |
-| 2. Serial Number: 01:23:45:67:89                 |
-| 3. Signature Algorithm: SHA-256 with RSA         |
-| 4. Issuer: CN=MyLocalCA                          |  ← *실습: ca.conf의 CA 섹션*
-| 5. Validity:                                     |
-|    - Not Before: 2026-01-01                      |
-|    - Not After: 2027-01-01                       |
-| 6. Subject: CN=my-kubernetes-node-1              |  ← *실습: 각 컴포넌트별 설정*
-| 7. Subject Public Key Info:                      |
-|    - Algorithm: RSA (2048 bit)                   |
-|    - Public Key: 0xAF31...                       |
-| 8. Extensions:                                   |
-|    - SAN: DNS:node1.example.com, IP:192.168.1.10 |  ← *실습: kube-api-server 등*
-|    - Key Usage: Digital Signature                |
-+--------------------------------------------------+
-
-+--------------------------------------------------+
-| Signature Algorithm: SHA-256 with RSA            |
-+--------------------------------------------------+
-
-+--------------------------------------------------+
-| Signature Value: 0x82...FA                       |
-| (TBSCertificate hashed and signed with CA's key) |
-+--------------------------------------------------+
-```
-
-
-주요 구성 요소는 다음과 같다.
-- **본문(TBSCertificate)**: 서명 대상이 되는 인증서 정보. 소유자의 공개키가 포함됨
-- **서명 알고리즘**: 본문을 해싱하고 서명할 때 사용한 알고리즘 (예: SHA-256 with RSA)
-- **서명 값(Signature)**: CA가 본문을 해싱한 후 자신의 개인키로 암호화한 값
-
-클라이언트가 인증서를 검증하는 과정은 다음과 같다.
-1. 서명 값을 CA의 공개키로 복호화하여 해시값 추출
-2. 본문을 동일한 알고리즘으로 해싱하여 해시값 생성
-3. 두 해시값이 일치하면 인증서가 유효하다고 판단하고, 본문 내의 공개키를 신뢰
-
-<br>
-
-<br>
-
-## Distinguished Name (DN)과 X.500 표준
-
-X.509 인증서의 Subject와 Issuer 필드에서 사용하는 `CN`, `O`, `OU`, `C` 같은 필드들은 **X.500 디렉토리 서비스 표준**에서 유래했다.
-
-X.500은 국제 전기통신 연합(ITU-T)이 정의한 디렉토리 서비스 표준으로, 계층적 구조로 개체를 식별하기 위한 **Distinguished Name (DN)** 체계를 제공한다. X.509는 X.500의 인증서 표준으로 만들어졌기 때문에, 동일한 DN 구조를 사용한다.
-
-### 주요 DN 필드
-
-| 필드 | 의미 | 예시 |
-|------|------|------|
-| **CN** (Common Name) | 주체의 이름 | `CN=admin`, `CN=kubernetes` |
-| **O** (Organization) | 조직명 | `O=system:masters` |
-| **OU** (Organizational Unit) | 조직 단위 | `OU=Engineering` |
-| **L** (Locality) | 지역/도시 | `L=Seattle` |
-| **ST** (State) | 주/도 | `ST=Washington` |
-| **C** (Country) | 국가 코드 | `C=US` |
-
-### LDAP와의 관계
-
-LDAP(Lightweight Directory Access Protocol)는 X.500의 경량화 버전으로, 동일한 DN 구조를 사용한다. 그래서 [LDAP 디렉토리 서비스를 사용했던 경험](https://sirzzang.github.io//articles/Articles-Opensource-Contribution/#%EC%84%B1%EA%B3%B5%EA%B8%B0)이 있다면, 인증서에서도 동일한 필드들을 보게 된다.
-
-LDAP의 DN은 아래와 같이 구성된다.
-```bash
-# LDAP DN 예시
-dn: CN=John Doe,OU=Engineering,O=Acme Corp,C=US
-```
-
-X.509 인증서의 Subject도 동일한 구조를 따른다.
-```bash
-# X.509 인증서 Subject 예시
-Subject: CN=admin, O=system:masters, C=US
-```
-
-이러한 표준화된 필드 덕분에 인증서, 디렉토리 서비스, Kerberos 등 다양한 인증/인가 시스템이 일관된 방식으로 주체를 식별할 수 있다.
+> 실습에서 `openssl`로 인증서를 생성하고 `openssl x509 -text`로 내용을 확인할 때 다음 필드를 직접 볼 수 있다:
+> - **Issuer**: `ca.conf`의 `[ca]` 섹션에서 설정한 CA 정보
+> - **Subject**: 각 컴포넌트별 `[req_distinguished_name]` 섹션에서 설정한 CN, O 값
+> - **SAN**: `kube-apiserver` 등 `[alt_names]` 섹션에서 설정한 DNS, IP 값
 
 <br>
 
@@ -391,9 +234,15 @@ Subject: CN=admin, O=system:masters
 
 ## 개요
 
-PKI(Public Key Infrastructure)는 공개키를 안전하게 배포하고 관리하기 위한 체계다. PKI의 핵심은 중간자 공격을 방지하는 것으로, 신뢰할 수 있는 CA가 "이 공개키는 이 주체의 것이 맞다"고 보증하는 인증서를 발급함으로써 이 문제를 해결한다.
+PKI(Public Key Infrastructure)는 공개키를 안전하게 배포하고 관리하기 위한 체계다. PKI의 핵심은 중간자 공격을 방지하는 것으로, 신뢰할 수 있는 CA(Certificate Authority)가 "이 공개키는 이 주체의 것이 맞다"고 보증하는 인증서를 발급함으로써 이 문제를 해결한다.
 
-PKI의 개념, 구성 요소(CA, 인증서, 신뢰 저장소, CRL/OCSP), 실제 사용 사례에 대한 자세한 내용은 [PKI 글]({% post_url 2026-01-18-CS-PKI %})을 참고하자.
+인증서 발급은 CSR(Certificate Signing Request) 방식을 따르며, Root CA는 Self-Signed 인증서로 생성된다.
+
+- PKI의 개념, 구성 요소, 실제 사용 사례에 대한 자세한 내용은 [PKI 글]({% post_url 2026-01-18-CS-PKI %})을 참고하자.
+- CA와 CSR 발급 과정에 대한 자세한 내용은 [PKI 글의 인증서 발급 프로세스](/cs/CS-PKI/#인증서-발급-프로세스)를 참고하자.
+- Self-Signed 인증서에 대한 자세한 내용은 [인증서 글의 루트 인증서](/cs/CS-Security-Certificate/#루트-인증서)를 참고하자.
+
+> 추후 실습에서 Root CA가 아닌 컴포넌트들의 인증서를 생성할 때 CSR 방식을 따른다. `ca.crt`(Root CA 인증서)는 Self-Signed 방식으로 생성하고, 이 CA로 다른 컴포넌트의 인증서에 서명한다.
 
 <br>
 
