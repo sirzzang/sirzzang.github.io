@@ -20,7 +20,7 @@ tags:
 
 X.509는 공개키 인증서의 **국제 표준 형식**이다. HTTPS, 쿠버네티스, VPN 등 다양한 시스템에서 사용된다. 이 글에서는 X.509 인증서의 구조와 필드에 대해 알아본다.
 
-> 인증서의 기본 개념(필요성, 체인, 종류)은 [디지털 인증서](/cs/CS-Certificate/)를, PKI 전반에 대해서는 [PKI](/cs/CS-PKI/)를 참고하자.
+> 인증서의 기본 개념(필요성, 체인, 종류)은 [디지털 인증서](/cs/Security-CS-Certificate/)를, PKI 전반에 대해서는 [PKI](/cs/CS-PKI/)를 참고하자.
 
 <br>
 
@@ -260,6 +260,6 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRHKpMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV
 
 X.509는 공개키 인증서의 국제 표준 형식으로, ITU-T에서 정의했다. TBSCertificate(본문) + 서명 알고리즘 + 디지털 서명으로 구성되며, Subject와 Issuer를 DN(Distinguished Name) 형식으로 표현한다. DER(바이너리)과 PEM(텍스트) 두 가지 인코딩 형식으로 저장된다.
 
-인증서의 기본 개념(필요성, 루트 인증서, 체인, 종류, 관리)은 [디지털 인증서](/cs/CS-Certificate/)를, PKI 전반에 대해서는 [PKI](/cs/CS-PKI/)를, 쿠버네티스에서의 활용은 [Kubernetes PKI](/kubernetes/Kubernetes-PKI/)를 참고하자.
+인증서의 기본 개념(필요성, 루트 인증서, 체인, 종류, 관리)은 [디지털 인증서](/cs/CS-Security-Certificate/)를, PKI 전반에 대해서는 [PKI](/cs/CS-PKI/)를, 쿠버네티스에서의 활용은 [Kubernetes PKI](/kubernetes/Kubernetes-PKI/)를 참고하자.
 
 <br>
