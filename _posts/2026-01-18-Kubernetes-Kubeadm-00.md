@@ -64,9 +64,6 @@ kubeadm이 **하지 않는** 것들이 있다.
 - **애드온 설치**: Kubernetes Dashboard, 모니터링 솔루션, 클라우드 특화 애드온 등을 설치하지 않음
 - **CNI 플러그인 설치**: Pod 네트워크를 위한 CNI 플러그인(Calico, Flannel 등)을 설치하지 않음
 
-
-
-
 > Instead, we expect higher-level and more tailored tooling to be built on top of kubeadm.
 
 공식 문서의 설명을 보면 kubeadm 위에 더 높은 수준의, 더 맞춤화된 도구들이 만들어지길 기대한다고 한다. kubeadm은 **기초(foundation)** 역할만 하고, 그 위에 다양한 도구들이 쌓이는 구조다.
@@ -120,7 +117,6 @@ kubeadm이 제공하는 주요 명령어들을 살펴보자. 명령어들은 크
 - 클러스터 버전을 올릴 때는 `kubeadm upgrade`를 사용한다.
 - 노드를 클러스터에서 제거하거나 초기화할 때는 `kubeadm reset`을 사용한다.
 
-
 <br>
 
 ## 생명주기 명령어
@@ -133,7 +129,6 @@ init (시작) ──→ join (확장) ──→ upgrade (갱신)
                                     ↓
                               reset (초기화)
 ```
-
 
 | 명령어 | 설명 |
 | --- | --- |
@@ -165,7 +160,6 @@ init (시작) ──→ join (확장) ──→ upgrade (갱신)
 | `kubeadm version` | kubeadm 버전 확인 |
 | `kubeadm alpha` | 다음 버전에 포함될 실험적 기능들 |
 
-<br>
 
 <br>
 
