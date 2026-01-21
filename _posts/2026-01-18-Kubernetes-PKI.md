@@ -60,106 +60,6 @@ Kubernetes가 DigiCert나 Let's Encrypt 같은 공개 CA 대신 자체 PKI를 �
 
 <br>
 
-# Kubernetes PKI 구조
-
-Kubernetes PKI는 세 개의 독립적인 CA를 운영한다. Kubernetes CA, etcd CA, front-proxy CA다.
-
-```
-kubernetes-ca (클러스터 CA)
-├── kube-apiserver
-├── kube-apiserver-kubelet-client
-├── kube-controller-manager
-├── kube-scheduler
-└── kubelet (각 노드별)
-
-etcd-ca (etcd 전용 CA)
-├── etcd-server
-├── etcd-peer
-└── etcd-healthcheck-client
-
-front-proxy-ca (API 확장용 CA)
-└── front-proxy-client
-```
-
-etcd는 클러스터의 모든 상태를 저장하는 핵심 데이터 저장소이므로, 별도의 CA로 분리하여 더 강력한 격리를 제공한다. 
-
-front-proxy-ca는 API Aggregation Layer에서 사용된다. 예를 들어 `kubectl top pods` 명령을 실행하면, 요청이 kube-apiserver를 거쳐 metrics-server로 프록시된다. 이때 kube-apiserver는 front-proxy-client 인증서로 metrics-server에 "나는 정당한 API Server다"라고 자신을 인증한다. metrics-server나 custom API server 같은 확장 API 서버에 요청을 프록시할 때 사용하는 별도의 신뢰 체계다.
-
-
-
-<br>
-
-# 인증서의 역할
-
-Kubernetes PKI에서 인증서는 세 가지 역할로 구분된다.
-
-## CA 인증서
-
-클러스터의 최상위 신뢰 기관이다.
-
-- 클러스터 생성 시 자체 서명된(self-signed) CA 인증서 생성
-- 모든 컴포넌트 및 사용자 인증서에 서명
-- CA의 개인키(private key)로 서명함으로써 해당 인증서의 신뢰성 보장
-
-## 서버 인증서
-
-서버가 자신이 정당한 서버임을 클라이언트에게 증명한다.
-
-- API Server가 자신이 정당한 서버임을 클라이언트에게 증명
-- CA에 의해 서명됨
-- 클라이언트는 CA 인증서로 서버 인증서를 검증
-
-## 클라이언트 인증서
-
-사용자 또는 클러스터 컴포넌트의 신원을 증명한다.
-
-- kubectl과 같은 클라이언트가 자신의 신원을 API Server에 증명
-- CA에 의해 서명됨
-- API Server는 CA 인증서로 클라이언트 인증서를 검증
-
-
-
-<br>
-
-# 인증서 생성 방법
-
-## CA 인증서 생성
-
-클러스터당 최초 1회 생성한다.
-
-```bash
-# 1. CA 개인키 생성
-openssl genrsa -out ca.key 2048
-
-# 2. CA 자체 서명 인증서 생성 (CSR 없이 바로 생성)
-openssl req -x509 -new -nodes -key ca.key \
-  -subj "/CN=kubernetes-ca" \
-  -days 3650 -out ca.crt
-```
-
-## 컴포넌트 인증서 생성
-
-각 컴포넌트마다 자신을 인증하기 위한 인증서를 생성한다.
-
-```bash
-# 1. 컴포넌트 개인키 생성
-openssl genrsa -out apiserver.key 2048
-
-# 2. CSR 생성 (공개키는 이 과정에서 자동 포함됨)
-openssl req -new -key apiserver.key \
-  -subj "/CN=kube-apiserver" \
-  -out apiserver.csr
-
-# 3. CA로 인증서 서명/발급
-openssl x509 -req -in apiserver.csr \
-  -CA ca.crt -CAkey ca.key -CAcreateserial \
-  -out apiserver.crt -days 365
-```
-
-
-
-<br>
-
 # 핵심 메커니즘: mTLS
 
 Kubernetes 컴포넌트 간 통신은 mTLS(Mutual TLS)를 사용한다. 일반적인 TLS는 서버만 인증서를 제시하지만, mTLS는 클라이언트도 인증서를 제시하여 양방향으로 신원을 검증한다.
@@ -180,7 +80,7 @@ Kubernetes 컴포넌트 간 통신은 mTLS(Mutual TLS)를 사용한다. 일반�
    - 인증서의 Common Name(CN) 필드로 사용자 이름 확인
 6. **양측**: 세션 키 교환 및 암호화 통신 시작
 
-## 왜 mTLS가 필요한가
+## mTLS 필요성
 
 일반적인 웹 서비스에서는 서버만 인증하면 충분하다. 하지만 Kubernetes 클러스터 내부에서는 모든 통신 당사자가 신뢰할 수 있는 컴포넌트인지 확인해야 한다. 악의적인 Pod가 API Server인 척 할 수도 있고, 공격자가 kubelet인 척 할 수도 있기 때문이다. mTLS는 통신하는 양쪽 모두가 정당한 컴포넌트임을 보장한다.
 
@@ -188,7 +88,7 @@ Kubernetes 컴포넌트 간 통신은 mTLS(Mutual TLS)를 사용한다. 일반�
 
 <br>
 
-# 왜 인증서가 이렇게 많은가
+# 인증서가 많은 이유
 
 Kubernetes를 처음 접하면 인증서 종류가 너무 많아서 당황하게 된다. [공식 문서](https://kubernetes.io/ko/docs/setup/best-practices/certificates/)에 따르면 Kubernetes는 다음 작업에서 PKI를 필요로 한다.
 
@@ -231,13 +131,143 @@ API Server와 kubelet의 관계를 보자. API Server가 kubelet에 로그 조�
 
 <br>
 
+# 인증서의 역할
+
+Kubernetes PKI에서 인증서는 세 가지 역할로 구분된다.
+
+## CA 인증서
+
+클러스터의 최상위 신뢰 기관이다.
+
+- 클러스터 생성 시 자체 서명된(self-signed) CA 인증서 생성
+- 모든 컴포넌트 및 사용자 인증서에 서명
+- CA의 개인키(private key)로 서명함으로써 해당 인증서의 신뢰성 보장
+
+## 서버 인증서
+
+서버가 자신이 정당한 서버임을 클라이언트에게 증명한다.
+
+- API Server가 자신이 정당한 서버임을 클라이언트에게 증명
+- CA에 의해 서명됨
+- 클라이언트는 CA 인증서로 서버 인증서를 검증
+
+## 클라이언트 인증서
+
+사용자 또는 클러스터 컴포넌트의 신원을 증명한다.
+
+- kubectl과 같은 클라이언트가 자신의 신원을 API Server에 증명
+- CA에 의해 서명됨
+- API Server는 CA 인증서로 클라이언트 인증서를 검증
+
+
+
+<br>
+
+# CA 구조
+
+Kubernetes PKI는 세 개의 독립적인 CA를 운영한다.
+
+```
+kubernetes-ca (클러스터 CA)
+├── kube-apiserver
+├── kube-apiserver-kubelet-client
+├── kube-controller-manager
+├── kube-scheduler
+└── kubelet (각 노드별)
+
+etcd-ca (etcd 전용 CA)
+├── etcd-server
+├── etcd-peer
+└── etcd-healthcheck-client
+
+front-proxy-ca (API 확장용 CA)
+└── front-proxy-client
+```
+
+각 CA는 자신이 담당하는 영역의 인증서를 **발급(서명)**하고, 해당 영역의 컴포넌트들이 상대방 인증서를 **검증**할 때 사용된다.
+
+<br>
+
+## kubernetes-ca (클러스터 CA)
+
+클러스터의 핵심 컴포넌트들을 위한 범용 CA다.
+
+| 역할 | 설명 |
+| --- | --- |
+| **발급** | kube-apiserver, kube-apiserver-kubelet-client, kubelet 등 클러스터 컴포넌트 인증서에 서명 |
+| **검증** | 클러스터 컴포넌트 간 통신 시 상대방 인증서 검증에 사용 |
+
+예컨대, API Server가 Kubelet에 요청할 때 사용되는 흐름을 보자.
+```
+API Server
+    ↓ [apiserver-kubelet-client.crt 제시 (kubernetes-ca가 서명한 인증서)]
+Kubelet
+    ↓ [kubernetes-ca.crt로 서명 검증]
+"OK, 이건 정당한 API Server다" → 요청 처리
+```
+
+<br>
+
+## etcd-ca (etcd 전용 CA)
+
+etcd 클러스터 전용 CA다. etcd는 클러스터의 모든 상태를 저장하는 핵심 데이터 저장소이므로, 별도 CA로 분리하여 강력한 보안 격리를 제공한다.
+
+| 역할 | 설명 |
+| --- | --- |
+| **발급** | etcd-server, etcd-peer, etcd-healthcheck-client 인증서에 서명 |
+| **검증** | etcd 클러스터 내부 통신 및 etcd 클라이언트 인증 시 사용 |
+
+etcd CA를 별도로 분리하면, etcd CA가 손상되더라도 kubernetes-ca는 안전하게 유지된다. 반대도 마찬가지다.
+
+> **참고**: etcd 인증서 종류
+>
+> - **etcd-server**: etcd가 클라이언트(API Server 등) 요청을 받을 때 서버 인증서로 사용
+> - **etcd-peer**: etcd 노드들끼리 클러스터 데이터를 동기화할 때 상호 인증에 사용
+> - **etcd-healthcheck-client**: kubelet이 etcd 헬스체크를 수행할 때 클라이언트 인증서로 사용
+> - **apiserver-etcd-client**: API Server가 etcd에 데이터를 읽고 쓸 때 클라이언트 인증서로 사용 (이 인증서도 etcd-ca가 서명)
+
+<br>
+
+## front-proxy-ca (API 확장용 CA)
+
+Kubernetes Aggregation Layer 전용 CA다. kube-apiserver가 확장 API 서버(metrics-server 등)에 요청을 프록시할 때 사용된다.
+
+| 역할 | 설명 |
+| --- | --- |
+| **발급** | front-proxy-client 인증서에 서명 |
+| **검증** | Extension API 서버가 kube-apiserver로부터 온 요청을 검증할 때 사용 |
+
+front-proxy-ca를 별도로 분리하면, Extension API 서버가 손상되더라도 kubernetes-ca는 영향받지 않는다.
+
+> **참고**: Front Proxy 동작 방식
+>
+> 일반적인 Core API 요청(`kubectl get pods`)은 kube-apiserver가 직접 처리하고 etcd에서 데이터를 조회한다. 하지만 Aggregated API 요청(`kubectl top nodes`)은 Extension API 서버로 프록시된다.
+>
+> 이 때, Extension API 서버가 요청이 정당한 kube-apiserver로부터 온 것인지 확인하기 위해 인증서가 필요하다. 여기서 front-proxy-client용 인증서를 사용한다. 
+>
+> ```
+> Client (kubectl)
+>     ↓
+> kube-apiserver (Front Proxy 역할)
+>     ↓ [front-proxy-client.crt 제시 (front-proxy-ca가 서명한 인증서)]
+> Extension API Server (metrics-server 등)
+>     ↓ [front-proxy-ca.crt로 서명 검증]
+> "OK, 정당한 kube-apiserver다" → 요청 처리
+> ```
+>
+> Extension API 서버 예시: metrics-server(`kubectl top`), custom-metrics-server(HPA), service-catalog, 사용자 정의 API 서버 등
+
+
+
+<br>
+
 # 필수 인증서 목록
 
 Kubernetes 클러스터에 필요한 인증서 목록이다. kubeadm으로 설치하면 대부분 `/etc/kubernetes/pki`에 저장된다. 상세한 내용은 [공식 문서](https://kubernetes.io/ko/docs/setup/best-practices/certificates/)를 참고하자.
 
 ## CA 인증서
 
-| 경로 | 기본 CN | 설명 |
+| 파일 | 기본 CN | 용도 |
 |------|---------|------|
 | ca.crt, ca.key | kubernetes-ca | Kubernetes 일반 CA |
 | etcd/ca.crt, etcd/ca.key | etcd-ca | etcd 전용 CA |
@@ -245,15 +275,15 @@ Kubernetes 클러스터에 필요한 인증서 목록이다. kubeadm으로 설�
 
 ## 서버/클라이언트 인증서
 
-| 기본 CN | 부모 CA | 종류 | 용도 |
-|---------|---------|------|------|
-| kube-apiserver | kubernetes-ca | server | API Server TLS |
-| kube-apiserver-kubelet-client | kubernetes-ca | client | API Server → kubelet 호출 |
-| front-proxy-client | kubernetes-front-proxy-ca | client | API 확장 요청 |
-| kube-etcd | etcd-ca | server, client | etcd 서버 |
-| kube-etcd-peer | etcd-ca | server, client | etcd 노드 간 통신 |
-| kube-etcd-healthcheck-client | etcd-ca | client | etcd 헬스체크 |
-| kube-apiserver-etcd-client | etcd-ca | client | API Server → etcd 접근 |
+| 파일 | 기본 CN | 부모 CA | 종류 | 용도 |
+|------|---------|---------|------|------|
+| apiserver.crt, .key | kube-apiserver | kubernetes-ca | server | API Server TLS |
+| apiserver-kubelet-client.crt, .key | kube-apiserver-kubelet-client | kubernetes-ca | client | API Server → kubelet 호출 |
+| front-proxy-client.crt, .key | front-proxy-client | kubernetes-front-proxy-ca | client | API 확장 요청 |
+| etcd/server.crt, .key | kube-etcd | etcd-ca | server, client | etcd 서버 |
+| etcd/peer.crt, .key | kube-etcd-peer | etcd-ca | server, client | etcd 노드 간 통신 |
+| etcd/healthcheck-client.crt, .key | kube-etcd-healthcheck-client | etcd-ca | client | etcd 헬스체크 |
+| apiserver-etcd-client.crt, .key | kube-apiserver-etcd-client | etcd-ca | client | API Server → etcd 접근 |
 
 ## ServiceAccount 키
 
@@ -272,7 +302,11 @@ Kubernetes 클러스터에 필요한 인증서 목록이다. kubeadm으로 설�
 
 # 실제 PKI 디렉토리 구조
 
-kubeadm으로 설치한 클러스터의 실제 PKI 디렉토리 구조다.
+kubeadm으로 설치한 클러스터의 실제 디렉토리 구조다.
+
+## 인증서 파일
+
+인증서 파일은 `/etc/kubernetes/pki/`에 저장된다.
 
 ```
 /etc/kubernetes/pki/
@@ -290,14 +324,9 @@ kubeadm으로 설치한 클러스터의 실제 PKI 디렉토리 구조다.
 └── sa.key, sa.pub                        # ServiceAccount 토큰 서명용
 ```
 
-kubeconfig 파일은 `/etc/kubernetes/`에 저장된다. 각 kubeconfig에 포함된 인증서는 다음과 같은 CN(Common Name)과 O(Organization) 필드를 갖는다.
+## kubeconfig 파일
 
-| 파일명 | 기본 CN | O (그룹) | 용도 |
-|--------|---------|----------|------|
-| admin.conf | kubernetes-admin | system:masters | 클러스터 관리자 |
-| kubelet.conf | system:node:\<nodeName\> | system:nodes | 각 노드의 kubelet |
-| controller-manager.conf | system:kube-controller-manager | - | controller-manager |
-| scheduler.conf | system:kube-scheduler | - | scheduler |
+kubeconfig 파일은 `/etc/kubernetes/`에 저장된다. kubeconfig는 클러스터 접속 정보와 함께 **클라이언트 인증서를 포함**하고 있어서, 각 컴포넌트가 API Server에 인증할 때 사용된다.
 
 ```
 /etc/kubernetes/
@@ -307,7 +336,55 @@ kubeconfig 파일은 `/etc/kubernetes/`에 저장된다. 각 kubeconfig에 포�
 └── scheduler.conf          # scheduler용
 ```
 
+각 kubeconfig에 포함된 인증서의 CN(Common Name)과 O(Organization) 필드는 다음과 같다.
+
+| 파일명 | 기본 CN | O (그룹) | 용도 |
+|--------|---------|----------|------|
+| admin.conf | kubernetes-admin | system:masters | 클러스터 관리자 |
+| kubelet.conf | system:node:\<nodeName\> | system:nodes | 각 노드의 kubelet |
+| controller-manager.conf | system:kube-controller-manager | - | controller-manager |
+| scheduler.conf | system:kube-scheduler | - | scheduler |
+
 kubelet.conf의 `<nodeName>`은 API Server에 등록된 노드 이름과 정확히 일치해야 한다.
+
+
+
+<br>
+
+# 인증서 생성 방법
+
+## CA 인증서 생성
+
+클러스터당 최초 1회 생성한다.
+
+```bash
+# 1. CA 개인키 생성
+openssl genrsa -out ca.key 2048
+
+# 2. CA 자체 서명 인증서 생성 (CSR 없이 바로 생성)
+openssl req -x509 -new -nodes -key ca.key \
+  -subj "/CN=kubernetes-ca" \
+  -days 3650 -out ca.crt
+```
+
+## 컴포넌트 인증서 생성
+
+각 컴포넌트마다 자신을 인증하기 위한 인증서를 생성한다.
+
+```bash
+# 1. 컴포넌트 개인키 생성
+openssl genrsa -out apiserver.key 2048
+
+# 2. CSR 생성 (공개키는 이 과정에서 자동 포함됨)
+openssl req -new -key apiserver.key \
+  -subj "/CN=kube-apiserver" \
+  -out apiserver.csr
+
+# 3. CA로 인증서 서명/발급
+openssl x509 -req -in apiserver.csr \
+  -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -out apiserver.crt -days 365
+```
 
 
 

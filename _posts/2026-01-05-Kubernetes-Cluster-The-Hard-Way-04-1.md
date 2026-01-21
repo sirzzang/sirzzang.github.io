@@ -32,137 +32,26 @@ hidden: true
 
 # TLS
 
-## 개요
+TLS(Transport Layer Security)는 네트워크 통신을 암호화하고, 통신 상대방의 신원을 검증하는 프로토콜이다.
 
-TLS(Transport Layer Security)는 네트워크 통신을 암호화하고, 통신 상대방의 신원을 검증하는 프로토콜이다. 웹 브라우저에서 HTTPS로 접속할 때 사용되는 것이 TLS이다.
-
-TLS의 핵심 기능은 다음과 같다.
 - **암호화**: 통신 내용을 제3자가 볼 수 없도록 암호화
 - **인증**: 통신 상대방이 실제로 그 서버가 맞는지 검증
 - **무결성**: 전송 중 데이터가 변조되지 않았음을 보장
 
-<br>
+TLS Handshake, 인증서 검증 과정, Cipher Suite 등 자세한 내용은 [TLS/SSL 프로토콜 글](/cs/CS-Security-TLS-SSL/)을 참고하자.
 
-## TLS Handshake
-
-클라이언트와 서버가 TLS 통신을 시작할 때, 먼저 **Handshake** 과정을 거친다. 이 과정에서 서버 인증과 세션 키 교환이 이루어진다.
-
-```
-Client                                 Server
-   │                                      │
-   │─────── 1. ClientHello ──────────────>│
-   │        (supported cipher suites,     │
-   │         TLS version, random)         │
-   │                                      │
-   │<────── 2. ServerHello ───────────────│
-   │        (selected cipher suite,       │
-   │         TLS version, random)         │
-   │                                      │
-   │<────── 3. Certificate ───────────────│
-   │        (server's X.509 certificate)  │
-   │                                      │
-   │<────── 4. ServerHelloDone ───────────│
-   │                                      │
-   │  5. Verify server certificate        │
-   │     using CA's public key            │
-   │                                      │
-   │─────── 6. ClientKeyExchange ────────>│
-   │        (encrypted pre-master secret) │
-   │                                      │
-   │─────── 7. ChangeCipherSpec ─────────>│
-   │                                      │
-   │─────── 8. Finished ─────────────────>│
-   │                                      │
-   │<────── 9. ChangeCipherSpec ──────────│
-   │                                      │
-   │<────── 10. Finished ─────────────────│
-   │                                      │
-   │<═══════ Encrypted Communication ════>│
-   │        (using session key)           │
-```
-
-주요 단계를 정리하면 다음과 같다.
-
-1. **ClientHello**: 클라이언트가 지원하는 TLS 버전, 암호화 방식 목록을 서버에 전송
-2. **ServerHello**: 서버가 사용할 TLS 버전, 암호화 방식을 선택하여 응답
-3. **Certificate**: 서버가 자신의 인증서(공개키 포함)를 클라이언트에 전송
-4. **인증서 검증**: 클라이언트가 CA의 공개키로 서버 인증서의 디지털 서명을 검증
-5. **키 교환**: 클라이언트가 세션 키(대칭키)를 생성하고, 서버의 공개키로 암호화하여 전송
-6. **암호화 통신 시작**: 이후 모든 통신은 세션 키로 암호화
-
-<br>
-
-## 인증서 검증 과정
-
-TLS에서 클라이언트가 서버 인증서를 검증하는 과정은 다음과 같다.
-
-1. **서버가 인증서 전송**: 인증서에는 서버의 공개키, 서버 정보, CA의 디지털 서명이 포함되어 있다
-2. **클라이언트의 서명 검증**:
-   - 인증서 본문을 해싱하여 해시값 생성
-   - CA의 공개키로 디지털 서명을 복호화하여 해시값 추출
-   - 두 해시값이 일치하면 인증서가 변조되지 않았음을 확인
-3. **인증서 내용 확인**: 유효기간, 도메인 주소 등이 실제 접속하려는 서버와 일치하는지 확인
-
-일반적인 웹 환경에서 CA의 공개키는 OS나 브라우저에 미리 내장되어 있다. DigiCert, Let's Encrypt 등 신뢰할 수 있는 CA의 루트 인증서가 Trust Store에 저장되어 있어, 별도의 설정 없이 인증서 검증이 가능하다.
+> 실습에서 쿠버네티스 컴포넌트들이 TLS로 통신할 때, 핸드셰이크 과정에서 인증서를 교환하고 세션 키를 생성하는 원리가 적용된다.
 
 <br>
 
 # mTLS
-
-## 개요
 
 mTLS(mutual TLS)는 TLS의 확장으로, **클라이언트와 서버가 서로의 인증서를 검증**하는 방식이다.
 
 - **TLS**: 클라이언트가 서버의 인증서만 검증 (서버 인증)
 - **mTLS**: 서버도 클라이언트의 인증서를 검증 (상호 인증)
 
-<br>
-
-## mTLS Handshake
-
-mTLS는 TLS Handshake에 클라이언트 인증서 전송 및 검증 단계가 추가된다.
-
-```
-Client                                 Server
-   │                                      │
-   │─────── 1. ClientHello ──────────────>│
-   │                                      │
-   │<────── 2. ServerHello ───────────────│
-   │                                      │
-   │<────── 3. Server Certificate ────────│
-   │                                      │
-   │<────── 4. CertificateRequest ────────│  ← mTLS: server requests
-   │        (request client certificate)  │         client certificate
-   │                                      │
-   │<────── 5. ServerHelloDone ───────────│
-   │                                      │
-6. Verify server certificate              │
-   │                                      │
-   │─────── 7. Client Certificate ───────>│  ← mTLS: client sends
-   │        (client's X.509 certificate)  │         its certificate
-   │                                      │
-   │─────── 8. ClientKeyExchange ────────>│
-   │                                      │
-   │─────── 9. CertificateVerify ────────>│  ← mTLS: client proves
-   │        (signature with client key)   │         it owns the cert
-   │                                      │
-   │─────── 10. ChangeCipherSpec ────────>│
-   │                                      │
-   │─────── 11. Finished ────────────────>│
-   │                                      │
-   │                 12. Verify client certificate
-   │                                      │
-   │<────── 13. ChangeCipherSpec ─────────│
-   │                                      │
-   │<────── 14. Finished ─────────────────│
-   │                                      │
-   │<═══════ Encrypted Communication ════>│
-```
-
-TLS와의 차이점은 다음과 같다.
-- **CertificateRequest** (4단계): 서버가 클라이언트에게 인증서를 요청
-- **Client Certificate** (7단계): 클라이언트가 자신의 인증서를 서버에 전송
-- **CertificateVerify** (9단계): 클라이언트가 인증서의 개인키 소유를 증명
+mTLS Handshake 과정 등 자세한 내용은 [TLS/SSL 프로토콜 글의 mTLS](/cs/CS-TLS-SSL/#mTLS)를 참고하자.
 
 <br>
 

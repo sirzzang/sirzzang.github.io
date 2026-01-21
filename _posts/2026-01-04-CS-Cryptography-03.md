@@ -19,7 +19,7 @@ tags:
 
 <br>
 
-*[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 On-Premise K8s Hands-on Study 자료를 기반으로 합니다. 학습 정리 목적으로 작성된 글로, 계속해서 수정될 수 있습니다.*
+*[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 On-Premise K8s Hands-on Study 자료를 기반으로 합니다.*
 
 
 > 암호화 기초
