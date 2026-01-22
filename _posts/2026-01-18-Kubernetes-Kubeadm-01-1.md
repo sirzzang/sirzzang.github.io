@@ -40,6 +40,8 @@ tags:
 
 # kubeadm init
 
+![kubeadm-init-process]({{site.url}}/assets/images/kubeadm-init-process.png){: .align-center}
+
 ## 개요
 
 `kubeadm init`은 Kubernetes 컨트롤 플레인을 초기화하는 명령어다.
@@ -147,7 +149,26 @@ kubeadm init --pod-network-cidr=10.244.0.0/16
 
 # kubeadm init 단계
 
-컨트롤 플레인에서 `kubeadm init`을 실행하면 아래 14개 단계가 순차적으로 진행된다. 각 단계는 `kubeadm init phase <phase-name>` 명령으로 개별 실행할 수 있다.
+컨트롤 플레인에서 `kubeadm init`을 실행하면 아래 단계들이 순차적으로 진행된다. 일부 단계는 설정에 따라 건너뛸 수 있다.
+
+1. preflight
+2. certs
+3. kubeconfig
+4. etcd *(stacked etcd인 경우)*
+5. control-plane
+6. kubelet-start
+7. wait-control-plane
+8. upload-config
+9. upload-certs *(`--upload-certs` 사용 시)*
+10. mark-control-plane
+11. bootstrap-token
+12. kubelet-finalize
+13. addon
+14. show-join-command
+
+<br>
+
+각 단계는 `kubeadm init phase <phase-name>` 명령으로 개별 실행할 수 있다.
 
 - `--help`: 단계 목록과 하위 단계를 확인할 수 있다.
 - `--skip-phases`: 특정 단계를 건너뛰고 실행할 수 있다. 커스텀 설정이 필요한 경우 유용하다.

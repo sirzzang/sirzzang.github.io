@@ -179,7 +179,7 @@ kubeadm은 Kubernetes The Hard Way에서 수동으로 수행하는 단계들을 
 | └ kubeconfig | [5.1. kubeconfig 개념]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-05-1 %})<br>[5.2. kubeconfig 파일 생성]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-05-2 %}) |
 | └ etcd | [7. Bootstrapping etcd]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-07 %}) |
 | └ control-plane | [8.1. Control Plane 설정 분석]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-08-1 %})<br>[8.2. Control Plane 배포]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-08-2 %}) |
-| └ kubelet-start | (Control Plane에서 kubelet 시작) |
+| └ kubelet-start | (The Hard Way에서는 Control Plane에 kubelet 미설치) |
 | └ wait-control-plane | (자동 대기) |
 | └ upload-config | (ConfigMap 자동 업로드) |
 | └ upload-certs | (인증서 자동 업로드) |
@@ -207,8 +207,21 @@ kubeadm은 Kubernetes The Hard Way에서 수동으로 수행하는 단계들을 
 | **CNI** | bridge 플러그인 수동 설정 | 별도 설치 필요 (Calico, Flannel 등) |
 | **etcd 통신** | HTTP (평문) | HTTPS (TLS 암호화) |
 | **토큰 기반 join** | 수동 인증서 배포 | bootstrap token 사용 |
+| **Control Plane kubelet** | 미설치 (컴포넌트를 systemd로 직접 실행) | 필수 (Static Pod 관리) |
 
 > **참고**: Kubernetes The Hard Way에서는 학습 목적으로 etcd를 HTTP로 구성했지만, kubeadm은 보안을 위해 HTTPS를 기본으로 사용한다.
+
+### Control Plane에 kubelet이 필요한 이유
+
+Kubernetes The Hard Way에서는 Control Plane 컴포넌트들을 systemd 서비스로 직접 실행했기 때문에 kubelet이 필요하지 않았다. 하지만 kubeadm은 Control Plane 컴포넌트들을 **Static Pod**로 배포하므로, 이를 관리할 kubelet이 반드시 필요하다.
+
+Control Plane에 kubelet이 필요한 이유를 정리하면:
+
+1. **Static Pod 관리**: kubelet은 `/etc/kubernetes/manifests` 디렉토리를 모니터링하며, 여기에 있는 매니페스트(kube-apiserver, kube-controller-manager, kube-scheduler, etcd)를 자동으로 Pod로 실행하고 관리한다.
+
+2. **노드 상태 보고**: Control Plane 노드도 클러스터의 일부이므로, 해당 노드의 상태(CPU, 메모리, 디스크 등)를 API Server에 보고해야 한다. 이 역할을 kubelet이 수행한다.
+
+3. **워크로드 스케줄링**: Control Plane 노드의 taint를 제거하면 일반 워크로드 Pod도 스케줄링될 수 있다. 이때 해당 Pod들을 실행하는 것도 kubelet이다.
 
 <br>
 
