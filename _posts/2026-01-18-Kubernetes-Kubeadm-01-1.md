@@ -1,5 +1,5 @@
 ---
-title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 01. kubeadm init"
+title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1-1. kubeadm init"
 excerpt: "kubeadm init 명령어의 동작 원리와 각 단계를 살펴 보자."
 categories:
   - Kubernetes

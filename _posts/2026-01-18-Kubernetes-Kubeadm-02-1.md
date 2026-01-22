@@ -1,5 +1,5 @@
 ---
-title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 02. kubeadm join"
+title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 2-1. kubeadm join"
 excerpt: "kubeadm join 명령어의 동작 원리와 각 단계를 살펴 보자."
 categories:
   - Kubernetes
