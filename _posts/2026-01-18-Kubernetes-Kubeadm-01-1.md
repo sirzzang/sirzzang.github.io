@@ -41,6 +41,7 @@ tags:
 # kubeadm init
 
 ![kubeadm-init-process]({{site.url}}/assets/images/kubeadm-init-process.png){: .align-center}
+<center><sup>kubeadm init을 이용한 control plane init 과정</sup></center>
 
 ## 개요
 
@@ -120,6 +121,21 @@ kubeadm init --control-plane-endpoint "k8s-api.example.com:6443"
 - 추가 컨트롤 플레인 노드가 조인할 수 있음
 
 > **주의**: 이 옵션 없이 클러스터를 생성한 후에는 HA로 전환하기 어렵다. 처음부터 다시 구성해야 할 수 있다.
+
+> **참고: HA 구성 시 로드밸런서의 필요성**
+>
+> "처음부터 지정해야 한다면, 로드밸런서도 처음부터 준비해야 하는 건가?"라고 궁금할 수 있다.
+>
+> `--control-plane-endpoint`는 처음부터 지정해야 하지만, **실제 로드밸런서가 즉시 필요한 것은 아니다**. 이 값이 인증서 SAN, kubeconfig, kubelet 설정 등에 포함되기 때문에 나중에 변경하기 어렵기 때문이다.
+>
+> | 방식 | 설명 |
+> | --- | --- |
+> | **DNS 방식** | DNS를 처음엔 단일 노드 IP로 지정, 나중에 LB IP로 변경 |
+> | **Virtual IP (kube-vip)** | Static Pod로 VIP 제공, 별도 LB 인프라 불필요 |
+> | **HAProxy + Keepalived** | 컨트롤 플레인 노드에 직접 설치하여 VIP 제공 |
+> | **클라우드 LB** | AWS ELB, GCP LB 등 미리 생성 후 endpoint로 지정 |
+>
+> 즉, **"endpoint 주소"는 처음부터 정해야 하지만**, 그 주소가 가리키는 실제 인프라(LB)는 나중에 구성해도 된다.
 
 ### --pod-network-cidr: Pod 네트워크 대역
 

@@ -1071,6 +1071,16 @@ ctr plugins ls
 > - `io.containerd.snapshotter.v1 overlayfs`: 컨테이너 파일시스템 레이어 관리
 > - `io.containerd.runtime.v2 task`: 실제 컨테이너 실행 (runc 연동)
 
+> **참고: Lazy-loading Snapshotter**
+> 
+> 기본 `overlayfs` snapshotter는 컨테이너 시작 전 **전체 이미지를 다운로드**해야 한다. 대용량 이미지(ML 모델, 데이터 분석 도구 등)의 경우 이미지 pull 시간이 컨테이너 시작 시간의 대부분을 차지할 수 있다.
+> 
+> 이런 경우 **lazy-loading snapshotter**를 고려할 수 있다:
+> - [**eStargz (stargz-snapshotter)**](https://github.com/containerd/stargz-snapshotter): CNCF containerd 프로젝트. 이미지를 부분적으로 다운로드하며 필요한 파일만 on-demand로 fetch
+> - [**SOCI Snapshotter**](https://github.com/awslabs/soci-snapshotter): AWS에서 개발. 기존 OCI 이미지를 수정 없이 사용하면서 lazy-loading 지원 ([AWS 블로그](https://aws.amazon.com/ko/blogs/tech/under-the-hood-lazy-loading-container-images-with-seekable-oci-and-aws-fargate/))
+>
+> 이러한 snapshotter를 사용하면 이미지 크기와 관계없이 컨테이너를 빠르게 시작할 수 있어, 스케일링이 빈번한 워크로드에 유리하다.
+
 <br>
 
 # kubeadm, kubelet, kubectl 설치
