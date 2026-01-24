@@ -1,5 +1,5 @@
 ---
-title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1-3. kubeadm init 실행 및 편의 도구 설치"
+title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.3. kubeadm init 실행 및 편의 도구 설치"
 excerpt: "kubeadm init을 실행하여 컨트롤 플레인을 구성하고, kubectl 편의 도구를 설치해 보자."
 categories:
   - Kubernetes
@@ -471,7 +471,7 @@ kubeadm join 192.168.10.100:6443 --token 123456.1234567890123456 \
 
 > **참고**: 토큰을 고정해두었기 때문에 join 명령어의 토큰 부분이 항상 동일하다. CA cert hash만 기억해두면 워커 노드 join 시 바로 사용할 수 있다.
 
-완료 메시지에서 보이는 아래 커맨드를 [워커 노드 join]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-5 %}) 시 바로 사용할 수 있다.
+완료 메시지에서 보이는 아래 커맨드를 [워커 노드 join]({% post_url 2026-01-18-Kubernetes-Kubeadm-02-1 %}) 시 바로 사용할 수 있다.
 
 ```bash
 Then you can join any number of worker nodes by running the following on each as root:
@@ -622,6 +622,31 @@ kubectl get svc -n kube-system
 # kube-dns   ClusterIP   10.96.0.10   <none>        53/UDP,53/TCP,9153/TCP   22m
 ```
 
+#### Lease
+
+컨트롤 플레인 컴포넌트와 kubelet이 시작되면서 **Lease 리소스**가 자동으로 생성된다.
+
+```bash
+# Leader Election용 Lease (kube-system)
+kubectl get lease -n kube-system
+# NAME                      HOLDER                                         AGE
+# kube-controller-manager   k8s-ctr_...                                    25m
+# kube-scheduler            k8s-ctr_...                                    25m
+
+# Node Heartbeat용 Lease (kube-node-lease)
+kubectl get lease -n kube-node-lease
+# NAME      HOLDER    AGE
+# k8s-ctr   k8s-ctr   25m
+```
+
+| Lease | 네임스페이스 | 생성 주체 | 용도 |
+| --- | --- | --- | --- |
+| `kube-scheduler` | `kube-system` | kube-scheduler | 스케줄러 Leader Election |
+| `kube-controller-manager` | `kube-system` | kube-controller-manager | 컨트롤러 매니저 Leader Election |
+| `<노드명>` | `kube-node-lease` | kubelet | 노드 상태 보고 (Heartbeat) |
+
+> **참고**: Leader Election은 HA 구성에서 여러 인스턴스 중 하나만 활성화하기 위한 메커니즘이다. 현재 단일 컨트롤 플레인이므로 Leader가 하나뿐이지만, `--leader-elect=true`가 기본 활성화되어 있어 HA 확장 시 자동으로 동작한다. Node Lease는 노드 상태를 경량화된 방식으로 보고하여 etcd 부하를 줄인다.
+
 <br>
 
 ## TLS Bootstrap을 위한 객체들
@@ -654,7 +679,7 @@ kubectl get svc -n kube-system
     ▼ 정식 kubelet 인증서로 클러스터 참여
 ```
 
-> 자세한 TLS Bootstrap 과정은 [워커 노드 join]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-5 %}) 글에서 다룬다.
+> 자세한 TLS Bootstrap 과정은 [워커 노드 join]({% post_url 2026-01-18-Kubernetes-Kubeadm-02-1 %}) 글에서 다룬다.
 
 ### Role/RoleBinding 확인
 
@@ -706,7 +731,7 @@ ConfigMap에는 2개의 데이터가 있다:
 - **kubeconfig**: API Server 주소와 CA 인증서 (워커 노드가 필요한 정보)
 - **jws-kubeconfig-123456**: 부트스트랩 토큰으로 서명한 값 (중간자가 ConfigMap을 조작하지 않았음을 검증)
 
-<details>
+<details markdown="1">
 <summary>cluster-info ConfigMap 전체 내용</summary>
 
 ```yaml
@@ -732,6 +757,8 @@ metadata:
 ```
 
 </details>
+
+<br>
 
 ### CA 인증서 확인
 

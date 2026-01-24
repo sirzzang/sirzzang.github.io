@@ -1,5 +1,5 @@
 ---
-title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1-2. 사전 설정 및 구성 요소 설치"
+title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.2. 사전 설정 및 구성 요소 설치"
 excerpt: "kubeadm을 사용한 클러스터 구성을 위해 필요한 사전 설정, CRI(containerd) 설치, kubeadm/kubelet/kubectl 설치를 수행한다."
 categories:
   - Kubernetes
@@ -60,9 +60,7 @@ tags:
 
 [이전 글]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-1 %})에서 `kubeadm init`의 동작 원리와 14개 단계를 살펴보았다. 이번 글부터는 실제로 kubeadm을 사용하여 클러스터를 구성한다. 설치 목표 클러스터 버전은 1.32다.
 
-kubeadm을 사용하기 전에 먼저 몇 가지 사전 설정이 필요하다. Kubernetes [공식 문서](https://v1-32.docs.kubernetes.io/ko/docs/setup/production-environment/tools/kubeadm/install-kubeadm/)에서 안내하는 요구사항을 충족해야 한다.
-
-이 글에서 다루는 모든 설정은 **컨트롤 플레인 노드와 워커 노드 모두**에 적용해야 한다. 실습에서는 k8s-ctr, k8s-w1, k8s-w2 세 노드에 동일하게 진행한다.
+kubeadm을 사용하기 전에 먼저 몇 가지 사전 설정이 필요하다. Kubernetes [공식 문서](https://v1-32.docs.kubernetes.io/ko/docs/setup/production-environment/tools/kubeadm/install-kubeadm/)에서 안내하는 요구사항을 충족해야 한다. 이 글에서 다루는 모든 설정은 **컨트롤 플레인 노드와 워커 노드 모두**에 적용해야 한다. 실습에서는 k8s-ctr, k8s-w1, k8s-w2 세 노드에 동일하게 진행한다.
 
 <br>
 
@@ -101,7 +99,6 @@ lscpu
 
 현재 4 CPU이므로 요구사항을 충족한다. 아키텍처는 `aarch64`(Apple Silicon ARM64)이므로 arm64 호환 이미지를 사용해야 한다.
 
-<br>
 
 ## 메모리
 
@@ -115,7 +112,6 @@ free -h
 
 현재 약 2.8GB이므로 요구사항을 충족한다.
 
-<br>
 
 ## 디스크
 
@@ -137,7 +133,6 @@ df -hT
 
 현재 루트 파티션(`/`)에 **58GB 가용 공간**이 있어 충분하다. `/boot/efi` 파티션은 EFI 부팅을 위한 것으로, Vagrant VM이 UEFI 부팅을 사용함을 알 수 있다.
 
-<br>
 
 ## 네트워크
 
@@ -208,6 +203,7 @@ stat -fc %T /sys/fs/cgroup   # cgroup2fs (v1이면 tmpfs)
 
 `cgroup2fs`가 출력되면 cgroup v2를 사용 중이다. cgroup v1이면 `tmpfs`가 출력된다.
 
+
 ### 마운트 정보 확인
 
 `findmnt`와 `mount` 명령어로 cgroup이 어떻게 마운트되어 있는지 확인한다.
@@ -219,8 +215,6 @@ findmnt | grep cgroup
 mount | grep cgroup
 # cgroup2 on /sys/fs/cgroup type cgroup2 (rw,nosuid,nodev,noexec,relatime,seclabel,nsdelegate,memory_recursiveprot)
 ```
-
-마운트 옵션 중 주요 항목:
 
 | 옵션 | 의미 |
 | --- | --- |
@@ -255,8 +249,6 @@ systemd-cgls --no-pager
 #   └─...
 ```
 
-출력에서 확인할 수 있는 것:
-
 | 항목 | 설명 |
 | --- | --- |
 | `user.slice` | 사용자 세션 관련 프로세스 (vagrant 로그인 세션 등) |
@@ -264,6 +256,7 @@ systemd-cgls --no-pager
 | `init.scope` | PID 1 (systemd) |
 
 Kubernetes가 설치되면 이 계층 구조에 `kubelet.slice`와 컨테이너별 cgroup이 추가된다.
+
 
 ### cgroup 드라이버: cgroupfs vs systemd
 
@@ -370,8 +363,6 @@ chronyc sources -v
 # ^- kr.timeadjust.org             3   8   377   331    -38ms[  -38ms] +/-   78ms
 # ^* 175.210.18.47                 2   9   377   152   +490us[ +478us] +/-   11ms
 ```
-
-출력에서 주요 항목:
 
 | 항목 | 의미 |
 | --- | --- |
@@ -698,7 +689,7 @@ Kubernetes는 컨테이너 런타임으로 CRI(Container Runtime Interface)를 �
 | **1.34** | **2.1.3+**, 2.0.6+, 1.7.28+, 1.6.36+ | v1 |
 | 1.35 | 2.2.0+, 2.1.5+, 1.7.28+ | v1 |
 
-출처: [containerd Kubernetes support](https://containerd.io/releases/#kubernetes-support)
+> 참고: [containerd Kubernetes support](https://containerd.io/releases/#kubernetes-support)
 
 containerd **2.1.5**를 설치하면 Kubernetes 1.32 ~ 1.35까지 모두 호환된다.
 
@@ -856,7 +847,7 @@ head /etc/containerd/config.toml
 # [grpc]
 ```
 
-<details>
+<details markdown="1">
 <summary>containerd config default 전체 출력 (클릭하여 펼치기)</summary>
 
 ```toml
@@ -962,6 +953,8 @@ imports = []
 ```
 
 </details>
+
+<br>
 
 기본 설정에서 `disabled_plugins = []`로 CRI 플러그인이 활성화되어 있다. 하지만 **SystemdCgroup = false**가 기본값이므로 이를 활성화해야 한다. 이 설정이 없으면 kubelet과 containerd 간 cgroup 관리 충돌이 발생할 수 있다.
 
@@ -1228,7 +1221,7 @@ image-endpoint: unix:///run/containerd/containerd.sock
 EOF
 ```
 
-<details>
+<details markdown="1">
 <summary>crictl info 전체 출력 (클릭하여 펼치기)</summary>
 
 ```json
@@ -1285,6 +1278,8 @@ EOF
 ```
 
 </details>
+
+<br>
 
 | 항목 | 값 | 의미 |
 | --- | --- | --- |

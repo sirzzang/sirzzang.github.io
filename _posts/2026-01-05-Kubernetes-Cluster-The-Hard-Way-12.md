@@ -288,13 +288,18 @@ systemd,1
 | **systemd** | 시스템 초기화 및 서비스 관리자 (PID 1) |
 | **containerd** | 컨테이너 런타임 데몬. kubelet의 CRI 요청을 받아 컨테이너 생성 |
 | **containerd-shim** | 각 Pod(컨테이너 그룹)마다 하나씩 생성. containerd와 실제 컨테이너 프로세스 사이의 중간 관리자 역할 |
-| **pause** | Pod의 인프라 컨테이너. 네트워크 네임스페이스를 유지하고 다른 컨테이너들이 공유 |
+| **pause** | Pod의 인프라 컨테이너. 네트워크 네임스페이스를 생성·유지하고 다른 컨테이너들이 공유. PID 1로서 좀비 프로세스 reaping 담당 |
 | **nginx** | 실제 애플리케이션 컨테이너. master 프로세스(4154)와 worker 프로세스(4188, 4189) |
 | **kubelet** | 노드 에이전트. API Server와 통신하며 Pod 라이프사이클 관리 |
 | **kube-proxy** | 네트워크 프록시. Service의 ClusterIP/NodePort 트래픽 라우팅 |
 
-> *참고*: containerd-shim, pause
+> **참고: pause 컨테이너**
 > 
+> `pause` 컨테이너는 모든 Pod에서 가장 먼저 생성되는 **인프라 컨테이너**다. 실제 워크로드는 수행하지 않고 다음 역할을 담당한다:
+> - **네트워크 네임스페이스 유지**: Pod 내 모든 컨테이너가 공유하는 네트워크 네임스페이스를 생성하고 유지한다. 애플리케이션 컨테이너가 재시작되어도 Pod의 IP 주소가 유지되는 이유다.
+> - **PID 1 역할**: 좀비 프로세스를 reaping하는 init 프로세스 역할을 한다.
+> - **리소스 최소화**: 아무 작업도 하지 않고 `pause()` 시스템 콜로 대기하므로 CPU/메모리 사용량이 거의 없다 (약 700KB).
+>
 > containerd-shim 아래에 pause와 nginx가 함께 있는 구조는 **하나의 Pod 안에서 pause 컨테이너가 네트워크 네임스페이스를 소유하고, nginx 컨테이너가 그 네임스페이스를 공유**하는 Kubernetes Pod 모델을 보여준다. 
 
 <br>
