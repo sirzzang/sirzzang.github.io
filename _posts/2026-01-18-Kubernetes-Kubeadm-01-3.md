@@ -230,7 +230,7 @@ tree /etc/kubernetes
 
 ### init 실행
 
-이제 init을 실행행한다.
+이제 init을 실행한다.
 
 ```bash
 kubeadm init --config="kubeadm-init.yaml"
