@@ -127,16 +127,26 @@ kubeadm init --control-plane-endpoint "k8s-api.example.com:6443"
 >
 > "처음부터 지정해야 한다면, 로드밸런서도 처음부터 준비해야 하는 건가?"라고 궁금할 수 있다.
 >
-> `--control-plane-endpoint`는 처음부터 지정해야 하지만, **실제 로드밸런서가 즉시 필요한 것은 아니다**. 이 값이 인증서 SAN, kubeconfig, kubelet 설정 등에 포함되기 때문에 나중에 변경하기 어렵기 때문이다.
+> `--control-plane-endpoint`는 처음부터 지정해야 한다. 이 값이 인증서 SAN, kubeconfig, kubelet 설정 등에 포함되어 나중에 변경하기 어렵기 때문이다. 다만, **실제 로드밸런서 인프라가 즉시 준비되어 있을 필요는 없다**.
 >
-> | 방식 | 설명 |
-> | --- | --- |
-> | **DNS 방식** | DNS를 처음엔 단일 노드 IP로 지정, 나중에 LB IP로 변경 |
-> | **Virtual IP (kube-vip)** | Static Pod로 VIP 제공, 별도 LB 인프라 불필요 |
-> | **HAProxy + Keepalived** | 컨트롤 플레인 노드에 직접 설치하여 VIP 제공 |
-> | **클라우드 LB** | AWS ELB, GCP LB 등 미리 생성 후 endpoint로 지정 |
+> 핵심은 **시점별 요구사항**이 다르다는 것이다. `kubeadm init` 시점에는 해당 주소의 유효성을 검증하지 않지만, **`kubeadm join` 시점에는 해당 주소로 반드시 연결이 되어야 한다**. 따라서 일반적인 패턴은 다음과 같다:
 >
-> 즉, **"endpoint 주소"는 처음부터 정해야 하지만**, 그 주소가 가리키는 실제 인프라(LB)는 나중에 구성해도 된다.
+> 1. `init` 시 DNS 기반 endpoint 지정 (예: `k8s-api.example.com`)
+> 2. 해당 DNS를 첫 번째 컨트롤 플레인 IP로 설정
+> 3. 워커 노드 join (DNS가 첫 번째 CP를 가리키므로 연결 가능)
+> 4. 나중에 LB 구성 후 DNS를 LB IP로 변경
+> 5. 추가 컨트롤 플레인 join (LB를 통해 연결)
+>
+> 아래는 HA 구성 시 API Server 앞단을 구성하는 방식들이다:
+>
+> | 구분 | 방식 | 설명 |
+> | --- | --- | --- |
+> | **별도 LB 인프라 불필요** | DNS 방식 | DNS를 처음엔 단일 노드 IP로, 나중에 LB IP로 변경 |
+> | | Virtual IP (kube-vip) | Static Pod로 VIP 제공 |
+> | | HAProxy + Keepalived | 컨트롤 플레인 노드에 직접 설치하여 VIP 제공 |
+> | **LB 인프라 필요** | 클라우드 LB | AWS ELB, GCP LB 등 미리 생성 후 endpoint로 지정 |
+> 
+> 즉, **endpoint 값 자체는 처음부터 정해야 하고 join 시점에는 연결 가능해야 한다**. DNS 방식을 사용하면 endpoint 값은 그대로 두고 DNS 레코드가 가리키는 IP만 변경하여 나중에 LB로 전환할 수 있다. 반면 IP를 직접 지정하면 나중에 변경이 어려우므로, **HA 전환 가능성이 있다면 DNS 기반 endpoint를 사용할 것이 일반적으로 권장된다**.
 
 ### --pod-network-cidr: Pod 네트워크 대역
 

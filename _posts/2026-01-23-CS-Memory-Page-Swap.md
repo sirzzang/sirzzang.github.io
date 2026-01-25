@@ -534,7 +534,7 @@ sysctl vm.dirty_ratio
 ```
 
 <details markdown="1">
-<summary>실제 커널 파라미터 출력 예시 (Ubuntu 24.04, 클릭하여 펼치기)</summary>
+<summary>실제 커널 파라미터 출력 예시 (Rocky Linux 10, 클릭하여 펼치기)</summary>
 
 ```bash
 $ sysctl -a | grep ^vm
