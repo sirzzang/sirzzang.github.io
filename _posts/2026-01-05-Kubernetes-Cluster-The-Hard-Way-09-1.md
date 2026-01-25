@@ -397,9 +397,24 @@ kubelet과 containerd 간의 통신 설정이다.
 
 - `registerNode: true`: kubelet이 API Server에 Node 객체 자동 등록
 - `maxPods: 16`: 노드당 최대 Pod 수
-- `failSwapOn: false`: swap 활성화 시 kubelet 시작 실패 여부. `false`면 swap이 켜져 있어도 시작
-- `memorySwap.swapBehavior: NoSwap`: swap 사용 정책. `NoSwap`은 컨테이너가 swap을 사용하지 않음
 - `resolvConf`: Pod에 전달할 DNS 설정 파일 경로
+
+<br>
+
+### Swap 설정
+
+kubelet의 swap 관련 설정이다.
+
+| 설정 | 값 | 설명 |
+|-----|---|------|
+| `failSwapOn` | `false` | swap이 활성화된 호스트에서도 kubelet 시작 허용 |
+| `memorySwap.swapBehavior` | `NoSwap` | 컨테이너가 swap을 사용하지 않도록 설정 |
+
+`swapBehavior` 옵션으로 설정할 수 있는 값은 아래와 같다.
+- **`NoSwap`** (기본값): 컨테이너가 swap 사용 불가. cgroup에서 `memory.swap.max=0` 설정
+- **`LimitedSwap`**: 컨테이너가 제한된 swap 사용 가능. cgroup v2 필요
+
+이 조합은 "호스트에 swap이 있어도 kubelet은 시작하되, 컨테이너는 swap을 쓰지 않는다"는 의미다. Kubernetes가 swap을 권장하지 않는 이유와 swap의 동작 원리는 [메모리, 페이지, 스왑]({% post_url 2026-01-23-CS-Memory-Page-Swap %}) 글을 참고한다.
 
 <br>
 
