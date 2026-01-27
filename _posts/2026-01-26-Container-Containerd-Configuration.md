@@ -74,6 +74,81 @@ containerd의 설정은 **계층적이고 복잡한 구조**를 가진다. 특�
 
 containerd, Docker, Cargo(Rust), Hugo 등 많은 Go 기반 프로젝트에서 TOML을 채택하고 있다.
 
+## TOML 테이블(섹션) 문법
+
+containerd 설정 파일을 읽다 보면 `[grpc]`, `[plugins."io.containerd.gc.v1.scheduler"]` 같은 대괄호 표현이 나온다. 이것은 TOML의 **테이블(Table)** 문법으로, 설정을 계층적으로 구조화하기 위한 것이다.
+
+```toml
+# 최상위 필드 (테이블 없이)
+version = 3
+root = "/var/lib/containerd"
+
+# 테이블(섹션) 선언
+[grpc]
+  address = "/run/containerd/containerd.sock"
+  uid = 0
+
+# 중첩 테이블
+[plugins."io.containerd.gc.v1.scheduler"]
+  pause_threshold = 0.02
+```
+
+테이블을 사용하면 같은 설정을 더 읽기 쉽게 표현할 수 있다:
+
+```toml
+# 테이블 없이 (읽기 어려움)
+plugins."io.containerd.gc.v1.scheduler".pause_threshold = 0.02
+plugins."io.containerd.gc.v1.scheduler".deletion_threshold = 0
+plugins."io.containerd.gc.v1.scheduler".mutation_threshold = 100
+
+# 테이블 사용 (읽기 쉬움)
+[plugins."io.containerd.gc.v1.scheduler"]
+  pause_threshold = 0.02
+  deletion_threshold = 0
+  mutation_threshold = 100
+```
+
+### 따옴표로 감싼 키: timeouts의 특수성
+
+containerd 공식 문서를 보면 `[grpc]`, `[plugins."..."]` 같은 섹션은 대괄호로 표현되는데, timeouts는 일반 키로 소개하고 있다. 글로벌 설정처럼 보이지만, 실제 설정을 확인해 보면, `[timeouts]`와 같이 대괄호로 표현된다. 혼란스러울 수 있지만, 하지만 timeouts도 [timeouts] 테이블이며, 다른 섹션들과 구조가 다르다.
+- `[grpc]`, `[plugins."..."]` 등의 섹션: 중첩 테이블 구조로, **구조체 타입**(필드가 있음)
+- `[timeouts]`: 테이블 구조이지만, **맵 타입**(키-값만 있음)
+
+```toml
+# 구조체 타입 - 필드가 있음
+[grpc]
+  address = "/run/containerd/containerd.sock"
+  uid = 0
+
+# 맵 타입 - 키-값만 있음 (확장성을 위한 설계)
+[timeouts]
+  'io.containerd.timeout.shim.cleanup' = '5s'   # 전체가 하나의 키 이름
+  'io.containerd.timeout.shim.load' = '5s'
+```
+
+TOML에서 점(`.`)이 포함된 키는 따옴표로 감싸야 한다. `'io.containerd.timeout.shim.cleanup'`은 중첩 테이블이 아니라 **하나의 키 이름**이다.
+
+> 참고: **맵 타입 섹션의 확장성**
+>
+> 혼란스러울 수 있음에도 이렇게 설계한 이유는 **확장성** 때문이다. 만약 중첩 테이블로 했다면 새로운 타임아웃을 추가할 때마다 깊이가 달라진다:
+>
+> ```toml
+> # 만약 중첩 테이블로 했다면 (복잡함)
+> [timeouts.io.containerd.timeout.shim]
+>   cleanup = '5s'
+>   load = '5s'
+>
+> [timeouts.io.containerd.timeout.task]
+>   state = '2s'
+>
+> # 맵 방식 (현재, 단순함)
+> [timeouts]
+>   'io.containerd.timeout.shim.cleanup' = '5s'
+>   'io.containerd.timeout.new.feature' = '10s'  # 쉽게 추가 가능
+> ```
+>
+> 이렇게 설계했기 때문에, 깊은 중첩 없이 새로운 타임아웃을 쉽게 추가할 수 있다.
+
 <br>
 
 # 설정 파일 개요
@@ -178,6 +253,110 @@ config.toml
 ```
 
 설정 파일에 명시되지 않은 옵션은 **기본값**이 적용된다. `containerd config default` 명령으로 전체 기본값을 확인할 수 있다.
+
+<details markdown="1">
+<summary>설정 파일 구조 상세 예시 (클릭하여 펼치기)</summary>
+
+```toml
+# ========================================
+# 1. 최상위 필드 (Top-level fields)
+# ========================================
+version = 3
+root = "/var/lib/containerd"
+state = "/run/containerd"
+
+# ========================================
+# 2. 최상위 섹션 (Top-level sections)
+# ========================================
+
+[grpc]
+address = "/run/containerd/containerd.sock"
+uid = 0
+
+[debug]
+address = "/run/containerd/debug.sock"
+level = "info"
+
+# ========================================
+# 3. Timeouts - 특수 케이스 (따옴표로 감싼 키)
+# ========================================
+[timeouts]
+  # 이것들은 중첩 테이블이 아니라 단일 키
+  'io.containerd.timeout.shim.cleanup' = '5s'
+  'io.containerd.timeout.shim.load' = '5s'
+  'io.containerd.timeout.task.state' = '2s'
+
+# ========================================
+# 4. 플러그인 섹션 (Plugins section)
+# ========================================
+
+[plugins]
+  # 플러그인 루트 - 아무것도 없음
+
+  # GC Scheduler 플러그인
+  [plugins."io.containerd.gc.v1.scheduler"]
+    pause_threshold = 0.02
+    deletion_threshold = 0
+    mutation_threshold = 100
+    schedule_delay = "0s"
+    startup_delay = "100ms"
+
+  # Diff Service 플러그인
+  [plugins."io.containerd.service.v1.diff-service"]
+    default = ["walking"]
+
+  # Monitor (cgroups) 플러그인
+  [plugins."io.containerd.monitor.v1.cgroups"]
+    no_prometheus = false
+
+  # Task 플러그인
+  [plugins."io.containerd.runtime.v2.task"]
+    platforms = ["linux/amd64"]
+    sched_core = false
+
+  # Tasks Service 플러그인
+  [plugins."io.containerd.service.v1.tasks-service"]
+    rdt_config_file = ""
+    blockio_config_file = ""
+
+  # CRI Runtime 플러그인 (중첩이 깊음)
+  [plugins."io.containerd.cri.v1.runtime"]
+    enable_selinux = false
+    max_container_log_line_size = 16384
+
+    [plugins."io.containerd.cri.v1.runtime".containerd]
+      snapshotter = "overlayfs"
+      default_runtime_name = "runc"
+
+      # Runc 런타임 설정
+      [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.runc]
+        runtime_type = "io.containerd.runc.v2"
+
+        # Runc 옵션
+        [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.runc.options]
+          SystemdCgroup = true
+          BinaryName = "/usr/bin/runc"
+
+# ========================================
+# 구조 요약:
+# ========================================
+# 
+# version, root         → 최상위 필드
+# [grpc]                → 최상위 섹션
+# [timeouts]            → 특수 케이스 (플랫 맵)
+# [plugins."..."]       → 플러그인 (깊은 중첩 가능)
+#
+# 플러그인 ID 형식:
+# io.containerd.<type>.<api_version>.<name>
+#
+# 예시:
+# - io.containerd.gc.v1.scheduler        → GC 스케줄러
+# - io.containerd.service.v1.diff        → Diff 서비스
+# - io.containerd.runtime.v2.task        → Runtime task
+# - io.containerd.cri.v1.runtime         → CRI 런타임
+```
+
+</details>
 
 <br>
 
@@ -309,19 +488,102 @@ TTRPC(Tiny TLS RPC)는 containerd에서 개발한 경량 RPC 프로토콜이다.
 
 containerd는 **플러그인 아키텍처**로 설계되어 있다. 거의 모든 기능이 플러그인으로 구현되며, 각 플러그인은 `[plugins."<plugin-id>"]` 형태로 설정한다. 아래 나열된 플러그인들은 **기본적으로 활성화**되어 있으며, 기본 활성화되지 않은 플러그인은 별도 문서를 참고해야 한다.
 
-### 기본 플러그인 및 주요 옵션
+### 기본 플러그인 요약
 
-| 플러그인 ID | 역할 | 주요 옵션 |
-|------------|------|----------|
-| `io.containerd.grpc.v1.cri` | **CRI 플러그인** - Kubernetes 연동 | `sandbox_image`, `default_runtime_name` 등 |
-| `io.containerd.runtime.v2.task` | 런타임 shim 설정 | `platforms` (지원 플랫폼), `sched_core` (코어 스케줄링, 기본값: `false`) |
-| `io.containerd.gc.v1.scheduler` | 가비지 컬렉션 스케줄러 | `pause_threshold` (0.02), `deletion_threshold` (0), `mutation_threshold` (100), `schedule_delay` (0ms), `startup_delay` (100ms) |
-| `io.containerd.service.v1.tasks-service` | 태스크 서비스 | `blockio_config_file`, `rdt_config_file` (Linux 전용) |
-| `io.containerd.service.v1.diff-service` | 이미지 레이어 diff | `default` (기본값: `["walking"]`) |
-| `io.containerd.monitor.v1.cgroups` | cgroup 모니터링 | `no_prometheus` (기본값: `false`) |
-| `io.containerd.snapshotter.v1.overlayfs` | OverlayFS 스냅샷터 | - |
-| `io.containerd.metadata.v1.bolt` | 메타데이터 저장 (BoltDB) | - |
-| `io.containerd.nri.v1.nri` | NRI (Node Resource Interface) | - |
+| 플러그인 ID | 역할 |
+|------------|------|
+| `io.containerd.grpc.v1.cri` | **CRI 플러그인** - Kubernetes 연동의 핵심 |
+| `io.containerd.runtime.v2.task` | 런타임 task 관리 |
+| `io.containerd.gc.v1.scheduler` | 가비지 컬렉션 스케줄러 |
+| `io.containerd.service.v1.tasks-service` | 태스크 서비스 (RDT, BlockIO) |
+| `io.containerd.service.v1.diff-service` | 이미지 레이어 diff 서비스 |
+| `io.containerd.monitor.v1.cgroups` | cgroup 메트릭 모니터링 |
+| `io.containerd.snapshotter.v1.overlayfs` | OverlayFS 스냅샷터 |
+| `io.containerd.metadata.v1.bolt` | 메타데이터 저장 (BoltDB) |
+| `io.containerd.nri.v1.nri` | NRI (Node Resource Interface) |
+
+### 플러그인 상세 설명
+
+#### io.containerd.grpc.v1.cri (CRI 플러그인)
+
+Kubernetes 연동의 핵심 플러그인이다. kubelet이 containerd와 통신할 때 이 플러그인을 통해 컨테이너를 생성하고 관리한다. 자세한 설정은 [CRI 플러그인 설정](#cri-플러그인-설정) 섹션에서 다룬다.
+
+#### io.containerd.runtime.v2.task
+
+컨테이너 런타임 task의 플랫폼 및 스케줄링을 설정한다.
+
+| 옵션 | 기본값 | 설명 |
+|-----|-------|------|
+| `platforms` | `["linux/amd64"]` | 지원 플랫폼 목록 |
+| `sched_core` | `false` | Linux Core Scheduling 활성화 여부 |
+
+#### io.containerd.gc.v1.scheduler (GC 스케줄러)
+
+사용하지 않는 이미지, 컨테이너, 스냅샷 등을 정리하는 가비지 컬렉션 스케줄러다.
+
+| 옵션 | 기본값 | 설명 |
+|-----|-------|------|
+| `pause_threshold` | `0.02` | GC 일시 중지 임계값 |
+| `deletion_threshold` | `0` | 삭제 작업 후 GC 트리거 임계값 |
+| `mutation_threshold` | `100` | DB 변경 후 GC 트리거 임계값 |
+| `schedule_delay` | `0s` | GC 스케줄 지연 시간 |
+| `startup_delay` | `100ms` | containerd 시작 후 첫 GC까지 대기 시간 |
+
+#### io.containerd.service.v1.tasks-service
+
+고급 리소스 관리 기능(RDT, BlockIO)을 제공하는 태스크 서비스다.
+
+| 옵션 | 기본값 | 설명 |
+|-----|-------|------|
+| `rdt_config_file` | `""` | Intel RDT(Resource Director Technology) 설정 파일 경로 |
+| `blockio_config_file` | `""` | Block I/O 설정 파일 경로 |
+
+#### io.containerd.service.v1.diff-service
+
+이미지 레이어 간 차이를 계산하는 서비스다.
+
+| 옵션 | 기본값 | 설명 |
+|-----|-------|------|
+| `default` | `["walking"]` | diff 계산 방식 (배열로 우선순위 지정) |
+
+**differ 종류**:
+- `walking`: 기본값. 파일시스템을 순회하며 두 스냅샷을 비교
+- 스냅샷터별 네이티브 differ: 스냅샷터가 자체 diff 기능을 제공하면 사용 가능 (예: `overlayfs`가 자체 diff를 지원하면 더 효율적)
+
+대부분의 환경에서는 `walking`만 사용하며, 특별한 최적화가 필요한 경우에만 다른 differ를 고려한다.
+
+#### io.containerd.monitor.v1.cgroups
+
+cgroup 메트릭을 모니터링하고 Prometheus로 노출한다.
+
+| 옵션 | 기본값 | 설명 |
+|-----|-------|------|
+| `no_prometheus` | `false` | `true`로 설정하면 Prometheus 메트릭 비활성화 |
+
+#### io.containerd.snapshotter.v1.overlayfs
+
+OverlayFS 기반 스냅샷터로, 컨테이너 이미지 레이어를 관리한다. 대부분의 Linux 시스템에서 기본 스냅샷터로 사용된다.
+
+#### io.containerd.metadata.v1.bolt
+
+BoltDB를 사용하여 containerd의 메타데이터를 저장한다.
+
+| 옵션 | 기본값 | 설명 |
+|-----|-------|------|
+| `content_sharing_policy` | `shared` | 콘텐츠 공유 정책 (`shared` 또는 `isolated`) |
+
+#### io.containerd.nri.v1.nri
+
+NRI(Node Resource Interface)는 컨테이너 생성/삭제 시 외부 플러그인이 개입할 수 있게 하는 인터페이스다. 리소스 할당, 디바이스 주입 등의 커스텀 로직을 구현할 수 있다.
+
+| 옵션 | 기본값 | 설명 |
+|-----|-------|------|
+| `disable` | `true` (v2) / `false` (v3) | NRI 비활성화 여부 |
+| `socket_path` | `/var/run/nri/nri.sock` | NRI 소켓 경로 |
+| `plugin_path` | `/opt/nri/plugins` | NRI 플러그인 경로 |
+| `plugin_config_path` | `/etc/nri/conf.d` | 플러그인 설정 경로 |
+| `plugin_registration_timeout` | `5s` | 플러그인 등록 타임아웃 |
+| `plugin_request_timeout` | `2s` | 플러그인 요청 타임아웃 |
 
 ### 플러그인 설정 키 구조
 
