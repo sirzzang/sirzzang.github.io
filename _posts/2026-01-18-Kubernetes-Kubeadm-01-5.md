@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.5. 컨트롤 플레인 컴포넌트 확인"
-excerpt: "노드 정보, 인증서, kubeconfig, Static Pod, 애드온 등 kubeadm init을 통해 구성된 컨트롤 플레인 컴포넌트를 상세히 확인해 보자."
+excerpt: "노드 정보, 인증서, kubeconfig, Static Pod, 애드온 등 kubeadm init을 통해 구성된 컨트롤 플레인 컴포넌트를 상세히 확인해보자."
 categories:
   - Kubernetes
 toc: true

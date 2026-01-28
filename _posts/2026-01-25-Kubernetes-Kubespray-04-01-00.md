@@ -1,6 +1,6 @@
 ---
-title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 4-1-0. cluster.yml Overview"
-excerpt: "Kubespray의 메인 플레이북 cluster.yml의 전체 흐름과 구조를 분석한다."
+title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 4.1.0. cluster.yml Overview"
+excerpt: "Kubespray의 메인 플레이북 cluster.yml의 전체 흐름과 구조를 분석해보자."
 categories:
   - Kubernetes
 toc: true

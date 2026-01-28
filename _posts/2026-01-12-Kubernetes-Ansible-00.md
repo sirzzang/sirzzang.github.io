@@ -1,6 +1,6 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 0. 들어 가며"
-excerpt: "Ansible의 탄생 배경과 설계 철학을 살펴본다."
+excerpt: "Ansible의 탄생 배경과 설계 철학을 살펴보자."
 categories:
   - Kubernetes
 toc: true

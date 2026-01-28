@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Kubernetes Deployment 재배포 실패 원인과 해결 - 1. 스케줄링"
-excerpt: Kubernetes에서의 파드 스케줄링 전략에 대해 알아 보자
+excerpt: Kubernetes에서의 파드 스케줄링 전략에 대해 알아보자.
 categories:
   - Dev
 toc: true

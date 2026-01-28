@@ -1,6 +1,6 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 1. 개념"
-excerpt: "Ansible의 구성 요소, 동작 원리, 멱등성 등 핵심 개념을 정리한다."
+excerpt: "Ansible의 구성 요소, 동작 원리, 멱등성 등 핵심 개념을 정리해보자."
 categories:
   - Kubernetes
 toc: true

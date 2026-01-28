@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 0. kubeadm이란"
-excerpt: "kubeadm의 개념과 설계 철학, 주요 명령어를 살펴보고, Kubernetes The Hard Way와 비교해 본다."
+excerpt: "kubeadm의 개념과 설계 철학, 주요 명령어를 살펴보고, Kubernetes The Hard Way와 비교해보자."
 categories:
   - Kubernetes
 toc: true

@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 12. Smoke Test"
-excerpt: "구성한 Kubernetes 클러스터가 정상적으로 동작하는지 다양한 테스트를 통해 검증해 보자."
+excerpt: "구성한 Kubernetes 클러스터가 정상적으로 동작하는지 다양한 테스트를 통해 검증해보자."
 categories:
   - Kubernetes
 toc: true

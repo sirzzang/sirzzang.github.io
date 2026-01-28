@@ -1,6 +1,6 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 7. 반복문"
-excerpt: "Ansible 반복문(loop)을 활용하여 동일한 작업을 여러 항목에 대해 효율적으로 실행하는 방법을 실습해 보자."
+excerpt: "Ansible 반복문(loop)을 활용하여 동일한 작업을 여러 항목에 대해 효율적으로 실행하는 방법을 실습해보자."
 hidden: true
 categories:
   - Kubernetes

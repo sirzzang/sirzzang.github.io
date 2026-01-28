@@ -1,7 +1,7 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 3. Ad-hoc 명령어"
 hidden: true
-excerpt: "Ansible 설정 파일 구성과 Ad-hoc 명령어를 통해 인벤토리에 정의된 호스트에 간단한 작업을 실행해 보자."
+excerpt: "Ansible 설정 파일 구성과 Ad-hoc 명령어를 통해 인벤토리에 정의된 호스트에 간단한 작업을 실행해보자."
 categories:
   - Kubernetes
 toc: true

@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 11. Provisioning Pod Network Routes"
-excerpt: "서로 다른 노드의 Pod 간 통신을 위해 수동 라우팅을 설정해 보자."
+excerpt: "서로 다른 노드의 Pod 간 통신을 위해 수동 라우팅을 설정해보자."
 categories:
   - Kubernetes
 toc: true

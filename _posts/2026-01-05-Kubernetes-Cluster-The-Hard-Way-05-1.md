@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 5.1. Generating Kubernetes Configuration Files"
-excerpt: "kubeconfig의 개념과 구성 요소, Node Authorizer의 동작 원리를 이해해 보자."
+excerpt: "kubeconfig의 개념과 구성 요소, Node Authorizer의 동작 원리를 이해해보자."
 categories:
   - Kubernetes
 toc: true

@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 1. Kubespray 개요"
-excerpt: "Kubespray의 핵심 기능과 동작 원리를 살펴보고, Kubernetes The Hard Way 및 kubeadm과 비교해 본다."
+excerpt: "Kubespray의 핵심 기능과 동작 원리를 살펴보고, Kubernetes The Hard Way 및 kubeadm과 비교해보자."
 categories:
   - Kubernetes
 toc: true

@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Kubernetes 환경에서 GPU Time Slicing 사용하기 - 3. 적용"
-excerpt: NVIDIA GPU에 GPU Time Slicing을 실제로 적용해 보자.
+excerpt: NVIDIA GPU에 GPU Time Slicing을 실제로 적용해보자.
 categories:
   - Dev
 toc: true

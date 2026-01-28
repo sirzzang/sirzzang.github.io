@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.3. Provisioning a CA and Generating TLS Certificates"
-excerpt: "OpenSSL을 사용하여 Root CA 인증서와 각 컴포넌트 인증서를 생성하고 배포해 보자."
+excerpt: "OpenSSL을 사용하여 Root CA 인증서와 각 컴포넌트 인증서를 생성하고 배포해보자."
 categories:
   - Kubernetes
 toc: true

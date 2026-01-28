@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Kubernetes 환경에서 GPU Time Slicing 사용하기 - 1. 개념"
-excerpt: GPU Time Slicing에 대해 알아 보자
+excerpt: GPU Time Slicing에 대해 알아보자.
 categories:
   - Dev
 toc: true

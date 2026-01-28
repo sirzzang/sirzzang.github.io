@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Kubernetes 클러스터 API 액세스 에러 해결"
-excerpt: Kubernetes 인증 메커니즘에서 나타날 수 있는 kubeconfig 인증서 만료로 인한 클러스터 API 사용 불가 문제를 이해해 보자.
+excerpt: Kubernetes 인증 메커니즘에서 나타날 수 있는 kubeconfig 인증서 만료로 인한 클러스터 API 사용 불가 문제를 이해해보자.
 categories:
   - Dev
 toc: true

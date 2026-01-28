@@ -1,6 +1,6 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 11. 태그(Tags)"
-excerpt: "Ansible 태그를 활용하여 플레이북의 특정 작업만 선택적으로 실행하거나 건너뛰는 방법을 실습해 보자."
+excerpt: "Ansible 태그를 활용하여 플레이북의 특정 작업만 선택적으로 실행하거나 건너뛰는 방법을 실습해보자."
 hidden: true
 categories:
   - Kubernetes

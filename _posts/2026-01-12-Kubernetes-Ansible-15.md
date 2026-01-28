@@ -1,6 +1,6 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 15. 결론"
-excerpt: "Ansible의 철학이 Kubespray에서 어떻게 구현되어 있는지 살펴보고, 시리즈를 마무리한다."
+excerpt: "Ansible의 철학이 Kubespray에서 어떻게 구현되어 있는지 살펴보자.."
 categories:
   - Kubernetes
 toc: true
