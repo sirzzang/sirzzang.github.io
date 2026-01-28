@@ -822,7 +822,7 @@ The connection to the server 127.0.0.1:6443 was refused - did you specify the ri
 
 | 구분 | 내용 |
 | --- | --- |
-| **원인** | kubeadm이 생성한 `admin.conf`는 `server: https://127.0.0.1:6443`으로 설정됨. 컨트롤 플레인에서는 동작하지만 Jumpbox에서는 localhost에 API Server가 없음 |
+| **원인** | kubeadm이 생성한 `admin.conf`는 `server: https://127.0.0.1:6443`으로 설정됨. <br>컨트롤 플레인에서는 동작하지만 Jumpbox에서는 localhost에 API Server가 없음 |
 | **해결** | `sed -i 's/127.0.0.1/192.168.10.100/g' ~/.kube/config`로 API Server 주소 변경 |
 | **결과** | Jumpbox에서 원격으로 클러스터 관리 가능 |
 

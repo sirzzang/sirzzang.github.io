@@ -1,5 +1,5 @@
 ---
-title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 4.1.0. cluster.yml Overview"
+title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 4.1.0. cluster.yml - Overview"
 excerpt: "Kubespray의 메인 플레이북 cluster.yml의 전체 흐름과 구조를 분석해보자."
 categories:
   - Kubernetes
@@ -68,7 +68,7 @@ tags:
 
 ## 전체 코드
 
-<details>
+<details markdown="1">
 <summary>cluster.yml 전체 코드 (클릭하여 펼치기)</summary>
 
 ```yaml
@@ -272,7 +272,7 @@ ansible-playbook cluster.yml --tags preinstall,container-engine
   gather_facts: false  # 왜 false?
 ```
 
-첫 번째 플레이에서 이미 팩트를 수집했기 때문이다:
+`gather_facts: false`로 설정한 이유는, 첫 번째 플레이에서 이미 팩트를 수집했기 때문이다:
 
 ```yaml
 - name: Gather facts
@@ -384,10 +384,10 @@ roles/kubespray_defaults/
 **etcd events 클러스터**를 별도로 구성할지 결정한다.
 
 - 기본값: `false`
-- `true`로 설정 시: 이벤트 저장용 별도 etcd 클러스터 구성
-- 대규모 클러스터에서 이벤트 분리로 성능 향상
+- `true`로 설정 시: Kubernetes 이벤트 저장용 별도 etcd 클러스터 구성
+- 용도: 대규모 클러스터에서 이벤트 트래픽을 분리하여 메인 etcd의 부하를 줄이고 성능을 향상시킬 수 있음
 
-> **참고**: 외부 etcd를 사용하려면 `etcd_deployment_type: host`(기본) 대신 `etcd_deployment_type: kubeadm_etcd_external`을 설정하고, `etcd_access_addresses` 등을 지정해야 한다.
+> **참고**: 외부 etcd를 사용하려면 `inventory/mycluster/group_vars/all/etcd.yml`에서 `etcd_deployment_type: host`(기본) 대신 `etcd_deployment_type: kubeadm_etcd_external`을 설정하고, `etcd_access_addresses` 등을 지정해야 한다.
 
 ## dns_mode와 resolvconf_mode
 
