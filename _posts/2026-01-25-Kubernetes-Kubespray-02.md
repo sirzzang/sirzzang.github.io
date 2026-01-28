@@ -525,6 +525,8 @@ ansible-playbook -i inventory/mycluster/inventory.ini \
 반드시 `ansible.cfg`가 있는 kubespray 디렉토리에서 실행해야 한다. Ansible은 설정 파일을 찾을 때 **현재 디렉토리의 `ansible.cfg`를 우선** 적용한다. Kubespray는 자체 `ansible.cfg`를 포함하고 있어, 해당 디렉토리에서 실행해야 올바른 설정이 적용된다. 
 > `ansible.cfg` 설정 우선순위에 대한 자세한 내용은 [Ansible 시리즈 - 4. Ad-hoc 명령어]({% post_url 2026-01-12-Kubernetes-Ansible-04 %})를 참고하자.
 
+<br>
+
 ### 트러블 슈팅: 인벤토리 경로
 
 모든 PLAY에서 `skipping: no hosts matched`가 출력되고 아무 작업도 수행되지 않는다면, 인벤토리 **파일** 경로를 확인하자.
@@ -539,9 +541,15 @@ ansible-playbook -i inventory/mycluster/inventory.ini \
 - `-i inventory/mycluster/inventory.ini` (파일): 명시적으로 파일을 지정하는 방식, 항상 동작
 > 실제로 공식 문서대로 디렉토리를 지정했지만 모든 PLAY가 `skipping: no hosts matched`로 건너뛰어졌다. 파일 경로를 명시하니 정상 동작했다.
 
+<br>
+
 ### 트러블 슈팅: `$USERNAME` 변수 오류
 
-`ansible-playbook: error: argument -u/--user: expected one argument` 오류가 발생하거나, 오류 없이 `ansible-playbook` 명령어의 help만 출력된다면 `$USERNAME` 환경변수가 설정되지 않은 것이다. [Kubespray 공식 문서](https://kubespray.io/#/docs/getting_started/setting-up-your-first-cluster?id=configuring-ssh-access)에서는 명령어 실행 전 `USERNAME=$(whoami)`로 변수를 설정하는 단계가 있다. `$USERNAME` 대신 `root`를 직접 지정해도 된다.
+`ansible-playbook: error: argument -u/--user: expected one argument` 오류가 발생하거나, 오류 없이 `ansible-playbook` 명령어의 help만 출력된다면 `$USERNAME` 환경변수가 설정되지 않은 것이다.
+
+[Kubespray 공식 문서](https://kubespray.io/#/docs/getting_started/setting-up-your-first-cluster?id=configuring-ssh-access)에서는 명령어 실행 전 `USERNAME=$(whoami)`로 변수를 설정하는 단계가 있다. `$USERNAME` 대신 `root`를 직접 지정해도 된다.
+
+<br>
 
 ### 트러블 슈팅: VirtualBox NAT IP 문제
 
@@ -569,6 +577,8 @@ worker-0        : ok=XX   changed=X    unreachable=0    failed=1    ...
 worker-1        : ok=XX   changed=X    unreachable=0    failed=1    ...
 ```
 
+<br>
+
 | 구분 | 내용 |
 | --- | --- |
 | **원인** | 멀티 NIC 환경에서 Kubespray IP 자동 감지 실패. NAT 인터페이스(`10.0.2.15`)를 API Server 주소로 잘못 선택 |
@@ -576,6 +586,8 @@ worker-1        : ok=XX   changed=X    unreachable=0    failed=1    ...
 | **결과** | 멱등성 덕분에 실패한 단계만 재처리, 5분 내외로 클러스터 구성 완료 |
 
 VirtualBox VM은 기본적으로 NAT 인터페이스(`10.0.2.15`)를 첫 번째 네트워크로 사용한다. Kubespray가 이 주소를 API Server 주소로 감지하면, Worker 노드들이 `https://10.0.2.15:6443`으로 접속을 시도하지만, 실제 API Server는 Private IP(`192.168.10.100`)에서 리스닝하고 있어 연결이 거부된다.
+
+<br>
 
 이 문제는 지금까지 기존 시리즈에서 **수도 없이** 다뤄왔다:
 
@@ -652,7 +664,7 @@ controller-0    : ok=460  changed=17   unreachable=0    failed=1    ...
 
 | 구분 | 내용 |
 | --- | --- |
-| **원인** | 이전 실행에서 etcd가 NAT IP(`10.0.2.15`)에 바인딩되어 설치됨. 인벤토리 수정 후에도 기존 etcd 설정은 변경되지 않음 |
+| **원인** | 이전 실행에서 etcd가 NAT IP(`10.0.2.15`)에 바인딩되어 설치됨. <br>인벤토리 수정 후에도 기존 etcd 설정은 변경되지 않음 |
 | **해결** | `reset.yml`로 클러스터 초기화 후 재배포 |
 | **교훈** | `ip` 변수는 **처음부터** 설정해야 한다. 중간에 수정하면 이미 설치된 컴포넌트와 불일치 발생 |
 

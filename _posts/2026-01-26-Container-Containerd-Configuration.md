@@ -1205,18 +1205,18 @@ version = 2
 # 레지스트리 미러 설정
 [plugins."io.containerd.grpc.v1.cri".registry.mirrors]
 
-[plugins."io.containerd.grpc.v1.cri".registry.mirrors."172.20.10.218"]
-  endpoint = ["http://172.20.10.218"]
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."192.168.1.100"]
+  endpoint = ["http://192.168.1.100"]
 
-[plugins."io.containerd.grpc.v1.cri".registry.mirrors."inno.registry.com:5000"]
-  endpoint = ["http://inno.registry.com:5000"]
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."my-registry.example.com:5000"]
+  endpoint = ["http://my-registry.example.com:5000"]
 
 # 레지스트리 인증 및 TLS 설정
-[plugins."io.containerd.grpc.v1.cri".registry.configs."172.20.10.218".auth]
-  username = "admin"
-  password = "Harbor12345"
+[plugins."io.containerd.grpc.v1.cri".registry.configs."192.168.1.100".auth]
+  username = "<username>"
+  password = "<password>"
 
-[plugins."io.containerd.grpc.v1.cri".registry.configs."172.20.10.218".tls]
+[plugins."io.containerd.grpc.v1.cri".registry.configs."192.168.1.100".tls]
   insecure_skip_verify = true
 
 # GPU 런타임 추가
