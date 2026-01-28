@@ -25,8 +25,6 @@ tags:
 - **핵심 차이**: 인증서 생성, etcd 구성, 컨트롤 플레인 부트스트래핑 등이 모두 자동화됨
 - **실습 결과**: `ansible-playbook cluster.yml` 명령 하나로 전체 클러스터 구성 완료
 
-> 이 글은 Kubespray GitHub의 [Setting up your first cluster](https://github.com/kubernetes-sigs/kubespray/blob/master/docs/getting_started/setting-up-your-first-cluster.md) 문서를 기반으로 한다.
-
 <br>
 
 # 들어가며

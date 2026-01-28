@@ -27,8 +27,6 @@ tags:
 - **공통 패턴**: 모든 플레이에서 `kubespray_defaults` 롤 먼저 실행
 - **태그 기반 선택 실행**: `--tags` 옵션으로 특정 단계만 실행 가능
 
-> 이전 글: [프로젝트 구조 Overview]({% post_url 2026-01-25-Kubernetes-Kubespray-04-00 %})
-
 <br>
 
 # cluster.yml 전체 흐름
@@ -36,6 +34,9 @@ tags:
 `cluster.yml`은 Kubespray의 메인 플레이북으로, 클러스터 생성의 전체 과정을 정의한다.
 
 ![kubespray-cluster-flowchart]({{site.url}}/assets/images/kubespray-cluster-flowchart.png)
+<center><sup>cluster.yml 플레이북 실행 흐름</sup></center>
+
+<br>
 
 ```
 1. 공통 작업 (boilerplate.yml)
