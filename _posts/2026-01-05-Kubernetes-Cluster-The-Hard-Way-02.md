@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 2. Set Up The Jumpbox"
-excerpt: "Jumpbox에 Kubernetes The Hard Way 저장소를 클론하고, 클러스터 구성에 필요한 모든 바이너리(kubectl, kube-apiserver, etcd 등)를 다운로드하여 역할별로 분류해 보자."
+excerpt: "Jumpbox에 Kubernetes The Hard Way 저장소를 클론하고, 클러스터 구성에 필요한 모든 바이너리(kubectl, kube-apiserver, etcd 등)를 다운로드하여 역할별로 분류해보자."
 categories:
   - Kubernetes
 toc: true

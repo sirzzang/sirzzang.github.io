@@ -1,7 +1,7 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 5. 변수"
 hidden: true
-excerpt: "Ansible 변수의 종류와 우선순위를 이해하고, 다양한 변수 선언 방법을 실습해 보자."
+excerpt: "Ansible 변수의 종류와 우선순위를 이해하고, 다양한 변수 선언 방법을 실습해보자."
 categories:
   - Kubernetes
 toc: true

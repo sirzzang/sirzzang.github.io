@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 9.1. Bootstrapping the Kubernetes Worker Nodes"
-excerpt: "CNI의 동작 원리와 Worker Node 설정 파일들을 분석해 보자."
+excerpt: "CNI의 동작 원리와 Worker Node 설정 파일들을 분석해보자."
 categories:
   - Kubernetes
 toc: true

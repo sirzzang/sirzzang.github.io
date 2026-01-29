@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 2.2. kubeadm join 실행"
-excerpt: "kubeadm join을 실행하여 워커 노드를 클러스터에 추가해 보자."
+excerpt: "kubeadm join을 실행하여 워커 노드를 클러스터에 추가해보자."
 categories:
   - Kubernetes
 toc: true

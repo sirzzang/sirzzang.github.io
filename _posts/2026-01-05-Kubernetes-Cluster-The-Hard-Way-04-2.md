@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.2. Provisioning a CA and Generating TLS Certificates"
-excerpt: "Kubernetes 클러스터의 인증서 생성을 위한 OpenSSL 설정 파일(ca.conf)의 구조를 분석해 보자."
+excerpt: "Kubernetes 클러스터의 인증서 생성을 위한 OpenSSL 설정 파일(ca.conf)의 구조를 분석해보자."
 categories:
   - Kubernetes
 toc: true

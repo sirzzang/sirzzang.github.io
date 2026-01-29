@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.1. Provisioning a CA and Generating TLS Certificates"
-excerpt: "Kubernetes 클러스터 구성에 필요한 TLS, mTLS, X.509, PKI 개념을 이해해 보자."
+excerpt: "Kubernetes 클러스터 구성에 필요한 TLS, mTLS, X.509, PKI 개념을 이해해보자."
 categories:
   - Kubernetes
 toc: true

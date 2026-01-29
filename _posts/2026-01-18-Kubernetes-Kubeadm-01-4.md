@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.4. Flannel CNI 설치 및 네트워크 확인"
-excerpt: "Flannel CNI를 설치하고, iptables와 conntrack을 통해 Kubernetes 네트워킹이 Linux에서 어떻게 구현되는지 확인해 보자."
+excerpt: "Flannel CNI를 설치하고, iptables와 conntrack을 통해 Kubernetes 네트워킹이 Linux에서 어떻게 구현되는지 확인해보자."
 categories:
   - Kubernetes
 toc: true

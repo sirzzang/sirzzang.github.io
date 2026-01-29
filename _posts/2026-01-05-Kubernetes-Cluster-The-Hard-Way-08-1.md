@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 8.1. Bootstrapping the Kubernetes Control Plane"
-excerpt: "Kubernetes Control Plane 컴포넌트들의 systemd unit 파일과 설정 파일을 분석해 보자."
+excerpt: "Kubernetes Control Plane 컴포넌트들의 systemd unit 파일과 설정 파일을 분석해보자."
 categories:
   - Kubernetes
 toc: true

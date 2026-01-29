@@ -1,6 +1,6 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 7. 반복문"
-excerpt: "Ansible 반복문(loop)을 활용하여 동일한 작업을 여러 항목에 대해 효율적으로 실행하는 방법을 실습해 보자."
+excerpt: "Ansible 반복문(loop)을 활용하여 동일한 작업을 여러 항목에 대해 효율적으로 실행하는 방법을 실습해보자."
 hidden: true
 categories:
   - Kubernetes
@@ -760,7 +760,7 @@ localhost                  : ok=3    changed=1    unreachable=0    failed=0    s
    - 각 배열 요소에는 `"item"` (반복 아이템), `"stdout"` (명령 실행 결과) 등이 포함됨
 3. **배열 구조**: 2번 반복했으므로 `results` 배열에 2개의 요소가 저장됨
 
-<details>
+<details markdown="1">
 <summary><strong>전체 result 변수 내용</strong></summary>
 
 ```json
@@ -915,7 +915,7 @@ localhost                  : ok=3    changed=1    unreachable=0    failed=0    s
    - 결과: `"Stdout: I can speak Korean"`, `"Stdout: I can speak English"`
 3. **값 추출**: `result.results` 배열에서 원하는 필드(`stdout`)만 깔끔하게 추출할 수 있음
 
-<details>
+<details markdown="1">
 <summary><strong>전체 실행 결과 (item 상세 내용 포함)</strong></summary>
 
 ```bash

@@ -1,6 +1,6 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 11. 태그(Tags)"
-excerpt: "Ansible 태그를 활용하여 플레이북의 특정 작업만 선택적으로 실행하거나 건너뛰는 방법을 실습해 보자."
+excerpt: "Ansible 태그를 활용하여 플레이북의 특정 작업만 선택적으로 실행하거나 건너뛰는 방법을 실습해보자."
 hidden: true
 categories:
   - Kubernetes
@@ -35,6 +35,12 @@ tags:
 
 플레이북이 큰 경우, 전체 플레이북을 실행하는 대신 특정 부분만 실행하는 것이 유용할 수 있다. 태그를 사용하면 이를 쉽게 구현할 수 있다.
 
+`tags` 키워드는 플레이북의 '사전 처리(pre processing)' 단계에 포함되며, 실행 가능한 작업을 결정할 때 높은 우선순위를 갖는다. 사전 처리는 [Playbook 실행 과정]({{site.url}}/kubernetes/Kubernetes-Ansible-01/#playbook과-module)의 1~3단계(Playbook 파싱, 모듈 찾기, 파라미터 변환)에서 태그를 평가하여 실행할 작업을 결정하는 과정을 의미한다.
+
+- 참고: [Ansible Tags 공식 문서](https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_tags.html)
+
+<br>
+
 태그 사용 과정은 두 단계로 구성된다:
 
 1. **태그 추가**: 작업에 태그를 추가한다. 태그는 개별 작업, 블록, 플레이, 롤 또는 imports에 추가할 수 있다.
@@ -42,9 +48,6 @@ tags:
 
 `tags` 키워드를 통해 태그를 추가하더라도 이는 태그를 정의하고 작업에 추가할 뿐, 실행할 작업을 선택하거나 건너뛰지는 않는다. 실제 작업 선택/건너뛰기는 **플레이북 실행 시 명령줄에서만** 가능하다.
 
-> **참고**: `tags` 키워드는 플레이북의 '사전 처리(pre processing)' 단계에 포함되며, 실행 가능한 작업을 결정할 때 높은 우선순위를 갖는다. 사전 처리는 [Playbook 실행 과정]({{site.url}}/kubernetes/Kubernetes-Ansible-01/#playbook과-module)의 1~3단계(Playbook 파싱, 모듈 찾기, 파라미터 변환)에서 태그를 평가하여 실행할 작업을 결정하는 과정을 의미한다.
->
-> [Ansible Tags 공식 문서](https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_tags.html)
 
 <br>
 
@@ -155,12 +158,14 @@ tasks:
 
 ## 블록에 태그 추가
 
-플레이의 모든 작업에 태그를 적용하는 것이 아니라 일부 작업에만 태그를 적용하려면 블록을 사용하고 블록 수준에서 태그를 정의한다.
+플레이북의 특정 블록에 태그를 추가한다. 플레이 내 일부 태스크 묶음을 블록으로 정의하고, 블록 수준에서 태그를 정의하면 된다. 블록 내 모든 태스크가 해당 태그를 상속 받는다. 
+- 블록 내 모든 태스크가 해당 태그를 상속받는다. 
+- 플레이의 모든 작업에 태그를 적용하지 않고, 일부 작업에만 특정 태그를 적용하고자 할 때 유용하다.
 
 ```yaml
 # myrole/tasks/main.yml
 - name: ntp tasks
-  tags: ntp
+  tags: ntp # 블록 레벨 태그
   block:
   - name: Install ntp
     ansible.builtin.yum:
@@ -189,7 +194,12 @@ tasks:
   tags: filesharing
 ```
 
-> **중요**: `tag` 선택 옵션이 `block`의 오류 처리를 포함한 다른 대부분의 논리보다 우선한다. `block`의 작업에 태그를 설정하지만 `rescue` 섹션이나 `always` 섹션에 태그를 설정하지 않으면, 해당 섹션의 작업이 실행되지 않을 수 있다.
+
+### 주의: 블록 내 개별 태스크 태그와 rescue/always
+
+블록 내 개별 태스크에 태그를 추가하는 경우는 블록 레벨 태스크 추가가 아니라, **개별 태스크 태그 추가**이다. 
+
+이 경우, `tag` 선택 옵션이 `block`의 오류 처리를 포함한 다른 대부분의 논리보다 우선한다. 따라서 `rescue`나 `always` 섹션에 태그를 설정하지 않으면, `tag` 선택 옵션(*`-tags` 등*)으로 실행했을 때, 해당 섹션의 작업이 실행되지 않을 수 있다.
 
 ```yaml
 - block:
@@ -205,6 +215,8 @@ tasks:
 ```
 
 위 예시는 태그 지정 없이 호출하면 3개의 작업을 모두 실행하지만, `--tags example`을 지정하여 실행하면 **첫 번째 작업만 실행**한다.
+
+<br>
 
 ## Plays에 태그 추가
 
@@ -241,7 +253,15 @@ tasks:
 
 ## Roles에 태그 추가
 
-롤에 태그를 추가하는 방법은 **3가지**가 있다.
+롤 수준에서 태그를 추가할 수 있다. 이 경우, **해당 롤의 모든 작업**뿐만 아니라 **해당 롤의 종속 작업(dependencies)**에도 태그가 적용된다.
+
+롤에 태그를 추가하는 방법은 **3가지**가 있다. 각 방법의 태그 적용 범위가 다르다.
+
+| 방법 | 태그 적용 범위 | `--tags` 실행 시 |
+|------|---------------|------------------|
+| `roles` 키워드 | 롤 내 **모든 작업**에 적용 | 롤 **전체** 실행 or 전체 스킵 |
+| `import_role` | 롤 내 **모든 작업**에 적용 | 롤 **전체** 실행 or 전체 스킵 |
+| 롤 내 개별 작업 태그 + `include_role` | 지정한 작업에만 적용 | 롤 내 **일부 작업만** 선택 실행 가능 |
 
 ### roles 키워드에서 태그 설정
 
@@ -255,7 +275,7 @@ roles:
     tags: [ web, foo ] 
 ```
 
-또는 YAML 형식으로:
+또는 YAML 형식으로 아래와 같이 지정할 수도 있다.
 
 ```yaml
 ---
@@ -269,7 +289,9 @@ roles:
     # - { role: foo, tags: ["bar", "baz"] }
 ```
 
-> **중요**: 롤 수준에서 태그를 추가하면 **해당 롤의 모든 작업**뿐만 아니라 **해당 롤의 종속 작업(dependencies)에도 태그가 적용**된다.
+> 여러 태그를 지정하면 OR 조건으로 작동한다. 즉, 위의 예시에서 `--tags bar` 또는 `--tags baz` 중 하나만 지정해도 해당 롤이 실행된다.
+
+<br>
 
 ### import_role에서 태그 설정
 
@@ -291,21 +313,53 @@ roles:
       tags: [ web, foo ]
 ```
 
-### 롤 내 개별 작업/블록에 태그 설정
+### include_role + 롤 내 개별 작업/블록에 태그 설정 
 
-롤 내의 **일부 작업만 선택적으로 실행**하려면 이 방법이 **유일한 방법**이다. 롤 내의 개별 작업이나 블록에 태그를 설정하고, 플레이북에서 동적 `include_role`을 사용한 다음, 동일한 태그를 include 항목에 추가해야 한다.
+롤 내의 **일부 작업만 선택적으로 실행**하기 위한 방법이다. 
 
-이 방법을 사용한 다음 `--tags foo`로 플레이북을 실행하면, Ansible이 포함 항목 자체와 태그 `foo`가 있는 롤 내의 모든 작업을 실행한다.
+위의 두 방법(`roles` 키워드, `import_role`)은 롤에 태그를 붙이면 **롤 전체**가 실행된다. 롤 안의 특정 작업만 골라서 실행하려면, 롤 내의 개별 작업이나 블록에 태그를 설정하고, 플레이북에서 동적 `include_role`을 사용한 다음, 동일한 태그를 include 항목에 추가해야 한다.
 
-> *아래 "Includes에 태그 추가" 예시를 참고한다.*
+```yaml
+# roles/foo/tasks/main.yml
+- name: Setup task
+  debug: msg="Setting up..."
+  tags: setup
+
+- name: Cleanup task
+  debug: msg="Cleaning up..."
+  tags: cleanup
+```
+
+```yaml
+# playbook.yml
+- hosts: webservers
+  tasks:
+    - name: Include foo role
+      include_role:
+        name: foo
+      tags: setup  # include 항목에도 동일한 태그 추가
+```
+
+| 실행 명령 | 결과 |
+|----------|------|
+| `ansible-playbook playbook.yml` | Setup task, Cleanup task **둘 다** 실행 |
+| `ansible-playbook playbook.yml --tags setup` | **Setup task만** 실행 |
+| `ansible-playbook playbook.yml --tags cleanup` | 아무것도 실행 안 됨 (include 항목 자체가 `cleanup` 태그가 없어서 건너뜀) |
+
+> **참고**: `--tags setup`으로 실행하면 Ansible이 먼저 `include_role` 항목을 실행하고(태그 `setup`이 있으므로), 그 다음 롤 내에서 `setup` 태그가 있는 작업만 선택적으로 실행한다.
+
+> *아래 "Includes에 태그 추가" 섹션에서 dynamic include의 태그 동작을 더 자세히 다룬다.*
+
+<br>
 
 ## Includes에 태그 추가
 
-플레이북의 dynamic **includes** 항목에 태그를 적용할 수 있다. 개별 작업의 태그와 마찬가지로, `include_*` 작업의 태그는 **include 항목 자체에만 적용**되며 **포함된 파일이나 롤 내의 작업에는 적용되지 않는다**.
+플레이북의 **dynamic includes 항목**에 태그를 적용할 수 있다. 개별 작업의 태그와 마찬가지로, `include_*` 작업의 태그는 **include 항목 자체에만 적용**되며 **포함된 파일이나 롤 내의 작업에는 적용되지 않는다**.
+- 참고: [Selectively running tagged tasks in reusable files](https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_tags.html#selective-reuse)
 
 dynamic **includes** 항목에 태그를 추가한 다음 `--tags mytags`로 해당 플레이북을 실행하면, Ansible은 **include 항목 자체를 실행**하고 포함된 파일이나 롤 내의 모든 작업을 해당 태그로 지정한 후, 해당 태그 없이 포함된 파일이나 롤 내의 모든 작업을 건너뛸 수 있다.
 
-> 자세한 내용은 [Selectively running tagged tasks in reusable files](https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_tags.html#selective-reuse)를 참고한다.
+<br>
 
 다른 작업에 태그를 추가하는 것과 동일한 방식으로 태그를 추가한다:
 
@@ -331,7 +385,9 @@ dynamic **includes** 항목에 태그를 추가한 다음 `--tags mytags`로 해
         - foo
 ```
 
-## 태그 상속
+<br>
+
+# 태그 상속
 
 **태그 상속**(Tag Inheritance)은 상위 수준에서 정의한 태그가 **모든 하위 작업에 자동으로 적용**되는 것을 말한다. 태그 상속 여부는 태그를 정의한 위치에 따라 달라진다:
 
@@ -344,21 +400,54 @@ dynamic **includes** 항목에 태그를 추가한 다음 `--tags mytags`로 해
 - **태그 상속이 적용되지 않는 경우:**
   - 동적 includes (`include_role`, `include_tasks`)
 
-동적 includes에 태그를 추가하면 **include 항목 자체**에만 적용되며, 포함된 파일이나 롤 내의 작업에는 적용되지 않는다. 태그 상속이 필요한 경우, `apply` 키워드 또는 `block`을 사용할 수 있다:
+## 동적 includes 태그 상속
+
+동적 includes에 태그를 추가하면 **include 항목 자체**에만 적용되며, 포함된 파일이나 롤 내의 작업에는 적용되지 않는다. 이로 인해, 아래와 같은 문제 상황이 발생할 수 있다:
+
+```yaml
+# db.yml (포함될 파일)
+- name: Create database
+  mysql_db: name=mydb
+
+- name: Create user
+  mysql_user: name=admin
+```
+
+```yaml
+# playbook.yml
+- include_tasks: db.yml
+  tags: db
+```
+
+이렇게 하고 `--tags db`로 실행하면 겉껍데기(`include` 작업)는 실행되지만, 정작 실제로 해야 할 일(`db.yml` 내부 태스크)이 스킵되는 황당한 상황이 발생한다.
+- `include_tasks` 작업 자체는 `db` 태그가 **있으므로** 실행됨 
+- 하지만 db.yml 내부의 태스크들은 `db` 태그가 **없으므로** 스킵됨
+
+따라서 이러한 상황을 해결하고자, 동적 include에서 태그 상속이 필요한 경우, `apply` 키워드 또는 `block`을 사용할 수 있다.
 
 ### apply 키워드 사용
+
+`apply` 키워드를 사용하면 포함된 파일 내부의 태스크들에도 태그를 전파할 수 있다.
 
 ```yaml
 - name: Apply the db tag to the include and to all tasks in db.yml
   include_tasks:
     file: db.yml
-    # adds 'db' tag to tasks within db.yml
     apply:
-      tags: db
-  # adds 'db' tag to this 'include_tasks' itself
-  tags: db
+      tags: db    # ← db.yml 내부 태스크들에 'db' 태그 전파
+  tags: db        # ← include_tasks 작업 자체에 'db' 태그 적용
 ```
+
+| 부분 | 역할 |
+|------|------|
+| `tags: db` (바깥) | `--tags db` 실행 시 이 include 작업 자체가 실행되게 함 |
+| `apply: tags: db` | db.yml 내부 태스크들에도 `db` 태그를 전파 |
+
+> **참고**: 둘 다 필요하다. 바깥 `tags`만 있으면 include는 실행되지만 내부 태스크가 스킵되고, `apply`만 있으면 `--tags db` 실행 시 include 자체가 스킵된다.
+
 ### block 사용
+
+`block`으로 감싸면 블록의 태그가 내부 작업에 상속된다.
 
 ```yaml
 - block:
@@ -367,7 +456,9 @@ dynamic **includes** 항목에 태그를 추가한 다음 `--tags mytags`로 해
   tags: db
 ```
 
-## 핸들러에 태그 추가
+이 방법은 `apply`보다 간단하지만, 블록 안의 모든 작업에 동일한 태그가 적용된다.
+
+# 핸들러에 태그 추가
 
 **핸들러**(handlers)는 알림을 받았을 때만 실행되는 특수한 작업 유형으로, **모든 태그를 무시**하며 선택 대상이 될 수 없다.
 

@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.3. kubeadm init 실행 및 편의 도구 설치"
-excerpt: "kubeadm init을 실행하여 컨트롤 플레인을 구성하고, kubectl 편의 도구를 설치해 보자."
+excerpt: "kubeadm init을 실행하여 컨트롤 플레인을 구성하고, kubectl 편의 도구를 설치해보자."
 categories:
   - Kubernetes
 toc: true

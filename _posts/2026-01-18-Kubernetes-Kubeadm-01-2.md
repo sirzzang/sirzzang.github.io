@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.2. 사전 설정 및 구성 요소 설치"
-excerpt: "kubeadm을 사용한 클러스터 구성을 위해 필요한 사전 설정, CRI(containerd) 설치, kubeadm/kubelet/kubectl 설치를 수행한다."
+excerpt: "kubeadm을 사용한 클러스터 구성을 위해 필요한 사전 설정, CRI(containerd) 설치, kubeadm/kubelet/kubectl 설치를 수행해보자."
 categories:
   - Kubernetes
 toc: true

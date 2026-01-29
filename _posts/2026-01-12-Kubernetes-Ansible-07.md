@@ -1,7 +1,7 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 6. 팩트(Facts)"
 hidden: true
-excerpt: "Ansible이 관리 호스트에서 자동으로 수집하는 팩트의 개념과 활용법을 실습해 보자."
+excerpt: "Ansible이 관리 호스트에서 자동으로 수집하는 팩트의 개념과 활용법을 실습해보자."
 categories:
   - Kubernetes
 toc: true

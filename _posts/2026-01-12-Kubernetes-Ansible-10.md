@@ -1,6 +1,6 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 9. 핸들러와 오류 처리"
-excerpt: "Ansible 핸들러(Handler)와 작업 실패 처리 방법을 실습해 보자."
+excerpt: "Ansible 핸들러(Handler)와 작업 실패 처리 방법을 실습해보자."
 hidden: true
 categories:
   - Kubernetes

@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 10. Configuring kubectl for Remote Access"
-excerpt: "Jumpbox에서 원격으로 클러스터를 관리할 수 있도록 kubectl을 설정해 보자."
+excerpt: "Jumpbox에서 원격으로 클러스터를 관리할 수 있도록 kubectl을 설정해보자."
 categories:
   - Kubernetes
 toc: true

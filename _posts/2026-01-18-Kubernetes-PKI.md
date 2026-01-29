@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Kubernetes PKI"
-excerpt: "Kubernetes 클러스터의 인증서 인프라에 대해 알아 보자."
+excerpt: "Kubernetes 클러스터의 인증서 인프라에 대해 알아보자."
 categories:
   - Kubernetes
 toc: true
