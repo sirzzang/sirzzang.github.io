@@ -4,6 +4,7 @@ excerpt: "Kubespray에서 사용하는 ansible.cfg 설정을 상세히 분석하
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

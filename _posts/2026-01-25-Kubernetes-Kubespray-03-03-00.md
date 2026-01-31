@@ -23,7 +23,7 @@ tags:
 
 이번 글에서는 **Kubespray의 메인 플레이북 `cluster.yml`**의 전체 흐름을 분석한다.
 
-- **10단계 플레이**로 구성: 공통 작업 → 팩트 수집 → etcd → K8s 노드 → 컨트롤 플레인 → kubeadm → CNI → 앱
+- **플레이 구성**: 공통 작업 → 팩트 수집 → etcd → K8s 노드 → 컨트롤 플레인 → kubeadm → CNI → 앱
 - **공통 패턴**: 모든 플레이에서 `kubespray_defaults` 롤 먼저 실행
 - **태그 기반 선택 실행**: `--tags` 옵션으로 특정 단계만 실행 가능
 
@@ -62,6 +62,18 @@ tags:
 11. resolv.conf 적용
 ```
 
+## 단계별 그룹핑
+
+위 흐름을 목적별로 그룹핑하면 다음과 같다:
+
+| 단계 | 목적 | 플레이 |
+|------|------|--------|
+| **초기화 및 정보 수집** | 공통 설정 적용, 서버 사양 정보 수집 | boilerplate, internal_facts |
+| **인프라 및 엔진 준비** | OS 최적화, 컨테이너 런타임 설치, 바이너리 다운로드 | preinstall, container-engine, download |
+| **데이터 저장소 및 노드 구성** | etcd 클러스터 구축, Kubelet 등 기초 컴포넌트 설치 | etcd, kubernetes/node |
+| **컨트롤 플레인 및 네트워크** | API 서버/스케줄러 설정, kubeadm join, CNI 설치 | control-plane, kubeadm, network_plugin |
+| **부가 서비스 설치** | Ingress, Storage 등 애드온 배포, DNS 설정 최종 적용 | kubernetes-apps, resolv.conf |
+
 <br>
 
 # 플레이북 구조
@@ -71,6 +83,7 @@ tags:
 <details markdown="1">
 <summary>cluster.yml 전체 코드 (클릭하여 펼치기)</summary>
 
+{% raw %}
 ```yaml
 ---
 - name: Common tasks for every playbooks
@@ -123,7 +136,7 @@ tags:
   environment: "{{ proxy_disable_env }}"
   roles:
     - { role: kubespray_defaults }
-    - { role: kubernetes/kubeadm, tags: kubeadm}
+    - { role: kubernetes/kubeadm, tags: kubeadm }
     - { role: kubernetes/node-label, tags: node-label }
     - { role: kubernetes/node-taint, tags: node-taint }
     - { role: kubernetes-apps/common_crds }
@@ -169,6 +182,7 @@ tags:
     - { role: kubespray_defaults }
     - { role: kubernetes/preinstall, when: "dns_mode != 'none' and resolvconf_mode == 'host_resolvconf'", tags: resolvconf, dns_late: true }
 ```
+{% endraw %}
 
 </details>
 
@@ -291,9 +305,11 @@ fact_caching_timeout = 86400  # 24시간
 
 ## any_errors_fatal
 
+{% raw %}
 ```yaml
 any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
 ```
+{% endraw %}
 
 **하나의 호스트에서 오류가 발생하면 전체 플레이북을 중단**한다.
 
@@ -303,9 +319,11 @@ any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
 
 ## environment와 proxy_disable_env
 
+{% raw %}
 ```yaml
 environment: "{{ proxy_disable_env }}"
 ```
+{% endraw %}
 
 롤 실행 시 적용할 **환경 변수**를 설정한다. `proxy_disable_env`는 프록시 설정을 비활성화하는 환경 변수다.
 
@@ -373,6 +391,7 @@ roles/kubespray_defaults/
 
 ## etcd_events_cluster_enabled
 
+{% raw %}
 ```yaml
 - name: Install etcd
   vars:
@@ -380,6 +399,7 @@ roles/kubespray_defaults/
     etcd_events_cluster_setup: "{{ etcd_events_cluster_enabled }}"
   import_playbook: install_etcd.yml
 ```
+{% endraw %}
 
 **etcd events 클러스터**를 별도로 구성할지 결정한다.
 
@@ -411,15 +431,7 @@ roles/kubespray_defaults/
 
 # 결과
 
-이번 글에서 `cluster.yml`의 전체 흐름을 파악했다. 다음 글에서는 각 플레이에서 실행되는 **롤들을 상세히 분석**한다:
-
-1. `boilerplate.yml`: 공통 작업
-2. `internal_facts.yml`: 팩트 수집
-3. `kubernetes/preinstall`: OS 준비
-4. `etcd`: etcd 클러스터 설치
-5. `kubernetes/node`: kubelet 설치
-6. `kubernetes/control-plane`: 컨트롤 플레인 설치
-7. `network_plugin`: CNI 설치
+이번 글에서 `cluster.yml`의 전체 흐름을 파악했다. 다음 글에서는 [`--list-tasks`로 태스크 구조]({% post_url 2026-01-25-Kubernetes-Kubespray-03-03-01 %})를 파악한 뒤, 각 플레이북을 상세 분석한다.
 
 <br>
 

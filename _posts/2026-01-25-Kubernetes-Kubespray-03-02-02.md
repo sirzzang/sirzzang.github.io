@@ -4,6 +4,7 @@ excerpt: "Kubespray의 group_vars 디렉토리 구조와 주요 설정 변수들
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
@@ -26,8 +27,6 @@ tags:
 - **Ansible 그룹 변수 체계**: 디렉토리별 적용 범위, 조건부 적용, 변수 우선순위
 - **group_vars/all/**: 전역 설정 (all.yml, etcd.yml, containerd.yml, 클라우드 프로바이더 등)
 - **group_vars/k8s_cluster/**: 클러스터 설정 (k8s-cluster.yml, addons.yml, 네트워크 플러그인 등)
-
-> [이전 글]({% post_url 2026-01-25-Kubernetes-Kubespray-03-02-01 %})에서 Kubespray의 변수 배치 전략을 파악했다. 이번 글에서는 실제로 `inventory/group_vars/` 디렉토리의 변수들을 살펴본다.
 
 <br>
 
@@ -489,7 +488,7 @@ Kubespray의 group_vars 구조와 주요 변수들을 확인했다:
 - `cloud_provider`, `container_manager`, `kube_network_plugin` 값에 따라 **조건부로 파일이 적용**됨
 - 더 구체적인 범위(`k8s_cluster`)가 전역 범위(`all`)보다 **높은 우선순위**를 가짐
 
-실제 변수 수정 및 클러스터 배포는 [실습 시리즈]({% post_url 2026-01-25-Kubernetes-Kubespray-04-01 %})에서 진행한다.
+다음 글에서는 [kubespray_defaults 역할]({% post_url 2026-01-25-Kubernetes-Kubespray-03-02-03 %})을 분석한다. 실제 변수 수정 및 클러스터 배포는 [실습 시리즈]({% post_url 2026-01-25-Kubernetes-Kubespray-04-01 %})에서 진행한다.
 
 <br>
 
