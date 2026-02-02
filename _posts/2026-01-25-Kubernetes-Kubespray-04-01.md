@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 4.1. 클러스터 배포 - 인벤토리 구성 및 변수 수정"
-excerpt: "Kubespray 인벤토리를 구성하고 클러스터 배포를 위한 변수를 수정해보자."
+excerpt: "Kubespray 인벤토리를 구성하고 클러스터 배포를 위한 변수를 수정한다."
 categories:
   - Kubernetes
 toc: true
@@ -26,7 +26,7 @@ tags:
 - **샘플 인벤토리 복사**: `cp -rfp`로 `sample` → `mycluster` 복사
 - **inventory.ini 작성**: 단일 노드 클러스터 구성
 - **Ansible 그룹 구조**: `kube_control_plane`, `etcd`, `kube_node` 그룹과 `[etcd:children]` 패턴 이해
-- **변수 수정**: CNI, kube-proxy 모드, 인증서 자동 갱신 등 설정 변경
+- **변수 수정**: CNI, kube-proxy 모드, 인증서 자동 갱신, 애드온 활성화 등 설정 변경
 
 <br>
 
@@ -216,12 +216,22 @@ ansible -i /root/kubespray/inventory/mycluster/inventory.ini all --list-hosts
 
 ## 수정할 설정
 
+### k8s-cluster.yml
+
 | 변수 | 기본값 | 변경값 | 이유 |
 |------|--------|--------|------|
 | `kube_network_plugin` | `calico` | `flannel` | 더 간단한 CNI 테스트 |
 | `kube_proxy_mode` | `ipvs` | `iptables` | 기본적인 모드로 변경 |
 | `enable_nodelocaldns` | `true` | `false` | 단순화를 위해 비활성화 |
 | `auto_renew_certificates` | `false` | `true` | 인증서 자동 갱신 활성화 |
+
+### addons.yml
+
+| 변수 | 기본값 | 변경값 | 이유 |
+|------|--------|--------|------|
+| `helm_enabled` | `false` | `true` | Helm 패키지 매니저 설치 |
+| `metrics_server_enabled` | `false` | `true` | `kubectl top` 명령 사용 |
+| `node_feature_discovery_enabled` | `false` | `true` | 노드 하드웨어 특성 레이블링 |
 
 ## 변수 수정
 
@@ -275,6 +285,40 @@ grep "^[^#]" inventory/mycluster/group_vars/k8s_cluster/k8s-net-flannel.yml
 ```
 
 > **참고**: `flannel_interface`는 Flannel이 VXLAN 통신에 사용할 네트워크 인터페이스를 지정한다. VirtualBox 환경에서는 Host-Only 네트워크 인터페이스(예: `enp0s8`)를 지정해야 노드 간 통신이 정상 동작한다.
+
+## addons.yml 수정
+
+애드온 설정을 수정하여 유용한 도구들을 활성화한다:
+
+```bash
+# addons.yml 수정
+sed -i 's|helm_enabled: false|helm_enabled: true|g' \
+  inventory/mycluster/group_vars/k8s_cluster/addons.yml
+
+sed -i 's|metrics_server_enabled: false|metrics_server_enabled: true|g' \
+  inventory/mycluster/group_vars/k8s_cluster/addons.yml
+
+sed -i 's|node_feature_discovery_enabled: false|node_feature_discovery_enabled: true|g' \
+  inventory/mycluster/group_vars/k8s_cluster/addons.yml
+```
+
+```bash
+# 수정 확인
+grep -iE 'helm_enabled:|metrics_server_enabled:|node_feature_discovery_enabled:' \
+  inventory/mycluster/group_vars/k8s_cluster/addons.yml
+```
+
+```yaml
+helm_enabled: true
+metrics_server_enabled: true
+node_feature_discovery_enabled: true
+```
+
+| 변수 | 설명 |
+|------|------|
+| `helm_enabled` | Helm 패키지 매니저 설치 |
+| `metrics_server_enabled` | Metrics Server 설치 (`kubectl top` 명령 사용 가능) |
+| `node_feature_discovery_enabled` | 노드 하드웨어 특성 자동 감지 및 레이블 추가 |
 
 <br>
 

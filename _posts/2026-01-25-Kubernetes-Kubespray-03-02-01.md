@@ -541,6 +541,66 @@ kube_version: v1.30.0              # ← 이것만 override
 
 필요하다면 `inventory/mycluster/host_vars/`에 호스트별 변수를 정의하거나, 실행 시 `-e` 옵션으로 임시 override할 수도 있다.
 
+## 변수 검색
+
+Kubespray는 변수가 수백 개에 달하기 때문에 모든 변수를 외울 수 없다. 필요한 변수는 그때그때 관련 키워드로 검색해서 찾는다.
+
+### 검색 기본 패턴
+
+`inventory`, `playbooks`, `roles` 디렉토리에서 관련 키워드를 검색한다:
+
+```bash
+grep -Rn "검색어" inventory/mycluster/ playbooks/ roles/
+```
+
+### 예시 1: 특정 기능 변수 찾기
+
+DNS autoscaler를 비활성화하고 싶다면, 관련 키워드로 검색한다:
+
+```bash
+grep -Rni "autoscaler" inventory/mycluster/ playbooks/ roles/ --include="*.yml" -A2 -B1
+```
+
+```bash
+roles/kubespray_defaults/defaults/main/main.yml:130:# Enable dns autoscaler
+roles/kubespray_defaults/defaults/main/main.yml:131:enable_dns_autoscaler: true
+...
+```
+
+`enable_dns_autoscaler` 변수를 찾았다. 이제 `group_vars/`에서 `false`로 설정하면 된다.
+
+### 예시 2: 변수의 선언과 사용 위치 확인
+
+변수가 어디서 선언되고 어디서 사용되는지 확인할 수 있다:
+
+```bash
+grep -Rn "allow_unsupported_distribution_setup" inventory/mycluster/ playbooks/ roles/ -A1 -B1
+```
+
+```bash
+inventory/mycluster/group_vars/all/all.yml-141-## If enabled it will allow kubespray to attempt setup even if the distribution is not supported.
+inventory/mycluster/group_vars/all/all.yml:142:allow_unsupported_distribution_setup: false
+--
+roles/kubernetes/preinstall/tasks/0040-verify-settings.yml-22-  assert:
+roles/kubernetes/preinstall/tasks/0040-verify-settings.yml:23:    that: (allow_unsupported_distribution_setup | default(false)) or ansible_distribution in supported_os_distributions
+roles/kubernetes/preinstall/tasks/0040-verify-settings.yml-24-    msg: "{{ ansible_distribution }} is not a known OS"
+```
+
+변수의 선언 위치(`group_vars`)와 실제 사용 위치(`task`)를 함께 확인할 수 있다. 이렇게 하면 변수가 어떤 맥락에서 사용되는지 이해하기 쉽다.
+
+### 유용한 grep 옵션
+
+| 옵션 | 설명 |
+|------|------|
+| `-R` | 하위 디렉토리까지 재귀 검색 |
+| `-n` | 라인 번호 표시 |
+| `-i` | 대소문자 무시 |
+| `-A N` | 매칭 라인 이후 N줄 표시 |
+| `-B N` | 매칭 라인 이전 N줄 표시 |
+| `--include="*.yml"` | yml 파일만 검색 |
+
+<br>
+
 ## 실전 예시: kube_version 변경하기
 
 특정 변수를 변경하고 싶을 때 따라가는 단계를 예시로 보자.
