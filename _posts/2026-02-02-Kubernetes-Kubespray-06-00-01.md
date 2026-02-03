@@ -449,6 +449,32 @@ Calico는 두 가지 데이터스토어를 지원하므로, etcd를 사용하는
 
 <br>
 
+# 실행 방법
+
+## 기본 실행
+
+```bash
+ansible-playbook -i inventory/mycluster/inventory.ini scale.yml
+```
+
+## 특정 노드만 추가 (권장)
+
+```bash
+ansible-playbook -i inventory/mycluster/inventory.ini scale.yml --limit=new-worker-node
+```
+
+## 태그로 특정 단계만 실행
+
+```bash
+# 네트워크 플러그인만 재설치
+ansible-playbook scale.yml --tags network
+
+# kubeadm과 노드 레이블만 실행
+ansible-playbook scale.yml --tags kubeadm,node-label
+```
+
+<br>
+
 # 정리
 
 이번 글에서 `scale.yml`의 전체 흐름을 파악했다. 핵심은 **기존 클러스터(특히 etcd)를 건드리지 않고 새 노드만 합류**시킨다는 점이다.
@@ -486,38 +512,9 @@ Kubespray의 역할은 kubeadm 명령을 직접 실행하는 것이 아니라, *
 
 <br>
 
-# 실행 방법
-
-## 기본 실행
-
-```bash
-ansible-playbook -i inventory/mycluster/inventory.ini scale.yml
-```
-
-## 특정 노드만 추가 (권장)
-
-```bash
-ansible-playbook -i inventory/mycluster/inventory.ini scale.yml --limit=new-worker-node
-```
-
-## 태그로 특정 단계만 실행
-
-```bash
-# 네트워크 플러그인만 재설치
-ansible-playbook scale.yml --tags network
-
-# kubeadm과 노드 레이블만 실행
-ansible-playbook scale.yml --tags kubeadm,node-label
-```
-
-다음 글에서는 [remove-node.yml]({% post_url 2026-02-02-Kubernetes-Kubespray-06-00-02 %})을 분석한다.
-
-<br>
-
 # 참고 자료
 
 - [Kubespray GitHub - scale.yml](https://github.com/kubernetes-sigs/kubespray/blob/master/scale.yml)
 - [Kubespray - Adding/removing a node](https://github.com/kubernetes-sigs/kubespray/blob/master/docs/operations/nodes.md)
-- [이전 글: 노드 관리 Playbook Overview]({% post_url 2026-02-02-Kubernetes-Kubespray-06-00 %})
 
 <br>
