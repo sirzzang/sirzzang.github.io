@@ -46,8 +46,8 @@ GPU 같은 하드웨어 장치를 컨테이너에서 사용하려면, 호스트�
 Docker가 컨테이너 시장을 독점하던 시기, 다양한 런타임 간 호환성을 위해 **OCI(Open Container Initiative)**가 설립되었다.
 
 - **2015**: Docker가 사실상 컨테이너의 표준
-- **2015.06**: OCI 설립 (Linux Foundation 주도)
-- **2017.07**: OCI Runtime Spec 1.0.0 발표 - Hooks 포함
+- **2015.06.**: OCI 설립 (Linux Foundation 주도)
+- **2017.07.**: OCI Runtime Spec 1.0.0 발표 - Hooks 포함
 - **현재**: OCI Runtime Spec은 사실상 모든 컨테이너 런타임이 따르는 표준
 
 OCI Runtime Hook은 **컨테이너 생명주기 중 특정 시점에 실행되는 외부 프로그램**이다. 이를 통해 런타임이 직접 지원하지 않는 기능(장치 주입, 네트워크 설정 등)을 확장할 수 있다.
@@ -294,7 +294,7 @@ OCI Runtime Spec에서 정의하는 Hook은 다음과 같다.
 <details>
 <summary>생명주기와 Hook 실행 시점 다이어그램</summary>
 
-![oci-container-lifecycle]({{site.url}}/assets/images/oci-container-lifecycle.png)
+<img src="{{site.url}}/assets/images/oci-container-lifecycle.png" alt="oci-container-lifecycle">
 
 </details>
 

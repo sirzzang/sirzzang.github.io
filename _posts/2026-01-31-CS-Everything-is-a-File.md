@@ -1,6 +1,6 @@
 ---
-title:  "[CS] Unix/Linux - Everything is a File 철학"
-excerpt: "Everything is a File 철학에 대해 알아 보자."
+title:  "[CS] Everything is a File 철학"
+excerpt: "Unix/Linux의 Everything is a File 철학에 대해 알아 보자."
 categories:
   - CS
 toc: true
@@ -18,7 +18,7 @@ tags:
 
 <br>
 
-리눅스 환경에서 업무를 하거나, 리눅스에 대해 공부하다 보면 여기저기서 "Everything is a file"이라는 말을 듣게 된다. 장치 드라이버, 소켓, 프로세스 등 시스템 프로그래밍이나 인프라 관련 내용을 다룰 때마다 등장하는 이 철학은 Unix/Linux를 이해하는 핵심 개념이다. 이 글에서는 "Everything is a file" 철학의 의미와 장점, 그리고 현실적인 한계를 살펴본다.
+리눅스에 대해 공부하다 보면 여기저기서 "Everything is a file"이라는 말을 듣게 된다. 장치 드라이버, 소켓, 프로세스 등 시스템 프로그래밍이나 인프라 관련 내용을 다룰 때마다 등장하는 이 철학은 Unix/Linux를 이해하는 핵심 개념이다. 이 글에서는 "Everything is a file" 철학의 의미와 장점, 그리고 현실적인 한계를 살펴본다.
 
 <br>
 
