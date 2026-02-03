@@ -511,6 +511,7 @@ kubectl get configmap kubeadm-config -n kube-system -o yaml
 
 인증서를 `kubeadm-certs` Secret에 업로드한다.
 
+- `kubeadm init`은 **첫 번째 컨트롤 플레인에서만** 실행되므로, 이 phase도 첫 번째 노드에서만 수행됨
 - HA 구성 시 다른 컨트롤 플레인 노드가 인증서를 가져갈 수 있도록 함
 - 기본적으로 2시간 후 자동 삭제됨
 - `--upload-certs` 플래그를 사용해야 활성화됨
