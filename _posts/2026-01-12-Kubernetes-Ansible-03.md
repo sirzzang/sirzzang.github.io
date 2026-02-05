@@ -268,7 +268,8 @@ ansible-inventory -i ./inventory --list | jq
 ```
 
 **출력 해석:**
-- `_meta.hostvars`: 호스트별 변수 (현재 없음)
+- `_meta.hostvars`: 호스트별 변수 (현재 없음)  
+  Ansible이 각 호스트에 적용한 변수(inventory에 적은 값과 group_vars 등이 합쳐진 결과)를 담는 객체다. 키는 호스트명, 값은 그 호스트의 변수 딕셔너리다. 이 인벤토리에는 호스트 변수를 두지 않았기 때문에 `{}`로 비어 있다. 변수를 두거나 `group_vars/`를 쓰면 여기서 확인할 수 있다([Kubespray 예]({% post_url 2026-02-02-Kubernetes-Kubespray-05-02 %}#host-vars-확인-ansible-inventory--list)).
 - `_meta.profile`: 인벤토리 플러그인 프로파일 정보
 - `all.children`: `all` 그룹의 자식 그룹 목록
 - `ungrouped.hosts`: 그룹에 속하지 않은 호스트 목록
@@ -718,6 +719,8 @@ ansible-inventory --list | jq
   }
 }
 ```
+
+**`_meta.hostvars`란?** `ansible-inventory --list`가 반환하는 JSON에서 `_meta`는 Ansible이 쓰는 특수 키이고, 그 안의 **`hostvars`**는 **호스트별로 적용된 변수(inventory에 적은 값 + group_vars 등이 합쳐진 결과)**를 담는 객체다. 키가 호스트명, 값이 그 호스트의 변수 딕셔너리다. 위 예시에서는 인벤토리에 호스트 변수를 두지 않았기 때문에 `hostvars`가 `{}`로 비어 있다. inventory.ini에 `ansible_host`, `ip` 같은 변수를 주거나 `group_vars/`를 쓰면, 여기서 각 호스트별 변수를 확인할 수 있다([Kubespray 인벤토리에서의 예]({% post_url 2026-02-02-Kubernetes-Kubespray-05-02 %}#host-vars-확인-ansible-inventory--list) 참고).
 
 > **참고**: `ansible.cfg`의 전체 구조(섹션 구성, 설정 우선순위 등)는 [다음 글]({% post_url 2026-01-12-Kubernetes-Ansible-04 %})에서 자세히 다룬다.
 

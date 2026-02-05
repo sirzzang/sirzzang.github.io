@@ -273,6 +273,17 @@ clusters:
 | **API 서버 추가/제거 시** | kubeconfig 수정 | kubeconfig + LB | LB 설정만 |
 | **관리 주체** | K8s 팀 단독 | K8s + 인프라 팀 | 인프라 + K8s 팀 |
 
+## kubelet/kube-proxy의 API Server 접근 이유
+
+워커 노드에서 API Server에 접근하는 컴포넌트는 kubelet과 kube-proxy다.
+
+| 컴포넌트 | 접근 이유 |
+|----------|----------|
+| **kubelet** | Node 상태 보고(heartbeat), Pod spec watch/실행, Pod 상태 업데이트 |
+| **kube-proxy** | Service/Endpoint 정보 watch, iptables/ipvs 규칙 업데이트 |
+
+Control Plane 노드든 Worker 노드든 kubelet/kube-proxy가 API Server에 접근하는 이유는 동일하다. 다만 **접근 경로**가 Case에 따라 달라진다.
+
 ## 접근 주체별 경로
 
 | 접근 주체 | Case 1 | Case 2 | Case 3 |
@@ -281,6 +292,35 @@ clusters:
 | CI/CD 시스템 | CP1, CP2, CP3 | External LB → CP1/2/3 | External LB → CP1/2/3 |
 | 워커 노드 kubelet | CP1, CP2, CP3 | CP1, CP2, CP3 | External LB → CP1/2/3 |
 | 워커 노드 kube-proxy | CP1, CP2, CP3 | CP1, CP2, CP3 | External LB → CP1/2/3 |
+
+## API Server → kubelet 역방향 통신
+
+위 패턴들은 모두 **클라이언트 → API Server** 방향 통신이다. 하지만 **API Server → kubelet** 역방향 통신도 존재한다.
+
+| 작업 | 설명 |
+|------|------|
+| `kubectl exec` | 컨테이너 내부 명령 실행 |
+| `kubectl logs` | 컨테이너 로그 조회 |
+| `kubectl port-forward` | 포트 포워딩 |
+| Metrics 수집 | kubelet의 메트릭 조회 |
+
+이 경우 **API Server는 항상 kubelet에 직접 연결**한다. LB를 거치지 않는다.
+
+```yaml
+# 모든 Case에서 동일 (API Server → kubelet)
+API Server (192.168.10.11) → kubelet@192.168.10.14:10250  # 직접 연결
+API Server (192.168.10.12) → kubelet@192.168.10.14:10250  # 직접 연결
+API Server (192.168.10.13) → kubelet@192.168.10.14:10250  # 직접 연결
+```
+
+특정 노드의 kubelet에 접근해야 하므로 LB를 거칠 수 없기 때문이다. API Server는 노드 오브젝트에서 IP 주소를 조회하여 해당 kubelet에 직접 연결한다.
+
+| 통신 방향 | HA 패턴 영향 | 접근 방식 |
+|-----------|-------------|----------|
+| 클라이언트 → API Server | Case에 따라 다름 | LB 또는 직접 접근 |
+| **API Server → kubelet** | **모든 Case 동일** | **항상 직접 연결 (Node IP:10250)** |
+
+> **참고**: 헷갈리지 말자. LB는 "대상이 여러 개이고, 아무나 처리해도 되는 경우"에만 의미가 있다. 정방향(kubelet → API Server)은 API Server 3대 중 **어디든 상관없으므로** LB 사용 가능. 역방향(API Server → kubelet)은 **특정 노드**의 kubelet이어야 하므로 LB 불가.
 
 <br>
 
