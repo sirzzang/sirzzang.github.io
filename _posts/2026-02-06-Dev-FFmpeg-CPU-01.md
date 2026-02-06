@@ -1,6 +1,6 @@
 ---
 title:  "[Dev] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 1. 배경지식: CPU와 스케줄링"
-excerpt: "CPU가 시간을 나눠쓰는 자원이라는 것, 그리고 그 시간을 누가 어떻게 관리하는지 알아본다."
+excerpt: "CPU가 시간을 나눠쓰는 자원이라는 것, 그리고 그 시간을 누가 어떻게 관리하는지 알아 보자."
 categories:
   - Dev
 toc: true
