@@ -224,7 +224,7 @@ CFS가 "공정하게" CPU를 나눠준다고 했다. 그런데 특정 프로세�
 - 프로세스가 CPU를 사용하면 quota가 차감된다
 - quota가 0이 되면, 해당 period가 끝날 때까지 **실행할 수 없다**
 
-예를 들어 `quota = 200ms, period = 100ms`이면, 100ms마다 200ms의 CPU 시간을 쓸 수 있다. 이는 2코어 분량의 CPU 시간에 해당한다.
+예를 들어 `quota = 200ms, period = 100ms`이면, 100ms마다 200ms의 CPU 시간을 쓸 수 있다. 이는 2코어 분량의 CPU 시간에 해당한다. "100ms 동안 200ms를 쓴다"가 직관에 어긋나 보일 수 있는데, 앞서 다룬 user/sys/real의 원리와 같다. 코어 2개가 100ms 동안 동시에 일하면, 벽시계로는 100ms이지만 CPU 시간 합산은 200ms다.
 
 ```
 period = 100ms, quota = 200ms (2코어 분량)
@@ -236,6 +236,15 @@ period = 100ms, quota = 200ms (2코어 분량)
   quota=200ms       quota=200ms       quota=200ms
   [사용 → 소진]     [충전 → 사용]     [충전 → 사용]
 ```
+
+K8s의 CPU limit이 바로 이 quota/period로 변환된다. period는 항상 100ms이고, limit 값이 quota를 결정한다 ([다음 글]({% post_url 2026-02-06-Dev-FFmpeg-CPU-02 %})에서 전체 변환 경로를 자세히 다룬다).
+
+| K8s CPU limit | quota | period | 의미 |
+|---|---|---|---|
+| `1000m` (1코어) | 100ms | 100ms | 100ms마다 CPU 시간 100ms 사용 가능 |
+| `500m` (0.5코어) | 50ms | 100ms | 100ms마다 CPU 시간 50ms 사용 가능 |
+| `2000m` (2코어) | 200ms | 100ms | 100ms마다 CPU 시간 200ms 사용 가능 |
+| `100m` (0.1코어) | 10ms | 100ms | 100ms마다 CPU 시간 10ms 사용 가능 |
 
 <br>
 

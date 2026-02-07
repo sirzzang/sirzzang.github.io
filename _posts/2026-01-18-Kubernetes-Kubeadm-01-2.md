@@ -270,12 +270,19 @@ Linux 시스템에서 cgroup을 관리할 수 있는 주체가 두 개 있다:
 
 kubelet이 cgroup을 **어떤 방식으로** 관리할지 결정하는 것이 **cgroup 드라이버**다.
 
-#### cgroupfs 드라이버 (비권장)
+#### cgroupfs 드라이버
 
 kubelet이 `/sys/fs/cgroup` 파일시스템을 **직접 조작**한다.
 
-- systemd는 자신이 **유일한 cgroup 관리자**라고 기대한다.
-- kubelet이 cgroupfs로 직접 cgroup을 조작하면 **systemd의 관리와 충돌**할 수 있다.
+- systemd 기반 시스템에서는 **비권장**이다. 
+  - systemd는 자신이 **유일한 cgroup 관리자**라고 기대한다.
+  - kubelet이 cgroupfs로 직접 cgroup을 조작하면 **관리 주체가 둘이 되어 충돌**할 수 있다.
+  - 충돌 시 systemd가 kubelet이 만든 cgroup을 인식하지 못해 정리해버리거나, 리소스 제한이 의도대로 적용되지 않아 Pod가 불안정해지거나 노드 전체가 불안정해질 수 있다.
+- systemd가 없는 환경(*예: Alpine Linux(OpenRC)*) 등 systemd가 없는 환경에서는 cgroup 관리자가 kubelet 하나뿐이므로, cgroupfs를 써도 충돌 문제가 없다.
+
+> Kubernetes 1.28부터 systemd가 기본값으로 변경되었다. 대부분의 프로덕션 서버가 systemd 기반이므로, systemd가 없는 환경이 아니라면 아래의 systemd 드라이버를 사용해야 한다.
+
+<br>
 
 #### systemd 드라이버 (권장)
 
@@ -283,6 +290,7 @@ kubelet이 **systemd를 통해** cgroup을 관리한다.
 
 - kubelet이 cgroup 작업을 systemd에 위임한다.
 - systemd가 일관되게 cgroup을 관리하므로 **충돌이 발생하지 않는다**.
+- cgroup 계층 구조에 systemd의 slice 네이밍(`kubepods.slice`, `kubepods-burstable.slice` 등)이 적용된다.
 
 #### 설정 방법
 
