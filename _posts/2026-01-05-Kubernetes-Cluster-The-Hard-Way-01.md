@@ -67,6 +67,8 @@ Kubernetes the Hard Way 튜토리얼은 다음 조건을 만족하는 환경이 
 
 ### Vagrant NIC1, NIC2 의미
 
+> **참고**: VirtualBox + Vagrant 네트워크 어댑터에 대한 상세 설명은 [별도 글]({% post_url 2026-02-09-Dev-VirtualBox-Network %})에 정리해 두었다.
+
 Vagrant VM은 기본적으로 최소 2개의 네트워크 인터페이스(NIC)를 가진다.
 
 1. 첫 번째 NIC: NIC1 (eth0 또는 enp0s3)

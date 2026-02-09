@@ -137,7 +137,7 @@ df -hT
 
 ## 네트워크
 
-Kubernetes 노드 간 통신에 사용할 네트워크 인터페이스와 IP 주소를 파악한다. Vagrant 환경에서는 보통 여러 네트워크 인터페이스가 있으므로 클러스터 통신에 사용할 인터페이스를 정확히 식별해야 한다.
+Kubernetes 노드 간 통신에 사용할 네트워크 인터페이스와 IP 주소를 파악한다. Vagrant 환경에서는 보통 여러 네트워크 인터페이스가 있으므로 클러스터 통신에 사용할 인터페이스를 정확히 식별해야 한다. VirtualBox의 NAT/Host-Only 어댑터 구조에 대해서는 [VirtualBox + Vagrant 네트워크 어댑터 이해하기]({% post_url 2026-02-09-Dev-VirtualBox-Network %})를 참고하자.
 
 ```bash
 ip -br -c -4 addr
