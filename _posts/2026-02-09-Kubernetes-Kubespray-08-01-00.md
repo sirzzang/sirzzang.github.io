@@ -461,7 +461,7 @@ tree /etc/NetworkManager/dispatcher.d/
 4 directories, 0 files
 ```
 
-> **참고**: NetworkManager의 동작 원리와 네트워크 핵심 개념은 [다음 글(8.1.1 Network Gateway)]({% post_url 2026-02-02-Kubernetes-Kubespray-08-01-01 %})에서 자세히 다룬다.
+> **참고**: NetworkManager의 동작 원리와 네트워크 핵심 개념은 [다음 글(8.1.1 Network Gateway)]({% post_url 2026-02-09-Kubernetes-Kubespray-08-01-01 %})에서 자세히 다룬다.
 
 <br>
 
@@ -490,6 +490,6 @@ tree /etc/NetworkManager/dispatcher.d/
 
 - [Vagrant Disk Configuration](https://developer.hashicorp.com/vagrant/docs/disks/usage)
 - [Bento Box: Rocky Linux 10.0](https://portal.cloud.hashicorp.com/vagrant/discover/bento/rockylinux-10.0)
-- [이전 글: Overview]({% post_url 2026-02-02-Kubernetes-Kubespray-08-00 %})
 
 <br>
+
