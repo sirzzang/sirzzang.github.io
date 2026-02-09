@@ -1,5 +1,5 @@
 ---
-title:  "[Dev] AI Agent: 개념과 구현"
+title:  "[AI] AI Agent: 개념과 구현"
 excerpt: "LLM의 한계를 극복하는 AI Agent의 개념과 Function Calling을 활용한 구현 패턴을 정리하고, Upstage API를 이용한 SQL Agent 구현 예시를 살펴본다."
 categories:
   - Dev

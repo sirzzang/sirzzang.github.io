@@ -1,6 +1,6 @@
 ---
-title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8.1.2. NTP / DNS"
-excerpt: "폐쇄망 환경에서 노드 간 시간 동기화를 위한 NTP 서버와, 내부 도메인 이름 해석을 위한 DNS 서버를 구축한다."
+title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8. 오프라인 배포: The Hard Way - 2. NTP / DNS"
+excerpt: "폐쇄망 환경에서 노드 간 시간 동기화를 위한 NTP 서버와, 내부 도메인 이름 해석을 위한 DNS 서버를 구축해보자."
 categories:
   - Kubernetes
 toc: true
@@ -17,7 +17,6 @@ tags:
   - BIND
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-6
-hidden: true
 
 ---
 
@@ -41,7 +40,7 @@ hidden: true
 
 <br>
 
-# 왜 NTP / DNS가 필요한가
+# NTP / DNS의 필요성
 
 ## NTP (Network Time Protocol)
 
@@ -151,7 +150,7 @@ admin에서 chrony를 NTP 서버로 설정한다. 외부 한국 공용 NTP 서�
 | `allow 192.168.10.0/24` | 내부망 노드의 시간 동기화 요청을 허용 |
 | `local stratum 10` | 외부 연결이 끊겨도 로컬 시계 기반으로 시간 제공 (폐쇄망 대비) |
 
-```shell
+```bash
 # 현재 chrony 상태 확인
 root@admin:~# systemctl status chronyd.service --no-pager
 
@@ -185,7 +184,7 @@ MS Name/IP address         Stratum Poll Reach LastRx Last sample
 
 기본 설정에서는 `2.rocky.pool.ntp.org`와 동기화하고 있고, 내부망 클라이언트에 시간을 제공하는 설정(`allow`)은 없다. 설정을 변경한다.
 
-```shell
+```bash
 # 설정 백업 후 변경
 root@admin:~# cp /etc/chrony.conf /etc/chrony.bak
 root@admin:~# cat << EOF > /etc/chrony.conf
@@ -236,7 +235,7 @@ k8s-node에서 chrony 클라이언트 설정을 변경하여, admin(`192.168.10.
 
 ### k8s-node1
 
-```shell
+```bash
 # 변경 전: 외부 NTP 서버와 직접 동기화
 root@week06-week06-k8s-node1:~# chronyc sources -v
 MS Name/IP address         Stratum Poll Reach LastRx Last sample
@@ -268,7 +267,7 @@ MS Name/IP address         Stratum Poll Reach LastRx Last sample
 
 동일하게 설정한다.
 
-```shell
+```bash
 # admin을 NTP 서버로 설정 + 서비스 재시작
 root@week06-week06-k8s-node2:~# cp /etc/chrony.conf /etc/chrony.bak
 root@week06-week06-k8s-node2:~# cat << EOF > /etc/chrony.conf
@@ -289,7 +288,7 @@ MS Name/IP address         Stratum Poll Reach LastRx Last sample
 
 admin에서 `chronyc clients`로 이 NTP 서버를 사용하는 클라이언트를 확인한다.
 
-```shell
+```bash
 root@admin:~# chronyc clients
 
 # 실행 결과
@@ -317,7 +316,7 @@ admin에서 BIND를 설치하고 DNS 서버를 구성한다. 내부망(`192.168.
 | `allow-recursion { 127.0.0.1; 192.168.10.0/24; }` | 재귀 쿼리도 내부망에만 허용 |
 | `forwarders { 168.126.63.1; 8.8.8.8; }` | 외부 도메인은 KT DNS, Google DNS에 전달 |
 
-```shell
+```bash
 # BIND 설치
 root@admin:~# dnf install -y bind bind-utils
 
@@ -415,7 +414,7 @@ k8s-node에서 admin(`192.168.10.10`)을 DNS 서버로 사용하도록 설정한
 
 ### k8s-node1
 
-```shell
+```bash
 # NetworkManager에서 DNS 관리 끄기
 root@week06-week06-k8s-node1:~# cat << EOF > /etc/NetworkManager/conf.d/99-dns-none.conf
 [main]
@@ -450,7 +449,7 @@ node1은 `enp0s8`이 내려가 있어 인터넷에 직접 접근할 수 없지�
 
 동일하게 설정한다.
 
-```shell
+```bash
 # NetworkManager DNS 관리 끄기 + admin DNS 설정
 root@week06-week06-k8s-node2:~# cat << EOF > /etc/NetworkManager/conf.d/99-dns-none.conf
 [main]
@@ -502,7 +501,6 @@ root@week06-week06-k8s-node2:~# dig +short google.com
 
 # 참고 자료
 
-- [이전 글: 8.1.1 Network Gateway]({% post_url 2026-02-09-Kubernetes-Kubespray-08-01-01 %})
 - [chrony Documentation](https://chrony-project.org/documentation.html)
 - [BIND 9 Administrator Reference Manual](https://bind9.readthedocs.io/)
 - [NTP Pool Project](https://www.pool.ntp.org/)

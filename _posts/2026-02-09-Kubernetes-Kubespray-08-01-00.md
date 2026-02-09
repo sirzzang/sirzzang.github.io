@@ -1,6 +1,6 @@
 ---
-title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8.1.0. 오프라인 배포 - 실습 환경 배포"
-excerpt: "폐쇄망 Kubernetes 클러스터 배포를 위한 Vagrant 실습 환경을 구성하고, 네트워크 구조를 확인한다."
+title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8. 오프라인 배포: The Hard Way - 0. 실습 환경 배포"
+excerpt: "폐쇄망 Kubernetes 클러스터 배포를 위한 Vagrant 실습 환경을 구성하고, 네트워크 구조를 확인해보자."
 categories:
   - Kubernetes
 toc: true

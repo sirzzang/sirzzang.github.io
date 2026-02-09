@@ -1,6 +1,6 @@
 ---
-title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8.1.1. Network Gateway"
-excerpt: "폐쇄망 환경 시뮬레이션을 위해 admin을 NAT Gateway로 구성하고, k8s-node의 인터넷 직접 접근을 차단한다."
+title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8. 오프라인 배포: The Hard Way - 1. Network Gateway"
+excerpt: "폐쇄망 환경 시뮬레이션을 위해 admin을 NAT Gateway로 구성하고, k8s-node의 인터넷 직접 접근을 차단해보자."
 categories:
   - Kubernetes
 toc: true
@@ -74,7 +74,7 @@ tags:
 
 | 인터페이스 | 네트워크 종류 | IP | 역할 |
 |------------|--------------|-----|------|
-| `enp0s8` | NAT | 10.0.2.15 (DHCP) | 외부 인터넷 접속용. `vagrant ssh`는 이 인터페이스의 포트포워딩을 사용 |
+| `enp0s8` | NAT | 10.0.2.15 (VirtualBox 기본값) | 외부 인터넷 접속용. `vagrant ssh`는 이 인터페이스의 포트포워딩을 사용 |
 | `enp0s9` | Host-Only | 192.168.10.x (수동) | 호스트 - VM, VM - VM 내부 통신용. Vagrantfile에서 IP 직접 지정. 인터넷 불가 |
 
 ## 접속 방식: vagrant ssh vs ssh root@IP
@@ -273,7 +273,7 @@ ssh root@192.168.10.12
 # 비밀번호: qwe123
 ```
 
-```shell
+```bash
 # 현재 라우팅 경로 확인: 8.8.8.8이 enp0s8(NAT)을 통해 직접 나가고 있다
 root@week06-week06-k8s-node2:~# ip route get 8.8.8.8
 8.8.8.8 via 10.0.2.2 dev enp0s8 src 10.0.2.15 uid 0
@@ -335,7 +335,7 @@ EOF
 
 동일한 작업을 k8s-node1에서도 진행한다. `ssh root@192.168.10.11`로 접속 후:
 
-```shell
+```bash
 # enp0s8 비활성화
 root@week06-week06-k8s-node1:~# nmcli connection down enp0s8
 Connection 'enp0s8' successfully deactivated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/6)
@@ -354,7 +354,7 @@ default via 192.168.10.10 dev enp0s9 proto static metric 200
 
 active connection을 확인하면 enp0s8이 사라진 것을 볼 수 있다.
 
-```shell
+```bash
 root@week06-week06-k8s-node1:~# nmcli connection show --active
 NAME    UUID                                  TYPE      DEVICE
 enp0s9  66b6560d-3511-49a3-9bec-e9531b7397bb  ethernet  enp0s9
@@ -363,7 +363,7 @@ lo      8c2c8970-6550-4551-8086-8eed054e17f0  loopback  lo
 
 DNS 설정도 동일하게 복구한다.
 
-```shell
+```bash
 root@week06-week06-k8s-node1:~# cat << EOF > /etc/resolv.conf
 nameserver 168.126.63.1
 nameserver 8.8.8.8
@@ -374,7 +374,7 @@ EOF
 
 **vagrant ssh로 접속한 상태에서 enp0s8을 내리면 세션이 멈춘다.**
 
-```shell
+```bash
 vagrant ssh week06-node1
 root@week06-week06-k8s-node1:~# nmcli connection down enp0s8
 # (응답 없음... 멈춤)
@@ -382,13 +382,15 @@ root@week06-week06-k8s-node1:~# nmcli connection down enp0s8
 
 `vagrant ssh`는 enp0s8의 NAT 포트포워딩(`60001 → 22`)을 통해 들어온 연결이다. 바로 그 인터페이스를 내리면 **자기가 타고 있는 SSH 연결을 끊어버리는** 셈이다.
 
-해결:
+**해결**:
 - 현재 터미널에서 `~.` (틸드 + 점)을 입력하면 SSH 세션을 강제 종료할 수 있다
 - 이후 Host-Only 인터페이스(`ssh root@192.168.10.x`)로 재접속한다
 
+<br>
+
 **enp0s8을 내렸는데 `ip addr show`에서 여전히 UP으로 보인다.**
 
-```shell
+```bash
 root@week06-week06-k8s-node1:~# ip addr show enp0s8
 2: enp0s8: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP ...
     link/ether 08:00:27:90:ea:eb brd ff:ff:ff:ff:ff:ff
@@ -404,6 +406,8 @@ root@week06-week06-k8s-node1:~# ip addr show enp0s8
 
 VirtualBox 가상 NIC가 연결되어 있으니 물리적으로는 여전히 UP이다. 케이블을 뽑은 게 아니라 "IP 설정만 해제"한 것이기 때문이다. IPv4 주소(`inet 10.0.2.15`)가 사라졌다면 connection down은 정상 동작한 것이다. 실제 connection 상태는 `nmcli connection show --active`로 확인해야 한다.
 
+<br>
+
 ## 2. [admin] NAT Gateway (MASQUERADE) 설정
 
 admin에서 MASQUERADE를 설정하여 NAT Gateway(공유기) 역할을 하도록 한다. `ip_forward`는 `admin.sh`에서 이미 설정되어 있으므로, MASQUERADE만 추가하면 된다.
@@ -417,7 +421,7 @@ admin에서 MASQUERADE를 설정하여 NAT Gateway(공유기) 역할을 하도�
 | `-o enp0s8` | enp0s8(인터넷)으로 나가는 패킷만 |
 | `-j MASQUERADE` | 출발지 IP를 admin의 enp0s8 IP(`10.0.2.15`)로 변환 |
 
-```shell
+```bash
 # ip_forward 확인 (admin.sh TASK 5에서 이미 설정됨)
 root@admin:~# sysctl net.ipv4.ip_forward
 net.ipv4.ip_forward = 1
@@ -442,11 +446,11 @@ Chain POSTROUTING (policy ACCEPT 0 packets, 0 bytes)
     4   304 MASQUERADE  all  --  *      enp0s8  0.0.0.0/0            0.0.0.0/0
 ```
 
-## 3: 통신 확인
+## 3. 통신 확인
 
 k8s-node에서 외부 통신이 admin을 경유하는지 확인한다.
 
-```shell
+```bash
 root@week06-week06-k8s-node2:~# ip route get 8.8.8.8
 8.8.8.8 via 192.168.10.10 dev enp0s9 src 192.168.10.12 uid 0
     cache
@@ -461,7 +465,7 @@ enp0s8 down + MASQUERADE 후: node2 → enp0s9(192.168.10.10) → admin → enp0
 
 admin에서 `conntrack`으로 연결 추적 테이블을 확인하면, MASQUERADE가 실제로 동작하고 있음을 볼 수 있다.
 
-```shell
+```bash
 root@admin:~# conntrack -L
 
 # 실행 결과 (ICMP 부분)
@@ -474,7 +478,7 @@ icmp     1 29 src=192.168.10.12 dst=8.8.8.8 type=8 code=0 id=3 src=8.8.8.8 dst=1
 
 admin에서 MASQUERADE 룰을 제거하면, node는 다시 인터넷에 접근할 수 없게 된다.
 
-```shell
+```bash
 # 제거 전 확인
 root@admin:~# iptables -t nat -S
 -P PREROUTING ACCEPT
@@ -496,7 +500,7 @@ root@admin:~# iptables -t nat -S
 
 node에서 확인하면, 패킷 손실률 100%로 인터넷 통신이 불가능하다.
 
-```shell
+```bash
 root@week06-week06-k8s-node1:~# ping -c 1 8.8.8.8
 PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.
 
@@ -512,7 +516,7 @@ admin을 통한 외부 경로 자체를 없애서, 내부(`192.168.10.0/24`) 통
 
 k8s-node1:
 
-```shell
+```bash
 # 디폴트 라우트 제거 (+ 대신 - 사용) + 설정 적용
 root@week06-week06-k8s-node1:~# nmcli connection modify enp0s9 -ipv4.routes "0.0.0.0/0 192.168.10.10 200"
 root@week06-week06-k8s-node1:~# nmcli connection up enp0s9
@@ -524,7 +528,7 @@ root@week06-week06-k8s-node1:~# ip route
 
 k8s-node2:
 
-```shell
+```bash
 # 디폴트 라우트 제거 + 설정 적용
 root@week06-week06-k8s-node2:~# nmcli connection modify enp0s9 -ipv4.routes "0.0.0.0/0 192.168.10.10 200"
 root@week06-week06-k8s-node2:~# nmcli connection up enp0s9
@@ -542,24 +546,60 @@ root@week06-week06-k8s-node2:~# ip route
 
 iptables 대신 nftables로 동일한 NAT Gateway를 구현해 본다. Rocky Linux 10에는 nftables가 기본으로 설치되어 있다.
 
-iptables와 nftables를 동시에 사용하면 같은 netfilter hook에 체인이 중복 등록되어 충돌할 수 있으므로, **반드시 iptables 룰을 먼저 제거**한 뒤 진행해야 한다.
+이 도전 과제를 진행하려면, 먼저 Step 5에서 제거한 k8s-node의 디폴트 라우트를 다시 추가해야 한다.
+
+### iptables와 nftables 동시 사용 시 주의 사항
+
+iptables와 nftables는 모두 커널의 **netfilter hook**에 체인을 등록한다. 같은 hook 지점(예: `POSTROUTING`)에 양쪽 체인이 걸려 있으면, priority(우선순위 숫자)에 따라 **순서대로 모두 실행**된다.
+
+```
+패킷 → netfilter POSTROUTING hook
+         ├─ nftables 체인 (priority 100)  ← 먼저 실행
+         └─ iptables 체인 (priority 100)  ← 그 다음 실행
+         (같은 priority면 등록 순서에 따름)
+```
+
+따라서 둘을 동시에 사용하면 의도하지 않은 동작이 발생할 수 있다.
 
 | 상황 | 결과 |
 |------|------|
+| iptables ACCEPT + nftables DROP | **DROP** (하나라도 DROP하면 차단) |
 | iptables MASQUERADE + nftables MASQUERADE | 이중 NAT 가능성 (예측 불가) |
 | iptables 룰 없음 + nftables MASQUERADE | 정상 동작 |
 
-> 실무에서도 iptables와 nftables 중 하나만 사용하는 것이 원칙이다. 둘 다 netfilter의 같은 hook에 체인을 등록하므로, 의도하지 않은 중복 룰이 생길 수 있다.
+따라서 실무에서는 iptables와 nftables 중 하나만 사용하는 것이 좋다. 같은 hook 지점에 체인이 여러 개 있어도 동작 자체는 하지만, 의도하지 않은 중복 룰이 생기기 쉽다. iptables를 쓸 거면 nftables 룰을 비우고, nftables를 쓸 거면 iptables 룰을 비워야 한다.
 
-이 도전 과제를 진행하려면, 먼저 Step 5에서 제거한 k8s-node의 디폴트 라우트를 다시 추가해야 한다.
+### iptables 룰 제거
+
+nftables로 전환하기 전에, 기본 실습에서 적용한 iptables MASQUERADE 룰을 **반드시 먼저 제거**한다.
+
+```bash
+# iptables NAT 룰 제거
+root@admin:~# iptables -t nat -F POSTROUTING
+
+# 제거 확인
+root@admin:~# iptables -t nat -S
+-P PREROUTING ACCEPT
+-P INPUT ACCEPT
+-P OUTPUT ACCEPT
+-P POSTROUTING ACCEPT
+```
+
+`POSTROUTING` 체인에 룰이 없는 상태(`-P POSTROUTING ACCEPT`만 남아 있는 상태)가 되면 정상이다.
+
+### nftables MASQUERADE 설정
 
 admin에서 nftables를 설정한다.
 
-```shell
-# nftables로 NAT Gateway 설정
-root@admin:~# nft add table ip nat                                                                # 테이블 생성
-root@admin:~# nft add chain ip nat postrouting { type nat hook postrouting priority srcnat \; }    # 체인 생성
-root@admin:~# nft add rule ip nat postrouting oifname "enp0s8" masquerade                         # MASQUERADE 룰 추가
+```bash
+# 테이블 생성
+root@admin:~# nft add table ip nat
+
+# POSTROUTING 체인 생성
+root@admin:~# nft add chain ip nat postrouting { type nat hook postrouting priority srcnat \; }
+
+# MASQUERADE 룰 추가
+root@admin:~# nft add rule ip nat postrouting oifname "enp0s8" masquerade
 
 # 확인
 root@admin:~# nft list ruleset
@@ -575,9 +615,16 @@ table ip nat {
 }
 ```
 
-`POSTROUTING`(대문자)은 iptables 호환 레이어가 자동 생성한 빈 체인이고, `postrouting`(소문자)이 직접 생성한 체인이다. 빈 체인을 정리한다.
+출력을 보면 체인이 두 개다. 이름이 비슷하지만 출처가 다르다.
 
-```shell
+| 체인 | 출처 | 룰 |
+|------|------|------|
+| `POSTROUTING` (대문자) | iptables 호환 레이어가 자동 생성 | 없음 (비어 있음) |
+| `postrouting` (소문자) | `nft add chain`으로 직접 생성 | `masquerade` |
+
+동작에 문제는 없지만, 깔끔하게 정리하려면 빈 체인을 삭제한다.
+
+```bash
 root@admin:~# nft delete chain ip nat POSTROUTING
 root@admin:~# nft list ruleset
 table ip nat {
@@ -588,9 +635,24 @@ table ip nat {
 }
 ```
 
+이 상태에서 `iptables -t nat -S`를 실행하면 다음과 같은 경고가 나온다.
+
+```bash
+root@admin:~# iptables -t nat -S
+# Table `nat' contains incompatible base-chains, use 'nft' tool to list them.
+-P PREROUTING ACCEPT
+-P INPUT ACCEPT
+-P OUTPUT ACCEPT
+-P POSTROUTING ACCEPT
+```
+
+`incompatible base-chains` 경고는 iptables가 nftables 방식으로 만든 체인을 읽을 수 없다는 의미다. nftables가 정상 동작하고 있음을 오히려 확인해 주는 것이니 무시해도 된다.
+
+### 통신 확인
+
 node에서 확인하면, nftables로도 동일하게 NAT Gateway가 동작하는 것을 볼 수 있다.
 
-```shell
+```bash
 root@week06-week06-k8s-node1:~# ping -c 1 8.8.8.8
 PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.
 64 bytes from 8.8.8.8: icmp_seq=1 ttl=254 time=34.0 ms
@@ -603,8 +665,6 @@ root@week06-week06-k8s-node1:~# ip route get 8.8.8.8
 8.8.8.8 via 192.168.10.10 dev enp0s9 src 192.168.10.11 uid 0
     cache
 ```
-
-> 이 상태에서 `iptables -t nat -S`를 실행하면 `incompatible base-chains` 경고가 나올 수 있다. iptables가 nftables 방식으로 만든 체인을 읽을 수 없다는 의미이며, nftables가 정상 동작하고 있음을 오히려 확인해 주는 것이다.
 
 <br>
 
@@ -628,7 +688,6 @@ root@week06-week06-k8s-node1:~# ip route get 8.8.8.8
 
 # 참고 자료
 
-- [이전 글: 8.1.0 실습 환경 배포]({% post_url 2026-02-09-Kubernetes-Kubespray-08-01-00 %})
 - [iptables Tutorial](https://www.frozentux.net/iptables-tutorial/iptables-tutorial.html)
 - [nftables Wiki](https://wiki.nftables.org/)
 - [Linux IP Forwarding - Kernel Documentation](https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt)

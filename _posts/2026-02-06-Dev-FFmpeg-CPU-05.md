@@ -1,5 +1,5 @@
 ---
-title:  "[Dev] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 5. 결론: CPU Limit을 설정하지 않기로 한 이유"
+title:  "[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 5. 결론: CPU Limit을 설정하지 않기로 한 이유"
 excerpt: "튜닝 실험 결과를 종합하고, CPU limit 설정에 대한 고민과 최종 결정을 정리해 보자."
 categories:
   - Dev

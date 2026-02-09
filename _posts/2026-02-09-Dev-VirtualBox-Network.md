@@ -1,8 +1,8 @@
 ---
-title:  "[Dev] VirtualBox + Vagrant 네트워크 어댑터 이해하기"
+title:  "[CS] VirtualBox + Vagrant 네트워크 어댑터 이해하기"
 excerpt: "Vagrant + VirtualBox 환경에서 반복적으로 등장하는 NAT, Host-Only 네트워크 구조를 정리한다."
 categories:
-  - Dev
+  - CS
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -41,7 +41,11 @@ Vagrant + VirtualBox VM은 기본적으로 **2개의 네트워크 인터페이�
 | NIC2 | Host-Only | `192.168.10.x` | VM 간 통신 + 호스트-VM 통신 |
 
 
-> **인터페이스 이름에 대해**: VirtualBox 버전, 게스트 OS, Vagrant box 이미지에 따라 NIC 이름이 달라질 수 있다. `bento/rockylinux-10.0`에서는 `enp0s8`/`enp0s9`, `bento/debian-12`에서는 `eth0`/`eth1` 또는 `enp0s3`/`enp0s8`이 될 수 있다. 중요한 것은 이름이 아니라 **어댑터 타입(NAT vs Host-Only)**이다.
+> 참고: **인터페이스 이름**
+> 
+>  VirtualBox 버전, 게스트 OS, Vagrant box 이미지에 따라 NIC 이름이 달라질 수 있다. 
+> `bento/rockylinux-10.0`에서는 `enp0s8`/`enp0s9`, `bento/debian-12`에서는 `eth0`/`eth1` 또는 `enp0s3`/`enp0s8`이 될 수 있다. 
+> 중요한 것은 이름이 아니라 **어댑터 타입(NAT vs Host-Only)**이다.
 
 <br>
 
@@ -124,7 +128,7 @@ VirtualBox의 NAT 어댑터는 VM마다 독립된 가상 NAT 환경을 만든다
 └────────────────────────────────────┘
 ```
 
-NAT 네트워크의 IP 체계는 VirtualBox 소스코드에 하드코딩되어 있다.
+NAT 네트워크의 IP 체계는 VirtualBox에서 고정되어 있다.
 
 | IP | 역할 |
 |----|------|
@@ -138,7 +142,7 @@ NAT 네트워크의 IP 체계는 VirtualBox 소스코드에 하드코딩되어 �
 
 <br>
 
-핵심은 `10.0.2.15`가 **호스트 네트워크에 존재하는 IP가 아니라**는 점이다. VirtualBox NAT 모드에서는 VM마다 **독립된 가상 NAT 장치**가 붙는다. VM들이 하나의 네트워크를 공유하는 게 아니라, 각 VM이 **자기만의 미니 공유기**를 갖는 구조다.
+**핵심은 각 VM이 독립된 NAT 환경에 있다는 점이다.** `10.0.2.15`는 **호스트 네트워크에 존재하는 IP가 아니다**. VirtualBox NAT 모드에서는 VM마다 **독립된 가상 NAT 장치**가 붙는다. VM들이 하나의 네트워크를 공유하는 게 아니라, 각 VM이 **자기만의 미니 공유기**를 갖는 구조다.
 
 ```
 호스트 (실제 네트워크: 172.30.1.x)

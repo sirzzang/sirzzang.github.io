@@ -323,7 +323,7 @@ spec:
 
 <br>
 
-```shell
+```bash
 kubectl apply minio-pv-pvc.yaml
 ```
 
@@ -369,7 +369,7 @@ Helm을 이용해 MinIO를 배포할 경우 사용되는 values.yaml에서 `pers
 
 ### 재배포
 
-```shell
+```bash
 helm uninstall minio -n minio
 helm install minio -n minio ./minio.5.2.0.tgz --values minio-values.yaml
 ```
