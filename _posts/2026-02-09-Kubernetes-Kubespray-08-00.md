@@ -144,13 +144,13 @@ Kubernetes 클러스터 배포 이전에 폐쇄망 내부에서 갖춰야 할 �
 | **8.1.0** | 실습 환경 배포 | Bastion + Admin 역할의 서버 구성, 오프라인 환경 시뮬레이션 |
 | **8.1.1** | Network Gateway | 내부망 라우팅, 네트워크 핵심 개념 |
 | **8.1.2** | NTP Server / Client | chrony를 이용한 시간 동기화 |
-| **8.1.3** | DNS Server / Client | 내부 도메인 이름 해석 |
-| **8.1.4** | Local YUM/DNF Repository | reposync + createrepo를 이용한 OS 패키지 Mirror |
-| **8.1.5** | Private Container Registry | Docker Registry를 이용한 이미지 저장소 |
-| **8.1.6** | Private PyPI Mirror | devpi를 이용한 Python 패키지 저장소 |
-| **8.1.7** | Private Go Module Proxy *(도전 과제)* | Athens를 이용한 Go 모듈 프록시 |
+|  | DNS Server / Client | 내부 도메인 이름 해석 |
+| **8.1.3** | Local YUM/DNF Repository | reposync + createrepo를 이용한 OS 패키지 Mirror |
+| **8.1.4** | Private Container Registry | Docker Registry를 이용한 이미지 저장소 |
+| **8.1.5** | Private PyPI Mirror | devpi를 이용한 Python 패키지 저장소 |
+| **8.1.6** | Private Go Module Proxy *(도전 과제)* | Athens를 이용한 Go 모듈 프록시 |
 
-> **참고**: 8.1.4 이후 구성요소(Container Registry, PyPI Mirror, Go Module Proxy)는 kubespray-offline(8.2)에서 자동화해주는 영역이다. 스터디에서도 수동 구축은 skip을 권장했지만, 원리를 이해하기 위해 직접 구축해 보았다.
+> **참고**: 8.1.3 이후 구성요소(Container Registry, PyPI Mirror, Go Module Proxy)는 kubespray-offline(8.2)에서 자동화해주는 영역이다. 스터디에서도 수동 구축은 skip을 권장했지만, 원리를 이해하기 위해 직접 구축해 보았다.
 
 8.1에서 수동으로 구축하는 과정을 거치면, 8.2에서 kubespray-offline이 **왜** 그렇게 자동화했는지를 깊이 이해할 수 있다. 자동화 도구가 해주는 일을 먼저 직접 경험하는 것은 [Kubernetes The Hard Way]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-00 %})에서부터 이어온 이 스터디 시리즈의 전체 철학이기도 하다.
 
