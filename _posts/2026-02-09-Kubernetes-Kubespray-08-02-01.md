@@ -52,8 +52,8 @@ tags:
 ```
 offline-environment.md
 ├── 개요 문단 (아티팩트 준비, 서빙 인프라 설정)
+├── Access Control
 ├── Configure Inventory
-│   └── Access Control
 ├── Install Kubespray Python Packages
 └── Run Kubespray as Usual
 ```
@@ -62,7 +62,7 @@ offline-environment.md
 
 ## Access Control의 위치
 
-Access Control은 Configure Inventory의 하위 섹션으로 되어 있는데, 내용적으로는 "서빙 인프라에 인증이 걸려 있을 때 변수를 어떻게 설정하나"에 대한 이야기다. Configure Inventory의 일부로 보면 자연스럽지만, 별도 섹션처럼 눈에 들어와서 처음에는 독립된 단계인가 싶었다. 결론적으로는 변수 설정의 한 부분으로 묶어서 이해하면 된다.
+Access Control이 Configure Inventory보다 먼저 나오는 섹션으로 되어 있는데, 내용적으로는 "서빙 인프라에 인증이 걸려 있을 때 변수를 어떻게 설정하나"에 대한 이야기라, Configure Inventory의 일부로 보면 자연스럽다. 그런데 별도 섹션처럼 눈에 들어와서, 그리고 더 먼저 나와서 처음에는 독립된 단계인가 싶었다. 결론적으로는 변수 설정의 한 부분으로 묶어서 이해하면 된다.
 
 ## Install Kubespray Python Packages의 순서
 
