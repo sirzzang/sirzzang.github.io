@@ -1,3 +1,4 @@
+---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8. 오프라인 배포: kubespray-offline - 0. Overview"
 excerpt: "kubespray-offline이 무엇을, 왜 자동화하는지 이해하기 위한  청사진을 그려보자."
 categories:
