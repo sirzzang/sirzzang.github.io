@@ -66,11 +66,11 @@ Access Control이 Configure Inventory보다 먼저 나오는 섹션으로 되어
 
 ## Install Kubespray Python Packages의 순서
 
-이 단계가 Configure Inventory 뒤에 나오는데, 논리적으로 생각하면 **Kubespray를 어떻게 실행할지(컨테이너 이미지 vs 수동 설치)**를 먼저 결정해야 준비할 아티팩트가 달라질 수 있다. 컨테이너 이미지 방식을 쓸 거면 Kubespray 이미지를 아티팩트에 추가해야 하고, 수동 설치 방식이면 PyPI 미러가 반드시 필요하다. 그런데 이 결정이 문서 맨 뒤에 나오니까, 처음 읽을 때 `이걸 먼저 결정했어야 하는 거 아닌가?` 싶어서 한참 헷갈렸다.
+이 단계가 Configure Inventory 뒤에 나오는데, 논리적으로 생각하면 **Kubespray를 어떻게 실행할지(컨테이너 이미지 vs 수동 설치)**를 먼저 결정해야 준비할 아티팩트가 달라질 수 있다. 그런데 이 결정이 문서 맨 뒤에 나오니까, 처음 읽을 때 `이걸 먼저 결정했어야 하는 거 아닌가?` 싶어서 한참 헷갈렸다.
 
 ### 이론적으로 보면
 
-Kubespray를 어떻게 실행할지(컨테이너 이미지 vs 수동 설치)에 따라, 준비해야 할 아티팩트가 달라질 수 있다. 컨테이너 이미지 방식을 쓸 거면 아티팩트에 Kubespray 이미지를 추가해야 하고, PyPI 미러는 admin용으로는 불필요할 수 있다. *반대로* 수동 설치 방식을 쓸 거면 Kubespray 이미지는 필요 없지만, PyPI 미러는 필수다. 이 결정이 아티팩트 준비보다 앞에 와야 논리적으로 자연스러운데, 문서에서는 맨 뒤에 나온다.
+컨테이너 이미지 방식을 쓸 거면 아티팩트에 Kubespray 이미지를 추가해야 하고, PyPI 미러는 admin용으로는 불필요할 수 있다. *반대로* 수동 설치 방식을 쓸 거면 Kubespray 이미지는 필요 없지만, PyPI 미러는 필수다. 즉 이 결정이 아티팩트 준비보다 앞에 와야 논리적으로 자연스러운데, 문서에서는 맨 뒤에 나온다.
 
 ### 실무적으로 보면
 
@@ -79,9 +79,44 @@ Kubespray를 어떻게 실행할지(컨테이너 이미지 vs 수동 설치)에 
 - `false`(기본값)이면 `pypi-mirror.sh`로 PyPI 미러를 준비하고,
 - `true`이면 `build-ansible-container.sh`로 Ansible 컨테이너 이미지를 빌드한다.
 
-결정에 따라 준비하는 아티팩트가 달라지긴 하지만, 그 분기를 도구가 알아서 처리해 주는 구조다. 실제 워크플로우에서는 설정 파일에서 이 결정을 먼저 한 뒤 아티팩트를 준비하는 흐름이므로, 공식 문서의 순서를 두고 그렇게까지 고민할 필요가 없었던 셈이다(kubespray-offline의 상세 구조는 이후 시리즈에서 다룬다). 
+<br>
 
-공식 문서가 Install Kubespray Python Packages를 뒤쪽에 배치한 것도 결국, **공식 문서는 개념과 설정 방법을 설명하는 순서**이고, 실제 아티팩트 준비는 도구가 결정에 맞게 처리한다는 맥락으로 이해하면 된다.
+*다만* 여기서 주의할 점은, kubespray-offline이 빌드하는 이미지(`kubespray-offline-ansible`)는 공식 문서에서 말하는 Kubespray 컨테이너 이미지(`quay.io/kubespray/kubespray`)와 **다르다**는 것이다. `config.sh`의 주석도 "Run **ansible** in container?"이지, "Run kubespray in container?"가 아니다.
+
+```bash
+# config.sh
+ansible_in_container=${ansible_in_container:-false}  # Run ansible in container?
+```
+
+`build-ansible-container.sh`가 빌드하는 이미지의 Dockerfile을 간단히 살펴 보면 아래와 같다.
+
+```dockerfile
+# ansible-container/Dockerfile (축약)
+FROM python:3.8-slim
+RUN apt install -y openssh-client sshpass
+COPY requirements.txt /root/
+RUN pip install -r /root/requirements.txt   # Ansible, Jinja2, netaddr 등
+```
+
+`python:3.8-slim` 기반에 Kubespray의 `requirements.txt`만 설치한 경량 이미지다. Kubespray 코드 자체는 포함되어 있지 않고, 실행 시 호스트의 Kubespray 디렉토리를 마운트해서 사용한다. 
+
+<br>
+
+결국 정리하면, 아래와 같이 비교해 볼 수 있다.
+
+| | 공식 문서의 컨테이너 이미지 | kubespray-offline의 컨테이너 이미지 |
+|---|---|---|
+| 이미지 | `quay.io/kubespray/kubespray` | `kubespray-offline-ansible` (자체 빌드) |
+| 내용물 | Kubespray 코드 + Python 패키지 전부 | Python + Ansible 패키지만 |
+| 목적 | Kubespray 실행 환경 통째로 제공 | Ansible 실행에 필요한 Python 의존성 해결 |
+
+둘 다 "컨테이너로 Python 패키지 설치 문제를 우회한다"는 목적은 같지만, 이미지 자체가 다르다.
+
+<br>
+
+*그럼에도 불구하고* 핵심은, 결정에 따라 준비하는 아티팩트가 달라지긴 하지만, **그 분기를 도구가 알아서 처리해 주는 구조**라는 것이다. 실제 워크플로우에서는 설정 파일에서 이 결정을 먼저 한 뒤 아티팩트를 준비하는 흐름이므로, 공식 문서의 순서를 두고 그렇게까지 고민할 필요가 없었던 셈이다(kubespray-offline의 상세 구조는 이후 시리즈에서 다룬다). 
+
+공식 문서가 Install Kubespray Python Packages를 뒤쪽에 배치한 것도 결국, **공식 문서는 개념과 설정 방법을 설명하는 순서**이고, 실제 아티팩트 준비는 도구가 결정에 맞게 처리한다는 맥락으로 이해하면 되지 않을까 싶다.
 
 > 다만, "PyPI 패키지를 다 받아놓는 게 맞는가?"라는 별도의 질문은 남아 있는데, 이건 뒤의 [Python 패키지 (Optional)](#python-패키지-optional) 섹션에서 다룬다.
 
@@ -416,9 +451,7 @@ Kubespray가 공식 컨테이너 이미지(`quay.io/kubespray/kubespray`)를 제
 
 ## "결정"이 영향을 주는 범위
 
-앞서 [공식 문서 읽기 전에](#공식-문서-읽기-전에)에서 정리한 핵심을 다시 한 번 짚어보면:
-
-앞서 [공식 문서를 읽기 전에](#install-kubespray-python-packages의-순서)에서 고민했듯이, 이 결정에 따라 준비하는 아티팩트가 달라지긴 한다. 하지만 kubespray-offline은 `ansible_in_container` 설정으로 이를 알아서 분기 처리한다. 실제로 신경 써야 할 것은 **admin 노드에서 어떤 방식으로 실행할지**뿐이다.
+앞서 [공식 문서를 읽기 전에](#install-kubespray-python-packages의-순서)에서 고민했듯이, 이 결정에 따라 준비하는 아티팩트가 달라지긴 한다. 하지만 kubespray-offline은 `ansible_in_container` 설정으로 이를 알아서 분기 처리한다(다만, kubespray-offline이 빌드하는 이미지는 공식 Kubespray 이미지가 아니라 자체 Ansible 컨테이너라는 점은 [앞서 정리한 대로](#실무적으로-보면)다). 실제로 신경 써야 할 것은 **admin 노드에서 어떤 방식으로 실행할지**뿐이다.
 
 <br>
 
