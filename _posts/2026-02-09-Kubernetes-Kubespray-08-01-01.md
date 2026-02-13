@@ -135,6 +135,8 @@ netfilter를 제어하는 도구가 **iptables**(레거시)와 **nftables**(후�
        └ "nat 테이블에 MASQUERADE 룰을 등록해라"
 ```
 
+iptables나 nftables로 추가한 룰은 커널 메모리에만 존재한다. 디스크에 자동 저장되지 않으므로, **재부팅하면 수동으로 입력한 정책이 모두 사라진다.** 영구적으로 유지하려면 별도로 룰을 파일에 저장하고, 부팅 시 로드하도록 설정해야 한다.
+
 | 항목 | iptables | nftables |
 |------|----------|----------|
 | 시기 | 2001년~ (레거시) | 2014년~ (후속) |
@@ -665,6 +667,127 @@ root@week06-week06-k8s-node1:~# ip route get 8.8.8.8
 8.8.8.8 via 192.168.10.10 dev enp0s9 src 192.168.10.11 uid 0
     cache
 ```
+
+### 재부팅 후에도 정책 유지
+
+앞에서 말했듯이, iptables나 nftables로 추가한 룰은 커널 메모리에만 존재하기 때문에 별도의 설정 없이는 재부팅 시 수동으로 입력한 정책이 모두 날아간다. 실제로 재부팅해 보면 확인할 수 있다.
+
+```bash
+# 재부팅 전: 룰이 존재
+root@admin:~# nft list ruleset
+table ip nat {
+	chain postrouting {
+		type nat hook postrouting priority srcnat; policy accept;
+		oifname "enp0s8" masquerade
+	}
+}
+
+root@admin:~# reboot
+```
+
+재부팅 후 VM 상태를 확인하고 다시 접속한다.
+
+```bash
+$ vagrant status
+Current machine states:
+
+week06-node1              running (virtualbox)
+week06-node2              running (virtualbox)
+week06-admin              running (virtualbox)
+
+$ vagrant ssh week06-admin
+```
+
+```bash
+# 재부팅 후: 룰이 모두 사라짐
+root@admin:~# nft list ruleset
+root@admin:~#
+```
+
+> **참고**: 재부팅 전에 `nft list ruleset`에 보이던 `table inet netavark`(Podman 네트워크 룰)도 함께 사라진다. netavark 룰은 Podman이 컨테이너 실행 시 자동으로 생성·관리하는 것이므로, 컨테이너가 다시 시작되면 자동으로 재생성된다. 수동으로 영구 저장할 필요는 없다.
+
+이를 영구적으로 유지하려면 현재 설정을 파일로 저장하고, 시스템 부팅 시 nftables 서비스가 해당 파일을 로드하도록 설정해야 한다.
+
+먼저 MASQUERADE 룰을 다시 추가하고, 현재 룰셋을 파일로 저장한다.
+
+```bash
+# MASQUERADE 룰 재추가
+root@admin:~# nft add table ip nat
+root@admin:~# nft add chain ip nat postrouting { type nat hook postrouting priority srcnat \; }
+root@admin:~# nft add rule ip nat postrouting oifname "enp0s8" masquerade
+
+# 룰 확인
+root@admin:~# nft list ruleset
+table ip nat {
+	chain postrouting {
+		type nat hook postrouting priority srcnat; policy accept;
+		oifname "enp0s8" masquerade
+	}
+}
+
+# 현재 nftables 룰 저장
+root@admin:~# nft list ruleset > /etc/sysconfig/nftables.conf
+```
+
+다음으로, 부팅 시 자동으로 저장된 룰셋을 로드하도록 nftables 서비스를 활성화한다.
+
+```bash
+# nftables 서비스 상태 확인
+root@admin:~# systemctl is-active nftables.service
+inactive
+
+# 부팅 시 자동 시작 + 즉시 시작
+root@admin:~# systemctl enable --now nftables
+Created symlink '/etc/systemd/system/multi-user.target.wants/nftables.service' → '/usr/lib/systemd/system/nftables.service'.
+
+# 서비스 활성화 확인
+root@admin:~# systemctl is-active nftables.service
+active
+```
+
+nftables 서비스의 유닛 파일을 보면, 시작 시 `/etc/sysconfig/nftables.conf` 파일을 로드하는 것을 확인할 수 있다.
+
+```bash
+root@admin:~# cat /usr/lib/systemd/system/nftables.service
+[Unit]
+Description=Netfilter Tables
+Documentation=man:nft(8)
+Wants=network-pre.target
+Before=network-pre.target
+
+[Service]
+Type=oneshot
+ProtectSystem=full
+ProtectHome=true
+ExecStart=/sbin/nft -f /etc/sysconfig/nftables.conf
+ExecReload=/sbin/nft 'flush ruleset; include "/etc/sysconfig/nftables.conf";'
+ExecStop=/sbin/nft flush ruleset
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+이제 재부팅 후에도 정책이 유지되는지 확인한다.
+
+```bash
+root@admin:~# reboot
+```
+
+```bash
+$ vagrant ssh week06-admin
+
+# 재부팅 후: 정책 유지 확인
+root@admin:~# nft list ruleset
+table ip nat {
+	chain postrouting {
+		type nat hook postrouting priority srcnat; policy accept;
+		oifname "enp0s8" masquerade
+	}
+}
+```
+
+재부팅 후에도 MASQUERADE 룰이 그대로 유지되는 것을 확인할 수 있다.
 
 <br>
 
