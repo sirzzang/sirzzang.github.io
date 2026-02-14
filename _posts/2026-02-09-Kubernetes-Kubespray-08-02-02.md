@@ -15,6 +15,7 @@ tags:
   - Ansible
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-6
+hidden: true
 
 ---
 
@@ -273,6 +274,7 @@ dnsmasq_image_tag: '2.72'
 - `roles/download/defaults/main/`에 이 `foo_*` 변수들의 기본값이 정의되어 있고
 - 오프라인에서는 이걸 내부 서버를 가리키도록 오버라이드하는 구조
 
+{% raw %}
 ```
 roles/download/defaults/main/
   └── foo_download_url: "https://dl.k8s.io/..."  ← 기본값 (온라인)
@@ -281,6 +283,7 @@ roles/download/defaults/main/
                             ▼
       foo_download_url: "{{ files_repo }}/..."    ← 오프라인 값 (내부 서버)
 ```
+{% endraw %}
 
 <br>
 

@@ -4,6 +4,7 @@ excerpt: "ffmpeg의 영상 처리 파이프라인과 멀티스레드 동작 방�
 categories:
   - Dev
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

@@ -19,6 +19,7 @@ tags:
   - nginx
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-6
+hidden: true
 
 ---
 

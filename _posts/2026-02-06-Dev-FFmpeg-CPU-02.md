@@ -4,6 +4,7 @@ excerpt: "cgroup이 프로세스 그룹의 CPU를 어떻게 제한하는지, 그
 categories:
   - Dev
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

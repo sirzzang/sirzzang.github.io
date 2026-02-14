@@ -17,6 +17,7 @@ tags:
   - Container-Registry
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-6
+hidden: true
 
 ---
 
@@ -309,9 +310,10 @@ files_repo: "http://192.168.10.10/repo"
 
 공식 문서가 제공하는 변수 설정 예시다. 레지스트리 관련 변수, 바이너리 다운로드 URL, OS별 레포 설정이 포함되어 있다. 
 
-잘 살펴 보면, 패턴이 보인다. **최상위 변수(`registry_host`, `files_repo`, `yum_repo` 등)만 내부 서버로 바꿔주면**, 나머지 세부 변수들은 `{{ }}` 템플릿으로 자동 연동된다. 오프라인 환경에서 실제로 건드려야 할 변수의 수가 생각보다 적은 이유다.
+잘 살펴 보면, 패턴이 보인다. **최상위 변수(`registry_host`, `files_repo`, `yum_repo` 등)만 내부 서버로 바꿔주면**, 나머지 세부 변수들은 {% raw %}`{{ }}`{% endraw %} 템플릿으로 자동 연동된다. 오프라인 환경에서 실제로 건드려야 할 변수의 수가 생각보다 적은 이유다.
 
 
+{% raw %}
 ```yaml
 # Registry overrides
 kube_image_repo: "{{ registry_host }}"
@@ -370,6 +372,7 @@ containerd_ubuntu_repo_base_url: "{{ ubuntu_repo }}/containerd"
 containerd_ubuntu_repo_gpgkey: "{{ ubuntu_repo }}/containerd/gpg"
 containerd_ubuntu_repo_repokey: 'YOURREPOKEY'
 ```
+{% endraw %}
 
 
 ## Access Control
@@ -380,6 +383,7 @@ containerd_ubuntu_repo_repokey: 'YOURREPOKEY'
 
 내부 HTTP 파일 서버에 Basic Auth가 걸려 있으면, URL에 `username:password@`를 포함시킨다.
 
+{% raw %}
 ```yaml
 files_repo_host: example.com
 files_repo_path: /repo
@@ -390,6 +394,7 @@ files_repo_pass: !vault |
           ...
 files_repo: "https://{{ files_repo_user ~ ':' ~ files_repo_pass ~ '@' ~ files_repo_host ~ files_repo_path }}"
 ```
+{% endraw %}
 
 `@`, `:`, `#` 같은 특수문자가 비밀번호에 포함되어 있으면 URL이 깨지므로, `%40`, `%3A` 등으로 URL-encode 해야 한다.
 
@@ -397,6 +402,7 @@ files_repo: "https://{{ files_repo_user ~ ':' ~ files_repo_pass ~ '@' ~ files_re
 
 프라이빗 레지스트리에 인증이 걸려 있으면, containerd의 registry auth를 설정한다.
 
+{% raw %}
 ```yaml
 registry_pass: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -408,6 +414,7 @@ containerd_registry_auth:
     username: "{{ registry_user }}"
     password: "{{ registry_pass }}"
 ```
+{% endraw %}
 
 ### 보안 주의사항
 

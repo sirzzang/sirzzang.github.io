@@ -4,6 +4,7 @@ excerpt: "CPU가 시간을 나눠쓰는 자원이라는 것, 그리고 그 시�
 categories:
   - Dev
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

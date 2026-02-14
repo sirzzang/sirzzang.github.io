@@ -17,6 +17,7 @@ tags:
   - Container-Registry
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-6
+hidden: true
 
 ---
 
@@ -140,18 +141,22 @@ grep 'download_url:' ${REPO_ROOT_DIR}/${DOWNLOAD_YML} \
 
 `download.yml`에서 `download_url:`이 포함된 줄을 찾아, URL 부분만 추출한다. 예를 들어:
 
+{% raw %}
 ```yaml
 # download.yml의 원본
 kubelet_download_url: "{{ dl_k8s_io_url }}/release/v{{ kube_version }}/bin/linux/{{ image_arch }}/kubelet"
 ```
+{% endraw %}
 
 이 줄에서 `kubelet_download_url: ` 부분과 따옴표를 제거하면:
 
+{% raw %}
 ```
 {{ dl_k8s_io_url }}/release/v{{ kube_version }}/bin/linux/{{ image_arch }}/kubelet
 ```
+{% endraw %}
 
-이것이 `files.list.template`에 들어간다. 아직 Jinja2 변수(`{{ }}`)가 치환되지 않은 템플릿 상태다.
+이것이 `files.list.template`에 들어간다. 아직 Jinja2 변수({% raw %}`{{ }}`{% endraw %})가 치환되지 않은 템플릿 상태다.
 
 <br>
 
@@ -169,12 +174,14 @@ sed -n '/^downloads:/,/download_defaults:/p' ${REPO_ROOT_DIR}/${DOWNLOAD_YML} \
 
 **kube-* 이미지 수동 추가**
 
+{% raw %}
 ```bash
 KUBE_IMAGES="kube-apiserver kube-controller-manager kube-scheduler kube-proxy"
 for i in $KUBE_IMAGES; do
     echo "{{ kube_image_repo }}/$i:v{{ kube_version }}" >> ${TEMP_DIR}/images.list.template
 done
 ```
+{% endraw %}
 
 주석에 이유가 명시되어 있다. `kube-apiserver`, `kube-controller-manager`, `kube-scheduler`, `kube-proxy`는 kubeadm이 직접 pull하는 이미지라서, `download.yml`의 `downloads:` 블록에 정의되어 있지 않다. 그래서 별도로 추가해야 한다.
 
@@ -194,6 +201,7 @@ done
 
 ### generate_list.yml 플레이북
 
+{% raw %}
 ```yaml
 ---
 - name: Collect container images for offline deployment
@@ -216,6 +224,7 @@ done
         - files
         - images
 ```
+{% endraw %}
 
 `when: false`로 role을 "실행하지 않고 변수만 로드"하는 패턴이 핵심이다. Ansible에서 role을 선언하면 `defaults/main.yml`의 변수가 자동으로 로드된다. `when: false`는 role의 **task**만 건너뛰고, 변수 로딩은 그대로 수행된다. 이렇게 로드된 변수(`kube_version`, `etcd_version`, `calico_version` 등)로 `.list.template`의 Jinja2 변수를 치환해서 `.list` 파일을 생성한다.
 
@@ -704,7 +713,7 @@ decide_relative_dir() {
 }
 ```
 
-예를 들어 `https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubelet`이라는 URL은 `kubernetes/v1.31.0/kubelet`로 정리된다. 이렇게 하면 `files_repo` 변수에 맞춘 URL 경로 체계(`{{ files_repo }}/kubernetes/v{{ kube_version }}/kubelet`)와 정확히 대응한다. `offline.yml`에서 정의하는 다운로드 URL 패턴이 이 경로 체계를 전제로 되어 있기 때문이다.
+예를 들어 `https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubelet`이라는 URL은 `kubernetes/v1.31.0/kubelet`로 정리된다. 이렇게 하면 `files_repo` 변수에 맞춘 URL 경로 체계({% raw %}`{{ files_repo }}/kubernetes/v{{ kube_version }}/kubelet`{% endraw %})와 정확히 대응한다. `offline.yml`에서 정의하는 다운로드 URL 패턴이 이 경로 체계를 전제로 되어 있기 때문이다.
 
 **이미지 다운로드 — 개별 tar.gz**
 
@@ -743,6 +752,7 @@ get_image() {
 
 kubespray-offline은 `offline.yml` 샘플 파일을 제공한다.
 
+{% raw %}
 ```yaml
 http_server: "http://YOUR_HOST"
 registry_host: "YOUR_HOST:35000"
@@ -761,8 +771,9 @@ kubeadm_download_url: "{{ files_repo }}/kubernetes/v{{ kube_version }}/kubeadm"
 # ...
 runc_download_url: "{{ files_repo }}/runc/v{{ runc_version }}/runc.{{ image_arch }}"
 ```
+{% endraw %}
 
-[8.2.1]({% post_url 2026-02-09-Kubernetes-Kubespray-08-02-01 %})에서 정리한 공식 문서의 변수 설정 예시와 거의 동일하다. 하나 주의할 점은 **`runc_download_url`의 경로에 `runc_version`이 포함**되어 있다는 것이다. 공식 문서의 예시(`{{ files_repo }}/runc.{{ image_arch }}`)와 다르며, kubespray-offline의 `decide_relative_dir`이 runc 파일을 `runc/v{version}/` 경로 아래에 배치하므로 이에 맞춰야 한다.
+[8.2.1]({% post_url 2026-02-09-Kubernetes-Kubespray-08-02-01 %})에서 정리한 공식 문서의 변수 설정 예시와 거의 동일하다. 하나 주의할 점은 **`runc_download_url`의 경로에 `runc_version`이 포함**되어 있다는 것이다. 공식 문서의 예시({% raw %}`{{ files_repo }}/runc.{{ image_arch }}`{% endraw %})와 다르며, kubespray-offline의 `decide_relative_dir`이 runc 파일을 `runc/v{version}/` 경로 아래에 배치하므로 이에 맞춰야 한다.
 
 이 파일을 inventory의 `group_vars/all/offline.yml`에 복사하고, `YOUR_HOST`를 실제 IP로 바꾸면 된다.
 
