@@ -1,6 +1,6 @@
 ---
-title:  "[Kubernetes] Kubernetes Deployment 재배포 실패 원인과 해결 - 3. Deployment 업데이트 전략"
-excerpt: Kubernetes에서의 Deployment 업데이트 전략 대해 알아보자
+title:  "[Kubernetes] Kubernetes Deployment 재배포 실패 원인과 해결 - 3. Deadlock"
+excerpt: 보다 보니, 이거 그냥 Deadlock이 아니던가!
 categories:
   - Dev
 toc: true
@@ -16,176 +16,176 @@ tags:
 
 
 
-~~도대체 거의 1년 가까이 된 내용을 왜 이제서야 작성하게 되었는지 반성하며~~ 회사에서 Deployment를 재배포하다가 쿠버네티스의 스케줄링과 Deployment 업데이트 전략에 대해 공부하게 된 내용을 작성한다. [스케줄링 프로세스에 이어서](https://sirzzang.github.io/dev/Dev-Kubernetes-Deployment-Failure-2/)
+> **TL;DR**
+>
+> 이 Deployment 재배포 실패 상황은 OS의 Deadlock과 닮았다. 기존 파드는 새 파드가 Ready 되어야 종료되고, 새 파드는 기존 파드가 종료되어야 GPU를 확보할 수 있다. Mutual Exclusion, Hold and Wait, No Preemption, Circular Wait -- Deadlock의 4가지 조건에 비유해 볼 수 있으며, 해결 방법(리소스 늘리기, 순서 바꾸기)도 유사하다.
+
+<br>
+
+~~도대체 거의 1년 가까이 된 내용을 왜 이제서야 작성하게 되었는지 반성하며~~ 회사에서 Deployment를 재배포하다가 쿠버네티스의 스케줄링과 Deployment 업데이트 전략에 대해 공부하게 된 내용을 작성한다. [분석 및 해결에 이어서]({% post_url 2025-11-05-Dev-Kubernetes-Deployment-Failure-2 %})
 
 
 
 <br>
 
-# Deployment 업데이트
+# 여담
+
+공부하고 분석하다 보니 드는 생각인데, 이 상황은 마치 내가 goroutine을 사용하다 겪는 Deadlock 상황 같기도 하다. 정말 자주 겪어서 그런가, 바로 생각이 나 버렸다.
+
+> *참고*: 여담의 여담
+>
+> 사실 go 언어에서 goroutine 쓰면서 Deadlock 상황을 자주 마주하는 건, 내 문제기도 하다. 다른 언어들(Python의 threading, Java의 Thread 등)로도 동시성 프로그래밍을 하다 보면 Deadlock을 겪을 수 있지만, 내 경우에는 go 언어를 주력으로 사용하면서 goroutine을 유독 자주 쓰게 되었다. 다른 언어에 비해 동시성 프로그래밍에 대한 접근성이 좋다고 느껴지기 때문이다.
+>
+> - `go` 키워드만 붙이면 되니까, 뭔가 이것 저것 임포트해서 불편하게 쓰지 않아도 되고,
+> - go 런타임에서 관리되고, OS 스레드를 spawning하는 것처럼 비용이 크지도 않다고 하며,
+> - 이런 이유에서인지 go의 장점 중 하나로 동시성 프로그래밍에 좋다는 게 언급되곤 하니,
+> - 잘 모르면서도 goroutine을 잘 써야 go를 잘 쓰는 것 같다는 느낌을 받아, 
+>
+> 불필요한 상황에서도 goroutine을 써서 개발해 보려고 했던 적이 많다. 다행인지 불행인지, go 런타임이 Deadlock을 감지해서 fatal 에러를 던져줘 버리는 덕분(?)에, 남발해서 쓸 때마다 교훈을 얻었다. 그 덕에 지금은 그 어려움을 뼈저리게 느껴, 남발하지 않으려고 노력하기도 하지만, 이렇게 전혀 다른 분야(?)에서 인사이트를 얻게 되기도 하더라.
+
+<br>
+
+내 Deployment에 설정된 배포 전략을,
 
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: rolling-update-deploy
-spec:
-  replicas: 2
-  strategy: # 파드 배포 전략
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
-      maxSurge: 1
+replicas: 1
+maxSurge: 1          # 새 파드 먼저 생성
+maxUnavailable: 0    # 기존 파드는 새 파드 Ready 후 삭제
 ```
 
-Kubernetes는 Deployment 리소스 타입에 대해 파드 배포 전략(`strategy`)으로 아래의 2가지를 지원한다. 어떤 전략을 선택하든, 배포가 끝나면, `replicas`에 명시된 수만큼의 파드가 떠 있을 것이다.
+goroutine을 이용해 비유해 보자면, 딱 이런 상황이 아닐까?
 
-- `Recreate`: 현재 실행 중인 모든 파드를 종료하고, 새로운 파드를 생성
-  - 서비스 중단 발생
-- `RollingUpdate`: 파드를 점진적으로 교체
-  - 배포 과정에서 새로운 버전의 파드가 생성되고, 기존 파드가 종료됨으로써 무중단 업데이트 가능
-    - 새로운 버전의 파드 생성 및 기존 파드의 종료를 설정값으로 조정
-  - 기본값
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	gpu := make(chan int, 1)
+	done := make(chan bool)
+	
+	// 기존 파드 (goroutine) - GPU를 계속 점유
+	go func() {
+		gpuID := 1
+		fmt.Printf("기존 파드: GPU %d 사용 중\n", gpuID)
+		
+		// 새 파드가 Ready 될 때까지 GPU 계속 보유
+		<-done
+		fmt.Println("기존 파드: 종료, GPU 반환")
+		gpu <- gpuID
+	}()
+	
+	// 새 파드 (goroutine)
+	go func() {
+		fmt.Println("새 파드: GPU 기다리는 중...")
+		gpuID := <-gpu  // GPU 받을 때까지 블로킹
+		fmt.Printf("새 파드: GPU %d 획득, Ready!\n", gpuID)
+		done <- true
+	}()
+	
+	// Deployment Controller
+	fmt.Println("Controller: 새 파드 Ready 대기")
+	<-done
+	fmt.Println("Controller: 배포 완료")
+}
+```
+
+<br>
+
+그럼 아래와 같은 출력을 보게 될 것이다.
+
+```bash
+ontroller: 새 파드 Ready 대기
+기존 파드: GPU 1 사용 중
+새 파드: GPU 기다리는 중...
+fatal error: all goroutines are asleep - deadlock!
+
+goroutine 1 [chan receive]:
+```
+
+<br>
+
+생각해 보면, Deadlock 상황과 참 닮았다. 전통적인 OS Deadlock 상황과 완전히 일치하지는 않지만, 그래도 Deadlock이 발생하는 조건을 아래와 같이 비유해서 생각해 볼 수 있다.
+
+1. manual exclusion: 자원은 한 번에 하나의 프로세스만 사용할 수 있음
+   - GPU는 한 번에 하나의 파드에서만 사용할 수 있음
+
+2. hold and wait: 하나의 프로세스가 자원을 보유하면서, 동시에 추가 자원을 요청하며 대기하는 상황
+	- 엄밀히 말해서 파드 관점에서는 충족한다고 볼 수 없음
+		- 기존 파드: GPU를 보유하면서, 추가 자원을 요청하는 것은 아님
+		- 새 파드: GPU를 기다리지만, 아무 자원도 보유하지 않음
+	- 다만, 조금 넓은 관점에서, Deployment 컨트롤러 입장에서 보면 성립한다고 봐줄(?) 수도 있음
+		- Hold: 기존 파드를 유지
+		- Wait: 새 파드가 Ready되기를 기다림
+   - 기존 파드: GPU 보유
+   - 새 파드: GPU 대기
+
+3. no preemption: 자원을 강제로 빼앗을 수 없음
+   - 두 파드가 우선순위도 같아서, 선점할 수도 없음
+
+4. circular wait: 프로세스들이 순환 구조로 서로의 자원을 기다림
+   ```bash
+   기존 파드 → (새 파드 Ready 대기) → 새 파드
+   새 파드 → (GPU 대기) → 기존 파드
+   ↑                                  ↓
+   ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
+   ```
+
+   - 기존 파드: 새 파드가 Ready 상태가 되어야 종료될 수 있음
+   - 새 파드: 기존 파드가 종료되어야 GPU를 받아 생성될 수 있음
 
 
 
 <br>
 
-## RollingUpdate
+해결 방법 역시 비슷한 면이 있다.
 
-RollingUpdate 전략은 점진적인 파드 업데이트를 위해 아래와 같은 두 가지 값을 설정할 수 있게 한다.
-
-- `maxSurge`: 업데이트 시 동시에 새로 생성(*surge라는 단어를 참 센스 있게 사용한 느낌이다*)할 수 있는 파드 수
-
-  ```yaml
-  maxSurge: 3          # 정확히 3개
-  maxSurge: 30%        # 30%(소수점일 경우 올림)
-  maxSurge: "30%"      # 문자열로도 가능
+- goroutine 채널 버퍼 늘리기 = GPU 늘리기
+  ```go
+  gpu := make(chan int, 2) // gpu 2개로 늘리기
   ```
 
-  - 숫자나 퍼센티지 사용 가능
-  - 퍼센티지일 경우, `replicas` 값에 곱하고, 곱한 결과가 소수점일 경우 올림
-  - 퍼센티지 계산 한 최종값이 `replicas` 값을 초과하는 경우, `replicas` 값 적용
-  - 기본값 25%
-
-- `maxUnavailable`: 업데이트 시, 동시에 종료할 수 있는 파드 수
-
-  ```yaml
-  maxUnavailable: 3          # 정확히 3개
-  maxUnavailable: 30%        # 30% (소수점일 경우)
-  maxUnavailable: "30%"      # 문자열로도 가능
+- 순서 바꾸기
+  ```go
+  gpu <- 1
+  go func() {
+  	<-gpu // 먼저 뻬기 = 기존 파드 먼저 내리기
+  	gpu <- 2 // 다시 넣기 = 새 파드 배치하기	
+  }
   ```
 
-  - 숫자나 퍼센티지 사용 가능
-  - 퍼센티지일 경우, `replicas` 값에 곱하고, 곱한 결과가 소수점일 경우 내림
-  - 퍼센티지 계산 한 최종값이 `replicas` 값을 초과하는 경우, `replicas` 값 적용
-  - 기본값 25%
+  
+
+  
 
 <br>
 
-그렇다면, 해당 값들의 설정에 따라 Deployment의 배포는 어떻게 동작할까.
+참으로 얄궂은 상황이 아닐 수 없다. 그러나 다행히도(?) 스케줄링이 실패했다는 에러 메시지를 받는 경우가 전부 다 goroutine Deadlock이 발생해 에러 메시지를 받는 경우와 동일한 상황인 것은 아니다. 사고 실험을 해 보면, 아래와 같은 경우에도 스케줄링이 불가하다는 에러 메시지를 받는 게 가능하다.
 
-|                        | maxSurge = 0                                            | maxSurge > 0                                                |
-| ---------------------- | ------------------------------------------------------- | ----------------------------------------------------------- |
-| **maxUnavailable = 0** | 1. 불가                                                 | 2. 새 파드 먼저 생성하고, 기존 파드는 새 파드 Ready 후 종료 |
-| **maxUnavailable > 0** | 3. 기존 파드 먼저 종료하고, 리소스 확보 후 새 파드 생성 | 4. 2, 3의 경우가 모두 가능하고, 상황에 따라 선택됨          |
+- 새로 파드를 생성하는 데 배치할 노드가 없는 상황: 예컨대, 내 상황에서 GPU가 없는 노드를 `nodeSelector`로 걸어 놓고 새로 생성하는 상황
+- 스케일 업하는데 배치할 노드가 없는 상황: 예컨대, 내 상황에서 `replicas`를 2로 늘리는 상황
 
-1. 애초에 불가능한 경우다. 이럴 거면 배포를 안 하는 거랑 다름이 없으니 굳이 케이스를 열어 둘 필요가 없다.
-2. 항상 새 파드를 먼저 생성하고, 종료할 수 있는 파드가 없기 때문에, 파드 수는 `replicas` 값 이하로 내려가지 않는다.
-3. 항상 기존 파드를 먼저 종료하기 때문에, 파드 수는 `replicas` 값 이상으로 올라가지 않는다.
-4. 배포 과정에서 이론 상  `[replicas - maxUnavailable, replicas + maxSurge]` 범위 내의 파드 수가 존재할 수 있다.
-   - 최대 파드 수 = `replicas + maxSurge` → 기존 파드 수 유지하면서 최대로 생성할 수 있는 파드 수를 더함
-   - 최소 파드 수 = `replicas - maxUnavailable` → 기존 파드 수에서 최대로 종료할 수 있는 파드 수를 뺌
-   - 이론 상, 최소 파드 수가 0이 되는 순간이 가능하므로, 이 경우 서비스 다운타임이 올 수 있음
-
-> *참고*: 이론 상 최소 파드 수가 0이 된다면?
->
-> - 이 경우에는 애초에 다운타임이 있기 때문에  `Recreate`를 선택하는 게 낫지 않나 싶을 수 있으나, 그런 것만은 아님. 그건 이론상 가능한 경우로 항상 발생하는 것은 아니기 때문에
-> - 다만, 다운타임이 있어도 되는 서비스라면, 이런 경우가 올 수 있더라도 크게 걱정하지 않아도 됨. 사실 이 경우는 그런데, 차라리 `Recreate`를 선택하는 게 오히려 관리 상 더 편할 수 있음
-> - 애초에 `replicas` 값을 설정하고 Deployment로 배포한다는 거 자체가 무중단 운영을 전제로 한 건데, 이 상태에서 이론적으로 최소 파드 수가 0이 될 수 있게 Rolling Update Strategy를 설계하면, 그게 이상한 거 아닐까
-
-
-
-> *참고*: 설정 기본값에 대한 생각
->
-> 두 항목 모두 기본값이 25%인데, 이는 확장성을 고려했기 때문이라고 한다. 당장 생각해 봐도 알 수 있다. `replicas` 값이 적으면 상관 없겠지만, 만약 100일 때 `maxSurge`가 1이라면, 항상 1개씩만 새로 생성될 테니, 한 세월이 걸릴 것이다.
->
-> 올림과 내림을 적용하는 전략이 다른 것은, 아무래도 보수적으로 접근하기 위함이 아닐까. `maxSurge`를 내리고 `maxUnavailable`을 올리면, 디폴트 상황에 0과 1이 적용되어 다운타임이 발생할 수밖에 없으니까.
-
+<br>
+그리고 go runtime과 Kubernetes scheduler가 이런 상황을 처리하는 방식도 다르다.
+- go runtime: Deadlock을 감지하고 fatal error 발생
+- Kubernetes scheduler: 무한히 재시도하며 Pending 상태 유지
 
 
 <br>
 
-다양한 조합에 따른 배포 상황을 알아 보자.
+# 교훈
 
-```yaml
-# 최대: 13개, 최소: 10개
-replicas: 10
-maxSurge: 25%        # 2.5 -> 3(올림) 생성 가능
-maxUnavailable: 0    # 중단 불가
-```
+이러나 저러나, Kubernetes든 goroutine이든 잘 모르고 쓰면 문제가 된다. 그리고, 어쩔 수 없지만, 이렇게 문제를 겪어야 배울 수 있다.
 
-```yaml
-# 최대: 13개, 최소: 8개
-replicas: 10
-maxSurge: 25%        # 2.5 -> 3(올림) 생성 가능
-maxUnavailable: 25%  # 2.5 -> 2(내림) 중단
-```
-
-```yaml
-# 최대 1개, 최소 0개 (순차 교체)
-replicas: 1
-maxSurge: 0          # 생성 불가
-maxUnavailable: 1    # 중단 가능
-```
-
-```yaml
-# 최대 2개, 최소 1개
-replicas: 1
-maxSurge: 1          # 생성 가능
-maxUnavailable: 0    # 중단 불가
-```
-
+> 이건 뭐 순환 참조도 아니고...
 
 <br>
 
+# 결론
 
-## 배포 전략
-
-언제나 그러하듯, 상황에 따라 적합한 배포 전략을 선택해야 한다.
-
-* `Recreate`는 무조건 다시 만드는 것이기 때문에, 다운타임이 존재할 수밖에 없음
-  * 다운타임이 중요하다면, 선택하면 안 됨
-  * 반대로, 다운타임이 크게 중요하지 않다면, 적용해 볼 수 있음
-    * 개발 환경, 테스트 환경
-    * 다운타임이 허용 가능한 내부 도구
-  * 또한, 이런 환경에는 적용하는 것을 고려해야 함
-    * 애초에 노드에 리소스 제약이 있어서, 해당 노드에서 여러 개의 파드를 띄울 수 없는 경우
-    * 상태를 엄밀하게 저장해야 해서, 여러 개의 파드가 떠서 다른 상태를 저장해 버리면 안 되는 경우
-
-* `RollingUpdate`는 잘 설계한다면 다운타임이 없음
-  * 다음과 같은 상황에 적합함
-    * 프로덕션 환경에서의 무중단 서비스로, 점진적 배포가 필요한 상황
-    * 로드 밸런서로 트래픽을 분산해야 하는 상황
-  * 그 외에, 이런 상황에서도 고려해볼 수 있음
-    * 리소스에 여유가 있는 상황
-    * 상태 저장이 필요 없는 파드
-
-> 어떤 것이 권장된다는 것은 없으나, 기본값이 `RollingUpdate`인 것도 그렇고, Kubernetes를 도입해야 하는 상황 자체가, 다운타임이 생기면 안되는 경우일 가능성이 높기 때문에, `RollingUpdate`를 선택하는 것이 좋지 않을까
-
-<br>
-
-## 기타
-
-Deployment 배포 전략 외에, 추가적으로 Deployment 배포 시 고려해 볼 수 있는 항목들이 있다. 있다는 걸 알아만 두자.
-
-- `minReadySeconds`: 파드 Ready 상태가 된 후 최소 대기 시간
-  - 새 파드가 Ready 상태가 된 후, 정말 안정적인지 확인하기 위함
-  - 파드가 CrashLoopBackOff 상태에 빠지는 것을 방지하기 위함
-- `progressDeadlineSeconds`: 배포 타임아웃
-  - 해당 시간 안에 배포하지 못하면 실패 처리
-  - 기본 600초
-- ...
-
+시리즈를 마무리하며 돌아보면, 이 문제의 핵심은 결국 **기본값을 맹신하지 말라**는 것이다. Kubernetes가 제공하는 기본값은 범용적인 상황에 맞춰져 있을 뿐, 내 환경의 리소스 제약까지 고려해 주지는 않는다. GPU가 1개뿐인 노드에 `replicas: 1`로 배포하면서 업데이트 전략을 명시하지 않은 건, goroutine에서 채널 크기를 고려하지 않고 코드를 짠 것과 다를 바 없었다. 도구를 쓸 때는 그 도구의 기본 동작을 이해하고, 내 상황에 맞게 설정해야 한다.
 
 

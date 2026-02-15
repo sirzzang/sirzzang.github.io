@@ -1,6 +1,6 @@
 ---
-title:  "[Kubernetes] Kubernetes Deployment 재배포 실패 원인과 해결 - 2. 스케줄링 프로세스"
-excerpt: Kubernetes 스케줄러의 파드 배치 프로세스와 선점 메커니즘에 대해 알아보자
+title:  "[Kubernetes] Kubernetes Deployment 재배포 실패 원인과 해결 - 2. 분석 및 해결"
+excerpt: Kubernetes에서의 Deployment 재배포는 왜 실패했는지 알아보자.
 categories:
   - Dev
 toc: true
@@ -14,242 +14,287 @@ tags:
   - scheduler
 ---
 
-~~도대체 거의 1년 가까이 된 내용을 왜 이제서야 작성하게 되었는지 반성하며~~ Deployment를 재배포하다가 쿠버네티스의 스케줄링과 Deployment 업데이트 전략에 대해 공부하게 된 내용을 작성한다. [스케줄링 기본 개념에 이어서](https://sirzzang.github.io/dev/Dev-Kubernetes-Deployment-Failure-1/)
+
+
+> **TL;DR**
+>
+> Deployment 매니페스트에 `strategy`를 명시하지 않아, 기본값 RollingUpdate(`maxSurge: 1`, `maxUnavailable: 0`)이 적용되었다. 이로 인해 새 파드를 먼저 생성하려 하지만, `nodeSelector`로 고정된 노드의 유일한 GPU를 기존 파드가 점유 중이라 스케줄링 실패. 같은 Deployment의 파드끼리는 우선순위가 동일하여 선점도 불가능하다. 해결: `maxSurge: 0`, `maxUnavailable: 1`로 설정하여 기존 파드를 먼저 종료하도록 변경.
+
+<br>
+
+~~도대체 거의 1년 가까이 된 내용을 왜 이제서야 작성하게 되었는지 반성하며~~ 회사에서 Deployment를 재배포하다가 쿠버네티스의 스케줄링과 Deployment 업데이트 전략에 대해 공부하게 된 내용을 작성한다. [Deployment 업데이트 전략에 이어서]({% post_url 2025-11-05-Dev-Kubernetes-Deployment-Failure-1 %})
 
 
 
 <br>
 
-# 프로세스
+# 분석
 
-쿠버네티스 스케줄러가 파드를 노드에 배치하는 프로세스에 대해 알아 보자. 조금 복잡하니, 두 단계로 나눠서 알아 보자.
-
-<br>
-
-## 메인 스케줄링 프로세스
-
-![kubernetes-scheduling]({{site.url}}/assets/images/kubernetes-scheduling.png){: width="600"}{: .align-center}
-- 스케줄링 대상 파드: Active Queue에 있는 파드
-- 전체 단계
-  1. PreFilter: 스케줄링 전 사전 처리 
-  2. Filter: 모든 노드 동시 체크 (병렬)
-     - 성공 시, PreScore 단계로 감
-     - 실패 시, PostFilter 단계로 감
-  3. PostFilter: 필터링 실패 시 실행 (여기서 선점 로직 동작)
-  4. PreScore: 스코어링 전 사전 처리
-  5. Score: 필터링 통과한 노드에 대해 점수 부여 (병렬)
-  6. NormalizeScore: 점수 정규화
-  7. Reserve: 선택된 노드에 리소스 예약
-    - 실제 바인딩 전에 리소스를 예약하여 다른 스케줄러 인스턴스와의 경쟁 방지
-    - Reserve 실패 시 다른 노드로 재시도, Reserve 성공 후 Bind 실패 시 예약 해제(Unreserve)
-  8. Permit: 스케줄링 승인 대기
-    - 웹훅 등 외부 승인을 기다리는 단계 (기본적으로는 즉시 승인)
-    - 승인 대기 중에는 다른 파드가 해당 노드의 리소스를 사용할 수 있음
-  9. PreBind: 바인딩 전 작업 (예: 볼륨 프로비저닝)
-  10. Bind: 실제 노드에 파드 바인딩
-    - API Server에 PATCH 요청을 보내 `spec.nodeName`을 설정하는 것이 핵심 작업
-    - `spec.nodeName`이 설정되면 해당 노드의 Kubelet이 파드를 감지하고 실행을 시작
-    - PodScheduled condition은 API Server가 자동으로 업데이트
-    - Bind 실패 가능성: 노드가 갑자기 NotReady 상태가 되거나, 노드의 리소스가 부족해지거나, 네트워크 문제로 API Server와 통신 실패
-    - 실패 시 파드가 Backoff Queue로 이동
-    ```
-    PATCH /api/v1/namespaces/default/pods/my-pod
-    {
-      "spec": {
-        "nodeName": "worker-node-1"  # 바인딩: nodeName 설정
-      }
-    }
-    ```
-  11. PostBind: 바인딩 후 작업
-
-- 주요 단계
-  - Filter 단계(필터링): 각 노드 별로 다음 조건을 만족하는지 확인. 하나라도 실패 시 탈락
-    - 리소스 체크
-      - NodeResourcesFit: CPU, Memory 등 리소스 충분한가
-      - NodeResourcesBalancedAllocation: 리소스가 밸런스 있게 사용되나
-    - 배치 규칙 체크
-      - NodeSelector: `nodeSelector` 일치 여부
-      - NodeAffinity: node affinity 조건 만족 여부
-      - PodTopologySpread: 파드 토폴로지 분산 규칙 만족 여부
-      - TaintToleration: taint/toleration 적합한가
-    - 실용성 체크
-      - VolumeBinding: 볼륨 마운트 가능 여부
-      - NodePorts: 포트 충돌 유무
-  - PostFilter 단계: 모든 노드가 Filter 실패 시에만 실행되는 조건부 extension point. 개별 플러그인으로 구성됨
-    - 선점(Preemption): 낮은 우선순위 파드를 축출하여 노드 확보
-  - Score 단계(스코어링): 필터링 통과 노드에 점수 부여 후 최고 점수 노드 선택
-    - ImageLocality: 이미지가 이미 있는 노드 선호
-    - NodeResourcesBalancedAllocation: 리소스 밸런스
-    - InterPodAffinity: 파드 간 친화성
-    - ...
+돌고 돌아, 다시 처음으로 가 보자. 내 소중한(?) 트래커 파드는 왜 Pending 상태에 갇혀 있었으며, 왜 내 Deployment 배포는 실패했는가.
 
 <br>
 
-### 스케줄링 프로세스 주요 단계에 따른 큐 복귀
+Deployment 매니페스트를 보자.
 
-[이전 글에서 스케줄러가 큐 관리 역할을 담당한다](https://sirzzang.github.io/dev/Dev-Kubernetes-Deployment-Failure-1/#스케줄러-큐)고 했는데, **스케줄링 프로세스의 결과에 따른 큐 간 파드 이동**도 모두 스케줄러가 담당한다.
-
-1. **스케줄링 실패 시 큐 이동**: 실패 유형에 따라 다른 큐로 이동시킨다
-   - Score 단계 이후, 노드가 선택된 상태에서 바인딩까지 일시적 문제로 실패한 경우 → Backoff Queue
-   - 애초에 배치 가능한 노드를 찾지 못해 노드 선택 자체가 실패한 경우 → Unschedulable Queue
-
-2. **Active Queue로의 복귀**: 조건이 충족되면 다시 Active Queue로 이동시킨다
-   - Backoff Queue: 타이머 만료 시(스케줄러가 주기적으로 확인)
-   - Unschedulable Queue: 클러스터 이벤트 발생 시
-   - 선점 성공: PostFilter 단계에서 선점에 성공하여 `nominatedNodeName`이 설정된 경우 즉시 Active Queue로 이동
-
-<br>
-
-## PostFilter 단계
-
-필터링 단계에서 **모든** 노드에 대한 필터링이 실패했을 경우, PostFilter 단계를 진행한다. 아래 그림에서, 이전 그림에 비해 더 자세히 나타난 `3` 이후의 부분이다.
-
-![kubernetes-scheduling-2]({{site.url}}/assets/images/kubernetes-scheduling-2.png){: .align-center}
-> 그림에서는 단일 큐로 표현했지만, 실제로는 Active Queue, Backoff Queue, Unschedulable Queue 3개로 구성된다.
-
-Filter 단계가 실패하면 실행되는 확장점(extension point)이다. 공식 문서에 의하면, 다음과 같다.
-
-> PostFilter is called by the scheduling framework when the scheduling cycle failed at Prefilter or Filter
-
-다양한 플러그인으로 구성되어, 각각의 플러그인이 실행되는 형태이다. DefaultPreemption(선점)이라는 기본 플러그인이 제공되며, 그 외에 다른 플러그인도 등록할 수 있다. 커스텀 플러그인을 만들어 등록하는 것 또한 가능하다.
-
-설정된 순서대로 실행되며, 첫 번째로 성공한 플러그인에서 nominatedNodeName, 즉, 파드를 실행할 수 있는 노드명이 설정된다.
-
-- PostFilter 플러그인 실행 규칙
-  - **순차 실행**: 설정된 순서대로 하나씩 실행
-  - **Early Exit**: 첫 번째 성공한 플러그인에서 종료, 나머지는 실행 안 함
-  - **단일 nominatedNodeName**: 파드당 하나의 후보 노드만 설정 가능
-- 플러그인별 동작 방식
-  - **DefaultPreemption**:
-    * 모든 노드를 평가하여 각 노드에서 선점 가능 여부 확인
-    * 선점 알고리즘으로 최적의 단일 노드 선택
-    * 선택 기준: PDB 위반 최소 → 최고 victim 우선순위 최소 → victim 개수 최소
-    * 선택된 하나의 노드에서만 victim 축출
-  - **CrossNodePreemption**:
-    * 여러 노드 조합을 평가
-    * cross-node 제약(PodTopologySpread, AntiAffinity) 고려
-    * 여러 노드에 걸쳐 victim 축출 가능
-  - **PreemptionToleration**: victim 측면의 선점 정책 커스터마이징
-
-nominatedNodeName이 설정된 파드는 다시 스케줄링 큐로 돌아가며, 추후 다시 스케줄링 프로세스를 거친다.
-
-<br>
-
-## Pending 상태와 스케줄링 재시도
-
-Filter 단계에서 모든 노드가 실패하면 PostFilter가 실행된다. PostFilter(선점 등의 플러그인)에서 적합한 후보 노드를 찾으면 `nominatedNodeName`이 설정되고, 파드는 큐로 돌아가서 재스케줄링을 시도한다. 반면, PostFilter에서도 후보 노드를 찾지 못하면 파드는 UnschedulableQueue로 이동한다.
-
-이 모든 과정에서 파드는 Pending 상태를 유지한다. 파드는 **생성된 직후부터 Pending 상태**이며, 스케줄링에 성공해 바인딩되고 컨테이너가 시작되어야 비로소 Running 상태가 된다.
-
-UnschedulableQueue에 있는 Pending 파드들은 다음과 같은 클러스터 이벤트 발생 시 자동으로 재스케줄링이 시도된다:
-* 새로운 노드가 클러스터에 추가됨
-* 기존 파드가 종료되어 리소스가 확보됨
-* 노드의 taint가 제거되거나 상태가 변경됨
-* 리소스 쿼터가 조정됨
-
-<br>
-
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <namespace>-object-tracker
+  namespace: <namespace>
+  labels:
+    app: <namespace>-object-tracker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: <namespace>-object-tracker
+  template:
+    metadata:
+      labels:
+        app: <namespace>-object-tracker
+    spec:
+      containers:
+      - name: <namespace>-object-tracker
+        image: <namespace>/boost-track-app:1.0
+        imagePullPolicy: Always
+        env:
+        - name: MAX_AGE
+          value: "30" # int
+        - name: MIN_HITS
+          value: "3" # int
+        - name: IOU_THRH
+          value: "0.3" # 0 ~ 1 float
+        - name: USE_ECC # cache
+          value: "true" # true / false
+        - name: USE_EMBEDDING # reID
+          value: "true" # true / false
+        ports:
+        - containerPort: 8004
+        command: ["/bin/bash" , "-c"]
+        args:
+        - |
+          uvicorn app.main:app --host 0.0.0.0 --port 8004
+        resources:
+          limits:
+            nvidia.com/gpu: 1 # gpu 필요
+      nodeSelector:
+        kubernetes.io/hostname: <`트래커노드`>
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: <namespace>-object-tracker
+  namespace: <namespace>
+spec:
+  type: NodePort
+  selector:
+    app: <namespace>-object-tracker
+  ports:
+  - port: 8004
+    targetPort: 8004
+    nodePort: 30006
+```
 
 
 
 <br>
 
-# 선점
-
-[공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/)에서는 이렇게 설명한다.
-
-> Pods can have priority. Priority indicates the importance of a Pod relative to other Pods. If a Pod cannot be scheduled, the scheduler tries to preempt (evict) lower priority Pods to make scheduling of the pending Pod possible.
-
-다시 말해, 우선순위가 더 높은 파드를 위해 더 낮은 우선순위 파드를 종료하는 것이다. 선점이라고 하니 뭔가 해당 파드가 직접 뺏어가는 것처럼 들린다. 그러나 공식 문서 맥락을 보면, 더 낮은 우선순위의 파드를 종료하는 것 뿐이다. 그렇게 되면, 우선순위가 더 높은 파드가 스케줄링될 수 있을 테니.
-
-**낮은 우선순위 파드를 종료시켜 공간을 확보한 후, 높은 우선순위 파드가 그 공간에 스케줄링되는 방식**이다. 선점한 파드에는 nominatedName이 설정된다.
+이제 보인다.
+- strategy가 명시되지 않았으므로, `RollingUpdate` 전략을 사용함
+- `RollingUpdate` 전략 설정값이 `maxSurge`, `maxUnavailable` 값이 명시되지 않았으므로, 각각 기본값인 25%가 설정됨
 
 <br>
 
-우선순위에 따라 결정한다는 것이 중요하다. 즉, 선점이 이루어지기 위해서는 우선순위가 있어야 한다.
+실제로, 해당 Deployment를 확인해 보니, 그렇더라.
 
-- priorityClass 리소스를 정의해야 함
+```bash
+$ kubectl describe deployment -n <namespace> <namespace>-object-tracker
+Name:                   <namespace>-object-tracker
+Namespace:              <namespace>
+CreationTimestamp:      Fri, 26 Sep 2024 15:04:38 +0900
+Labels:                 app=<namespace>-object-tracker
+Annotations:            deployment.kubernetes.io/revision: 4
+                        field.cattle.io/publicEndpoints: [{"port":30006,"protocol":"TCP","serviceName":"<namespace>:<namespace>-object-tracker","allNodes":true}]
+Selector:               app=<namespace>-object-tracker
+Replicas:               1 desired | 1 updated | 2 total | 1 available | 1 unavailable
+StrategyType:           RollingUpdate # strategy
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge # rolling update 항목
+...
+```
 
-  ```yaml
-  ---
-  apiVersion: scheduling.k8s.io/v1
-  kind: PriorityClass
-  metadata:
-    name: high-priority
-  value: 1000000
-  globalDefault: false  # true로 설정하면 priorityClassName 미지정 파드의 기본값으로 사용됨 (클러스터당 1개만 가능)
-  preemptionPolicy: PreemptLowerPriority  # PreemptLowerPriority: 낮은 우선순위 파드 선점 가능 / Never: 선점하지 않음
-  description: "High priority pods"
-  ---
-  apiVersion: scheduling.k8s.io/v1
-  kind: PriorityClass
-  metadata:
-    name: low-priority
-  value: 1000
-  globalDefault: false
-  description: "Low priority pods"
-  ```
+<br>
 
-- 기존 파드와 우선순위 대상 파드에 해당 priorityClass가 적용되어 있어야 함
+그럼 어떻게 업데이트가 시도될까. 당연히 아무 것도 설정하지 않아 기본값이 설정되니, 계산해 보면 아래와 같다.
+- `maxSurge`: 1 * 0.25 = 0.25이므로, 올림하여 1로 설정됨
+- `maxUnavailable`: 1 * 0.25 =0.25이므로, 내림하여 0으로 설정됨
 
-  ```yaml
-  apiVersion: v1
-  kind: Pod
-  metadata:
-    name: nginx
-    labels:
-      env: test
-  spec:
-    containers:
-    - name: nginx
-      image: nginx
-      imagePullPolicy: IfNotPresent 
-    priorityClassName: high-priority
-  ```
+그러니, 내 상황에서는 **일단 새로운 파드를 생성하고 난 뒤에**, 기존 파드가 종료될 것이다. 
+
+<br>
+
+그리고 새로운 파드를 생성하려고 할 때는 스케줄링 프로세스를 따를 것이다. 스케줄러에 빙의해 보자.
+
+> *참고*: 스케줄링 프로세스에 대한 자세한 내용은 [쿠버네티스 스케줄링 - 2. 프로세스와 선점]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}) 글을 참고하자. 간단히 말해, 스케줄러는 모든 노드를 대상으로 필터링(Filter)을 수행하고, 모든 노드가 탈락하면 선점(Preemption)을 시도한다.
+
+- 필터링: 모든 노드를 살펴 본다
+  - `트래커노드`: 탈락
+    - `nodeSelector`, cpu, memory 등 다른 조건은 만족했을 수 있음
+    - gpu 1개 필요하나, 이미 기존 파드가 점유 중이므로 **탈락**
+  - 그 외 노드: 애초에 `nodeSelector` 단계부터 **탈락**
+- 선점: 모든 노드에 대해 필터링이 실패했으니 선점 전략을 써보려 한다
+  - `트래커노드`: 불가
+    - Deployment 내 파드들은 우선순위가 동일하기 때문에, 기존 파드를 종료할 수 없음
+  - 그 외 노드: 선점 전략을 시도해 보려 해도, 애초에 `nodeSelector`가 안 맞으니, 선점을 시도해 봐야 의미가 없음
+
+<br>
+
+## 에러 메시지 분석
+
+여기까지 왔으면, 에러 메시지가 읽힌다. ~~다시 읽어보니 어찌나 잘 쓴 메시지인지~~
+
+> 0/10 nodes are available: 1 Insufficient nvidia.com/gpu, 9 node(s) didn't match Pod's node affinity/selector. preemption: 0/10 nodes are available: 1 No preemption victims found for incoming pod, 9 Preemption is not helpful for scheduling..
+
+* `0/10 nodes are available: 1 Insufficient nvidia.com/gpu, 9 node(s) didn't match Pod's node affinity/selector.`: 10개 노드 중 어디에도 파드를 배치할 수 없음
+  * 일반 스케줄링 실패 이유에 대한 분류
+    * 1 Insufficient nvidia.com/gpu: 1개 노드에서 GPU가 부족함 → `트래커노드`. nodeSelctor는 만족하지만, GPU 리소스가 부족
+    * 9 node(s) didn't match Pod's node affinity: 9개 노드에서는 `nodeSelector` 불일치 
+  * 즉, `nodeSelector`를 해당 노드로 걸어 놨으니까, 다른 노드들은 당연히 `ndoeSelector` 불일치이고, 일치하는 노드에 파드 배치하려고 봤더니 GPU가 부족하다
+* `preemption: 0/10 nodes are available: 1 No preemption victims found for incoming pod, 9 Preemption is not helpful for scheduling..`: preemption을 시도해 봤으나, 그렇게 해서도 파드를 배치할 수 없음
+  * 선점 실패 이유에 대한 분류
+    * 1 No preemption victims found for incoming pod: 배치하려는 새 파드(incoming pod)를 위해 희생시킬 파드가 없음
+      - 기존 파드와 새 파드가 우선순위가 같기 때문
+    * 9 Preemption is not helpful for scheduling: 다른 노드는 선점을 해 봤자, 도움이 안 된다(not helpful) → 다른 노드에서 preemption에 의해 아무리 파드를 종료해서 리소스를 확보해도, `nodeSelector` 조건 때문에 거기에 배치할 수가 없다
+  * 즉, 선점으로 해보려고 해도 불가능하다
+* 즉, 일반적인 방식으로 스케줄링하고, 필요하면 preemption해야 하는데, 불가능하다!
+
+<br>
+
+## Unschedulable Queue로의 이동
+
+결국 이 상황은, 파드가 [Unschedulable Queue]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#스케줄러-큐)로 이동하게 되는 전형적인 케이스다. [스케줄링 프로세스]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#스케줄링-프로세스-주요-단계에-따른-큐-복귀)에서 살펴 보았듯, 스케줄러는 실패 유형에 따라 파드를 다른 큐로 이동시킨다. **애초에 배치 가능한 노드를 찾지 못해 노드 선택 자체가 실패한 경우, 파드는 Unschedulable Queue로 이동**하게 된다.
+
+<br>
+
+Unschedulable Queue에 있는 파드들은 현재 클러스터 구조상 스케줄링이 불가능한, 즉 **구조적 실패** 상태에 놓인 파드들이다. 이 케이스가 바로 그 상황에 해당한다:
+- 모든 노드가 `nodeSelector` 불일치 → 9개 노드 탈락
+- 유일하게 `nodeSelector`가 일치하는 노드는 GPU 리소스 부족 → `트래커노드` 탈락
+- 선점(PostFilter)을 시도해 봐도 희생시킬 파드 없음 → 선점 실패
+
+<br>
+
+이 파드가 Unschedulable Queue에서 빠져나오려면, 다음과 같은 클러스터 이벤트가 발생해야 한다:
+- `트래커노드`에서 기존 파드가 종료되어 GPU 리소스가 확보됨
+- 새로운 GPU 노드가 추가되고 `nodeSelector` 조건이 변경됨
+- 해당 노드의 GPU 리소스가 증가함
+
+그러나 현재 상황에서는 기존 파드가 종료되지 않는 한(`maxUnavailable: 0`이므로), 혹은 클러스터 노드 구조가 변경되지 않는 한 이러한 이벤트가 발생할 수 없다. 이것이 바로 내 파드가 Pending 상태에 갇혀 있었던 이유다.
+
+<br>
+
+# 해결
+
+
+
+## 대안
+
+그럼 이 상황을 어떻게 해결할 수 있을까. 원리를 아니까, 이제는 간단하다.
+
+- 노드 필터링 조건 변경
+  - `nodeSelector` 변경
+  - node affinity 추가
+  - ...
+- 해당 노드의 가용 GPU 자원 늘려 주기
+  - 물리적으로 GPU를 더 달기
+  - Time Slicing을 적용하기
+  - (가능하다면) MIG를 적용하기
+- 업데이트 전략 변경
+  - `Recreate`
+  - `RollingUpdate`를 쓰되, `maxSurge`를 0으로, `maxUnavailable`을 1로 명시적으로 설정하기
+
+<br>
+
+## 채택
+
+사실 트래커의 경우, 다운타임이 생겨도 문제가 없는 상황이다. 또한, 어차피 GPU를 1개 점유하는데, 다른 노드들의 GPU는 이 노드보다 더 사양이 좋아 더 무거운 작업에 사용해야 하기 때문에 굳이 다른 노드에서 띄울 이유도 없다. 그러니, 기존 파드를 종료하고 새 파드가 뜨게 하는 방안을 택했다.
+
+<br>
+
+앞서 분석했듯, 이 상태를 해결하기 위한 핵심은, **Unschedulable Queue에서 빠져나올 수 있는 클러스터 이벤트를 발생시키는 것**이다. 이를 위해 내가 택한 구조적 해결 방안은, 기존 파드를 종료시키는 것이었다:
+- `maxUnavailable: 1`로 설정하면 기존 파드를 먼저 종료할 수 있게 되고, 
+- 기존 파드가 종료되면 GPU 리소스가 확보되며,
+- 이 리소스 확보 이벤트가 발생하면, 
+- Unschedulable Queue에 있던 새 파드가 Active Queue로 이동하여 스케줄링이 재시도되고, 
+- 이번에는 GPU 리소스가 확보되어 있으므로,
+- 정상적으로 스케줄링에 성공하게 된다.
+
+<br>
+
+`Recreate`를 선택해도 되지만, 나중에 GPU를 논리적으로 분할(time slicing)하여 사용하려고 했었기 때문에, 확장성 측면에서 `RollingUpdate`를 선택하기로 했다. 대신, 배포 매니페스트에 주석을 잘 달았다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <namespace>-object-tracker
+  namespace: <namespace>
+  labels:
+    app: <namespace>-object-tracker
+spec:
+  # NOTE: 현재 해당 노드에 가용 GPU 1개 뿐이므로, replicas를 1로 설정함
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    # NOTE: 현재 해당 노드에 가용 GPU 1개 뿐이므로, maxSurge를 0으로 설정해야 함.
+    # 추후 가용 GPU 늘 경우, 아래 값 조정 필요
+    rollingUpdate:
+      maxSurge: 0        # 추가 파드 생성 안함
+      maxUnavailable: 1   # 기존 파드 먼저 종료 허용
+```
+
 
 
 
 <br>
 
-대부분, 파드를 그 자체로 띄우진 않으니, Deployment와 같은 리소스 컨트롤러에 우선순위를 적용한다. 중요한 것은, 같은 리소스 컨트롤러에서 생성된 파드는 같은 우선순위를 갖는다는 것이다. 다만, 실제 프로덕션 환경에서는 서로 다른 워크로드 간 우선순위 차이를 적용해, 아래와 같은 경우에 우선순위 차이를 이용한 선점을 활발히 사용한다고 한다:
+# 결과
 
-- 프로덕션(high) vs 개발/테스트(low) 환경 파드
-- 핵심 서비스(high) vs 배치 작업(low)
-- 상시 서비스(high) vs ML 학습 작업(preemptionPolicy: Never)
-- 시스템 컴포넌트(system-cluster-critical) vs 사용자 워크로드 
+배포 후 재시작해주었더니 잘 동작한다. 혹시나 이전에 스케줄링에 실패 중이던 파드가 Pending 상태로 남아 있을 수 있기 때문에, `kubectl rollout restart`로 재시작해주는 게 좋다.
+
+```bash
+$ kubectl apply -f tracker-deployment.yaml
+$ kubectl rollout restart deployment -n <namespace> <namespace>-object-tracker
+```
+
+
 
 <br>
 
-리소스가 제한적인 클러스터에서는 이러한 우선순위 설정이 서비스 안정성 확보를 위해 필수적이다. 안타깝게도, 나는 아직까지 실무에서 써본 적이 없다. 다만, 만약 ML 서비스에서 권한이 다른 사용자 간 학습 우선순위를 조정해야 할 일이 생긴다거나, 혹은 긴급한 추론이 필요할 때 학습 워크로드보다 우선순위를 높게 주는 등의 방식으로 사용해 볼 수 있을 것 같다. 써볼 일이 생긴다면 좋겠다. ~~혹은 써볼 일을 만들어도 좋겠다!~~
+## 더 생각해 볼 점
+
+- 애초에 이렇게 GPU가 제한되어 있는데 `nodeSelector`를 쓴 게 잘못 아닐까?
+  - 내 상황에서는, 노드셀렉터를 쓴 거 자체가 잘못이라기 보다는, Deployment 배포 전략을 잘못 채택한 게 잘못이었다고 봐야 함
+  - 배포 전략을 명확히 설정하지 않아 잡혔던 기본값이, 해당 노드의 제한된 리소스와 맞지 않았던 것
+- `nodeSelector`를 사용하여 배포하는건 오히려 스케줄러의 선택의 폭을 줄여서 안 좋은 게 아닐까?
+  - 상황에 따라 다름
+  - 그리고 오히려, 다음의 경우는 `nodeSelector`를 명시적으로 사용하는 게 도움이 됨
+    - GPU 모델 지정
+    - 특정 노드 라이센스 제약
+    - 대용량 데이터셋이 있는 노드
+    - 워크로드 격리가 필요한 경우
+  - 내 상황의 경우, 애초에 팀 내에서 해당 노드에 트래커를 띄우기로 했으니 그러려니 하지만, 만약 트래커가 다른 노드의 GPU에서 구동되어도 무방한 상황에 이렇게 `nodeSelector`를 설정했다면, 그 경우엔 다시 생각해 볼 필요가 있음
+
+
 
 <br>
 
-## nominatedNodeName이 하는 일
+# 결론
 
-PostFilter 단계 이후, nominatedNodeName이 설정된 파드는 스케줄링 큐로 돌아가 이후 다시 필터링, 스코어링 등 원래 스케줄링 프로세스를 거친다고 했다. 그러면 그건 뭐하러 설정하나 싶을 수도 있다.
-
-nominatedNodeName은 선점 후 victim 파드가 종료되는 동안:
-
-- 다른 낮은 우선순위 파드가 끼어들어 그 공간을 차지하는 것을 방지하고,
-- 리소스 예약을 표시하는 역할을 하여,
-- 스케줄러가 다른 파드를 평가할 때, nominated 파드도 실행 중인 것처럼 계산한다.
-
-예컨대, 아래와 같은 문제 상황을 방지하는 것이다.
-
-- 높은 우선순위 파드 P가 선점 성공
-- victim 파드 축출 시작
-- 파드 P는 큐로 돌아가 대기
-- 그 사이 다른 파드가 끼어 들어서 victim이 비운 공간을 차지
-- 파드 P는 영원히 기다림
-
-nominatedNodeName이 설정되면, 스케줄러가 nominated 파드도 실행 중인 것처럼 계산하기 때문에, `아, 이 노드는 이미 예약된 공간이 있네`라고 생각한다는 것이다.
-
-다만, nominatedNodeName이 설정된 파드더라도, nominated node에 항상 스케줄링된다는 보장은 없다. 높은 우선순위 파드가 나타나게 되면, 변경될 수 있다. 공식 문서의 표현에 따르면, 아래와 같다. 보장되지는 않는다는 것이다.
-
-> Please note that Pod P is **not necessarily scheduled** to the 'nominated Node'.
+이 문제의 본질은, **Deployment 업데이트 전략의 기본값이 노드의 리소스 제약과 맞지 않았다**는 것이다. `replicas: 1` + GPU 1개인 환경에서 `maxSurge: 1`, `maxUnavailable: 0`(기본값)은 새 파드를 먼저 띄우려 하지만, 기존 파드가 유일한 GPU를 점유하고 있어 스케줄링이 영원히 실패하는 구조적 교착 상태에 빠진다. `maxSurge: 0`, `maxUnavailable: 1`로 명시적으로 설정하여 기존 파드를 먼저 종료하게 함으로써 해결할 수 있었다. 리소스가 제한된 환경에서는 Deployment 전략의 기본값을 그대로 사용하지 말고, 환경에 맞게 명시적으로 설정하자.
 
 <br>
 
 ---
 
-다음 글에서는 이 스케줄링 개념을 바탕으로, **Deployment 업데이트 전략(RollingUpdate의 maxSurge, maxUnavailable)**이 어떻게 이 문제와 연결되는지 알아본다. [다음 글 보기](https://sirzzang.github.io/dev/Dev-Kubernetes-Deployment-Failure-3/)
+다음 글에서는 이 문제가 사실 **Deadlock**과 닮았다는 인사이트에 대해 이야기한다. [다음 글 보기]({% post_url 2025-11-05-Dev-Kubernetes-Deployment-Failure-3 %})

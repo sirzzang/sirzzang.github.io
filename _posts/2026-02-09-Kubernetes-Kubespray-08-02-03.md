@@ -437,6 +437,8 @@ done < "${FILES_LIST}"
 
 이 방식의 장점은 URL 경로가 원본과 동일하게 유지되므로, Nginx에서 서빙할 때 경로 매핑을 별도로 할 필요가 없다는 것이다.
 
+<br>
+
 **tar 아카이브 생성**
 
 ```bash
@@ -446,6 +448,8 @@ tar -czvf "${OFFLINE_FILES_ARCHIVE}" "${OFFLINE_FILES_DIR_NAME}"
 ```
 
 다운로드한 파일을 `offline-files.tar.gz`로 묶는다. `NO_HTTP_SERVER` 환경변수가 설정되어 있으면 Nginx 기동을 건너뛴다. 다운로드만 하고 파일을 다른 곳으로 옮기고 싶은 경우에 유용하다.
+
+<br>
 
 **Nginx 컨테이너 기동**
 
@@ -461,7 +465,7 @@ sudo "${runtime}" run \
 
 ### nginx.conf
 
-```nginx
+```
 http {
     default_type application/octet-stream;
     server {
@@ -488,6 +492,8 @@ http {
 ## upload2artifactory.py — Artifactory 업로드
 
 앞의 스크립트들로 다운로드한 파일을 [JFrog Artifactory](https://jfrog.com/artifactory/)에 업로드하는 선택적 유틸리티다. Artifactory는 바이너리/패키지 관리를 위한 범용 저장소 관리 도구로, 엔터프라이즈 환경에서 내부 아티팩트 관리에 많이 사용된다. 여기서 "Artifactory"는 JFrog의 제품명이지 일반 용어가 아니다.
+
+<br>
 
 환경변수로 인증 정보와 대상 URL을 설정한다.
 
@@ -534,17 +540,17 @@ Podman/CRI-O 계열의 insecure registry 설정 템플릿이다. `docker-daemon.
 
 ## contrib/offline 정리
 
-contrib/offline의 전체 워크플로우를 정리하면:
+contrib/offline의 전체 워크플로우를 정리하면 아래와 같다.
 
 ```
 [온라인 환경]
-1. generate_list.sh       → files.list + images.list 생성
-2. manage-offline-container-images.sh create   → 이미지 pull + tar 묶음
-3. manage-offline-files.sh                     → 파일 다운로드 (+ Nginx 기동)
-4. (선택) upload2artifactory.py                → Artifactory에 파일 업로드
+1. generate_list.sh                             → files.list + images.list 생성
+2. manage-offline-container-images.sh create    → 이미지 pull + tar 묶음
+3. manage-offline-files.sh                      → 파일 다운로드 (+ Nginx 기동)
+4. (선택) upload2artifactory.py                  → Artifactory에 파일 업로드
    ↓ 물리 매체/승인 경로로 이동
 [오프라인 환경]
-5. manage-offline-container-images.sh register → 레지스트리 기동 + 이미지 등록
+5. manage-offline-container-images.sh register  → 레지스트리 기동 + 이미지 등록
 6. (파일 서빙은 이미 Nginx가 돌고 있거나 별도로 구성)
 ```
 
@@ -568,36 +574,36 @@ contrib/offline의 전체 워크플로우를 정리하면:
 
 ```
 kubespray-offline/
-├── config.sh                        # 최상위 설정
-├── download-all.sh                  # 다운로드 원스톱 스크립트
-├── download-kubespray-files.sh      # kubespray 파일/이미지 다운로드 (contrib/offline 활용)
-├── download-images.sh               # 이미지 개별 다운로드
-├── download-additional-containers.sh# 추가 이미지 다운로드
-├── get-kubespray.sh                 # kubespray 소스 다운로드
-├── prepare-pkgs.sh                  # python, podman 등 사전 패키지 설치
-├── prepare-py.sh                    # python venv + 패키지 설치
-├── pypi-mirror.sh                   # PyPI 미러 파일 다운로드
-├── build-ansible-container.sh       # Ansible 컨테이너 이미지 빌드
-├── create-repo.sh                   # RPM/DEB 레포 다운로드
-├── copy-target-scripts.sh           # target 노드용 스크립트 복사
-├── install-containerd.sh            # containerd 로컬 설치
-├── install-docker.sh                # docker 로컬 설치
-├── install-nerdctl.sh               # nerdctl 로컬 설치
-├── precheck.sh                      # 사전 점검
-├── cleanup.sh                       # 정리
-├── offline.yml                      # inventory 오버라이드 샘플
+├── config.sh                         # 최상위 설정
+├── download-all.sh                   # 다운로드 원스톱 스크립트
+├── download-kubespray-files.sh       # kubespray 파일/이미지 다운로드 (contrib/offline 활용)
+├── download-images.sh                # 이미지 개별 다운로드
+├── download-additional-containers.sh # 추가 이미지 다운로드
+├── get-kubespray.sh                  # kubespray 소스 다운로드
+├── prepare-pkgs.sh                   # python, podman 등 사전 패키지 설치
+├── prepare-py.sh                     # python venv + 패키지 설치
+├── pypi-mirror.sh                    # PyPI 미러 파일 다운로드
+├── build-ansible-container.sh        # Ansible 컨테이너 이미지 빌드
+├── create-repo.sh                    # RPM/DEB 레포 다운로드
+├── copy-target-scripts.sh            # target 노드용 스크립트 복사
+├── install-containerd.sh             # containerd 로컬 설치
+├── install-docker.sh                 # docker 로컬 설치
+├── install-nerdctl.sh                # nerdctl 로컬 설치
+├── precheck.sh                       # 사전 점검
+├── cleanup.sh                        # 정리
+├── offline.yml                       # inventory 오버라이드 샘플
 ├── imagelists/
-│   └── images.txt                   # 추가 이미지 목록
-├── pkglist/                         # OS별 패키지 목록
+│   └── images.txt                    # 추가 이미지 목록
+├── pkglist/                          # OS별 패키지 목록
 │   ├── rhel/
 │   └── ubuntu/
-├── scripts/                         # 공통 함수
+├── scripts/                          # 공통 함수
 │   ├── common.sh
 │   ├── images.sh
 │   ├── create-repo-rhel.sh
 │   ├── create-repo-ubuntu.sh
 │   └── set-locale.sh
-├── target-scripts/                  # target 노드에 복사되는 스크립트
+├── target-scripts/                   # target 노드에 복사되는 스크립트
 │   ├── config.sh
 │   ├── setup-all.sh
 │   ├── setup-container.sh
@@ -607,13 +613,15 @@ kubespray-offline/
 │   ├── start-registry.sh
 │   ├── load-push-all-images.sh
 │   ├── extract-kubespray.sh
-│   └── playbook/                    # offline-repo.yml 등
-├── ansible-container/               # Ansible 컨테이너 빌드용
-├── docker/                          # Docker 내부 빌드/테스트용
-└── test/                            # 테스트 스크립트
+│   └── playbook/                     # offline-repo.yml 등
+├── ansible-container/                # Ansible 컨테이너 빌드용
+├── docker/                           # Docker 내부 빌드/테스트용
+└── test/                             # 테스트 스크립트
 ```
 
 contrib/offline의 스크립트 3+1개에 비하면 규모가 훨씬 크다. 핵심은 **download 단계 스크립트들**(루트에 위치)과 **target 단계 스크립트들**(`target-scripts/`에 위치)의 2단 구조다.
+
+<br>
 
 ## 핵심 워크플로우
 
@@ -646,6 +654,8 @@ REGISTRY_PORT=${REGISTRY_PORT:-35000}
 
 이 설정 파일을 먼저 수정한 뒤 이후 단계를 실행해야 한다. README에서 "Before download offline files, check and edit configurations in `config.sh`"라고 안내하는 이유다.
 
+<br>
+
 ### download-all.sh — 원스톱 다운로드
 
 ```bash
@@ -666,7 +676,7 @@ run ./create-repo.sh
 run ./copy-target-scripts.sh
 ```
 
-실행 순서를 정리하면:
+실행 순서를 정리하면 다음과 같다.
 
 | 순서 | 스크립트 | 하는 일 |
 |---|---|---|
@@ -681,9 +691,13 @@ run ./copy-target-scripts.sh
 | 8 | `create-repo.sh` | RPM/DEB 패키지 레포 다운로드 |
 | 9 | `copy-target-scripts.sh` | target 노드용 스크립트를 outputs/에 복사 |
 
+<br>
+
 [8.2.1]({% post_url 2026-02-09-Kubernetes-Kubespray-08-02-01 %})에서 고민했던 **"Ansible 실행 방식 결정이 아티팩트 준비에 영향을 준다"**는 문제가 5.1/5.2 분기에서 해결된다. `config.sh`에서 `ansible_in_container`를 먼저 결정해 두면, `download-all.sh`가 그에 맞는 아티팩트를 자동으로 준비한다.
 
 모든 결과물은 `outputs/` 디렉토리에 모인다. 이 디렉토리를 통째로 target 노드(admin 노드)에 옮기면 된다.
+
+<br>
 
 ### download-kubespray-files.sh — contrib/offline 활용 지점
 
@@ -698,6 +712,8 @@ generate_list() {
 contrib/offline의 `generate_list.sh`를 **그대로 호출**해서 `files.list`와 `images.list`를 생성한다. 목록 생성 로직을 재구현하지 않고 공식 스크립트를 활용하는 것이다.
 
 하지만 그 이후의 파일 다운로드와 이미지 다운로드는 **자체 구현**을 사용한다.
+
+<br>
 
 **파일 다운로드 — 경로 재구성**
 
@@ -715,6 +731,8 @@ decide_relative_dir() {
 
 예를 들어 `https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubelet`이라는 URL은 `kubernetes/v1.31.0/kubelet`로 정리된다. 이렇게 하면 `files_repo` 변수에 맞춘 URL 경로 체계({% raw %}`{{ files_repo }}/kubernetes/v{{ kube_version }}/kubelet`{% endraw %})와 정확히 대응한다. `offline.yml`에서 정의하는 다운로드 URL 패턴이 이 경로 체계를 전제로 되어 있기 때문이다.
 
+<br>
+
 **이미지 다운로드 — 개별 tar.gz**
 
 contrib/offline은 모든 이미지를 하나의 `container-images.tar.gz`로 묶지만, kubespray-offline은 각 이미지를 **개별 tar.gz 파일**로 저장한다.
@@ -729,6 +747,8 @@ get_image() {
 ```
 
 `outputs/images/` 디렉토리에 이미지별로 `registry.k8s.io_kube-apiserver-v1.31.0.tar.gz` 형태의 파일이 쌓인다. 하나의 큰 tar로 묶는 것과 비교했을 때, 개별 이미지 단위로 관리/전송/디버깅이 편하다.
+
+<br>
 
 ### target-scripts — target 노드 실행 스크립트
 
@@ -747,6 +767,8 @@ get_image() {
 1번의 "nginx/registry 이미지를 containerd에 load"라는 표현이 처음에는 헷갈릴 수 있는데, 의미는 간단하다. Nginx 컨테이너와 Registry 컨테이너를 실행하려면 **그 이미지가 먼저 containerd에 있어야** 한다. 온라인이면 pull하면 되지만 오프라인이므로, 미리 다운로드해 둔 `nginx:1.29.4` 이미지와 `registry:3.0.0` 이미지 tar를 `nerdctl load`로 containerd에 넣는 것이다.
 
 `setup-offline.sh`에서 yum/deb 레포와 PyPI 미러를 로컬 Nginx로 전환하는 것은, [8.1 시리즈]({% post_url 2026-02-09-Kubernetes-Kubespray-08-01-00 %})에서 수동으로 했던 `/etc/yum.repos.d/` 설정 변경, pip의 `--index-url` 설정 등을 자동화한 것이다.
+
+<br>
 
 ### offline.yml — inventory 오버라이드 샘플
 
@@ -776,6 +798,8 @@ runc_download_url: "{{ files_repo }}/runc/v{{ runc_version }}/runc.{{ image_arch
 [8.2.1]({% post_url 2026-02-09-Kubernetes-Kubespray-08-02-01 %})에서 정리한 공식 문서의 변수 설정 예시와 거의 동일하다. 하나 주의할 점은 **`runc_download_url`의 경로에 `runc_version`이 포함**되어 있다는 것이다. 공식 문서의 예시({% raw %}`{{ files_repo }}/runc.{{ image_arch }}`{% endraw %})와 다르며, kubespray-offline의 `decide_relative_dir`이 runc 파일을 `runc/v{version}/` 경로 아래에 배치하므로 이에 맞춰야 한다.
 
 이 파일을 inventory의 `group_vars/all/offline.yml`에 복사하고, `YOUR_HOST`를 실제 IP로 바꾸면 된다.
+
+<br>
 
 ### deploy offline repo configurations
 
@@ -807,6 +831,8 @@ ansible-playbook -i ${your_inventory_file} offline-repo.yml
 
 contrib/offline은 파일과 이미지에 한정된 자동화를 제공하고, **OS 패키지 레포, PyPI 미러, admin 노드 환경 설정은 범위 밖**이다. kubespray-offline은 이 빈틈을 채우며 거의 전 과정을 자동화한다.
 
+<br>
+
 ## 아키텍처 차이
 
 | 관점 | contrib/offline | kubespray-offline |
@@ -820,6 +846,8 @@ contrib/offline은 파일과 이미지에 한정된 자동화를 제공하고, *
 | **PyPI 미러** | 범위 밖 | `pypi-mirror.sh`로 자동 구성 |
 | **실행 환경 설정** | 범위 밖 | containerd 설치, Python venv 구성 등 |
 | **설정 파일** | 환경변수 기반 | `config.sh` + `target-scripts/config.sh` |
+
+<br>
 
 ## 이미지 처리 방식 차이
 
@@ -837,6 +865,8 @@ contrib/offline은 파일과 이미지에 한정된 자동화를 제공하고, *
 - 레지스트리 접두사를 미리 제거해 두고, push 시 대상 레지스트리를 앞에 붙인다
 - 하나의 아카이브로 묶이므로 이동은 간편하지만, 개별 이미지만 갱신하기는 번거롭다
 
+<br>
+
 **kubespray-offline**
 
 ```
@@ -849,6 +879,8 @@ contrib/offline은 파일과 이미지에 한정된 자동화를 제공하고, *
 - 개별 파일이므로 특정 이미지만 교체/추가가 쉽다
 - 파일 수는 많아지지만 관리 유연성이 높다
 
+<br>
+
 ## 파일 다운로드 경로 차이
 
 **contrib/offline**: `wget -x`
@@ -859,6 +891,8 @@ contrib/offline은 파일과 이미지에 한정된 자동화를 제공하고, *
 ```
 
 원본 URL의 호스트명을 포함한 전체 경로가 그대로 보존된다. Nginx로 서빙할 때 경로 매핑이 필요 없지만, kubespray의 `files_repo` 변수에서 참조하는 경로 패턴과는 다를 수 있다.
+
+<br>
 
 **kubespray-offline**: `curl` + `decide_relative_dir`
 
