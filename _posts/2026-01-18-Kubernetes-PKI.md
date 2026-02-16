@@ -326,7 +326,9 @@ kubeadm으로 설치한 클러스터의 실제 디렉토리 구조다.
 
 ## kubeconfig 파일
 
-kubeconfig 파일은 `/etc/kubernetes/`에 저장된다. kubeconfig는 클러스터 접속 정보와 함께 **클라이언트 인증서를 포함**하고 있어서, 각 컴포넌트가 API Server에 인증할 때 사용된다.
+위에서 살펴본 인증서들은 `/etc/kubernetes/pki/`에 파일로 존재하지만, 실제로 컴포넌트가 API Server에 인증할 때는 이 인증서를 직접 참조하는 것이 아니라 **kubeconfig 파일**을 통해 사용한다. kubeconfig는 클러스터 접속 정보(API Server 주소 등)와 함께 클라이언트 인증서를 포함하거나 참조하는 파일로, PKI 인증서의 **배달 수단** 역할을 한다. `/etc/kubernetes/` 디렉토리에 인증서 파일(`pki/`)과 나란히 위치하는 것도 이 때문이다.
+
+> kubeconfig 파일 자체의 구조와 사용법에 대해서는 [kubeconfig 개요]({% post_url 2026-02-16-Kubernetes-Kubeconfig-01 %}) 글에서 다룬다. 여기서는 PKI 관점에서 각 kubeconfig에 **어떤 신원(identity)의 인증서가 포함되어 있는지**를 살펴본다.
 
 ```
 /etc/kubernetes/

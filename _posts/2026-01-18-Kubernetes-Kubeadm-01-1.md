@@ -357,6 +357,8 @@ cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
+kubeconfig 파일의 구조, `current-context`, 경로 해석, 다중 클러스터 사용법은 [kubeconfig 개요]({% post_url 2026-02-16-Kubernetes-Kubeconfig-01 %}) 시리즈를 참고하자.
+
 <br>
 
 ## 4. etcd

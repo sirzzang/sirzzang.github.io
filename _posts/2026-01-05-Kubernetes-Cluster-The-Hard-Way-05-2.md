@@ -498,7 +498,7 @@ ssh server ls -l /root/*.kubeconfig
 
 <br>
 
-이번 실습을 통해 Kubernetes 컴포넌트가 API Server와 통신하기 위한 kubeconfig 파일을 직접 생성하고 배포해 보았다. kubeconfig의 구성 요소(clusters, users, contexts)와 각 컴포넌트별 인증서 사용 방식, Node Authorizer가 kubelet을 자동으로 인식하는 명명 규칙 등을 이해할 수 있었다. 각 노드에 필요한 kubeconfig만 선별적으로 배포하여 보안을 강화했다.
+이번 실습을 통해 Kubernetes 컴포넌트가 API Server와 통신하기 위한 kubeconfig 파일을 직접 생성하고 배포해 보았다. kubeconfig의 구성 요소(clusters, users, contexts)와 각 컴포넌트별 인증서 사용 방식, Node Authorizer가 kubelet을 자동으로 인식하는 명명 규칙 등을 이해할 수 있었다. 각 노드에 필요한 kubeconfig만 선별적으로 배포하여 보안을 강화했다. kubeconfig 필드별 의미와 API 스펙은 [kubeconfig 개요]({% post_url 2026-02-16-Kubernetes-Kubeconfig-01 %})와 [kubeconfig API Reference]({% post_url 2026-02-16-Kubernetes-Kubeconfig-03 %})를 참고하자.
 
 <br> 
 

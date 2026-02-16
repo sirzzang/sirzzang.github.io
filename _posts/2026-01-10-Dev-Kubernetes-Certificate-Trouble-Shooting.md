@@ -181,7 +181,7 @@ K3s는 `/var/lib/rancher/k3s/server/tls`에 다음과 같은 인증서들을 생
 
 ### kubeconfig 구조와 인증서 활용
 
-`/etc/rancher/k3s/k3s.yaml`은 `/var/lib/rancher/k3s/server/cred/admin.kubeconfig`를 기반으로 K3s가 자동 생성한 kubeconfig 파일이다.
+`/etc/rancher/k3s/k3s.yaml`은 `/var/lib/rancher/k3s/server/cred/admin.kubeconfig`를 기반으로 K3s가 자동 생성한 kubeconfig 파일이다. kubeconfig 파일의 전체 구조와 필드 설명은 [kubeconfig 개요]({% post_url 2026-02-16-Kubernetes-Kubeconfig-01 %})와 [kubeconfig API Reference]({% post_url 2026-02-16-Kubernetes-Kubeconfig-03 %})를 참고하자.
 
 ```yaml
 apiVersion: v1
