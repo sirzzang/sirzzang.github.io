@@ -13,6 +13,8 @@ tags:
   - Context
 ---
 
+<br>
+
 # 들어가며
 
 Kubernetes 클러스터를 사용하다 보면, `kubectl get pods` 같은 명령어가 어떻게 올바른 클러스터의 올바른 API 서버로 연결되는지 궁금해질 때가 있다. 이 연결 정보를 관리하는 것이 바로 **kubeconfig** 파일이다.
@@ -174,6 +176,8 @@ users:
     client-certificate: /certs/dev.crt
     client-key: /certs/dev.key
 ```
+
+<br>
 
 이처럼 mTLS든 토큰이든, kubeconfig의 `users` 섹션에 해당 필드만 채우면 된다. 인증 방식이 달라져도 파일을 읽는 쪽(kubectl, kubelet 등)은 같은 구조를 파싱하면 되므로, **접근 설정의 표준화**가 이루어진다.
 
@@ -441,7 +445,7 @@ kubectl은 kubeconfig를 파싱하여 연결 정보를 조립하는 클라이언
 `current-context`가 비어 있거나 없는 경우, kubectl은 클러스터/사용자 정보를 결정할 수 없어 기본값인 `localhost:8080`으로 연결을 시도하고, `The connection to the server localhost:8080 was refused` 같은 에러가 발생한다.
 
 
-### 참고: localhost:8080 fallback은 왜 있는가?
+### 참고: localhost:8080 fallback
 
 `localhost:8080` fallback은 Kubernetes 초기 설계의 흔적이다. 과거에는 kube-apiserver가 두 개의 포트를 열 수 있었다.
 

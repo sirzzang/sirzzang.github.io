@@ -26,8 +26,8 @@ tags:
 > *참고*: 알아 두면 쓸모 있는 지식들
 > 
 > - [기본 암호학 지식]({% post_url 2026-01-04-CS-Cryptography-01 %}): 특히,
->   - [비대칭키 암호화]({% post_url 2026-01-04-CS-Cryptography-04 %})와 TLS/mTLS
->   - X.509 인증서
+>   - [비대칭키 암호화]({% post_url 2026-01-04-CS-Cryptography-04 %})와 [TLS/mTLS]({% post_url 2026-01-05-CS-Security-TLS-SSL %})
+>   - [X.509 인증서]({% post_url 2026-01-04-CS-Security-X509-Certificate %})
 > - kind: Docker 컨테이너를 노드로 사용하여 로컬에서 Kubernetes 클러스터를 테스트할 수 있게 해주는 도구
 > - minikube: 로컬에서 단일 노드 Kubernetes 클러스터를 실행할 수 있게 해주는 도구
 > - virtualbox: 가상화 도구

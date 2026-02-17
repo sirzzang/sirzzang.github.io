@@ -16,12 +16,6 @@ tags:
 
 <br>
 
-# TL;DR
-
-kubeconfig (v1) API 기준으로 **Config / Cluster / AuthInfo / Context** 필드 스펙과 **우선순위**(인증서·토큰), **exec·deprecated 인증 방식**을 정리한 Reference 글이다. 상세는 [공식 kubeconfig (v1) API Reference](https://kubernetes.io/docs/reference/config-api/kubeconfig.v1/)를 함께 참고하면 된다.
-
-<br>
-
 # 들어가며
 
 [kubeconfig 개요]({% post_url 2026-02-16-Kubernetes-Kubeconfig-01 %}) 글에서 kubeconfig의 핵심 구조와 주요 필드를 살펴보았다. 이 글에서는 [kubeconfig (v1) API Reference](https://kubernetes.io/docs/reference/config-api/kubeconfig.v1/)를 기반으로, kubeconfig 파일의 전체 필드 스펙을 상세히 톺아본다.
