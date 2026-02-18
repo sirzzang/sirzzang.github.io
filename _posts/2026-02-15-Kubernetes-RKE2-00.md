@@ -1,5 +1,5 @@
 ---
-title:  "[Kubernetes] Cluster: RKE2를 이용해 클러스터 구성하기 - 0. RKE2: Overview"
+title:  "[Kubernetes] Cluster: RKE2를 이용해 클러스터 구성하기 - 0. Overview"
 excerpt: "RKE2가 무엇이고, K3s 및 기존 프로비저닝 도구와 어떻게 다른지 살펴보자."
 categories:
   - Kubernetes
@@ -204,7 +204,7 @@ total 32
 -rw-r--r--. 1 root root 6325 Feb 16 17:33 kube-controller-manager.yaml
 ```
 
-위는 실제 RKE2 서버 노드에서 확인한 예시다. 파일 생성 시간을 보면 etcd와 kube-proxy가 먼저(17:32), 이후 apiserver, scheduler, controller-manager가 순서대로(17:33) 생성된 것을 확인할 수 있다. 이 시간 차이는 [프로세스 라이프사이클](#2단계-initialize-server)에서 다루는 goroutine 의존성 체인이 반영된 결과다.
+위는 실제 RKE2 서버 노드에서 확인한 예시다. 실행 환경·RKE2 버전에 따라 **나열 순서**(`-t` 옵션으로 수정 시간순 정렬)와 **파일 크기**는 다를 수 있다. 일반적으로 etcd manifest가 먼저 쓰이고, 이후 apiserver·scheduler·controller-manager·kube-proxy 등이 의존 관계에 따라 순차적으로 작성되며, 이 순서와 시간 차이는 [프로세스 라이프사이클](#2단계-initialize-server)에서 다루는 goroutine 의존성 체인에 따른다. 실제로 확인했을 때 순서나 바이트 수가 위와 다르더라도, 동일한 5개 manifest가 있으면 정상이다.
 
 > 참고: kube-proxy도 static pod로 실행된다는 점이 kubeadm과 다르다. kubeadm에서는 kube-proxy가 DaemonSet으로 배포되지만, RKE2에서는 static pod manifest로 관리된다.
 

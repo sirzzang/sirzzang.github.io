@@ -69,16 +69,15 @@ Kubernetes the Hard Way 튜토리얼은 다음 조건을 만족하는 환경이 
 
 > **참고**: VirtualBox + Vagrant 네트워크 어댑터에 대한 상세 설명은 [별도 글]({% post_url 2026-02-09-Dev-VirtualBox-Network %})에 정리해 두었다.
 
-Vagrant VM은 기본적으로 최소 2개의 네트워크 인터페이스(NIC)를 가진다.
+Vagrant + VirtualBox 환경에서 VM은 기본적으로 1개의 NAT NIC를 가지며, Vagrantfile에 `private_network`(또는 `public_network` 등)를 추가하면 두 번째 NIC가 붙어 2개 이상의 인터페이스를 갖게 된다. 본 실습에서는 Vagrantfile에서 private network를 정의해 VirtualBox가 **각 VM에** Host-Only용 두 번째 NIC를 추가하므로, 각 VM은 2개의 네트워크 인터페이스(NIC)를 가진다.
 
 1. 첫 번째 NIC: NIC1 (eth0 또는 enp0s3)
   - **용도**: Vagrant 관리 전용 (SSH 접속, 프로비저닝 등)
   - **네트워크 타입**: NAT
   - **IP 주소**: 모든 Vagrant VM에서 동일하게 `10.0.2.15` 사용
-  - **특징**
-    - Vagrant가 VM을 제어하기 위해 예약된 인터페이스
-    - 사용자가 직접 설정하거나 변경할 수 없음
-    - VM 간 통신에는 사용되지 않음
+  - Vagrant가 VM을 제어하기 위해 예약된 인터페이스
+  - 사용자가 직접 설정하거나 변경할 수 없음
+  - VM 간 통신에는 사용되지 않음
     
 2. 두 번째 NIC 이후: NIC2 (eth1 또는 enp0s8)
   - **용도**: 실제 네트워크 통신 (VM 간 통신, 호스트-VM 통신 등)
@@ -326,36 +325,51 @@ EOF
 echo ">>>> Initial Config End <<<<"
 ```
 
-### 작업 상세 설명
-1. TASK 1: Profile & Bashrc 설정
-  - `.bashrc`에 `sudo su -` 명령을 추가하여 vagrant 사용자가 자동으로 root로 전환되도록 설정
-    - 실습 과정의 많은 부분에 root 권한이 필요함 (시스템 서비스 설치, 설정 파일 수정, 네트워크 구성 등)
-    - 매번 `sudo`를 입력하거나 `sudo su -`를 실행하는 것보다 SSH 접속 시 자동으로 root로 전환되는 게 편리
-    - 프로덕션 환경에서는 권장되지 않지만, 실습 환경이므로 보안보다 편의성 우선
-  - `vi`를 `vim`으로 alias 설정
-  - 타임존을 Asia/Seoul로 변경
-2. TASK 2: AppArmor 비활성화
-  - AppArmor: Linux 커널의 보안 모듈로, 프로그램의 리소스 접근을 제한하는 Mandatory Access Control (MAC) 시스템
-  - 비활성화 이유: Kubernetes 실습 환경에서는 AppArmor가 일부 컨테이너 런타임이나 네트워크 플러그인과 충돌할 수 있음
-  - 프로덕션 환경에서는 보안을 위해 활성화 권장
-3. TASK 3: SWAP 비활성화
-  - SWAP: 디스크 공간을 메모리처럼 사용하는 가상 메모리
-  - 비활성화 이유
-    - Kubernetes는 노드의 메모리 사용량을 정확히 모니터링해야 하는데, SWAP이 활성화되어 있으면 메모리 부족 상황을 제대로 감지하지 못할 수 있음
-    - kubelet은 기본적으로 SWAP이 비활성화되어 있어야 정상 동작함
-4. TASK 4: 필수 패키지 설치
-  - `tree`, `git`, `jq`, `yq`, `unzip`, `vim`, `sshpass` 등 실습에 필요한 유틸리티 설치
-5. TASK 5: Root 비밀번호 설정
-  - root 비밀번호를 `qwe123`으로 설정 (실습 환경용)
-  - **chpasswd**: 사용자 비밀번호를 일괄 변경하는 명령어. `echo "username:password" | chpasswd` 형식으로 사용
-6. TASK 6: SSH 설정
-  - 실습 편의를 위해 패스워드 기반 인증과 root 로그인을 허용
-    - `PasswordAuthentication yes`: 패스워드 인증 허용
-    - `PermitRootLogin yes`: root 계정으로 직접 SSH 접속 허용
-  - 프로덕션 환경에서는 보안상 키 기반 인증만 사용하고 root 로그인을 비활성화해야 함
-7. TASK 7: Local DNS 설정 (Hosts 파일)
-  - `/etc/hosts` 파일에 각 호스트의 IP와 호스트명을 매핑하여 도메인 이름으로 접근할 수 있도록 설정
-  - 예: `192.168.10.100 server.kubernetes.local server` → `server.kubernetes.local` 또는 `server`로 접근 가능
+### TASK 1: Profile & Bashrc 설정
+
+- `.bashrc`에 `sudo su -` 명령을 추가하여 vagrant 사용자가 자동으로 root로 전환되도록 설정
+  - 실습 과정의 많은 부분에 root 권한이 필요함 (시스템 서비스 설치, 설정 파일 수정, 네트워크 구성 등)
+  - 매번 `sudo`를 입력하거나 `sudo su -`를 실행하는 것보다 SSH 접속 시 자동으로 root로 전환되는 게 편리
+  - 프로덕션 환경에서는 권장되지 않지만, 실습 환경이므로 보안보다 편의성 우선
+- `vi`를 `vim`으로 alias 설정
+- 타임존을 Asia/Seoul로 변경
+
+### TASK 2: AppArmor 비활성화
+
+- AppArmor: Linux 커널의 보안 모듈로, 프로그램의 리소스 접근을 제한하는 Mandatory Access Control (MAC) 시스템
+- 비활성화 이유: Kubernetes 실습 환경에서는 AppArmor가 일부 컨테이너 런타임이나 네트워크 플러그인과 충돌할 수 있음
+- 프로덕션 환경에서는 보안을 위해 활성화 권장
+
+### TASK 3: SWAP 비활성화
+
+- SWAP: 디스크 공간을 메모리처럼 사용하는 가상 메모리
+- 비활성화 이유
+  - Kubernetes는 노드의 메모리 사용량을 정확히 모니터링해야 하는데, SWAP이 활성화되어 있으면 메모리 부족 상황을 제대로 감지하지 못할 수 있음
+  - kubelet은 기본적으로 SWAP이 비활성화되어 있어야 정상 동작함
+
+### TASK 4: 필수 패키지 설치
+
+- `tree`, `git`, `jq`, `yq`, `unzip`, `vim`, `sshpass` 등 실습에 필요한 유틸리티 설치
+- 용도: 디렉터리 구조 확인(`tree`), 스크립트/설정 관리(`git`), JSON·YAML 처리(`jq`, `yq`), 인증서 압축 해제(`unzip`), 편집(`vim`), 비밀번호 없이 SSH 연동(`sshpass`) 등
+
+### TASK 5: Root 비밀번호 설정
+
+- root 비밀번호를 `qwe123`으로 설정 (실습 환경용)
+- **chpasswd**: 사용자 비밀번호를 일괄 변경하는 명령어. `echo "username:password" | chpasswd` 형식으로 사용
+- jumpbox에서 다른 VM으로 `sshpass`로 접속하거나, 스크립트에서 패스워드 인증을 쓸 때 필요
+
+### TASK 6: SSH 설정
+
+- 실습 편의를 위해 패스워드 기반 인증과 root 로그인을 허용
+  - `PasswordAuthentication yes`: 패스워드 인증 허용
+  - `PermitRootLogin yes`: root 계정으로 직접 SSH 접속 허용
+- 프로덕션 환경에서는 보안상 키 기반 인증만 사용하고 root 로그인을 비활성화해야 함
+
+### TASK 7: Local DNS 설정 (Hosts 파일)
+
+- `/etc/hosts` 파일에 각 호스트의 IP와 호스트명을 매핑하여 도메인 이름으로 접근할 수 있도록 설정
+- 별도 DNS 서버 없이도 `server.kubernetes.local`, `node-0` 등 호스트명으로 접근 가능
+- 예: `192.168.10.100 server.kubernetes.local server` → `server.kubernetes.local` 또는 `server`로 접근 가능
 
 <br>
 
