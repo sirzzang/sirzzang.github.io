@@ -21,7 +21,7 @@ Kubernetes 클러스터를 사용하다 보면, `kubectl get pods` 같은 명령
 
 [Kubernetes 공식 문서](https://kubernetes.io/ko/docs/concepts/configuration/organize-cluster-access-kubeconfig/)에 따르면, kubeconfig 파일을 사용하여 클러스터, 사용자, 네임스페이스 및 인증 메커니즘에 대한 정보를 관리할 수 있다. `kubectl` 커맨드라인 도구는 kubeconfig 파일을 사용하여 클러스터를 선택하고 클러스터의 API 서버와 통신하는 데 필요한 정보를 찾는다.
 
-이 글에서는 kubeconfig의 개념, 파일 구조, 사용법, 그리고 Best Practice에 대해 정리한다. 각 필드의 상세한 API Reference는 [별도 글]({% post_url 2026-02-16-Kubernetes-Kubeconfig-03 %})에서 다루고, 다중 클러스터 접근 구성 실습은 [다음 글]({% post_url 2026-02-16-Kubernetes-Kubeconfig-02 %})에서 진행한다.
+이 글에서는 kubeconfig의 개념, 파일 구조, 사용법, 그리고 Best Practice에 대해 정리한다. 각 필드의 상세한 API Reference는 [별도 글]({% post_url 2026-02-16-Kubernetes-Kubeconfig-03 %})에서 다루고, [다음 글]({% post_url 2026-02-16-Kubernetes-Kubeconfig-02 %})에서 다중 클러스터 접근 구성 실습을 진행해 본다.
 
 
 <br>
@@ -32,10 +32,9 @@ Kubernetes 클러스터를 사용하다 보면, `kubectl get pods` 같은 명령
 
 kubeconfig란, **Kubernetes 클러스터에 접근하기 위한 설정 정보를 담은 YAML 파일**이다. 더 정확히 말하면, 어떤 클러스터의 API 서버에 어떤 인증 정보로 통신할지를 정의하는 파일이다.
 
-참고로 "kubeconfig"는 **파일 이름이 아니라 개념적 용어**이다. 클러스터 접근 설정을 담고 있는 파일을 통칭하여 kubeconfig라고 부르는 것이며, 실제 파일 이름은 `config`, `admin.conf`, `kubelet.conf` 등 다양할 수 있다.
-
 여기서 **"Kubernetes 클러스터에 접근한다"는 것은 곧 "API 서버에 접근한다"**는 것과 사실상 동일하다. Kubernetes에서 모든 작업은 API 서버를 통해 이루어지기 때문이다. `kubectl`이든, `kubelet`이든, `kube-scheduler`든, 클러스터에 뭔가를 하려면 **반드시 API 서버와 통신**해야 한다. API 서버가 클러스터의 **유일한 진입점(single entry point)**이기 때문이다.
 
+참고로 "kubeconfig"는 **파일 이름이 아니라 개념적 용어**이다. 클러스터 접근 설정을 담고 있는 파일을 통칭하여 kubeconfig라고 부르는 것이며, 실제 파일 이름은 `config`, `admin.conf`, `kubelet.conf` 등 다양할 수 있다.
 
 ## 사용 주체
 
@@ -642,14 +641,14 @@ export KUBECONFIG=~/.kube/config-dev:~/.kube/config-staging:~/.kube/config-prod
 
 ## 경로는 절대 경로 또는 인라인으로
 
-kubeconfig 안에 인증서 경로를 쓸 때는, 거의 항상 **절대 경로**를 사용하거나 `certificate-authority-data`처럼 **base64 인라인**으로 넣는 것이 좋다.
-
-[공식 문서](https://kubernetes.io/ko/docs/concepts/configuration/organize-cluster-access-kubeconfig/#%ED%8C%8C%EC%9D%BC-%EC%B0%B8%EC%A1%B0)에서도 다음과 같이 말한다.
+kubeconfig 안에 인증서 경로를 쓸 때는, 거의 항상 **절대 경로**를 사용하거나 `certificate-authority-data`처럼 **base64 인라인**으로 넣는 것이 좋다. 상대 경로를 쓰면 "기준이 뭔지" 헷갈리기 쉽다. [공식 문서](https://kubernetes.io/ko/docs/concepts/configuration/organize-cluster-access-kubeconfig/#%ED%8C%8C%EC%9D%BC-%EC%B0%B8%EC%A1%B0)에서는 경로 해석 규칙을 이렇게 정리하고 있다.
 
 > kubeconfig 파일에서 파일과 경로 참조는 kubeconfig 파일의 위치와 관련 있다. 커맨드라인 상에 파일 참조는 현재 디렉터리를 기준으로 한다. `$HOME/.kube/config`에서 상대 경로는 상대적으로, 절대 경로는 절대적으로 저장한다.
 
 
 ## 보안
+
+kubeconfig는 클러스터 접근 권한을 담고 있으므로, 실무에서는 아래 수칙을 지키는 것이 좋다.
 
 - kubeconfig 파일 권한은 `chmod 600`으로 본인만 읽을 수 있게 설정
 - 절대 Git 등 버전 관리에 커밋하지 않기 (인증서, 토큰 등 민감 정보 포함)
@@ -658,6 +657,8 @@ kubeconfig 안에 인증서 경로를 쓸 때는, 거의 항상 **절대 경로*
 
 
 ## 정기적 정리 및 도구 활용
+
+클러스터와 사용자가 늘어나면 kubeconfig가 비대해지므로, 실무에서는 아래를 습관화하는 것이 좋다.
 
 - 더 이상 사용하지 않는 컨텍스트, 클러스터, 사용자 항목은 주기적으로 삭제
 - [kubectx / kubens](https://github.com/ahmetb/kubectx) 같은 도구를 사용하면 컨텍스트/네임스페이스 전환이 훨씬 편리하다

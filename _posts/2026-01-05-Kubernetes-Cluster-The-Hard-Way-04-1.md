@@ -66,7 +66,7 @@ mTLS Handshake 과정 등 자세한 내용은 [TLS/SSL 프로토콜 글의 mTLS]
 
 <br>
 
-예를 들어, kubelet이 kube-apiserver와 통신할 때:
+예를 들어, kubelet이 kube-apiserver와 통신할 때 아래와 같은 과정을 거친다.
 1. kube-apiserver가 자신의 인증서를 kubelet에 전송
 2. kubelet이 kube-apiserver 인증서를 CA 공개키로 검증
 3. kubelet이 자신의 인증서를 kube-apiserver에 전송

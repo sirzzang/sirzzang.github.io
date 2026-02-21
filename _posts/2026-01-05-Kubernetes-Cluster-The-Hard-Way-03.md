@@ -60,14 +60,14 @@ IPV4_ADDRESS FQDN HOSTNAME POD_SUBNET
 
 Pod 서브넷이란, 각 워커 노드에 할당될 Pod 네트워크 대역을 의미한다. Kubernetes는 각 노드마다 **고유한** Pod CIDR 범위를 할당하여 Pod 간 통신을 관리한다. 예컨대, 위의 파일에서 `10.200.0.0/24`는 node-0에 할당될 Pod 네트워크 대역이다.
 
-다만, 컨트롤 플레인(server)은 kubelet이 동작하지 않으므로 Pod 서브넷 설정이 필요 없다.
+이 튜토리얼에서는 컨트롤 플레인 컴포넌트를 systemd 서비스로 구동하므로 컨트롤 플레인(server)에는 kubelet이 설치되지 않는다. 따라서 server에는 Pod가 올라가지 않으며, Pod 서브넷 설정이 필요 없다. ([0편]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-00 %})의 "컨트롤 플레인 구동 방식" 참고)
 
 원본 튜토리얼에서는 각 머신이 서로 통신 가능하고 jumpbox에서 접근 가능한 한, 어떤 IP 주소든 할당 가능하다고 명시되어 있다.
 
 
 ### Machine Database 생성
 
-`machines.txt` 파일을 생성하여 각 머신의 정보를 저장한다:
+`machines.txt` 파일을 생성하여 각 머신의 정보를 저장한다. 이 파일은 이후 스크립트에서 반복문으로 읽어 각 머신에 명령을 실행할 때 사용된다.
 
 ```bash
 # (jumpbox) #
@@ -89,9 +89,7 @@ cat machines.txt
 192.168.10.102 node-1.kubernetes.local node-1 10.200.1.0/24
 ```
 
-<br>
 
-이 파일은 이후 스크립트에서 반복문으로 읽어 각 머신에 명령을 실행할 때 사용된다.
 
 
 <br>
@@ -106,10 +104,8 @@ cat machines.txt
 
 기본적으로 Debian 시스템은 보안상의 이유로 root 계정의 SSH 접근을 비활성화한다. 하지만 이 튜토리얼에서는 편의를 위해 root SSH 접근을 활성화한다. 거듭 강조하지만, 프로덕션 환경에서는 보안상 권장되지 않으며, 일반 사용자 계정과 sudo를 사용하는 것이 좋다.
 
-우리 실습 환경에서는 [이전 글]({{site.url}}/kubernetes/Kubernetes-Cluster-The-Hard-Way-02/)에서 이미 root SSH 접근이 설정되어 있다.
-
-
-따라서 간단히 설정만 확인한다.
+이 실습 환경을 구축할 때, [이전 글]({{site.url}}/kubernetes/Kubernetes-Cluster-The-Hard-Way-02/)에서 이미 root SSH 접근을 설정했다.
+따라서 이번 글에서는 잘 설정되어 있는지 간단히 확인하기만 한다.
 ```bash
 # (jumpbox) #
 # SSH 설정에서 암호 인증 및 root 로그인 허용 여부 확인
@@ -126,20 +122,16 @@ PermitRootLogin yes
 
 만약 root SSH 접근이 비활성화되어 있다면, 각 머신에 접속하여 다음과 같이 설정할 수 있다. 원본 가이드를 참고하여 기록해 둔다.
 
-1. 일반 사용자 계정으로 SSH 접속 후 root로 전환:
 ```bash
+# 1. 일반 사용자 계정으로 SSH 접속 후 root로 전환
 su - root
-```
 
-2. `/etc/ssh/sshd_config` 파일 수정:
-```bash
+# 2. /etc/ssh/sshd_config 파일 수정 (PermitRootLogin yes)
 sed -i \
   's/^#*PermitRootLogin.*/PermitRootLogin yes/' \
   /etc/ssh/sshd_config
-```
 
-3. SSH 서버 재시작:
-```bash
+# 3. SSH 서버 재시작
 systemctl restart sshd
 ```
 
@@ -328,15 +320,15 @@ node-0
 node-1
 ```
 
+<br>
+
 마찬가지로, 원본 가이드에서 hosts 파일을 설정하여 각 머신의 `/etc/hosts`에 추가하는 방법만 기록해 둔다.
 
-1. Jumpbox의 /etc/hosts에 추가
 ```bash
+# 1. Jumpbox의 /etc/hosts에 추가
 cat hosts >> /etc/hosts
-```
 
-2. 각 원격 머신의 /etc/hosts에 추가
-```bash
+# 2. 각 원격 머신의 /etc/hosts에 추가
 while read IP FQDN HOST SUBNET; do
   scp hosts root@${HOST}:~/
   ssh -n root@${HOST} "cat hosts >> /etc/hosts"

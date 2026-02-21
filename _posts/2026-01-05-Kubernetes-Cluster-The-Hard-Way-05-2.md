@@ -31,18 +31,25 @@ hidden: true
 
 # kubelet kubeconfig 생성
 
-노드 별로 kubelet이 API Server와 통신하기 위한 kubeconfig 파일을 생성한다. kubeconfig 생성 순서는 4단계로 구성된다.
-1. `set-cluster`: API Server 접속 정보 설정 (어디로 접속할지)
-2. `set-credentials`: 클라이언트 인증 정보 설정 (내가 누구인지)
-3. `set-context`: cluster와 user를 조합하여 context 생성
-4. `use-context`: 사용할 context를 current-context로 지정
+노드 별로 kubelet이 API Server와 통신하기 위한 kubeconfig 파일을 생성한다. 이 실습에서는 **`kubectl config`** 하위 명령으로 kubeconfig를 만든다. 다음 네 가지를 순서대로 실행하면 된다.
+
+1. **`kubectl config set-cluster`**: API Server 접속 정보 설정 (어디로 접속할지)
+2. **`kubectl config set-credentials`**: 클라이언트 인증 정보 설정 (내가 누구인지)
+3. **`kubectl config set-context`**: cluster와 user를 조합하여 context 생성
+4. **`kubectl config use-context`**: 사용할 context를 current-context로 지정
 
 각 단계마다 kubeconfig 파일의 `clusters`, `users`, `contexts`, `current-context` 섹션이 차례대로 채워진다.
 
+> **참고**: kubeconfig는 YAML을 직접 작성해도 된다. [kubeconfig 구조]({% post_url 2026-02-16-Kubernetes-Kubeconfig-01 %})와 [API 스펙]({% post_url 2026-02-16-Kubernetes-Kubeconfig-03 %})을 알고 있다면 `clusters`, `users`, `contexts`를 채운 파일을 만들어 두고 base64 인코딩만 넣어 주면 된다. 다만 반복 생성·자동화할 때는 `kubectl config` 명령이 편한 경우가 많다.
+
 > **참고**: [원래 가이드에서는 `for host in node-0 node-1; do` 반복문을 사용](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/05-kubernetes-configuration-files.md#the-kubelet-kubernetes-configuration-file)하지만, 이 실습에서는 각 노드별로 명시적으로 실행하여 단계별 변화를 확인한다.
 
+<br>
 
 ## set-cluster
+
+`set-cluster` 단계는 kubeconfig의 `clusters` 섹션을 채운다. API Server의 위치와 해당 서버의 신뢰성을 검증할 CA 인증서 정보를 설정한다.
+
 
 ```bash
 # jumpbox에서 실행
@@ -69,15 +76,14 @@ ls -l node-0.kubeconfig
 -rw------- 1 root root 2758 Jan  8 21:29 node-0.kubeconfig
 ```
 
-`set-cluster` 단계는 kubeconfig의 `clusters` 섹션을 채운다. API Server의 위치와 해당 서버의 신뢰성을 검증할 CA 인증서 정보를 설정한다.
-
-<br>
 
 주요 옵션은 다음과 같다.
 - `--certificate-authority`: API Server의 인증서를 검증할 CA 인증서 파일 경로
 - `--embed-certs=true`: CA 인증서 내용을 base64로 인코딩하여 kubeconfig 내부에 포함
 - `--server`: API Server 접속 주소 (HTTPS 엔드포인트)
 - `--kubeconfig`: 설정을 저장할 kubeconfig 파일 경로
+
+<br>
 
 ### certificate-authority
 
@@ -114,7 +120,12 @@ preferences: {}
 users: null
 ```
 
+<br>
+
 ## set-credentials
+
+`set-credentials` 단계는 kubeconfig의 `users` 섹션을 채운다. API Server와 mTLS 통신을 위해 **클라이언트 측 인증 정보**를 설정하는 단계다.
+
 ```bash
 # node-0 credentials 설정 후 확인
 kubectl config set-credentials system:node:node-0 \
@@ -131,14 +142,12 @@ kubectl config set-credentials system:node:node-1 \
   --kubeconfig=node-1.kubeconfig && cat node-1.kubeconfig
 ```
 
-`set-credentials` 단계는 kubeconfig의 `users` 섹션을 채운다. API Server와 mTLS 통신을 위해 **클라이언트 측 인증 정보**를 설정하는 단계다.
-
-<br>
-
 주요 옵션은 다음과 같다.
 - `--client-certificate`: 클라이언트 인증서 파일 경로. mTLS에서 클라이언트가 자신을 증명하는 데 사용
 - `--client-key`: 클라이언트 개인키 파일 경로. 인증서와 쌍을 이루며, 서명에 사용
 - `--embed-certs=true`: 인증서와 키의 내용을 base64로 인코딩하여 kubeconfig 파일 내부에 직접 포함
+
+<br>
 
 ### client-certificate와 client-key 설정
 
@@ -154,7 +163,7 @@ kubectl config set-credentials system:node:node-1 \
 
 여기서 `system:node:node-0`은 **새로운 사용자를 생성하는 것이 아니다**. 이것은 인증서에 담긴 CN(Common Name) 값을 kubeconfig에 기록하는 것이다.
 
-**실제 통신 흐름:**
+**실제 통신 흐름**은 아래와 같다:
 
 1. kubelet이 실행되어 kubeconfig 파일 읽기
 2. `users` 섹션에서 `client-certificate-data`와 `client-key-data` 확인
@@ -187,6 +196,8 @@ users: # 추가됨
     client-key-data: LS0tLS1CRUdJTiBQUklWQVRFI...
 ```
 
+<br>
+
 ## set-context
 
 `set-context` 단계는 kubeconfig의 `contexts` 섹션을 채운다. 앞서 설정한 cluster와 user를 조합하여 context를 생성한다.
@@ -213,6 +224,8 @@ Context "default" created.
 - `--cluster`: 접속할 클러스터 이름 (set-cluster에서 설정한 이름)
 - `--user`: 사용할 인증 정보 이름 (set-credentials에서 설정한 이름)
 - `--kubeconfig`: 설정을 저장할 kubeconfig 파일 경로
+
+<br>
 
 ### context의 역할
 
@@ -248,8 +261,11 @@ users:
     client-key-data: LS0tLS1CRUdJTiBQUklWQVRF...
 ```
 
+<br>
+
 ## use-context
-current-context 에 default 추가
+
+`use-context` 단계는 kubeconfig의 **current-context**를 지정한다. 여러 context가 있어도 클라이언트는 이 값으로 "어떤 context를 기본으로 쓸지" 결정하므로, 여기서 만든 `default` context를 current-context로 넣어 둔다.
 
 ```bash
 kubectl config use-context default \
@@ -286,6 +302,8 @@ users:
     client-key-data: LS0tLS1CRUdJTiBQUklWQVRFIEtFW...
 
 ```
+
+<br>
 
 ## 생성된 파일 확인
 

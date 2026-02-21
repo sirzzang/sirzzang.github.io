@@ -73,7 +73,7 @@ CA(Certificate Authority)는 다른 인증서에 서명하는 역할을 한다. 
 openssl genrsa -out ca.key 4096
 ```
 
-개인키 파일의 권한이 `600`(-rw-------)인 것을 확인한다. 개인키는 소유자만 읽을 수 있어야 한다.
+개인키 파일의 권한이 `600`(`-rw-------`)인 것을 확인한다. 개인키는 소유자만 읽을 수 있어야 한다.
 
 ```bash
 # 결과 확인
@@ -111,20 +111,22 @@ prime1, prime2, exponent1, exponent2, coefficient:
 
 ## 인증서 생성
 
-Root CA는 상위 CA가 없으므로, Self-Signed** 방식으로 생성한다. 즉, CA가 자기 자신의 개인키로 자신의 인증서에 서명한다. 이 때, 위에서 생성한 개인키를 이용한다. 
+Root CA는 상위 CA가 없으므로, Self-Signed 방식으로 생성한다. 즉, CA가 자기 자신의 개인키로 자신의 인증서에 서명한다. 이 때, 위에서 생성한 개인키를 이용한다.
+
+`openssl req`는 보통 CSR(Certificate Signing Request)을 만들 때 쓰지만, **`-x509` 옵션을 주면 CSR을 파일로 출력하지 않고**, 설정에서 읽은 DN 정보로 곧바로 자기 서명 인증서를 만들어 `-out`에 지정한 파일로 **인증서만** 쓴다. 따라서 아래 명령을 실행하면 **ca.crt만 생성되고, CSR 파일은 생성되지 않는다.**
 
 `-section` 옵션을 지정하지 않았으므로, OpenSSL은 `ca.conf`의 기본 `[req]` 섹션을 사용한다. 뒤에서 이어질 다른 컴포넌트 인증서 생성 시에는 `-section` 옵션으로 각 섹션을 명시적으로 지정한다.
 
 ```bash
 # (jumpbox)
-# -x509: CSR 대신 Self-Signed 인증서 직접 생성
-# -new: 새 인증서 생성 요청
+# -x509: CSR을 출력하지 않고 Self-Signed 인증서만 직접 생성
+# -new: 인증서에 넣을 요청 정보(DN 등) 생성
 # -sha512: SHA-512 해시 알고리즘으로 서명
 # -noenc: 개인키 암호호 없음(패스프레이즈 없음)
 # -key ca.key: 서명에 사용할 개인키(위에서 생성한 개인키)
 # -days 3653: 유효 기간 약 10년
 # -config ca.conf: 설정 파일에서 DN 정보 읽기
-# -out ca.crt: 출력 인증서 파일
+# -out ca.crt: 출력 인증서 파일(CSR은 생성되지 않음)
 openssl req -x509 -new -sha512 -noenc \
   -key ca.key -days 3653 \
   -config ca.conf \
@@ -213,8 +215,9 @@ ls -la ca.*
 
 # Admin 
 
-상위 CA가 없었던 위 단계와 달리, CSR 생성 단계가 추가된다.
+Root CA는 `-x509`로 인증서만 곧바로 냈지만, Admin처럼 **상위 CA(Root CA)가 서명해 주는** 인증서는 흐름이 다르다. **개인키 → CSR 생성(파일로 출력) → CA가 CSR에 서명하여 인증서(crt) 생성** 순서로 진행한다. 따라서 이 단계에서는 **admin.csr이 실제로 디스크에 생성**되고, 이어지는 인증서 생성 단계에서 그 CSR을 입력으로 넣어 `openssl x509 -req`로 CA가 서명한 뒤 **admin.crt만 출력**한다. CSR은 서명 과정에서 "소비"되는 입력일 뿐, 인증서 발급 후에도 남겨 둘 필요는 없다.
 
+<br>
 
 ## 개인키 생성
 ```bash
@@ -233,10 +236,13 @@ ls -l admin.key
 
 ## CSR 생성
 
+`-x509` 없이 `openssl req -new`만 사용하므로, 이번에는 **CSR만 생성되고 인증서는 생성되지 않는다.** 출력은 `-out admin.csr`로 지정한 **admin.csr 한 개**뿐이다.
+
 ```bash
-# csr 파일 생성
-# admin.key 개인키를 사용해 
-# 'CN=admin, O=system:masters'인 Kubernetes 관리자용 클라이언트 인증서 요청(admin.csr) 생성
+# (jumpbox) #
+# -new -key: 개인키로 서명한 CSR 생성 (인증서는 생성하지 않음)
+# -config -section admin: ca.conf의 [admin] 섹션에서 DN·확장 정보 읽기
+# -out admin.csr: CSR 파일 출력 (crt는 이 단계에서 생성되지 않음)
 openssl req -new -key admin.key -sha256 \
   -config ca.conf -section admin \
   -out admin.csr
@@ -283,14 +289,15 @@ Certificate Request:
 
 ## 인증서 생성
 
-CSR을 이용해 CA에 인증서를 요청해 생성한다.
+앞에서 만든 **CSR(admin.csr)을 입력**으로 받아, Root CA(ca.crt, ca.key)가 서명한 **인증서(admin.crt)만 출력**한다. `openssl x509 -req`는 CSR을 읽어 인증서로 변환할 뿐, 새 CSR을 만들지 않는다. 생성되는 파일은 **admin.crt 하나**이며, ca.srl은 CA가 다음 인증서 발급 시 시리얼 번호를 위해 자동 생성·재사용하는 부가 파일이다.
 
 ```bash
-# ca에 csr 요청을 통한 crt 파일 생성
-## -req : CSR를 입력으로 받아 인증서를 생성, self-signed 아님, CA가 서명하는 방식
-## -days 3653 : 인증서 유효기간 3653일 (약 10년)
-## -copy_extensions copyall : CSR에 포함된 모든 X.509 extensions를 인증서로 복사
-## -CAcreateserial : CA 시리얼 번호 파일 자동 생성, 다음 인증서 발급 시 재사용, 기본 생성 파일(ca.srl)
+# (jumpbox) #
+# -req -in admin.csr: CSR을 입력으로 받아 인증서 생성 (Self-Signed 아님, CA가 서명)
+# -out admin.crt: 출력은 인증서(admin.crt)만 생성, CSR은 그대로 두고 재사용 가능
+# -copy_extensions copyall: CSR에 포함된 X.509 확장을 인증서에 그대로 복사
+# -CA, -CAkey: 서명에 사용할 CA 인증서와 개인키
+# -CAcreateserial: CA 시리얼 번호 파일(ca.srl) 자동 생성, 이후 발급 시 재사용
 openssl x509 -req -days 3653 -in admin.csr \
   -copy_extensions copyall \
   -sha256 -CA ca.crt \
@@ -359,13 +366,14 @@ Certificate:
 - RBAC(`Role`/`ClusterRole`)이나 Webhook 기반 인가 검사를 **거치지 않음**
 - API Server에서 모든 동작을 무조건 허용 (클러스터 슈퍼유저 권한)
 
-따라서, 이 그룹에 대해서는 아래와 같은 보안 권고 사항이 제시된다:
-- [Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/security/rbac-good-practices/#least-privilege)에서도 이 그룹 사용을 최소화하라고 권고
-- 실무에서는 **AWS Root 계정**처럼 관리해야 함:
-  - 클러스터 부트스트랩 목적으로만 사용
-  - 일상적인 관리 작업에는 `cluster-admin` ClusterRole을 사용
-  - **인증서가 탈취되면 복구가 매우 어려움**
-- 필요한 경우, [`cluster-admin` ClusterRole](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#user-facing-roles)과 ClusterRoleBinding을 통해 관리자 권한을 부여하는 것이 안전
+[Kubernetes 공식 문서의 RBAC Good Practices — Least privilege](https://kubernetes.io/docs/concepts/security/rbac-good-practices/#least-privilege)에서는 **사용자를 `system:masters` 그룹에 추가하는 것을 피하라**고 명시한다. 이 그룹 소속 사용자는 RBAC 검사와 인가 웹훅을 **완전히 우회**하며, RoleBinding·ClusterRoleBinding을 제거해도 권한을 **회수할 수 없다**(언제나 무제한 슈퍼유저 접근).
+
+실무에서는 다음을 권장한다:
+- **AWS Root 계정**처럼 극소수·극도로 제한된 용도로만 사용:
+  - 클러스터 부트스트랩·복구 등 꼭 필요한 경우에만 사용
+  - 일상적인 관리에는 `system:masters` 대신 [`cluster-admin` ClusterRole](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#user-facing-roles)을 바인딩한 계정 사용 (공식 문서는 `cluster-admin`도 필요한 경우에만 쓰고, 일상 작업은 [impersonation](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#user-impersonation)을 고려하라고 권고함)
+  - **인증서가 탈취되면** RBAC로 회수할 수 없어 복구가 매우 어려움
+- 일반 관리자 권한이 필요할 때는 `system:masters`가 아닌, `cluster-admin` ClusterRole + ClusterRoleBinding으로 부여하는 편이 안전하다.
 
 <br>
 

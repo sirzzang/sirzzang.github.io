@@ -90,7 +90,7 @@ CA (Certificate Authority)
 
 ### distinguished_name
 인증서의 Subject 정보를 정의하는 섹션이다. `CN`, `O` 등의 필드는 X.500 표준에서 유래한 Distinguished Name(DN) 구조를 따른다.
-> DN 필드의 유래와 의미는 [이전 글(4.1)의 "Distinguished Name과 X.500 표준" 섹션](/kubernetes/Kubernetes-Cluster-The-Hard-Way-04-1/#distinguished-name-dn과-x500-표준)을 참고하자.
+> DN 필드의 유래와 의미는 [X.509 인증서 글의 Distinguished Name (DN)과 X.500 표준](/cs/CS-Security-X509-Certificate/#distinguished-name-dn과-x500-표준) 섹션을 참고하자.
 
 - **`CN`** (Common Name): 사용자 이름으로 매핑. `system:node:<nodeName>`, `system:kube-scheduler` 등
 - **`O`** (Organization): 그룹 이름으로 매핑. `system:nodes`, `system:masters` 등

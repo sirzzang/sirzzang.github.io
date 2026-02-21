@@ -547,7 +547,7 @@ configmap/kube-flannel-cfg created
 daemonset.apps/kube-flannel-ds created
 ```
 
-노드 확인:
+클러스터에 등록된 노드와 상태(Ready 여부)를 확인한다.
 
 ```bash
 multipass exec kubeadm-node -- kubectl get nodes
@@ -907,7 +907,7 @@ kubectl config view --kubeconfig=$HOME/.kube/config-kubeadm
 ```
 
 <details markdown="1">
-<summary>**kind**</summary>
+<summary>kind</summary>
 
 ```
 apiVersion: v1
@@ -932,7 +932,7 @@ users:
 </details>
 
 <details markdown="1">
-<summary>**k3s** (rename-context로 context 이름만 k3s-lab으로 바꾼 상태)</summary>
+<summary>k3s (rename-context로 context 이름만 k3s-lab으로 바꾼 상태)</summary>
 
 ```
 clusters: name "default", server https://192.168.2.4:6443
@@ -943,7 +943,7 @@ users: name "default", client cert/key
 </details>
 
 <details markdown="1">
-<summary>**kubeadm**</summary>
+<summary>kubeadm</summary>
 
 ```
 clusters: name "kubernetes", server https://192.168.2.5:6443
