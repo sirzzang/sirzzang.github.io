@@ -611,6 +611,30 @@ current-context: new-context  # ← 파일이 직접 수정됨
 kubectl --context=prod-admin get pods
 ```
 
+
+## kubectl config set-context
+
+컨텍스트를 **새로 만들거나**, 이미 있는 컨텍스트의 **설정을 수정**할 때 쓴다. `use-context`가 "어떤 컨텍스트를 쓸지(current-context)"를 바꾸는 반면, `set-context`는 "그 컨텍스트의 cluster, user, namespace 같은 옵션"을 정하는 명령이다.
+
+```bash
+# 새 컨텍스트 생성 (cluster, user 지정)
+kubectl config set-context my-context --cluster=my-cluster --user=my-user
+
+# 기존 컨텍스트에 기본 네임스페이스 지정
+kubectl config set-context my-context --namespace=dev
+```
+
+**현재 쓰는 컨텍스트**에 기본 네임스페이스를 붙이고 싶을 때는 `current-context`와 조합하면 편하다. `kubectl config current-context`는 kubeconfig의 `current-context` 값, 즉 옵션 없이 `kubectl`을 실행할 때 적용되는 그 컨텍스트 이름을 출력한다.
+
+```bash
+# 현재 기본 컨텍스트의 기본 네임스페이스를 dev로 설정
+kubectl config set-context $(kubectl config current-context) --namespace=dev
+```
+
+이렇게 하면 kubeconfig에서 해당 컨텍스트에 `namespace: dev`가 들어가고, 이후에는 `-n`/`--namespace`를 주지 않아도 `kubectl get pods`, `kubectl apply -f ...` 등이 `dev` 네임스페이스를 기준으로 동작한다. 특정 명령만 다른 네임스페이스를 쓰려면 그때만 `-n prod`처럼 지정하면 된다.
+
+`set-context`로 바꾼 내용도 kubeconfig 파일에 그대로 저장되므로, 터미널을 닫거나 재부팅해도 유지된다. 기본 네임스페이스를 다시 비우고 싶다면 같은 방식으로 `--namespace=""`를 주거나, 해당 컨텍스트의 `namespace` 필드를 수동으로 제거하면 된다.
+
 > `kubectl config` 하위 명령어의 전체 목록과 상세 사용법은 [kubectl config 공식 레퍼런스](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_config/)를 참고하자.
 
 

@@ -42,6 +42,14 @@ tags:
 
 이전 글에서 다룬 CFS bandwidth control의 quota/period 설정이 바로 이 cgroup 단위로 적용된다. cgroup이 없으면 개별 프로세스마다 제한을 걸어야 하지만, cgroup이 있으면 "이 그룹에 속한 모든 프로세스가 합산해서 CPU를 얼마까지만 쓸 수 있다"고 선언할 수 있다.
 
+cgroup에는 v1과 v2 두 가지 버전이 있다. v1은 리소스 컨트롤러별로 별도의 계층 구조를 가지고, v2는 단일 통합 계층 구조를 사용한다. 이 시리즈의 실험 환경은 **cgroup v2**이며, 이후 등장하는 파일 경로와 인터페이스(`cpu.max`, `cpu.weight`, `cpu.stat` 등)는 모두 cgroup v2 기준이다. 기존 자료에서 자주 등장하는 cgroup v1 인터페이스와의 대응 관계는 다음과 같다.
+
+| 기능 | cgroup v1 | cgroup v2 |
+|------|-----------|-----------|
+| quota/period 설정 | `cpu.cfs_quota_us` + `cpu.cfs_period_us` | `cpu.max` |
+| 상대적 가중치 | `cpu.shares` (범위: 2~262144) | `cpu.weight` (범위: 1~10000) |
+| 사용량/throttling 통계 | `cpuacct.stat` + `cpu.stat` (별도 파일) | `cpu.stat` (통합) |
+
 <br>
 
 ## cpu.max: quota/period 설정
@@ -87,9 +95,13 @@ burst_usec 0
 | `usage_usec` | cgroup 내 프로세스들이 사용한 총 CPU 시간 (us) |
 | `user_usec` | 사용자 모드에서 소비한 CPU 시간 |
 | `system_usec` | 커널 모드에서 소비한 CPU 시간 |
-| `nr_periods` | CFS bandwidth control이 경과한 총 period 수 |
+| `nr_periods` | bandwidth control이 활성화된 상태에서 경과한 총 period 수 |
 | `nr_throttled` | quota를 초과해 throttle된 period 수 |
 | `throttled_usec` | throttle 상태로 대기한 총 시간 (us) |
+| `nr_bursts` | burst가 발생한 횟수 |
+| `burst_usec` | burst로 추가 사용한 총 CPU 시간 (us) |
+
+`nr_bursts`와 `burst_usec`은 cgroup v2의 **`cpu.max.burst`** 기능과 관련된다. `cpu.max.burst`는 이전 period에서 사용하지 않은 quota를 축적해 두었다가, 순간적으로 quota를 초과하여 사용할 수 있게 하는 burst capacity다. 기본값은 0(burst 비활성)이며, K8s에서 직접 설정하지는 않는다. burst가 설정되어 있으면, 일시적인 CPU 사용량 급증에 대해 throttling 없이 유연하게 대응할 수 있다.
 
 <br>
 
@@ -116,15 +128,15 @@ cat cpu.stat > after.txt
 | `usage_usec` / `user_usec` / `system_usec` | 컨텍스트 스위치마다 (수 us ~ 수 ms 단위) |
 | `nr_periods` / `nr_throttled` / `throttled_usec` | CFS period마다 (기본 100ms 간격) |
 
-throttling 관점에서 중요한 세 필드의 해석:
+throttling 관점에서 중요한 세 필드를 자세히 보자. `nr_periods`와 `nr_throttled`는 `cpu.max`에 quota가 설정되어 bandwidth control이 활성화된 경우에만 카운트된다. `cpu.max`가 `max`(제한 없음)이면 두 값 모두 0으로 남는다.
 
-| 지표 | 의미 | 해석 예시 |
-|------|------|----------|
-| `nr_periods` | 측정 구간의 총 period 수 | 215 = 21.5초간 측정 |
-| `nr_throttled` | throttle이 발생한 period 수 | 208/215 = 거의 매 period마다 throttle |
-| `throttled_usec` | 대기한 총 시간 | 154,500,000us = 154.5초 대기 |
+| 필드 | 카운트 단위 | 증가 조건 | 해석 예시 |
+|------|-----------|----------|----------|
+| `nr_periods` | period | bandwidth control 활성 + 해당 period에 실행 대기 태스크 존재 | 215 = 21.5초간 측정 |
+| `nr_throttled` | period | 해당 period에서 quota 소진으로 throttling 발생 | 208 = 208개 period에서 throttle |
+| `throttled_usec` | 마이크로초(us) | throttle 상태에서 대기할 때마다 누적 | 154,500,000us = 154.5초 대기 |
 
-`nr_throttled / nr_periods` 비율이 높을수록 CPU 제한에 심하게 걸리고 있다는 뜻이다.
+`nr_throttled / nr_periods`는 "실행 대기 태스크가 있었던 period 중 몇 %에서 throttling이 발생했는가"를 의미한다. 이 비율이 높을수록 CPU 제한이 심한 것이다 (예: 208/215 = 96.7%).
 
 <br>
 
@@ -311,7 +323,7 @@ nr_bursts 0
 burst_usec 0
 ```
 
-이 Pod는 `nr_periods`와 `nr_throttled`가 모두 0이다. CPU limit이 설정되지 않았거나, 아직 quota를 초과한 적이 없다는 뜻이다.
+이 Pod는 `nr_periods`와 `nr_throttled`가 모두 0이다. `nr_periods = 0`은 bandwidth control이 비활성 상태(`cpu.max`가 `max`로 설정)이거나 해당 cgroup에 실행 중인 프로세스가 없었다는 뜻이다. `nr_periods`는 bandwidth control이 활성화된 상태에서 경과한 총 period 수를 기록하므로, throttling 발생 여부와는 별개다. throttling이 한 번도 발생하지 않았음을 나타내는 것은 `nr_throttled = 0`이다.
 
 <br>
 
@@ -326,8 +338,8 @@ kubelet (Pod spec 수신)
     ↓
 컨테이너 런타임 (containerd)
     ↓
-cgroup 파일에 값 설정
-    ├── request → cpu.shares (상대적 가중치)
+cgroup v2 파일에 값 설정
+    ├── request → cpu.weight (상대적 가중치)
     └── limit   → cpu.max   (quota/period)
     ↓
 호스트 커널 CFS bandwidth control 적용
@@ -341,15 +353,23 @@ request와 limit은 각각 다른 cgroup 메커니즘으로 매핑된다.
 
 ### request → cpu.weight: 상대적 가중치
 
-request는 cgroup의 `cpu.weight`(cgroup v2) 또는 `cpu.shares`(cgroup v1)로 변환된다. 핵심은 이 값이 **CPU 경합이 있을 때만 의미를 가지는 상대적 가중치**라는 점이다.
+request는 cgroup v2의 `cpu.weight`로 변환된다. 핵심은 이 값이 **CPU 경합이 있을 때만 의미를 가지는 상대적 가중치**라는 점이다.
+
+cgroup v2에서 `cpu.weight`의 범위는 1~10000(기본값 100)이다. kubelet은 내부적으로 request 밀리코어 값을 먼저 cgroup v1의 shares 값으로 변환한 뒤, 이를 다시 v2 weight로 매핑한다.
 
 ```
-cpu.shares = request(millicores) × 1024 / 1000
+# 1단계: request → shares (v1 호환 중간값)
+shares = request(millicores) × 1024 / 1000
+
+# 2단계: shares → weight (v2)
+weight = 1 + ((shares - 2) × 9999) / 262142
 ```
 
-예를 들어, `1000m` request는 1024 shares, `500m` request는 512 shares로 변환된다. 두 컨테이너가 CPU를 두고 경쟁할 때, 1024 shares를 가진 컨테이너는 512 shares를 가진 컨테이너보다 2배의 CPU 시간을 할당 받는다. 하지만 **노드가 유휴 상태이고 CPU 경합이 없다면**, 컨테이너는 shares 값과 무관하게 필요한 만큼 CPU를 사용할 수 있다.
+예를 들어 `1000m` request는 shares 1024를 거쳐 weight 약 39로, `500m` request는 shares 512를 거쳐 weight 약 20으로 변환된다. 두 컨테이너가 CPU를 두고 경쟁할 때, weight가 높은 컨테이너가 비례적으로 더 많은 CPU 시간을 할당 받는다. 하지만 **노드가 유휴 상태이고 CPU 경합이 없다면**, 컨테이너는 weight 값과 무관하게 필요한 만큼 CPU를 사용할 수 있다.
 
-이 shares 값은 cgroup 계층 구조를 따라 전파된다. 아래 그림에서 괄호 안의 숫자가 각 레벨의 `cpu.shares` 값이다.
+> 참고: cgroup v1 환경에서는 `cpu.shares`(범위 2~262144)가 직접 사용되며, `shares = request(millicores) × 1024 / 1000` 공식이 최종 값이 된다.
+
+이 가중치 값은 cgroup 계층 구조를 따라 전파된다. 아래 그림은 cgroup v1 기준의 예시로, 괄호 안의 숫자가 각 레벨의 `cpu.shares` 값이다. cgroup v2에서도 `cpu.weight`로 동일한 비례 배분 원리가 적용된다.
 
 ![cgroup shares hierarchy](/assets/images/cgroup-shares-hierarchy.png)
 <center><sup>출처: <a href="https://engineering.omio.com/cpu-limits-and-aggressive-throttling-in-kubernetes-c5b20bd8a718">CPU limits and aggressive throttling in Kubernetes - Omio Engineering</a></sup></center>
@@ -373,16 +393,18 @@ request와 달리, **limit은 노드에 유휴 CPU가 있더라도 항상 강제
 
 ### 정리
 
-| K8s 설정 | 목적 | cgroup 매핑 | 동작 방식 |
+| K8s 설정 | 목적 | cgroup v2 매핑 | 동작 방식 |
 |---------|------|-----------|----------|
-| `requests.cpu` | 스케줄링 + 경합 시 최소 보장 | `cpu.weight` / `cpu.shares` | **상대적** 가중치. 경합 시에만 활성화 |
+| `requests.cpu` | 스케줄링 + 경합 시 최소 보장 | `cpu.weight` | **상대적** 가중치. 경합 시에만 활성화 |
 | `limits.cpu` | 최대 사용량 제한 | `cpu.max` (quota/period) | **절대적** 시간 할당량. 항상 활성화, throttling 발생 |
 
 <br>
 
 ### "시끄러운 이웃" 문제와 limit의 역할
 
-CPU limit이 "시끄러운 이웃(noisy neighbor)" 문제를 해결해 줄 것 같지만, 실제로 경합 상황에서 리소스를 공정하게 배분하는 것은 request에 의해 결정되는 `cpu.shares`다. 모든 Pod에 적절한 request가 설정되어 있다면, CFS 스케줄러는 shares 값에 비례하여 CPU 시간을 분배하고, 특정 Pod가 다른 Pod를 기아 상태에 빠뜨리는 것을 방지한다.
+**시끄러운 이웃(noisy neighbor) 문제**란, 동일 노드에서 특정 Pod가 CPU를 과도하게 소비하여 같은 노드의 다른 Pod 성능을 저하시키는 현상이다.
+
+CPU limit이 이 문제를 해결해 줄 것 같지만, 실제로 경합 상황에서 리소스를 공정하게 배분하는 것은 request에 의해 결정되는 `cpu.weight`다. 모든 Pod에 적절한 request가 설정되어 있다면, CFS 스케줄러는 shares 값에 비례하여 CPU 시간을 분배하고, 특정 Pod가 다른 Pod를 기아 상태에 빠뜨리는 것을 방지한다.
 
 반면 limit은 **다른 누구도 CPU를 필요로 하지 않는 상황에서조차** Pod의 사용량을 제한한다. 노드에 유휴 코어가 남아 있어도 quota를 초과하면 강제로 대기해야 한다. 이런 의미에서 limit은 경합 문제를 해결하는 정밀한 도구라기보다, 상한선을 강제하는 무딘 도구에 가깝다.
 
@@ -468,7 +490,7 @@ Prometheus를 사용하는 환경이라면 cAdvisor가 노출하는 메트릭으
 
 CPU limit이 cgroup을 통해 어떻게 적용되고, throttling이 어떻게 발생하는지는 알았다. 다음으로 알아야 할 것은 ffmpeg이 내부적으로 CPU를 어떻게 사용하는지다. ffmpeg이 몇 개의 스레드를 만들고, 어떤 방식으로 병렬 처리하는지에 따라 throttling의 양상이 달라지기 때문이다.
 
-> 여기까지 정리하고 나니, YAML에 숫자 하나 적는 것의 무게가 달라 보인다. `cpu: "1000m"`이라는 한 줄이 커널 수준에서 어떤 결과를 만들어 내는지 알게 되었으니, 앞으로는 좀 더 신중하게 설정할 수 있을 것 같다.
+> YAML에서 `cpu: "1000m"`이라는 한 줄은, kubelet → 컨테이너 런타임 → cgroup `cpu.max` → CFS bandwidth control → throttling이라는 긴 경로를 거쳐 커널 수준의 동작으로 이어진다. 이 경로를 이해하면 리소스 설정을 단순한 숫자가 아닌, 커널 메커니즘에 대한 선언으로 바라볼 수 있다.
 
 <br>
 
