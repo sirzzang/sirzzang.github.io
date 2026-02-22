@@ -276,7 +276,7 @@ revision이나 RAFT TERM에 불일치가 있으면 K3s/etcd 문서의 스냅샷 
 `--cluster-reset`으로 cp-node-a가 단독 클러스터로 재시작된 이후, 나머지 노드들의 재조인 절차는 다음과 같다.
 
 1. **cp-node-b** (죽어 있던 노드, 복구된 경우):
-   cp-node-b는 원래 클러스터의 정상 멤버였으므로, etcd DB 디렉토리만 삭제하면 충분하다. K3s 바이너리와 설정은 그대로 사용할 수 있다.
+   cp-node-b는 원래 클러스터의 정상 멤버였으므로, etcd DB 디렉토리만 삭제하면 충분하다. `--cluster-reset`은 etcd 멤버십만 리셋할 뿐 CA 인증서(`/var/lib/rancher/k3s/server/tls/`)는 보존하므로, cp-node-b가 원래 클러스터에서 발급받은 인증서와 토큰이 여전히 유효하다. Raft cluster ID 불일치를 해소하기 위해 etcd DB만 삭제하면 된다.
    ```bash
    # cp-node-b에서
    $ sudo systemctl stop k3s
@@ -291,7 +291,7 @@ revision이나 RAFT TERM에 불일치가 있으면 K3s/etcd 문서의 스냅샷 
    ```
 
 2. **cp-node-c** (Split Brain으로 독립되어 있던 노드):
-   cp-node-c는 독립 클러스터로 운영되면서 인증서 등이 달라졌을 수 있으므로, `k3s-uninstall.sh`로 완전히 제거한 뒤 재설치한다.
+   cp-node-c는 SQLite 모드로 독립 클러스터를 생성하면서 새로운 CA 인증서를 발급했기 때문에, 원래 클러스터의 CA와 불일치한다. `k3s-uninstall.sh`로 완전히 제거하여 불일치하는 인증서를 삭제한 뒤 재설치해야 한다.
    ```bash
    # cp-node-c에서
    $ sudo /usr/local/bin/k3s-uninstall.sh

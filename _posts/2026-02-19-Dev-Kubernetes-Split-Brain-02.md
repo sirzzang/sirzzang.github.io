@@ -1126,7 +1126,9 @@ w-2    Ready    <none>                      9m2s    v1.27.9+k3s1   192.168.56.22
 
 <br>
 
-5노드 모두 Ready. cp-1, cp-2, cp-3 모두 ROLES에 `control-plane,etcd,master`가 표시된다. 3개 etcd 멤버가 모두 `started` 상태이고 `IS LEARNER`이 `false`이므로 정상적인 voting 멤버이다. `--cluster-init`으로 etcd를 초기화한 cp-1이 현재 leader이다.
+5노드 모두 Ready. cp-1, cp-2, cp-3 모두 ROLES에 `control-plane,etcd,master`가 표시된다. 3개 etcd 멤버가 모두 `started` 상태이고 `IS LEARNER`이 `false`이므로 정상적인 voting 멤버이다[^learner]. `--cluster-init`으로 etcd를 초기화한 cp-1이 현재 leader이다.
+
+[^learner]: etcd의 learner는 Raft 합의에 참여하지 않는 non-voting 멤버이다. K3s에서는 새 멤버가 조인할 때 먼저 learner로 등록하여 데이터를 동기화한 뒤, 완료되면 voting member로 승격하는 방식으로 사용된다. 정상 상태에서는 모든 멤버가 `IS LEARNER: false`여야 한다. 실험 5c에서 이 승격 과정을 관찰한다.
 
 <br>
 
@@ -1646,6 +1648,8 @@ w-2    Ready    <none>                      77m   v1.27.9+k3s1
 **이것은 중요한 발견이다. etcd 데이터가 남아 있는 상태에서는, `--server`나 `--cluster-init` 플래그 없이 `k3s server`를 실행해도 기존 클러스터에 정상 합류한다.** etcd 데이터 디렉토리(`/var/lib/rancher/k3s/server/db/etcd/member/`)에 피어 정보가 저장되어 있기 때문이다. 실험 3a(systemd 재부팅)과 본질적으로 동일한 결과이며, 실행 방법(systemd vs 커맨드 라인)과 관계없이 **etcd 데이터의 존재 여부**가 결정적이라는 것을 확인했다.
 
 이는 곧, Part 1에서 목격한 상황 — cp-node-c가 자기 자신만 보이는 단독 클러스터를 생성한 것 — 이 **etcd 데이터가 없는 상태에서 `k3s server`가 실행되었을 때만 발생할 수 있다**는 것을 의미한다. 이 가설은 실험 4b에서 검증한다.
+
+> **4a vs 4b가 이 글의 핵심 대비이다.** 동일한 명령(`k3s server`, 플래그 없음)이 etcd 데이터의 유무만으로 "정상 복귀"와 "Split Brain"이라는 정반대의 결과를 만든다.
 
 ### 실험 4b: etcd WAL만 삭제한 상태에서 `k3s server` (no flags)
 
