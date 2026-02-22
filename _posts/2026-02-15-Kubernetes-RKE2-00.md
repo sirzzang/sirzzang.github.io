@@ -129,7 +129,32 @@ K3s는 핵심 바이너리(containerd, kubelet, runc 등)가 `k3s` 바이너리 
 
 컨트롤 플레인 컴포넌트(API server, controller manager, scheduler, etcd)를 어떻게 띄우는지도 다르다. K3s는 이들을 **서버 프로세스 안에 통합**해 두고, 별도 static pod로 기동하지 않는다. 그래서 K3s의 `agent/pod-manifests/`에는 컨트롤 플레인용 매니페스트가 없어 비어 있는 것이 정상이다. RKE2는 바닐라 Kubernetes에 가깝게 **static pod**로 띄우며, kubelet이 `pod-manifests/`를 감시해 etcd·kube-apiserver 등을 pod로 실행한다. 그래서 RKE2 서버 노드에는 kubelet이 반드시 필요하고, 문서 뒤쪽 [아키텍처](#아키텍처)에서 보듯 부팅 순서가 "에이전트(kubelet) 기동 → static pod manifest 작성 → 컨트롤 플레인 pod 기동"이 된다.
 
-실제로 K3s 서버에서는 `kubectl get pods -n kube-system` 해도 kube-apiserver, etcd, kube-scheduler, kube-controller-manager가 **pod로 보이지 않는다** (서버 프로세스 안에서 돌기 때문). 반면 RKE2에서는 같은 명령으로 이들이 static pod로 나온다. 디렉터리로 보면, RKE2는 `/var/lib/rancher/rke2/agent/pod-manifests/`에 etcd, kube-apiserver 등 매니페스트가 있지만, K3s의 `/var/lib/rancher/k3s/server/manifests/`에는 CoreDNS·Traefik 같은 애드온만 있고 컨트롤 플레인용 static pod 매니페스트는 없다.
+<br>
+
+<details markdown="1">
+<summary>K3s 확인 결과: static pod가 없다</summary>
+
+실제로 K3s 서버에서 `kubectl get pods -n kube-system`을 실행하면, kube-apiserver, etcd, kube-scheduler, kube-controller-manager가 **pod로 보이지 않는다**. 서버 프로세스 안에서 돌기 때문이다.
+
+```bash
+root@cp-1:~# kubectl get pods -n kube-system
+NAME                                     READY   STATUS      RESTARTS      AGE
+coredns-77ccd57875-wlbx7                 1/1     Running     1 (29m ago)   97m
+helm-install-traefik-crd-ggltn           0/1     Completed   0             97m
+helm-install-traefik-m2bh8               0/1     Completed   1             97m
+local-path-provisioner-957fdf8bc-bhxxh   1/1     Running     2 (28m ago)   97m
+metrics-server-648b5df564-wzdvs          1/1     Running     2 (28m ago)   97m
+svclb-traefik-517284c5-66p7p             2/2     Running     0             89m
+svclb-traefik-517284c5-9kddv             2/2     Running     2 (64m ago)   78m
+svclb-traefik-517284c5-fbvlf             2/2     Running     2 (29m ago)   97m
+svclb-traefik-517284c5-vrsl7             2/2     Running     6 (12m ago)   74m
+svclb-traefik-517284c5-z5x62             2/2     Running     0             83m
+traefik-768bdcdcdd-8dcg5                 1/1     Running     1 (29m ago)   97m
+```
+
+CoreDNS, Traefik, metrics-server, local-path-provisioner 같은 **애드온 pod만** 보이고, kubeadm이나 RKE2에서 볼 수 있는 `kube-apiserver-*`, `etcd-*`, `kube-scheduler-*`, `kube-controller-manager-*` static pod는 없다. 반면 RKE2에서는 같은 명령으로 이들이 static pod로 나온다. 디렉터리로 보면, RKE2는 `/var/lib/rancher/rke2/agent/pod-manifests/`에 etcd, kube-apiserver 등 매니페스트가 있지만, K3s의 `/var/lib/rancher/k3s/server/manifests/`에는 CoreDNS·Traefik 같은 애드온만 있고 컨트롤 플레인용 static pod 매니페스트는 없다.
+
+</details>
 
 ### 기타: 데이터 경로에서 보이는 차이
 

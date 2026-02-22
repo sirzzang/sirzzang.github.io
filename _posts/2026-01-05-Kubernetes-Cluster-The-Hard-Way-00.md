@@ -122,7 +122,7 @@ Kubernetes 클러스터는 [여러 컴포넌트](https://v1-32.docs.kubernetes.i
 > 참고: **컨트롤 플레인 구동 방식**
 >
 > 이 튜토리얼(Kubernetes The Hard Way)에서는 컨트롤 플레인 컴포넌트(kube-apiserver, kube-controller-manager, kube-scheduler, etcd)를 **systemd 서비스**로 직접 구동한다. 따라서 컨트롤 플레인 노드(Server)에는 kubelet을 설치하지 않으며, Pod도 올리지 않는다. 
-> 반면 kubeadm, kubespray, Rancher 등 대부분의 클러스터 프로비저닝 도구는 컨트롤 플레인 컴포넌트를 **Static Pod** 형태로 띄우기 때문에, 컨트롤 플레인 노드에도 kubelet이 필요하다. 
+> 반면 kubeadm, kubespray, Rancher RKE2 등 대부분의 클러스터 프로비저닝 도구는 컨트롤 플레인 컴포넌트를 **Static Pod** 형태로 띄우기 때문에, 컨트롤 플레인 노드에도 kubelet이 필요하다. 
 > 이 차이를 알아두면 이후 글에서 "컨트롤 플레인에는 kubelet이 없다"는 설명이 혼란스럽지 않을 것이다.
 
 ### Server: 컨트롤 플레인

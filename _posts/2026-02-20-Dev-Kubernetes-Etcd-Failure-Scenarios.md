@@ -2,7 +2,7 @@
 title:  "[Kubernetes] etcd 비정상 시나리오별 대응"
 excerpt: K3s 삼중화 클러스터에서 etcd 멤버가 비정상일 때의 대표 시나리오와 대응 방법을 정리한다.
 categories:
-  - Kubernetes
+  - Dev
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -17,25 +17,25 @@ tags:
 
 # 배경
 
-이 글은 [K3s 컨트롤 플레인 재조인 트러블슈팅]({% post_url 2026-02-19-Kubernetes-Split-Brain %}) 글에서 etcd 비정상 시나리오 부분을 분리한 것이다. K3s 삼중화 컨트롤 플레인(3멤버 etcd) 환경에서, 재조인 전 etcd 상태가 비정상일 때의 대표 시나리오와 대응 방법을 정리한다.
+K3s 삼중화 컨트롤 플레인(3멤버 embedded etcd)을 운영하다 보면, 노드 장애·재조인·네트워크 이슈 등으로 etcd 상태가 비정상이 되는 상황을 맞닥뜨릴 수 있다. etcd가 비정상이면 컨트롤 플레인 노드 재조인이나 클러스터 복구 작업 자체가 불가능할 수 있으므로, 상황별로 어떤 대응이 필요한지 미리 정리해 두는 것이 중요하다.
 
-Split Brain의 원인과 해결 과정, K3s의 `k3s server` 부팅 동작 등에 대해서는 위 글을 참고한다.
+이 글에서는 Raft 멤버십/토폴로지 관점의 대표 시나리오와 대응 방법을 정리한다. Split Brain의 원인과 해결 과정, K3s의 `k3s server` 부팅 동작 등 구체적인 트러블슈팅 사례는 [K3s 컨트롤 플레인 재조인 트러블슈팅]({% post_url 2026-02-19-Dev-Kubernetes-Split-Brain-01 %}) 글을 참고한다.
 
 <br>
 
 # TL;DR
 
-아래 표는 **Raft 멤버십/토폴로지 관점**의 주요 시나리오만 다룬다. 재조인 전 점검 맥락에서는 이 범위로 충분하지만, etcd 운영 전반의 모든 장애 케이스를 다루는 것은 아니다.
+핵심 원칙은 **"쓰기가 가능한 클러스터를 먼저 확보"**하는 것이다. `member remove`, 재조인 등 모든 클러스터 변경 작업은 etcd 쓰기를 필요로 하기 때문이다.
+
+아래 표는 **Raft 멤버십/토폴로지 관점**의 주요 시나리오를 정리한 것이다. 인프라/운영 레벨 장애(디스크 풀, 인증서 만료 등)는 [기타 케이스](#기타-케이스)를 참고한다.
 
 | 시나리오 | 증상 | 쓰기 가능 여부 | 핵심 대응 |
 | --- | --- | --- | --- |
 | 1. 멤버 1개 unhealthy | `endpoint health`에서 1개 `false` | O (quorum 2/3 유지) | 복구 시도 후, 불가 시 `member remove` → 빠르게 재조인 |
 | 2. 3멤버 중 2개 unhealthy | quorum 미달, API Server 쓰기 실패 | X | 노드 복구 시도 → 불가 시 `--cluster-reset` 응급 조치 |
 | 3. Split Brain | 분리된 노드가 독립 클러스터 운영 | O (원래 클러스터 2/3) | 분리 노드 제거 → 데이터 정리 → 재조인 |
-| 4. member ID mismatch | 로그에 `member ID mismatch` | O (healthy) | revision + RAFT TERM 확인 → 스냅샷 복구 검토 |
+| 4. member ID mismatch | 로그에 `member ID mismatch` | O (healthy) | revision + RAFT TERM 확인 → 에러 진행 여부 판단 → 필요 시 재조인 또는 스냅샷 복구 |
 | 복합 | Split Brain + quorum 상실 | X | quorum 먼저 확보 → 이후 Split Brain 대응 |
-
-핵심 원칙: **"쓰기가 가능한 클러스터를 먼저 확보"**한다. Split Brain 복구(멤버 제거, 재조인)를 포함한 모든 클러스터 변경 작업은 etcd 쓰기를 필요로 하기 때문이다. 인프라/운영 레벨 장애(디스크 풀, 인증서 만료 등)는 [기타 케이스](#기타-케이스)를 참고한다.
 
 <br>
 
@@ -64,14 +64,14 @@ $ sudo ETCDCTL_API=3 etcdctl \
 +----------------------------+--------+-------------+-------+
 |          ENDPOINT          | HEALTH |    TOOK     | ERROR |
 +----------------------------+--------+-------------+-------+
-| https://x.x.x.x:2379      |   true | 10.399169ms |       |
-| https://y.y.y.y:2379      |   true | 10.207552ms |       |
+| https://x.x.x.x:2379       |   true | 10.399169ms |       |
+| https://y.y.y.y:2379       |   true | 10.207552ms |       |
 +----------------------------+--------+-------------+-------+
 ```
 
 ### `endpoint status`
 
-각 엔드포인트의 **상세 상태 메타데이터**를 반환한다. DB 크기, 리더 여부, Raft index, **Raft term**, **revision** 등이 포함된다. 데이터 정합성이나 리더 선출 상태를 확인할 때 사용한다.
+각 엔드포인트의 **상세 상태 메타데이터**를 반환한다. DB 크기, 리더 여부, Raft term, Raft index 등이 포함된다. 데이터 정합성이나 리더 선출 상태를 확인할 때 사용한다.
 
 ```bash
 $ sudo ETCDCTL_API=3 etcdctl \
@@ -80,7 +80,23 @@ $ sudo ETCDCTL_API=3 etcdctl \
   --cert=/var/lib/rancher/k3s/server/tls/etcd/server-client.crt \
   --key=/var/lib/rancher/k3s/server/tls/etcd/server-client.key \
   endpoint status --cluster -w table
++----------------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+|          ENDPOINT          |        ID        | VERSION | DB SIZE | IS LEADER | IS LEARNER | RAFT TERM | RAFT INDEX | RAFT APPLIED INDEX | ERRORS |
++----------------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+| https://x.x.x.x:2379      | aaaaaaaaaaaaaaaa |  3.5.13 |  5.2 MB |      true |      false |         5 |      54321 |              54321 |        |
+| https://y.y.y.y:2379      | bbbbbbbbbbbbbbbb |  3.5.13 |  5.2 MB |     false |      false |         5 |      54321 |              54321 |        |
++----------------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
 ```
+
+주요 필드:
+
+| 필드 | 설명 |
+| --- | --- |
+| **RAFT TERM** | 리더 선출이 발생할 때마다 증가하는 논리적 시간 단위. 모든 멤버의 term이 동일하면 리더가 안정적으로 유지되고 있다는 의미다. 특정 멤버만 term이 다르면 네트워크 파티션 등을 의심할 수 있다. |
+| **RAFT INDEX** | Raft 로그에 커밋된 마지막 엔트리의 일련 번호. 쓰기 요청이 커밋될 때마다 증가한다. 멤버 간 차이가 크면 복제 지연을 의미한다. |
+| **RAFT APPLIED INDEX** | 상태 머신(etcd 스토리지)에 실제로 적용된 로그의 인덱스. RAFT INDEX와 차이가 크면 apply가 밀려 있다는 뜻이다. |
+
+참고로 etcd의 **revision**은 키-값 저장소에서 변경(생성·수정·삭제)이 일어날 때마다 증가하는 전역 시퀀스 번호다. `endpoint status` 테이블에는 표시되지 않지만, JSON 출력(`-w json`)의 응답 헤더에 포함된다. 멤버 간 revision이 다르면 데이터 정합성 문제를 의심할 수 있다.
 
 정리하면, `endpoint health`로 먼저 "살아 있는가"를 확인하고, 이상이 있으면 `endpoint status`로 "어떤 상태인가"를 확인하는 순서로 진단한다.
 
@@ -89,7 +105,7 @@ $ sudo ETCDCTL_API=3 etcdctl \
 etcd는 Raft 합의 알고리즘을 사용하며, 쓰기(로그 복제)를 수행하려면 **쿼럼(quorum)**을 만족해야 한다.
 
 - **기준이 되는 N**: 클러스터 **멤버 수 N**은 `etcdctl member list`에 등록된 멤버 수이다. unhealthy 멤버라도 `member remove`로 제거하기 전까지는 N에 포함된다. 즉, "지금 응답하는 멤버 수"가 아니라 "member list에 있는 멤버 수"가 N이다.
-- **쿼럼 계산**: 쿼럼 = 과반수 = ⌈(N+1)/2⌉. 따라서 N=3이면 쿼럼 2, N=5이면 쿼럼 3이다.
+- **쿼럼 계산**: 쿼럼 = 과반수 = floor(N/2) + 1. 따라서 N=3이면 쿼럼 2, N=5이면 쿼럼 3이다.
 - **시나리오 1과의 관계**: 3개 중 1개만 unhealthy인 경우, N=3·쿼럼=2이고, 정상 응답하는 멤버가 2개이므로 쿼럼 충족 → **쓰기 가능**하다. `member remove`를 실행해 비로소 해당 멤버가 list에서 빠지면 N=2가 되고, 쿼럼도 2가 되어 남은 멤버 중 1개만 장애나도 쓰기 불가가 된다.
 
 
@@ -185,7 +201,7 @@ $ sudo k3s server --cluster-reset
 `--cluster-reset`의 내부 동작:
 
 1. 기존 etcd member list를 **모두 제거**하고, 자기 자신만 남긴다
-2. 새로운 **Raft cluster ID**를 생성한다 (기존 클러스터와는 완전히 다른 합의 그룹이 됨)
+2. 기존 Raft 합의 그룹과 단절된 **새로운 단일 멤버 클러스터**가 된다
 3. 자기가 보유한 etcd 데이터는 보존하되, 단일 멤버로 재구성한다
 
 이것은 시나리오 1의 `member remove` + 재조인과는 **근본적으로 다른 복구 경로**다. `member remove`는 기존 Raft 클러스터 내에서 멤버 하나를 제거하는 것이지만, `--cluster-reset`은 **기존 클러스터 자체를 버리고 새로운 클러스터를 만드는 것**이다. 따라서 이후 다른 노드들은 **반드시 etcd 데이터를 완전히 삭제한 뒤** `--server`를 지정해 재조인해야 한다. 기존 데이터를 가지고 합류하면 Raft cluster ID 불일치로 실패한다.
@@ -194,22 +210,11 @@ $ sudo k3s server --cluster-reset
 
 ## 시나리오 3: Split Brain
 
-한 노드가 기존 클러스터와 별개의 etcd 클러스터로 부팅해, 원래 클러스터에는 2개 멤버만 보이고, 분리된 노드는 독립 클러스터로 동작하는 상황이다.
+한 노드가 기존 클러스터와 별개의 etcd 클러스터로 부팅해, 분리된 노드는 독립 클러스터로 동작하는 상황이다. 원래 클러스터의 etcd member list에는 여전히 3개가 등록되어 있고, 분리된 노드는 응답하지 않는 상태가 일반적이다. 원래 클러스터 입장에서는 정상 멤버 2개로 quorum(2/3)이 유지되므로 **쓰기가 가능**하다.
 
-대응은 [Split Brain 트러블슈팅 글의 "해결" 섹션]({% post_url 2026-02-19-Kubernetes-Split-Brain %}#해결)과 동일하다. 원래 클러스터에서 해당 노드 제거 → 분리된 노드에서 K3s 완전 제거 → `--server` 지정 후 재조인.
+> **시나리오 1과의 구분**: 원래 클러스터 관점에서 초기 증상은 시나리오 1(멤버 1개 unhealthy)과 동일하다. 둘 다 `endpoint health`에서 1개가 `false`이고 quorum은 유지된다. 차이는 해당 노드가 **독립 클러스터를 운영 중인지 여부**인데, 이것은 해당 노드에 직접 접속하여 `kubectl get nodes`를 실행해 봐야 알 수 있다. 단순히 노드가 죽어 있으면 시나리오 1이고, 자기만 보이는 독립 클러스터가 떠 있으면 시나리오 3이다.
 
-### member list에서 분리된 노드가 이미 없는 경우
-
-원래 클러스터의 `etcdctl member list`에서 분리된 노드가 이미 제거되어 있는 경우가 있을 수 있다. 이 경우 `member remove` 단계를 건너뛸 수 있다.
-
-member list에 분리된 노드가 없을 수 있는 경우는 다음과 같다.
-
-- **K3s의 force-new-cluster 경로**: K3s가 `--server` 없이 재기동될 때 내부적으로 force-new-cluster에 가까운 경로를 탄다. 이 과정에서 기존 etcd 멤버 정보를 정리하고 자기 자신만 남긴 단독 클러스터를 구성할 수 있다. 이 경우, 원래 클러스터 쪽에서도 해당 멤버가 자동으로 제거되었을 가능성이 있다.
-- **이전에 수동으로 `member remove`를 실행한 경우**: 관리자가 이미 해당 노드를 etcd 멤버에서 제거했을 수 있다.
-
-참고로, `kubectl delete node`는 Kubernetes 노드 오브젝트만 삭제하며, etcd 멤버 정보는 별도로 `etcdctl member remove`를 실행해야 제거된다. 따라서 `kubectl delete node`만으로는 member list에서 사라지지 않는다.
-
-> 실제로 [Split Brain 트러블슈팅]({% post_url 2026-02-19-Kubernetes-Split-Brain %}) 글의 복구 과정에서도 member list에 분리된 노드가 보이지 않았다. 당시 정확한 확인이 남아 있지 않아 단정할 수는 없지만, K3s가 `--server` 없이 재기동될 때 force-new-cluster 경로를 타면서 기존 멤버 정보가 정리된 것으로 추정된다.
+대응은 [Split Brain 트러블슈팅 글의 "해결" 섹션]({% post_url 2026-02-19-Dev-Kubernetes-Split-Brain-01 %}#해결)과 동일하다. 원래 클러스터에서 해당 노드 제거 → 분리된 노드에서 K3s 완전 제거 → `--server` 지정 후 재조인.
 
 ## 시나리오 4: member ID mismatch
 
@@ -233,7 +238,12 @@ $ sudo etcdctl endpoint status --cluster -w table
 - **revision**: 모든 엔드포인트에서 동일해야 한다. 근소한 차이(수 단위)는 네트워크 지연에 의한 것일 수 있으며, 큰 차이가 있으면 데이터 분기를 의심한다.
 - **RAFT TERM**: 모든 엔드포인트에서 **동일**해야 한다. term이 다르면 리더 선출이 비정상적으로 진행된 것으로, 단순한 지연과 구분된다.
 
-revision과 RAFT TERM이 모두 일치하면, 데이터는 정상이고 member ID만 꼬인 상태일 수 있다. 이 경우 해당 노드를 `member remove` 후 데이터를 정리하고 재조인하면 해결된다. 불일치가 있으면 K3s/etcd 문서의 스냅샷 복원 절차를 검토한다.
+revision과 RAFT TERM이 모두 일치하면, 데이터는 정상이고 member ID만 꼬인 상태일 수 있다. 이 경우, 로그의 member ID mismatch 에러가 **현재 진행 중인 문제인지, 이미 해소된 과거 에러인지**를 먼저 구분해야 한다.
+
+- **모든 지표가 정상이고 에러 로그가 더 이상 발생하지 않는 경우**: 과거 에러일 가능성이 높다. 재조인 없이 로그 모니터링으로 넘어간다.
+- **`endpoint health`가 `false`이거나 해당 노드가 실제로 클러스터에서 동작하지 못하는 경우**: 해당 노드를 `member remove` 후 데이터를 정리하고 재조인하면 해결된다.
+
+revision이나 RAFT TERM에 불일치가 있으면 K3s/etcd 문서의 스냅샷 복원 절차를 검토한다.
 
 
 ## 복합 시나리오: Split Brain + 기존 클러스터 노드 하나가 죽어 있었다면
@@ -259,11 +269,14 @@ revision과 RAFT TERM이 모두 일치하면, 데이터는 정상이고 member I
    - quorum이 확보된 뒤에야 `etcdctl member remove`로 cp-node-c를 제거할 수 있다 (member list에 남아 있는 경우).
    - cp-node-c에서 K3s 데이터를 정리한 뒤 `--server`를 지정해 재조인한다.
 
-**`--cluster-reset` 응급 조치 이후의 전체 복구 절차**:
+<br>
+
+### `--cluster-reset` 응급 조치 이후의 전체 복구 절차:
 
 `--cluster-reset`으로 cp-node-a가 단독 클러스터로 재시작된 이후, 나머지 노드들의 재조인 절차는 다음과 같다.
 
 1. **cp-node-b** (죽어 있던 노드, 복구된 경우):
+   cp-node-b는 원래 클러스터의 정상 멤버였으므로, etcd DB 디렉토리만 삭제하면 충분하다. K3s 바이너리와 설정은 그대로 사용할 수 있다.
    ```bash
    # cp-node-b에서
    $ sudo systemctl stop k3s
@@ -278,6 +291,7 @@ revision과 RAFT TERM이 모두 일치하면, 데이터는 정상이고 member I
    ```
 
 2. **cp-node-c** (Split Brain으로 독립되어 있던 노드):
+   cp-node-c는 독립 클러스터로 운영되면서 인증서 등이 달라졌을 수 있으므로, `k3s-uninstall.sh`로 완전히 제거한 뒤 재설치한다.
    ```bash
    # cp-node-c에서
    $ sudo /usr/local/bin/k3s-uninstall.sh
@@ -309,14 +323,14 @@ etcd가 비정상일 때의 대응은 결국 하나의 원칙으로 수렴한다
 3. K3s 스냅샷 존재 여부 확인 (`ls /var/lib/rancher/k3s/server/db/snapshots/`)
 4. 현재 상황에 맞는 시나리오 식별 후 대응
 
-> 이 글은 [K3s 컨트롤 플레인 재조인 트러블슈팅]({% post_url 2026-02-19-Kubernetes-Split-Brain %}) 글에서 분리되었다.
+> 이 글은 [K3s 컨트롤 플레인 재조인 트러블슈팅]({% post_url 2026-02-19-Dev-Kubernetes-Split-Brain-01 %}) 글에서 분리되었다.
 
 <br>
 
 
 # 참고: 기타 etcd 실패 케이스
 
-최초에 다뤘던 표의 시나리오는 **Raft 멤버십/토폴로지** 관점만 다룬다. 아래는 멤버십과 무관한 **인프라·운영 레벨** 장애로, 별도 진단이 필요하다.
+최초에 다뤘던 표의 시나리오는 **Raft 멤버십/토폴로지** 관점만 다룬다. 아래는 멤버십과 무관한 **인프라·운영 레벨** 장애로, 별도 진단이 필요하다. 추후 참고를 위해 남겨 둔다.
 
 - **디스크 풀**: etcd는 write-ahead log를 디스크에 쓰므로, 디스크가 가득 차면 write가 실패한다. member는 healthy로 보이지만 쓰기가 안 되는 상황이라 진단이 까다롭다.
 - **인증서 만료**: etcd peer/client TLS 인증서가 만료되면 멤버 간 통신이 끊겨 quorum 상실처럼 보이지만 원인이 다르다. K3s 장기 운영 클러스터에서 자주 발생하는 케이스다.
