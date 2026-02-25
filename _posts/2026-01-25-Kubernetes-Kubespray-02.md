@@ -551,6 +551,8 @@ ansible-playbook -i inventory/mycluster/inventory.ini \
 
 ### 트러블 슈팅: VirtualBox NAT IP 문제
 
+> **참고**: VirtualBox NAT IP 문제의 근본 원인과 전체 그림은 [VirtualBox + Vagrant 네트워크 어댑터 이해하기]({% post_url 2026-02-09-Dev-VirtualBox-Network %}#nat-ip-문제-왜-자꾸-100215가-문제를-일으키는가)를 참고하자.
+
 Worker 노드 조인 단계에서 다음과 같은 오류가 발생할 수 있다:
 
 ```
@@ -794,6 +796,8 @@ scp root@192.168.10.100:/etc/kubernetes/admin.conf ~/.kube/config
 # API Server 주소를 localhost에서 컨트롤 플레인 IP로 변경 (아래 트러블슈팅 참고)
 sed -i 's/127.0.0.1/192.168.10.100/g' ~/.kube/config
 ```
+
+> **참고**: kubeconfig 파일 구조, `server` 필드, 다중 클러스터 사용법은 [kubeconfig 개요]({% post_url 2026-02-16-Kubernetes-Kubeconfig-01 %})와 [다중 클러스터 접근 구성 실습]({% post_url 2026-02-16-Kubernetes-Kubeconfig-02 %})을 참고하자.
 
 ### 클러스터 접속 확인
 
