@@ -1,8 +1,8 @@
 ---
-title:  "[Web] Origin에 대한 고찰 - 정의, SOP, CORS"
-excerpt: Origin에 대해 알아 보자
+title:  "[CS] Origin에 대한 고찰 - 정의, SOP, CORS"
+excerpt: Origin에 대해 알아보자.
 categories:
-  - Dev
+  - CS
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -69,6 +69,25 @@ tags:
 | `http://store.company.com/dir/page.html` | `https://store.company.com/page.html`             | X<br />- scheme이 다름               |
 | `http://store.company.com/dir/page.html` | `http://store.company.com:81/dir/page.html`       | X<br />- port가 다름                 |
 | `http://store.company.com/dir/page.html` | `http://news.company.com/dir/page.html`           | X<br />- host가 다름                 |
+
+<br>
+
+## Origin 판단 시 놓치기 쉬운 함정
+
+ Origin 판단 원칙 자체는 단순하지만, 실무에서 의외로 놓치기 쉬운 함정들이 있다.
+
+| Origin 1 | Origin 2 | Same Origin? | 함정 |
+| --- | --- | --- | --- |
+| `http://example.com:8004` | `https://example.com` | X | 프로토콜 + 포트 **둘 다** 다름 |
+| `http://example.com:8004` | `http://example.com` | X | 포트만 달라도 Cross-Origin |
+| `http://example.com` | `http://example.com:80` | O | http 기본 포트는 80 |
+| `https://example.com` | `https://example.com:443` | O | https 기본 포트는 443 |
+
+ 특히 첫 번째 케이스는 실무에서 자주 마주하는 상황이다. 프로토콜이 `http`에서 `https`로 바뀌면 그것만으로도 다른 Origin이 되는데, 여기에 포트까지 다르면 Origin 구성 요소 세 개 중 두 개가 다른 셈이 된다. 눈으로 보기에는 '같은 도메인 아닌가?' 싶지만, 브라우저는 엄격하게 다른 Origin으로 판단한다.
+
+ 두 번째 케이스도 주의해야 한다. 예를 들어, nginx로 프런트엔드를 `http://foo.example.com:8004`에서 서빙하면서, API 요청을 `http://foo.example.com`으로 보내는 경우를 생각해 보자. 같은 도메인이니까 Same-Origin이라고 생각하기 쉽지만, 포트가 다르기 때문에 브라우저는 이를 Cross-Origin으로 판단한다. `http`의 기본 포트는 80이므로, `http://foo.example.com`은 `http://foo.example.com:80`과 같다. 따라서 `:8004`와 `:80`은 서로 다른 포트이고, 결국 Cross-Origin이 되는 것이다.
+
+> 실무에서 CORS 문제를 마주했을 때, 가장 먼저 확인해야 할 것은 현재 페이지의 Origin과 요청 대상의 Origin이 정말로 같은지다. 프로토콜, 호스트, 포트 세 가지를 하나하나 대조해 보자.
 
 
 
@@ -163,7 +182,7 @@ tags:
 
  브라우저는 `XMLHttpRequest`나 `fetch()` API를 이용해야 하는 경우, 요청의 대상이 Cross Origin인지 아닌지 URL을 통해 판단한다. 그리고 Cross Origin에 대한 요청인 경우, CORS 메커니즘을 따른다. 위에서 사전 요청을 보낸다고 했으나, 엄밀히는 사전 요청이 필요한 경우와 그렇지 않은 경우의 두 가지 시나리오로 나뉘며, 사전 요청이 필요한지 여부는 브라우저에서 자바스크립트 코드를 통해 알아서 판단할 수 있다.
 
- 브라우저가 알아서 판단할 수 있긴 하지만, 단순 요청의 경우, 아래의 조건을 모두 충족해야 한다~~*(알아두면 좋겠지)*~~.
+ 브라우저가 알아서 판단할 수 있긴 하지만, 단순 요청의 경우, 아래의 조건을 **모두** 충족해야 한다. 이 조건을 알아 두는 것이 실무적으로 중요한데, **대부분의 API 요청은 이 조건을 만족하지 못해 사전 요청이 발생하기 때문**이다.
 
 - 메서드: `GET`, `HEAD`, `POST` 중 하나
 - 헤더: 사용자 에이전트에서 자동으로 설정되는 헤더 외에, Fetch 명세에서 [CORS-safelisted request header](https://fetch.spec.whatwg.org/#cors-safelisted-request-header)로 지정한 헤더
@@ -225,6 +244,8 @@ tags:
     - 따라서 이 응답을 받은 브라우저에서는 Cross Origin 서버가 요청을 보내도 안전한 Origin임을 알고, 응답으로 받은 데이터를 로드함
     - 만약, Origin에 특정 Origin이 명시되어 있고, 그것이 자신의 Origin과 다르다면, 응답으로 받은 데이터를 로드하지 않을 것
       - `Origin: http://bar.example`으로 명시되어 있는 경우의 예
+
+> **실무에서의 빈도**: 단순 요청 조건을 만족하는 API 호출은 생각보다 드물다. 대부분의 API 요청은 `Content-Type: application/json`을 사용하거나, `Authorization`과 같은 커스텀 헤더를 포함하기 때문에, 단순 요청 조건을 충족하지 못한다. 즉, 실무에서 마주하는 거의 모든 API 통신은 아래의 사전 요청 시나리오에 해당한다.
 
 <br>
 
@@ -324,7 +345,34 @@ tags:
   [Some XML payload]
   ```
 
+<br>
 
+ **실무에서 대부분의 API 요청은 사전 요청 시나리오에 해당한다.** 아래와 같은 전형적인 로그인 API 호출을 생각해 보자.
+
+```javascript
+axios.post('/api/user/login', {
+    username: id,
+    password: pw,
+})
+```
+
+ 이 요청은 `Content-Type: application/json`으로 전송된다. 단순 요청이 허용하는 Content-Type은 `application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain` 세 가지뿐이므로, 이 요청은 단순 요청 조건을 충족하지 못한다. 따라서 브라우저는 자동으로 사전 요청(OPTIONS)을 먼저 보내게 된다. JSON을 주고받는 API 통신이 표준인 현대 웹 개발에서, **Preflight는 사실상 기본값**이라고 봐도 무방하다.
+
+ 그렇다면 Preflight를 아예 피할 수는 없을까?
+
+```javascript
+// 방법 1: Form 데이터로 전송 (비현실적)
+const formData = new URLSearchParams();
+formData.append('username', id);
+formData.append('password', pw);
+
+axios.post('/api/user/login', formData, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+})
+// → Preflight 없음! 하지만 JSON이 표준인 현대 API에서는 거의 쓰이지 않음
+```
+
+ `application/x-www-form-urlencoded`를 사용하면 단순 요청이 되어 Preflight를 피할 수 있다. 하지만, JSON이 사실상 API 통신의 표준인 현실에서 이 방법은 비현실적이다. 결론적으로, **서버에서 OPTIONS 요청을 올바르게 처리하는 것이 정답**이다.
 
 <br>
 
@@ -403,7 +451,7 @@ tags:
 
 <br>
 
-# 결론
+# 실무에서의 CORS 대응
 
  결론적으로 Origin은 Same Origin Policy로 인해 발생하는 문제 상황 및 이를 해결하기 위한 Cross Origin Resource Sharing 메커니즘을 이해하기 위한 핵심 개념이다.
 
@@ -412,11 +460,11 @@ tags:
   - 로드해야 할 리소스의 Origin이 현재 리소스의 Origin과 다르다면 브라우저 단에서 요청 자체를 막아 버림
 - Same Origin Policy에도 불구하고 Cross Origin으로부터 리소스를 로드해야 한다면, Cross Origin Resource Sharing을 허용해야 함
 
-
-
 <br>
 
-그렇다면, 개발자로서 실무 상황에서 알아 두면 좋은 것은, SOP에 위배되는 상황에 어떻게 대처할 것인가일 것이다.
+ 그렇다면, 개발자로서 실무 상황에서 SOP에 위배되는 상황에 어떻게 대처할 수 있을까.
+
+## 서버 CORS 설정
 
 - 클라이언트 개발자는 요청을 보내면 된다.
   - 브라우저가 CORS 관련 판단을 다 알아서 해 준다.
@@ -424,9 +472,154 @@ tags:
 - 서버 개발자는 CORS 허용을 위한 관련 설정을 해 주면 된다.
   - 어떤 origin, method, header를 허용할지에 대한 코드 설정이 필요하다.
   - 사실 대부분의 웹 프레임워크나 미들웨어에서는 관련 설정을 쉽게 할 수 있도록 지원하고 있다.
-- 서버에서 무언가 할 수 없는 상황이라면, 클라이언트 요청 처리를 위한 프록시 서버를 둬도 된다.
-  - SOP는 브라우저의 웹 보안 정책이고, 서버 간 통신에서는 적용되지 않는다.
-  - ~~*흔치는 않겠지만*~~ 서버를 어떻게 할 수 없는 상황이라면, 브라우저는 해당 프록시 서버와 통신하면 된다.
+
+<br>
+
+## 프록시로 Same-Origin 만들기
+
+ 서버에서 무언가 할 수 없는 상황이라면, 클라이언트 요청 처리를 위한 프록시 서버를 두는 방법이 있다. SOP는 브라우저의 웹 보안 정책이고, 서버 간 통신에서는 적용되지 않기 때문이다.
+
+ 이 패턴의 대표적인 예가 **nginx 리버스 프록시**다. nginx가 프런트엔드 정적 파일 서빙과 API `proxy_pass`를 함께 처리하면, 브라우저 입장에서는 모든 요청이 Same-Origin이 된다.
+
+```nginx
+server {
+    listen 8004;
+    server_name foo.example.com;
+
+    # 프런트엔드 정적 파일 서빙
+    location / {
+        root /usr/share/nginx/html;
+        index index.html;
+    }
+
+    # API 요청을 백엔드로 프록시
+    location /api/ {
+        proxy_pass http://backend-server:8080;
+    }
+}
+```
+
+ 이렇게 구성하면, 브라우저에서 `http://foo.example.com:8004`로 페이지를 로드한 후 `http://foo.example.com:8004/api/...`로 API 요청을 보내게 된다. 프로토콜(`http`), 호스트(`foo.example.com`), 포트(`8004`)가 모두 같으므로, 브라우저 입장에서 Same-Origin 요청이 된다. Same-Origin 요청에는 CORS 메커니즘이 적용되지 않으므로, Cross-Origin 문제 자체가 발생하지 않는다.
+
+<br>
+
+### Same-Origin 구성이 깨지면 즉시 Cross-Origin
+
+ 프록시로 Same-Origin을 만들 때 주의할 점은, **Origin 구성 요소가 하나라도 틀어지면 즉시 Cross-Origin이 된다**는 것이다. 그리고 Cross-Origin 상황에서 `Content-Type: application/json`을 사용하는 순간, 단순 요청 조건을 만족하지 못하므로 Preflight가 반드시 발생한다.
+
+ 예를 들어, 아래와 같은 상황을 생각해 보자.
+
+```
+현재 페이지: http://foo.example.com:8004
+요청 URL:   http://foo.example.com/api/user/login
+
+브라우저의 판단:
+  1. Origin 비교: http://foo.example.com:8004 vs http://foo.example.com(:80)
+  2. 포트 불일치! → Cross-Origin!
+  3. Content-Type: application/json → 단순 요청 아님!
+  4. → OPTIONS Preflight 발생
+  5. → CORS 헤더 엄격히 체크
+```
+
+ 같은 도메인이라 Same-Origin이라고 생각하기 쉽지만, 포트가 다르기 때문에 Cross-Origin으로 처리된다. 이런 상황에서는 서버에서 CORS 헤더를 정확히 설정해 주어야 한다.
+
+<br>
+
+ Cross-Origin에서의 CORS 검증은 엄격하다. 모든 CORS 헤더가 정확히 매칭되어야 한다.
+
+```http
+HTTP/1.1 204 No Content
+Access-Control-Allow-Origin: http://foo.example.com:8004  ← 정확히 매칭!
+Access-Control-Allow-Methods: GET, POST, OPTIONS           ← 필수!
+Access-Control-Allow-Headers: Content-Type, Authorization  ← 필수!
+Access-Control-Allow-Credentials: true                     ← Cookie 있으면 필수!
+Access-Control-Max-Age: 86400                              ← 선택
+```
+
+ 하나라도 빠지거나 값이 틀리면, 브라우저는 응답을 차단한다.
+
+<br>
+
+### nginx에서 OPTIONS를 처리하는 이유
+
+ Cross-Origin 상황에서 Preflight(OPTIONS) 요청이 발생하면, 서버가 이를 올바르게 처리해야 한다. nginx에서 OPTIONS를 직접 처리하는 방식은 다음과 같다.
+
+```nginx
+location /api/ {
+    # Preflight 요청 처리
+    if ($request_method = 'OPTIONS') {
+        add_header 'Access-Control-Allow-Origin' '$http_origin' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'Content-Type, Authorization' always;
+        add_header 'Access-Control-Max-Age' 86400;
+        return 204;
+    }
+
+    # 실제 요청에 대한 CORS 헤더
+    add_header 'Access-Control-Allow-Origin' '$http_origin' always;
+
+    proxy_pass http://backend-server:8080;
+}
+```
+
+ 여기서 주목할 포인트가 몇 가지 있다.
+
+- **`add_header ... always`의 중요성**: `always` 키워드가 없으면, nginx는 2xx, 3xx 응답에만 해당 헤더를 추가한다. 즉, 백엔드에서 4xx나 5xx 에러가 발생했을 때 CORS 헤더가 붙지 않게 되고, 브라우저가 에러 응답조차 읽지 못하는 상황이 생긴다. `always`를 붙이면 모든 응답 코드에 헤더가 추가된다.
+- **OPTIONS를 nginx에서 직접 204로 반환**: 백엔드까지 OPTIONS 요청을 전달하지 않으므로, 백엔드 부담을 줄이고 CORS 정책을 nginx 한 곳에서 중앙 집중적으로 관리할 수 있다.
+
+<br>
+
+### 백엔드에도 CORS 설정을 유지하는 이유
+
+ nginx에서 CORS를 처리한다면, 백엔드에서는 CORS 설정이 불필요한 것 아닌가 싶을 수 있다. 하지만, 다음과 같은 이유로 백엔드에도 CORS 설정을 유지하는 것이 좋다.
+
+- **로컬 개발 환경**: 개발 시에는 nginx 없이 프런트엔드 개발 서버(`localhost:3000`)와 백엔드(`localhost:8080`)를 직접 연결하는 경우가 많다. 이 때 백엔드에 CORS 설정이 없으면, 포트가 다르므로 Cross-Origin이 되어 개발 자체가 어려워진다.
+- **아키텍처 변경 대응**: nginx 앞단 구성이 바뀌거나, 다른 서비스에서 직접 API를 호출하게 될 수도 있다. 백엔드 자체에 CORS 설정이 있으면 이런 변경에 유연하게 대응할 수 있다.
+- **이중 방어**: nginx CORS 설정에 문제가 생기더라도 백엔드가 자체적으로 CORS를 처리할 수 있다.
+
+<br>
+
+## 에러 유형별 감별법
+
+ CORS 관련 문제를 디버깅할 때, 브라우저 개발자 도구에서 보이는 에러 메시지만으로는 원인을 파악하기 어려운 경우가 많다. 사실 CORS 에러처럼 보이지만, 실제로는 네트워크 단계에서 이미 실패한 경우도 있다. 아래는 에러 유형별로 원인을 감별하는 가이드다.
+
+| 에러 | 단계 | 원인 | 대응 |
+| --- | --- | --- | --- |
+| `net::ERR_NAME_NOT_RESOLVED` | DNS | 도메인을 IP로 변환하지 못함 | DNS 설정 확인, 도메인 오타 확인 |
+| `net::ERR_CONNECTION_REFUSED` | TCP | 서버에 연결할 수 없음 | 서버 구동 여부, 포트, 방화벽 확인 |
+| `405 Method Not Allowed` | 서버 | 서버가 OPTIONS 메서드를 지원하지 않음 | 서버 또는 nginx에서 OPTIONS 처리 추가 |
+| `CORS error` + 200 OK | CORS | 응답은 왔지만 CORS 헤더가 없거나 잘못됨 | `Access-Control-Allow-*` 헤더 확인 |
+
+<br>
+
+ 감별의 핵심은, **에러가 어느 단계에서 발생했는지를 먼저 파악하는 것**이다.
+
+```
+[브라우저 요청]
+    │
+    ├── DNS 실패 → net::ERR_NAME_NOT_RESOLVED
+    │   └── CORS 이전 단계. 네트워크 설정 문제.
+    │
+    ├── TCP 실패 → net::ERR_CONNECTION_REFUSED
+    │   └── CORS 이전 단계. 서버가 안 떠 있거나 포트/방화벽 문제.
+    │
+    ├── OPTIONS 요청 → 405 Method Not Allowed
+    │   └── 서버가 OPTIONS를 처리하지 못함.
+    │       nginx 또는 백엔드에서 OPTIONS 처리 필요.
+    │
+    ├── OPTIONS 요청 → 200/204 but CORS 헤더 없음
+    │   └── Preflight는 성공했지만, CORS 헤더가 빠져 있음.
+    │       add_header 설정 확인 (always 키워드 포함).
+    │
+    └── 실제 요청 → 200 OK but 브라우저에서 차단
+        └── 응답은 성공했지만, CORS 헤더가 없어
+            브라우저가 JavaScript에 응답을 전달하지 않음.
+            Access-Control-Allow-Origin 헤더 확인.
+```
+
+ 특히, `405 Method Not Allowed` 에러는 CORS 문제처럼 보이지만, 실제로는 서버가 OPTIONS 메서드를 처리하지 못해서 발생하는 것이다. Preflight에서 OPTIONS 요청이 발생했는데, 서버가 이 메서드를 지원하지 않으면 405를 반환한다. 이 경우, nginx에서 OPTIONS를 직접 처리하거나, 백엔드에서 OPTIONS 메서드를 허용하도록 설정하면 해결된다.
+
+ 또한, 브라우저 개발자 도구의 Network 탭에서 요청과 응답의 헤더를 직접 확인하는 것이 가장 확실한 디버깅 방법이다. 응답에 `Access-Control-Allow-Origin` 헤더가 있는지, 그 값이 현재 Origin과 정확히 일치하는지 확인하자.
 
 
 
