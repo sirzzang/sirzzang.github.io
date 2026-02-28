@@ -22,6 +22,17 @@ tags:
 
 <br>
 
+# TL;DR
+
+- **Origin**: scheme + host + port. 셋 중 하나라도 다르면 다른 Origin
+- **SOP**: 브라우저가 다른 Origin의 리소스 접근을 차단하는 보안 정책
+- **CORS**: SOP를 우회하여 Cross-Origin 리소스를 허용하는 HTTP 헤더 기반 메커니즘
+- **실무 핵심**: 대부분의 API 요청은 `Content-Type: application/json`을 사용하므로, 단순 요청이 아닌 **Preflight(OPTIONS)가 사실상 기본값**
+- **프록시 패턴**: nginx 리버스 프록시로 Same-Origin을 만들면 CORS 문제 자체가 사라짐. 단, Origin 구성이 하나라도 틀어지면 즉시 Cross-Origin
+- **에러 감별**: `ERR_NAME_NOT_RESOLVED`(DNS) → `ERR_CONNECTION_REFUSED`(TCP) → `405`(OPTIONS 미지원) → `CORS error`(헤더 누락) 순서로 단계를 먼저 파악
+
+<br>
+
 
 
 # Origin
@@ -479,7 +490,7 @@ axios.post('/api/user/login', formData, {
 
  서버에서 무언가 할 수 없는 상황이라면, 클라이언트 요청 처리를 위한 프록시 서버를 두는 방법이 있다. SOP는 브라우저의 웹 보안 정책이고, 서버 간 통신에서는 적용되지 않기 때문이다.
 
- 이 패턴의 대표적인 예가 **nginx 리버스 프록시**다. nginx가 프런트엔드 정적 파일 서빙과 API `proxy_pass`를 함께 처리하면, 브라우저 입장에서는 모든 요청이 Same-Origin이 된다.
+ 이 패턴의 대표적인 예가 **nginx 리버스 프록시**다. 리버스 프록시의 개념과 실무 활용에 대해서는 [Proxy / Reverse Proxy]({% post_url 2026-02-27-CS-Proxy-Reverse-Proxy %})를 참고. nginx가 프런트엔드 정적 파일 서빙과 API `proxy_pass`를 함께 처리하면, 브라우저 입장에서는 모든 요청이 Same-Origin이 된다.
 
 ```nginx
 server {
@@ -500,6 +511,8 @@ server {
 ```
 
  이렇게 구성하면, 브라우저에서 `http://foo.example.com:8004`로 페이지를 로드한 후 `http://foo.example.com:8004/api/...`로 API 요청을 보내게 된다. 프로토콜(`http`), 호스트(`foo.example.com`), 포트(`8004`)가 모두 같으므로, 브라우저 입장에서 Same-Origin 요청이 된다. Same-Origin 요청에는 CORS 메커니즘이 적용되지 않으므로, Cross-Origin 문제 자체가 발생하지 않는다.
+
+ 실제로 이 패턴에서 겪은 트러블슈팅 사례는 [CORS 상황 해결: 같은 도메인의 다른 nginx가 응답하고 있었다]에 정리해 두었다.
 
 <br>
 
@@ -640,6 +653,8 @@ location /api/ {
 - 그러면 애초에 이런 메커니즘을 클라이언트 코드 단에서 해 버리면 안 되나? 자바스크립트 코드에서?
 
   - 그러면 애초에 Same Origin Policy를 도입한 이유가 없음
+  - 만약 자바스크립트 코드에서 CORS 허용 여부를 결정할 수 있다면, 악성 스크립트가 마음대로 다른 Origin의 리소스에 접근할 수 있게 됨
+  - CORS 판단의 주체가 브라우저(신뢰할 수 있는 제3자)인 이유가 바로 이것
 
 - 어떤 악의적인 사이트에서 CORS 요청을 다 허가해 줘 버리면, 그럼 그냥 그 사이트에서의 리소스는 다 뜨는 거 아닌가?
 
@@ -653,17 +668,14 @@ location /api/ {
 
 
 
-
-
 <br>
 
-<br>
 
-- *참고*
-  - [https://developer.mozilla.org/en-US/docs/Web/Security/Same-origin_policy](https://developer.mozilla.org/en-US/docs/Web/Security/Same-origin_policy)
-  - [https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS)
-  - [https://medium.com/@lifthus531/cors%EC%97%90-%EB%8C%80%ED%95%9C-%EA%B9%8A%EC%9D%80-%EC%9D%B4%ED%95%B4-8c84c2137c83](https://medium.com/@lifthus531/cors%EC%97%90-%EB%8C%80%ED%95%9C-%EA%B9%8A%EC%9D%80-%EC%9D%B4%ED%95%B4-8c84c2137c83)
-  - [https://velog.io/@kansun12/%ED%94%84%EB%A1%A0%ED%8A%B8%EC%97%94%EB%93%9C-CORS](https://velog.io/@kansun12/%ED%94%84%EB%A1%A0%ED%8A%B8%EC%97%94%EB%93%9C-CORS)
+# 참고
+- [https://developer.mozilla.org/en-US/docs/Web/Security/Same-origin_policy](https://developer.mozilla.org/en-US/docs/Web/Security/Same-origin_policy)
+- [https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS)
+- [https://medium.com/@lifthus531/cors%EC%97%90-%EB%8C%80%ED%95%9C-%EA%B9%8A%EC%9D%80-%EC%9D%B4%ED%95%B4-8c84c2137c83](https://medium.com/@lifthus531/cors%EC%97%90-%EB%8C%80%ED%95%9C-%EA%B9%8A%EC%9D%80-%EC%9D%B4%ED%95%B4-8c84c2137c83)
+- [https://velog.io/@kansun12/%ED%94%84%EB%A1%A0%ED%8A%B8%EC%97%94%EB%93%9C-CORS](https://velog.io/@kansun12/%ED%94%84%EB%A1%A0%ED%8A%B8%EC%97%94%EB%93%9C-CORS)
 
 
 
