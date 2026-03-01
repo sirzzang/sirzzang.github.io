@@ -36,7 +36,9 @@ tags:
 - cp-node-c가 기존 클러스터와 독립적인 단독 클러스터를 구성 (Split Brain)
 - K3s 데이터 완전 제거 후 `--server` 플래그를 명시하여 재조인하여 해결
 
-하지만 다음 의문이 남았다.
+Part 1의 복구 당시에는 빠르게 해결하는 데 집중했고, 정확한 원인 분석은 이후로 미루어 두었다. 이 글은 복구 이후 시간을 두고 다시 이 문제를 분석한 결과를 정리한 것이다.
+
+당시 남았던 의문을 다시 돌이켜 본다.
 
 1. **정확히 어떤 메커니즘으로 독립 클러스터가 생성되었는가?**
 2. **etcd 데이터가 보존된 것인가, 사라진 것인가?** — 분리된 클러스터에서 AGE가 19h이고, `etcd` 역할이 없고, 다른 노드가 보이지 않는다.
@@ -91,7 +93,7 @@ main()                                               cmd/server/main.go
 K3s가 어떤 데이터스토어를 사용할지는 [`assignManagedDriver()`](https://github.com/k3s-io/k3s/blob/v1.27.9%2Bk3s1/pkg/cluster/managed.go)에서 결정된다.
 
 <details markdown="1">
-<summary>assignManagedDriver() 코드</summary>
+<summary>assignManagedDriver() 코드 (핵심 로직만 발췌)</summary>
 
 ```go
 // pkg/cluster/managed.go — assignManagedDriver()
@@ -121,7 +123,7 @@ func (c *Cluster) assignManagedDriver(ctx context.Context) error {
 [`IsInitialized()`](https://github.com/k3s-io/k3s/blob/v1.27.9%2Bk3s1/pkg/etcd/etcd.go)는 etcd WAL 디렉토리의 존재 여부만 확인한다.
 
 <details markdown="1">
-<summary>IsInitialized() 코드</summary>
+<summary>IsInitialized() 코드 (핵심 로직만 발췌)</summary>
 
 ```go
 // pkg/etcd/etcd.go — IsInitialized()
@@ -149,7 +151,7 @@ func (e *ETCD) IsInitialized() (bool, error) {
 `managedDB`가 etcd로 설정된 경우, [`ETCD.Start()`](https://github.com/k3s-io/k3s/blob/v1.27.9%2Bk3s1/pkg/etcd/etcd.go)에서 기동 방식을 결정한다.
 
 <details markdown="1">
-<summary>ETCD.Start() 코드</summary>
+<summary>ETCD.Start() 코드 (핵심 로직만 발췌)</summary>
 
 ```go
 // pkg/etcd/etcd.go — Start()
@@ -183,7 +185,7 @@ func (e *ETCD) Start(ctx context.Context, clientAccessInfo *clientaccess.Info) e
 [`member_controller.go`](https://github.com/k3s-io/k3s/blob/v1.27.9%2Bk3s1/pkg/etcd/member_controller.go)의 `onRemove` 핸들러는, Kubernetes Node 오브젝트가 삭제될 때 etcd 멤버도 함께 제거한다.
 
 <details markdown="1">
-<summary>onRemove() 코드</summary>
+<summary>onRemove() 코드 (핵심 로직만 발췌)</summary>
 
 ```go
 // pkg/etcd/member_controller.go — onRemove()
@@ -213,7 +215,12 @@ func (e *etcdMemberHandler) onRemove(key string, node *v1.Node) (*v1.Node, error
 
 # 재현 실험
 
-소스 코드 분석 결과에서 확인한 시사점을 바탕으로, 재현 실험으로 검증한다.
+소스 코드 분석 결과에서 확인한 시사점을 바탕으로, 재현 실험으로 검증한다. 이후 5개의 실험을 순서대로 진행하는데, 각 실험의 역할은 다음과 같다.
+
+- **실험 1-2** (환경 구성): 단독 CP(SQLite) 클러스터를 구성한 뒤 삼중화(etcd)로 전환하여, Part 1의 운영 환경을 재현한다.
+- **실험 3** (전제 조건 확인): systemd unit에서 `--server` 플래그를 제거한 뒤에도 etcd 데이터가 있으면 정상 동작하는지 확인한다. "플래그가 빠진 상태를 인지하지 못하고 운영하는" 시나리오가 성립하는지를 검증하는 단계이다.
+- **실험 4** (핵심 재현): etcd 데이터 유무에 따라 동일한 명령(`k3s server`, 플래그 없음)이 "정상 복귀"와 "Split Brain"이라는 정반대의 결과를 만드는지 확인한다. 이 글의 핵심 실험이다.
+- **실험 5** (부가 검증): etcd 멤버 자동 제거 여부, `kubectl delete node`에 의한 제거, 정상 재조인 절차를 검증한다.
 
 ## 실험 환경
 
@@ -588,9 +595,6 @@ Created symlink /etc/systemd/system/multi-user.target.wants/k3s.service → /etc
 
 `--cluster-init` 없이 설치했으므로 ROLES에 `etcd`가 없다. 데이터스토어도 확인한다.
 
-<details markdown="1">
-<summary>kubectl get nodes, ls 출력</summary>
-
 ```bash
 kubectl get nodes -o wide
 ```
@@ -615,10 +619,6 @@ drwx------ 2 root root    4096 Feb 22 04:51 etcd
 # /var/lib/rancher/k3s/server/db/etcd/
 -rw------- 1 root root   13 Feb 22 04:51 name
 ```
-
-</details>
-
-<br>
 
 `state.db`(SQLite)가 존재한다. `etcd/` 디렉토리도 있지만, `name` 파일만 있고 `member/` 서브디렉토리가 없다. K3s는 SQLite 모드에서도 `etcd/` 디렉토리와 `name` 파일을 생성하지만, etcd가 실제로 기동되려면 `etcd/member/wal/`이 존재해야 한다. 즉, 현재는 SQLite 단독 모드이다.
 
@@ -1000,6 +1000,9 @@ Created symlink /etc/systemd/system/multi-user.target.wants/k3s.service → /etc
 
 <br>
 
+<details markdown="1">
+<summary>ls 출력 (cp-2 데이터스토어 확인)</summary>
+
 ```bash
 ls -al /var/lib/rancher/k3s/server/db/
 ls -al /var/lib/rancher/k3s/server/db/etcd/
@@ -1015,6 +1018,10 @@ drwx------ 2 root root 4096 Feb 22 05:11 snapshots
 drwx------ 4 root root 4096 Feb 22 05:10 member
 -rw------- 1 root root   13 Feb 22 05:10 name
 ```
+
+</details>
+
+<br>
 
 cp-1과 달리 `state.db`가 존재하지 않는다. `--server`로 조인한 노드는 처음부터 etcd 멤버로 합류하므로 SQLite를 거치지 않는다. `etcd/member/` 디렉토리가 바로 생성되어 있다.
 

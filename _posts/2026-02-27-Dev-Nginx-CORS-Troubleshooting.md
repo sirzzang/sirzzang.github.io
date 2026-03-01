@@ -25,13 +25,11 @@ SOP와 Origin의 기본 개념은 [Origin에 대한 고찰 - 정의, SOP, CORS](
 
 # TL;DR
 
-| 구분 | 내용 |
-| --- | --- |
-| **현상** | 프론트엔드 로그인 시 OPTIONS preflight → 405 Method Not Allowed |
-| **근본 원인** | `.env.production`에 `VITE_API_URL=https://foo.example.com/`(절대 경로)으로 설정되어 있어, 브라우저가 API 요청을 같은 도메인의 다른 nginx(포트 443의 `proxy-server`)로 보냄 |
-| **혼란 포인트** | 응답 헤더 `Server: nginx`가 찍혀서, 프론트 nginx가 차단한 것처럼 보였음 |
-| **해결** | `VITE_API_URL=/` 상대 경로로 변경 → 재빌드 → 컨테이너 재시작 |
-| **교훈** | CORS 에러 시 응답 주체가 누구인지 먼저 확인 |
+- **현상**: 프론트엔드 로그인 시 OPTIONS preflight → 405 Method Not Allowed
+- **근본 원인**: `.env.production`에 `VITE_API_URL=https://foo.example.com/`(절대 경로)으로 설정되어 있어, 브라우저가 API 요청을 같은 도메인의 다른 nginx(포트 443의 `proxy-server`)로 보냄
+- **혼란 포인트**: 응답 헤더 `Server: nginx`가 찍혀서, 프론트 nginx가 차단한 것처럼 보였음
+- **해결**: `VITE_API_URL=/` 상대 경로로 변경 → 재빌드 → 컨테이너 재시작
+- **교훈**: CORS 에러 시 응답 주체가 누구인지 먼저 확인
 
 <br>
 
@@ -39,7 +37,7 @@ SOP와 Origin의 기본 개념은 [Origin에 대한 고찰 - 정의, SOP, CORS](
 
 ## 마이그레이션 맥락
 
-클라우드(AWS EC2)에서 운영하던 MLOps 서비스를 사내 서버(외부 접근 가능)로 마이그레이션하기로 결정했다. 프론트엔드도 이 과정에서 함께 옮기게 되었는데, 마이그레이션 후 새 환경에서 로그인을 시도하니 CORS 에러가 터졌다.
+클라우드(AWS EC2)에서 운영하던 MLOps 서비스를 사내 서버(외부 접근 가능)로 마이그레이션하기로 결정했다. 프론트엔드도 이 과정에서 함께 옮기게 되었는데, 마이그레이션 후 새 환경에서 로그인을 시도하니 CORS 에러가 발생했다.
 
 ## 인프라 구성
 
@@ -119,69 +117,12 @@ nginx는 요청 URI에 따라 어떤 `location` 블록이 처리할지를 결정
 
 ### try_files: SPA 라우팅 지원
 
-`try_files`는 **일반 지시어**다. "주어진 경로를 순서대로 시도하고, 없으면 마지막 인자로 처리한다"는 의미이다. 주로 정적 사이트, PHP 라우팅, SPA 폴백 등 여러 용도로 쓰는데, 여기서는 **SPA 폴백** 용도로 사용한다.
-
-```nginx
-try_files $uri $uri/ /index.html;
-```
-
-SPA(Single Page Application)에서는 클라이언트 사이드 라우팅을 사용한다. `/dashboard`, `/settings` 같은 경로를 브라우저가 직접 요청하면, 서버에는 해당 파일이 없다. 위 설정은 요청된 URI에 해당하는 파일(`$uri`)이나 디렉토리(`$uri/`)가 없으면 `index.html`을 반환해서, React Router 같은 클라이언트 사이드 라우터가 URL을 해석할 수 있게 한다. 이 설정이 없으면, 브라우저에서 `/dashboard`로 직접 접속하거나 새로고침할 때 nginx가 404를 반환한다.
+`try_files $uri $uri/ /index.html`은 SPA 폴백 설정이다. 요청된 파일이나 디렉토리가 없으면 `index.html`을 반환해서, 클라이언트 사이드 라우터(React Router 등)가 URL을 처리할 수 있게 한다.
 
 ### proxy_set_header: 원본 정보 전달
 
-```nginx
-proxy_set_header Host $host;
-proxy_set_header X-Real-IP $remote_addr;
-```
+리버스 프록시가 요청을 중계할 때 원본 클라이언트 정보(호스트, IP)가 유실될 수 있다. `proxy_set_header Host $host`와 `proxy_set_header X-Real-IP $remote_addr`로 원본 정보를 백엔드에 전달한다. 자세한 내용은 [Proxy / Reverse Proxy - 원본 정보 전달]({% post_url 2026-02-27-CS-Proxy-Reverse-Proxy %}#원본-정보-전달)을 참고한다.
 
-리버스 프록시가 요청을 중계할 때, 원본 클라이언트의 정보(호스트, IP 등)가 유실될 수 있다. `proxy_set_header`로 원본 호스트와 클라이언트 IP를 백엔드에 전달한다.
-> 리버스 프록시에서의 원본 정보 전달에 대한 자세한 내용은 [Proxy / Reverse Proxy - 원본 정보 전달]({% post_url 2026-02-27-CS-Proxy-Reverse-Proxy %}#원본-정보-전달)을 참고한다.
-
-<br>
-
-## nginx에서도 CORS를 설정하는 이유
-
-이번 케이스에서는 백엔드(Go gin)에서도 CORS 미들웨어를 설정해 두었고, 프론트 nginx에도 CORS 설정이 들어가 있었다. 왜 nginx에서까지 CORS를 처리하는지 짚고 넘어간다.
-
-### 백엔드 CORS + nginx CORS: 이중 방어
-
-실무에서는 백엔드에서 CORS를 처리하는 것이 기본이다. 그런데 nginx(리버스 프록시)에서도 **방어적으로** CORS 설정을 추가하는 경우가 많다.
-
-- **중앙 집중 관리**: 백엔드가 여러 개여도 nginx 한 곳에서 CORS 정책을 통일할 수 있다.
-- **백엔드 부담 경감**: OPTIONS preflight 요청을 nginx에서 204로 바로 끊어주면, 백엔드까지 도달하지 않는다.
-- **방어적 설정**: 백엔드 CORS 미들웨어 설정에 실수가 있더라도, nginx에서 잡아줄 수 있다.
-
-이번 케이스에서도 백엔드 CORS가 있는 상태에서 nginx에도 방어적으로 넣어 둔 구성이었다.
-
-### OPTIONS 처리와 응답 헤더: 두 가지 역할
-
-nginx의 CORS 설정은 두 가지 역할을 한다.
-
-**1. OPTIONS preflight를 nginx에서 직접 처리한다.** Cross-Origin 요청 전에 브라우저가 보내는 사전 확인 요청(OPTIONS)을 백엔드까지 보내지 않고, nginx에서 204로 바로 끊어준다.
-
-```nginx
-if ($request_method = 'OPTIONS') {
-    return 204;
-}
-```
-
-**2. 실제 요청(POST, GET 등)의 응답에도 CORS 헤더를 추가한다.** 브라우저는 Preflight뿐만 아니라 실제 응답에도 CORS 헤더를 체크한다. nginx의 `add_header ... always` 설정으로 백엔드 응답에 CORS 헤더를 덧붙인다.
-
-```nginx
-add_header 'Access-Control-Allow-Origin' $allow_origin always;
-```
-
-여기서 `always` 키워드가 중요하다. `always`가 없으면 2xx, 3xx 응답에만 헤더가 추가되고, 4xx/5xx 에러 응답에는 CORS 헤더가 붙지 않는다. 에러 응답에 CORS 헤더가 없으면 브라우저가 에러 내용조차 JS에 전달하지 않아서, 프론트엔드 개발자가 에러 메시지를 볼 수조차 없게 된다.
-
-### Same-Origin인데 CORS 헤더를 붙이는 이유
-
-nginx가 프론트 서빙 + API `proxy_pass`를 동시에 하고, `VITE_API_URL`을 상대 경로(`/`)로 설정하면 브라우저 입장에서 Same-Origin이 된다. Same-Origin이면 브라우저가 CORS 헤더를 체크하지 않으므로, 헤더가 있든 없든 상관없다. 그런데도 붙여두는 이유는 **방어적 설정**이다.
-
-- 나중에 아키텍처가 바뀌어서 Cross-Origin이 될 수 있다.
-- 로컬 개발 환경에서는 프론트(`localhost:3000`)와 nginx(다른 포트)가 Cross-Origin일 수 있다.
-- 있어서 해가 되지 않고, 없으면 나중에 빠뜨릴 수 있다.
-
-> nginx에서의 CORS 처리 방식과 `add_header ... always`의 동작에 대해서는 [Origin에 대한 고찰 - 정의, SOP, CORS]({% post_url 2025-05-10-CS-Origin-SOP-CORS %}#nginx에서-options를-처리하는-이유)에도 정리해 두었다. 
 <br>
 
 # 상황
@@ -262,7 +203,7 @@ server {
 - **`location /`**: 프론트엔드 정적 파일을 서빙한다. [`try_files $uri $uri/ /index.html`](#try_files-spa-라우팅-지원)은 SPA 라우팅 지원 설정으로, 파일이 없으면 `index.html`을 반환한다.
 - **`location ^~ /api`**: `/api`로 시작하는 요청을 백엔드로 프록시한다. [`^~`](#location-매칭-규칙)는 접두사 매칭 시 정규식 검사를 건너뛰는 수식어로, 정적 파일 캐싱용 정규식이 `/api` 요청을 가로채는 것을 방어한다.
 - **`proxy_pass`, [`proxy_set_header`](#proxy_set_header-원본-정보-전달)**: nginx가 서버 사이드에서 백엔드로 요청을 중계한다. 브라우저는 이 과정을 모르므로 Same-Origin이 유지된다. `Host`와 `X-Real-IP` 헤더 전달은 리버스 프록시에서의 [원본 정보 전달]({% post_url 2026-02-27-CS-Proxy-Reverse-Proxy %}#원본-정보-전달) 목적이다.
-- **CORS 헤더 + OPTIONS 처리**: 앞서 배경 지식에서 설명한 대로, `add_header ... always`로 모든 응답에 CORS 헤더를 붙이고, OPTIONS 요청은 204로 바로 반환한다. Same-Origin 구성에서도 방어적으로 넣어 둔 것이다.
+- **CORS 헤더 + OPTIONS 처리**: `add_header ... always`로 모든 응답(에러 응답 포함)에 CORS 헤더를 추가하고, OPTIONS preflight는 백엔드까지 보내지 않고 204로 즉시 반환한다. 백엔드(Go gin)에도 CORS 미들웨어가 있지만, nginx에서 방어적으로 이중 처리한 구성이다. Same-Origin 상태에서는 실질적으로 불필요하지만, 아키텍처 변경 대비용이다. CORS 처리에 대한 자세한 내용은 [Origin에 대한 고찰]({% post_url 2025-05-10-CS-Origin-SOP-CORS %}#nginx에서-options를-처리하는-이유)을 참고한다.
 
 정리하면, **CORS 설정은 잘 되어 있고, OPTIONS도 204로 처리하고 있었다.** 이 nginx를 요청이 거쳤다면 문제가 없어야 했다.
 
@@ -348,9 +289,11 @@ CORS 에러로 보였기 때문에 트러블슈팅 시 **백엔드 설정을 먼
 
 <br>
 
-## 그런데, nginx 설정은 정상인데?
+# 원인 추적
 
-"443의 다른 서버가 받은 것 아닐까?" 하는 의심을 확인하려고, 응답 주체를 좁혀 나갔다. 프론트 nginx(`frontend-app`)에는 CORS 설정이 분명히 잘 되어 있었다. 컨테이너 안에 직접 들어가서 확인해 봐도 환경변수가 정상 치환되어 있었고, OPTIONS 요청에 대한 204 반환 설정도 있었다.
+## 프론트 nginx는 정상이었다
+
+응답 주체를 좁혀 나갔다. 프론트 nginx(`frontend-app`)에는 CORS 설정이 분명히 잘 되어 있었다. 컨테이너 안에 직접 들어가서 확인해 봐도 환경변수가 정상 치환되어 있었고, OPTIONS 요청에 대한 204 반환 설정도 있었다.
 
 ```bash
 # 프론트엔드 nginx 컨테이너 내부에서 확인
@@ -360,30 +303,11 @@ $ cat /etc/nginx/conf.d/default.conf
 # → proxy_pass 대상 IP/포트 정상
 ```
 
-만약 이 nginx를 거쳤다면, OPTIONS 요청에 204를 반환하고, CORS 헤더도 정상적으로 붙여줬을 것이다. Preflight가 성공했을 것이고, 이후 POST 요청도 백엔드까지 도달했어야 한다. **그런데 백엔드 로그에 OPTIONS·POST 둘 다 안 찍힌다.** 요청이 프론트 nginx까지 도달하지 않았다는 뜻이다.
-
-게다가, 프론트 nginx는 **HTTP**(포트 80)로 서빙하고 있었는데, 브라우저가 보낸 요청은 **HTTPS**(포트 443)로 가고 있었다. 이 사실만으로도 응답 주체가 프론트 nginx가 아니라는 게 명확해진다.
-
-```
-프론트 nginx (frontend-app):
-  - Port: 8004 → 내부 80
-  - Protocol: HTTP (TLS 없음)
-  - OPTIONS 처리: 설정됨
-
-브라우저 요청 대상:
-  - URL: https://foo.example.com/api/user/login
-  - Port: 443
-  - Protocol: HTTPS
-  → 프론트 nginx가 아닌 다른 서버로 가고 있음!
-```
-
-<br>
-
-# 원인 추적
+만약 이 nginx를 거쳤다면 문제가 없어야 했다. **그런데 백엔드 로그에 OPTIONS·POST 둘 다 안 찍힌다.** 게다가 프론트 nginx는 **HTTP**(포트 80, 외부 8004)로 서빙하는데, 브라우저가 보낸 요청은 **HTTPS**(포트 443)로 가고 있었다. 응답 주체가 프론트 nginx가 아닌 건 명확했다.
 
 ## curl -v로 재현
 
-상황을 재현하기 위해 같은 OPTIONS 요청을 `curl -v`로 보내봤다.
+의심을 확인하기 위해 같은 OPTIONS 요청을 `curl -v`로 보내봤다.
 
 ```bash
 curl -X OPTIONS https://foo.example.com/api/user/login \
@@ -396,8 +320,8 @@ curl -X OPTIONS https://foo.example.com/api/user/login \
 결과를 보니, TLS handshake가 맺어지고 있었다. 포트 443으로 연결되어 HTTPS 통신이 이루어졌다.
 
 ```
-*   Trying 203.0.113.10:443...
-* Connected to foo.example.com (203.0.113.10) port 443 (#0)
+*   Trying <ip>:443...
+* Connected to foo.example.com (<ip>) port 443 (#0)
 * TLSv1.3 (OUT), TLS handshake, Client hello (1):
 ...
 * SSL connection using TLSv1.3 / TLS_AES_256_GCM_SHA384
@@ -484,9 +408,12 @@ server {
 
 ## 상황 도식 정리
 
-이번 문제는 **요청이 CORS 설정이 있는 백엔드 서버에도, 프론트 nginx에 도달하지 못하고, 같은 도메인의 다른 nginx로 갔던 것**이 근본 원인이었다.
+이번 문제는 **요청이 CORS 설정이 있는 백엔드 서버에도, 프론트 nginx에 도달하지 못하고, 같은 도메인의 다른 nginx로 갔던 것**이 근본 원인이었다. 
+- 문제의 **핵심 3단계**: 절대 경로(`VITE_API_URL=https://...`) → 443의 proxy-server가 수신 → `/api` 라우팅·CORS 설정 없음 → 405
 
 ![nginx-fe-troubleshooting-1.png]({{site.url}}/assets/images/nginx-fe-troubleshooting-1.png)
+
+상세 흐름은 다음과 같다.
 
 1. `VITE_API_URL=https://foo.example.com/`
 2. `axios.post('https://foo.example.com/api/user/login')`
@@ -508,13 +435,14 @@ server {
 
 ## 방법 1: VITE_API_URL 상대 경로 설정 (채택)
 
-`.env.production`을 수정하고 재빌드 후 컨테이너를 재시작했다.
+`.env.production`을 수정하고 **재빌드** 후 컨테이너를 재시작했다.
 
 ```bash
 # .env.production
 VITE_API_URL=/
 ```
 
+> **주의**: `VITE_` 접두사 환경변수는 빌드 시점에 번들 JS에 문자열로 주입된다. `.env.production`을 수정한 후 반드시 `yarn build`(또는 `vite build`)로 **재빌드**해야 변경이 반영된다. 컨테이너 재시작(`docker restart`)만으로는 이전 빌드의 값이 그대로 유지된다.
 
 **방법 1 적용 시 흐름**은 다음과 같다.
 
@@ -652,18 +580,7 @@ CORS 에러가 났을 때, **응답을 준 서버가 내가 생각하는 그 서
 3. **`curl -v`로 직접 재현** — TLS handshake 여부, 응답 서버 버전이 바로 보인다.
 4. **`Server` 헤더의 nginx 버전** — 이번 케이스의 결정적 단서. `nginx/1.19.6` vs `nginx/1.29.1`. 버전이 다르면 다른 nginx다.
 5. **응답 body의 에러 페이지 스타일** — nginx 기본 에러 페이지 하단에 버전이 찍힌다 (`<center>nginx/1.29.1</center>`).
-6. **`X-Served-By` 커스텀 헤더 (예방적)** — 각 nginx에 구분용 헤더를 넣어두면 디버깅이 훨씬 쉬워진다.
-
-```nginx
-# proxy-server
-add_header X-Served-By "proxy-server" always;
-
-# frontend-app
-add_header X-Served-By "frontend-app" always;
-```
-
-이렇게 해 두면 응답 헤더만 봐도 어떤 nginx가 응답했는지 즉시 알 수 있다. **비용은 거의 없으면서 효과가 크다.** 온프레미스에서 nginx를 여러 개 운영할 경우, 습관적으로 넣어 두면 이번 같은 상황에서 디버깅 시간을 크게 줄일 수 있다.
-
+6. **`X-Served-By` 커스텀 헤더 (예방적)** — 각 nginx에 구분용 헤더(`add_header X-Served-By "proxy-server" always`)를 넣어두면, 응답 헤더만 봐도 어떤 nginx가 응답했는지 즉시 알 수 있다. 비용은 거의 없으면서 효과가 크다. 온프레미스에서 nginx를 여러 개 운영할 경우, 습관적으로 넣어 두자.
 7. **TLS 여부** — `http`로 서빙하는 nginx로 갔으면 TLS handshake가 없고, `https`(443) nginx로 갔으면 있다. `curl -v`에서 바로 보인다.
 
 <br>

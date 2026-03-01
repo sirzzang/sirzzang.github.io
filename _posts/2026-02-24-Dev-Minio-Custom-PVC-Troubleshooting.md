@@ -23,12 +23,10 @@ tags:
 
 # TL;DR
 
-| 구분 | 내용 |
-| --- | --- |
-| **현상** | 루트 파티션 90% 사용, 워크플로우 중단 |
-| **원인** | `distributed` 모드에서 `existingClaim` 무시 → K3s default StorageClass가 루트 파티션에 PV 생성 |
-| **해결** | SSD 증설 → `standalone` 모드 전환 → `existingClaim`으로 SSD 경로의 PVC 연결 |
-| **핵심** | StatefulSet의 `volumeClaimTemplates`는 `existingClaim`과 본질적으로 충돌한다 |
+- **현상**: 루트 파티션 90% 사용, 워크플로우 중단
+- **원인**: `distributed` 모드에서 `existingClaim` 무시 → K3s default StorageClass가 루트 파티션에 PV 생성
+- **해결**: SSD 증설 → `standalone` 모드 전환 → `existingClaim`으로 SSD 경로의 PVC 연결
+- **핵심**: StatefulSet의 `volumeClaimTemplates`는 `existingClaim`과 본질적으로 충돌한다
 
 <br>
 
