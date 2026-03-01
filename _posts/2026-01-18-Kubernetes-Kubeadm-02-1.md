@@ -335,6 +335,8 @@ clusters:
 2. Discovery: 클러스터 정보 다운로드 및 검증
 3. TLS Bootstrap → CSR 제출 → 인증서 발급
 4. kubelet 설정 완료 → 정식 인증서로 API Server와 mTLS 연결   
+![kubeadm-join-process]({{site.url}}/assets/images/kubeadm-join-process.png){: .align-center}
+<center><sup>kubeadm init을 이용한 worker node join 과정</sup></center>
 
 
 ```bash
@@ -357,10 +359,7 @@ API Server에서 클러스터 정보를 다운로드하고 검증한다.
 - `kube-public` 네임스페이스의 `cluster-info` ConfigMap에서 CA 인증서, API Server 주소 획득
 - `--discovery-token-ca-cert-hash`로 CA 인증서 진위 검증
 
-> **참고**: `cluster-info` ConfigMap
-
-> API Server에서 **유일하게 인증 없이 접근 가능한** 엔드포인트다. `kubeadm init`의 bootstrap-token 단계에서 `system:unauthenticated` 그룹에 이 ConfigMap에 대한 읽기 권한을 부여한다.
-> 이렇게 해서 아직 인증서가 없는 새 노드도 클러스터 정보를 가져올 수 있다.
+> **참고**: `cluster-info` ConfigMap은 API Server에서 **유일하게 인증 없이 접근 가능한** 엔드포인트다. `kubeadm init`의 bootstrap-token 단계에서 `system:anonymous` 그룹에 읽기 권한을 부여한다. 인증 없이 공개되어도 안전한 이유는 JWS 서명으로 MITM을 방어하기 때문이다. 자세한 내용은 [init과 join의 신뢰 모델]({% post_url 2026-01-18-Kubernetes-Kubeadm-00 %}#init과-join의-신뢰-모델)을 참고하자.
 
 ### 3. TLS Bootstrap
 

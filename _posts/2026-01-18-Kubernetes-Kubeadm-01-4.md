@@ -1,6 +1,6 @@
 ---
-title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.4. Flannel CNI 설치 및 네트워크 확인"
-excerpt: "Flannel CNI를 설치하고, iptables와 conntrack을 통해 Kubernetes 네트워킹이 Linux에서 어떻게 구현되는지 확인해보자."
+title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.4. kubeadm init 실행 및 편의 도구 설치"
+excerpt: "kubeadm init을 실행하여 컨트롤 플레인을 구성하고, kubectl 편의 도구를 설치해보자."
 categories:
   - Kubernetes
 toc: true
@@ -10,7 +10,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-3
-hidden: true
 
 ---
 
@@ -20,843 +19,1176 @@ hidden: true
 
 # TL;DR
 
-이번 글의 목표는 **Flannel CNI 설치 및 Linux 네트워크 스택 확인**이다.
+이번 글의 목표는 **kubeadm init 실행 및 컨트롤 플레인 구성**이다.
 
-- **Flannel CNI 설치**: Pod 네트워크를 위한 CNI 플러그인 설치
-- **네트워크 리소스**: 라우팅, 인터페이스, 브릿지 확인
-- **Linux 네트워크 스택**: iptables 규칙, conntrack 연결 추적 확인
+- **kubeadm init**: 설정 파일을 사용하여 컨트롤 플레인 초기화
+- **kubeconfig 설정**: kubectl 사용을 위한 설정
+- **편의 도구**: kubecolor, kubectx, kubens, kube-ps1, helm, k9s 설치
 
 <br>
 
 # 들어가며
 
-[이전 글]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %})에서 `kubeadm init`을 실행하고 편의 도구를 설치했다. 하지만 노드 상태가 **NotReady**이고 CoreDNS Pod도 **Pending** 상태였다. 이번 글에서는 CNI 플러그인을 설치하여 Pod 네트워크를 구성하고, Linux 네트워크 스택을 통해 Kubernetes 네트워킹이 어떻게 동작하는지 확인한다.
+[이전 글]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %})에서 containerd와 kubeadm/kubelet/kubectl 설치를 완료했다. 이제 `kubeadm init`을 실행하여 컨트롤 플레인을 구성한다. 
+
+컨트롤 플레인 구성이 목적이므로, 이 글에서는 **컨트롤 플레인 노드(k8s-ctr)**에서만 작업을 진행한다.
 
 <br>
 
-# Flannel CNI 설치
+# kubeadm 설정 파일 작성
 
-## CNI 플러그인의 필요성
+`kubeadm init`은 명령줄 옵션과 설정 파일 두 가지 방식을 지원한다.
 
-지금까지 노드가 **NotReady** 상태였고, CoreDNS Pod도 **Pending** 상태였다. 이는 CNI 플러그인이 없어서 Pod 네트워크를 구성할 수 없었기 때문이다.
+## 명령줄 옵션 방식
 
-[이전 글]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-2 %}#cni-바이너리-및-설정-디렉토리-확인)에서 `kubernetes-cni` 패키지로 표준 CNI 플러그인(`bridge`, `host-local` 등)이 이미 설치되어 있다. 하지만 표준 플러그인만으로는 노드 간 Pod 통신이 불가능하고 수동 설정이 필요하기 때문에, 별도의 CNI 솔루션을 설치해야 한다:
-
-| 표준 CNI 플러그인만 | + Flannel 같은 CNI 솔루션 |
-| --- | --- |
-| 단일 노드 내 네트워크 설정 (브릿지, IP 할당) | 클러스터 전체 서브넷 자동 할당 |
-| 수동으로 각 노드마다 설정 필요 | CNI 설정 파일 자동 생성 |
-| 노드 간 통신 불가 | 오버레이 네트워크로 노드 간 통신 |
-
-> 참고: **Hard Way와의 비교**
->
-> [Kubernetes The Hard Way 실습]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-09-2 %}#cni-설정-파일-배치)에서는 표준 CNI 플러그인만 사용했기 때문에:
-> - 각 노드에 `10-bridge.conf` 설정 파일을 **수동으로 배치**해야 했다
-> - 노드 간 Pod 통신을 위해 [라우팅 테이블을 수동으로 설정]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-11 %})해야 했다 (`ip route add 10.200.1.0/24 via 192.168.10.102` 형태)
-> - 이 설정은 **휘발성**이라 재부팅 시 사라졌다
->
-> Flannel 같은 CNI 솔루션은 이 모든 작업을 **자동화**한다.
-
-CNI 솔루션은 여러 종류가 있다 (Calico, Cilium, Weave 등). 이 실습에서는 설정이 간단한 **Flannel**을 사용한다.
-
-## Flannel이란
-
-Flannel은 실제 네트워크 설정(veth 생성, IP 할당)을 `bridge`, `host-local` 같은 표준 플러그인에 **위임**하여 수행하게 하고, 자신은 이 플러그인들이 사용할 **설정 파일을 자동 생성**하고 **노드 간 오버레이 네트워크를 구성**하는 역할을 담당한다.
-
-위 역할을 담당하는 핵심 컴포넌트가 **flanneld** 데몬이며, 각 노드에서 실행되어 Pod 네트워크를 구성한다. flanneld는 호스트의 네트워크 인터페이스와 라우팅 테이블을 직접 조작해야 하므로 `hostNetwork: true`로 실행된다.
-
-### Pod 네트워크 구조
-
-Pod 네트워크 구성의 계층별 역할은 다음과 같다:
-
-| 계층 | 역할 |
-| --- | --- |
-| **Flannel (flanneld)** | CNI 설정 파일 배포 + VXLAN 오버레이 네트워크 구성 |
-| **표준 CNI 플러그인 (bridge, host-local)** | Pod 생성 시 veth 쌍 생성, `cni0` 브릿지 연결, IP 할당 |
-| **Linux 커널** | [veth]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-12 %}#veth-인터페이스와-pod-네트워킹)(Virtual Ethernet) 기능 제공 |
-
-<br>
-
-![kubeadm-flannel]({{site.url}}/assets/images/kubeadm-flannel.png){: .align-center}
-
-flanneld는 Kubernetes API와 통신하여 노드별 서브넷 할당 정보를 동기화하고, 이를 기반으로 라우팅 테이블과 VXLAN 터널을 설정한다.
-
-> 참고: **VXLAN(Virtual Extensible LAN)**
->
-> L2 이더넷 프레임을 UDP 패킷으로 캡슐화하는 터널링 프로토콜이다. 서로 다른 물리 네트워크(L3)에 있는 노드들도 마치 같은 L2 네트워크에 있는 것처럼 통신할 수 있다. Flannel은 `flannel.1` 인터페이스를 VXLAN 터널의 끝점(VTEP: VXLAN Tunnel Endpoint)으로 사용하여 다른 노드로 가는 Pod 트래픽을 캡슐화/역캡슐화한다.
-
-각 Pod는 veth 쌍을 통해 노드의 `cni0` 브릿지에 연결된다. veth의 한쪽은 Pod 내부(eth0), 다른 쪽은 호스트의 cni0에 연결된다. `cni0`는 Linux 브릿지로, 같은 노드 내 모든 Pod를 하나의 L2 네트워크로 묶어준다.
-
-- **같은 노드 내 통신**: `cni0` 브릿지가 MAC 주소를 학습하여 직접 전달한다. (Pod1 → veth → cni0 → veth → Pod2)
-- **다른 노드 간 통신**: flannel.1(VXLAN 터널 엔드포인트)이 L2 프레임을 UDP로 캡슐화하여 물리 네트워크를 넘어 전달한다. (Pod1 → veth → cni0 → flannel.1 → eth0 → 네트워크 → eth0 → flannel.1 → cni0 → veth → Pod3)
-
-<br>
-
-## 현재 Pod CIDR 확인
-
-Flannel 설치 전에 `kubeadm init` 시 설정한 Pod CIDR이 제대로 적용되었는지 확인한다.
-
-**kube-controller-manager**가 노드별 Pod CIDR 할당을 담당한다. `kubeadm init` 시 설정한 `podSubnet`이 controller-manager의 `--cluster-cidr` 옵션으로 전달되고, `--allocate-node-cidrs=true`가 활성화되어 있으면 새 노드가 join할 때마다 `/24` 서브넷을 자동 할당한다.
+명령줄 옵션 방식은 간단한 테스트에 적합하다.
 
 ```bash
-kc describe pod -n kube-system kube-controller-manager-k8s-ctr | grep -E 'cluster-cidr|allocate-node-cidrs'
-#   --allocate-node-cidrs=true      # 노드별 CIDR 자동 할당 활성화
-#   --cluster-cidr=10.244.0.0/16    # 전체 Pod 네트워크 대역
+kubeadm init \
+  --apiserver-advertise-address=192.168.10.100 \
+  --pod-network-cidr=10.244.0.0/16 \
+  --service-cidr=10.96.0.0/16 \
+  --kubernetes-version=1.32.11 \
+  --token=123456.1234567890123456 \
+  --token-ttl=0
 ```
 
-위 설정이 실제로 노드에 반영되었는지 확인한다.
+## 설정 파일 방식
+
+명령줄 옵션 대신 YAML 설정 파일을 사용하면 버전 관리와 재현성 측면에서 더 좋다. 이번 실습에서도 설정 파일 방식을 사용한다.
 
 ```bash
-# 노드별 할당된 CIDR 확인 (각 노드의 spec.podCIDR 필드 조회)
-kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.podCIDR}{"\n"}{end}'
-# k8s-ctr	10.244.0.0/24    # 첫 번째 노드에 /24 할당됨
+## kubeadm Configuration 파일 작성
+cat << EOF > kubeadm-init.yaml
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+bootstrapTokens:
+- token: "123456.1234567890123456"    # 토큰 고정 (실습용)
+  ttl: "0s"                           # 토큰 만료 시간 없음 (실습용)
+  usages:
+  - signing
+  - authentication
+nodeRegistration:
+  kubeletExtraArgs:
+    - name: node-ip
+      value: "192.168.10.100"         # 미설정 시 10.0.2.15로 매핑될 수 있음 (실습 환경 특수성)
+  criSocket: "unix:///run/containerd/containerd.sock"
+localAPIEndpoint:
+  advertiseAddress: "192.168.10.100"
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: "1.32.11"
+networking:
+  podSubnet: "10.244.0.0/16"          # Flannel 기본값
+  serviceSubnet: "10.96.0.0/16"
+EOF
+cat kubeadm-init.yaml
 ```
 
-Flannel은 이 설정을 그대로 사용한다. Flannel이 CIDR을 새로 만드는 게 아니라, Kubernetes가 이미 할당한 `spec.podCIDR`을 읽어서 해당 노드의 Pod 네트워크를 구성한다.
+### 설정 파일 주요 항목
+
+| 항목 | 설명 |
+| --- | --- |
+| `bootstrapTokens` | 워커 노드 join 시 사용할 토큰 |
+| `nodeRegistration.kubeletExtraArgs` | kubelet에 전달할 추가 인자. `node-ip`를 명시하여 올바른 IP 사용 |
+| `localAPIEndpoint.advertiseAddress` | API Server가 광고할 IP 주소 |
+| `networking.podSubnet` | Pod 네트워크 CIDR. Flannel 사용 시 `10.244.0.0/16` |
+| `networking.serviceSubnet` | Service 네트워크 CIDR |
+
+주요 설정 항목 값에서 주의해서 봐야 하는 것은 다음과 같다:
+- **node-ip**: Vagrant처럼 여러 네트워크 인터페이스가 있는 환경에서는 반드시 명시해야 한다. 미설정 시 NAT 인터페이스 IP(10.0.2.15)가 사용되어 노드 간 통신에 문제가 발생할 수 있다.
+- **advertiseAddress vs node-ip**: `advertiseAddress`는 API Server가 광고하는 주소, `node-ip`는 kubelet이 사용하는 주소다. 둘 다 클러스터 통신용 IP로 일치시키는 것이 좋다.
+- **podSubnet**: CNI 플러그인마다 기본값이 다르다. Flannel은 `10.244.0.0/16`, Calico는 `192.168.0.0/16`이 기본값이다. 사용할 CNI에 맞춰 설정한다.
+- **token**: 실습 재현성을 위해 토큰을 고정했다. 프로덕션에서는 위험하므로 [아래 섹션](#token-고정의-위험성)에서 자세히 다룬다.
+- **criSocket**: containerd 외 CRI-O 등 다른 런타임 사용 시 해당 소켓 경로로 변경해야 한다.
+
+### token 고정의 위험성
+
+설정 파일의 `bootstrapTokens` 영역을 보면, 토큰을 `123456.1234567890123456`으로 고정하고 `ttl: "0s"`(만료 없음)로 설정했다. 이는 **실습 재현성과 워커 노드 join 편의**를 위한 것이다. 기본적으로 `kubeadm init`은 `[a-z0-9]{6}.[a-z0-9]{16}` 형식의 **랜덤 토큰**을 생성하고, 기본 TTL은 24시간이다.
+
+**프로덕션에서는 절대 이렇게 하면 안 된다.** [Bootstrap 신뢰 모델]({% post_url 2026-01-18-Kubernetes-Kubeadm-00 %}#init과-join의-신뢰-모델)에서 살펴본 것처럼, JWS 보안 모델의 핵심은 **Token Secret을 중간자가 모른다**는 전제다. 토큰을 고정하면 이 전제가 무너진다.
+
+| 설정 | 문제 |
+| --- | --- |
+| `token: "123456.1234567890123456"` | Secret이 `1234567890123456`이면 사실상 공개된 값. "out-of-band로 안전하게 전달한다"는 전제가 무너지고, 중간자가 Secret을 알기 때문에 유효한 JWS 서명을 위조할 수 있음 |
+| `ttl: "0s"` | 기본값 24시간 대신 영구 유효. 토큰이 유출되면 **언제든** 아무 노드가 클러스터에 join 가능 |
+
+프로덕션에서의 권장 사항:
+- `kubeadm init`이 자동 생성하는 **랜덤 토큰** 사용: `InitConfiguration`에서 **`bootstrapTokens` 블록을 아예 넣지 않으면** kubeadm이 랜덤 토큰 생성
+- TTL은 기본 24시간, 또는 더 짧게 설정
+- join이 끝나면 `kubeadm token delete`로 즉시 삭제
+- 필요 시 `kubeadm token create --print-join-command`로 일회성 토큰 재생성
 
 <br>
 
-## Helm으로 Flannel 설치
+# 컨테이너 이미지 사전 다운로드 (선택)
 
-이번 실습에서는 Helm을 이용해 Flannel을 설치한다. 
-- [Helm으로 설치](https://github.com/flannel-io/flannel?tab=readme-ov-file#deploying-flannel-with-helm) (이번 실습)
-- [`kubectl apply -f`로 설치](https://github.com/flannel-io/flannel?tab=readme-ov-file#deploying-flannel-manually)
-
-`kubectl apply -f`를 이용해 직접 설치할 수도 있지만, Helm을 사용하면 다음과 같은 이점이 있다.
-- 버전 관리가 용이함
-- 설정 변경 시 `helm upgrade`로 간편하게 적용
-- `helm uninstall`로 깔끔하게 제거 가능
+네트워크 환경에 따라 `kubeadm init` 시간을 단축하기 위해 이미지를 미리 다운로드할 수 있다.
 
 ```bash
-# Flannel Helm 저장소 추가
-helm repo add flannel https://flannel-io.github.io/flannel
-# "flannel" has been added to your repositories
+# 필요한 이미지 목록 확인
+kubeadm config images list
+# registry.k8s.io/kube-apiserver:v1.32.11
+# registry.k8s.io/kube-controller-manager:v1.32.11
+# registry.k8s.io/kube-scheduler:v1.32.11
+# registry.k8s.io/kube-proxy:v1.32.11
+# registry.k8s.io/coredns/coredns:v1.11.3
+# registry.k8s.io/pause:3.10
+# registry.k8s.io/etcd:3.5.24-0
 
-helm repo update
-# ...Successfully got an update from the "flannel" chart repository
-# Update Complete. ⎈Happy Helming!⎈
-
-# Flannel 네임스페이스 생성
-kubectl create namespace kube-flannel
-# namespace/kube-flannel created
+# 이미지 사전 다운로드
+kubeadm config images pull
+# [config/images] Pulled registry.k8s.io/kube-apiserver:v1.32.11
+# [config/images] Pulled registry.k8s.io/kube-controller-manager:v1.32.11
+# [config/images] Pulled registry.k8s.io/kube-scheduler:v1.32.11
+# [config/images] Pulled registry.k8s.io/kube-proxy:v1.32.11
+# [config/images] Pulled registry.k8s.io/coredns/coredns:v1.11.3
+# [config/images] Pulled registry.k8s.io/pause:3.10
+# [config/images] Pulled registry.k8s.io/etcd:3.5.24-0
 ```
 
-Flannel Helm 설치 시 사용할 설정 파일을 작성한다.
+kubeadm은 설치된 버전과 설정 파일을 기반으로 필요한 이미지 목록을 결정한다:
 
-```yaml
-# flannel.yaml
-podCidr: "10.244.0.0/16"
-flannel:
-  cniBinDir: "/opt/cni/bin"
-  cniConfDir: "/etc/cni/net.d"
-  args:
-  - "--ip-masq"
-  - "--kube-subnet-mgr"
-  - "--iface=enp0s9"              # 클러스터 통신용 인터페이스
-  backend: "vxlan"
-```
-
-| 설정 | 설명 |
+| 이미지 | 버전 결정 방식 |
 | --- | --- |
-| `podCidr` | `kubeadm init` 시 설정한 Pod 네트워크 대역 |
-| `--ip-masq` | Pod에서 외부로 나가는 트래픽에 SNAT 적용 |
-| `--kube-subnet-mgr` | Kubernetes API에서 서브넷 정보 조회 |
-| `--iface` | Flannel이 사용할 네트워크 인터페이스 |
-| `backend` | 오버레이 네트워크 방식 (vxlan, host-gw 등) |
+| kube-apiserver, kube-controller-manager, kube-scheduler, kube-proxy | `kubernetesVersion`과 동일 |
+| etcd, coredns, pause | kubeadm 소스 코드에 하드코딩된 호환 버전 |
 
-> 참고: **--iface 옵션**
+설정 파일이나 특정 버전을 지정하면 해당 버전에 맞는 이미지 목록을 확인할 수 있다:
+
+```bash
+kubeadm config images list --config=kubeadm-init.yaml      # 설정 파일 기반
+kubeadm config images list --kubernetes-version=1.33.0    # 특정 버전 지정
+```
+
+> **참고: 업그레이드 시 이미지 사전 다운로드**
 > 
-> 여러 네트워크 인터페이스가 있는 환경에서 Flannel이 사용할 인터페이스를 명시한다.
-> Vagrant 환경에서는 `kubelet --node-ip`와 동일하게 Host-Only 네트워크 인터페이스(`enp0s9`)를 지정해야 노드 간 Pod 통신이 정상 작동한다.
-
-```bash
-# Flannel 설치
-helm install flannel flannel/flannel --namespace kube-flannel --version 0.27.3 -f flannel.yaml
-# NAME: flannel
-# LAST DEPLOYED: Fri Jan 23 20:23:12 2026
-# NAMESPACE: kube-flannel
-# STATUS: deployed
-# REVISION: 1
-```
+> 클러스터 **업그레이드** 시에는 이미지 사전 다운로드가 특히 유용하다. `kubeadm upgrade apply` 과정에서 새 버전 이미지를 pull하는 시간이 포함되면, 컨트롤 플레인 컴포넌트의 다운타임이 길어질 수 있다. 
+> 
+> 업그레이드 전에 `kubeadm config images pull --kubernetes-version=<target-version>`으로 미리 이미지를 받아두면 실제 업그레이드 시간을 크게 단축할 수 있다.
 
 <br>
 
-## 설치 확인
+# dry-run으로 사전 확인 (선택)
 
-### Helm 릴리스 확인
-
-Helm으로 배포된 Flannel 릴리스를 확인한다.
-
-`helm list -A`는 모든 네임스페이스의 Helm 릴리스를 조회한다. Flannel이 `kube-flannel` 네임스페이스에 `deployed` 상태로 설치되어 있음을 확인할 수 있다.
+`--dry-run` 옵션을 사용하면 실제로 클러스터를 생성하지 않고 **어떤 작업이 수행될지 미리 확인**할 수 있다. 생성될 리소스들의 YAML 매니페스트도 출력된다.
 
 ```bash
-helm list -A
-# NAME    NAMESPACE     REVISION  UPDATED                                STATUS    CHART            APP VERSION
-# flannel kube-flannel  1         2026-01-23 20:23:12.809390297 +0900 KST deployed  flannel-v0.27.3  v0.27.3
+kubeadm init --config="kubeadm-init.yaml" --dry-run
 ```
 
-`helm get values`는 릴리스에 적용된 사용자 정의 값(User-Supplied Values)을 출력한다. 앞서 설치 시 `-f flannel.yaml`로 지정한 설정이 정상적으로 반영되었는지 확인할 수 있다. 
+dry-run 출력은 `[dryrun] Would perform action <ACTION> on resource` 형식으로 **실제로 수행될 API 호출**을 보여준다:
 
-```bash
-helm get values -n kube-flannel flannel
-# USER-SUPPLIED VALUES:
-# flannel:
-#   args:
-#   - --ip-masq
-#   - --kube-subnet-mgr
-#   - --iface=enp0s9
-#   backend: vxlan
-#   cniBinDir: /opt/cni/bin
-#   cniConfDir: /etc/cni/net.d
-# podCidr: 10.244.0.0/16
+```
+[dryrun] Would perform action CREATE on resource "configmaps" in API group "core/v1"
+[dryrun] Attached object:
+apiVersion: v1
+data:
+  kubelet: |
+    apiVersion: kubelet.config.k8s.io/v1beta1
+    cgroupDriver: systemd
+    clusterDNS:
+    - 10.96.0.10
+    staticPodPath: /etc/kubernetes/manifests
+    rotateCertificates: true
+    ...
+kind: ConfigMap
+metadata:
+  name: kubelet-config
+  namespace: kube-system
 ```
 
-### Flannel 리소스 확인
+이처럼 각 리소스에 대해 **어떤 action(CREATE, GET, PATCH 등)이 수행될지**와 함께 **생성될 오브젝트의 YAML**이 출력된다.
 
-`kube-flannel` 네임스페이스의 리소스를 확인한다.
+dry-run 출력에서 주요하게 확인할 부분은 아래와 같다:
 
-```bash
-kubectl get ds,pod,cm -n kube-flannel -o wide
-# NAME                             DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   AGE
-# daemonset.apps/kube-flannel-ds   1         1         1       1            1           66s
-#
-# NAME                        READY   STATUS    RESTARTS   AGE   IP               NODE
-# pod/kube-flannel-ds-hv2xd   1/1     Running   0          66s   192.168.10.100   k8s-ctr
-#
-# NAME                         DATA   AGE
-# configmap/kube-flannel-cfg   2      66s
-```
-
-Flannel은 **DaemonSet**으로 배포되어 모든 노드에서 실행된다. Pod IP가 `192.168.10.100`(노드 IP)인 것은 `hostNetwork: true` 설정으로 호스트의 네트워크 네임스페이스를 공유하기 때문이다.
-
-### DaemonSet 구성 확인
-
-DaemonSet의 구성을 확인하면 Flannel이 어떻게 CNI 바이너리와 설정 파일을 배포하는지 알 수 있다.
-
-```bash
-kubectl describe ds -n kube-flannel kube-flannel-ds
-# ...
-# Pod Template:
-#   Init Containers:
-#    install-cni-plugin:
-#     Image:      ghcr.io/flannel-io/flannel-cni-plugin:v1.7.1-flannel1
-#    install-cni:
-#     Image:      ghcr.io/flannel-io/flannel:v0.27.3
-#   Containers:
-#    kube-flannel:
-#     Image:      ghcr.io/flannel-io/flannel:v0.27.3
-# ...
-```
-
-| 컨테이너 | 역할 |
+| 리소스 | 설명 |
 | --- | --- |
-| `install-cni-plugin` (init) | `/opt/cni/bin/flannel` 바이너리 복사 |
-| `install-cni` (init) | `/etc/cni/net.d/10-flannel.conflist` 설정 파일 복사 |
-| `kube-flannel` (main) | VXLAN 오버레이 네트워크 운영 |
+| `kubelet-config` ConfigMap | 클러스터 내 모든 kubelet이 공유할 설정 (`cgroupDriver: systemd`, `clusterDNS`, `staticPodPath` 등) |
+| `bootstrap-token-*` Secret | 워커 노드 join에 사용할 부트스트랩 토큰 |
+| `cluster-info` ConfigMap | 워커 노드가 클러스터에 join할 때 사용하는 CA 인증서와 API Server 주소 |
+| `coredns` Deployment/ConfigMap | 클러스터 DNS 서비스 |
+| `kube-proxy` DaemonSet/ConfigMap | 각 노드의 네트워크 프록시 |
+
+dry-run 후 `/etc/kubernetes` 디렉토리 구조를 확인하면, **실제 파일은 생성되지 않고 임시 디렉토리에만 생성**된 것을 알 수 있다:
+
+```bash
+tree /etc/kubernetes
+# /etc/kubernetes
+# ├── manifests                      <- 비어있음 (dry-run이므로)
+# └── tmp
+#     └── kubeadm-init-dryrun*       <- dry-run 결과가 여기에 저장
+#         ├── admin.conf
+#         ├── apiserver.crt
+#         ├── ca.crt
+#         ├── ca.key
+#         ├── etcd/
+#         │   ├── ca.crt, ca.key
+#         │   ├── server.crt, server.key
+#         │   └── ...
+#         ├── etcd.yaml              <- etcd Static Pod 매니페스트
+#         ├── kube-apiserver.yaml    <- API Server Static Pod 매니페스트
+#         ├── kube-controller-manager.yaml
+#         ├── kube-scheduler.yaml
+#         └── ...
+```
+
+이 구조를 통해 실제 init 시 어떤 인증서와 매니페스트가 생성될지 미리 확인할 수 있다. 문제가 없으면 실제 init을 진행한다.
+
+<br>
+
+# 실행
+
+이제 init을 실행한다. 이전 글에서 살펴본 `kubeadm init`의 14단계가 실제로 빠르게 진행된다. 사전에 이미지를 pull해두었고, 설정이 올바르다면 **전체 과정이 수 초 내에 완료**된다.
+
+```bash
+kubeadm init --config="kubeadm-init.yaml"
+```
+
 
 <details markdown="1">
-<summary>DaemonSet 전체 상세 정보</summary>
+<summary>분류별 YAML 예시</summary>
 
 ```bash
-kubectl describe ds -n kube-flannel kube-flannel-ds
-# Name:           kube-flannel-ds
-# Selector:       app=flannel
-# Node-Selector:  <none>
-# Labels:         app=flannel
-#                 app.kubernetes.io/managed-by=Helm
-#                 tier=node
-# Annotations:    deprecated.daemonset.template.generation: 1
-#                 meta.helm.sh/release-name: flannel
-#                 meta.helm.sh/release-namespace: kube-flannel
-# Desired Number of Nodes Scheduled: 1
-# Current Number of Nodes Scheduled: 1
-# Number of Nodes Scheduled with Up-to-date Pods: 1
-# Number of Nodes Scheduled with Available Pods: 1
-# Number of Nodes Misscheduled: 0
-# Pods Status:  1 Running / 0 Waiting / 0 Succeeded / 0 Failed
-# Pod Template:
-#   Labels:           app=flannel
-#                     tier=node
-#   Service Account:  flannel
-#   Init Containers:
-#    install-cni-plugin:
-#     Image:      ghcr.io/flannel-io/flannel-cni-plugin:v1.7.1-flannel1
-#     Command:    cp
-#     Args:       -f /flannel /opt/cni/bin/flannel
-#     Mounts:     /opt/cni/bin from cni-plugin (rw)
-#    install-cni:
-#     Image:      ghcr.io/flannel-io/flannel:v0.27.3
-#     Command:    cp
-#     Args:       -f /etc/kube-flannel/cni-conf.json /etc/cni/net.d/10-flannel.conflist
-#     Mounts:
-#       /etc/cni/net.d from cni (rw)
-#       /etc/kube-flannel/ from flannel-cfg (rw)
-#   Containers:
-#    kube-flannel:
-#     Image:      ghcr.io/flannel-io/flannel:v0.27.3
-#     Command:    /opt/bin/flanneld --ip-masq --kube-subnet-mgr --iface=enp0s9
-#     Requests:   cpu: 100m, memory: 50Mi
-#     Environment:
-#       POD_NAME:                    (v1:metadata.name)
-#       POD_NAMESPACE:               (v1:metadata.namespace)
-#       EVENT_QUEUE_DEPTH:          5000
-#       CONT_WHEN_CACHE_NOT_READY:  false
-#     Mounts:
-#       /etc/kube-flannel/ from flannel-cfg (rw)
-#       /run/flannel from run (rw)
-#       /run/xtables.lock from xtables-lock (rw)
-#   Volumes:
-#    run:          HostPath /run/flannel
-#    cni-plugin:   HostPath /opt/cni/bin
-#    cni:          HostPath /etc/cni/net.d
-#    flannel-cfg:  ConfigMap kube-flannel-cfg
-#    xtables-lock: HostPath /run/xtables.lock (FileOrCreate)
-#   Priority Class Name:  system-node-critical
-#   Tolerations:          :NoExecute op=Exists
-#                         :NoSchedule op=Exists
-```
+[init] Using Kubernetes version: v1.32.11
+[preflight] Running pre-flight checks
+[preflight] Pulling images required for setting up a Kubernetes cluster
+[preflight] This might take a minute or two, depending on the speed of your internet connection
+[preflight] You can also perform this action beforehand using 'kubeadm config images pull'
+[certs] Using certificateDir folder "/etc/kubernetes/pki"
+[certs] Generating "ca" certificate and key
+[certs] Generating "apiserver" certificate and key
+[certs] apiserver serving cert is signed for DNS names [k8s-ctr kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local] and IPs [10.96.0.1 192.168.10.100]
+[certs] Generating "apiserver-kubelet-client" certificate and key
+[certs] Generating "front-proxy-ca" certificate and key
+[certs] Generating "front-proxy-client" certificate and key
+[certs] Generating "etcd/ca" certificate and key
+[certs] Generating "etcd/server" certificate and key
+[certs] etcd/server serving cert is signed for DNS names [k8s-ctr localhost] and IPs [192.168.10.100 127.0.0.1 ::1]
+[certs] Generating "etcd/peer" certificate and key
+[certs] etcd/peer serving cert is signed for DNS names [k8s-ctr localhost] and IPs [192.168.10.100 127.0.0.1 ::1]
+[certs] Generating "etcd/healthcheck-client" certificate and key
+[certs] Generating "apiserver-etcd-client" certificate and key
+[certs] Generating "sa" key and public key
+[kubeconfig] Using kubeconfig folder "/etc/kubernetes"
+[kubeconfig] Writing "admin.conf" kubeconfig file
+[kubeconfig] Writing "super-admin.conf" kubeconfig file
+[kubeconfig] Writing "kubelet.conf" kubeconfig file
+[kubeconfig] Writing "controller-manager.conf" kubeconfig file
+[kubeconfig] Writing "scheduler.conf" kubeconfig file
+[etcd] Creating static Pod manifest for local etcd in "/etc/kubernetes/manifests"
+[control-plane] Using manifest folder "/etc/kubernetes/manifests"
+[control-plane] Creating static Pod manifest for "kube-apiserver"
+[control-plane] Creating static Pod manifest for "kube-controller-manager"
+[control-plane] Creating static Pod manifest for "kube-scheduler"
+[kubelet-start] Writing kubelet environment file with flags to file "/var/lib/kubelet/kubeadm-flags.env"
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+[kubelet-start] Starting the kubelet
+[wait-control-plane] Waiting for the kubelet to boot up the control plane as static Pods from directory "/etc/kubernetes/manifests"
+[kubelet-check] Waiting for a healthy kubelet at http://127.0.0.1:10248/healthz. This can take up to 4m0s
+[kubelet-check] The kubelet is healthy after 1.001573204s
+[api-check] Waiting for a healthy API server. This can take up to 4m0s
+[api-check] The API server is healthy after 3.002710936s
+[upload-config] Storing the configuration used in ConfigMap "kubeadm-config" in the "kube-system" Namespace
+[kubelet] Creating a ConfigMap "kubelet-config" in namespace kube-system with the configuration for the kubelets in the cluster
+[upload-certs] Skipping phase. Please see --upload-certs
+[mark-control-plane] Marking the node k8s-ctr as control-plane by adding the labels: [node-role.kubernetes.io/control-plane node.kubernetes.io/exclude-from-external-load-balancers]
+[mark-control-plane] Marking the node k8s-ctr as control-plane by adding the taints [node-role.kubernetes.io/control-plane:NoSchedule]
+[bootstrap-token] Using token: 123456.1234567890123456
+[bootstrap-token] Configuring bootstrap tokens, cluster-info ConfigMap, RBAC Roles
+[bootstrap-token] Configured RBAC rules to allow Node Bootstrap tokens to get nodes
+[bootstrap-token] Configured RBAC rules to allow Node Bootstrap tokens to post CSRs in order for nodes to get long term certificate credentials
+[bootstrap-token] Configured RBAC rules to allow the csrapprover controller automatically approve CSRs from a Node Bootstrap Token
+[bootstrap-token] Configured RBAC rules to allow certificate rotation for all node client certificates in the cluster
+[bootstrap-token] Creating the "cluster-info" ConfigMap in the "kube-public" namespace
+[kubelet-finalize] Updating "/etc/kubernetes/kubelet.conf" to point to a rotatable kubelet client certificate and key
+[addons] Applied essential addon: CoreDNS
+[addons] Applied essential addon: kube-proxy
 
-- **Init Containers**: CNI 바이너리와 설정 파일을 호스트에 복사
-- **HostPath Volumes**: 호스트의 `/opt/cni/bin`, `/etc/cni/net.d`, `/run/flannel` 등에 직접 접근
-- **Priority Class**: `system-node-critical`로 설정되어 클러스터 핵심 컴포넌트로 취급
-- **Tolerations**: 모든 taint를 허용하여 Control Plane 노드에서도 실행 가능
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 192.168.10.100:6443 --token 123456.1234567890123456 \
+        --discovery-token-ca-cert-hash sha256:998060ec728a1cab3c1de8ad8fb6c63c2782f5cc1e982984197f0f226bfba91f
+
+```
 
 </details>
 
-<br>
 
-flanneld 실행 커맨드에 `--iface=enp0s9` 옵션이 적용되었음을 확인할 수 있다.
-
-```bash
-kubectl describe ds -n kube-flannel kube-flannel-ds | grep -A5 "Command:"
-#     Command:
-#       /opt/bin/flanneld
-#       --ip-masq
-#       --kube-subnet-mgr
-#       --iface=enp0s9
-```
-
-### CNI 바이너리 및 설정 확인
-
-Init Container가 설치한 파일들을 확인한다:
-
-```bash
-# CNI 바이너리 목록
-ls -l /opt/cni/bin/
-# -rwxr-xr-x. 1 root root 3239200 Dec 12  2024 bandwidth
-# -rwxr-xr-x. 1 root root 3731632 Dec 12  2024 bridge
-# -rwxr-xr-x. 1 root root 9123544 Dec 12  2024 dhcp
-# ...
-# -rwxr-xr-x. 1 root root 2903098 Jan 23 20:23 flannel    # ← init container가 복사
-# -rwxr-xr-x. 1 root root 2812400 Dec 12  2024 host-local
-# -rwxr-xr-x. 1 root root 2953200 Dec 12  2024 loopback
-# -rwxr-xr-x. 1 root root 3312488 Dec 12  2024 portmap
-# ...
-```
-
-`flannel`만 init container가 복사한 것이고(*날짜가 다름*), 나머지는 [kubelet 설치 시]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-2 %}#cni-바이너리-및-설정-디렉토리-확인) `kubernetes-cni` 패키지로 설치된 표준 CNI 플러그인이다. [앞서 설명한 대로](#cni-플러그인의-필요성), Flannel이 내부적으로 이 표준 플러그인들(`bridge`, `host-local`)에 위임하여 실제 네트워크 설정을 수행한다.
-
-```bash
-# CNI 설정 파일 (init container가 복사)
-tree /etc/cni/net.d/
-# /etc/cni/net.d/
-# └── 10-flannel.conflist
-
-cat /etc/cni/net.d/10-flannel.conflist | jq
-# {
-#   "name": "cbr0",
-#   "cniVersion": "0.3.1",
-#   "plugins": [
-#     {
-#       "type": "flannel",
-#       "delegate": {
-#         "hairpinMode": true,
-#         "isDefaultGateway": true
-#       }
-#     },
-#     {
-#       "type": "portmap",
-#       "capabilities": { "portMappings": true }
-#     }
-#   ]
-# }
-```
-
-이제 kubelet이 Pod 생성 시 이 설정 파일을 읽고 `flannel` CNI 플러그인을 호출할 수 있다.
+클러스터 초기화 단계의 하이라이트인 만큼, 출력을 단계별로 살펴보자.
 
 <br>
 
-## CNI 설치 후 클러스터 상태 변화
-
-### NetworkReady 상태
-
-[이전 글]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-2 %}#crictl-info-확인)에서 `NetworkReady: false`였던 상태가 CNI 설치 후 `true`로 변경되었다.
+## 1단계: [preflight] 사전 검사
 
 ```bash
-crictl info | jq '.status.conditions'
-# [
-#   { "status": true, "type": "RuntimeReady" },
-#   { "status": true, "type": "NetworkReady" },      # false → true로 변경됨!
-#   { "status": true, "type": "ContainerdHasNoDeprecationWarnings" }
-# ]
+[init] Using Kubernetes version: v1.32.11
+[preflight] Running pre-flight checks
+        [WARNING Firewalld]: firewalld is active, please ensure ports [6443 10250] are open or your cluster may not function correctly
+[preflight] Pulling images required for setting up a Kubernetes cluster
+[preflight] This might take a minute or two, depending on the speed of your internet connection
+[preflight] You can also perform this action beforehand using 'kubeadm config images pull'
 ```
 
-### CoreDNS 및 노드 상태
+- Kubernetes 버전 확인 (v1.32.11)
+- 사전 검사 수행: 시스템 요구사항, 포트 충돌, 커널 파라미터 등
+- **firewalld 경고**: 6443(API Server), 10250(kubelet) 포트가 열려있어야 함. 실습에서는 firewalld를 비활성화했으므로 무시해도 됨
+- 이미지 pull 안내: 이미 `kubeadm config images pull`로 받아두었으므로 빠르게 진행
 
-CNI가 정상 동작하면서 Pending 상태였던 CoreDNS Pod가 IP를 할당받고 Running 상태가 된다.
+<br>
+
+## 2단계: [certs] 인증서 생성
 
 ```bash
-kubectl get pod -n kube-system -o wide
-# NAME                              READY   STATUS    AGE   IP               NODE
-# coredns-668d6bf9bc-n8jxf          1/1     Running   44m   10.244.0.3       k8s-ctr
-# coredns-668d6bf9bc-z6h69          1/1     Running   44m   10.244.0.2       k8s-ctr
-# etcd-k8s-ctr                      1/1     Running   44m   192.168.10.100   k8s-ctr
-# kube-apiserver-k8s-ctr            1/1     Running   44m   192.168.10.100   k8s-ctr
-# kube-controller-manager-k8s-ctr   1/1     Running   44m   192.168.10.100   k8s-ctr
-# kube-proxy-5p6jx                  1/1     Running   44m   192.168.10.100   k8s-ctr
-# kube-scheduler-k8s-ctr            1/1     Running   44m   192.168.10.100   k8s-ctr
+[certs] Using certificateDir folder "/etc/kubernetes/pki"
+[certs] Generating "ca" certificate and key
+[certs] Generating "apiserver" certificate and key
+[certs] apiserver serving cert is signed for DNS names [k8s-ctr kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local] and IPs [10.96.0.1 192.168.10.100]
+[certs] Generating "apiserver-kubelet-client" certificate and key
+[certs] Generating "front-proxy-ca" certificate and key
+[certs] Generating "front-proxy-client" certificate and key
+[certs] Generating "etcd/ca" certificate and key
+[certs] Generating "etcd/server" certificate and key
+[certs] etcd/server serving cert is signed for DNS names [k8s-ctr localhost] and IPs [192.168.10.100 127.0.0.1 ::1]
+[certs] Generating "etcd/peer" certificate and key
+[certs] Generating "etcd/healthcheck-client" certificate and key
+[certs] Generating "apiserver-etcd-client" certificate and key
+[certs] Generating "sa" key and public key
 ```
 
-CoreDNS가 정상 기동되면 클러스터 DNS 서비스가 준비되므로, 노드 상태도 `NotReady`에서 `Ready`로 변경된다.
+[이전 글]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-1 %})에서 살펴본, [Kubernetes The Hard Way]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-04-1 %})에서 OpenSSL로 일일이 생성했던 인증서들이 자동으로 생성된다:
+
+| 인증서 | 용도 |
+| --- | --- |
+| `ca` | 클러스터 루트 CA (모든 인증서의 신뢰 기반) |
+| `apiserver` | API Server의 TLS 서빙 인증서 |
+| `apiserver-kubelet-client` | API Server가 kubelet에 접근할 때 사용 |
+| `front-proxy-ca/client` | API Aggregation Layer용 |
+| `etcd/ca`, `etcd/server`, `etcd/peer` | etcd 클러스터 내부 통신용 |
+| `etcd/healthcheck-client` | etcd 헬스체크용 |
+| `apiserver-etcd-client` | API Server가 etcd에 접근할 때 사용 |
+| `sa` (Service Account) | ServiceAccount 토큰 서명용 키 쌍 |
+
+<br>
+
+`apiserver` 인증서의 SAN(Subject Alternative Name)에 다양한 DNS와 IP가 포함됨에 주목하자.
+- DNS: `k8s-ctr`, `kubernetes`, `kubernetes.default`, `kubernetes.default.svc`, `kubernetes.default.svc.cluster.local`
+- IP: `10.96.0.1` (Service CIDR의 첫 번째 IP), `192.168.10.100` (advertiseAddress)
+
+다시 한 번 짚고 넘어 가지만, 클라이언트가 API Server에 접속할 때 **접속 주소가 인증서의 SAN에 포함되어 있어야** TLS 검증이 통과된다. 예를 들어,
+- Pod 내부에서 `https://kubernetes.default.svc:443`으로 접속하거나
+- 외부에서 `https://192.168.10.100:6443`으로 접속할 때
+모두 이 인증서로 검증된다. 
+
+만약 다음과 같은 경우에는 `--apiserver-cert-extra-sans` 옵션으로 SAN을 추가해야 한다:
+- **HA 구성**: 여러 컨트롤 플레인 앞에 Load Balancer를 두는 경우, LB의 IP/DNS가 SAN에 포함되어야 함
+- **커스텀 도메인**: `api.mycompany.com` 같은 도메인으로 접근하려는 경우
+- **클라우드 환경**: 외부 IP(Public IP)가 내부 IP와 다른 경우
+
+<br>
+
+## 3단계: [kubeconfig] kubeconfig 파일 생성
+
+각 컴포넌트가 API Server에 인증할 때 사용하는 kubeconfig 파일이 생성된다.
+
+```bash
+[kubeconfig] Using kubeconfig folder "/etc/kubernetes"
+[kubeconfig] Writing "admin.conf" kubeconfig file
+[kubeconfig] Writing "super-admin.conf" kubeconfig file
+[kubeconfig] Writing "kubelet.conf" kubeconfig file
+[kubeconfig] Writing "controller-manager.conf" kubeconfig file
+[kubeconfig] Writing "scheduler.conf" kubeconfig file
+```
+
+| 파일 | 용도 |
+| --- | --- |
+| `admin.conf` | 클러스터 관리자용 (`kubectl` 사용 시) |
+| `super-admin.conf` | 최고 권한 관리자용 (1.29+에서 추가) |
+| `kubelet.conf` | kubelet이 API Server에 연결할 때 사용 |
+| `controller-manager.conf` | Controller Manager가 API Server에 연결할 때 사용 |
+| `scheduler.conf` | Scheduler가 API Server에 연결할 때 사용 |
+
+<br>
+
+## 4단계: [etcd], [control-plane] Static Pod 매니페스트 생성
+
+etcd와 컨트롤 플레인 컴포넌트들의 Static Pod 매니페스트가 `/etc/kubernetes/manifests/`에 생성된다. kubelet은 이 디렉토리를 감시하다가 매니페스트가 생성되면 자동으로 Pod를 실행한다.
+
+```bash
+[etcd] Creating static Pod manifest for local etcd in "/etc/kubernetes/manifests"
+[control-plane] Using manifest folder "/etc/kubernetes/manifests"
+[control-plane] Creating static Pod manifest for "kube-apiserver"
+[control-plane] Creating static Pod manifest for "kube-controller-manager"
+[control-plane] Creating static Pod manifest for "kube-scheduler"
+```
+
+<br>
+
+## 5단계: [kubelet-start] kubelet 시작
+
+kubelet을 시작한다. kubelet이 시작되면 `/etc/kubernetes/manifests/`의 Static Pod들을 실행한다.
+
+```bash
+[kubelet-start] Writing kubelet environment file with flags to file "/var/lib/kubelet/kubeadm-flags.env"
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+[kubelet-start] Starting the kubelet
+```
+
+- `/var/lib/kubelet/kubeadm-flags.env`: kubelet 시작 시 전달할 플래그 (node-ip 등)
+- `/var/lib/kubelet/config.yaml`: kubelet 설정 파일 (이 파일이 없어서 이전에 crashloop이었음)
+
+<br>
+
+## 6단계: [wait-control-plane] 컨트롤 플레인 대기
+
+이 단계에서 이미지 사전 다운로드의 효과가 나타난다. 최대 4분까지 기다릴 수 있다고 하지만, 실제로는 수 초 만에 완료된다.
+
+```bash
+[wait-control-plane] Waiting for the kubelet to boot up the control plane as static Pods from directory "/etc/kubernetes/manifests"
+[kubelet-check] Waiting for a healthy kubelet at http://127.0.0.1:10248/healthz. This can take up to 4m0s
+[kubelet-check] The kubelet is healthy after 1.002214971s
+[api-check] Waiting for a healthy API server. This can take up to 4m0s
+[api-check] The API server is healthy after 3.003031359s
+```
+
+- kubelet 헬스체크 (`:10248/healthz`): 약 **1초** 만에 healthy
+- API Server 헬스체크: 약 **3초** 만에 healthy
+
+<br>
+
+## 7단계: [upload-config] 설정 업로드
+
+이제 API Server가 동작하므로, 클러스터 자체에 설정을 저장할 수 있다. 이렇게 하면 나중에 업그레이드하거나 노드를 추가할 때 일관된 설정을 사용할 수 있다.
+
+```
+[upload-config] Storing the configuration used in ConfigMap "kubeadm-config" in the "kube-system" Namespace
+[kubelet] Creating a ConfigMap "kubelet-config" in namespace kube-system with the configuration for the kubelets in the cluster
+```
+
+- `kubeadm-config`: kubeadm init에 사용된 설정을 ConfigMap으로 저장 (`kubeadm upgrade` 시 참조)
+- `kubelet-config`: 클러스터 내 모든 kubelet이 공유할 설정 (워커 노드 join 시 참조)
+
+<br>
+
+## 8단계: [mark-control-plane] 컨트롤 플레인 마킹
+
+컨트롤 플레인 노드는 etcd, API Server 등 핵심 컴포넌트가 실행되므로, 일반 워크로드와 분리하여 안정성을 확보해야 한다. Label과 Taint로 이를 구현한다.
+
+```bash
+[mark-control-plane] Marking the node k8s-ctr as control-plane by adding the labels: [node-role.kubernetes.io/control-plane node.kubernetes.io/exclude-from-external-load-balancers]
+[mark-control-plane] Marking the node k8s-ctr as control-plane by adding the taints [node-role.kubernetes.io/control-plane:NoSchedule]
+```
+
+- **Label 추가**: `node-role.kubernetes.io/control-plane` → `kubectl get nodes`에서 역할 표시
+- **Taint 추가**: `node-role.kubernetes.io/control-plane:NoSchedule` → 일반 Pod가 스케줄링되지 않음
+
+<br>
+
+## 9단계: [bootstrap-token] 부트스트랩 토큰 설정
+
+부트스트랩 토큰은 워커 노드가 클러스터에 join할 때 사용하는 임시 인증 수단이다. 이 토큰으로 인증한 후 kubelet은 자신의 인증서를 발급받아 장기 자격 증명으로 전환한다.
+
+```bash
+[bootstrap-token] Using token: 123456.1234567890123456
+[bootstrap-token] Configuring bootstrap tokens, cluster-info ConfigMap, RBAC Roles
+[bootstrap-token] Configured RBAC rules to allow Node Bootstrap tokens to get nodes
+[bootstrap-token] Configured RBAC rules to allow Node Bootstrap tokens to post CSRs in order for nodes to get long term certificate credentials
+[bootstrap-token] Configured RBAC rules to allow the csrapprover controller automatically approve CSRs from a Node Bootstrap Token
+[bootstrap-token] Configured RBAC rules to allow certificate rotation for all node client certificates in the cluster
+[bootstrap-token] Creating the "cluster-info" ConfigMap in the "kube-public" namespace
+```
+
+- 설정 파일에서 지정한 **고정 토큰**(`123456.1234567890123456`)이 사용됨
+- RBAC 규칙 설정: 워커 노드가 토큰으로 join하고 인증서를 발급받을 수 있도록
+- `cluster-info` ConfigMap: `kube-public` 네임스페이스에 생성되어 워커 노드가 클러스터 정보를 가져갈 수 있음
+
+<br>
+
+## 10단계: [addons] 애드온 설치
+
+클러스터가 정상 작동하려면 DNS와 네트워크 프록시가 필수다. kubeadm은 이 두 가지 핵심 애드온을 자동으로 설치한다.
+
+```bash
+[addons] Applied essential addon: CoreDNS
+[addons] Applied essential addon: kube-proxy
+```
+
+- **CoreDNS**: 클러스터 내부 DNS 서비스 (Deployment로 배포, CNI 설치 전까지 Pending 상태)
+- **kube-proxy**: 각 노드의 네트워크 프록시 (DaemonSet으로 배포)
+
+## 완료
+
+드디어 완료 메시지를 볼 수 있다.
+
+```bash
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 192.168.10.100:6443 --token 123456.1234567890123456 \
+        --discovery-token-ca-cert-hash sha256:bd763182471f1ed47780644230f234a89061a29041a922a74c849a48342c797d
+```
+
+완료 메시지에서 중요한 정보를 살펴 보자.
+1. **kubeconfig 설정 방법**: kubectl 사용을 위한 설정
+2. **CNI 플러그인 설치 필요**: 아직 Pod 네트워크가 없음
+3. **워커 노드 join 명령어**: 토큰과 CA cert hash가 포함된 명령어 → **워커 노드에서 그대로 복사하여 실행하면 됨**
+
+> **참고**: 토큰을 고정해두었기 때문에 join 명령어의 토큰 부분이 항상 동일하다. CA cert hash만 기억해두면 워커 노드 join 시 바로 사용할 수 있다.
+
+완료 메시지에서 보이는 아래 커맨드를 [워커 노드 join]({% post_url 2026-01-18-Kubernetes-Kubeadm-02-1 %}) 시 바로 사용할 수 있다.
+
+```bash
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 192.168.10.100:6443 --token 123456.1234567890123456 \
+        --discovery-token-ca-cert-hash sha256:bd763182471f1ed47780644230f234a89061a29041a922a74c849a48342c797d
+```
+
+<br>
+
+## crictl로 컨트롤 플레인 컴포넌트 확인
+
+`kubeadm init`이 완료된 직후 crictl로 실행 중인 컨테이너를 확인해 보자.
+
+```bash
+crictl images
+# IMAGE                                     TAG                 IMAGE ID            SIZE
+# registry.k8s.io/coredns/coredns           v1.11.3             2f6c962e7b831       16.9MB
+# registry.k8s.io/etcd                      3.5.24-0            1211402d28f58       21.9MB
+# registry.k8s.io/kube-apiserver            v1.32.11            58951ea1a0b5d       26.4MB
+# registry.k8s.io/kube-controller-manager   v1.32.11            82766e5f2d560       24.2MB
+# registry.k8s.io/kube-proxy                v1.32.11            dcdb790dc2bfe       27.6MB
+# registry.k8s.io/kube-scheduler            v1.32.11            cfa17ff3d6634       19.2MB
+# registry.k8s.io/pause                     3.10                afb61768ce381       268kB
+
+crictl ps
+# CONTAINER      IMAGE          CREATED          STATE     NAME                      POD
+# dc8f81e24dff7  dcdb790dc2bfe  18 minutes ago   Running   kube-proxy                kube-proxy-5p6jx
+# 28856e606823f  58951ea1a0b5d  18 minutes ago   Running   kube-apiserver            kube-apiserver-k8s-ctr
+# e7593756117ad  1211402d28f58  18 minutes ago   Running   etcd                      etcd-k8s-ctr
+# 61a09c44673c6  cfa17ff3d6634  18 minutes ago   Running   kube-scheduler            kube-scheduler-k8s-ctr
+# 65d20308c4200  82766e5f2d560  18 minutes ago   Running   kube-controller-manager   kube-controller-manager-k8s-ctr
+```
+
+사전에 다운로드한 7개의 이미지가 모두 사용되고 있다. 실행 중인 컨테이너를 보면:
+- **Static Pod**: `kube-apiserver`, `etcd`, `kube-scheduler`, `kube-controller-manager` (이름에 `-k8s-ctr` 노드명 포함)
+- **DaemonSet Pod**: `kube-proxy` (이름이 랜덤 suffix)
+- **coredns**는 CNI 플러그인 설치 전이라 아직 Pending 상태 (컨테이너로 보이지 않음)
+
+<br>
+
+# kubeconfig 설정
+
+kubectl을 사용하기 위해 kubeconfig를 설정한다.
+
+```bash
+mkdir -p /root/.kube
+cp -i /etc/kubernetes/admin.conf /root/.kube/config
+chown $(id -u):$(id -g) /root/.kube/config
+```
+
+## `/root/.kube/config`
+
+kubectl은 기본적으로 `$HOME/.kube/config` 파일에서 클러스터 접속 정보를 읽는다. 현재 root 사용자이므로 `/root/.kube/config`에 설정한다. 일반 사용자라면 `/home/<username>/.kube/config`가 된다.
+
+## `admin.conf`
+
+[이전 글]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-1 %}#3-kubeconfig)에서 살펴본 것처럼, `/etc/kubernetes/admin.conf`는 **클러스터 관리자 권한**이 포함된 kubeconfig 파일이다:
+- **인증서**: `kubernetes-admin` 사용자의 클라이언트 인증서 (Base64 인코딩)
+- **API Server 주소**: `https://192.168.10.100:6443`
+- **클러스터 CA**: API Server 인증서 검증용
+
+이 파일을 복사하면 kubectl이 API Server에 인증하고 모든 리소스에 접근할 수 있다.
+
+<br>
+
+# 초기 상태 확인
+
+이제 클러스터 컨트롤 플레인 구성 및 kubectl 설정을 완료했으니, 클러스터 초기 상태를 확인해 보자.
+
+```bash
+kubectl cluster-info
+# Kubernetes control plane is running at https://192.168.10.100:6443
+# CoreDNS is running at https://192.168.10.100:6443/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy
+```
+
+컨트롤 플레인이 `192.168.10.100:6443`에서 실행 중임을 확인할 수 있다.
+
+
+## 노드 상태
+
+클러스터에 등록된 노드 정보를 확인한다. 현재 컨트롤 플레인만 초기화했기 때문에, 컨트롤 플레인 노드만 확인할 수 있다.
 
 ```bash
 kubectl get node -o wide
-# NAME      STATUS   ROLES           AGE   VERSION    INTERNAL-IP      CONTAINER-RUNTIME
-# k8s-ctr   Ready    control-plane   44m   v1.32.11   192.168.10.100   containerd://2.1.5
+# NAME      STATUS     ROLES           AGE   VERSION    INTERNAL-IP      EXTERNAL-IP   OS-IMAGE                        KERNEL-VERSION                  CONTAINER-RUNTIME
+# k8s-ctr   NotReady   control-plane   20m   v1.32.11   192.168.10.100   <none>        Rocky Linux 10.0 (Red Quartz)   6.12.0-55.39.1.el10_0.aarch64   containerd://2.1.5
 ```
 
-<br>
-
-CNI 플러그인 설치 후 변화를 요약하면 아래와 같다.
-
-| 변화 | Before | After |
+| 필드 | 값 | 설명 |
 | --- | --- | --- |
-| `NetworkReady` | false | **true** |
-| 노드 상태 | NotReady | **Ready** |
-| CoreDNS 상태 | Pending | **Running** |
-| CoreDNS IP | `<none>` | **10.244.0.2, 10.244.0.3** |
+| `STATUS` | **NotReady** | CNI 플러그인 미설치로 네트워크 준비 안됨 |
+| `ROLES` | control-plane | 8단계에서 추가한 Label |
+| `INTERNAL-IP` | 192.168.10.100 | `node-ip`로 지정한 클러스터 통신용 IP |
+| `CONTAINER-RUNTIME` | containerd://2.1.5 | 설치한 containerd 버전 |
 
-CoreDNS Pod에 `10.244.0.0/24` 대역의 IP가 할당되었다. 이는 컨트롤 플레인 노드에 할당된 Pod CIDR이다.
+## 노드 리소스 정보
 
-<br>
-
-## 네트워크 리소스 확인
-
-CNI 설치 후 노드에 생성된 네트워크 리소스를 확인한다.
-
-### 라우팅 테이블
-
-`kubeadm init` 시 설정한 Pod CIDR(`10.244.0.0/16`)에 대한 라우트가 Flannel에 의해 추가되었는지 확인한다.
+kubelet이 노드의 리소스를 API Server에 보고한다. 스케줄러는 이 정보를 바탕으로 Pod 배치를 결정한다.
 
 ```bash
-ip -c route | grep 10.244
-# 10.244.0.0/24 dev cni0 proto kernel scope link src 10.244.0.1
+kubectl get nodes -o json | jq ".items[] | {name:.metadata.name} + .status.capacity"
+# {
+#   "name": "k8s-ctr",
+#   "cpu": "4",
+#   "ephemeral-storage": "60970Mi",
+#   "memory": "2893976Ki",
+#   "pods": "110"
+# }
 ```
 
-Pod 네트워크(`10.244.0.0/24`)로 향하는 패킷은 `cni0` 브릿지를 통해 전달된다.
+## kube-system 네임스페이스 리소스 확인
 
-### 네트워크 인터페이스
+[`kube-system`]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-1 %}#4-etcd-control-plane-static-pod-매니페스트-생성)은 Kubernetes 시스템 컴포넌트가 배포되는 예약된 네임스페이스다.
 
-Flannel이 생성한 오버레이 네트워크 인터페이스와 Pod 연결 상태를 확인한다.
+### Pod
+
+컨트롤 플레인 컴포넌트(Static Pod)와 kube-proxy(DaemonSet)는 `hostNetwork: true`로 호스트 네트워크를 사용하므로 `Running` 상태지만, CoreDNS(Deployment)는 Pod 네트워크가 필요하여 CNI 플러그인 없이는 IP를 할당받지 못해 `Pending` 상태다.
+
+> CNI를 설치하면 노드가 Ready가 되고, CoreDNS도 Pod IP를 할당받아 Running 상태가 된다.
 
 ```bash
-ip addr | grep -E "flannel|cni0|veth"
-# 4: flannel.1: ... inet 10.244.0.0/32 scope global flannel.1
-# 5: cni0: ...      inet 10.244.0.1/24 brd 10.244.0.255 scope global cni0
-# 6: vethd46304de@if2: ... master cni0
-# 7: vethc5ce784f@if2: ... master cni0
+kubectl get pod -n kube-system -o wide
+# NAME                              READY   STATUS    RESTARTS   AGE   IP               NODE      NOMINATED NODE   READINESS GATES
+# coredns-668d6bf9bc-n8jxf          0/1     Pending   0          21m   <none>           <none>    <none>           <none>
+# coredns-668d6bf9bc-z6h69          0/1     Pending   0          21m   <none>           <none>    <none>           <none>
+# etcd-k8s-ctr                      1/1     Running   0          21m   192.168.10.100   k8s-ctr   <none>           <none>
+# kube-apiserver-k8s-ctr            1/1     Running   0          21m   192.168.10.100   k8s-ctr   <none>           <none>
+# kube-controller-manager-k8s-ctr   1/1     Running   0          21m   192.168.10.100   k8s-ctr   <none>           <none>
+# kube-proxy-5p6jx                  1/1     Running   0          21m   192.168.10.100   k8s-ctr   <none>           <none>
+# kube-scheduler-k8s-ctr            1/1     Running   0          21m   192.168.10.100   k8s-ctr   <none>           <none>
 ```
 
-| 인터페이스 | IP | 역할 |
-| --- | --- | --- |
-| `flannel.1` | 10.244.0.0/32 | VXLAN 터널 엔드포인트 (노드 간 오버레이 통신 - 다른 노드 간 통신) |
-| `cni0` | 10.244.0.1/24 | Linux 브릿지 (같은 노드 내 Pod 연결, Pod 게이트웨이) |
-| `veth*` | - | Pod-브릿지(cni0) 연결 (2개 = CoreDNS Pod 2개 ) |
-
-### 브릿지 연결
-
-Pod의 veth 인터페이스가 `cni0` 브릿지에 제대로 연결되어 있는지 확인한다.
-
-```bash
-bridge link
-# 6: vethd46304de@enp0s8: master cni0 state forwarding priority 32 cost 2
-# 7: vethc5ce784f@enp0s8: master cni0 state forwarding priority 32 cost 2
-```
-
-- **`master cni0`**: 해당 veth가 `cni0` 브릿지에 연결됨
-- **`state forwarding`**: 트래픽을 정상적으로 전달하는 상태
-
-2개의 veth가 `cni0`에 연결되어 있으며, 이는 CoreDNS Pod 2개에 해당한다.
-
-### 네트워크 네임스페이스
-
-CNI가 생성한 Pod별 네트워크 네임스페이스를 확인한다.
-
-```bash
-lsns -t net | grep cni
-# 4026532303 net  2 18164 65535  0 /run/netns/cni-b55a74ef-... /pause
-# 4026532378 net  2 18157 65535  1 /run/netns/cni-55b1d32b-... /pause
-```
-
-각 Pod는 고유한 네트워크 네임스페이스를 가진다. Hard Way에서 Pod를 직접 배포할 때 보았던 [pause 컨테이너]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-12 %}#pause-컨테이너)가 여기서도 동일하게 동작하여 이 네임스페이스를 소유하고 유지한다. CNI는 이 pause 컨테이너의 네트워크 네임스페이스에 veth 쌍을 연결하고 IP를 할당한다. Pod 내 다른 컨테이너들은 pause의 네트워크 네임스페이스를 공유하여 같은 IP와 포트 공간을 사용한다.
-
-<br>
-
-# Linux 네트워크 스택 확인
-
-[이전 글]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %})에서 kube-proxy가 배포되었고, 이번 글에서 Flannel을 설치했다. 이 두 컴포넌트가 모두 배포된 시점에 Linux 네트워크 스택을 살펴보면 Kubernetes 네트워킹이 어떻게 동작하는지 파악할 수 있다. 
-
-## Kubernetes 네트워킹 개요
-
-Kubernetes 네트워킹은 Linux 네트워크 스택 위에서 동작한다. 네트워킹에서의 핵심은 **Linux 네트워크 스택(특히 iptables)을 동적으로 조작**하는 것이다. Pod가 생성되거나 Service가 추가될 때마다 iptables 규칙이 자동으로 업데이트되어 트래픽이 올바른 목적지로 라우팅된다.
-- [클러스터 네트워킹](https://kubernetes.io/ko/docs/concepts/cluster-administration/networking/)
-- [Service](https://kubernetes.io/ko/docs/concepts/services-networking/service/)
-
-
-<br>
-
-지금까지 설치한 컴포넌트들이 어떻게 Linux 네트워크를 활용하는지 정리해 보자.
-
-| 컴포넌트 | 설치 시점 | Linux 네트워크 활용 |
-| --- | --- | --- |
-| **kube-proxy** | [kubeadm init]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %}#static-pod-매니페스트) 시 DaemonSet 배포 | iptables로 Service → Pod 라우팅 |
-| **Flannel** | 이번 글에서 Helm으로 설치 | veth, bridge, VXLAN, iptables로 Pod 네트워크 구성 |
-
-> **참고: kube-proxy 모드**
-> 
-> kube-proxy는 Service 라우팅 구현 방식에 따라 여러 모드를 지원한다:
-> - **iptables** (기본값): iptables 규칙으로 DNAT 수행. 대부분의 환경에서 사용
-> - **IPVS**: Linux IPVS(IP Virtual Server)를 사용한 L4 로드밸런싱. 대규모 클러스터에서 더 나은 성능
-> - **nftables**: iptables의 후속 기술. Kubernetes 1.29+에서 지원
-> 
-> IPVS나 nftables를 사용하려면 [kubeadm 설정 파일]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %}#kubeadm-설정-파일)에서 `KubeProxyConfiguration`의 `mode` 필드를 명시해야 한다. 이전 글에서 별도 설정 없이 기본값을 사용했으므로 iptables 모드다.
-> 
-> ```bash
-> # kube-proxy ConfigMap에서 현재 모드 확인
-> kubectl get cm kube-proxy -n kube-system -o yaml | grep mode
-> #     mode: ""   # 빈 문자열 = iptables (기본값)
-> ```
-
-두 컴포넌트 모두 **iptables**를 사용하지만 목적이 다르다:
-- **kube-proxy**: Service 추상화 (ClusterIP → Pod IP 변환)
-- **Flannel**: Pod 네트워크 통신 (SNAT, 포워딩 허용)
-
-## iptables 규칙
-
-iptables 규칙을 확인하여 Kubernetes 네트워킹이 Linux 수준에서 어떻게 구현되는지 이해해 보자.
-
-### iptables 개요
-
-iptables는 Linux 커널의 패킷 필터링 프레임워크다. 패킷이 들어오면 **테이블**(nat, filter 등) 내의 **체인**(PREROUTING, FORWARD 등)을 순서대로 거치며, 각 체인의 규칙에 따라 패킷이 처리된다.
-
-Kubernetes에서 iptables 규칙은 **Flannel**과 **kube-proxy**가 각각 다른 시점에 추가한다:
-
-| 컴포넌트 | 규칙 추가 시점 | 체인 | 역할 |
+| Pod | 유형 | 상태 | 설명 |
 | --- | --- | --- | --- |
-| **Flannel** | flanneld 시작 시 | `FLANNEL-POSTRTG` (nat) | Pod → 외부 통신 시 SNAT |
-| **Flannel** | flanneld 시작 시 | `FLANNEL-FWD` (filter) | Pod 네트워크 트래픽 포워딩 허용 |
-| **kube-proxy** | Service 생성 시 | `KUBE-SERVICES` (nat) | Service ClusterIP 매칭 진입점 |
-| **kube-proxy** | Service 생성 시 | `KUBE-SVC-*` (nat) | 서비스별 로드밸런싱 |
-| **kube-proxy** | Service 생성 시 | `KUBE-SEP-*` (nat) | 실제 Pod IP로 DNAT |
-| **kube-proxy** | Service 생성 시 | `KUBE-FORWARD` (filter) | 마킹된 패킷 포워딩 허용 |
+| `etcd-k8s-ctr` | Static Pod | Running | 클러스터 데이터 저장소 |
+| `kube-apiserver-k8s-ctr` | Static Pod | Running | API Server |
+| `kube-controller-manager-k8s-ctr` | Static Pod | Running | 컨트롤러 매니저 |
+| `kube-scheduler-k8s-ctr` | Static Pod | Running | 스케줄러 |
+| `kube-proxy-5p6jx` | DaemonSet | Running | 네트워크 프록시 |
+| `coredns-*` | Deployment | **Pending** | CNI 없어서 스케줄링 불가 |
 
-### nat 테이블
 
-nat 테이블은 주소 변환(NAT)을 담당한다. Service ClusterIP → Pod IP 변환(DNAT)과 Pod → 외부 통신 시 IP 변환(SNAT)이 여기서 처리된다.
+### Service
 
-<br>
-
-**Flannel이 추가한 규칙** (flanneld 시작 시):
+kubeadm 초기화 직후에는 `kube-dns` 서비스만 존재한다. CoreDNS **Pod**이지만 서비스명은 **`kube-dns`**인데, 이는 기존 kube-dns와의 호환성을 위한 것이다. Pod 내부에서 DNS 조회 시 `/etc/resolv.conf`에 `nameserver 10.96.0.10`이 설정된다.
 
 ```bash
-# Pod → 외부 통신 시 SNAT (--ip-masq 옵션)
-iptables -t nat -S | grep FLANNEL
-# -A POSTROUTING -m comment --comment "flanneld masq" -j FLANNEL-POSTRTG
-# -A FLANNEL-POSTRTG -s 10.244.0.0/16 ! -d 224.0.0.0/4 ... -j MASQUERADE
+kubectl get svc -n kube-system
+# NAME       TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)                  AGE
+# kube-dns   ClusterIP   10.96.0.10   <none>        53/UDP,53/TCP,9153/TCP   22m
 ```
 
-Pod(`10.244.0.0/16`)에서 외부로 나가는 트래픽의 출발지 IP를 노드 IP로 변환(SNAT)한다. 이렇게 해야 외부 네트워크에서 응답을 노드로 돌려보낼 수 있고, 노드가 다시 Pod로 전달한다. `--ip-masq` 옵션이 이 규칙을 활성화한다.
+### Lease
+
+컨트롤 플레인 컴포넌트와 kubelet이 시작되면서 **Lease 리소스**가 자동으로 생성된다.
+
+```bash
+# Leader Election용 Lease (kube-system)
+kubectl get lease -n kube-system
+# NAME                      HOLDER                                         AGE
+# kube-controller-manager   k8s-ctr_...                                    25m
+# kube-scheduler            k8s-ctr_...                                    25m
+
+# Node Heartbeat용 Lease (kube-node-lease)
+kubectl get lease -n kube-node-lease
+# NAME      HOLDER    AGE
+# k8s-ctr   k8s-ctr   25m
+```
+
+| Lease | 네임스페이스 | 생성 주체 | 용도 |
+| --- | --- | --- | --- |
+| `kube-scheduler` | `kube-system` | kube-scheduler | 스케줄러 Leader Election |
+| `kube-controller-manager` | `kube-system` | kube-controller-manager | 컨트롤러 매니저 Leader Election |
+| `<노드명>` | `kube-node-lease` | kubelet | 노드 상태 보고 (Heartbeat) |
+
+> **참고**: Leader Election은 HA 구성에서 여러 인스턴스 중 하나만 활성화하기 위한 메커니즘이다. 현재 단일 컨트롤 플레인이므로 Leader가 하나뿐이지만, `--leader-elect=true`가 기본 활성화되어 있어 HA 확장 시 자동으로 동작한다. Node Lease는 노드 상태를 경량화된 방식으로 보고하여 etcd 부하를 줄인다.
 
 <br>
 
-**kube-proxy가 추가한 규칙** (Service 생성 시):
+## TLS Bootstrap을 위한 객체들
 
-현재 시점에 이미 존재하는 Service들이 있어서 kube-proxy가 해당 규칙을 생성해 둔 상태다:
+`kubeadm init`은 워커 노드가 클러스터에 join할 수 있도록 **부트스트랩 인프라**를 자동으로 구성한다. 해당 인프라는 아직 클러스터 인증서가 없는 노드(worker)가 API Server에 처음 접속해서 최소 정보(엔드포인트 + CA)를 얻기 위해 필요하다.
 
-| Service | ClusterIP | 생성 시점 |
+> 이 객체들이 왜 필요하고, Bootstrap Token과 JWS 서명을 통해 어떻게 MITM을 방어하는지는 [init과 join의 신뢰 모델]({% post_url 2026-01-18-Kubernetes-Kubeadm-00 %}#init과-join의-신뢰-모델)에서 다루었다. 여기서는 실제 생성된 객체들을 확인한다.
+
+각 객체들은 아래와 같다.
+
+| 객체 | 이름 | 용도 |
 | --- | --- | --- |
-| `default/kubernetes` | 10.96.0.1:443 | [kubeadm init]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %}#kubeadm-init-실행) 시 자동 생성 (API Server) |
-| `kube-system/kube-dns` | 10.96.0.10:53 | [CoreDNS addon]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %}#coredns-kube-proxy) 배포 시 생성 |
+| **Namespace** | `kube-public` | 공개 리소스 저장용 네임스페이스 |
+| **ConfigMap** | `cluster-info` | API Server 엔드포인트 + CA 인증서 |
+| **Role** | `kubeadm:bootstrap-signer-clusterinfo` | `cluster-info` 읽기 권한 정의 |
+| **RoleBinding** | `kubeadm:bootstrap-signer-clusterinfo` | **User** `system:anonymous`에 Role 부여 (= 인증 없는 요청 허용) |
+
+### cluster-info ConfigMap
+
+`cluster-info` ConfigMap은 워커 노드가 클러스터에 join할 때 필요한 **부트스트랩 데이터**(API Server 주소 + CA 인증서)를 담고 있다. Role/RoleBinding은 **인증되지 않은 요청**(API Server가 부여하는 User `system:anonymous`)도 이 ConfigMap을 읽을 수 있도록 권한을 부여한다.
+
+
+```
+워커 노드 (인증서 없음)
+    │
+    ▼ curl -k https://API_SERVER/api/v1/namespaces/kube-public/configmaps/cluster-info
+    │
+    ▼ cluster-info에서 CA 인증서 + API Server 주소 획득
+    │
+    ▼ 부트스트랩 토큰으로 인증 → CSR 제출 → 인증서 발급
+    │
+    ▼ 정식 kubelet 인증서로 클러스터 참여
+```
+
+> 자세한 TLS Bootstrap 과정은 [워커 노드 join]({% post_url 2026-01-18-Kubernetes-Kubeadm-02-1 %}) 글에서 다룬다.
+
+### ConfigMap 내용 확인
 
 ```bash
-# kube-dns Service (10.96.0.10:53) → CoreDNS Pod로 DNAT
-iptables -t nat -S | grep "kube-dns:dns ->"
-# -A KUBE-SVC-TCOU7JCQXEZGVUNU ... --probability 0.50000000000 -j KUBE-SEP-YIL6JZP7A3QYXJU2
-# -A KUBE-SVC-TCOU7JCQXEZGVUNU ... -j KUBE-SEP-6E7XQMQ4RAYOWTTM
-# (2개의 CoreDNS Pod에 50% 확률로 로드밸런싱)
+kubectl -n kube-public get configmap cluster-info
+# NAME           DATA   AGE
+# cluster-info   2      24m
 ```
+
+ConfigMap에는 2개의 데이터가 있다:
+
+- **kubeconfig**: API Server 주소와 CA 인증서 (워커 노드가 필요한 정보)
+- **jws-kubeconfig-123456**: 부트스트랩 토큰으로 서명한 값 (중간자가 ConfigMap을 조작하지 않았음을 검증)
+
+`cluster-info`에는 CA 인증서만 포함되어 있고, 개인키나 인증 토큰은 없다. CA 인증서는 공개되어도 안전하며, 오히려 클라이언트가 API Server를 검증하는 데 필요하다.
+
 
 <details markdown="1">
-<summary>nat 테이블 전체 규칙</summary>
+<summary>cluster-info Configmap 전문</summary>
 
 ```bash
-iptables -t nat -S
-# -P PREROUTING ACCEPT
-# -P INPUT ACCEPT
-# -P OUTPUT ACCEPT
-# -P POSTROUTING ACCEPT
-# -N FLANNEL-POSTRTG
-# -N KUBE-MARK-MASQ
-# -N KUBE-NODEPORTS
-# -N KUBE-POSTROUTING
-# -N KUBE-SEP-6E7XQMQ4RAYOWTTM
-# -N KUBE-SEP-ETI7FUQQE3BS2IXE
-# ... (생략)
-# -N KUBE-SERVICES
-# -N KUBE-SVC-ERIFXISQEP7F7OF4
-# -N KUBE-SVC-NPX46M4PTMTKRN6Y
-# -N KUBE-SVC-TCOU7JCQXEZGVUNU
-# [kube-proxy] 모든 들어오는/나가는 패킷을 KUBE-SERVICES 체인으로 전달
-# [kube-proxy] 들어오는/나가는 패킷을 KUBE-SERVICES 체인으로 전달
-# -A PREROUTING -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
-# -A OUTPUT -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
-# -A POSTROUTING -m comment --comment "kubernetes postrouting rules" -j KUBE-POSTROUTING
-#
-# [Flannel] Pod → 외부 통신 시 SNAT 처리를 위해 FLANNEL-POSTRTG로 전달
-# -A POSTROUTING -m comment --comment "flanneld masq" -j FLANNEL-POSTRTG
-#
-# [Flannel] Pod CIDR에서 출발하는 트래픽을 노드 IP로 MASQUERADE (SNAT)
-# -A FLANNEL-POSTRTG -s 10.244.0.0/16 ! -d 224.0.0.0/4 ... -j MASQUERADE --random-fully
-#
-# [kube-proxy] kube-dns Service (10.96.0.10:53) → CoreDNS Pod로 DNAT
-# -A KUBE-SERVICES -d 10.96.0.10/32 -p udp --dport 53 -j KUBE-SVC-TCOU7JCQXEZGVUNU
-# -A KUBE-SVC-TCOU7JCQXEZGVUNU ... --probability 0.50 -j KUBE-SEP-YIL6JZP7A3QYXJU2
-# -A KUBE-SVC-TCOU7JCQXEZGVUNU ... -j KUBE-SEP-6E7XQMQ4RAYOWTTM
-# -A KUBE-SEP-YIL6JZP7A3QYXJU2 -p udp -j DNAT --to-destination 10.244.0.2:53
-# -A KUBE-SEP-6E7XQMQ4RAYOWTTM -p udp -j DNAT --to-destination 10.244.0.3:53
-#
-# [kube-proxy] kubernetes Service (10.96.0.1:443) → API Server로 DNAT
-# -A KUBE-SERVICES -d 10.96.0.1/32 -p tcp --dport 443 -j KUBE-SVC-NPX46M4PTMTKRN6Y
-# -A KUBE-SVC-NPX46M4PTMTKRN6Y ... -j KUBE-SEP-ETI7FUQQE3BS2IXE
-# -A KUBE-SEP-ETI7FUQQE3BS2IXE -p tcp -j DNAT --to-destination 192.168.10.100:6443
+kubectl -n kube-public get configmap cluster-info -o yaml
+```
+
+```yaml
+apiVersion: v1
+data:
+  jws-kubeconfig-123456: eyJhbGciOiJIUzI1NiIsImtpZCI6IjEyMzQ1NiJ9..MmO9sDL7qDG1eP_KcoXgZMoGzFsv2oonAqcC3JP0cVU # JWS 값
+  kubeconfig: |
+    apiVersion: v1
+    clusters:
+    - cluster:
+        certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURCVENDQWUyZ0F3SUJBZ0lJWmgxTEFtbENIZWd3RFFZSktvWklodmNOQVFFTEJRQXdGVEVUTUJFR0ExVUUKQXhNS2EzVmlaWEp1WlhSbGN6QWVGdzB5TmpBek1ERXhOREE1TlRKYUZ3MHpOakF5TWpjeE5ERTBOVEphTUJVeApFekFSQmdOVkJBTVRDbXQxWW1WeWJtVjBaWE13Z2dFaU1BMEdDU3FHU0liM0RRRUJBUVVBQTRJQkR3QXdnZ0VLCkFvSUJBUUNyQWhCZ1ZwTHpwbnBSVU8vK3pPTnZYek9OQlNNaE16c1gySno3OWFyN0ZEcFFqSklWSHhJc2x0dkYKOUxtU3J3UGhZTm1KSkVNL3NlN2ZOdTI5MFZUYXpKOFNsM2NETVBsMWcwRXdWUW9ZTldJNDcxaDMxL054RHNQQQpGalgwNVVoWTZGOW52SjYybnpIbFZ0TGJCMDJmcG5WRHd5TEdST0s3UGxPVFVBVXJGeGlzejRtUUJXNkNtZlU1CkxFY2drdE9sYTJ6VUR2QzRTOGdxWW5tTWtJWThUd0dtVkp3eUs0bzQ1bXBGS2FyN3Y1dC9lVFlram5XenRtckUKdjBaOGhROEl4UFdoamZ1b0VEdTREVXkrcHZHbWxoMENpYUlCUGhPNVIySklzcFJNQnZCY2ZqYlltQmlQSVMxRQpPWkVsazYyU3I2S2hPYXJXOFZTcjRJYmcrN3cvQWdNQkFBR2pXVEJYTUE0R0ExVWREd0VCL3dRRUF3SUNwREFQCkJnTlZIUk1CQWY4RUJUQURBUUgvTUIwR0ExVWREZ1FXQkJST2RCSUlSTVYrYTFqZTNWMis4THdZcGxuckRqQVYKQmdOVkhSRUVEakFNZ2dwcmRXSmxjbTVsZEdWek1BMEdDU3FHU0liM0RRRUJDd1VBQTRJQkFRQnlzTHppUXhzOQphWm5WSWcrdmdES3ZsYzd0cy9UY29HTmdJYzlMUzNmQkppWVVtaGhKcmdUVTFkRFhha0ZwV0FGK1dpOEplMTB5ClFaR3d6dGQxUk9nSHVCK3ZtRFdiS3NJMkxUMDRlRklSUnVQTVU0UThSblZ0Wnh5QlFwWVV2dVJDbFFwYWhkUmcKVjUxK2NSUU4wZG5uWDB2WkFWWjA2RU9mOWV5dEVXRkd1d1FacHJNM1VVaklldUZ6UHI4bDhmUUdoSnBDNHNjQQozalVEcUJtbEVkTW5FWnJxSmMzd3JjaUduQXFSTzNBYjBLbVdleE12WjVKd0JKd2IyZ1VVZXhURUs4MEdteC9SCnhhb0pPMGNZSGRlNkh0UXZNR3Y4d3F2SDJVWDRUL2I0dDNFQlFod0J3ZmFtSGRHL0M2UDJETkt6ZkExdlNPS2QKSkszdTRVM3lRVXBBCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+        server: https://192.168.10.100:6443
+      name: ""
+    contexts: null
+    current-context: ""
+    kind: Config
+    preferences: {}
+    users: null
+kind: ConfigMap
+metadata:
+  creationTimestamp: "2026-01-23T10:41:10Z"
+  name: cluster-info
+  namespace: kube-public
+  resourceVersion: "311"
+  uid: a83f9ad3-d842-4575-b310-51be6d50be7b
 ```
 
 </details>
 
-<br>
+### Role/RoleBinding 확인
 
-### filter 테이블
-
-filter 테이블은 패킷 필터링(허용/차단)을 담당한다. Pod 네트워크 트래픽의 포워딩 허용이 여기서 처리된다.
-
-**Flannel이 추가한 규칙** (flanneld 시작 시):
+이 ConfigMap이 인증 없이 접근 가능한 이유는 RBAC 설정 때문이다.
 
 ```bash
-# Pod 네트워크 트래픽 포워딩 허용
-iptables -t filter -S | grep FLANNEL
-# -A FORWARD -m comment --comment "flanneld forward" -j FLANNEL-FWD
-# -A FLANNEL-FWD -s 10.244.0.0/16 ... -j ACCEPT
-# -A FLANNEL-FWD -d 10.244.0.0/16 ... -j ACCEPT
+kubectl -n kube-public get role,rolebinding
+# NAME                                               CREATED AT
+# role.rbac.../kubeadm:bootstrap-signer-clusterinfo  2026-01-23T10:41:10Z
+# role.rbac.../system:controller:bootstrap-signer    2026-01-23T10:41:10Z
+# NAME                                                      ROLE                                        AGE
+# rolebinding.../kubeadm:bootstrap-signer-clusterinfo       Role/kubeadm:bootstrap-signer-clusterinfo   25m
+# rolebinding.../system:controller:bootstrap-signer         Role/system:controller:bootstrap-signer     25m
 ```
 
-Pod CIDR(`10.244.0.0/16`)에서 출발하거나 도착하는 트래픽의 포워딩을 허용한다.
+RoleBinding `kubeadm:bootstrap-signer-clusterinfo`의 `subjects`에 **User** `system:anonymous`가 있다. API Server는 **인증 정보가 없는 요청**에 이 사용자 identity를 부여하므로, 이 RoleBinding은 "인증 없는 요청에게 해당 Role 부여"를 의미한다. Role `kubeadm:bootstrap-signer-clusterinfo`는 `resourceNames: [cluster-info]`, `verbs: [get]`이므로, 결과적으로 **인증 없이 `cluster-info` ConfigMap 읽기만 허용**된다.
 
-<br>
+```yaml
+# Role kubeadm:bootstrap-signer-clusterinfo: cluster-info에 대한 get만 허용
+rules:
+- apiGroups: [""]
+  resourceNames: [cluster-info]
+  resources: [configmaps]
+  verbs: [get]
 
-**kube-proxy가 추가한 규칙** (Service 생성 시):
-
-```bash
-# 마킹된 패킷 포워딩 허용
-iptables -t filter -S | grep KUBE-FORWARD
-# -A KUBE-FORWARD -m conntrack --ctstate INVALID -j DROP
-# -A KUBE-FORWARD -m mark --mark 0x4000/0x4000 -j ACCEPT
-# -A KUBE-FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-```
-
-kube-proxy가 마킹한 패킷(`0x4000`)과 기존 연결의 응답 패킷(`RELATED,ESTABLISHED`)을 포워딩 허용한다. 잘못된 패킷(`INVALID`)은 드롭한다.
-
-<details markdown="1">
-<summary>filter 테이블 전체 규칙</summary>
-
-```bash
-iptables -t filter -S
-# -P INPUT ACCEPT
-# -P FORWARD ACCEPT
-# -P OUTPUT ACCEPT
-# -N FLANNEL-FWD
-# -N KUBE-EXTERNAL-SERVICES
-# -N KUBE-FIREWALL
-# -N KUBE-FORWARD
-# -N KUBE-NODEPORTS
-# -N KUBE-SERVICES
-#
-# [Flannel] Pod 네트워크 트래픽 포워딩 허용
-# -A FORWARD -m comment --comment "flanneld forward" -j FLANNEL-FWD
-# -A FLANNEL-FWD -s 10.244.0.0/16 -m comment --comment "flanneld forward" -j ACCEPT
-# -A FLANNEL-FWD -d 10.244.0.0/16 -m comment --comment "flanneld forward" -j ACCEPT
-#
-# [kube-proxy] 마킹된 패킷 및 기존 연결 포워딩 허용
-# -A KUBE-FORWARD -m conntrack --ctstate INVALID -j DROP
-# -A KUBE-FORWARD -m mark --mark 0x4000/0x4000 -j ACCEPT
-# -A KUBE-FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-```
-
-</details>
-
-<br>
-
-## conntrack
-
-conntrack 테이블을 확인하여 iptables NAT 규칙이 적용된 연결이 어떻게 추적되는지 이해해 보자.
-
-### conntrack 개요
-
-**conntrack(Connection Tracking)**은 Linux 커널의 네트워크 연결 상태 추적 시스템이다. kube-proxy가 Service의 ClusterIP를 Pod IP로 변환(DNAT)할 때 conntrack 테이블을 사용하여 응답 패킷을 올바른 출발지로 되돌린다.
-
-| 역할 | 설명 |
-| --- | --- |
-| **NAT 상태 추적** | DNAT 규칙이 적용된 연결의 원본 주소를 기억하여 응답 패킷을 올바르게 라우팅 |
-| **연결 상태 관리** | TCP 연결의 상태(ESTABLISHED, TIME_WAIT 등)를 추적하여 stateful 방화벽 기능 제공 |
-| **Service 로드밸런싱** | 동일 클라이언트의 후속 패킷이 같은 Pod로 전달되도록 연결 유지 |
-| **성능 최적화** | 이미 추적된 연결은 iptables 규칙을 다시 평가하지 않고 빠르게 처리 |
-
-```bash
-# conntrack 도구 설치
-dnf install -y conntrack-tools
-```
-
-### 전체 conntrack 엔트리 조회
-
-```bash
-# 전체 conntrack 엔트리 조회
-conntrack -L
-# conntrack v1.4.8 (conntrack-tools): 286 flow entries have been shown.
+# RoleBinding kubeadm:bootstrap-signer-clusterinfo: system:anonymous(= 인증 없는 요청)에 Role 부여
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: User
+  name: system:anonymous
 ```
 
 <details markdown="1">
-<summary>전체 출력 보기 (286 entries)</summary>
+<summary>Role / RoleBinding 전문 (kube-public)</summary>
 
-```
-tcp      6 65 TIME_WAIT src=127.0.0.1 dst=127.0.0.1 sport=56844 dport=2381 src=127.0.0.1 dst=127.0.0.1 sport=2381 dport=56844 [ASSURED] mark=0
-tcp      6 15 TIME_WAIT src=10.244.0.1 dst=10.244.0.2 sport=46574 dport=8080 src=10.244.0.2 dst=10.244.0.1 sport=8080 dport=46574 [ASSURED] mark=0
-tcp      6 86399 ESTABLISHED src=127.0.0.1 dst=127.0.0.1 sport=46870 dport=2379 src=127.0.0.1 dst=127.0.0.1 sport=2379 dport=46870 [ASSURED] mark=0
-tcp      6 86383 ESTABLISHED src=10.244.0.3 dst=10.96.0.1 sport=48242 dport=443 src=192.168.10.100 dst=10.244.0.3 sport=6443 dport=48242 [ASSURED] mark=0
-tcp      6 86399 ESTABLISHED src=192.168.10.100 dst=192.168.10.100 sport=54874 dport=6443 src=192.168.10.100 dst=192.168.10.100 sport=6443 dport=54874 [ASSURED] mark=0
-udp      17 27 src=10.0.2.15 dst=175.195.167.194 sport=56947 dport=123 src=175.195.167.194 dst=10.0.2.15 sport=123 dport=56947 mark=0
-udp      17 26 src=10.0.2.15 dst=168.126.63.1 sport=46942 dport=53 src=168.126.63.1 dst=10.0.2.15 sport=53 dport=46942 mark=0
-tcp      6 86400 ESTABLISHED src=10.0.2.2 dst=10.0.2.15 sport=61614 dport=22 src=10.0.2.15 dst=10.0.2.2 sport=22 dport=61614 [ASSURED] mark=0
-... (이하 생략)
+```bash
+kubectl -n kube-public get role,rolebinding -o yaml
 ```
 
+```yaml
+apiVersion: v1
+items:
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: Role
+  metadata:
+    name: kubeadm:bootstrap-signer-clusterinfo
+    namespace: kube-public
+  rules:
+  - apiGroups: [""]
+    resourceNames: [cluster-info]
+    resources: [configmaps]
+    verbs: [get]
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: Role
+  metadata:
+    name: system:controller:bootstrap-signer
+    namespace: kube-public
+  rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resourceNames: [cluster-info]
+    resources: [configmaps]
+    verbs: [update]
+  - apiGroups: ["", "events.k8s.io"]
+    resources: [events]
+    verbs: [create, patch, update]
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: RoleBinding
+  metadata:
+    name: kubeadm:bootstrap-signer-clusterinfo
+    namespace: kube-public
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: Role
+    name: kubeadm:bootstrap-signer-clusterinfo
+  subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: system:anonymous
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: RoleBinding
+  metadata:
+    name: system:controller:bootstrap-signer
+    namespace: kube-public
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: Role
+    name: system:controller:bootstrap-signer
+  subjects:
+  - kind: ServiceAccount
+    name: bootstrap-signer
+    namespace: kube-system
+kind: List
+metadata:
+  resourceVersion: ""
+```
 </details>
+
+### cluster-info 인증 없이 접근 가능 확인
+
+RoleBinding 덕분에 `cluster-info`는 Kubernetes API 리소스 중 **유일하게 인증 없이 접근 가능**하다. 아직 인증서가 없는 새 노드가 이 데이터를 가져와 [JWS 서명으로 검증]({% post_url 2026-01-18-Kubernetes-Kubeadm-00 %}#해결-cluster-info와-bootstrap-token)한 뒤 CA를 신뢰하는 것이 TLS Bootstrap의 출발점이다.
+
+```bash
+curl -s -k https://192.168.10.100:6443/api/v1/namespaces/kube-public/configmaps/cluster-info | jq '.data | keys'
+# [
+#   "jws-kubeconfig-123456",
+#   "kubeconfig"
+# ]
+```
+
+<details markdown="1">
+<summary>응답 전문 (인증 없이 `cluster-info` GET 시)</summary>
+
+```json
+{
+  "kind": "ConfigMap",
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "cluster-info",
+    "namespace": "kube-public",
+    "uid": "a83f9ad3-d842-4575-b310-51be6d50be7b",
+    "resourceVersion": "311",
+    "creationTimestamp": "2026-01-23T10:41:10Z",
+    "managedFields": [
+      {
+        "manager": "kubeadm",
+        "operation": "Update",
+        "apiVersion": "v1",
+        "time": "2026-01-23T10:41:10Z",
+        "fieldsType": "FieldsV1",
+        "fieldsV1": {
+          "f:data": {
+            ".": {},
+            "f:kubeconfig": {}
+          }
+        }
+      },
+      {
+        "manager": "kube-controller-manager",
+        "operation": "Update",
+        "apiVersion": "v1",
+        "time": "2026-01-23T10:41:17Z",
+        "fieldsType": "FieldsV1",
+        "fieldsV1": {
+          "f:data": {
+            "f:jws-kubeconfig-123456": {}
+          }
+        }
+      }
+    ]
+  },
+  "data": {
+    "jws-kubeconfig-123456": "eyJhbGciOiJIUzI1NiIsImtpZCI6IjEyMzQ1NiJ9..MmO9sDL7qDG1eP_KcoXgZMoGzFsv2oonAqcC3JP0cVU",
+    "kubeconfig": "apiVersion: v1\nclusters:\n- cluster:\n    certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURCVENDQWUyZ0F3SUJBZ0lJWmgxTEFtbENIZWd3RFFZSktvWklodmNOQVFFTEJRQXdGVEVUTUJFR0ExVUUKQXhNS2EzVmlaWEp1WlhSbGN6QWVGdzB5TmpBek1ERXhOREE1TlRKYUZ3MHpOakF5TWpjeE5ERTBOVEphTUJVeApFekFSQmdOVkJBTVRDbXQxWW1WeWJtVjBaWE13Z2dFaU1BMEdDU3FHU0liM0RRRUJBUVVBQTRJQkR3QXdnZ0VLCkFvSUJBUUNyQWhCZ1ZwTHpwbnBSVU8vK3pPTnZYek9OQlNNaE16c1gySno3OWFyN0ZEcFFqSklWSHhJc2x0dkYKOUxtU3J3UGhZTm1KSkVNL3NlN2ZOdTI5MFZUYXpKOFNsM2NETVBsMWcwRXdWUW9ZTldJNDcxaDMxL054RHNQQQpGalgwNVVoWTZGOW52SjYybnpIbFZ0TGJCMDJmcG5WRHd5TEdST0s3UGxPVFVBVXJGeGlzejRtUUJXNkNtZlU1CkxFY2drdE9sYTJ6VUR2QzRTOGdxWW5tTWtJWThUd0dtVkp3eUs0bzQ1bXBGS2FyN3Y1dC9lVFlram5XenRtckUKdjBaOGhROEl4UFdoamZ1b0VEdTREVXkrcHZHbWxoMENpYUlCUGhPNVIySklzcFJNQnZCY2ZqYlltQmlQSVMxRQpPWkVsazYyU3I2S2hPYXJXOFZTcjRJYmcrN3cvQWdNQkFBR2pXVEJYTUE0R0ExVWREd0VCL3dRRUF3SUNwREFQCkJnTlZIUk1CQWY4RUJUQURBUUgvTUIwR0ExVWREZ1FXQkJST2RCSUlSTVYrYTFqZTNWMis4THdZcGxuckRqQVYKQmdOVkhSRUVEakFNZ2dwcmRXSmxjbTVsZEdWek1BMEdDU3FHU0liM0RRRUJDd1VBQTRJQkFRQnlzTHppUXhzOQphWm5WSWcrdmdES3ZsYzd0cy9UY29HTmdJYzlMUzNmQkppWVVtaGhKcmdUVTFkRFhha0ZwV0FGK1dpOEplMTB5ClFaR3d6dGQxUk9nSHVCK3ZtRFdiS3NJMkxUMDRlRklSUnVQTVU0UThSblZ0Wnh5QlFwWVV2dVJDbFFwYWhkUmcKVjUxK2NSUU4wZG5uWDB2WkFWWjA2RU9mOWV5dEVXRkd1d1FacHJNM1VVaklldUZ6UHI4bDhmUUdoSnBDNHNjQQozalVEcUJtbEVkTW5FWnJxSmMzd3JjaUduQXFSTzNBYjBLbVdleE12WjVKd0JKd2IyZ1VVZXhURUs4MEdteC9SCnhhb0pPMGNZSGRlNkh0UXZNR3Y4d3F2SDJVWDRUL2I0dDNFQlFod0J3ZmFtSGRHL0M2UDJETkt6ZkExdlNPS2QKSkszdTRVM3lRVXBBCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K\n    server: https://192.168.10.100:6443\n  name: \"\"\ncontexts: null\ncurrent-context: \"\"\nkind: Config\npreferences: {}\nusers: null\n"
+  }
+}
+```
+</details>
+
+반면 다른 리소스는 인증 없이 접근하면 `403 Forbidden` 에러가 발생한다.
+
+```bash
+curl -s -k https://192.168.10.100:6443/api/v1/namespaces/default/pods | jq '.message'
+# "pods is forbidden: User \"system:anonymous\" cannot list resource \"pods\" in API group \"\" in the namespace \"default\""
+```
 
 <br>
 
-**conntrack 엔트리 형식:**
-
-```
-tcp 6 86399 ESTABLISHED src=10.244.0.3 dst=10.96.0.1 sport=48242 dport=443 src=192.168.10.100 dst=10.244.0.3 sport=6443 dport=48242 [ASSURED]
-```
-
-| 필드 | 예시 값 | 설명 |
-| --- | --- | --- |
-| 프로토콜 | `tcp` | 프로토콜 이름 |
-| 프로토콜 번호 | `6` | 6=TCP, 17=UDP |
-| TTL | `86399` | 연결 만료까지 남은 시간 (초) |
-| 연결 상태 | `ESTABLISHED` | TCP 상태 (ESTABLISHED, TIME_WAIT, CLOSE 등) |
-| **원본 패킷 (요청)** | `src=10.244.0.3 dst=10.96.0.1 sport=48242 dport=443` | CoreDNS Pod → kubernetes Service ClusterIP |
-| **응답 패킷 (DNAT 역변환)** | `src=192.168.10.100 dst=10.244.0.3 sport=6443 dport=48242` | API Server → CoreDNS Pod |
-| 플래그 | `[ASSURED]` | 양방향 트래픽이 확인된 연결 |
-
-### TCP 연결만 조회
+### CA 인증서 확인
 
 ```bash
-# TCP 연결만 보기
-conntrack -L -p tcp
-# conntrack v1.4.8 (conntrack-tools): 279 flow entries have been shown.
+kubectl -n kube-public get configmap cluster-info -o jsonpath='{.data.kubeconfig}' | \
+  grep certificate-authority-data | cut -d ':' -f2 | tr -d ' ' | base64 -d | openssl x509 -text -noout
+# Certificate:
+#     Data:
+#         Issuer: CN=kubernetes
+#         Validity
+#             Not Before: Jan 23 10:36:04 2026 GMT
+#             Not After : Jan 21 10:41:04 2036 GMT      # 10년 유효
+#         Subject: CN=kubernetes
+#         X509v3 Basic Constraints: critical
+#             CA:TRUE                                   # CA 인증서임
+#         X509v3 Subject Alternative Name:
+#             DNS:kubernetes
 ```
 
-### ESTABLISHED 상태만 조회
+이 CA 인증서는 `/etc/kubernetes/pki/ca.crt`와 동일하며, 워커 노드가 API Server의 인증서를 검증할 때 사용한다.
+
+<br>
+
+# 편의성 설정
+
+클러스터 관리를 위한 도구들을 설치한다.
+
+## kubectl 자동 완성
 
 ```bash
-# ESTABLISHED 상태만 보기 (활성 연결)
-conntrack -L -p tcp --state ESTABLISHED
-# tcp  6 86376 ESTABLISHED src=127.0.0.1 dst=127.0.0.1 sport=47672 dport=2379 ... [ASSURED]        # etcd 연결
-# tcp  6 86388 ESTABLISHED src=192.168.10.100 dst=192.168.10.100 sport=38154 dport=6443 ... [ASSURED]  # API Server 연결
-# tcp  6 86375 ESTABLISHED src=10.244.0.3 dst=10.96.0.1 sport=48242 dport=443 src=192.168.10.100 dst=10.244.0.3 sport=6443 dport=48242 [ASSURED]  # Service DNAT
-# tcp  6 86399 ESTABLISHED src=10.0.2.2 dst=10.0.2.15 sport=61614 dport=22 ... [ASSURED]           # SSH 연결
-# ... (68 flow entries)
+# 현재 세션에 즉시 적용
+source <(kubectl completion bash)   # kubectl 자동 완성
+source <(kubeadm completion bash)   # kubeadm 자동 완성
+
+# 영구 설정 (다음 로그인부터 자동 적용)
+echo 'source <(kubectl completion bash)' >> /etc/profile   # kubectl
+echo 'source <(kubeadm completion bash)' >> /etc/profile   # kubeadm
+
+# kubectl을 k로 alias
+alias k=kubectl
+complete -o default -F __start_kubectl k   # k에도 자동 완성 적용
+echo 'alias k=kubectl' >> /etc/profile
+echo 'complete -o default -F __start_kubectl k' >> /etc/profile
+
+# 테스트
+k get node
+# NAME      STATUS     ROLES           AGE   VERSION
+# k8s-ctr   NotReady   control-plane   27m   v1.32.11
 ```
 
-**주요 ESTABLISHED 연결 분석:**
+이제 `k`만 입력해도 `kubectl`처럼 동작하고, Tab 자동 완성도 사용할 수 있다.
 
-| 연결 유형 | 예시 | 설명 |
-| --- | --- | --- |
-| etcd 연결 | `127.0.0.1:* → 127.0.0.1:2379` | API Server, Controller Manager 등이 etcd에 연결 (다수) |
-| API Server 연결 | `192.168.10.100:* → 192.168.10.100:6443` | 컴포넌트들이 API Server에 연결 |
-| **Service DNAT** | `10.244.0.3:48242 → 10.96.0.1:443` ↔ `192.168.10.100:6443 → 10.244.0.3` | CoreDNS가 `kubernetes` Service를 통해 API Server에 연결 |
-| SSH 연결 | `10.0.2.2:61614 → 10.0.2.15:22` | Vagrant SSH 연결 |
+<br>
 
-> **Service DNAT 추적 예시**: `10.244.0.3`(CoreDNS Pod)이 `10.96.0.1:443`(kubernetes Service ClusterIP)에 접속하면, conntrack은 이 연결을 추적하고 응답 패킷이 `192.168.10.100:6443`(실제 API Server)에서 올 때 원래 목적지인 `10.244.0.3`으로 정확히 전달한다.
+## kubecolor 설치
 
-### 특정 포트 관련 연결
+kubectl 출력을 컬러로 표시해주는 도구다.
 
 ```bash
-# Service(443) 관련 연결 확인
-conntrack -L | grep dport=443
-# tcp  6 86376 ESTABLISHED src=10.244.0.3 dst=10.96.0.1 sport=48242 dport=443 src=192.168.10.100 dst=10.244.0.3 sport=6443 dport=48242 [ASSURED]
-# tcp  6 86389 ESTABLISHED src=10.0.2.15 dst=10.96.0.1 sport=39156 dport=443 src=192.168.10.100 dst=10.0.2.15 sport=6443 dport=6826 [ASSURED]
-# tcp  6 86383 ESTABLISHED src=10.244.0.2 dst=10.96.0.1 sport=40304 dport=443 src=192.168.10.100 dst=10.244.0.2 sport=6443 dport=40304 [ASSURED]
+# kubecolor 설치
+dnf install -y 'dnf-command(config-manager)'   # config-manager 플러그인 설치
+dnf config-manager --add-repo https://kubecolor.github.io/packages/rpm/kubecolor.repo   # 저장소 추가
+dnf install -y kubecolor
+
+# 테스트 (출력이 컬러로 표시됨)
+kubecolor get node
+kubecolor describe node
+
+# alias 설정 (kc로 짧게 사용)
+alias kc=kubecolor
+echo 'alias kc=kubecolor' >> /etc/profile
 ```
 
-위 결과에서 `dst=10.96.0.1`(kubernetes Service ClusterIP)로 향하는 연결이 실제로는 `192.168.10.100:6443`(API Server)으로 DNAT되어 처리됨을 확인할 수 있다.
+![kubecolor-result]({{site.url}}/assets/images/kubecolor-result.png){: .align-center}
 
-### 실시간 이벤트 추적
+
+<br>
+
+## kubectx, kubens 설치
+
+context와 namespace를 쉽게 전환할 수 있는 도구다.
+- **kubectx**: 여러 클러스터(context) 간 전환
+- **kubens**: 네임스페이스 간 전환
 
 ```bash
-# 실시간 conntrack 이벤트 추적 (Ctrl+C로 종료)
-conntrack -E
-#     [NEW] tcp      6 120 SYN_SENT src=192.168.10.100 dst=192.168.10.100 sport=34518 dport=6443 [UNREPLIED]
-#  [UPDATE] tcp      6 60 SYN_RECV src=192.168.10.100 dst=192.168.10.100 sport=34518 dport=6443
-#  [UPDATE] tcp      6 86400 ESTABLISHED src=192.168.10.100 dst=192.168.10.100 sport=34518 dport=6443 [ASSURED]
-#  [UPDATE] tcp      6 120 FIN_WAIT src=192.168.10.100 dst=192.168.10.100 sport=34518 dport=6443 [ASSURED]
-#  [UPDATE] tcp      6 300 CLOSE_WAIT src=192.168.10.100 dst=192.168.10.100 sport=34518 dport=6443 [ASSURED]
-#  [UPDATE] tcp      6 10 CLOSE src=192.168.10.100 dst=192.168.10.100 sport=34518 dport=6443 [ASSURED]
+# 설치
+dnf install -y git
+git clone https://github.com/ahmetb/kubectx /opt/kubectx
+ln -s /opt/kubectx/kubectx /usr/local/bin/kubectx   # context 전환 도구
+ln -s /opt/kubectx/kubens /usr/local/bin/kubens     # namespace 전환 도구
+
+# 테스트
+kubens                  # 네임스페이스 목록 (현재 선택된 것 하이라이트)
+kubens kube-system      # kube-system으로 전환
+kubectl get pod         # -n 옵션 없이도 kube-system의 Pod 조회
+kubens default          # 다시 default로 복귀
+
+kubectx                 # context 목록 (현재는 1개뿐)
 ```
 
-TCP 연결의 전체 생명주기를 실시간으로 관찰할 수 있다: `SYN_SENT` → `SYN_RECV` → `ESTABLISHED` → `FIN_WAIT` → `CLOSE_WAIT` → `CLOSE`.
+<br>
 
-### conntrack 커널 파라미터
+## kube-ps1 설치
+
+bash 프롬프트에 현재 context와 namespace를 표시한다.
 
 ```bash
-# conntrack 관련 커널 파라미터 확인
-sysctl -a | grep conntrack
-# net.netfilter.nf_conntrack_buckets = 65536
-# net.netfilter.nf_conntrack_count = 420              # 현재 추적 중인 연결 수
-# net.netfilter.nf_conntrack_max = 131072             # 최대 추적 가능 연결 수
-# net.netfilter.nf_conntrack_tcp_timeout_close = 10
-# net.netfilter.nf_conntrack_tcp_timeout_close_wait = 3600
-# net.netfilter.nf_conntrack_tcp_timeout_established = 86400
-# net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 120
-# net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 60
-# net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 120
-# net.netfilter.nf_conntrack_tcp_timeout_time_wait = 120
-# net.netfilter.nf_conntrack_udp_timeout = 30
-# net.netfilter.nf_conntrack_udp_timeout_stream = 120
-# ... (이하 생략)
+# kube-ps1 설치
+git clone https://github.com/jonmosco/kube-ps1.git /root/kube-ps1
+
+# bash_profile 설정
+cat << "EOT" >> /root/.bash_profile
+source /root/kube-ps1/kube-ps1.sh
+KUBE_PS1_SYMBOL_ENABLE=true
+function get_cluster_short() {
+  echo "$1" | cut -d . -f1
+}
+KUBE_PS1_CLUSTER_FUNCTION=get_cluster_short
+KUBE_PS1_SUFFIX=') '
+PS1='$(kube_ps1)'$PS1
+EOT
+
+# 자동 root 전환 설정 (Vagrant용)
+echo "sudo su -" >> /home/vagrant/.bashrc
+```
+![kubeps1-result]({{site.url}}/assets/images/kubeps1-result.png){: .align-center}
+
+<br>
+
+## Helm 설치
+
+Kubernetes 패키지 관리 도구다.
+
+```bash
+# Helm 3 설치 (버전 지정)
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.18.6 bash
+# Downloading https://get.helm.sh/helm-v3.18.6-linux-arm64.tar.gz
+# Verifying checksum... Done.
+# Preparing to install helm into /usr/local/bin
+# helm installed into /usr/local/bin/helm
+
+# 버전 확인
+helm version
+# version.BuildInfo{Version:"v3.18.6", GitCommit:"b76a950f6835474e0906b96c9ec68a2eff3a6430", GitTreeState:"clean", GoVersion:"go1.24.6"}
 ```
 
-| 파라미터 | 값 | 설명 |
-| --- | --- | --- |
-| `nf_conntrack_max` | 131072 | conntrack 테이블 최대 크기(최대 엔트리 수) |
-| `nf_conntrack_count` | 420 | 현재 추적 중인 연결 수(현재 사용 중) |
-| `nf_conntrack_buckets` | 65536 | 해시 테이블 버킷 수 |
-| `nf_conntrack_tcp_timeout_established` | 86400초 (24시간) | ESTABLISHED 연결 유지 시간 |
-| `nf_conntrack_tcp_timeout_close_wait` | 3600초 (1시간) | CLOSE_WAIT 상태 유지 시간 |
-| `nf_conntrack_tcp_timeout_time_wait` | 120초 | TIME_WAIT 상태 유지 시간 |
-| `nf_conntrack_udp_timeout` | 30초 | UDP 연결 타임아웃 |
+<br>
 
-> **트러블슈팅 팁**: 대규모 클러스터에서 `nf_conntrack: table full, dropping packet` 에러가 발생하면 `nf_conntrack_max` 값을 증가시켜야 한다. 현재 사용률은 `count/max = 420/131072 ≈ 0.3%`로 여유롭다. `conntrack -S`로 통계를 확인하여 drop된 패킷 수를 모니터링할 수 있다.
+## k9s 설치
+
+터미널 기반 Kubernetes 대시보드다.
+
+```bash
+# k9s 설치
+CLI_ARCH=amd64
+if [ "$(uname -m)" = "aarch64" ]; then CLI_ARCH=arm64; fi
+wget https://github.com/derailed/k9s/releases/latest/download/k9s_linux_${CLI_ARCH}.tar.gz
+tar -xzf k9s_linux_*.tar.gz
+chown root:root k9s
+mv k9s /usr/local/bin/
+chmod +x /usr/local/bin/k9s
+
+# 실행 테스트
+k9s
+# 종료: Ctrl+C 또는 :q
+```
+
+![k9s-result]({{site.url}}/assets/images/k9s-result.png){: .align-center}
+
+
+<br>
+
+## 설정 적용
+
+```bash
+# 셸 재시작하여 /etc/profile 설정 적용
+exit   # root -> vagrant
+exit   # vagrant -> host
+
+# 다시 접속 (vagrant 로그인 시 자동으로 root 전환됨)
+vagrant ssh k8s-ctr
+
+# context 이름 변경 (선택, 기본 이름이 너무 길어서)
+kubectl config rename-context "kubernetes-admin@kubernetes" "HomeLab"
+# Context "kubernetes-admin@kubernetes" renamed to "HomeLab".
+
+kubens default   # 기본 네임스페이스 확인
+```
+![k-result.png]({{site.url}}/assets/images/k-result.png){: .align-center}
 
 <br>
 
@@ -866,12 +1198,15 @@ sysctl -a | grep conntrack
 
 | 항목 | 결과 |
 | --- | --- |
-| CNI | Flannel v0.27.3 설치, 노드 상태 Ready |
-| 네트워크 인터페이스 | `cni0` 브릿지, `flannel.1` VXLAN 인터페이스 생성 |
-| iptables | `KUBE-*`, `FLANNEL-*` 체인 구성 완료 |
-| conntrack | Service DNAT 연결 추적 정상 동작 |
+| 컨트롤 플레인 | kube-apiserver, kube-controller-manager, kube-scheduler, etcd 실행 중 |
+| 인증서 | /etc/kubernetes/pki에 모든 인증서 생성됨 |
+| kubeconfig | admin.conf, controller-manager.conf, scheduler.conf, kubelet.conf 생성됨 |
+| 노드 상태 | **NotReady** (CNI 플러그인 미설치) |
+| CoreDNS 상태 | **Pending** (CNI 플러그인 미설치) |
+| 편의 도구 | kubecolor, kubectx, kubens, kube-ps1, helm, k9s 설치됨 |
 
 <br>
 
-CNI 설치로 Pod 네트워크가 구성되었다. [다음 글]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-5 %})에서는 노드 정보, 인증서, kubeconfig, Static Pod, 애드온 등 컨트롤 플레인 컴포넌트를 상세히 확인한다.
+다만, 노드가 NotReady이고 CoreDNS가 Pending인 상태다. 이는 CNI 플러그인이 없어서 Pod 네트워크를 구성할 수 없기 때문이다. [다음 글]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-5 %})에서 Flannel CNI를 설치하고, 생성된 컴포넌트들을 상세히 확인한다.
 
+<br>

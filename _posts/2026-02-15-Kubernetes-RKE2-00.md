@@ -466,7 +466,7 @@ RKE2 업그레이드 시에도 이 설정이 중요하다. `systemctl restart rk
 
 rke2 프로세스 하위의 cgroup 서브트리를 systemd가 간섭하지 않도록 위임한다. rke2 안에서 containerd가 컨테이너별 cgroup을 자유롭게 만들어야 하는데, 이 설정이 없으면 systemd가 rke2 하위 cgroup을 정리하거나 재배치할 수 있다.
 
-참고로, containerd의 cgroup **driver** 자체는 [kubeadm 환경]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-2 %})과 마찬가지로 systemd를 사용한다(`SystemdCgroup = true`). 다만 kubeadm에서는 사용자가 `/etc/containerd/config.toml`에 직접 설정해야 하지만, RKE2는 containerd 설정을 자동 생성하면서(`/var/lib/rancher/rke2/agent/etc/containerd/config.toml`) 알아서 적용한다.
+참고로, containerd의 cgroup **driver** 자체는 [kubeadm 환경]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %})과 마찬가지로 systemd를 사용한다(`SystemdCgroup = true`). 다만 kubeadm에서는 사용자가 `/etc/containerd/config.toml`에 직접 설정해야 하지만, RKE2는 containerd 설정을 자동 생성하면서(`/var/lib/rancher/rke2/agent/etc/containerd/config.toml`) 알아서 적용한다.
 
 `Delegate=yes`는 이 cgroup driver 설정과는 *다른 레벨*의 이야기다. `Delegate=yes`는 containerd에게 전달하는 설정이 아니라, **systemd에게 "이 서비스 하위의 cgroup 서브트리를 건드리지 말라"고 알려주는 설정**이다. containerd가 어디서 실행되느냐에 따라 어떤 unit 파일에 넣어야 하는지가 달라진다:
 

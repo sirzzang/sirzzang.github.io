@@ -37,7 +37,7 @@ tags:
 
 # 워커 노드 사전 설정
 
-워커 노드(k8s-w1, k8s-w2) 모두에서 [1-2. 사전 설정 및 구성 요소 설치]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-2 %})와 동일한 설정을 수행한다.
+워커 노드(k8s-w1, k8s-w2) 모두에서 [1-2. 환경 확인 및 사전 설정]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-2 %})과 [1-3. CRI 및 kubeadm 구성 요소 설치]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %})와 동일한 설정을 수행한다.
 
 <details markdown="1">
 <summary>사전 설정 및 구성 요소 설치 명령어</summary>
@@ -206,10 +206,10 @@ cat kubeadm-join.yaml
 | `nodeRegistration.kubeletExtraArgs.node-ip` | kubelet에 전달할 노드 IP (Vagrant 환경에서 중요) |
 
 주요 설정 항목 값에서 주의해서 봐야 하는 것은 다음과 같다:
-- **token**: [kubeadm init 시 설정한 토큰]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %}#설정-파일-방식)과 동일해야 한다. 이번 실습에서는 `123456.1234567890123456`으로 고정했다.
+- **token**: [kubeadm init 시 설정한 토큰]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-4 %}#설정-파일-방식)과 동일해야 한다. 이번 실습에서는 `123456.1234567890123456`으로 고정했다.
 - **apiServerEndpoint**: 컨트롤 플레인의 API Server 주소다. HA 구성에서는 로드밸런서 주소를 지정한다.
 - **unsafeSkipCAVerification**: `true`로 설정하면 CA 인증서 해시 검증을 건너뛴다. 실습 편의를 위해 사용하지만, **프로덕션에서는 `caCertHashes`를 명시**하여 중간자 공격을 방지해야 한다.
-- **node-ip**: [init에서 설명한 것처럼]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %}#설정-파일-방식), Vagrant처럼 여러 네트워크 인터페이스가 있는 환경에서는 반드시 명시해야 한다. 미설정 시 NAT 인터페이스 IP(10.0.2.15)가 사용되어 노드 간 통신에 문제가 발생할 수 있다.
+- **node-ip**: [init에서 설명한 것처럼]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-4 %}#설정-파일-방식), Vagrant처럼 여러 네트워크 인터페이스가 있는 환경에서는 반드시 명시해야 한다. 미설정 시 NAT 인터페이스 IP(10.0.2.15)가 사용되어 노드 간 통신에 문제가 발생할 수 있다.
 - **criSocket**: containerd 외 CRI-O 등 다른 런타임 사용 시 해당 소켓 경로로 변경해야 한다.
 
 <br>
@@ -534,7 +534,7 @@ systemctl status kubelet --no-pager
 #              └─10552 /usr/bin/kubelet --bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf ...
 ```
 
-kubelet이 [systemd 서비스]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-2 %}#kubelet-서비스-파일-확인)로 실행 중이며, `10-kubeadm.conf` drop-in 파일을 통해 추가 설정이 적용된다.
+kubelet이 [systemd 서비스]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %}#kubelet-서비스-파일-확인)로 실행 중이며, `10-kubeadm.conf` drop-in 파일을 통해 추가 설정이 적용된다.
 
 ### 디렉토리 구조 확인
 
@@ -581,7 +581,7 @@ users:
     client-key: /var/lib/kubelet/pki/kubelet-client-current.pem
 ```
 
-`client-certificate`와 `client-key`가 `/var/lib/kubelet/pki/kubelet-client-current.pem`을 참조하는 것은 [컨트롤 플레인의 kubelet.conf]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-5 %}#kubeletconf)와 동일하다. 이는 `rotateCertificates: true` 설정에 의한 **인증서 자동 갱신**을 지원하기 위함이다.
+`client-certificate`와 `client-key`가 `/var/lib/kubelet/pki/kubelet-client-current.pem`을 참조하는 것은 [컨트롤 플레인의 kubelet.conf]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-6 %}#kubeletconf)와 동일하다. 이는 `rotateCertificates: true` 설정에 의한 **인증서 자동 갱신**을 지원하기 위함이다.
 
 ### cluster-info ConfigMap 접근 확인
 

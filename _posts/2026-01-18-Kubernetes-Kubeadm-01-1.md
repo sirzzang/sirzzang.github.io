@@ -178,6 +178,9 @@ kubeadm init --pod-network-cidr=10.244.0.0/16
 
 컨트롤 플레인에서 `kubeadm init`을 실행하면 아래 단계들이 순차적으로 진행된다. 일부 단계는 설정에 따라 건너뛸 수 있다.
 
+![kubeadm init 단계 흐름]({{site.url}}/assets/images/kubeadm-init-stages.png){: .align-center}
+<center><sup>출처: [k8s-deploy-week3-kubeadm-upgrade](https://juwon8891.github.io/2026/01/24/k8s-deploy-week3-kubeadm-upgrade/)</sup></center>
+
 1. preflight
 2. certs
 3. kubeconfig
@@ -563,10 +566,11 @@ kubeadm token create --print-join-command
 - `kube-public` 네임스페이스에 `cluster-info` ConfigMap 생성
   - 클러스터 join에 필요한 최소한의 정보(API Server 주소, CA 인증서 등) 포함
   - 인증되지 않은 사용자(`system:unauthenticated`)도 접근 가능하도록 RBAC 설정 → 인증서 없이도 부트스트랩 데이터 획득 가능
+- Bootstrap Token의 Secret 부분으로 `kubeconfig` 데이터를 HMAC 서명하여 JWS(JSON Web Signature) 생성
 - Bootstrap Token이 CSR(Certificate Signing Request) 서명 API에 접근할 수 있도록 허용
 - 새로운 CSR 요청에 대한 자동 승인 설정
 
-> 이 메커니즘의 상세 동작은 `kubeadm join`을 다루는 글에서 살펴본다.
+> Bootstrap Token과 JWS를 활용한 신뢰 모델의 전체 그림(MITM 방어, CA 해시 이중 검증, 토큰 고정의 위험성 등)은 [init과 join의 신뢰 모델]({% post_url 2026-01-18-Kubernetes-Kubeadm-00 %}#init과-join의-신뢰-모델)을 참고한다.
 
 <br>
 

@@ -84,7 +84,7 @@ Control Plane HA는 다시 여러 측면으로 나뉜다.
 
 Controller Manager와 Scheduler는 **Active-Standby** 방식으로 동작한다. HA 구성 시 여러 인스턴스 중 **1대만 Leader로 선출**되어 실제 작업을 수행하고, 나머지는 대기한다.
 
-> **참고**: Leader Election에 사용되는 Lease 리소스에 대한 자세한 내용은 [kubeadm 클러스터 구성 - Lease]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %}#lease) 참조
+> **참고**: Leader Election에 사용되는 Lease 리소스에 대한 자세한 내용은 [kubeadm 클러스터 구성 - Lease]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-4 %}#lease) 참조
 
 ```bash
 # Leader 확인
@@ -169,7 +169,7 @@ kubelet → localhost:6443 → 로컬 프록시 → CP1 (192.168.10.11:6443)
 
 #### 외부 접근
 
-외부 접근(kubectl, CI/CD)의 경우, kubeconfig에 여러 endpoint를 설정하거나 DNS Round-Robin 등 별도 구성이 필요하다.
+외부 접근(kubectl, CI/CD)의 경우, kubeconfig에 여러 endpoint를 설정하거나 DNS Round-Robin 등 별도 구성이 필요하다. kubeconfig 포맷과 다중 클러스터·엔드포인트 관리는 [kubeconfig 개요]({% post_url 2026-02-16-Kubernetes-Kubeconfig-01 %})와 [다중 클러스터 접근 구성 실습]({% post_url 2026-02-16-Kubernetes-Kubeconfig-02 %})을 참고하자.
 
 ```yaml
 # 외부 kubeconfig 예시 (수동 failover)

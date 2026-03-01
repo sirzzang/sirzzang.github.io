@@ -593,8 +593,8 @@ VirtualBox VM은 기본적으로 NAT 인터페이스(`10.0.2.15`)를 첫 번째 
 
 - [Kubernetes The Hard Way - 1단계]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-01 %}#vagrant-nic1-nic2-의미): Vagrant VM의 NIC1(NAT)과 NIC2(Private) 구조 설명
 - [Ansible 시리즈 - Managed Node]({% post_url 2026-01-12-Kubernetes-Ansible-02 %}#8-네트워크-인터페이스-확인): `eth0`(10.0.2.15)은 NAT, `eth1`은 내부 통신용
-- [Kubeadm 시리즈 - kubeadm init]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %}#설정-파일-방식): `node-ip` 미설정 시 NAT IP(10.0.2.15)가 사용되어 노드 간 통신 문제 발생
-- [Kubeadm 시리즈 - Flannel CNI]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-4 %}#flannel-개요): `--iface` 옵션으로 올바른 인터페이스 지정 필요
+- [Kubeadm 시리즈 - kubeadm init]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-4 %}#설정-파일-방식): `node-ip` 미설정 시 NAT IP(10.0.2.15)가 사용되어 노드 간 통신 문제 발생
+- [Kubeadm 시리즈 - Flannel CNI]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-5 %}#flannel-개요): `--iface` 옵션으로 올바른 인터페이스 지정 필요
 
 그렇게 열심히 공부해 놓고도 까먹으면, 15-30분간의 Kubespray 배포 끝에 **마지막 `kubeadm join` 단계에서 실패**하는 안타까운 결과를 보게 된다. 기억하자: **Vagrant + VirtualBox 환경에서는 항상 `ip` 변수를 명시해야 한다.**
 
@@ -833,7 +833,7 @@ The connection to the server 127.0.0.1:6443 was refused - did you specify the ri
 이 문제는 기존 시리즈에서도 다뤘다:
 
 - [The Hard Way - 10. Configuring kubectl]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-10 %}): localhost용 `admin.kubeconfig`(`127.0.0.1`)와 원격용 `~/.kube/config`(`server.kubernetes.local`)를 **별도로 생성**
-- [Kubeadm 시리즈 - 01-3]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %}#설정-파일-방식): `--apiserver-advertise-address=192.168.10.100`을 명시하여 `admin.conf`에 **처음부터 올바른 IP가 설정**됨. 덕분에 이 문제를 피할 수 있었음
+- [Kubeadm 시리즈 - 01-4]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-4 %}#설정-파일-방식): `--apiserver-advertise-address=192.168.10.100`을 명시하여 `admin.conf`에 **처음부터 올바른 IP가 설정**됨. 덕분에 이 문제를 피할 수 있었음
 
 <br>
 
