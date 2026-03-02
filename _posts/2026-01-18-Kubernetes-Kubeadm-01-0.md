@@ -56,7 +56,7 @@ hidden: true
 | `/etc/containerd/config.toml` | containerd 설정 (SystemdCgroup 활성화) |
 | `/run/containerd/containerd.sock` | CRI 유닉스 도메인 소켓. kubelet이 이 소켓을 통해 containerd와 통신 |
 
-이 시점 상태:
+### 완료 시 상태
 
 | 구성 요소 | 실행 방식 | 상태 |
 | --- | --- | --- |
@@ -94,7 +94,7 @@ hidden: true
 
 > 각 파일의 역할 상세는 [kubelet 서비스 파일]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %}#kubelet-서비스-파일)을 참고한다.
 
-이 시점 상태:
+### 완료 시 상태
 
 | 구성 요소 | 실행 방식 | 상태 |
 | --- | --- | --- |
@@ -113,6 +113,8 @@ hidden: true
 > 상세: [1.4. kubeadm init 실행]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-4 %})
 
 `kubeadm init`이 실행되면 Stage 2에서 비어 있던 디렉토리들이 채워진다.
+
+<br>
 
 **인증서** (`/etc/kubernetes/pki/`)
 
@@ -180,7 +182,7 @@ hidden: true
 | --- | --- |
 | `/var/lib/etcd/` | etcd 데이터 디렉토리 |
 
-이 시점 상태:
+### 완료 시 상태
 
 | 구성 요소 | 실행 방식 | 상태 |
 | --- | --- | --- |
@@ -206,7 +208,7 @@ hidden: true
 | --- | --- |
 | `/etc/cni/net.d/*` | CNI 설정 파일 (Flannel이 생성) |
 
-이 시점 상태:
+### 완료 시 상태
 
 | 구성 요소 | 실행 방식 | 상태 |
 | --- | --- | --- |
@@ -237,6 +239,8 @@ hidden: true
 > 상세: [2.2. 워커 노드 Join 실행]({% post_url 2026-01-18-Kubernetes-Kubeadm-02-2 %})
 
 컨트롤 플레인의 `kubeadm init`과 달리, 워커 노드의 `kubeadm join`은 **최소한의 파일만** 생성한다.
+
+<br>
 
 **`/etc/kubernetes/`**
 

@@ -862,6 +862,7 @@ subjects:
   name: system:anonymous
 ```
 
+
 <details markdown="1">
 <summary>Role / RoleBinding 전문 (kube-public)</summary>
 
@@ -929,6 +930,43 @@ metadata:
   resourceVersion: ""
 ```
 </details>
+
+<br>
+
+> **참고: API Server의 anonymous auth 동작**
+>
+> API Server는 `--anonymous-auth=true`(기본값)일 때, 인증 정보가 없는 요청에 자동으로 다음 두 identity를 부여한다:
+> - **Username**: `system:anonymous`
+> - **Groups**: `["system:unauthenticated"]`
+>
+> 따라서 위 RoleBinding은 인증 없는 모든 요청에 적용된다. User `system:anonymous`에 바인딩하는 것과 Group `system:unauthenticated`에 바인딩하는 것은 기능적으로 동일하다(인증 안 된 요청은 항상 둘 다 부여받으므로). kubeadm은 User에 직접 바인딩하여 더 좁은 범위를 지정한다.
+>
+> - [Kubernetes 공식 문서 - Anonymous requests](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#anonymous-requests)
+
+> **참고: `--enable-bootstrap-token-auth=true` 자동 설정**
+>
+> kubeadm은 kube-apiserver Static Pod 매니페스트(`/etc/kubernetes/manifests/kube-apiserver.yaml`)를 생성할 때 `--enable-bootstrap-token-auth=true`를 자동으로 포함시킨다. 이는 kubeadm의 핵심 워크플로우가 Bootstrap Token 기반 노드 join이기 때문이다:
+>
+> 1. **kubeadm init** → Bootstrap Token 생성 (`123456.1234567890123456`)
+> 2. **kubeadm join --token ...** → Worker가 이 토큰으로 API Server에 인증
+>
+> 이 흐름이 동작하려면 API Server의 **Bootstrap Token Authenticator**가 활성화되어야 한다. 이 authenticator가 켜지면 토큰이 Bearer Token으로 사용되어 `system:bootstrap:<token-id>` 사용자로 인증되고 `system:bootstrappers` 그룹에 소속된다.
+>
+> 또한, 다음 컨트롤러도 함께 활성화된다:
+>
+> | 컨트롤러 | 역할 |
+> | --- | --- |
+> | **tokencleaner** | 만료된 Bootstrap Token Secret 자동 삭제 |
+> | **bootstrapsigner** | `cluster-info` ConfigMap에 JWS 서명 생성/갱신 |
+>
+> 전체 흐름을 정리하면:
+> 1. **kubeadm join** 시 Worker가 **인증 없이** `GET cluster-info` 요청 → `system:anonymous`로 처리됨 → 위 RoleBinding에 의해 응답 받음
+> 2. **JWS 검증**으로 CA 인증서 신뢰 확보
+> 3. 그 다음 **Bootstrap Token**으로 인증된 요청을 보내 TLS Bootstrap 진행
+>
+> 실제 설정은 [kube-apiserver Static Pod]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-7 %}#kube-apiserver)에서 확인할 수 있다.
+
+<br>
 
 ### cluster-info 인증 없이 접근 가능 확인
 

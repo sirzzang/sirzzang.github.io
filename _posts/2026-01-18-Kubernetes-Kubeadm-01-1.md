@@ -565,7 +565,7 @@ kubeadm token create --print-join-command
 
 - `kube-public` 네임스페이스에 `cluster-info` ConfigMap 생성
   - 클러스터 join에 필요한 최소한의 정보(API Server 주소, CA 인증서 등) 포함
-  - 인증되지 않은 사용자(`system:unauthenticated`)도 접근 가능하도록 RBAC 설정 → 인증서 없이도 부트스트랩 데이터 획득 가능
+  - 인증되지 않은 사용자(User `system:anonymous`)도 접근 가능하도록 RBAC 설정 → 인증서 없이도 부트스트랩 데이터 획득 가능
 - Bootstrap Token의 Secret 부분으로 `kubeconfig` 데이터를 HMAC 서명하여 JWS(JSON Web Signature) 생성
 - Bootstrap Token이 CSR(Certificate Signing Request) 서명 API에 접근할 수 있도록 허용
 - 새로운 CSR 요청에 대한 자동 승인 설정

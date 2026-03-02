@@ -32,7 +32,7 @@ Kubernetes 네트워킹은 Linux 네트워크 스택 위에서 동작한다. [ku
 
 # Kubernetes 네트워킹 개요
 
-Kubernetes 네트워킹은 Linux 네트워크 스택 위에서 동작한다. 네트워킹에서의 핵심은 **Linux 네트워크 스택(특히 iptables)을 동적으로 조작**하는 것이다. Pod가 생성되거나 Service가 추가될 때마다 iptables 규칙이 자동으로 업데이트되어 트래픽이 올바른 목적지로 라우팅된다.
+Kubernetes 네트워킹의 핵심은 **Linux 네트워크 스택(특히 iptables)을 동적으로 조작**하는 것이다. Pod가 생성되거나 Service가 추가될 때마다 iptables 규칙이 자동으로 업데이트되어 트래픽이 올바른 목적지로 라우팅된다.
 - [클러스터 네트워킹](https://kubernetes.io/ko/docs/concepts/cluster-administration/networking/)
 - [Service](https://kubernetes.io/ko/docs/concepts/services-networking/service/)
 
@@ -44,7 +44,7 @@ Kubernetes 네트워킹은 Linux 네트워크 스택 위에서 동작한다. 네
 | 컴포넌트 | 설치 시점 | Linux 네트워크 활용 |
 | --- | --- | --- |
 | **kube-proxy** | [kubeadm init]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-4 %}#static-pod-매니페스트) 시 DaemonSet 배포 | iptables로 Service → Pod 라우팅 |
-| **Flannel** | 이번 글에서 Helm으로 설치 | veth, bridge, VXLAN, iptables로 Pod 네트워크 구성 |
+| **Flannel** | [CNI 플러그인으로 설치]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-5 %}#flannel-설치) | veth, bridge, VXLAN, iptables로 Pod 네트워크 구성 |
 
 > **참고: kube-proxy 모드**
 >
@@ -61,9 +61,13 @@ Kubernetes 네트워킹은 Linux 네트워크 스택 위에서 동작한다. 네
 > #     mode: ""   # 빈 문자열 = iptables (기본값)
 > ```
 
+<br>
+
 두 컴포넌트 모두 **iptables**를 사용하지만 목적이 다르다:
 - **kube-proxy**: Service 추상화 (ClusterIP → Pod IP 변환)
 - **Flannel**: Pod 네트워크 통신 (SNAT, 포워딩 허용)
+
+<br>
 
 # iptables 규칙
 
@@ -273,7 +277,7 @@ tcp      6 86400 ESTABLISHED src=10.0.2.2 dst=10.0.2.15 sport=61614 dport=22 src
 
 <br>
 
-### conntrack 엔트리 형식
+## conntrack 엔트리 형식
 
 ```
 tcp 6 86399 ESTABLISHED src=10.244.0.3 dst=10.96.0.1 sport=48242 dport=443 src=192.168.10.100 dst=10.244.0.3 sport=6443 dport=48242 [ASSURED]
@@ -381,6 +385,37 @@ sysctl -a | grep conntrack
 
 <br>
 
-이상으로 Linux 네트워크 스택에서의 Kubernetes 네트워킹을 살펴보았다. iptables는 Service 라우팅(kube-proxy)과 Pod 네트워크 통신(Flannel)을 구현하고, conntrack은 DNAT 연결 상태를 추적하여 응답 패킷을 올바른 목적지로 전달한다.
+# 정리
+
+Kubernetes 네트워킹은 iptables와 conntrack이라는 Linux 네트워크 스택의 두 축 위에서 동작한다.
+
+## iptables: 패킷 경로 결정
+
+iptables의 nat 테이블과 filter 테이블은 **kube-proxy**와 **Flannel** 두 컴포넌트가 각자의 목적에 맞게 사용한다.
+
+| 구분 | kube-proxy | Flannel (VXLAN) |
+| --- | --- | --- |
+| **목적** | Service → Pod 라우팅 (ClusterIP, NodePort) | Pod 간 오버레이 네트워크 통신 |
+| **nat 테이블** | KUBE-SERVICES, KUBE-SVC-*, KUBE-SEP-* 체인으로 Service IP를 Pod IP로 DNAT | FLANNEL-POSTRTG 체인으로 오버레이 트래픽 SNAT/MASQUERADE |
+| **filter 테이블** | KUBE-FIREWALL, KUBE-FORWARD 체인으로 패킷 필터링 및 포워딩 허용 | 직접 filter 규칙을 추가하지 않음 |
+| **규칙 특징** | Service/Endpoint 변경 시 동적으로 갱신 | 노드 부팅 시 설정, 비교적 정적 |
+
+## conntrack: 연결 상태 추적
+
+conntrack은 iptables의 DNAT/SNAT 규칙이 만든 **주소 변환 상태를 기억**하여, 응답 패킷이 원래 요청자에게 돌아갈 수 있도록 한다.
+
+- **역할**: 요청 시 DNAT된 연결의 원본/변환 주소 쌍을 저장하고, 응답 시 자동으로 reverse NAT 수행
+- **엔트리 구조**: 프로토콜, 상태, 타임아웃, 원본 tuple(src→dst), 변환 tuple(src→dst) 포함
+- **운영 포인트**: `nf_conntrack_max`(테이블 크기)와 타임아웃 값이 대규모 클러스터에서 성능에 영향
+
+## 핵심 흐름
+
+클라이언트가 Service IP로 요청을 보내면:
+
+1. **iptables nat** → Service IP를 실제 Pod IP로 DNAT (kube-proxy 규칙)
+2. **conntrack** → 변환 전후 주소 쌍을 엔트리로 저장
+3. **Pod 응답** → conntrack 엔트리를 참조하여 reverse DNAT 수행, 원래 클라이언트에게 전달
+
+이 구조 덕분에 사용자는 Pod의 실제 IP를 몰라도 안정적인 Service IP로 통신할 수 있고, Pod이 재시작되어 IP가 바뀌어도 Service 접근에는 영향이 없다.
 
 <br>

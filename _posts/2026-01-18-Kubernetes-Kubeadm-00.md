@@ -265,7 +265,22 @@ Bootstrap Token은 kubeadm의 TLS Bootstrap 전용 형식으로, **Token ID**와
 1. `kube-public` 네임스페이스에 `cluster-info` ConfigMap을 생성한다.
 2. `kubeconfig` 데이터(API Server 주소 + CA 인증서)를 Token Secret으로 **HMAC-SHA256 서명**한다.
 3. 서명 결과를 `jws-kubeconfig-{Token ID}` 키로 ConfigMap에 저장한다.
-4. RBAC를 설정하여 `system:unauthenticated` 그룹에 `cluster-info` GET을 허용한다.
+4. RBAC를 설정하여 User `system:anonymous`에 `cluster-info` GET을 허용한다.
+
+> **참고: `system:anonymous` vs `system:unauthenticated`**
+>
+> API Server에 인증 정보 없이 요청이 들어오면(`--anonymous-auth=true` 기본값), authenticator가 자동으로 **두 가지를 동시에 부여**한다([공식 문서](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#anonymous-requests)):
+>
+> | 구분 | `system:anonymous` | `system:unauthenticated` |
+> | --- | --- | --- |
+> | **종류** | User (사용자) | Group (그룹) |
+> | **의미** | 인증되지 않은 요청에 부여되는 가상 사용자 이름 | 인증되지 않은 요청에 부여되는 가상 그룹 |
+>
+> 즉, 인증되지 않은 요청 하나는 User `system:anonymous`**이면서 동시에** Group `system:unauthenticated`의 멤버다. 어느 쪽에 RoleBinding을 걸어도 결과는 동일하지만, kubeadm은 **User에 직접 바인딩**하는 더 보수적인 방식을 사용한다. 실제 RoleBinding 확인은 [init 실행 — Role/RoleBinding 확인]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-4 %}#rolebinding-확인)을 참고한다.
+>
+> 한편, [kubeadm implementation details 공식 문서](https://kubernetes.io/docs/reference/setup-tools/kubeadm/implementation-details/#create-the-public-cluster-info-configmap)에서는 "unauthenticated users (i.e. users in RBAC group `system:unauthenticated`)"라고 **Group으로 설명**하고 있지만, 실제 kubeadm 코드가 생성하는 RoleBinding은 `kind: User, name: system:anonymous`다. 기능적으로는 동일하나, User에 직접 바인딩하는 쪽이 범위가 더 좁아 약간 더 보수적인 접근이다.
+
+<br>
 
 ConfigMap 키에는 Token ID(`123456`)만 노출된다. **Secret은 절대 노출되지 않는다.**
 
