@@ -4,6 +4,7 @@ excerpt: "Kubernetes The Hard Way에서 수동으로 진행했던 작업들을 K
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

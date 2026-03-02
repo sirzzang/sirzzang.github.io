@@ -4,6 +4,7 @@ excerpt: "Kubernetes Control Plane HA 구성의 3가지 패턴을 이해하고 K
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

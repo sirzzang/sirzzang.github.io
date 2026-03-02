@@ -13,6 +13,7 @@ tags:
   - Client-Side LB
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-5
+hidden: true
 
 ---
 
@@ -554,7 +555,7 @@ Kubernetes control plane is running at https://127.0.0.1:6443
 
 ## kubeconfig 설정
 
-이번 실습에서는 admin-lb(별도 호스트)에서 **하나의 API Server**만 보게 kubeconfig를 설정한다. [클러스터 배포 - 실습 환경 구성]({% post_url 2026-01-25-Kubernetes-Kubespray-04-00 %})이나 단일 노드 실습(4.1)에서는 admin-lb와 Control Plane이 분리되지 않았거나 kubectl을 Control Plane 노드에서만 썼기 때문에 `server`를 바꿀 필요가 없었다. Control Plane에서 가져온 config는 `server: https://127.0.0.1:6443`이라서, admin-lb에서는 그대로 쓰면 접근이 안 되므로 단일 IP(예: 192.168.10.11)로 바꾼다. 그 노드 장애 시 admin-lb에서 kubectl 접근이 불가할 수 있다.
+이번 실습에서는 admin-lb(별도 호스트)에서 **하나의 API Server**만 보게 kubeconfig를 설정한다. [클러스터 배포 - 실습 환경 구성]({% post_url 2026-01-25-Kubernetes-Kubespray-04-00 %})이나 단일 노드 실습(4.1)에서는 admin-lb와 Control Plane이 분리되지 않았거나 kubectl을 Control Plane 노드에서만 썼기 때문에 `server`를 바꿀 필요가 없었다. Control Plane에서 가져온 config는 `server: https://127.0.0.1:6443`이라서, admin-lb에서는 그대로 쓰면 접근이 안 되므로 단일 IP(예: 192.168.10.11)로 바꾼다. 그 노드 장애 시 admin-lb에서 kubectl 접근이 불가할 수 있다. kubeconfig 구조와 다중 클러스터 관리는 [kubeconfig 개요]({% post_url 2026-02-16-Kubernetes-Kubeconfig-01 %}) 시리즈를 참고하자.
 
 ### kubeconfig 복사
 

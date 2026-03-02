@@ -1,24 +1,33 @@
 ---
-title:  "[Kubernetes] Kubernetes 환경에서 GPU Time Slicing 사용하기 - 3. 적용"
+title:  "[Kubernetes] GPU Sharing: Time Slicing - 3. 적용"
 excerpt: NVIDIA GPU에 GPU Time Slicing을 실제로 적용해보자.
 categories:
-  - Dev
+  - Kubernetes
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
-  - k8s
-  - k3s
-  - kubernetes
-  - gpu
-  - time slicing
+  - Kubernetes
+  - GPU
+  - GPU Sharing
+  - Time Slicing
+  - NVIDIA
 ---
 
 
 
 <br>
 
-[지난 글](https://sirzzang.github.io/dev/Dev-Kubernetes-GPU-Time-Slicing-2/)에서 쿠버네티스 환경에서 GPU Time Slicing이 어떻게 동작하는지, 그리고 Time Slicing ConfigMap을 어떻게 구성하는지 알아보았다. 이번 글에서는 실제로 Time Slicing을 적용하는 방법과 적용 사례, 그리고 사용 시 주의해야 할 한계점들을 살펴본다.
+# TL;DR
+
+- GPU Time Slicing 적용 방법은 GPU Operator 사용 여부에 따라 다르다: GPU Operator 환경에서는 ConfigMap + ClusterPolicy, Device Plugin 단독 환경에서는 ConfigMap + Helm values
+- 적용 후 `nvidia.com/gpu` Allocatable이 `replicas` 배수로 증가하여, 하나의 물리 GPU를 여러 파드가 공유
+- **주의사항**: Fault Isolation 부재, DCGM-Exporter 메트릭 개별 수집 불가, ConfigMap 변경 시 DaemonSet 수동 재시작 필요
+- `replicas` 값은 2 이상이어야 하며, 설정 변경 후에도 기존 파드는 영향받지 않는다
+
+<br>
+
+[지난 글]({% post_url 2025-11-22-Kubernetes-GPU-Time-Slicing-2 %})에서 쿠버네티스 환경에서 GPU Time Slicing이 어떻게 동작하는지, 그리고 Time Slicing ConfigMap을 어떻게 구성하는지 알아보았다. 이번 글에서는 실제로 Time Slicing을 적용하는 방법과 적용 사례, 그리고 사용 시 주의해야 할 한계점들을 살펴본다.
 
 <br>
 
@@ -357,7 +366,7 @@ inference-pod         20/20   20           20          81d
 
 ## Fault Isolation 부재
 
-[지난 글](https://sirzzang.github.io/dev/Dev-Kubernetes-GPU-Time-Slicing-1/#time-slicing의-한계)에서 다뤘듯이, Time Slicing은 물리적으로 격리되어 있지 않기 때문에 Fault Isolation이 제공되지 않는다.
+[지난 글]({% post_url 2025-11-22-Kubernetes-GPU-Time-Slicing-1 %}#time-slicing의-한계)에서 다뤘듯이, Time Slicing은 물리적으로 격리되어 있지 않기 때문에 Fault Isolation이 제공되지 않는다.
 
 * **메모리 관리**: 각 파드가 사용할 GPU 메모리를 제한할 방법이 없음
 * **장애 전파**: 한 파드의 GPU 오류가 다른 파드에 영향 가능
@@ -414,7 +423,23 @@ Time Slicing 설정을 변경해도, 이미 스케줄링된 파드는 영향을 
 
 <br>
 
+# 정리
+
+3편에 걸쳐 GPU Time Slicing의 개념, 설정, 적용을 살펴보았다.
+
+| 편 | 핵심 내용 |
+|----|----------|
+| [1편. 개념]({% post_url 2025-11-22-Kubernetes-GPU-Time-Slicing-1 %}) | Time Slicing = SM 실행 시간의 시분할. Preemptive Context Switching 기반. 메모리는 시분할되지 않음. MIG 대비 Fault Isolation 미제공 |
+| [2편. 설정]({% post_url 2025-11-22-Kubernetes-GPU-Time-Slicing-2 %}) | Device Plugin이 replicas 수만큼 논리적 GPU를 overcommit. 커널 드라이버가 자동으로 Time Slicing 수행. ConfigMap 구성 방법 |
+| **3편. 적용** | GPU Operator / Device Plugin 환경별 적용 방법. Fault Isolation 부재, DCGM 제한, replicas ≥ 2, 설정 변경 시 기존 파드 유지 |
+
+Time Slicing은 MIG를 지원하지 않는 GPU에서도 GPU 공유를 가능하게 해주는 실용적인 선택지다. 다만 Fault Isolation이 없으므로, 신뢰할 수 있는 워크로드(내부 추론 서빙, 개발/테스트 환경 등)에 적용하는 것이 권장된다.
+
+<br>
+
 # 참고
 
 * [NVIDIA GPU Operator - Time Slicing GPUs in Kubernetes](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/gpu-sharing.html)
 * [NVIDIA k8s-device-plugin GitHub](https://github.com/NVIDIA/k8s-device-plugin)
+
+<br>

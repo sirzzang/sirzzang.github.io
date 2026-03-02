@@ -13,6 +13,7 @@ tags:
   - Ansible
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-5
+hidden: true
 
 ---
 
