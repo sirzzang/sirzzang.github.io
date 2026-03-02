@@ -30,7 +30,7 @@ hidden: true
 
 # 들어가며
 
-[이전 글]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-2 %})에서 실습 환경을 확인하고 kubeadm 클러스터 구성을 위한 사전 설정을 완료했다. 이번 글에서는 컨테이너 런타임(containerd)과 Kubernetes 핵심 도구(kubeadm, kubelet, kubectl)를 설치한다.
+[이전 글]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-2 %})에서 실습 환경을 확인하고 kubeadm 클러스터 구성을 위한 사전 설정을 완료했다. 이번 글에서는 컨테이너 런타임(containerd)과 Kubernetes 핵심 도구(kubeadm, kubelet, kubectl)를 설치한다. 이 글에서 생성되는 파일의 전체 그림은 [실습 구성도의 Stage 1~2]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-0 %}#stage-1-containerd-설치)를 참고한다.
 
 이 글에서 다루는 모든 설치 작업은 **컨트롤 플레인 노드와 워커 노드 모두**에 적용해야 한다. 실습에서는 k8s-ctr, k8s-w1, k8s-w2 세 노드에 동일하게 진행한다.
 
@@ -1176,6 +1176,32 @@ cat /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
 | `/var/lib/kubelet/kubeadm-flags.env` | kubeadm이 생성하는 플래그 | `kubeadm init/join` |
 | `/etc/sysconfig/kubelet` | 사용자 정의 추가 인자 | 수동 생성 (선택) |
 
+`kubeadm init`이 실행되면 위 파일들이 생성된다.
+
+> 실제 값은 `kubeadm init` + CNI 설치 후 [kubelet 상태 및 설정 확인]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-6 %}#kubelet-상태-및-설정-확인)에서 확인한다.
+
+
+### config.yaml
+
+kubelet의 런타임 설정 파일이다.
+
+| 설정 | 역할 |
+| --- | --- |
+| `staticPodPath` | kubelet이 감시할 Static Pod 매니페스트 디렉토리 (`/etc/kubernetes/manifests`) |
+| `cgroupDriver` | cgroup 드라이버. containerd의 `SystemdCgroup` 설정과 일치해야 한다 |
+| `clusterDNS` | 클러스터 DNS(CoreDNS) Service의 ClusterIP |
+| `clusterDomain` | 클러스터 도메인 (`cluster.local`) |
+| `rotateCertificates` | kubelet 클라이언트 인증서 자동 갱신 여부 |
+
+### kubeadm-flags.env
+
+kubeadm이 kubelet에 전달할 플래그를 `KUBELET_KUBEADM_ARGS` 환경변수로 정의한다.
+
+| 플래그 | 역할 |
+| --- | --- |
+| `--container-runtime-endpoint` | CRI 소켓 경로 (containerd 유닉스 도메인 소켓) |
+| `--node-ip` | 노드 IP (kubeadm 설정의 `localAPIEndpoint.advertiseAddress`) |
+| `--pod-infra-container-image` | Pod의 [인프라 컨테이너(pause)]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-12 %}#pause-컨테이너) 이미지 |
 
 ## kubernetes 관련 디렉토리
 
@@ -1198,8 +1224,9 @@ cat /etc/sysconfig/kubelet
 # KUBELET_EXTRA_ARGS=
 ```
 
+## 정리
 
-현재 상태 요약:
+현재 상태를 요약하면 다음과 같다.
 - `/etc/kubernetes/manifests`: 비어 있음 (static pod manifest가 없음)
 - `/var/lib/kubelet`: 비어 있음 (`config.yaml` 등 아직 없음)
 - `/etc/sysconfig/kubelet`: `KUBELET_EXTRA_ARGS` 비어 있음
