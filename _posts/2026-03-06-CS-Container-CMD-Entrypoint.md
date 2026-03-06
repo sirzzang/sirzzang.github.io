@@ -453,7 +453,7 @@ Pod spec에서 `command`나 `args`를 지정하면 이미지에 정의된 ENTRYP
 | Image ENTRYPOINT | Image CMD | `command` | `args` | 실행 결과 |
 |---|---|---|---|---|
 | `[sleep]` | `[5]` | 미지정 | 미지정 | `sleep 5` |
-| `[sleep]` | `[5]` | `[sleep2.0]` | 미지정 | `sleep2.0` (CMD `5` 무시!) |
+| `[sleep]` | `[5]` | `[sleep2.0]` | 미지정 | `sleep2.0` (CMD `5` 무시) |
 | `[sleep]` | `[5]` | 미지정 | `[10]` | `sleep 10` |
 | `[sleep]` | `[5]` | `[sleep2.0]` | `[10]` | `sleep2.0 10` |
 
