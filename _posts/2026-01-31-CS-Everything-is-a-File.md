@@ -529,7 +529,7 @@ ls -l /dev/nvidia*
 cat /proc/driver/nvidia/gpus/0000:01:00.0/information
 ```
 
-> **참고**: 컨테이너에 GPU를 주입하는 방법은 [[Dev] 컨테이너 장치 주입](/dev/Dev-Container-Device-Injection/)을 참고하자.
+> **참고**: 컨테이너에 GPU를 주입하는 방법은 [컨테이너 장치 주입]({% post_url 2026-02-02-CS-Container-Device-Injection %})을 참고하자.
 
 <br>
 

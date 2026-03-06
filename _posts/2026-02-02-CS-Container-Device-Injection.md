@@ -2,7 +2,7 @@
 title:  "[Container] 컨테이너 장치 주입: OCI Runtime Hook과 CDI"
 excerpt: "컨테이너에 장치 파일을 주입하기 위한 두 가지 방식을 알아보자."
 categories:
-  - Dev
+  - CS
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -604,8 +604,11 @@ CDI 방식의 도입은 컨테이너 생태계 성숙에 따른 자연스러운 
 
 # 참고 자료
 
+추후 더 알아보면 좋을 자료들을 정리해 둔다.
+
 - [OCI Runtime Specification](https://github.com/opencontainers/runtime-spec)
 - [OCI Runtime Spec - Runtime and Lifecycle](https://github.com/opencontainers/runtime-spec/blob/main/runtime.md)
 - [Container Device Interface (CDI)](https://github.com/cncf-tags/container-device-interface)
 - [CDI Spec](https://github.com/cncf-tags/container-device-interface/blob/main/SPEC.md)
 
+<br>
