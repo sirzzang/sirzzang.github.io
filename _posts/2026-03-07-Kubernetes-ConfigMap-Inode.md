@@ -17,7 +17,7 @@ tags:
 
 <br>
 
-Docker 컨테이너에 bind mount한 파일이 호스트에서 바뀌어도 컨테이너에 반영되지 않는 문제가 있다. bind mount가 mount 시점의 inode를 참조하기 때문인데, 심볼릭 링크 대상이 바뀌거나 파일이 삭제-재생성되면 inode가 달라져 mount가 끊긴다. 이 문제를 [Docker 타임존 동기화 글]({% post_url 2026-03-07-Dev-Docker-Timezone-Sync %})에서 다룬 적이 있다.
+Docker 컨테이너에 bind mount한 파일이 호스트에서 바뀌어도 컨테이너에 반영되지 않는 문제가 있다. bind mount가 mount 시점의 inode를 참조하기 때문인데, 심볼릭 링크 대상이 바뀌거나 파일이 삭제-재생성되면 inode가 달라져 mount가 끊긴다. 이 문제는 [Docker 타임존 동기화 글]({% post_url 2026-03-07-Dev-Docker-Timezone-Sync %})에서 다뤘다.
 
 ConfigMap 동작 원리를 공부하던 중, 이 문제가 갑자기 떠올랐다. [Kubernetes 공식 문서](https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically)에 이런 내용이 있다.
 
