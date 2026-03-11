@@ -462,6 +462,8 @@ spec:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: minio-storage-class
+  hostPath:   # 노드 경로를 그대로 마운트. 스케줄러가 "이 PV가 어느 노드에 있는지" 모름
+    path: "/mnt/data/minio-pv"
   nodeAffinity:
     required:
       nodeSelectorTerms:
@@ -470,8 +472,6 @@ spec:
               operator: In
               values:
                 - server01-mlops01
-  hostPath:
-    path: "/mnt/data/minio-pv"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -497,12 +497,19 @@ $ kubectl apply -f minio-pv-pvc.yaml
 
 ## values.yaml 변경 및 재배포
 
+MinIO 설정을 변경해 재배포한다.
+
 ```yaml
 persistence:
   enabled: true
   existingClaim: "minio-pvc"
 
 mode: standalone
+
+# 다중 노드 클러스터에서 hostPath PV를 쓸 경우, 해당 노드로 스케줄을 고정하려면 추가:
+# 참고: https://github.com/minio/minio/blob/master/helm/minio/values.yaml#L266
+# nodeSelector:
+#   kubernetes.io/hostname: server01-mlops01
 ```
 
 ```bash
@@ -514,6 +521,148 @@ $ helm install minio -n minio ./minio-5.2.0.tgz --values minio-values.yaml
 
 1. **`mode: standalone`**: Deployment로 배포되어 `existingClaim`이 정상 동작하도록 변경
 2. **`persistence.existingClaim: "minio-pvc"`**: 위에서 생성한 SSD 경로의 PVC를 지정
+
+<br>
+
+# 참고: 더 나은 구성 — local PV
+
+당시에는 hostPath + nodeAffinity로 PV를 구성했다. *MinIO Pod에 nodeSelector를 걸었는지 기억은 나지 않지만*, PV에 nodeAffinity를 설정해 두었으므로 스케줄러가 이를 인식하여 올바른 노드에 배치했다. 관련해 Kubernetes [PV 공식 문서](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#node-affinity)는 아래와 같이 설명한다.
+
+>  Pods that use a PV will only be scheduled to nodes that are selected by the node affinity.
+
+이는 볼륨 타입을 가리지 않으므로 hostPath PV에도 적용된다. 동작에는 문제가 없다. 
+
+<br>
+
+다만 복기해 보니, hostPath에는 두 가지 아쉬운 점이 있다. 첫째, nodeAffinity가 선택 사항이라 빠뜨려도 API 검증에서 걸리지 않는다. 둘째, [hostPath 전용 문서](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath)에는 스케줄러의 nodeAffinity 인식에 대한 별도 언급이 없어, 동작의 근거를 [일반 PV 문서](https://kubernetes.io/docs/concepts/persistent-volumes/#node-affinity)에서 찾아야 한다. 지금 돌이켜 보면 Kubernetes가 노드 로컬 스토리지를 표현하기 위해 제공하는 **`local`** 볼륨 타입을 쓰는 편이 더 나았다. `local`은 nodeAffinity가 API 레벨에서 필수이고, 전용 문서에서 스케줄러 인식을 명시적으로 보장한다.
+
+<br>
+
+## local PV
+
+*`local`*은 노드에 물리적으로 부착된 로컬 스토리지(디스크, 파티션, 디렉토리 등)를 나타내는 PV 소스 타입이다. 
+
+> 참고: *PV 소스*
+>
+> Kubernetes PV에는 해당 PV의 실제 스토리지가 어디에 있는지를 지정하기 위한 스토리지 타입이 있다: `hostPath`, `nfs`, `csi`, `local` 등. `local`은 그 중 하나다. 공식 문서에서도 "A local volume represents a mounted local storage device such as a disk, partition or directory."라고 표현하는데, **mounted local storage device**라는 것이 PV 소스임을 나타낸다.
+>
+> `local`과 `hostPath`는 모두 노드의 로컬 스토리지에 접근하지만, 모델링하는 대상이 다르다. `hostPath`는 **"이 경로를 마운트하라"**로, 어느 노드의 경로인지는 hostPath의 관심사가 아니다. 따라서 nodeAffinity는 선택 사항이다. 반면 `local`은 **"이 노드에 물리적으로 부착된 이 스토리지 장치"**를 모델링한다. node-3에 꽂힌 SSD는 node-3에만 존재하므로, "어떤 스토리지인가"에 "어떤 노드에 있는가"가 본질적으로 포함된다. 노드 정보 없이는 PV 정의 자체가 불완전하므로, `local`에서 nodeAffinity는 필수다.
+
+<br>
+
+
+hostPath와 local이 가리키는 대상은 같다 — 둘 다 **노드의 로컬 스토리지**(디스크, 파티션, 디렉토리)에 접근한다. 차이는 접근 경로, 즉 **PV 계층을 강제하는지 여부**다.
+
+hostPath는 두 가지 방식으로 쓸 수 있다. Pod spec의 `spec.volumes[].hostPath`에 경로를 넣어 PV/PVC 없이 **직접 마운트**하거나, PV의 `.spec.hostPath`에 경로를 지정해 PVC를 통해 접근할 수 있다. 반면 local은 PV의 `.spec.local.path`로만 존재하며, Pod spec에서 직접 쓰는 방법이 없다. **반드시 PV/PVC를 거쳐야 한다.**
+
+이 "강제"가 local의 핵심 설계다. PV 계층을 반드시 거치니까:
+- **nodeAffinity가 필수**다 → 빠뜨릴 수 없으므로 스케줄러가 항상 인식한다
+- **관리자가 노출 경로를 통제**한다 → Pod가 임의 경로를 마운트할 수 없다
+- **StorageClass 연동이 자연스럽다** → `WaitForFirstConsumer` 등 바인딩 제어가 가능하다
+
+hostPath를 Pod spec에서 직접 쓰면 이런 보호가 전혀 없이 노드 파일시스템의 아무 경로나 마운트할 수 있고, 이것이 공식 문서가 보안 위험을 경고하는 이유다. hostPath를 PV 소스로 쓰면 PV 계층은 거치지만, nodeAffinity가 선택 사항이라 빠뜨릴 수 있고, 보안 경고도 그대로 남는다.
+
+<br>
+
+이 구조적 차이에서 파생되는 실질적인 차이를 정리해 보면 아래와 같다.
+
+| 구분 | `hostPath` | `local` |
+| --- | --- | --- |
+| 정의 | 노드의 특정 경로를 그대로 마운트 | 노드 로컬 스토리지를 표현하는 전용 볼륨 타입 |
+| 사용 범위 | **Pod spec에서 직접 사용 가능** + PV 소스로도 사용 가능 | **PV 소스로만** 존재. Pod spec에서 직접 사용 불가 |
+| nodeAffinity | 선택 사항. <br> 일반 PV 문서상 스케줄러가 인식하며 hostPath PV에도 적용되지만, [hostPath 전용 문서](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath)에는 별도 언급 없음 | **필수** (없으면 API validation error). <br> [전용 문서](https://kubernetes.io/docs/concepts/storage/volumes/#local)에서 스케줄러 인식을 **명시** |
+| Pod nodeSelector | nodeAffinity를 설정했다면 스케줄러가 인식하므로 기능적으로는 불필요. 다만 nodeAffinity가 선택 사항이라 누락 가능성이 있어, **방어적으로 거는 것을 권장** | 불필요 — nodeAffinity가 필수이므로 누락 자체가 불가능 |
+| volumeBindingMode | StorageClass 설정에 따름. `WaitForFirstConsumer` 적용 가능하나, 공식 문서에서 hostPath와의 조합을 별도로 안내하지는 않음 | 공식 문서에서 `WaitForFirstConsumer`와의 조합을 **명시적으로 안내** |
+| 보안 | Pod spec에서 직접 사용 시 **노드의 아무 경로나 마운트 가능** → 공식 문서에서 보안 위험 경고, 사용 자제 권장 | 반드시 PV/PVC를 거쳐야 하므로 **관리자가 노출 경로를 통제** |
+
+<br>
+
+## 매니페스트 제안
+
+앞서 작성한 hostPath 기반 PV/PVC에서 `local` PV로 전환할 때, **PV 매니페스트의 차이는 `hostPath` → `local`로 변경하는 것뿐**이다. PVC는 동일하다. 다만 `local` PV의 이점을 최대로 활용하려면 StorageClass도 함께 구성하는 것이 좋다(아래에서 별도로 다룬다).
+
+```yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: minio-pv
+spec:
+  capacity:
+    storage: 3Ti
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: minio-storage-class
+  local:                          # hostPath → local로만 변경
+    path: /mnt/data/minio-pv
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - server01-mlops01
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-pvc
+  namespace: minio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: minio-storage-class
+  resources:
+    requests:
+      storage: 1Ti
+```
+
+여기에 **StorageClass**를 함께 두면, `local` PV의 이점을 최대로 활용할 수 있다.
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: minio-storage-class
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+```
+
+`provisioner: kubernetes.io/no-provisioner`는 동적 프로비저닝을 사용하지 않는다는 선언이다. PV를 수동으로 만들거나 외부 프로비저너(local static provisioner 등)가 미리 생성해 두는 경우에 쓴다. 핵심은 **`volumeBindingMode: WaitForFirstConsumer`**다.
+
+<br>
+
+## 효과
+
+`local` PV 자체의 이점과, `WaitForFirstConsumer` StorageClass와 조합했을 때의 이점이 있다.
+
+### nodeAffinity의 강제성과 문서 명시성
+
+앞서 살펴본 대로 `local` PV는 nodeAffinity가 필수이므로, 설정 누락으로 Pod가 엉뚱한 노드에 스케줄되는 문제가 원천 차단된다. 또한 [전용 문서](https://kubernetes.io/docs/concepts/storage/volumes/#local)에서 "The system is aware of the volume's node constraints by looking at the node affinity on the PersistentVolume"이라고 **명시적으로 보장**하므로, 동작의 근거를 일반 PV 문서에서 찾을 필요가 없다. Pod에 nodeSelector를 따로 걸 필요 없이 PV 한 곳에만 의도가 드러나므로 유지보수가 수월하다.
+
+### 바인딩 지연 (WaitForFirstConsumer)
+
+별도 StorageClass 없이 PVC를 만들면 기본적으로 Immediate 바인딩이 일어나, Pod가 스케줄되기 전에 PVC가 PV와 먼저 바인딩된다. 이 경우 나중에 Pod 스케줄 시 CPU·메모리 등 다른 제약과 맞지 않아 Pending에 빠질 수 있다. `WaitForFirstConsumer`를 쓰면 Pod가 어느 노드에 갈지 정해질 때까지 바인딩을 미루므로, 자원·노드 제약에 맞게 배치된 뒤 바인딩되어 스케줄링이 안정적이다.
+
+<br>
+
+## hostPath의 보안 위협
+
+Kubernetes 공식 문서는 hostPath 볼륨에 대해 **다수의 보안 위험**이 있다고 경고하며, 가능한 한 사용을 피하라고 권장한다([Volumes — hostPath](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath)).
+
+> HostPath volumes present many security risks, and it is a best practice to avoid the use of HostPaths when possible. When a HostPath volume must be used, it should be scoped to only the required file or directory, and mounted as ReadOnly.
+
+같은 문서는 대안으로 `local` PV를 명시적으로 권장한다
+
+> For example, define a **local** PersistentVolume, and use that instead."
+
+<br>
+
+핵심 위험은 `hostPath`가 **Pod spec에서 직접 사용 가능**하다는 점이다. Pod을 생성할 수 있는 사용자라면 누구나 `spec.volumes[].hostPath.path`에 노드의 아무 경로(`/etc/shadow`, kubelet 자격 증명 등)를 지정하여 PV/PVC 없이 마운트할 수 있다. 반면 `local`은 **PV 소스로만 존재**하며 Pod spec에서 직접 사용할 수 없다. 반드시 PV/PVC를 거쳐야 하므로, 어떤 경로를 노출할지는 클러스터 관리자가 통제한다.
+
+이 글의 맥락(*관리자가 PV를 직접 만드는 경우*)에서는 hostPath PV든 local PV든 관리자가 경로를 지정하므로, PV 수준의 보안 차이는 크지 않다. 그러나 `hostPath`라는 타입 자체가 Pod spec 직접 사용이라는 넓은 위험 표면을 갖고 있고, PodSecurity 정책에서도 hostPath는 제한 대상으로 분류된다. 노드 로컬 스토리지가 필요할 때 `local` PV를 쓰면 이 위험 표면을 원천적으로 피할 수 있다.
 
 <br>
 
