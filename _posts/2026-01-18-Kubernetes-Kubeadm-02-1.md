@@ -306,7 +306,7 @@ clusters:
 ```
 
 - **`kube-public` 네임스페이스**: 누구나 읽을 수 있는 공개 네임스페이스
-- **`system:unauthenticated` 접근 허용**: 아직 인증서 없는 노드도 이 정보를 가져올 수 있음
+- **User `system:anonymous` 접근 허용**: 아직 인증서 없는 노드도 이 정보를 가져올 수 있음
 - **Trust on First Use**: 처음 연결할 때 CA 인증서를 받아서 이후 통신에 사용
 
 <br>
@@ -349,9 +349,18 @@ kubeadm join 192.168.1.100:6443 \
 ### 1. preflight
 
 시스템 요구사항을 검증한다. `kubeadm init`의 preflight와 유사하지만, join에 필요한 항목을 검증한다.
-- 필요 포트 사용 가능 여부 (10250 등)
+- 필요 포트 사용 가능 여부
 - 컨테이너 런타임 설치 여부
 - 커널 모듈 로드 여부 (br_netfilter, overlay 등)
+
+워커 노드에서 검사하는 포트는 다음과 같다. 검사 대상 포트는 [Ports and Protocols](https://kubernetes.io/docs/reference/networking/ports-and-protocols/) 문서에 정리되어 있다. 해당 문서에는 워커 노드의 열려 있어야 하는 포트로 NodePort 범위(30000-32767)도 포함되어 있지만, 이 포트들은 서비스 생성 시 동적으로 할당되므로 preflight 검사 대상이 아니다. 컴포넌트가 직접 바인딩하는 포트만이 충돌 검사 대상이 된다.
+
+| 포트 | 컴포넌트 | 용도 |
+| --- | --- | --- |
+| 10250 | kubelet | Kubelet API |
+| 10256 | kube-proxy | 헬스체크 엔드포인트 |
+
+> Control Plane 노드의 포트 검사 항목은 [kubeadm init의 preflight]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-4 %}#포트-충돌-검사)에서 다룬다.
 
 ### 2. Discovery
 
@@ -359,7 +368,7 @@ API Server에서 클러스터 정보를 다운로드하고 검증한다.
 - `kube-public` 네임스페이스의 `cluster-info` ConfigMap에서 CA 인증서, API Server 주소 획득
 - `--discovery-token-ca-cert-hash`로 CA 인증서 진위 검증
 
-> **참고**: `cluster-info` ConfigMap은 API Server에서 **유일하게 인증 없이 접근 가능한** 엔드포인트다. `kubeadm init`의 bootstrap-token 단계에서 `system:anonymous` 그룹에 읽기 권한을 부여한다. 인증 없이 공개되어도 안전한 이유는 JWS 서명으로 MITM을 방어하기 때문이다. 자세한 내용은 [init과 join의 신뢰 모델]({% post_url 2026-01-18-Kubernetes-Kubeadm-00 %}#init과-join의-신뢰-모델)을 참고하자.
+> **참고**: `cluster-info` ConfigMap은 API Server에서 **유일하게 인증 없이 접근 가능한** 엔드포인트다. `kubeadm init`의 bootstrap-token 단계에서 User `system:anonymous`에 읽기 권한을 부여한다. 인증 없이 공개되어도 안전한 이유는 JWS 서명으로 MITM을 방어하기 때문이다. 자세한 내용은 [init과 join의 신뢰 모델]({% post_url 2026-01-18-Kubernetes-Kubeadm-00 %}#init과-join의-신뢰-모델)을 참고하자.
 
 ### 3. TLS Bootstrap
 
@@ -433,7 +442,7 @@ kubeadm join 192.168.1.100:6443 \
 
 ### 1. preflight
 
-워커 노드와 동일. 추가로 컨트롤 플레인에 필요한 포트(6443, 10259, 10257, 2379-2380 등)도 검증한다.
+워커 노드와 동일한 검사에 더해, 컨트롤 플레인에 필요한 포트도 추가로 검증한다. 전체 포트 목록은 [kubeadm init의 preflight]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-4 %}#포트-충돌-검사)를 참고하자.
 
 ### 2. Discovery
 

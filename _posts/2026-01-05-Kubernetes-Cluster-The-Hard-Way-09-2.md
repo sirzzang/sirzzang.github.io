@@ -241,7 +241,7 @@ version = 2
 
 주요 설정 항목은 다음과 같다:
 
-- `snapshotter = "overlayfs"`: 컨테이너 이미지 레이어 관리에 [overlayfs](https://sirzzang.github.io/dev/Dev-Container-Duplicate-Container-Images-2/#overlayfs) 사용
+- `snapshotter = "overlayfs"`: 컨테이너 이미지 레이어 관리에 [OverlayFS]({% post_url 2026-03-01-CS-Container-Filesystem %}#overlayfs) 사용
 - `default_runtime_name = "runc"`: 기본 저수준 런타임으로 runc 사용
 - `runtime_type = "io.containerd.runc.v2"`: runc v2 shim 사용
 - `SystemdCgroup = true`: systemd를 cgroup 드라이버로 사용 (kubelet과 일치 필요)

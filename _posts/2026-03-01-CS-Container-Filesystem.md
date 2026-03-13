@@ -185,7 +185,7 @@ merged           ← 레이어들이 하나로 합쳐진 뷰
 
 # 1. 이미지는 압축 파일 묶음이다
 
-[컨테이너 이미지]({% post_url 2025-12-12-Dev-Container-Duplicate-Container-Images-1 %})는 여러 개의 **레이어**로 구성되어 있으며, 각 레이어는 `tar.gz` 형태의 압축 파일로 레지스트리에 저장되어 있다. 이미지를 pull하면 이 압축 파일들을 받아오는 것이다.
+[컨테이너 이미지]({% post_url 2026-02-28-CS-Container-Image %})는 여러 개의 **레이어**로 구성되어 있으며, 각 레이어는 `tar.gz` 형태의 압축 파일로 레지스트리에 저장되어 있다. 이미지를 pull하면 이 압축 파일들을 받아오는 것이다.
 
 ```
 컨테이너 이미지 (Registry)
@@ -272,7 +272,7 @@ Content Store (blobs/sha256/...)     ← tar.gz 압축 상태
 Snapshot 디렉토리 (snapshots/{id}/fs/)  ← 레이어 디렉토리
 ```
 
-> 각 런타임별 실제 디렉토리 구조 비교는 [Docker와 containerd 이미지 관리 비교 - 2편]({% post_url 2025-12-12-Dev-Container-Duplicate-Container-Images-2 %}#실제-디렉토리-구조-확인)을 참고한다.
+> 각 런타임별 실제 디렉토리 구조 비교는 [Docker와 containerd 이미지 관리 비교 - 1편]({% post_url 2025-12-12-Dev-Container-Duplicate-Container-Images-1 %}#실제-디렉토리-구조-확인)을 참고한다.
 
 <br>
 
@@ -461,7 +461,7 @@ mount -t overlay overlay \
 
 이렇게 조립된 merged 디렉토리는 아직 호스트의 특정 경로에 있는 일반 디렉토리일 뿐이다. 이것을 컨테이너만의 루트(`/`)로 만드는 것이 [다음 단계](#4-mount-namespace--pivot_root로-격리)의 역할이다.
 
-> 각 런타임별 실제 디렉토리 구조의 상세 비교는 [스토리지 드라이버 구현 비교 - 2편]({% post_url 2025-12-12-Dev-Container-Duplicate-Container-Images-2 %}#실제-디렉토리-구조-확인)을 참고한다.
+> 각 런타임별 실제 디렉토리 구조의 상세 비교는 [스토리지 드라이버 구현 비교 - 1편]({% post_url 2025-12-12-Dev-Container-Duplicate-Container-Images-1 %}#실제-디렉토리-구조-확인)을 참고한다.
 
 <br>
 

@@ -351,6 +351,22 @@ kubeadm join 192.168.10.100:6443 --token 123456.1234567890123456 \
 - **firewalld 경고**: 6443(API Server), 10250(kubelet) 포트가 열려있어야 함. 실습에서는 firewalld를 비활성화했으므로 무시해도 됨
 - 이미지 pull 안내: 이미 `kubeadm config images pull`로 받아두었으므로 빠르게 진행
 
+### 포트 충돌 검사
+
+preflight 단계에서는 각 컴포넌트가 바인딩할 포트가 이미 다른 프로세스에 의해 점유되어 있지 않은지 검사한다. 검사 대상 포트는 [Ports and Protocols](https://kubernetes.io/docs/reference/networking/ports-and-protocols/) 문서에 정리되어 있다. `kubeadm init`에서는 Control Plane 컴포넌트가 사용하는 포트를 검사한다.
+
+| 포트 | 컴포넌트 | 용도 |
+| --- | --- | --- |
+| 6443 | kube-apiserver | Kubernetes API 서버 |
+| 2379-2380 | etcd | etcd 서버 클라이언트 API |
+| 10250 | kubelet | Kubelet API |
+| 10259 | kube-scheduler | 스케줄러 |
+| 10257 | kube-controller-manager | 컨트롤러 매니저 |
+
+preflight는 포트 점유 여부만 확인할 뿐, 방화벽에서 해당 포트가 외부에 열려 있는지까지는 검사하지 않는다.  따라서 preflight를 통과하더라도, 방화벽에서 해당 포트를 열어주지 않으면 클러스터가 정상 동작하지 않을 수 있다. 위 출력에서 firewalld 경고가 별도로 나오는 것도 이 때문이다. 
+
+> 워커 노드의 포트 검사 항목은 [kubeadm join의 preflight]({% post_url 2026-01-18-Kubernetes-Kubeadm-02-1 %}#1-preflight) 단계에서 다룬다.
+
 <br>
 
 ## 2단계: [certs] 인증서 생성
