@@ -196,7 +196,7 @@ Terraform 자체는 코어 엔진이고, 각 클라우드/서비스별 구현은
 | `hashicorp/azurerm` | Azure 리소스 |
 | `hashicorp/kubernetes` | K8s 리소스 직접 관리 |
 
-`terraform init`을 실행하면 `.tf` 파일에 선언된 Provider를 보고 해당 플러그인을 자동으로 다운로드한다. 실행 후 `.terraform` 디렉토리에 생기는 것이 Provider 플러그인이다.
+`terraform init`을 실행하면 `.tf` 파일에 선언된 Provider를 보고 해당 플러그인을 자동으로 다운로드한다. 실행 후 `.terraform/providers/` 디렉토리에 Provider 플러그인이, `.terraform/modules/` 디렉토리에 모듈 소스가 저장된다.
 
 <br>
 

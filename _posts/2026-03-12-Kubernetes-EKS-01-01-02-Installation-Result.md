@@ -54,8 +54,6 @@ my-eks-keypair 118.xxx.xxx.xxx/32
 
 Terraform 변수 우선순위에서 실행 시 주입되는 변수가 가장 높다. [Ansible 변수 우선순위]({% post_url 2026-01-25-Kubernetes-Kubespray-03-02-01 %}#ansible-변수-우선순위)와 마찬가지로 실행 시 주입되는 것이 `default`보다 우선한다.
 
-
-
 <br>
 
 # 배포 실행
@@ -266,7 +264,59 @@ terraform plan
   }
 ```
 
-코드에 KMS 설정을 명시하지 않았는데도 EKS 모듈이 **KMS 키를 자동 생성**하여 클러스터의 **etcd Secret 암호화**에 사용한다(`eks.kms` 하위 모듈). 모듈이 내부적으로 뭘 해주는지 의식해야 하는 좋은 사례다.
+EKS 클러스터는 etcd에 Secret(비밀번호, 토큰 등)을 저장하는데, 이를 평문이 아닌 암호화된 상태로 보관하려면 암호화 키가 필요하다. **KMS**(Key Management Service)는 AWS에서 제공하는 암호화 키 관리 서비스로, 여기서는 이 etcd Secret 암호화 키를 생성하고 관리하는 역할을 한다.
+
+코드에 KMS 설정을 명시하지 않았는데도 EKS 모듈이 `eks.kms` 하위 모듈을 통해 **KMS 키를 자동 생성**한 것으로, 모듈이 내부적으로 뭘 해주는지 의식해야 하는 좋은 사례다. 
+
+사용된 각 속성의 의미는 다음과 같다.
+
+- `key_usage = "ENCRYPT_DECRYPT"`: 데이터 암호화/복호화 용도
+- `enable_key_rotation = true`: 보안을 위해 키를 주기적으로 자동 교체
+- `description = "myeks cluster encryption key"`: EKS 클러스터 암호화 전용 키
+
+
+> **참고**: [Kubernetes Hard Way - Data Encryption Config and Key](/kubernetes/Kubernetes-Cluster-The-Hard-Way-06/) 글에서 이 encryption at rest를 다룬 적이 있다. 그때는 `/dev/urandom`으로 직접 암호화 키를 생성하고 `EncryptionConfiguration`을 작성해 kube-apiserver에 전달했는데, EKS에서는 이 과정을 모듈이 KMS를 통해 자동으로 처리해 준다.
+
+<br>
+
+### KMS 키 정책
+
+KMS 키와 함께 생성되는 **키 정책(Key Policy)**의 plan 결과도 눈여겨볼 만하다.
+
+```
+# module.eks.module.kms.data.aws_iam_policy_document.this[0] will be read during apply
+<= data "aws_iam_policy_document" "this" {
+    + statement {
+        + actions   = ["kms:*"]
+        + resources = ["*"]
+        + sid       = "Default"
+        + principals {
+            + identifiers = ["arn:aws:iam::988608581192:root"]
+            + type        = "AWS"
+          }
+      }
+    + statement {
+        + actions   = ["kms:CancelKeyDeletion", "kms:Create*", "kms:Delete*", ...]
+        + resources = ["*"]
+        + sid       = "KeyAdministration"
+        + principals {
+            + identifiers = ["arn:aws:iam::988608581192:user/admin"]
+            + type        = "AWS"
+          }
+      }
+    + statement {
+        + actions   = ["kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", ...]
+        + resources = ["*"]
+        + sid       = "KeyUsage"
+        + principals {
+            + identifiers = [(known after apply)]
+            + type        = "AWS"
+          }
+      }
+  }
+```
+
+`KeyAdministration`의 principal이 `arn:aws:iam::988608581192:user/admin`으로 되어 있다. 이것이 바로 `~/.aws/credentials`에서 읽어 온 IAM 사용자이며, [코드 분석의 Provider 섹션]({% post_url 2026-03-12-Kubernetes-EKS-01-01-01-Installation %}#provider)에서 설명한 자격증명 자동 탐색의 결과다. `KeyUsage`의 principal이 `(known after apply)`인 이유는 EKS 클러스터의 IAM Role ARN이 아직 생성 전이라 plan 시점에는 알 수 없기 때문이다.
 
 ### Plan 요약
 
@@ -373,11 +423,189 @@ CoreDNS와 kube-proxy는 노드그룹이 준비된 후 설치된다.
 Apply complete! Resources: 52 added, 0 changed, 0 destroyed.
 ```
 
-52개 리소스가 모두 생성되었다.
+52개 리소스가 모두 생성되었다. 콘솔에서 생성 결과를 확인할 수 있다.
 
-![eks-deploy-complete]({{site.url}}/assets/images/eks-deploy-complete.png){: .align-center width="600"}
+콘솔에서 Terraform 설정이 어떻게 반영되었는지 확인해 보자.
+
+### VPC
+
+![myeks-vpc-console-result]({{site.url}}/assets/images/myeks-vpc-console-result.png){: .align-center width="600"}
+
+<center><sup>VPC 콘솔에서 <code>myeks-VPC</code>가 <code>192.168.0.0/16</code> CIDR로 생성된 것을 확인할 수 있다</sup></center>
+
+`vpc.tf`에서 `name = "${var.ClusterBaseName}-VPC"`, `cidr = var.VpcBlock`으로 설정한 값이 그대로 반영되었다.
 
 <br>
+
+### VPC 리소스 맵
+
+![myeks-vpc-console-result-2]({{site.url}}/assets/images/myeks-vpc-console-result-2.png){: .align-center width="600"}
+
+<center><sup><code>myeks-VPC</code>의 리소스 맵</sup></center>
+
+VPC 모듈이 자동으로 만들어준 리소스들의 전체 구조를 한눈에 볼 수 있다. AZ별 퍼블릭 서브넷 3개(`ap-northeast-2a`, `2b`, `2c`), 라우팅 테이블 2개(`myeks-VPC-public`, `myeks-VPC-default`), 네트워크 연결 1개(`myeks-IGW`)가 생성되었다. [코드 분석]({% post_url 2026-03-12-Kubernetes-EKS-01-01-01-Installation %}#vpc-모듈이-자동으로-해주는-것)에서 "모듈 한 블록으로 최소 7~10개 resource 블록을 대체한다"고 했는데, 그 결과물이다.
+
+<br>
+
+### 퍼블릭 서브넷
+
+![myeks-public-subnet-console-result]({{site.url}}/assets/images/myeks-public-subnet-console-result.png){: .align-center width="600"}
+
+<center><sup>퍼블릭 서브넷 3개가 AZ별로 생성됨</sup></center>
+
+`var.tf`에서 선언한 `public_subnet_blocks`(`192.168.1.0/24`, `192.168.2.0/24`, `192.168.3.0/24`)가 그대로 반영되었다. 세 서브넷 모두 동일한 VPC(`vpc-0bbe44f398f6f...`)에 속해 있고, 이름도 `myeks-PublicSubnet`으로 통일되어 있다.
+
+<br>
+
+### 라우팅 테이블
+
+![myeks-vpc-routingtable-console-result]({{site.url}}/assets/images/myeks-vpc-routingtable-console-result.png){: .align-center width="600"}
+
+<center><sup><code>myeks-VPC-public</code> 라우팅 테이블의 라우팅 규칙</sup></center>
+
+`myeks-VPC-public` 라우팅 테이블에 3개 서브넷이 연결되어 있고, 라우팅 규칙은 두 개다.
+
+| 대상 | 대상(Target) | 의미 |
+| --- | --- | --- |
+| `0.0.0.0/0` | `igw-03d522d4af99...` (myeks-IGW) | 모든 외부 트래픽은 IGW로 |
+| `192.168.0.0/16` | `local` | VPC 내부 통신은 로컬 라우팅 |
+
+[코드 분석]({% post_url 2026-03-12-Kubernetes-EKS-01-01-01-Installation %}#vpc-모듈이-자동으로-해주는-것)에서 설명한 대로, VPC 모듈이 `public_subnets`를 지정하면 자동으로 IGW 생성과 `0.0.0.0/0 → IGW` 경로 추가를 처리해 준 것이다. Longest Prefix Match에 의해 VPC 내부 통신(`192.168.0.0/16`)은 로컬 경로로 먼저 매칭되고, 그 외 나머지 모든 트래픽(`0.0.0.0/0`)이 IGW로 빠지는 구조다.
+
+<br>
+
+### EKS 클러스터
+
+![myeks-endpoint-access-public-console-result]({{site.url}}/assets/images/myeks-endpoint-access-public-console-result.png){: .align-center width="600"}
+
+<center><sup>EKS 콘솔에서 <code>myeks</code> 클러스터의 네트워킹 정보</sup></center>
+
+EKS 콘솔의 네트워킹 탭에서 Terraform 설정이 반영된 결과를 확인할 수 있다.
+
+| 항목 | 콘솔 표시값 | Terraform 설정 |
+| --- | --- | --- |
+| **Kubernetes 버전** | 1.34 | `kubernetes_version = var.KubernetesVersion` |
+| **VPC** | `vpc-0bbe44f398f6fc948` | `vpc_id = module.vpc.vpc_id` |
+| **서브넷** | 3개 (`subnet-09ff...`, `subnet-0e89...`, `subnet-04b0...`) | `subnet_ids = module.vpc.public_subnets` |
+| **API 서버 엔드포인트 액세스** | 퍼블릭 | `endpoint_public_access = true`, `endpoint_private_access = false` |
+| **퍼블릭 액세스 소스 허용 목록** | `0.0.0.0/0` (모든 트래픽에 개방) | `endpoint_public_access_cidrs` 미설정 (기본값) |
+| **서비스 IPv4 범위** | `10.100.0.0/16` | EKS가 자동 할당한 Service CIDR |
+
+API 서버 엔드포인트 액세스가 **퍼블릭**이고, 퍼블릭 액세스 소스 허용 목록이 `0.0.0.0/0`으로 모든 트래픽에 개방되어 있다. [Public-Public 구성의 한계](#이-구성의-한계)에서 지적한 보안 이슈가 여기서 확인된다.
+
+<br>
+
+### 컨트롤 플레인 로그
+
+![myeks-cluster-observability-console-result]({{site.url}}/assets/images/myeks-cluster-observability-console-result.png){: .align-center width="600"}
+
+<center><sup>EKS 콘솔 관찰성 탭에서 컨트롤 플레인 로그 설정 확인</sup></center>
+
+관찰성 탭의 컨트롤 플레인 로그 섹션에서 5가지 로그 타입(API 서버, 감사, Authenticator, 컨트롤러 관리자, 스케줄러)이 모두 **off**인 것을 확인할 수 있다. [코드 분석]({% post_url 2026-03-12-Kubernetes-EKS-01-01-01-Installation %}#control-plane-로그)에서 살펴본 `enabled_log_types = []` 설정이 그대로 반영된 결과다. 실습 환경에서의 비용 절감을 위해 비활성화한 것이고, 프로덕션에서는 최소 `api`, `audit` 정도는 켜두는 것이 좋다.
+
+<br>
+
+### IAM 액세스 항목
+
+![mycluster-admin-access-console-result]({{site.url}}/assets/images/mycluster-admin-access-console-result.png){: .align-center width="600"}
+
+<center><sup>EKS 콘솔 액세스 탭에서 IAM 액세스 항목 확인</sup></center>
+
+액세스 탭에서 클러스터에 등록된 IAM 액세스 항목 3개를 확인할 수 있다.
+
+| IAM 보안 주체 ARN | 유형 | 사용자 이름 | 액세스 정책 |
+| --- | --- | --- | --- |
+| `arn:aws:iam::...:role/AWSServiceRoleForAmazonEKS` | 표준 | `eks:managed` | AmazonEKSClusterInsightsPolicy, AmazonEKSEventPolicy |
+| `arn:aws:iam::...:role/myeks-node-group-eks-node-group-...` | EC2 Linux | `system:node:{% raw %}{{EC2PrivateDNSName}}{% endraw %}` | system:nodes 그룹 |
+| **`arn:aws:iam::...:user/admin`** | 표준 | `arn:aws:iam::988608581192:user/admin` | **AmazonEKSClusterAdminPolicy** |
+
+세 번째 항목이 핵심이다. [코드 분석]({% post_url 2026-03-12-Kubernetes-EKS-01-01-01-Installation %}#클러스터-생성자-권한)에서 살펴본 `enable_cluster_creator_admin_permissions = true` 설정에 의해, `terraform apply`를 실행한 IAM User `admin`이 **AmazonEKSClusterAdminPolicy** 권한으로 EKS Access Entry에 자동 등록된 것이다. 이 설정이 없었다면 클러스터를 만들고도 `kubectl`로 접근할 수 없는 상황이 발생했을 것이다.
+
+<br>
+
+### 관리형 노드 그룹 (Auto Scaling 그룹)
+
+![myeks-node-autoscaling-group-console-result]({{site.url}}/assets/images/myeks-node-autoscaling-group-console-result.png){: .align-center width="600"}
+
+<center><sup>EC2 콘솔의 Auto Scaling 그룹에서 관리형 노드 그룹 확인</sup></center>
+
+EKS 관리형 노드 그룹은 내부적으로 **EC2 Auto Scaling 그룹**으로 관리된다. EC2 콘솔의 Auto Scaling 그룹 페이지에서 확인할 수 있다.
+
+| 항목 | 콘솔 표시값 | Terraform 설정 |
+| --- | --- | --- |
+| **원하는 용량** | 2 | `desired_size = var.WorkerNodeCount` (기본값 2) |
+| **크기 조정 한도** | 1 - 4 | `min_size = var.WorkerNodeCount - 1`, `max_size = var.WorkerNodeCount + 2` |
+| **원하는 용량 유형** | 단위(인스턴스 개수) | ON_DEMAND (plan에서 확인) |
+| **인스턴스** | 2 | `desired_size`와 일치 |
+| **소유자** | `AWSServiceRoleForAmazonEKSNodegroup/EKS` | AWS가 관리형 노드 그룹을 위해 생성한 서비스 연결 역할 |
+
+[코드 분석]({% post_url 2026-03-12-Kubernetes-EKS-01-01-01-Installation %}#managed-node-group)에서 설명한 대로, `desired_size`/`min_size`/`max_size` 설정이 Auto Scaling 그룹의 용량 설정으로 그대로 반영되었다. 다만 실제 자동 조절이 동작하려면 Cluster Autoscaler나 Karpenter 같은 별도 오토스케일러를 설치해야 하고, 기본적으로는 `desired_size`인 2대로 고정된다.
+
+실제로 EC2 인스턴스 목록에서도 2대가 실행 중인 것을 확인할 수 있다.
+
+![myeks-ec2-instance-running-console-result]({{site.url}}/assets/images/myeks-ec2-instance-running-console-result.png){: .align-center width="600"}
+
+<center><sup>EC2 콘솔에서 워커 노드 인스턴스 2대가 실행 중</sup></center>
+
+| 항목 | 인스턴스 1 | 인스턴스 2 |
+| --- | --- | --- |
+| **Name** | myeks-node-g... | myeks-node-g... |
+| **인스턴스 유형** | t3.medium | t3.medium |
+| **가용 영역** | ap-northeast-2b | ap-northeast-2c |
+| **퍼블릭 IPv4 DNS** | ec2-16-184-33-1... | ec2-13-209-87-1... |
+
+두 인스턴스가 서로 다른 AZ(`2b`, `2c`)에 분산 배치되어 있고, 인스턴스 유형은 `var.WorkerNodeInstanceType`의 기본값인 `t3.medium`이다. `map_public_ip_on_launch = true` 설정 덕분에 퍼블릭 IP(DNS)가 자동으로 할당된 것도 확인할 수 있다.
+
+<br>
+
+### 보안그룹
+
+인스턴스 하나를 선택해서 보안 탭을 보면, 보안그룹이 두 개 연결되어 있다.
+
+![myeks-ec2-security-group-console-result-1]({{site.url}}/assets/images/myeks-ec2-security-group-console-result-1.png){: .align-center width="600"}
+
+<center><sup>워커 노드 인스턴스의 보안 탭 — 두 개의 보안그룹이 연결됨</sup></center>
+
+| 보안그룹 | 설명 |
+| --- | --- |
+| `myeks-node-...` (EKS 모듈이 자동 생성) | EKS 관리형 노드 그룹의 기본 보안그룹. 컨트롤 플레인과의 통신(9443, 6443 등)을 허용 |
+| **`myeks-node-group-sg`** (Terraform에서 직접 정의) | `eks.tf`의 `aws_security_group.node_group_sg`. `vpc_security_group_ids`로 연결한 것 |
+
+`myeks-node-group-sg`의 인바운드 규칙을 확인해 보자.
+
+![myeks-ec2-security-group-console-result-2]({{site.url}}/assets/images/myeks-ec2-security-group-console-result-2.png){: .align-center width="600"}
+
+<center><sup><code>myeks-node-group-sg</code> 보안그룹의 인바운드 규칙</sup></center>
+
+인바운드 규칙 2개가 [코드 분석]({% post_url 2026-03-12-Kubernetes-EKS-01-01-01-Installation %}#보안그룹-규칙)에서 살펴본 `aws_security_group_rule.allow_ssh`의 `cidr_blocks`와 정확히 일치한다.
+
+| 유형 | 프로토콜 | 포트 범위 | 소스 | Terraform 설정 |
+| --- | --- | --- | --- | --- |
+| 모든 트래픽 | 전체 | 전체 | `192.168.1.100/32` | bastion host용 예비 허용 |
+| 모든 트래픽 | 전체 | 전체 | `118.47.160.23/32` | `var.ssh_access_cidr` (내 공인 IP) |
+
+`protocol = "-1"`(모든 프로토콜)로 설정했기 때문에 유형이 "모든 트래픽", 프로토콜과 포트 범위가 "전체"로 표시된다. 지정된 CIDR에서 오는 모든 트래픽을 허용하되, 접속 대상만 IP로 제한하는 구조다.
+
+<br>
+
+### EKS 애드온
+
+![aws-myeks-cluster-addon-console-result]({{site.url}}/assets/images/aws-myeks-cluster-addon-console-result.png){: .align-center width="600"}
+
+<center><sup>EKS 콘솔 추가 기능 탭에서 설치된 애드온 확인</sup></center>
+
+[코드 분석]({% post_url 2026-03-12-Kubernetes-EKS-01-01-01-Installation %}#eks-애드온)에서 `addons` 블록에 선언한 3개 애드온이 모두 활성 상태로 설치되어 있다.
+
+| 애드온 | 버전 | 카테고리 | Terraform 설정 |
+| --- | --- | --- | --- |
+| **Amazon VPC CNI** | v1.21.1-eksbuild.3 | networking | `most_recent = true`, `before_compute = true` |
+| **CoreDNS** | v1.13.2-eksbuild.1 | networking | `most_recent = true` |
+| **kube-proxy** | v1.34.3-eksbuild.5 | networking | `most_recent = true` |
+
+세 애드온 모두 `most_recent = true` 설정에 의해 EKS 클러스터 버전(1.34)과 호환되는 최신 버전이 설치되었다. VPC CNI의 `before_compute = true` 설정 덕분에 [apply 로그](#리소스-생성-순서)에서 확인한 것처럼 노드그룹보다 먼저 설치되어 Pod 네트워킹이 정상 동작한다.
+
+<br>
+
 
 # Public-Public 구성 분석
 
@@ -393,7 +621,20 @@ kubectl (내 PC) ──── 인터넷 ──── EKS API Server (AWS 관리)
 CI/CD, 모니터링 등 ──── 인터넷 ──── EKS API Server
 ```
 
-**모든 통신이 퍼블릭 인터넷을 경유**한다.
+관련 주요 설정은 아래와 같았다.
+
+```hcl
+endpoint_public_access = true
+endpoint_private_access = false
+enable_nat_gateway = false
+```
+
+- `endpoint_public_access = true` → 인터넷에서 `kubectl` 접근 가능
+- `enable_nat_gateway = false` → 프라이빗 서브넷을 안 쓰니 NAT Gateway 불필요. 비용 절감
+- `ssh_access_cidr`로 IP 제한 → 워커 노드에 SSH 접속 가능
+
+
+결과적으로, **모든 통신이 퍼블릭 인터넷을 경유**한다. API 서버 엔드포인트가 인터넷에서 접근 가능하고, 워커 노드도 퍼블릭 서브넷에 배치되어 인터넷을 통해 API 서버와 통신한다.
 
 - `kubectl` → 인터넷 → EKS API 서버
 - 워커 노드 → 인터넷 → EKS API 서버 (VPC 내부가 아닌 퍼블릭 경로)
@@ -444,13 +685,29 @@ endpoint_private_access = true   # false → true
 
 `before_compute = true` 설정 하나가 빠지면 노드가 올라온 뒤에 CNI가 설치되어 **초기 Pod가 네트워킹 문제로 실패**할 수 있다. 사소해 보이지만 실무에서 트러블슈팅하기 까다로운 부분이다.
 
+## AWS 자격증명 흐름
+
+[코드 분석]({% post_url 2026-03-12-Kubernetes-EKS-01-01-01-Installation %}#provider)에서 살펴본 것처럼 코드에는 `access_key`나 `secret_key`가 없고, `~/.aws/credentials`의 IAM 사용자가 자동으로 사용된다. 이 IAM 사용자가 배포 전체 과정에서 어떻게 쓰이는지 정리하면 다음과 같다.
+
+| 단계 | IAM 자격증명이 쓰이는 곳 |
+| --- | --- |
+| `terraform init` | Provider 플러그인 다운로드 (AWS API 불필요) |
+| `terraform plan` | `data` 소스 읽기 위해 AWS API 호출 (caller identity 확인 등) |
+| `terraform apply` | 모든 리소스 생성 시 AWS API 호출 (VPC, EKS, IAM Role 등) |
+| `aws eks update-kubeconfig` | kubeconfig에 해당 IAM 사용자 기반 인증 설정 |
+| `kubectl` | kubeconfig → `aws eks get-token` → IAM 사용자로 EKS API 인증 |
+
+결국 `~/.aws/credentials`에 있는 IAM 사용자가 이 전체 과정의 신원(identity)이며, [클러스터 생성자 권한]({% post_url 2026-03-12-Kubernetes-EKS-01-01-01-Installation %}#클러스터-생성자-권한) 설정에 의해 EKS 관리자로 등록되는 주체이기도 하다. 위의 [KMS 키 정책 plan 결과](#kms-키-자동-생성)에서 `KeyAdministration` principal로 `user/admin`이 찍힌 것이 바로 이 IAM 사용자다.
+
+코드에 자격증명이 안 보여서 마법처럼 느껴질 수 있지만, Ansible에서 SSH 키를 `~/.ssh/`에 두면 인벤토리나 플레이북에 명시하지 않아도 자동으로 쓰이는 것과 같은 원리다. 도구가 정해진 경로에서 자격증명을 자동 탐색하는 것이고, 그 자격증명의 주체가 전체 작업의 실행자가 된다.
+
 ## -auto-approve 주의
 
 실습에서는 편의상 `-auto-approve`를 사용했지만, 프로덕션에서는 `plan` 결과를 직접 눈으로 확인한 뒤 `yes`를 입력하는 워크플로우가 안전하다.
 
 <br>
 
-# 마무리
+# 결론
 
 Terraform으로 EKS 클러스터를 배포했다. 전체 과정을 정리하면 다음과 같다.
 

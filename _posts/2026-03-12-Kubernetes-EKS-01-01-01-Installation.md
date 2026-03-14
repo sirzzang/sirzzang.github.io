@@ -238,12 +238,12 @@ module "vpc" {
 ## 모듈 설정
 
 - **source**: [terraform-aws-modules/vpc/aws](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/6.5.0) 모듈을 사용한다. 만약 모듈 없이 직접 만든다면 `resource "aws_internet_gateway"` 같은 블록을 하나하나 작성해야 한다.
-- **version**: `~>6.5`는 **Pessimistic Constraint**로, 6.5 이상 7.0 미만을 의미한다(`>=6.5.0, <7.0.0`). 메이저 업데이트로 인한 breaking change를 방지하면서 패치/마이너 업데이트는 받겠다는 뜻이다.
+- **version**: `~>6.5`는 6.5 이상 7.0 미만(`>=6.5.0, <7.0.0`)을 의미한다. 메이저 업데이트로 인한 breaking change를 방지하면서 패치/마이너 업데이트는 받겠다는 뜻이다.
 - **name**: `${var.ClusterBaseName}-VPC`로 `var.tf`에서 선언한 `ClusterBaseName` 변수를 이용해서 VPC 이름을 생성한다(기본값 `myeks-VPC`).
 - **azs**: `var.tf`에서 선언한 `availability_zones` 변수를 그대로 넘긴다.
 
 
-> **참고: Semantic Versioning**
+> **참고: Semantic Versioning과 `~>` 연산자**
 >
 > 버전은 `MAJOR.MINOR.PATCH` 형식을 따른다(예: `6.5.0`).
 >
@@ -253,7 +253,7 @@ module "vpc" {
 > | MINOR | 호환을 유지하며 기능 추가 |
 > | PATCH | 버그 수정 |
 >
-> `~>6.5`는 "이 마이너 버전 이상, 다음 메이저 미만"을 의미한다. 메이저 업데이트로 인한 breaking change를 방지하면서 패치/마이너 업데이트는 자동으로 받을 수 있다.
+> `~>` 연산자는 Terraform에서 **Pessimistic Constraint Operator**라고 부른다. 지정한 버전 이상, 다음 메이저 미만의 범위를 의미하며, breaking change는 막으면서 패치/마이너 업데이트는 자동으로 받을 수 있다.
 
 <br>
 
@@ -391,7 +391,25 @@ provider "aws" {
 }
 ```
 
-AWS Provider 사용을 선언하는 블록이다. Provider 플러그인(실제 바이너리)을 어떻게 설정할지 적는 곳으로, 여기서는 리전만 지정하고 있다. `terraform init` 시 이 선언을 보고 `hashicorp/aws` Provider 플러그인을 다운로드한다. 인증 정보는 `aws configure`로 설정한 자격증명이 자동으로 사용된다.
+AWS Provider 사용을 선언하는 블록이다. Provider 플러그인(실제 바이너리)을 어떻게 설정할지 적는 곳으로, 여기서는 리전만 지정하고 있다. `terraform init` 시 이 선언을 보고 `hashicorp/aws` Provider 플러그인을 다운로드한다.
+
+코드 어디에도 `access_key`나 `secret_key`가 없는데, Terraform의 AWS Provider는 인증 정보가 명시적으로 없으면 아래 순서대로 자격증명을 자동 탐색한다.
+
+1. **Provider 블록 내 직접 지정** (코드에 하드코딩 — 비권장)
+   ```hcl
+   provider "aws" {
+     access_key = "AKIA..."
+     secret_key = "wJalr..."
+   }
+   ```
+2. **환경변수** (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
+3. **AWS CLI 프로파일** (`~/.aws/credentials` + `~/.aws/config`)
+4. **EC2 Instance Profile / ECS Task Role** (IAM Role이 인스턴스에 붙어 있는 경우)
+5. **Web Identity Token** (OIDC 등)
+
+[사전 준비]({% post_url 2026-03-12-Kubernetes-EKS-00-Prerequisites %}#aws-cli-자격증명-설정)에서 `aws configure`로 설정한 인증 정보가 `~/.aws/credentials`에 저장되어 있으므로, 3번 경로로 자동 사용된다. Ansible에서 SSH 키를 `~/.ssh/`에 두면 별도로 명시하지 않아도 자동으로 쓰이는 것과 비슷한 원리다.
+
+이 자격증명의 IAM 사용자가 이후 모든 AWS API 호출의 주체(**caller identity**)가 되며, [클러스터 생성자 권한](#클러스터-생성자-권한) 설정에서 EKS 관리자로 등록되는 대상이기도 하다.
 
 <br>
 
@@ -425,9 +443,13 @@ resource "aws_security_group_rule" "allow_ssh" {
 
 `aws_security_group.node_group_sg`는 EKS 워커 노드용 보안그룹이다. `vpc_id = module.vpc.vpc_id`에서 VPC 모듈의 output을 참조한다. `terraform-aws-modules/vpc/aws` 모듈이 내부적으로 `aws_vpc` 리소스를 생성하고, 그 결과값을 output으로 노출한다. 모듈의 `outputs.tf`에 `output "vpc_id" { value = aws_vpc.this[0].id }` 같은 선언이 있어서, `module.vpc.vpc_id`로 참조할 수 있다. `.tf` 파일에 직접 보이진 않지만 모듈 내부에 정의되어 있는 것이다.
 
+이 리소스는 **인바운드/아웃바운드 규칙이 없는 빈 보안그룹 껍데기**만 만든다. AWS API 수준에서 `CreateSecurityGroup`을 호출하여 보안그룹을 생성하고, `sg-0a6afe6fd37744d7f` 같은 ID를 발급받는 단계다. 실제 트래픽 허용 규칙은 아래의 `aws_security_group_rule`에서 별도로 부착한다.
+
+> **참고**: Terraform에서는 `aws_security_group` 블록 안에 `ingress { }` 블록을 직접 넣는 인라인 방식도 있지만, 이 코드처럼 `aws_security_group_rule`로 분리하면 규칙을 독립적으로 추가/삭제할 수 있어 관리가 편하다.
+
 ### 보안그룹 규칙
 
-`aws_security_group_rule.allow_ssh`는 워커 노드에 대한 인바운드 트래픽을 허용하는 보안그룹 규칙이다. 각 필드를 살펴보면:
+`aws_security_group_rule.allow_ssh`는 앞에서 만든 빈 보안그룹에 **인바운드 규칙을 부착**하는 리소스다. AWS API 수준에서는 `AuthorizeSecurityGroupIngress`를 호출하는 것에 해당한다. 각 필드를 살펴보면:
 
 - `type = "ingress"`: 인바운드(들어오는) 트래픽 규칙
 - `from_port = 0`, `to_port = 0`: 허용할 포트 범위를 지정하는 것인데, `protocol = "-1"`과 함께 쓰이면 의미가 달라짐
@@ -454,10 +476,17 @@ resource "aws_security_group_rule" "allow_ssh" {
 
 ### Terraform 리소스 참조 추적
 
-`security_group_id = aws_security_group.node_group_sg.id`에서 앞에서 생성한 보안그룹의 ID를 참조한다. Terraform의 리소스 간 참조 추적 기능이 동작하는 방식은 다음과 같다.
+`security_group_id = aws_security_group.node_group_sg.id`에서 앞에서 생성한 보안그룹의 ID를 참조한다. 이 참조가 바로 **"빈 껍데기를 먼저 만들고, 거기에 규칙을 붙인다"**는 두 단계 구조를 Terraform이 자동으로 보장하는 메커니즘이다.
+
+| 순서 | 리소스 | AWS API | 하는 일 |
+| --- | --- | --- | --- |
+| 1 | `aws_security_group.node_group_sg` | `CreateSecurityGroup` | 빈 보안그룹 생성 (ID 발급) |
+| 2 | `aws_security_group_rule.allow_ssh` | `AuthorizeSecurityGroupIngress` | 1에서 만든 보안그룹에 인바운드 규칙 부착 |
+
+Terraform의 리소스 간 참조 추적 기능이 동작하는 방식은 다음과 같다.
 
 1. `aws_security_group.node_group_sg`를 먼저 생성
-2. AWS가 해당 리소스의 `id`를 반환
+2. AWS가 해당 리소스의 `id`를 반환 (예: `sg-0a6afe6fd37744d7f`)
 3. Terraform이 그 값을 **state에 저장**하고, `aws_security_group.node_group_sg.id`로 참조하는 다른 리소스에 주입
 
 이 참조를 통해 Terraform은 보안그룹 생성 → 규칙 생성 순서를 자동으로 보장한다.
@@ -559,6 +588,9 @@ subnet_ids = module.vpc.public_subnets
 `subnet_ids`에는 서브넷 ID가 들어간다. VPC 모듈의 `outputs.tf`를 보면 이름이 비슷한 항목들이 있다.
 
 ```hcl
+# .terraform/modules/vpc/outputs.tf
+...
+
 output "public_subnet_objects" {
   description = "A list of all public subnets, containing the full objects."
   value       = aws_subnet.public
@@ -573,6 +605,8 @@ output "public_subnet_arns" {
   description = "List of ARNs of public subnets"
   value       = aws_subnet.public[*].arn
 }
+
+...
 ```
 
 - `public_subnet_objects`는 서브넷 **오브젝트 전체**를 반환(모든 속성 포함)
@@ -667,7 +701,7 @@ enabled_log_types = ["api", "audit", "authenticator", "controllerManager", "sche
 enable_cluster_creator_admin_permissions = true
 ```
 
-`terraform apply`를 실행하는 IAM 사용자를 **EKS 클러스터 관리자로 자동 등록**하는 설정이다. EKS Access Entry에 현재 IAM 사용자를 `AmazonEKSClusterAdminPolicy` 권한으로 등록한다.
+`terraform apply`를 실행하는 IAM 사용자를 **EKS 클러스터 관리자로 자동 등록**하는 설정이다. [Provider 섹션](#provider)에서 살펴본 것처럼, `~/.aws/credentials`에서 읽어 온 IAM 사용자가 `terraform apply`의 caller identity가 되고, 이 설정에 의해 해당 IAM 사용자가 EKS Access Entry에 `AmazonEKSClusterAdminPolicy` 권한으로 등록된다.
 
 이 설정이 없으면 클러스터를 만들고도 `kubectl`로 접근 권한이 없는 상황이 발생할 수 있다. EKS는 기본적으로 아무에게도 K8s RBAC 권한을 주지 않으므로, 클러스터를 만든 IAM 사용자라도 Access Entry에 등록되지 않으면 `kubectl get pods`에 `Unauthorized`가 반환된다.
 
@@ -685,7 +719,7 @@ eks_managed_node_groups = {
 
 **관리형 노드 그룹(Managed Node Group)**을 사용한다. AWS가 노드의 프로비저닝과 라이프사이클(업데이트, 패치, 교체)을 관리해주는 방식이다. 자체 관리형(self-managed)과 비교했을 때 다음과 같은 장점이 있다.
 
-- 노드 AMI 업데이트를 AWS 콘솔/API로 간편하게 수행
+- 노드 AMI(Amazon Machine Image — OS, 런타임 등이 패키징된 머신 이미지) 업데이트를 AWS 콘솔/API로 간편하게 수행
 - 노드 헬스 체크와 자동 교체
 - EKS 콘솔에서 노드 그룹 상태 확인 가능
 
@@ -792,33 +826,7 @@ VPC CNI에 주목할 필요가 있다. **Amazon VPC CNI Plugin**은 Pod에 **VPC
 
 <br>
 
-# EKS Cluster Endpoint Access
-
-이 실습의 핵심 구성을 정리한다.
-
-```hcl
-endpoint_public_access = true
-endpoint_private_access = false
-enable_nat_gateway = false
-```
-
-**Public-Public 구성**이다. API 서버 엔드포인트가 인터넷에서 접근 가능하고, 워커 노드도 퍼블릭 서브넷에 배치되어 인터넷을 통해 API 서버와 통신한다.
-
-```
-kubectl (내 PC) ──── 인터넷 ──── EKS API Server (AWS 관리)
-                                       │
-                                       │ (인터넷 경유)
-                                       │
-               Worker Node (퍼블릭 서브넷, 퍼블릭 IP)
-```
-
-- `endpoint_public_access = true` → 인터넷에서 `kubectl` 접근 가능
-- `enable_nat_gateway = false` → 프라이빗 서브넷을 안 쓰니 NAT Gateway 불필요. 비용 절감
-- `ssh_access_cidr`로 IP 제한 → 워커 노드에 SSH 접속 가능
-
-<br>
-
-# 마무리
+# 결론
 
 실습 코드의 Terraform 파일 세 개를 분석했다.
 
