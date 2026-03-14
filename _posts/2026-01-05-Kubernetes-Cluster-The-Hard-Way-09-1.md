@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 9.1. Bootstrapping the Kubernetes Worker Nodes"
-excerpt: "CNI의 동작 원리와 Worker Node 설정 파일들을 분석해보자."
+excerpt: "Worker Node 컴포넌트 설정 파일들을 분석해보자."
 categories:
   - Kubernetes
 toc: true
@@ -20,12 +20,10 @@ hidden: true
 
 # TL;DR
 
-이번 글의 목표는 **CNI의 동작 원리 이해와 Worker Node 설정 파일 분석**이다. [Kubernetes the Hard Way 튜토리얼의 Bootstrapping the Kubernetes Worker Nodes 단계](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/09-bootstrapping-kubernetes-workers.md)를 수행한다.
-
+이번 글의 목표는 **Worker Node 설정 파일 분석**이다. [Kubernetes the Hard Way 튜토리얼의 Bootstrapping the Kubernetes Worker Nodes 단계](https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/09-bootstrapping-kubernetes-workers.md)를 수행한다.
 
 Worker Node는 실제로 Pod를 실행하는 노드다. containerd(컨테이너 런타임), kubelet(노드 에이전트), kube-proxy(네트워크 프록시), CNI 플러그인(Pod 네트워크)이 필요하다. 이번 글에서는 각 컴포넌트의 설정 파일을 분석한다.
 
-- CNI 개념: Container Network Interface의 역할과 동작 방식
 - 설정 파일 분석: CNI, kubelet, containerd, kube-proxy 설정
 - 파일 배포: jumpbox에서 Worker Node로 바이너리, 설정 파일 전송
 
@@ -34,147 +32,24 @@ Worker Node는 실제로 Pod를 실행하는 노드다. containerd(컨테이너 
 
 # CNI (Container Network Interface)
 
-CNI는 컨테이너에 네트워크 설정을 자동화하기 위한 표준 인터페이스다. Kubernetes에서 Pod가 생성될 때 자동으로 네트워크 인터페이스를 구성하고 IP를 할당하는 역할을 한다.
-
-## 용어 정의
-
-정확한 용어 구분이 중요하다.
-
-- **CNI (Container Network Interface)**: 사양/표준/인터페이스 (문서)
-  - 표준 인터페이스: stdin으로 JSON을 받고, stdout으로 JSON을 반환하는 단순한 규약
-- **CNI 플러그인**: 그 사양을 구현한 바이너리 실행 파일
-  - containerd가 필요할 때마다 fork/exec으로 실행
-  - 구현체 예시: Calico, Flannel, Weave Net, Cilium
-    
-
-> 실무에서는 "CNI 설치했어?", "어떤 CNI 써?"처럼 혼용되기도 한다. 마치 USB는 표준 규격이지만 일상에서 "USB 샀어"라고 말하는 것과 같다. 하지만 정확히 뭘 말하는지 구분할 수 있어야 한다.
-
-<br>
-
-## 동작 방식
-
-[이전에 Container Runtime에 대해 간략히 알아 본 글](https://sirzzang.github.io/dev/Dev-Nvidia-Container-Runtime/#container-runtime)에서 설명했듯, 컨테이너 런타임에는 고수준(containerd, CRI-O)과 저수준(runc)이 있다. 고수준 컨테이너 런타임이 담당하는 역할에 네트워크 설정도 있는데, 정확히는 다음과 같다:
-
-- 고수준 컨테이너 런타임이 
-- CNI 플러그인을 호출하여
-- 네트워크 설정을 위임한다
-
-<br>
-
-컨테이너 생성 시 동작 원리는 다음과 같다:
-
-1. [고수준 컨테이너 런타임] **네트워크 네임스페이스 생성**: 컨테이너의 격리된 네트워크 환경을 위한 network namespace 생성
-2. [고수준 컨테이너 런타임] **CNI 설정 파일 읽기**: `/etc/cni/net.d/`에서 네트워크 구성 정보 로드
-3. [고수준 컨테이너 런타임] **CNI 플러그인 실행**: `/opt/cni/bin/` 아래의 플러그인 바이너리를 fork/exec로 실행
-4. [CNI 플러그인] **네트워크 설정 적용**: CNI 플러그인이 veth pair 생성, IP 할당, 라우팅 테이블 구성, iptables 규칙 추가
-5. [CNI 플러그인] **결과 반환**: 할당된 IP 정보를 stdout으로 JSON 형식으로 반환
-6. [고수준 컨테이너 런타임] **컨테이너 실행 시작**: containerd가 IP 정보를 저장하고, runc(저수준 런타임)를 호출하여 실제 컨테이너 프로세스 시작
-
-편의상, 이하 고수준 컨테이너 런타임은 containerd에 빗대어 설명한다.
-
-<br>
-
-### 1-3단계: containerd (고수준 런타임)
-
-containerd가 CNI 플러그인 실행을 위해 CNI 플러그인 설정 파일을 읽는다. `/etc/cni/net.d/` 하위에 CNI 플러그인 별 설정이 저장된다.
-
-```bash
-/etc/cni/net.d/
-├── 10-bridge.conf          # bridge 플러그인 설정
-├── 10-calico.conflist      # Calico 설정
-├── 10-flannel.conflist     # Flannel 설정
-└── 99-loopback.conf        # loopback 설정
-```
-
-- 숫자 prefix (10-, 20-, 99-): 실행 순서 (낮은 번호가 먼저)
-- containerd는 사전순으로 첫 번째 설정 파일을 사용
-
-<br>
-
-CNI 실행 파일은 `/opt/cni/bin` 하위에 위치한다. containerd가 CNI 플러그인을 실행할 때는 환경 변수와 stdin을 통해 정보를 전달한다. 
-
-```bash
-# containerd가 내부적으로 실행하는 명령
-CNI_COMMAND=ADD \
-CNI_CONTAINERID=abc123 \
-CNI_NETNS=/var/run/netns/abc123 \
-CNI_IFNAME=eth0 \
-CNI_PATH=/opt/cni/bin \
-/opt/cni/bin/bridge < /etc/cni/net.d/10-bridge.conf
-```
-
-주요 환경 변수는 다음과 같다.
-
-- `CNI_COMMAND`: 수행할 작업 (ADD: 네트워크 연결, DEL: 네트워크 해제)
-- `CNI_CONTAINERID`: 컨테이너의 고유 식별자
-- `CNI_NETNS`: 컨테이너의 network namespace 경로
-- `CNI_IFNAME`: 컨테이너 내부에 생성할 네트워크 인터페이스 이름
-- `CNI_PATH`: CNI 플러그인 바이너리 검색 경로
-
-<br>
-
-### 4-5단계: CNI 플러그인 (독립 바이너리)
-
-바이너리에 stdin으로 설정이 전달되고, 바이너리가 네트워크 설정을 수행한 후 stdout으로 결과를 반환한다.
-
-네트워크 설정 과정에서 하는 일은 여러 가지가 있지만, 핵심은 veth pair 생성, IP 주소 할당, 네트워크 인터페이스 활성화, 라우팅 테이블 구성 등이다. 예를 들어 다음과 같은 작업들을 수행한다:
-
-```bash
-# 컨테이너 network namespace 내에서 IP 할당
-ip netns exec cni-abc123 ip addr add 10.244.1.5/24 dev eth0
-# 네트워크 인터페이스 활성화
-ip netns exec cni-abc123 ip link set eth0 up
-# 기본 라우팅 설정
-ip netns exec cni-abc123 ip route add default via 10.244.1.1
-```
-
-<br>
-
-## Kubernetes에서의 CNI
-
-앞서 설명한 containerd와 CNI 플러그인의 관계를 Kubernetes 환경에서 다시 정리하면 다음과 같다:
-
-```
-[kube-apiserver] 
-    ↓ Pod 생성 요청
-[kubelet] 
-    ↓ CRI(Container Runtime Interface) 호출
-[containerd] 
-    ↓ CNI 플러그인 실행
-[CNI 플러그인] 네트워크 설정 수행
-```
-
-<br>
-
-### Pod 생성 플로우에서의 CNI
-
-kubelet이 직접 CNI를 호출하는 것이 아니다. kubelet이 Pod 생성 요청을 받고 containerd에게 컨테이너 생성을 요청하면, containerd가 CNI를 호출한다는 점이 중요하다.
-
-1. **kube-apiserver**: scheduler가 Pod를 특정 worker node에 할당
-2. **kubelet**: 해당 노드의 kubelet이 Pod 생성 요청을 받음
-3. **kubelet -> containerd**: CRI를 통해 컨테이너 생성 요청
-4. **containerd -> CNI 플러그인**: `/etc/cni/net.d/` 설정을 읽고 `/opt/cni/bin/` 바이너리 실행
-5. **CNI 플러그인**: Pod에 IP 할당, veth pair 생성, 라우팅 설정
-6. **containerd -> runc**: 네트워크가 구성된 상태에서 실제 컨테이너 프로세스 시작
-
-<br>
+CNI(Container Network Interface)는 컨테이너에 네트워크 설정을 자동화하기 위한 표준 인터페이스다. Kubernetes에서 Pod가 생성될 때 자동으로 네트워크 인터페이스를 구성하고 IP를 할당하는 역할을 한다. CNI의 개념, 동작 방식, 플러그인 종류, 설정 구조에 대한 상세한 내용은 [Kubernetes CNI]({% post_url 2026-01-05-Kubernetes-CNI %}) 글을 참고한다.
 
 ## 이번 실습에서의 CNI
 
-Kubernetes the Hard Way 튜토리얼에서는 CNI 플러그인 중 가장 기본적인 **bridge 플러그인**을 사용한다:
+이 실습에서는 CNI 플러그인 중 가장 기본적인 **bridge 플러그인**을 사용한다. 실무에서 사용하는 Calico, Flannel, Cilium 등은 [오버레이 네트워크]({% post_url 2026-01-05-Kubernetes-CNI %}#오버레이-네트워크)로 노드 간 Pod 통신을 자동 처리하지만, 이 실습에서는 [11. Provisioning Pod Network Routes]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-11 %}) 단계에서 라우팅 테이블을 **수동으로 설정**하여 해결한다. 원리적으로는 오버레이 없는 방식(host-gw)과 같다.
 
 1. **CNI 플러그인 바이너리 설치**: `/opt/cni/bin/`에 bridge, loopback 등 기본 플러그인 설치
 2. **CNI 설정 파일 배치**: `/etc/cni/net.d/`에 Pod 네트워크 대역(10.200.x.0/24) 설정
 3. **kubelet 설정**: kubelet이 containerd를 통해 CNI를 사용하도록 구성
 4. **테스트**: Pod 생성 후 IP 할당 및 네트워크 연결 확인
 
-> 실무에서는 Calico, Flannel, Cilium 등 더 강력한 CNI 플러그인을 사용하지만, 학습 목적으로는 가장 단순한 bridge 플러그인으로 CNI의 동작 원리를 이해하는 것이 좋다.
-
 CNI 플러그인 바이너리는 [2. Setup the Jumpbox]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-02 %}) 단계에서 이미 다운로드해 두었다.
 
 <br>
 
 # CNI 설정 파일
+
+[CNI 설정 파일의 구조와 주요 필드]({% post_url 2026-01-05-Kubernetes-CNI %}#cni-설정)는 별도 글에서 정리했다. 여기서는 이 실습에서 사용하는 설정 파일을 분석한다.
 
 ## 10-bridge.conf
 
@@ -215,7 +90,7 @@ CNI 플러그인 바이너리는 [2. Setup the Jumpbox]({% post_url 2026-01-05-K
 
 ### IPAM 옵션 분석
 
-IPAM(IP Address Management)은 컨테이너에 IP 주소를 할당하는 방식을 정의한다.
+[IPAM(IP Address Management)]({% post_url 2026-01-05-Kubernetes-CNI %}#ipam)은 컨테이너에 IP 주소를 할당하는 방식을 정의한다.
 
 - `type: host-local`: 각 노드가 로컬에서 IP 관리. 별도 IPAM 서버 없이 노드별로 독립적으로 IP 할당
 - `ranges`: IP 할당 범위. 2차원 배열로 여러 대역 지정 가능

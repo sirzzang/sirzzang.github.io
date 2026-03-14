@@ -450,7 +450,7 @@ cat inventory/mycluster/group_vars/k8s_cluster/kube_control_plane.yml
 | 파일 | CNI | 설명 |
 |------|-----|------|
 | `k8s-net-calico.yml` | Calico | BGP 기반, NetworkPolicy 지원 |
-| `k8s-net-flannel.yml` | Flannel | 간단한 오버레이 네트워크 |
+| `k8s-net-flannel.yml` | Flannel | 간단한 [오버레이 네트워크]({% post_url 2026-01-05-Kubernetes-CNI %}#오버레이-네트워크) |
 | `k8s-net-cilium.yml` | Cilium | eBPF 기반, 고성능 |
 | `k8s-net-kube-ovn.yml` | Kube-OVN | OVN/OVS 기반 |
 | `k8s-net-kube-router.yml` | Kube-Router | BGP 기반, 경량 |
