@@ -293,14 +293,47 @@ systemd,1
 | **kubelet** | 노드 에이전트. API Server와 통신하며 Pod 라이프사이클 관리 |
 | **kube-proxy** | 네트워크 프록시. Service의 ClusterIP/NodePort 트래픽 라우팅 |
 
-> **참고: pause 컨테이너**
-> 
-> `pause` 컨테이너는 모든 Pod에서 가장 먼저 생성되는 **인프라 컨테이너**다. 실제 워크로드는 수행하지 않고 다음 역할을 담당한다:
-> - **네트워크 네임스페이스 유지**: Pod 내 모든 컨테이너가 공유하는 네트워크 네임스페이스를 생성하고 유지한다. 애플리케이션 컨테이너가 재시작되어도 Pod의 IP 주소가 유지되는 이유다.
-> - **PID 1 역할**: 좀비 프로세스를 reaping하는 init 프로세스 역할을 한다.
-> - **리소스 최소화**: 아무 작업도 하지 않고 `pause()` 시스템 콜로 대기하므로 CPU/메모리 사용량이 거의 없다 (약 700KB).
->
-> containerd-shim 아래에 pause와 nginx가 함께 있는 구조는 **하나의 Pod 안에서 pause 컨테이너가 네트워크 네임스페이스를 소유하고, nginx 컨테이너가 그 네임스페이스를 공유**하는 Kubernetes Pod 모델을 보여준다. 
+### pause 컨테이너
+
+`pause` 컨테이너는 쿠버네티스에서 모든 파드에 자동으로 생성되는 **인프라 컨테이너**(sandbox container)다. 실제 애플리케이션 로직은 전혀 없고, 말 그대로 pause — 아무 것도 안 하고 멈춰 있다.
+
+containerd-shim 아래에 pause와 nginx가 함께 있는 구조는 **하나의 Pod 안에서 pause 컨테이너가 네트워크 네임스페이스를 소유하고, nginx 컨테이너가 그 네임스페이스를 공유**하는 Kubernetes Pod 모델을 보여준다.
+
+#### 왜 필요한가
+
+파드 안의 컨테이너들이 **네트워크 네임스페이스(IP, 포트)와 IPC 네임스페이스를 공유**하려면 누군가가 먼저 그 네임스페이스를 "만들고 유지"해야 한다. 그 역할을 pause가 한다.
+
+1. pause 컨테이너가 먼저 생성되면서 새로운 네트워크 네임스페이스가 만들어진다.
+2. 이 네임스페이스에 **veth pair**가 생성된다 — 한쪽은 pause의 네임스페이스 안에(`eth0`), 다른 한쪽은 호스트의 bridge(또는 CNI가 관리하는 인터페이스)에 연결된다.
+3. 이후 같은 파드의 다른 컨테이너들은 pause가 이미 만들어 놓은 네트워크 네임스페이스에 join한다. **자기만의 네트워크 네임스페이스를 만들지 않는다.**
+4. 결과적으로 같은 파드 내 컨테이너끼리 `localhost`로 통신할 수 있다.
+
+정리하면, **veth pair는 pause 네임스페이스에 이미 1개만 존재**하고, 나머지 컨테이너들은 그 네임스페이스를 공유하는 것이다. **veth pair는 파드당 1개**이고, pause가 만든 netns를 모든 컨테이너가 공유하기 때문에 같은 파드 안에서 `localhost`로 서로 통신할 수 있다.
+
+```bash
+# 1. pause가 하는 일 = 네임스페이스 생성 + veth pair 연결
+ip netns add pause-ns                    # pause의 netns 생성
+ip link add veth0 type veth peer name veth1
+ip link set veth1 netns pause-ns         # 한쪽을 pause netns에
+ip link set veth0 master bridge0         # 다른 쪽을 bridge에
+
+# 2. 다른 컨테이너가 하는 일 = 그냥 join
+# (실제로는 containerd가 --net=pause-ns 옵션으로 같은 netns에 넣음)
+```
+
+#### 왜 pause여야 하는가
+
+pause 없이 앱 컨테이너 중 하나가 네임스페이스를 소유하고 있다가 크래시하면, 다른 컨테이너의 네트워크도 깨진다. pause는 거의 죽지 않는 극도로 가벼운 프로세스(약 700KB)라서 이런 문제를 방지한다. `pause()` 시스템 콜로 대기하므로 CPU/메모리 사용량이 거의 없고, PID 1로서 좀비 프로세스를 reaping하는 init 프로세스 역할도 한다.
+
+#### 추가 특성
+
+- **UID 65535(nobody)로 실행된다**: `lsns`로 네임스페이스를 확인하면 pause의 소유자가 UID 65535임을 알 수 있다. root 권한 없이 네임스페이스만 유지하는 최소 권한 원칙이 적용된 것이다.
+
+- **hostNetwork Pod에서는 별도 net 네임스페이스를 만들지 않는다**: `hostNetwork: true`인 Pod(컨트롤 플레인 Static Pod, kube-proxy 등)의 pause는 호스트의 네트워크 네임스페이스를 그대로 사용한다. pause가 별도 net 네임스페이스를 생성하는 것은 일반(Pod 네트워크) Pod에만 해당한다.
+
+- **kubelet이 어떤 pause 이미지를 사용할지는 `--pod-infra-container-image` 플래그로 결정된다**: containerd 설정의 `pinned_images.sandbox` 값(`registry.k8s.io/pause:3.10`)과 연동되며, kubeadm에서는 `kubeadm-flags.env`를 통해 kubelet에 전달된다.
+
+- **containerd가 Pod sandbox(pause)를 생성하면서 CNI를 호출한다**: Pod 생성 시 kubelet → containerd → pause 컨테이너 생성 → CNI 바이너리 호출 순서로 진행된다. CNI는 pause의 네트워크 네임스페이스에 veth pair를 연결하고 IP를 할당한다. Pod 내 다른 컨테이너들은 이미 네트워크가 설정된 pause의 네임스페이스에 join하므로 별도 CNI 호출이 필요 없다.
 
 <br>
 

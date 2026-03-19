@@ -201,7 +201,7 @@ sysctl_ignore_unknown_keys: false
 ```
 {% endraw %}
 
-Kubespray는 Kubernetes 클러스터 동작에 필요한 커널 파라미터를 자동으로 `/etc/sysctl.d/99-sysctl.conf`에 적용한다:
+Kubespray는 Kubernetes 클러스터 동작에 필요한 커널 파라미터를 자동으로 `/etc/sysctl.d/99-sysctl.conf`에 적용한다. 99번대 파일에 넣는 이유는 다른 설정보다 나중에 로드되어 최종 값으로 확정되도록 하기 위해서다. `/etc/sysctl.d/`의 파일 번호 체계와 로드 순서에 대한 자세한 설명은 [리눅스 커널 파라미터와 sysctl]({% post_url 2026-03-18-CS-Linux-Kernel-Parameter %}) 글을 참고한다.
 
 ```bash
 # 파드 간 패킷 라우팅 활성화

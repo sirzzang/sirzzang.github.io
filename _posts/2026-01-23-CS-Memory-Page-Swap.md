@@ -597,6 +597,8 @@ vm.zone_reclaim_mode = 0              # NUMA 메모리 회수 모드
 - **커널 버전**에 따라 새 파라미터 추가, 동작 변경 가능
 - **설정 파일 위치**가 다를 수 있음 (`/etc/sysctl.conf` vs `/etc/sysctl.d/`)
 
+`sysctl` 명령어의 동작 원리, `/etc/sysctl.d/` 디렉토리의 파일 번호 체계와 로드 순서에 대한 자세한 설명은 [리눅스 커널 파라미터와 sysctl]({% post_url 2026-03-18-CS-Linux-Kernel-Parameter %}) 글을 참고한다.
+
 <br>
 
 ## 스왑 공간 설정

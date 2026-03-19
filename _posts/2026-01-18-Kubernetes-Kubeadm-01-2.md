@@ -684,7 +684,7 @@ EOF
 
 <br>
 
-설정 파일을 생성했지만 아직 적용되지 않았다. `sysctl --system` 명령어로 모든 sysctl 설정 파일을 다시 로드한다.
+설정 파일을 생성했지만 아직 적용되지 않았다. `sysctl --system` 명령어로 모든 sysctl 설정 파일을 다시 로드한다. `sysctl --system`의 로드 순서와 `/etc/sysctl.d/` 파일 번호 체계에 대한 자세한 설명은 [리눅스 커널 파라미터와 sysctl]({% post_url 2026-03-18-CS-Linux-Kernel-Parameter %}) 글을 참고한다.
 
 ```bash
 sysctl --system

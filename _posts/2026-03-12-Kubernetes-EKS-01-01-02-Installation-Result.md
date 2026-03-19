@@ -255,6 +255,8 @@ terraform plan
 
 ### KMS 키 (자동 생성)
 
+plan 결과를 보면, 직접 선언하지 않은 리소스가 하나 눈에 띈다.
+
 ```
 # module.eks.module.kms.aws_kms_key.this[0] will be created
 + resource "aws_kms_key" "this" {
@@ -264,9 +266,11 @@ terraform plan
   }
 ```
 
-EKS 클러스터는 etcd에 Secret(비밀번호, 토큰 등)을 저장하는데, 이를 평문이 아닌 암호화된 상태로 보관하려면 암호화 키가 필요하다. **KMS**(Key Management Service)는 AWS에서 제공하는 암호화 키 관리 서비스로, 여기서는 이 etcd Secret 암호화 키를 생성하고 관리하는 역할을 한다.
+코드에 KMS 설정을 명시하지 않았는데도 EKS 모듈이 `eks.kms` 하위 모듈을 통해 **KMS 키를 자동 생성**한 것으로, 모듈이 내부적으로 뭘 해주는지 의식해야 하는 좋은 사례다.
 
-코드에 KMS 설정을 명시하지 않았는데도 EKS 모듈이 `eks.kms` 하위 모듈을 통해 **KMS 키를 자동 생성**한 것으로, 모듈이 내부적으로 뭘 해주는지 의식해야 하는 좋은 사례다. 
+**KMS**(Key Management Service)는 AWS에서 제공하는 암호화 키 관리 서비스로, 키 생성·보관·교체를 맡는다. 이 KMS 키가 하는 일이 바로 **Encryption at Rest**(저장 시 암호화)다. EKS 클러스터는 etcd에 Secret(비밀번호, 토큰 등)을 저장하는데, 이를 평문이 아닌 암호화된 상태로 디스크에 보관하는 것이다. 누군가 etcd의 데이터 파일에 직접 접근하더라도 암호화 키 없이는 내용을 읽을 수 없다.
+
+> **참고**: Encryption at Rest는 "저장된 데이터"를 암호화하는 것이고, Encryption in Transit는 "전송 중인 데이터"를 암호화하는 것이다(TLS/SSL 등). 여기서 KMS가 담당하는 것은 etcd에 저장된 Secret의 encryption at rest다.
 
 사용된 각 속성의 의미는 다음과 같다.
 
@@ -274,8 +278,8 @@ EKS 클러스터는 etcd에 Secret(비밀번호, 토큰 등)을 저장하는데,
 - `enable_key_rotation = true`: 보안을 위해 키를 주기적으로 자동 교체
 - `description = "myeks cluster encryption key"`: EKS 클러스터 암호화 전용 키
 
+[Kubernetes Hard Way - Data Encryption Config and Key]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-06 %})에서 이 encryption at rest를 직접 구성한 적이 있다. 그때는 `/dev/urandom`으로 암호화 키를 생성하고, `EncryptionConfiguration`을 작성해 kube-apiserver의 `--encryption-provider-config` 플래그로 전달했다. EKS에서는 이 과정을 EKS 모듈이 KMS를 통해 자동으로 처리해 준다.
 
-> **참고**: [Kubernetes Hard Way - Data Encryption Config and Key](/kubernetes/Kubernetes-Cluster-The-Hard-Way-06/) 글에서 이 encryption at rest를 다룬 적이 있다. 그때는 `/dev/urandom`으로 직접 암호화 키를 생성하고 `EncryptionConfiguration`을 작성해 kube-apiserver에 전달했는데, EKS에서는 이 과정을 모듈이 KMS를 통해 자동으로 처리해 준다.
 
 <br>
 
@@ -529,7 +533,7 @@ API 서버 엔드포인트 액세스가 **퍼블릭**이고, 퍼블릭 액세스
 
 <center><sup>EC2 콘솔의 Auto Scaling 그룹에서 관리형 노드 그룹 확인</sup></center>
 
-EKS 관리형 노드 그룹은 내부적으로 **EC2 Auto Scaling 그룹**으로 관리된다. EC2 콘솔의 Auto Scaling 그룹 페이지에서 확인할 수 있다.
+EKS 관리형 노드 그룹은 내부적으로 **[EC2 Auto Scaling 그룹]({% post_url 2026-03-12-Kubernetes-EKS-00-01-EKS-Computing-Group %}#asg-기반-프로비저닝)**으로 관리된다. EC2 콘솔의 Auto Scaling 그룹 페이지에서 확인할 수 있다.
 
 | 항목 | 콘솔 표시값 | Terraform 설정 |
 | --- | --- | --- |
@@ -539,7 +543,7 @@ EKS 관리형 노드 그룹은 내부적으로 **EC2 Auto Scaling 그룹**으로
 | **인스턴스** | 2 | `desired_size`와 일치 |
 | **소유자** | `AWSServiceRoleForAmazonEKSNodegroup/EKS` | AWS가 관리형 노드 그룹을 위해 생성한 서비스 연결 역할 |
 
-[코드 분석]({% post_url 2026-03-12-Kubernetes-EKS-01-01-01-Installation %}#managed-node-group)에서 설명한 대로, `desired_size`/`min_size`/`max_size` 설정이 Auto Scaling 그룹의 용량 설정으로 그대로 반영되었다. 다만 실제 자동 조절이 동작하려면 Cluster Autoscaler나 Karpenter 같은 별도 오토스케일러를 설치해야 하고, 기본적으로는 `desired_size`인 2대로 고정된다.
+[코드 분석]({% post_url 2026-03-12-Kubernetes-EKS-01-01-01-Installation %}#managed-node-group)에서 확인한 대로, `desired_size`, `min_size`, `max_size` 설정이 Auto Scaling 그룹의 용량 설정으로 그대로 반영되었다. 다만 실제 자동 조절이 동작하려면 [Cluster Autoscaler나 Karpenter]({% post_url 2026-03-12-Kubernetes-EKS-00-01-EKS-Computing-Group %}#참고-asg와-노드-오토스케일링) 같은 별도 오토스케일러를 설치해야 하고, 기본적으로는 `desired_size`인 2대로 고정된다.
 
 실제로 EC2 인스턴스 목록에서도 2대가 실행 중인 것을 확인할 수 있다.
 
@@ -555,6 +559,36 @@ EKS 관리형 노드 그룹은 내부적으로 **EC2 Auto Scaling 그룹**으로
 | **퍼블릭 IPv4 DNS** | ec2-16-184-33-1... | ec2-13-209-87-1... |
 
 두 인스턴스가 서로 다른 AZ(`2b`, `2c`)에 분산 배치되어 있고, 인스턴스 유형은 `var.WorkerNodeInstanceType`의 기본값인 `t3.medium`이다. `map_public_ip_on_launch = true` 설정 덕분에 퍼블릭 IP(DNS)가 자동으로 할당된 것도 확인할 수 있다.
+
+<br>
+
+### 시작 템플릿 (Launch Template)
+
+EKS 콘솔의 노드 그룹 상세 페이지에서 **Auto Scaling 그룹 이름** 링크를 통해 ASG → 시작 템플릿까지 따라갈 수 있다.
+
+![myeks-nodegroup-asg-link-console]({{site.url}}/assets/images/myeks-nodegroup-asg-link-console.png){: .align-center width="600"}
+
+<center><sup>노드 그룹 상세 — Auto Scaling 그룹 이름 링크</sup></center>
+
+ASG 상세 페이지 하단의 **시작 템플릿** 섹션에서 템플릿 ID, AMI ID, 보안 그룹 ID 등을 확인할 수 있다.
+
+![myeks-asg-launch-template-console]({{site.url}}/assets/images/myeks-asg-launch-template-console.png){: .align-center width="600"}
+
+<center><sup>Auto Scaling 그룹 상세 — 시작 템플릿 정보</sup></center>
+
+시작 템플릿의 **고급 세부 정보 → 사용자 데이터**에서는 노드 부팅 시 실행되는 userdata를 확인할 수 있다. [코드 분석]({% post_url 2026-03-12-Kubernetes-EKS-01-01-01-Installation %}#userdata)에서 살펴본 `NodeConfig`(API 서버 엔드포인트, CA 인증서, kubelet 설정)와 커스텀 초기화 스크립트(`dnf update`, `bind-utils` 설치)가 들어있다.
+
+![myeks-launch-template-userdata-console]({{site.url}}/assets/images/myeks-launch-template-userdata-console.png){: .align-center width="600"}
+
+<center><sup>시작 템플릿 사용자 데이터 — NodeConfig와 커스텀 초기화 스크립트</sup></center>
+
+시작 템플릿을 수정하려면 **"템플릿 수정(새 버전 생성)"**을 해야 한다. 기존 버전을 직접 수정하는 것이 아니라 새 버전을 만드는 구조다.
+
+![myeks-launch-template-version-console]({{site.url}}/assets/images/myeks-launch-template-version-console.png){: .align-center width="600"}
+
+<center><sup>시작 템플릿 수정 시 새 버전 생성이 필요</sup></center>
+
+이는 [Launch Template의 동작 원리]({% post_url 2026-03-12-Kubernetes-EKS-00-01-EKS-Computing-Group %}#launch-template)에서 다룬 것처럼, 템플릿은 "앞으로 새로 만들 인스턴스의 스펙 정의서"이기 때문이다. 새 버전을 만든 후 노드 그룹 업데이트를 하면 EKS가 rolling update로 노드를 교체한다. 또한 EKS가 자동 생성한 시작 템플릿을 콘솔에서 직접 수정하면 EKS 관리 로직과 충돌할 수 있으므로 주의해야 한다.
 
 <br>
 
@@ -582,7 +616,7 @@ EKS 관리형 노드 그룹은 내부적으로 **EC2 Auto Scaling 그룹**으로
 | 유형 | 프로토콜 | 포트 범위 | 소스 | Terraform 설정 |
 | --- | --- | --- | --- | --- |
 | 모든 트래픽 | 전체 | 전체 | `192.168.1.100/32` | bastion host용 예비 허용 |
-| 모든 트래픽 | 전체 | 전체 | `118.47.160.23/32` | `var.ssh_access_cidr` (내 공인 IP) |
+| 모든 트래픽 | 전체 | 전체 | `118.xxx.xxx.xxx/32` | `var.ssh_access_cidr` (내 공인 IP) |
 
 `protocol = "-1"`(모든 프로토콜)로 설정했기 때문에 유형이 "모든 트래픽", 프로토콜과 포트 범위가 "전체"로 표시된다. 지정된 CIDR에서 오는 모든 트래픽을 허용하되, 접속 대상만 IP로 제한하는 구조다.
 
@@ -675,11 +709,63 @@ endpoint_private_access = true   # false → true
 
 <br>
 
+# 트러블슈팅: 실습 환경 공인 IP 변경
+
+## 증상
+
+실습 진행 환경(카페, 자취방 등)이 바뀌어 공인 IP가 달라진 경우, 워커 노드에 접근할 수 없다.
+
+- 노드 공인 IP로 `ping` → **100% packet loss**
+- `ssh ec2-user@$NODE1` → **접속 안 됨**
+- `kubectl` 명령은 정상 동작 (API 서버는 `publicAccessCidrs: 0.0.0.0/0`이라 무관)
+
+```bash
+ping -c 1 $NODE1
+PING xx.xxx.xxx.xxx (xx.xxx.xxx.xxx): 56 data bytes
+--- xx.xxx.xxx.xxx ping statistics ---
+1 packets transmitted, 0 packets received, 100.0% packet loss
+```
+
+## 원인
+
+[위에서 확인한](#보안그룹) `myeks-node-group-sg` 보안그룹의 인바운드 규칙은 `protocol = "-1"`(모든 프로토콜)을 허용하지만, **소스 CIDR**이 `terraform apply` 시점의 공인 IP(`var.ssh_access_cidr`)와 `192.168.1.100/32`로 제한되어 있다.
+
+실습 환경이 바뀌어 현재 PC의 공인 IP가 이 CIDR에 매칭되지 않으면, 보안 그룹에서 **모든 인바운드 트래픽이 차단**된다. ping(ICMP)도 SSH(TCP 22)도 마찬가지다.
+
+`kubectl`은 영향을 받지 않는다. `kubectl`은 워커 노드가 아닌 **EKS API 서버**에 접속하고, API 서버의 `publicAccessCidrs`가 `0.0.0.0/0`이기 때문이다.
+
+## 해결
+
+환경변수를 갱신하고 `terraform apply`를 다시 실행한다.
+
+```bash
+export TF_VAR_ssh_access_cidr=$(curl -s ipinfo.io/ip)/32
+terraform plan
+terraform apply
+```
+
+`plan` 결과를 보면 보안그룹 규칙의 `cidr_blocks`만 변경된다. `cidr_blocks` 변경은 in-place 업데이트가 되지 않아 `forces replacement`(기존 규칙 삭제 → 새 규칙 생성)로 처리되지만, EKS 클러스터나 노드에는 영향이 없다.
+
+```
+-/+ resource "aws_security_group_rule" "allow_ssh" {
+      ~ cidr_blocks = [             # forces replacement
+          ~ "121.xxx.xxx.xxx/32" -> "새_IP/32",
+            "192.168.1.100/32",
+        ]
+    }
+```
+
+> `terraform apply` 시 addon 버전 업데이트(`vpc-cni`, `coredns` 등)가 함께 잡힐 수 있다. `eks.tf`에서 `most_recent = true`로 설정했기 때문에, AWS 쪽에서 새 빌드 버전이 나오면 자동 감지된다. 이 역시 `update in-place`이므로 안전하게 적용할 수 있다.
+
+AWS 콘솔에서 보안 그룹 인바운드 규칙을 직접 수정하는 방법도 있지만, Terraform 상태와 실제 상태가 불일치(drift)하게 되므로 `terraform apply`로 진행하는 것이 깔끔하다.
+
+<br>
+
 # 배포 시 기억할 점
 
 ## KMS 암호화 자동 설정
 
-`plan` 결과를 보면 코드에 명시하지 않았는데도 EKS 모듈이 KMS 키를 자동 생성한다. `eks.kms` 하위 모듈이 기본값으로 활성화되어 etcd Secret을 암호화한다. 모듈이 내부적으로 무엇을 해주는지 `plan` 단계에서 반드시 확인해야 한다.
+코드에 명시하지 않았는데도 EKS 모듈이 [KMS 키를 자동 생성](#kms-키-자동-생성)하여 etcd Secret의 encryption at rest를 적용한다. 모듈이 내부적으로 무엇을 해주는지 `plan` 단계에서 반드시 확인해야 한다.
 
 ## VPC CNI before_compute
 

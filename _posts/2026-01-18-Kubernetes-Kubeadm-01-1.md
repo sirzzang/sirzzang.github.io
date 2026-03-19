@@ -673,7 +673,7 @@ kubeadm join 192.168.1.100:6443 --token abcdef.0123456789abcdef \
 
 <br>
 
-# 마무리
+# 결론
 
 `kubeadm init`은 컨트롤 플레인을 부트스트래핑하는 핵심 명령어다. 내부적으로 14개의 단계를 거치며, 각 단계에서 인증서, kubeconfig, Static Pod 매니페스트 등을 생성한다.
 

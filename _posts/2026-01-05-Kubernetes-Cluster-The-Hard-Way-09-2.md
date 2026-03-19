@@ -196,7 +196,7 @@ bridge                262144  1 br_netfilter
 
 ### sysctl 설정
 
-bridge 트래픽이 iptables를 거치도록 커널 파라미터를 설정한다.
+bridge 트래픽이 iptables를 거치도록 커널 파라미터를 설정한다. `sysctl`과 `/etc/sysctl.d/` 파일 체계에 대한 자세한 설명은 [리눅스 커널 파라미터와 sysctl]({% post_url 2026-03-18-CS-Linux-Kernel-Parameter %}) 글을 참고한다.
 
 ```bash
 echo "net.bridge.bridge-nf-call-iptables = 1"  >> /etc/sysctl.d/kubernetes.conf

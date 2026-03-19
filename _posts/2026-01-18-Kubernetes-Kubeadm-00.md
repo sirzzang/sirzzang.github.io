@@ -571,7 +571,7 @@ SCP 수동 배포든, kubeadm이든, kubespray든, 근본적인 보안 모델은
 
 <br>
 
-# 마무리
+# 결론
 
 kubeadm은 Kubernetes The Hard Way에서 수동으로 했던 작업들을 자동화해주는 **노드 부트스트래퍼**다. 하지만 모든 것을 해주는 것은 아니다. 머신 프로비저닝, CRI·CNI 설치 등은 여전히 직접 해야 한다. 이것은 한계가 아니라 **Be simple + Be Extensible**이라는 의도된 설계다.
 

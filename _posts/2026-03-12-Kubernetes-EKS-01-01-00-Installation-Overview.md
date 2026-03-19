@@ -246,7 +246,7 @@ Provider가 있어야 Module이 동작한다.
 | **없으면?** | AWS 리소스를 아예 만들 수 없음 | 만들 수는 있지만 resource 블록을 일일이 다 써야 함 |
 | **선언** | `provider "aws" { ... }` | `module "vpc" { source = "..." }` |
 
-예를 들어 `module "vpc"`가 내부적으로 `aws_subnet`, `aws_internet_gateway` 같은 리소스를 만드는데, 이 `aws_*` 리소스들은 전부 `hashicorp/aws` Provider를 통해 AWS API를 호출한다. **Provider = 통신 계층, Module = 그 위에서 동작하는 편의 패키지**다.
+**Provider = 통신 계층, Module = 그 위에서 동작하는 편의 패키지**다. 예를 들어, `module "vpc"`가 내부적으로 `aws_subnet`, `aws_internet_gateway` 같은 리소스를 만드는데, 이 `aws_*` 리소스들은 전부 `hashicorp/aws` Provider를 통해 AWS API를 호출한다.
 
 <br>
 
@@ -321,7 +321,7 @@ terraform {
 
 <br>
 
-# 마무리
+# 결론
 
 EKS 클러스터를 배포하는 세 가지 방법을 살펴봤다.
 
