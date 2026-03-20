@@ -1523,7 +1523,7 @@ kube-proxy는 Service ClusterIP로 들어오는 트래픽을 실제 파드 IP로
 | `kubernetes` (API) | 10.100.0.1:443 | 192.168.1.61, 192.168.2.250 | 50:50 랜덤 |
 | `eks-extension-metrics-api` | 10.100.213.67:443 | 172.0.32.0:10443 | 단일 백엔드 |
 
-`default/kubernetes` Service의 백엔드 IP(`192.168.1.61`, `192.168.2.250`)는 컨트롤 플레인의 ENI IP다. [엔드포인트 분석]({% post_url 2026-03-12-Kubernetes-EKS-01-01-06-Public-Public-Endpoint %})에서 다룬 API 서버 내부 경로와 연결된다.
+`default/kubernetes` Service의 백엔드 IP(`192.168.1.61`, `192.168.2.250`)는 컨트롤 플레인의 ENI IP다. [EKS Owned ENI]({% post_url 2026-03-12-Kubernetes-EKS-01-01-06-EKS-Owned-ENI %})에서 이 ENI의 정체를 확인하고, [엔드포인트 분석]({% post_url 2026-03-12-Kubernetes-EKS-01-01-07-Public-Public-Endpoint %})에서 API 서버 접근 경로를 상세히 다룬다.
 
 ### VPC CNI: AWS SNAT
 
