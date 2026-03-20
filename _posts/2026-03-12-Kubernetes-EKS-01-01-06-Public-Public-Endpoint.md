@@ -1,5 +1,5 @@
 ---
-title:  "[EKS] EKS: Public-Public EKS 클러스터 - 6. 엔드포인트 분석"
+title:  "[EKS] EKS: Public-Public EKS 클러스터 - 6. 엔드포인트 액세스 분석"
 excerpt: "Public-Public 구성에서 API 서버 엔드포인트 구성에 대해 살펴보자."
 categories:
   - Kubernetes

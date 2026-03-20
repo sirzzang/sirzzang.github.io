@@ -14,7 +14,7 @@ tags:
 
 <br>
 
-Kubernetes를 학습하다 보면 커널 파라미터가 끊임없이 등장한다. 클러스터를 구성할 때마다 `net.bridge.bridge-nf-call-iptables`, `net.ipv4.ip_forward`를 설정해야 하고, 컨테이너 환경에서 `vm.swappiness`를 조정해야 한다는 이야기도 심심치 않게 들린다. 워커 노드의 `/etc/sysctl.d/`를 들여다보니 번호가 붙은 설정 파일들이 여러 개 있고, 누가 어떤 순서로 적용하는지도 궁금해졌다. 간단하게라도 정리해 본다.
+Kubernetes를 학습하다 보면 커널 파라미터가 끊임없이 등장한다. 클러스터를 구성할 때마다 `net.bridge.bridge-nf-call-iptables`, `net.ipv4.ip_forward`를 설정해야 하고, 컨테이너 환경에서 `vm.swappiness`를 조정해야 한다는 이야기도 심심치 않게 들린다. `/etc/sysctl.d/`를 들여다보니 번호가 붙은 설정 파일들이 여러 개 있고, 누가 어떤 순서로 적용하는지도 궁금해졌다. 간단하게라도 정리해 본다.
 
 <br>
 
@@ -252,7 +252,19 @@ fs.inotify.max_user_watches = 524288
 출력에서 확인할 수 있는 것들을 살펴 보자.
 - **파일명 기준 머지**: `/etc/sysctl.d/00-defaults.conf`가 `/usr/lib/sysctl.d/10-*`보다 먼저 적용된다. 디렉토리가 다르지만 파일명 `00-*`이 `10-*`보다 앞이기 때문이다. 이후 `50-*`, `60-*`, `99-*` 순으로 모든 디렉토리의 파일이 파일명 순서대로 적용되고, `/etc/sysctl.conf`가 마지막에 온다.
 - **파라미터 덮어쓰기**: `kernel.panic`이 `00-defaults.conf`에서 `5`로 설정된 후 `99-amazon.conf`에서 `10`으로 덮어쓰인다.
-- **에러 처리**: `50-default.conf` 로드 시 `sysctl: setting key "net.ipv4.conf.all.rp_filter": Invalid argument` 에러가 출력되는데, 이는 해당 파라미터가 현재 커널에서 해당 값을 지원하지 않는 경우다. 이런 에러는 설정이 무시될 뿐 시스템 동작에는 영향을 주지 않는다.
+- **에러 처리**: `50-default.conf` 로드 시 `sysctl: setting key "net.ipv4.conf.all.rp_filter": Invalid argument` 에러가 출력되지만, 해당 설정만 무시되고 다음 파라미터로 계속 진행된다. 아래에서 이 에러가 왜 발생하는지 자세히 다룬다.
+
+## 설정 파일에 지원되지 않는 파라미터가 포함된 이유
+
+위 출력에서 `50-default.conf` 로드 시 `Invalid argument` 에러가 발생한 것을 볼 수 있다. `/usr/lib/sysctl.d/50-default.conf`는 **systemd 패키지**가 설치될 때 함께 배포하는 파일로, systemd 메인테이너들이 "대부분의 리눅스 시스템에서 합리적인 기본값"이라고 판단한 커널 파라미터 세트를 담고 있다. 특정 커널 빌드에 맞춰 생성된 것이 아니라 범용적으로 배포되는 설정이다.
+
+문제는 **설정 파일을 만드는 주체(systemd)와 그 설정을 소비하는 주체(커널)가 서로 다르다**는 점이다. systemd는 다양한 커널 버전과 빌드 옵션 조합 위에서 동작해야 하므로, 불가피하게 디커플링이 발생한다.
+
+- **커널 빌드 옵션 차이**: `net.ipv4.conf.all.rp_filter = 2`(loose mode)는 커널이 `CONFIG_IP_MULTIPLE_TABLES` 같은 옵션을 켜고 컴파일되어야 동작한다. 커널 빌드 설정에 따라 특정 값이 거부될 수 있다.
+- **커널 버전 차이**: 특정 버전 이후에 추가되거나, 허용 값 범위가 변경된 파라미터가 있다. systemd 패키지는 이를 버전별로 분기 처리하지 않는다.
+- **모듈 로딩 타이밍**: 해당 파라미터를 노출하는 커널 모듈이 `sysctl --system` 시점에 아직 로드되지 않았을 수 있다.
+
+`sysctl --system`이 에러를 만나도 **중단하지 않고 다음 설정을 계속 적용**하는 것은 의도된 동작이다. 이런 디커플링이 전제되어 있기 때문에, systemd 쪽에서도 "일단 범용 설정을 다 넣어두고, 현재 커널에서 안 되는 것은 무시하면 된다"는 전략을 취한다. 에러 메시지가 출력되더라도 시스템 동작에는 영향이 없다.
 
 <br>
 
@@ -347,19 +359,62 @@ kubelet은 시작 시 `kernel.panic`, `vm.overcommit_memory` 등을 자동으로
 
 반면 Kubespray 같은 배포 도구는 `/etc/sysctl.d/99-sysctl.conf`에 파라미터를 영구 기록한다. 이 경우 kubelet이 아닌 systemd가 부팅 시 적용하므로, kubelet 시작 전에도 값이 설정되어 있다.
 
-## Pod 수준 sysctl (safe/unsafe sysctl)
+## Pod 수준 sysctl
 
-호스트 커널을 공유한다고 해서 Pod에서 커널 파라미터를 전혀 조정할 수 없는 것은 아니다. Linux namespace로 격리되는 일부 파라미터는 **Pod의 `securityContext.sysctls`**를 통해 Pod 단위로 설정할 수 있다.
+호스트 커널을 공유한다고 해서 Pod에서 커널 파라미터를 전혀 조정할 수 없는 것은 아니다. Pod의 `securityContext.sysctls`를 통해 일부 파라미터를 Pod 단위로 설정할 수 있다. 다만 모든 파라미터가 가능한 것은 아니며, **어떤 파라미터를 설정할 수 있는지**는 두 가지 축으로 결정된다.
 
-Kubernetes는 이를 **safe sysctl**과 **unsafe sysctl**로 구분한다.
+```
+모든 커널 파라미터
+├── Non-namespaced (호스트 전역) → Pod securityContext.sysctls로 설정 불가
+└── Namespaced (네임스페이스 격리)
+    ├── Safe   → 기본 허용, 부작용 없음
+    └── Unsafe → 격리는 되지만 간접 부작용 가능, kubelet 허용 필요
+```
+
+### 축 1: Namespaced vs Non-namespaced
+
+첫 번째 축은 커널 파라미터가 **Linux namespace로 격리되는지 여부**다.
 
 | 구분 | 설명 | 예시 |
 | --- | --- | --- |
-| **Safe** | namespace로 격리되어 다른 Pod·호스트에 영향 없음. 기본 허용 | `kernel.shm_rmid_forced`, `net.ipv4.ping_group_range` |
-| **Unsafe** | 호스트나 다른 Pod에 영향을 줄 수 있음. kubelet의 `--allowed-unsafe-sysctls` 플래그로 명시적 허용 필요 | `net.core.somaxconn`, `net.ipv4.ip_local_port_range` |
+| **Namespaced** | Pod(컨테이너)마다 독립된 값을 가질 수 있음 | `net.*` 대부분, `kernel.shm_rmid_forced` 등 IPC 관련 일부 |
+| **Non-namespaced** | 호스트 커널 전역에서 하나의 값을 공유 | `vm.*`, `kernel.pid_max`, `fs.file-max` 등 |
+
+Non-namespaced 파라미터는 값을 격리할 수 있는 namespace 자체가 없으므로, **Pod의 `securityContext.sysctls`로 설정하는 것 자체가 불가능**하다. 앞서 다룬 `net.ipv4.ip_forward`, `vm.overcommit_memory` 같은 파라미터가 여기에 해당하며, 반드시 호스트(노드) 수준에서 설정해야 한다.
+
+### 축 2: Safe vs Unsafe (namespaced 파라미터의 세분류)
+
+두 번째 축은 namespaced 파라미터 내에서의 구분이다. Kubernetes는 namespaced sysctl을 다시 **safe**과 **unsafe**로 나눈다.
+
+| 구분 | 설명 | 예시 |
+| --- | --- | --- |
+| **Safe** | namespace 격리가 되고, 다른 Pod·노드에 부작용이 없다고 Kubernetes가 검증한 파라미터. 기본 허용 | `kernel.shm_rmid_forced`, `net.ipv4.ping_group_range`, `net.ipv4.ip_local_port_range` |
+| **Unsafe** | namespace 격리는 되지만, **간접적인 부작용 가능성**이 있는 파라미터. kubelet에서 명시적 허용 필요 | `net.core.somaxconn`, `kernel.msgmax` |
+
+Kubernetes가 safe로 인정한 전체 목록은 다음과 같다 ([공식 문서](https://kubernetes.io/docs/tasks/administer-cluster/sysctl-cluster/) 기준).
+
+- `kernel.shm_rmid_forced`
+- `net.ipv4.ip_local_port_range`
+- `net.ipv4.tcp_syncookies`
+- `net.ipv4.ping_group_range` (1.18+)
+- `net.ipv4.ip_unprivileged_port_start` (1.22+)
+- `net.ipv4.ip_local_reserved_ports` (1.27+, 커널 3.16+)
+- `net.ipv4.tcp_keepalive_time` (1.29+, 커널 4.5+)
+- `net.ipv4.tcp_fin_timeout` (1.29+, 커널 4.6+)
+- `net.ipv4.tcp_keepalive_intvl` (1.29+, 커널 4.5+)
+- `net.ipv4.tcp_keepalive_probes` (1.29+, 커널 4.5+)
+- `net.ipv4.tcp_rmem` (1.32+, 커널 4.15+)
+- `net.ipv4.tcp_wmem` (1.32+, 커널 4.15+)
+
+> 버전이 올라가면서 safe 목록은 계속 확장되고 있다. `net.ipv4.ip_local_port_range`도 초기에는 unsafe였다가 이후 safe로 승격된 케이스다.
+
+여기서 핵심은 unsafe sysctl도 **namespace 격리 자체는 된다**는 점이다. 파라미터 값이 직접 호스트나 다른 Pod에 전파되는 것이 아니다. "영향을 미칠 수 있다"는 것은 간접적인 의미다. 예를 들어 `net.core.somaxconn`을 극단적으로 높게 설정하면 해당 Pod의 network namespace 안에서만 적용되지만, 커널 메모리를 과도하게 소비하여 노드 전체의 안정성에 영향을 줄 수 있다. Kubernetes가 unsafe로 분류하는 이유는 이런 간접적 부작용 때문이지, 격리가 안 되기 때문이 아니다.
+
+### 설정 방법
+
+safe sysctl은 별도 설정 없이 Pod spec에서 바로 사용할 수 있다.
 
 ```yaml
-# Pod spec에서 safe sysctl 설정 예시
 apiVersion: v1
 kind: Pod
 spec:
@@ -369,14 +424,30 @@ spec:
       value: "0 65535"
 ```
 
-unsafe sysctl을 허용하려면 kubelet 설정에서 명시적으로 지정해야 한다.
+unsafe sysctl을 사용하려면 kubelet 설정에서 해당 파라미터를 명시적으로 허용해야 한다.
 
 ```bash
-# kubelet 설정 예시
---allowed-unsafe-sysctls="net.core.somaxconn,net.ipv4.ip_local_port_range"
+--allowed-unsafe-sysctls="net.core.somaxconn,kernel.msgmax"
 ```
 
-앞서 다룬 `net.ipv4.ip_forward`, `vm.overcommit_memory` 같은 파라미터는 namespace로 격리되지 않으므로 Pod 수준에서 설정할 수 없고, **반드시 호스트(노드) 수준에서 설정**해야 한다.
+kubelet이 허용하지 않은 unsafe sysctl을 Pod spec에 지정하면, Pod 생성 자체가 거부된다.
+
+### Pod 종료 시 원복 여부
+
+Pod이 종료되면 해당 network/IPC namespace 자체가 사라진다. namespace에 속한 커널 파라미터 값도 함께 소멸하므로, 호스트나 다른 Pod에 대한 "원복"이라는 개념 자체가 필요 없다. 처음부터 격리된 공간에서만 존재했던 값이기 때문이다.
+
+unsafe sysctl의 간접 부작용(예: 커널 메모리 과다 소비)도 Pod이 종료되면서 해당 리소스가 해제되므로 자연스럽게 해소된다.
+
+### Pod 단위로 sysctl을 설정하는 이유
+
+굳이 Pod에서 커널 파라미터를 변경하는 이유는 호스트에서 파라미터를 변경하면 **그 노드 위의 모든 Pod에 영향**을 주기 때문이다. 특정 워크로드 하나를 위해 노드 전체 설정을 바꾸는 것은 과한 경우가 많다.
+
+그렇다면, 언제 이렇게 Pod에서 호스트 커널 파라미터를 변경해야 할까. 실제로 Pod 단위 sysctl이 필요한 사례는 아래와 같다: 
+- **nginx/envoy 같은 리버스 프록시 Pod**: 동시 연결이 많아 `net.core.somaxconn`을 높여야 하지만, 같은 노드의 다른 Pod들은 그럴 필요가 없다.
+- **non-root로 낮은 포트를 바인딩해야 하는 경우**: `net.ipv4.ip_unprivileged_port_start`를 낮추면 80, 443 같은 포트를 non-root 프로세스가 바인딩할 수 있다. 호스트 전체에 적용하면 보안 정책이 느슨해진다.
+- **멀티테넌트 클러스터**: 테넌트 A의 워크로드는 `net.ipv4.ip_local_port_range`를 넓게, 테넌트 B는 기본값으로 유지하고 싶을 때. 호스트 수준에서는 이런 분리가 불가능하다.
+
+"호스트에서 바꾸면 되지 않나"라는 생각은 단일 워크로드 환경에서는 맞다. 그러나 Kubernetes를 쓴다는 것은 한 노드에 여러 성격의 Pod이 올라간다는 뜻이므로, **워크로드별로 네트워크 튜닝을 다르게 가져가야 할 때** Pod 단위 sysctl이 의미를 가진다.
 
 ## /etc/sysctl.d/ 파일 체계를 이해해야 하는 이유
 
@@ -504,5 +575,6 @@ echo "br_netfilter" | tee /etc/modules-load.d/br_netfilter.conf
 - [Linux Kernel Documentation - vm.txt](https://www.kernel.org/doc/Documentation/sysctl/vm.txt) - 메모리 관련 커널 파라미터
 - [Linux Kernel Documentation - fs.txt](https://www.kernel.org/doc/Documentation/sysctl/fs.txt) - 파일시스템 관련 커널 파라미터
 - [Linux Kernel Documentation - net.txt](https://www.kernel.org/doc/Documentation/sysctl/net.txt) - 네트워크 관련 커널 파라미터
+- [Using sysctls in a Kubernetes Cluster](https://kubernetes.io/docs/tasks/administer-cluster/sysctl-cluster/) - Kubernetes 공식 문서: Pod 수준 sysctl 설정, safe/unsafe 분류, namespaced sysctl 목록
 
 <br>
