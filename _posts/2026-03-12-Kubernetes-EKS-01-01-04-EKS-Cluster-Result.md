@@ -58,7 +58,7 @@ CoreDNS is running at https://461A1FA....gr7.ap-northeast-2.eks.amazonaws.com/ap
 To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
 ```
 
-온프레미스에서 `kubectl cluster-info`를 실행하면 API 서버 주소가 `https://192.168.10.100:6443`처럼 마스터 노드의 IP와 포트로 나왔다. EKS에서는 `461A1FA....gr7.ap-northeast-2.eks.amazonaws.com`이라는 도메인이 나온다.
+온프레미스에서 `kubectl cluster-info`를 실행하면 API 서버 주소가 `https://192.168.10.100:6443`처럼 컨트롤 플레인 노드의 IP와 포트로 나왔다. EKS에서는 `461A1FA....gr7.ap-northeast-2.eks.amazonaws.com`이라는 도메인이 나온다.
 
 | 부분 | 의미 |
 | --- | --- |

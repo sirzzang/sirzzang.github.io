@@ -783,7 +783,7 @@ io.containerd.grpc.v1                     healthcheck              -            
 
 # kubelet
 
-온프레미스에서는 kubelet을 직접 설치하고 설정 파일을 작성해야 했다([CRI 및 kubeadm 구성 요소 설치]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %}), [kubeadm init 실행]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-4 %})). EKS에서는 AMI에 kubelet이 포함되어 있고, nodeadm이 설정을 자동 생성한다.
+온프레미스에서는 kubelet을 직접 설치하고 설정 파일을 작성해야 했다([CRI 및 kubeadm 구성 요소 설치]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-3 %}), [kubeadm init 실행]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-4 %})). EKS에서는 AMI에 kubelet이 포함되어 있고, **nodeadm**이 설정을 자동 생성한다. nodeadm은 AL2023 기반 EKS AMI에 포함된 노드 부트스트랩 에이전트로, 이전 세대 AL2 AMI의 `bootstrap.sh`를 대체한다. Launch Template의 userdata에 작성한 NodeConfig를 읽어 kubelet 설정, 인증서 배치, 클러스터 등록 등 노드 초기화를 자동으로 수행한다.
 
 ## 서비스 상태
 
@@ -855,9 +855,7 @@ tree /etc/kubernetes
     └── ca.crt                 # 클러스터 CA 공개 인증서
 ```
 
-`manifests/`가 비어 있는 것이 온프레미스와의 차이다. 온프레미스 마스터 노드에서는 여기에 `kube-apiserver.yaml`, `etcd.yaml` 등 컨트롤 플레인 Static Pod가 있었지만, EKS에서는 컨트롤 플레인이 AWS 관리형이라 Static Pod가 없다.
-
-온프레미스에서는 `manifests/`에 `kube-apiserver.yaml`, `etcd.yaml` 등 컨트롤 플레인 Static Pod가 있었다. EKS 워커 노드에서 이 디렉터리가 비어 있는 것은 컨트롤 플레인이 AWS 관리 영역임을 다시 한 번 보여준다.
+`manifests/`는 비어 있다. 워커 노드이므로 온프레미스에서도 이 디렉터리는 비어 있는 것이 정상이다. Static Pod 매니페스트(`kube-apiserver.yaml`, `etcd.yaml` 등)는 컨트롤 플레인 노드에만 존재한다.
 
 ```bash
 tree /var/lib/kubelet -L 2
@@ -1042,7 +1040,7 @@ cat /etc/kubernetes/kubelet/config.json.d/40-nodeadm.conf
 
 nodeadm이 별도로 `clusterDNS`와 `maxPods`를 설정한다. drop-in 설정은 메인 `config.json`을 오버라이드하는 구조로, nodeadm이 노드 스펙(인스턴스 타입, ENI 수)에 맞춰 동적으로 생성한다.
 
-> `maxPods: 17`은 2주차에서 ENI와 IP 할당 구조를 다룰 때 자세히 살펴본다.
+> `maxPods: 17`은 추후 ENI와 IP 할당 구조를 다룰 때 자세히 살펴본다.
 
 ## kubeconfig: kubelet → API 서버
 
@@ -1126,7 +1124,7 @@ Certificate:
                 DNS:kubernetes
 ```
 
-`tree /etc/kubernetes`에서 확인했듯이 `pki/` 디렉터리에는 `ca.crt`만 존재한다. 온프레미스에서도 워커 노드에는 `ca.crt`만 있고 `ca.key`는 없었지만, 관리자가 마스터 노드에 접속하면 `ca.key`를 직접 확인하고 인증서를 서명할 수 있었다. EKS에서는 컨트롤 플레인이 AWS 관리 영역이므로 **`ca.key`에 아예 접근할 수 없다**. [이전 글]({% post_url 2026-03-12-Kubernetes-EKS-01-01-04-EKS-Cluster-Result %})에서 "CA 프라이빗 키는 AWS만 보유한다"고 한 내용의 실증이다.
+`tree /etc/kubernetes`에서 확인했듯이 `pki/` 디렉터리에는 `ca.crt`만 존재한다. 워커 노드에 `ca.key`가 없는 것은 온프레미스에서도 마찬가지다. 다만 온프레미스에서는 관리자가 컨트롤 플레인 노드에 접속하면 `ca.key`를 직접 확인할 수 있었던 반면, EKS에서는 컨트롤 플레인이 AWS 관리 영역이므로 **`ca.key`에 아예 접근할 수 없다**. [이전 글]({% post_url 2026-03-12-Kubernetes-EKS-01-01-04-EKS-Cluster-Result %})에서 "CA 프라이빗 키는 AWS만 보유한다"고 한 내용의 실증이다.
 
 ## kubelet 서버 인증서
 
@@ -1207,7 +1205,7 @@ csr-rjkxd   60m   kubernetes.io/kubelet-serving   system:node:ip-192-168-3-99.ap
 
 | | 온프레미스 (kubeadm) | EKS |
 | --- | --- | --- |
-| CA 키 위치 | 마스터 노드 `/etc/kubernetes/pki/ca.key` | **AWS 관리 영역** (접근 불가) |
+| CA 키 위치 | 컨트롤 플레인 노드 `/etc/kubernetes/pki/ca.key` | **AWS 관리 영역** (접근 불가) |
 | kubelet 서버 인증서 | kubeadm이 발급, 1년 유효 | CSR → API 서버 자동 발급, ~45일 유효, 자동 갱신 |
 | kubelet 클라이언트 인증 | X.509 클라이언트 인증서 | AWS STS 토큰 (`aws eks get-token`) |
 | 인증서 갱신 | `kubeadm certs renew` 수동 실행 | `RotateKubeletServerCertificate`로 자동 |
@@ -1368,7 +1366,7 @@ ip addr
 | `ens6` | **Secondary ENI** | 192.168.2.24 | VPC CNI가 파드 IP 할당을 위해 추가한 ENI |
 | `enib3a22542c88` | **veth pair** (호스트 쪽) | - | 파드 네트워크 네임스페이스와 연결되는 가상 인터페이스. CNI 설정의 `vethPrefix: "eni"`에 의해 `eni`로 시작 |
 
-온프레미스(Calico/Flannel)에서는 `cali*`나 `flannel.*` 같은 오버레이 인터페이스가 보였다. EKS에서는 `ens*`(실제 ENI)와 `eni*`(veth pair)만 있고 오버레이 터널이 없다. 파드 IP가 VPC 서브넷의 실제 IP이므로 **캡슐화(encapsulation) 없이** 직접 라우팅된다.
+온프레미스(Calico/Flannel)에서는 `cali*`나 `flannel.*` 같은 오버레이 인터페이스가 보였다([Kubernetes CNI]({% post_url 2026-01-05-Kubernetes-CNI %})). EKS에서는 `ens*`(실제 ENI)와 `eni*`(veth pair)만 있고 오버레이 터널이 없다. 파드 IP가 VPC 서브넷의 실제 IP이므로 **캡슐화(encapsulation) 없이** 직접 라우팅된다. `ens5`, `ens6` 등 ENI 구조는 [다음 글]({% post_url 2026-03-12-Kubernetes-EKS-01-01-06-EKS-Owned-ENI %})에서 자세히 살펴본다.
 
 ## 라우팅 테이블
 
@@ -1706,19 +1704,19 @@ EKS 노드의 cgroup은 3개 슬라이스로 분리된다:
 
 # 온프레미스 비교
 
-| 항목 | 온프레미스 (kubeadm) | EKS 워커 노드 |
+| 항목 | 온프레미스 워커 노드 (kubeadm) | EKS 워커 노드 |
 | --- | --- | --- |
 | **OS** | Ubuntu/CentOS (직접 설치) | AL2023 (AMI에 포함) |
 | **CRI** | containerd (직접 설치·설정) | containerd (AMI에 포함, config.toml 사전 설정) |
 | **kubelet 설치** | apt/yum 또는 바이너리 | AMI에 포함 |
 | **kubelet 설정 경로** | `/var/lib/kubelet/config.yaml` | `/etc/kubernetes/kubelet/config.json` + nodeadm drop-in |
 | **API 서버 인증** | X.509 클라이언트 인증서 | AWS STS 토큰 (`aws eks get-token`) |
-| **CA 인증서** | `ca.crt` + `ca.key` 모두 존재 (마스터) | `ca.crt`만 존재 (`ca.key`는 AWS 관리) |
+| **CA 인증서** | `ca.crt`만 존재 (`ca.key`는 컨트롤 플레인 노드에 있음) | `ca.crt`만 존재 (`ca.key`는 AWS 관리, 접근 불가) |
 | **kubelet 서버 인증서** | kubeadm 발급, 1년 유효, 수동 갱신 | CSR 자동 발급, ~45일 유효, 자동 갱신 |
 | **CNI** | Calico/Flannel (오버레이) | VPC CNI (ENI 기반, 오버레이 없음) |
 | **파드 IP** | 별도 CIDR (예: 10.244.0.0/16) | VPC 서브넷 IP (노드와 같은 CIDR) |
 | **노드 등록** | `kubeadm join` (bootstrap token) | 자동 (IAM + NodeConfig) |
-| **Static Pod** | API 서버, etcd, scheduler, controller manager | 없음 (컨트롤 플레인은 AWS 관리) |
+| **manifests/** | 비어 있음 (Static Pod는 컨트롤 플레인 노드에만 존재) | 비어 있음 (컨트롤 플레인은 AWS 관리) |
 | **커널 파라미터** | 수동 설정 (sysctl) | AMI에 사전 적용 |
 | **Swap** | 수동 비활성화 (`swapoff -a`) | AMI에서 파티션 자체가 없음 |
 | **cgroup** | cgroup v1 또는 v2 (OS에 따라) | cgroup v2. system/runtime/kubepods 슬라이스 분리 |
@@ -1731,9 +1729,9 @@ EKS 노드의 cgroup은 3개 슬라이스로 분리된다:
 
 가장 눈에 띄는 차이는 세 가지다:
 
-1. **인증**: X.509 인증서 대신 AWS STS 토큰 기반. CA 프라이빗 키는 AWS만 보유
+1. **인증**: X.509 인증서 대신 AWS STS 토큰 기반. `ca.key`는 온프레미스에서도 워커 노드에 없지만, EKS에서는 컨트롤 플레인 자체에 접근할 수 없어 완전히 AWS 관리 영역
 2. **네트워크**: 오버레이 없는 VPC 네이티브 CNI. 파드 IP가 VPC 서브넷 IP
-3. **컨트롤 플레인 부재**: Static Pod 없음, `ca.key` 없음 — 관리형 서비스의 증거
+3. **설치·설정 자동화**: 직접 설치(apt/yum)와 수동 설정(sysctl, swapoff) 대신 AMI + nodeadm이 모든 것을 대체
 
 <br>
 

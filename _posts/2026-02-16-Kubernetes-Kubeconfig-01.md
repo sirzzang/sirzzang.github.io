@@ -453,7 +453,7 @@ kubectl은 kubeconfig를 파싱하여 연결 정보를 조립하는 클라이언
 | **6443** (secure port) | HTTPS | 정상적인 API 접근 | TLS + 인증/인가 적용 |
 | **8080** (insecure port) | HTTP | 로컬 디버깅/개발용 | **인증 완전 우회** |
 
-insecure port는 `--insecure-port=8080` 플래그로 열 수 있었고, 주로 마스터 노드에서 로컬로 빠르게 테스트할 때 쓰였다. **Kubernetes 1.20+에서 이 플래그가 삭제**되어 현재는 이 포트가 열리지 않는다.
+insecure port는 `--insecure-port=8080` 플래그로 열 수 있었고, 주로 컨트롤 플레인 노드에서 로컬로 빠르게 테스트할 때 쓰였다. **Kubernetes 1.20+에서 이 플래그가 삭제**되어 현재는 이 포트가 열리지 않는다.
 
 그런데 `current-context`가 없어도 `localhost:8080`에 연결이 성공하는 경우가 있을 수 있다.
 

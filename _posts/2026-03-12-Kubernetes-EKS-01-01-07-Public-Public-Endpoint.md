@@ -88,7 +88,7 @@ EKS는 엔드포인트 모드를 3가지로 제공한다.
 
 ![public-public-kubectl-to-apiserver]({{site.url}}/assets/images/public-public-kubectl-to-apiserver.png){: .align-center}
 
-<center><sup>Public-Public 구성의 전체 네트워크 경로 — kubectl은 인터넷을 통해 NLB 공인 IP로 직접 접근하고, kubelet은 IGW를 거쳐 동일한 NLB로 우회 접근한다. API 서버 → kubelet 방향은 EKS Owned ENI를 통한 사설 경로를 사용한다.</sup></center>
+<center><sup>Public-Public 구성의 전체 네트워크 경로 — kubectl은 인터넷을 통해 NLB 공인 IP로 직접 접근한다.</sup></center>
 
 ```
 로컬 PC → 인터넷 → NLB(공인 IP) → EKS 관리형 VPC → API 서버
@@ -214,12 +214,12 @@ EKS에서 NLB는 다음과 같이 구성된다.
 
 [EKS Overview]({% post_url 2026-03-12-Kubernetes-EKS-00-00-EKS-Overview %}#컨트롤-플레인)에서 살펴본 것처럼, 컨트롤 플레인은 최소 2개의 API 서버와 3개의 etcd 인스턴스가 분산 배치된다. API 서버의 정확한 인스턴스 수는 **AWS가 공개하지 않는** 내부 구현이다. NLB IP 2개는 AZ별 진입점이지, API 서버 인스턴스 수와 같은 것은 아니다.
 
-온프레미스에서 kubeadm HA 구성 시 HAProxy/nginx 같은 LB를 API 서버 앞에 직접 놓고, TLS 인증서의 SAN(Subject Alternative Name)에 LB의 IP/도메인을 포함시켜야 했다. EKS는 이를 **전부 자동으로** 해준다: NLB 프로비저닝, DNS 설정, TLS 인증서, API 서버 다중화까지. 온프레미스에서 선택이었던 HA가 EKS에서는 기본 제공이다.
+온프레미스에서 API 서버 HA 구성 시 HAProxy/nginx 같은 LB를 API 서버 앞에 직접 놓고, TLS 인증서의 SAN(Subject Alternative Name)에 LB의 IP/도메인을 포함시켜야 했다. EKS는 이를 **전부 자동으로** 해준다: NLB 프로비저닝, DNS 설정, TLS 인증서, API 서버 다중화까지. 온프레미스에서 선택이었던 HA가 EKS에서는 기본 제공이다.
 
 | | **온프레미스 Kubernetes** | **EKS (Public-Public)** |
 | --- | --- | --- |
-| API 서버 위치 | 마스터 노드에 직접 | AWS 관리형 VPC, NLB 뒤 |
-| dig 결과 | 마스터 노드 IP 1개 | NLB 공인 IP 2개 (HA) |
+| API 서버 위치 | 컨트롤 플레인 노드에 직접 | AWS 관리형 VPC, NLB 뒤 |
+| dig 결과 | 컨트롤 플레인 노드 IP 1개 | NLB 공인 IP 2개 (HA) |
 | IP 소유자 | 내가 관리하는 서버 | Amazon (AS16509) |
 | HA 구성 | 직접 구성 ([Kubespray HA]({% post_url 2026-02-02-Kubernetes-Kubespray-05-01 %}): HAProxy, nginx static pod 등) | AWS가 자동 HA |
 | TLS 인증서 SAN | LB IP/도메인을 수동으로 추가 | EKS가 자동 관리 |
@@ -232,6 +232,8 @@ EKS에서 NLB는 다음과 같이 구성된다.
 **1단계 — DNS 레벨**: 클라이언트(kubectl, kubelet 등)가 API 서버 도메인을 DNS resolve하면, A 레코드에 등록된 NLB IP 목록이 반환된다. 이 중 **하나를 OS의 DNS resolver(glibc `getaddrinfo()`)가 선택**한다. 보통 round-robin 또는 랜덤이다. kubelet이나 kube-proxy가 직접 선택하는 것이 아니라, OS 레벨에서 일어나는 DNS 기반 로드밸런싱의 일반적인 동작이다.
 
 **2단계 — NLB 레벨**: 선택된 IP의 NLB가 뒤에 있는 여러 API 서버 인스턴스(타겟 그룹) 중 하나로 TCP 연결을 포워딩한다. NLB는 단순 통과 장치가 아니라 L4 로드밸런서이므로, 하나의 NLB IP 뒤에 여러 API 서버가 있을 수 있다.
+
+온프레미스에서 kube-apiserver의 기본 포트는 6443이다. EKS에서 포트가 443인 이유는 클라이언트가 API 서버에 직접 접속하는 것이 아니라 NLB를 경유하기 때문이다. NLB 리스너가 HTTPS 표준 포트인 443으로 받아서 뒤의 API 서버로 전달하는 구조이므로, 클라이언트에게 내부 포트가 노출되지 않는다. 굳이 API 서버가 리스닝하고 있는 6443 포트를 열어주 줄 필요도 없다. AWS의 다른 HTTPS API 엔드포인트(S3, IAM, STS 등)와도 일관된 포트 체계이기도 하다.
 
 ```
 클라이언트 ──DNS resolve──→ [IP-A, IP-B]
@@ -288,7 +290,7 @@ ESTAB 0      0       192.168.3.96:38512   54.116.87.122:443   users:(("kubelet",
 
 주목해서 봐야 할 점은 다음과 같다.
 
-- **Peer Address:443** — 상대방 포트가 443(HTTPS)이므로, 이 노드가 **클라이언트**로서 API 서버에 연결한 것이다. `dig`으로 확인한 NLB 공인 IP(`43.201.196.244`, `54.116.87.122`)와 정확히 일치한다.
+- **Peer Address:443** — 상대방 포트가 443이다. 온프레미스라면 6443이 보이겠지만, EKS에서는 NLB가 443으로 리스닝하므로 443이 나온다. `dig`으로 확인한 NLB 공인 IP(`43.201.196.244`, `54.116.87.122`)와 정확히 일치한다.
 - **Local Address:3xxxx~4xxxx** — 클라이언트 측 Ephemeral Port(임시 포트, 32768~60999 범위). OS 커널이 랜덤으로 배정한 것이다.
 - **세 프로세스 모두 API 서버와 연결** — kubelet(파드 스케줄링, 노드 상태 보고), kube-proxy(Service/iptables 규칙 갱신), aws-k8s-agent(VPC CNI — ENI 관리, IP 할당 정보를 API 서버에 업데이트) 모두 API 서버를 watch하며 연결을 유지한다.
 - **DNS 레벨 로드밸런싱 실증** — node1의 kube-proxy는 `43.201.196.244`에, kubelet은 `54.116.87.122`에 연결되어 있다. 같은 노드의 프로세스인데 서로 다른 NLB IP에 연결된 것은, 각 프로세스가 독립적으로 DNS resolve를 수행한 결과다.
@@ -603,7 +605,7 @@ GET https://461A1FA...eks.amazonaws.com/api/v1/nodes?limit=500
 | --- | --- | --- |
 | config 로드 | `~/.kube/config` | 동일 |
 | 인증 방식 | 클라이언트 인증서 (X.509) | `aws eks get-token` ([STS 토큰]({% post_url 2026-03-12-Kubernetes-EKS-01-01-03-Kubeconfig-Authentication %})) |
-| API 서버 주소 | 마스터 노드 IP (`192.168.10.100:6443`) | EKS 엔드포인트 (NLB 공인 IP) |
+| API 서버 주소 | 컨트롤 플레인 노드 IP (`192.168.10.100:6443`) | EKS 엔드포인트 (NLB 공인 IP) |
 | 레이턴시 | 내부 네트워크라 빠름 (수~수십 ms) | 공인 경로라 상대적으로 느림 (수백 ms) |
 
 876ms의 레이턴시에는 STS 토큰 발급 시간도 포함되어 있지만, 근본적으로 **kubectl → 인터넷 → NLB → API 서버**라는 공인 경로를 거치기 때문에 온프레미스보다 느릴 수밖에 없다.

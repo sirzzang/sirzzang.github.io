@@ -173,7 +173,7 @@ EKS Owned ENI의 요청자 ID에 찍히는 계정은 AWS EKS 서비스 계정이
 | **EKS Owned ENI** | 컨트롤 플레인 연결 | 2 | 192.168.1.227, 192.168.3.82 |
 | | | **합계 6** | |
 
-VPC CNI가 생성하는 Secondary ENI는 **warm pool** 특성 때문에 존재한다. 파드가 아직 많지 않아도 VPC CNI는 미리 ENI를 추가로 확보해 두어, 파드 생성 시 IP 할당 지연 없이 즉시 할당할 수 있도록 한다. 이 warm pool 동작과 ENI당 IP 할당 구조(`maxPods: 17`의 근거)는 2주차에서 상세히 다룬다.
+VPC CNI가 생성하는 Secondary ENI는 **warm pool** 특성 때문에 존재한다. 파드가 아직 많지 않아도 VPC CNI는 미리 ENI를 추가로 확보해 두어, 파드 생성 시 IP 할당 지연 없이 즉시 할당할 수 있도록 한다. 이 warm pool 동작과 ENI당 IP 할당 구조(`maxPods: 17`의 근거)는 추후 상세히 다룬다.
 
 EKS Owned ENI는 일반적으로 **지정된 서브넷당 1개씩** 생성된다. 클러스터 생성 시 지정한 서브넷에 배치되며, 워커 노드 수와는 독립적이다. 워커 노드를 0대로 설정해도 EKS Owned ENI는 생성된다.
 
