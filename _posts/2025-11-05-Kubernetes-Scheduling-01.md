@@ -17,10 +17,11 @@ tags:
 
 # TL;DR
 
-- 쿠버네티스 스케줄링이란, `kube-scheduler`가 파드를 적합한 노드에 배치하는 프로세스다.
-- `kube-scheduler`는 컨트롤 플레인의 static pod으로 실행되며, 교체하거나 여러 스케줄러를 동시에 운영할 수 있다. 파드는 `spec.schedulerName`으로 사용할 스케줄러를 지정한다.
+- 쿠버네티스 스케줄링이란, `kube-scheduler`가 파드를 적합한 노드에 배치하는 프로세스다. 스케줄러는 노드가 결정되지 않은 파드를 감지하여, 스케줄링 요구 사항에 맞는 노드를 필터링하고 스코어링으로 최적 노드를 선택한다.
+- `kube-scheduler`는 컨트롤 플레인의 static pod으로 실행되며, 교체하거나 여러 스케줄러를 동시에 운영할 수 있다. 파드는 `spec.schedulerName`으로 사용할 스케줄러를 지정하며, 각 스케줄러는 자신의 이름과 일치하는 파드만 처리한다(경쟁 없음).
 - 스케줄러의 판단 기준은 오직 `spec.nodeName`이다. `status.phase: Pending`은 판단 기준이 아니다.
 - 스케줄러를 거치지 않는 수동 스케줄링은 파드 생성 시 `spec.nodeName`을 직접 지정하거나, 이미 생성된 파드에 대해 Binding 오브젝트를 생성하는 방식으로 가능하다.
+- DaemonSet은 v1.17부터 `kube-scheduler`를 통해 스케줄링된다. DaemonSet Controller가 `spec.nodeName` 대신 NodeAffinity(`matchFields`)를 설정하여 스케줄러에 위임하는 방식으로 변경되었다.
 - 스케줄러는 3개의 큐(Active / Backoff / Unschedulable)로 파드를 관리하며, Active Queue에 있는 파드만 스케줄링을 시도한다.
 
 <br>
@@ -29,13 +30,14 @@ tags:
 
 쿠버네티스를 운영하다 보면, 파드가 Pending 상태에 빠져 있는 상황을 마주하게 된다. 왜 이 파드는 특정 노드에 배치되지 않는지, 왜 리소스가 충분한데도 스케줄링에 실패하는지, 혹은 Deployment를 업데이트했는데 새 파드가 영원히 뜨지 않는 상황을 이해하려면, 스케줄링의 동작 방식을 알아야 한다.
 
-이 글에서는 아래 다섯 가지를 다룬다.
+이 글에서는 아래 여섯 가지를 다룬다.
 
 1. **스케줄링의 기본 개념**: 스케줄링이란 무엇이고, 무엇이 아닌지
-2. **스케줄러**: `kube-scheduler`의 실행 방식, 교체 가능 여부, 다중 스케줄러 운영
+2. **스케줄러**: `kube-scheduler`의 실행 방식, 교체 가능 여부, 다중 스케줄러 운영과 파드 매칭 방식
 3. **스케줄링 대상**: 스케줄러의 유일한 판단 기준 (`spec.nodeName`)과 판단 기준이 아닌 것 (`Pending`, `PodScheduled`)
 4. **수동 스케줄링**: 스케줄러를 거치지 않는 노드 배치 방법 (`spec.nodeName` 직접 지정, Binding 오브젝트)
-5. **스케줄러 큐 구조**: 3개 큐(Active / Backoff / Unschedulable)의 역할과 파드 이동 메커니즘
+5. **DaemonSet 스케줄링**: 과거 `spec.nodeName` 직접 지정 방식에서 NodeAffinity 기반 스케줄러 위임 방식으로의 전환
+6. **스케줄러 큐 구조**: 3개 큐(Active / Backoff / Unschedulable)의 역할과 파드 이동 메커니즘
 
 [다음 글]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %})에서는 구체적인 스케줄링 프로세스(Filter, Score, PostFilter)와 선점 메커니즘을 다룬다.
 
@@ -45,11 +47,17 @@ tags:
 
 ## 개념
 
-Kubernetes 스케줄링이란, **Kubernetes 스케줄러가 파드를 적합한 노드에 배치하는 프로세스**를 의미한다. 조금 더 정확하게는, 생성된 파드를 클러스터 내 어느 노드에서 실행할지 결정하고 할당하는 과정이다. 구체적으로는 다음과 같다.
+Kubernetes 스케줄링이란, **Kubernetes 스케줄러가 파드를 적합한 노드에 배치하는 프로세스**를 의미한다. 스케줄러의 핵심 역할은 **파드가 배포될 적합한 노드를 결정**하는 것이다. 스케줄러가 다루는 대상은 구체적으로 다음과 같다.
+
+- **새로 생성되는 파드 중 노드가 결정되지 않은 경우**: 파드가 API Server에 등록되었지만 아직 `spec.nodeName`이 설정되지 않은 상태
+- **생성되었지만 적합한 노드를 아직 찾지 못한 경우**: 이전 스케줄링 시도에서 실패하여 큐에서 대기 중인 파드
+
+스케줄러가 이러한 파드를 감지하면, 파드에 정의된 스케줄링 요구 사항(리소스 요청, nodeSelector, affinity 등)에 맞는 노드를 **필터링**하고, 스코어링 과정을 통해 배포에 **적합한 노드 순서를 정렬**한 뒤, 최적의 노드를 선택하여 바인딩한다. 전체 흐름을 요약하면 다음과 같다.
 
 1. `kube-scheduler`가 스케줄링이 필요한 파드를 감지
-2. 필터링과 스코어링(필요 시 선점)을 통해 최적의 노드를 선택
-3. 해당 노드에 파드를 바인딩
+2. 필터링으로 파드의 스케줄링 요구 사항에 맞는 노드를 걸러냄
+3. 스코어링으로 적합한 노드에 순위를 매김 (필요 시 선점)
+4. 최고 점수 노드에 파드를 바인딩
 
 ### 공식 문서 살펴 보기
 
@@ -100,6 +108,10 @@ K3s의 경우에는 `kube-scheduler`가 별도의 파드로 실행되지 않고 
 - **기본 스케줄러 교체**: `kube-scheduler`의 설정 파일(`KubeSchedulerConfiguration`)을 수정하여 플러그인을 활성화/비활성화하거나, 커스텀 스케줄러 바이너리로 교체할 수 있다.
 - **다중 스케줄러 운영**: 기본 스케줄러와 별도의 커스텀 스케줄러를 동시에 실행할 수 있다. 각 스케줄러는 고유한 이름을 가지며, 파드는 `spec.schedulerName` 필드로 어떤 스케줄러를 사용할지 지정한다.
 
+<br>
+
+#### schedulerName 지정
+
 ```yaml
 apiVersion: v1
 kind: Pod
@@ -112,17 +124,61 @@ spec:
     image: nginx
 ```
 
-`spec.schedulerName`을 지정하지 않으면 기본값인 `default-scheduler`가 사용된다. 지정된 이름의 스케줄러가 클러스터에 없으면, 해당 파드는 아무도 스케줄링하지 않으므로 Pending 상태에 영구히 남게 된다.
+`spec.schedulerName`을 지정하지 않으면 기본값인 `default-scheduler`가 사용된다. 이 기본값은 kube-apiserver가 파드 생성 시 자동으로 설정해 준다. 다중 스케줄러 환경에서 반드시 `schedulerName`을 명시해야 하는 것은 아니지만, **명시하지 않으면 항상 `default-scheduler`가 해당 파드를 처리한다.** 커스텀 스케줄러로 처리하고 싶은 파드에만 `schedulerName`을 명시하면 된다.
 
-다중 스케줄러가 유용한 대표적인 사례는 다음과 같다.
+지정된 이름의 스케줄러가 클러스터에 없으면, 해당 파드는 아무도 스케줄링하지 않으므로 Pending 상태에 영구히 남게 된다.
+
+<br>
+
+#### 다중 스케줄러 구현 방식
+
+다중 스케줄러를 구현하는 방식은 크게 두 가지다.
+
+**1. 단일 kube-scheduler에서 다중 프로필 운영**
+
+`KubeSchedulerConfiguration`에서 여러 프로필을 정의할 수 있다. 각 프로필은 고유한 `schedulerName`을 가지고, 서로 다른 플러그인 구성을 적용할 수 있다.
+
+```yaml
+apiVersion: kubescheduler.config.k8s.io/v1
+kind: KubeSchedulerConfiguration
+profiles:
+  - schedulerName: default-scheduler
+  - schedulerName: no-scoring-scheduler
+    plugins:
+      preScore:
+        disabled:
+        - name: '*'
+      score:
+        disabled:
+        - name: '*'
+```
+
+하나의 프로세스에서 여러 프로필을 운영하므로 리소스 경쟁 문제가 적다. 다만, 모든 프로필이 동일한 `queueSort` 플러그인을 사용해야 한다는 제약이 있다(스케줄러 내부적으로 Pending 파드 큐는 하나이기 때문).
+
+**2. 별도의 스케줄러 프로세스 운영**
+
+완전히 독립적인 스케줄러 바이너리를 Deployment 등으로 배포한다. [Volcano](https://volcano.sh/), [Kueue](https://kueue.sigs.k8s.io/) 등이 이 방식에 해당한다.
+
+<br>
+
+#### 파드와 스케줄러의 매칭: 경쟁은 없다
+
+하나의 파드를 놓고 여러 스케줄러가 "경쟁"하는 상황은 설계상 발생하지 않는다. 각 스케줄러는 **`spec.schedulerName`이 자신의 이름과 일치하는 파드만** Watch하고 처리한다. 즉, `schedulerName: default-scheduler`인 파드는 기본 스케줄러만, `schedulerName: my-custom-scheduler`인 파드는 커스텀 스케줄러만 처리한다. 랜덤으로 스케줄러가 파드를 가져가는 것이 아니라, **`schedulerName` 필드에 의해 1:1로 매칭**되는 구조다.
+
+그러나 서로 다른 스케줄러가 처리한 파드들이 **같은 노드의 리소스를 놓고 충돌**하는 문제는 발생할 수 있다. 각 스케줄러가 독립적으로 리소스 상태를 계산하기 때문에, 스케줄러 A가 노드의 잔여 리소스를 보고 파드를 배치하는 사이에 스케줄러 B가 같은 노드에 다른 파드를 배치하면 리소스 과할당이 발생한다. 더 심각한 케이스로, 선점 루프(preemption loop) 문제도 보고되어 있다. 스케줄러 A가 스케줄러 B가 관리하는 낮은 우선순위 파드를 선점하면, B의 컨트롤러가 해당 파드를 재생성하고, B가 다시 같은 노드에 스케줄링하고, A가 다시 선점하는 무한 루프가 발생할 수 있다.
+
+이 때문에 다중 스케줄러를 운영할 때는 **노드 풀을 분리**하거나, **스케줄러 간 리소스 경쟁이 없도록 설계**하는 것이 일반적이다. 단일 kube-scheduler의 다중 프로필 방식이 리소스 경쟁 측면에서 더 안전하다.
+
+<br>
+
+#### 다중 스케줄러 활용 사례
 
 | 사례 | 설명 |
 | --- | --- |
 | GPU 워크로드 전용 스케줄러 | GPU 토폴로지를 인식하는 커스텀 스케줄러로 GPU 파드만 스케줄링 |
 | 배치 작업 스케줄러 | [Volcano](https://volcano.sh/), [Kueue](https://kueue.sigs.k8s.io/) 등 배치/ML 워크로드에 특화된 스케줄러 |
 | 테스트/실험 | 새 스케줄링 정책을 테스트하면서 기존 워크로드에는 영향을 주지 않음 |
-
-다중 스케줄러 운영 시 주의할 점은, **서로 다른 스케줄러가 같은 노드의 리소스를 놓고 경쟁할 수 있다**는 것이다. 스케줄러 A가 노드의 잔여 리소스를 기준으로 파드를 배치하려는 순간, 스케줄러 B가 같은 노드에 다른 파드를 배치하면 리소스 충돌이 발생할 수 있다. 이 때문에 다중 스케줄러를 운영할 때는 노드 풀을 분리하거나, 스케줄러 간 리소스 경쟁이 없도록 설계하는 것이 일반적이다.
+| 스코어링 비활성화 | 특정 워크로드에 대해 Score 단계를 건너뛰어 스케줄링 속도를 높임 |
 
 <br>
 
@@ -317,6 +373,48 @@ Binding 오브젝트의 핵심 특성은 다음과 같다.
 
 <br>
 
+## DaemonSet 스케줄링
+
+DaemonSet은 클러스터의 모든(또는 특정) 노드에 파드를 하나씩 배치하는 워크로드 리소스다. DaemonSet의 스케줄링 방식은 Kubernetes 버전에 따라 크게 변화했다.
+
+### 과거: DaemonSet Controller가 직접 배치
+
+Kubernetes v1.12 이전(정확히는 `ScheduleDaemonSetPods` 기능이 활성화되기 전), DaemonSet Controller가 직접 `spec.nodeName`을 설정하여 파드를 노드에 배치했다. 이 방식은 앞서 설명한 "수동 스케줄링"과 동일한 메커니즘이다.
+
+- DaemonSet Controller가 각 노드에 대해 파드를 생성하면서 `spec.nodeName`을 직접 지정
+- `kube-scheduler`를 거치지 않으므로 taint/toleration, affinity 등 스케줄러의 필터 검증이 적용되지 않음
+- DaemonSet Controller가 자체적으로 taint/toleration 등을 확인해야 했는데, 이로 인해 스케줄러와 DaemonSet Controller의 로직이 중복되고, 동작이 불일치하는 문제가 있었음
+
+### 현재: kube-scheduler를 통한 배치 (v1.12 beta, v1.17 GA)
+
+`ScheduleDaemonSetPods` 기능이 v1.12에서 beta로 승격되고, **v1.17에서 GA(정식 기능)로 졸업**하면서, 현재는 DaemonSet 파드도 기본 스케줄러(`kube-scheduler`)를 통해 스케줄링된다.
+
+동작 방식은 다음과 같다.
+
+1. DaemonSet Controller가 각 노드에 대해 파드를 생성하되, `spec.nodeName`을 직접 설정하지 않는다.
+2. 대신 파드의 `spec.affinity.nodeAffinity`에 **`matchFields`를 사용하여 특정 노드를 지정**한다.
+
+    ```yaml
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchFields:
+              - key: metadata.name
+                operator: In
+                values:
+                - worker-1  # 이 노드에만 스케줄링
+    ```
+
+3. `kube-scheduler`가 이 NodeAffinity를 Filter 단계에서 평가하여 해당 노드에 스케줄링한다.
+
+이 변경으로 DaemonSet 파드도 스케줄러의 모든 필터 검증(taint/toleration, 리소스 확인 등)을 거치게 되었다. 스케줄러와 DaemonSet Controller 사이의 로직 불일치 문제가 해소되고, 스케줄링 동작의 일관성이 확보되었다.
+
+> **참고**: DaemonSet Controller가 `kubernetes.io/hostname` 라벨 대신 `metadata.name` 필드를 사용하는 이유는, hostname과 node name이 항상 일치하지 않을 수 있기 때문이다. `matchFields`로 `metadata.name`을 직접 참조하여 확실하게 노드를 특정한다.
+
+<br>
+
 ## 스케줄러 큐
 
 스케줄러는 내부적으로 3개의 큐를 운영하며, **Active Queue에 있는 파드만 꺼내서 스케줄링을 시도**한다. 큐 관리 자체도 스케줄러가 담당한다. 스케줄러 내부의 Scheduling Queue 컴포넌트가 새 파드 감지(Watch), 타이머 기반 Backoff Queue 확인, 클러스터 이벤트에 따른 Unschedulable Queue 처리, 스케줄링 실패 시 적절한 큐로의 이동 등을 모두 수행한다.
@@ -367,10 +465,13 @@ Active Queue에서 파드 꺼냄
 
 이 글에서 다룬 핵심 내용을 정리한다.
 
-1. **스케줄링은 배치 작업이다.** 파드 생성, 파드 실행, 리소스 할당은 스케줄링이 아니다. 스케줄러는 "어느 노드에서 실행할지"만 결정한다.
-2. **`kube-scheduler`는 교체 가능하고 다중 운영이 가능하다.** 파드는 `spec.schedulerName`으로 사용할 스케줄러를 지정하며, 기본값은 `default-scheduler`다.
+1. **스케줄링은 배치 작업이다.** 파드 생성, 파드 실행, 리소스 할당은 스케줄링이 아니다. 스케줄러는 노드가 결정되지 않은 파드를 감지하여, 스케줄링 요구 사항에 맞는 노드를 필터링하고 스코어링하여 "어느 노드에서 실행할지"를 결정한다.
+2. **`kube-scheduler`는 교체 가능하고 다중 운영이 가능하다.** 단일 kube-scheduler에서 다중 프로필을 운영하거나, 별도 스케줄러 프로세스를 배포할 수 있다. 각 스케줄러는 `spec.schedulerName`이 자신의 이름과 일치하는 파드만 처리하며, 하나의 파드를 두고 여러 스케줄러가 경쟁하는 일은 없다.
 3. **스케줄러의 판단 기준은 `spec.nodeName`이다.** `status.phase: Pending`이나 `PodScheduled` 조건이 아니다. `spec.nodeName`이 비어 있는 파드만 스케줄링 대상이 된다.
 4. **수동 스케줄링은 두 가지 방법이 있다.** 파드 생성 시 `spec.nodeName`을 직접 지정하거나, 이미 생성된 파드에 Binding 오브젝트를 생성한다. 두 방식 모두 스케줄러의 Filter 검증을 우회한다.
-5. **스케줄러는 3개의 큐로 파드를 관리한다.** Active Queue에서만 스케줄링을 시도하고, 실패 유형(일시적/구조적)에 따라 Backoff Queue 또는 Unschedulable Queue로 분류한 뒤, 조건 충족 시 Active Queue로 복귀시킨다.
+5. **DaemonSet은 v1.17부터 kube-scheduler를 통해 스케줄링된다.** DaemonSet Controller가 `spec.nodeName` 대신 NodeAffinity(`matchFields`)를 설정하여 스케줄러에 위임함으로써, 스케줄러의 필터 검증과 일관된 스케줄링 동작이 보장된다.
+6. **스케줄러는 3개의 큐로 파드를 관리한다.** Active Queue에서만 스케줄링을 시도하고, 실패 유형(일시적/구조적)에 따라 Backoff Queue 또는 Unschedulable Queue로 분류한 뒤, 조건 충족 시 Active Queue로 복귀시킨다.
 
 파드가 Pending 상태에 빠졌을 때, 먼저 `spec.nodeName`이 비어 있는지 확인하여 스케줄링 문제인지 아닌지를 구분하고, 스케줄링 문제라면 파드가 어느 큐에 있는지(Events 메시지 등)를 확인하여 원인을 좁혀 나가는 것이 효과적이다.
+
+<br>
