@@ -10,6 +10,7 @@ tags:
   - AI
   - Cursor
   - Retrospective
+hidden: true
 ---
 
 <br>

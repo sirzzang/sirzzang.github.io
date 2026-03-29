@@ -1,5 +1,5 @@
 ---
-title:  "[EKS] EKS: Networking - AWS VPC CNI"
+title:  "[EKS] EKS: Networking - 1. AWS VPC CNI"
 excerpt: "AWS VPC CNI의 구조와 동작 원리에 대해 살펴보자."
 categories:
   - Kubernetes
@@ -33,7 +33,7 @@ tags:
 
 # 들어가며
 
-[이전 글]({% post_url 2026-03-19-Kubernetes-EKS-02-00-Kubernetes-Networking-Model %})에서 쿠버네티스 네트워킹 모델의 요구사항과 이를 충족하는 세 가지 방식(오버레이, BGP, 클라우드 네이티브 라우팅)을 살펴봤다. AWS VPC CNI는 **클라우드 네이티브 라우팅** 방식에 해당하며, EKS 클러스터의 기본 네트워킹 플러그인으로 설치된다.
+[이전 글]({% post_url 2026-03-19-Kubernetes-EKS-02-00-01-Kubernetes-Pod-to-Pod-Networking %})에서 쿠버네티스 네트워킹 모델의 요구사항과 이를 충족하는 세 가지 방식(오버레이, BGP, 클라우드 네이티브 라우팅)을 살펴봤다. AWS VPC CNI는 **클라우드 네이티브 라우팅** 방식에 해당하며, EKS 클러스터의 기본 네트워킹 플러그인으로 설치된다.
 
 VPC CNI의 핵심은 **파드에게 VPC의 실제 IP를 부여**하는 것이다. 노드의 ENI(Elastic Network Interface)에 보조 IP를 추가하고 그것을 파드에 할당하므로, VPC 패브릭이 파드 IP를 직접 라우팅할 수 있다. 1주차에서 확인했던 [Secondary ENI]({% post_url 2026-03-12-Kubernetes-EKS-01-01-06-EKS-Owned-ENI %}#vpc에-eni가-6개인-이유)가 바로 이 메커니즘의 일부였다.
 
@@ -300,7 +300,7 @@ m5.large로 계산하면, 기본 모드에서는 `3 × 9 = 27`개인데, Prefix 
 
 파드가 아무리 많아져도 노드 서브넷의 IP는 건드리지 않는다. CG-NAT 대역(`100.64.0.0/10`)은 기업 환경에서 잘 쓰이지 않아 충돌 가능성이 낮기 때문에 권장된다.
 
-[이전 글에서 정리한 것]({% post_url 2026-03-19-Kubernetes-EKS-02-00-Kubernetes-Networking-Model %}#해결-방식)처럼, 대역이 다르더라도 VPC의 secondary CIDR이므로 VPC 라우팅 도메인 안에 있다. 핵심 메커니즘(ENI에 보조 IP를 붙이고, VPC 패브릭이 라우팅)은 동일하며, **보조 IP를 어느 서브넷에서 가져오느냐**만 다르다.
+[이전 글에서 정리한 것]({% post_url 2026-03-19-Kubernetes-EKS-02-00-01-Kubernetes-Pod-to-Pod-Networking %}#해결-방식)처럼, 대역이 다르더라도 VPC의 secondary CIDR이므로 VPC 라우팅 도메인 안에 있다. 핵심 메커니즘(ENI에 보조 IP를 붙이고, VPC 패브릭이 라우팅)은 동일하며, **보조 IP를 어느 서브넷에서 가져오느냐**만 다르다.
 
 > **참고: `EXTERNAL_SNAT`과 Instance/IP mode**
 >

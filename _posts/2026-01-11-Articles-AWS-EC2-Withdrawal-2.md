@@ -12,6 +12,7 @@ tags:
   - 의사결정
   - FinOps
   - 회고
+hidden: true
 ---
 
 <br>

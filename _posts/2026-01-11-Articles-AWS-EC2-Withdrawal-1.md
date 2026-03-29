@@ -10,6 +10,7 @@ tags:
   - 인프라
   - 의사결정
   - FinOps
+hidden: true
 ---
 
 <br>
