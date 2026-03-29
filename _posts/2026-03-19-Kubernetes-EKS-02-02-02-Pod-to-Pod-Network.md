@@ -1,5 +1,5 @@
 ---
-title: "[EKS] EKS: Networking - 4. 파드 간 통신"
+title: "[EKS] EKS: Networking - 3. 파드 간 통신"
 excerpt: "VPC CNI가 파드 네트워크를 구성하는 와이어링 과정과 파드 간 패킷 흐름을 tcpdump로 추적해 보자."
 categories:
   - Kubernetes
@@ -40,6 +40,8 @@ tags:
 - VPC CNI Plugin이 파드 네트워크를 **구성하는 과정** (와이어링)
 - 파드 간 패킷이 **흐르는 경로** (policy routing)
 - **tcpdump**로 실제 패킷 흐름을 검증한다
+
+이 글에서 다루는 파드 간 통신은 주로 **크로스 노드(다른 노드 간)** 통신이다. 같은 노드 내 파드 통신은 veth pair → 호스트 라우팅 테이블 → veth pair로 완결되는 일반적인 Linux 네트워킹이며, [기존 배경 설명 편]({% post_url 2026-03-19-Kubernetes-EKS-02-00-01-Pod-to-Pod-Networking %}#같은-노드의-파드-간-통신)에서 이미 다뤘다. VPC CNI가 와이어링(veth pair 생성, 호스트 라우트 추가)은 해주지만, 패킷 전달 자체는 노드 커널의 라우팅이 처리한다. VPC CNI의 고유한 가치 — **policy routing, ENI별 라우팅 테이블, VPC 라우팅 패브릭** — 가 동작하는 것은 크로스 노드 통신이다.
 
 <br>
 
@@ -208,7 +210,7 @@ table 2는 ens6을 통해 나가는 경로만 갖고 있다. `from 192.168.7.41 
 2. 호스트의 main 테이블에서 `파드B_IP dev eniXXX scope link` 매칭
 3. 해당 veth pair를 통해 파드B의 네임스페이스로 전달
 
-VPC 밖으로 나가지 않으므로 ENI도 거치지 않는다.
+VPC 밖으로 나가지 않으므로 ENI를 통과하지도, policy routing이 개입하지도 않는다. VPC CNI가 위에서 본 와이어링(veth pair 생성, 호스트 라우트 추가)을 해주지만, 패킷 전달 자체는 [일반적인 Linux 네트워킹]({% post_url 2026-03-19-Kubernetes-EKS-02-00-01-Pod-to-Pod-Networking %}#같은-노드의-파드-간-통신)과 동일하다. VPC CNI의 고유한 메커니즘이 동작하는 것은 아래의 크로스 노드 통신이다.
 
 ## 크로스 노드 통신
 
@@ -225,6 +227,63 @@ VPC 밖으로 나가지 않으므로 ENI도 거치지 않는다.
 5. **호스트 → veth**: main 테이블의 `192.168.4.248 dev eni31b43252b24 scope link`로 veth pair를 통해 파드 2에 전달
 
 이 과정에서 패킷의 **소스 IP(192.168.2.151)**와 **목적지 IP(192.168.4.248)**는 한 번도 변하지 않는다. NAT도 오버레이 캡슐화도 없다.
+
+<br>
+
+# 패킷 흐름
+
+위에서 크로스 노드 통신의 경로를 5단계로 살펴봤다. 여기서는 [AWS VPC CNI Proposal](https://github.com/aws/amazon-vpc-cni-k8s/blob/master/docs/cni-proposal.md)의 시퀀스 다이어그램을 기반으로, ENI별 policy routing과 `ip rule` 흐름까지 포함한 전체 패킷 경로를 추적한다.
+
+![pod-to-pod-sequence]({{site.url}}/assets/images/eks-proposal-pod-to-pod-sequence.png){: .align-center}
+
+
+<center><sup><a href="https://github.com/aws/amazon-vpc-cni-k8s/blob/master/docs/cni-proposal.md#life-of-a-pod-to-pod-ping-packet">AWS VPC CNI Proposal</a>의 Pod to Pod 통신 시퀀스. 파드 IP가 어느 ENI에 속하느냐에 따라 policy routing으로 나가는 ENI가 달라진다.</sup></center>
+
+핵심은 파드 IP가 어느 ENI에 속하느냐에 따라 **policy routing**으로 나가는 ENI가 달라진다는 점이다. `ip rule`의 `from <파드IP> lookup eni-1` 규칙이 해당 ENI의 라우팅 테이블을 사용하게 만든다. 반드시 "첫 번째 인터페이스"만 쓰는 것이 아니다.
+
+## 구성 요소
+
+| 구성 요소 | 역할 |
+|-----------|------|
+| **pod1 on node1** | 통신의 출발점. source IP가 파드 IP인 상태로 시작 |
+| **veth-1 on node1** | 파드 eth0과 pair로 연결된 가상 인터페이스. 파드 네임스페이스 → 노드 네임스페이스 경계 |
+| **eth0 on node1 (ens5)** | 송신 노드의 ENI. 목적지가 VPC CIDR 안이므로 **SNAT 없이** 파드 IP 그대로 나감 |
+| **eth0 on node2 (ens5)** | 수신 노드의 ENI. VPC 라우팅을 통해 패킷이 도착하는 지점 |
+| **veth-1 on node2** | 수신 노드에서 pod2와 연결된 veth pair. `ip rule`의 `to <pod2 IP> lookup main` → 호스트 라우트로 직접 전달 |
+| **pod2 on node2** | 최종 목적지. source IP는 **pod1의 파드 IP 그대로** |
+
+예시 IP: pod1 IP = `192.168.2.151` (node1), pod2 IP = `192.168.4.248` (node2)
+
+## 나가는 경로
+
+| 순서 | 구간 | 설명 |
+|------|------|------|
+| 1 | pod1 eth0 | L3 lookup → pod2 IP는 내 서브넷 밖 → next hop = default gw (`169.254.1.1`) |
+| 2 | pod1 eth0 | ARP로 default gw(veth)의 MAC 주소 획득 |
+| 3 | pod1 eth0 → veth-1 on node1 | ping 전송: `MAC-DA=veth MAC`, `IP-DA=pod2 IP`, `IP-SA=pod1 IP` |
+| 4 | veth-1 → node1's eth0 | L3 lookup: 목적지가 VPC CIDR **안** → `AWS-SNAT-CHAIN-0`에서 `-d 192.168.0.0/16 -j RETURN` → **SNAT 안 함** |
+| 5 | node1's eth0 → EC2-VPC fabric → node2's eth0 | VPC 라우팅: pod2 IP가 node2 ENI의 secondary IP → node2로 직접 전달. **파드 IP 그대로** |
+| 6 | node2's eth0 → veth-1 on node2 | L3 lookup: `ip rule`에서 `to 192.168.4.248 lookup main` → `192.168.4.248 dev eniXXXX scope link` |
+| 7 | veth-1 → pod2 eth0 | ping 도착: `IP-SA=pod1 IP`, `IP-DA=pod2 IP` — 파드 IP 변환 없음 |
+
+## 돌아오는 경로
+
+| 순서 | 구간 | 설명 |
+|------|------|------|
+| 8 | pod2 eth0 → veth-1 on node2 | ping reply: `IP-SA=pod2 IP`, `IP-DA=pod1 IP` |
+| 9 | node2's eth0 → EC2-VPC fabric → node1's eth0 | 역방향 VPC 라우팅 (동일하게 SNAT 없음) |
+| 10 | node1's eth0 → veth-1 → pod1 eth0 | ping reply 수신: `IP-SA=pod2 IP`, `IP-DA=pod1 IP` |
+
+경로 전체에서 소스 IP(`192.168.2.151`)와 목적지 IP(`192.168.4.248`)가 **한 번도 변하지 않는다**. [다음 글]({% post_url 2026-03-19-Kubernetes-EKS-02-02-03-Pod-to-External-Network %}#패킷-흐름)의 파드→외부 통신에서는 4 지점에서 SNAT이 적용되어 ens5에서 노드 IP가 찍히는 것과 대조된다.
+
+## 주요 사항
+
+- **1~3 파드 → veth → 호스트** — 목적지 IP(`192.168.4.248`)가 내 서브넷 밖 → default gateway(`169.254.1.1`) → ARP로 veth MAC 획득 → `MAC-DA=veth MAC`, `IP-DA=192.168.4.248`, `IP-SA=192.168.2.151`으로 veth pair를 통해 노드 네임스페이스에 전달. 여기까지는 파드→외부와 완전히 동일하다.
+- **4 SNAT이 안 일어나는 이유** — 노드 라우팅 참조 → 목적지가 `192.168.0.0/16` 안 → default route로 ens5를 통해 나간다. `AWS-SNAT-CHAIN-0`의 첫 번째 규칙이 `-d 192.168.0.0/16 -j RETURN`이다. pod2 IP(`192.168.4.248`)가 VPC CIDR 안이므로 RETURN → SNAT 규칙에 도달하지 않는다. **파드 IP 그대로 나간다**. 파드→외부에서는 목적지가 VPC CIDR 밖이라 이 규칙을 통과해서 SNAT이 적용된다.
+- **5 VPC native 라우팅** — VPC가 `192.168.4.248`은 node2 ENI의 secondary IP임을 알고 있어 직접 전달한다. 오버레이(VXLAN, Geneve 등) 없이 직접 전달 가능. IGW 불필요, NAT 불필요.
+- **6 policy routing** — 수신 노드에서 `ip rule`의 `to 192.168.4.248 lookup main` → 호스트 라우트(`192.168.4.248 dev eni31b43252b24 scope link`)로 정확한 veth에 전달한다.
+- **8~10 역방향** — reply도 동일한 경로를 역순으로 탄다. SNAT 없었으니 conntrack/역NAT도 불필요하다.
+- **tcpdump에서의 차이** — 파드→외부에서는 ens5에서 노드 IP가 찍힌다 (SNAT 후). 파드→파드에서는 ens5에서도 **파드 IP가 그대로** 찍힌다 (SNAT 없음). 아래 [tcpdump 검증](#tcpdump-검증)에서 이를 직접 확인한다.
 
 <br>
 

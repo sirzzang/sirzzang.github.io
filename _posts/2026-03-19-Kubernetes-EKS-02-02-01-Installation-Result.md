@@ -1,5 +1,5 @@
 ---
-title: "[EKS] EKS: Networking - 3. 실습 환경 네트워크 확인"
+title: "[EKS] EKS: Networking - 2. 실습 환경 구성 - 확인"
 excerpt: "배포된 EKS 클러스터의 네트워크 구성을 노드 수준에서 직접 확인하고, VPC CNI가 ENI와 보조 IP를 어떻게 관리하는지 살펴보자."
 categories:
   - Kubernetes
@@ -114,7 +114,7 @@ ip-192-168-9-102.ap-northeast-2.compute.internal
 **노드 1** (coredns 파드 있음) — 완전한 구조:
 
 - **ENI0**(ens5): 주 IP `192.168.4.12/22`. 노드 자체의 기본 네트워크 인터페이스다
-- **ENI1**(ens6): 주 IP `192.168.7.41/22`. VPC CNI(ipamd)가 파드 IP 확보를 위해 추가로 붙인 ENI다. t3.medium은 ENI당 [슬롯]({% post_url 2026-03-19-Kubernetes-EKS-02-01-EKS-VPC-CNI %}#슬롯-ip-관리의-기본-단위) 6개(주 IP 1개 + 보조 IP 5개)를 가지므로, 보조 IP 5개가 warm pool에 있다
+- **ENI1**(ens6): 주 IP `192.168.7.41/22`. VPC CNI(ipamd)가 파드 IP 확보를 위해 추가로 붙인 ENI다. t3.medium은 ENI당 [슬롯]({% post_url 2026-03-19-Kubernetes-EKS-02-01-01-EKS-VPC-CNI %}#슬롯-ip-관리의-기본-단위) 6개(주 IP 1개 + 보조 IP 5개)를 가지므로, 보조 IP 5개가 warm pool에 있다
 - **veth pair**: `enifdec4b696ce@if3`(호스트 측) ↔ `eth0`(파드 측). coredns 파드의 네트워크 네임스페이스를 호스트에 연결한다
 - **Host Network 파드**: aws-node, kube-proxy는 `hostNetwork: true`로 노드 IP를 그대로 사용한다
 
@@ -219,7 +219,19 @@ portRange: ""
 
 </details>
 
-`mode: "iptables"`로 설정되어 있다. kube-proxy가 Service → Pod 매핑을 iptables NAT 규칙으로 구현한다는 의미다.
+`mode: "iptables"`로 설정되어 있다. kube-proxy가 Service → Pod 매핑을 iptables NAT 규칙으로 구현한다는 의미다. 주요 설정 항목은 다음과 같다.
+
+| 설정 | 값 | 설명 |
+|---|---|---|
+| `conntrack.maxPerCore` | `32768` | CPU 코어당 최대 conntrack 테이블 엔트리 수 |
+| `conntrack.tcpEstablishedTimeout` | `24h` | ESTABLISHED 상태 TCP 연결의 conntrack 유지 시간 |
+| `conntrack.tcpCloseWaitTimeout` | `1h` | CLOSE_WAIT 상태 TCP 연결의 conntrack 유지 시간 |
+| `iptables.masqueradeAll` | `false` | 모든 트래픽에 SNAT를 적용하지 않음. `clusterCIDR` 외부로 나가는 트래픽만 마스커레이드 |
+| `iptables.masqueradeBit` | `14` | iptables fwmark에서 마스커레이드 마킹에 사용할 비트 위치 |
+| `iptables.minSyncPeriod` | `0s` | iptables 규칙 최소 동기화 주기. `0`이면 Service/Endpoint 변경 즉시 동기화 |
+| `iptables.syncPeriod` | `30s` | iptables 규칙 전체 재동기화 주기 |
+| `mode` | `"iptables"` | 프록시 모드. `iptables`, `ipvs`, `nftables` 중 선택 |
+| `oomScoreAdj` | `-998` | OOM Killer 우선순위. 값이 낮을수록 종료 우선순위가 낮아 보호됨 |
 
 > 참고: **IPVS 모드 지원 중단**
 > 
@@ -252,7 +264,7 @@ aws-node   3         3         3       3            3           <none>          
 | `AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG` | `false` | Custom Networking 비활성화 |
 | `AWS_VPC_K8S_CNI_EXTERNALSNAT` | `false` | VPC 외부 통신 시 노드 IP로 SNAT 수행 |
 
-`WARM_ENI_TARGET=1`은 이전 포스트에서 Terraform으로 설정한 값이다. 현재 사용 중인 ENI 외에 1개의 ENI를 항상 미리 붙여 두라는 의미로, 새 파드가 생성되면 warm pool의 IP를 즉시 할당할 수 있다. 웜 풀 전략의 상세 동작과 `WARM_IP_TARGET`, `MINIMUM_IP_TARGET` 등 다른 전략과의 비교는 [VPC CNI 설정 - 웜 풀 전략]({% post_url 2026-03-19-Kubernetes-EKS-02-01-EKS-VPC-CNI %}#웜-풀-전략)을 참고하자. 이번 실습에서 확인하는 환경 변수들의 이론적 배경(Secondary IP vs Prefix Delegation, Custom Networking 등)도 같은 글의 [IP 할당 설정]({% post_url 2026-03-19-Kubernetes-EKS-02-01-EKS-VPC-CNI %}#ip-할당-설정)에서 다루고 있다.
+`WARM_ENI_TARGET=1`은 이전 포스트에서 Terraform으로 설정한 값이다. 현재 사용 중인 ENI 외에 1개의 ENI를 항상 미리 붙여 두라는 의미로, 새 파드가 생성되면 warm pool의 IP를 즉시 할당할 수 있다. 웜 풀 전략의 상세 동작과 `WARM_IP_TARGET`, `MINIMUM_IP_TARGET` 등 다른 전략과의 비교는 [VPC CNI 설정 - 웜 풀 전략]({% post_url 2026-03-19-Kubernetes-EKS-02-01-01-EKS-VPC-CNI %}#웜-풀-전략)을 참고하자. 이번 실습에서 확인하는 환경 변수들의 이론적 배경(Secondary IP vs Prefix Delegation, Custom Networking 등)도 같은 글의 [IP 할당 설정]({% post_url 2026-03-19-Kubernetes-EKS-02-01-01-EKS-VPC-CNI %}#ip-할당-설정)에서 다루고 있다.
 
 <details markdown="1">
 <summary><b>aws-node 전체 환경 변수</b></summary>
@@ -438,15 +450,12 @@ ens6             UP             192.168.9.176/22 fe80::833:cfff:fe48:fe09/64
 
 노드별 차이가 명확하다.
 
-**노드 1, 3** (coredns 파드 있음):
+- **노드 1, 3** (coredns 파드 있음): `ens5`, `ens6` 존재. 일반 파드가 있으므로 추가 ENI가 필요
+  - `ens5`: ENI0의 주 IP. 노드 자체의 기본 네트워크 인터페이스
+  - `eniXXX@if3`: coredns 파드와 연결된 veth pair의 호스트 측.`AWS_VPC_K8S_CNI_VETHPREFIX=eni`에 의해 `eni` 접두어가 붙음
+  - `ens6`: ENI1. ipamd가 추가로 붙인 ENI. 보조 IP를 통해 파드에 IP를 제공
 
-- `ens5`: ENI0의 주 IP. 노드 자체의 기본 네트워크 인터페이스
-- `eniXXX@if3`: coredns 파드와 연결된 veth pair의 호스트 측. `AWS_VPC_K8S_CNI_VETHPREFIX=eni`에 의해 `eni` 접두어가 붙는다
-- `ens6`: ENI1. ipamd가 추가로 붙인 ENI. 보조 IP를 통해 파드에 IP를 제공한다
-
-**노드 2** (일반 파드 없음):
-
-- `ens5`만 존재한다. 일반 파드가 없으므로 추가 ENI나 veth pair가 필요 없다
+- **노드 2** (일반 파드 없음): `ens5`만 존재. 일반 파드가 없으므로 추가 ENI나 veth pair가 필요하지 않음
 
 <details markdown="1">
 <summary><b>ip addr 상세 출력 (노드 1)</b></summary>
@@ -1057,9 +1066,9 @@ netshoot-pod-64fbf7fb5-wz7nl   1/1     Running   0          3m18s   192.168.11.1
 
 특히 **노드 2**의 변화가 눈에 띈다. 이전까지 `ens5`만 있던 노드 2에 파드가 배치되면서 **ens6(추가 ENI)이 자동으로 올라오고**, veth pair도 생성된다.
 
-여기서 주의할 점은, 이것이 IP 풀이 바닥나서 발생한 것이 **아니라는** 것이다. ENI0(ens5)에는 아직 보조 IP 4개가 남아 있다. 트리거는 [`WARM_ENI_TARGET`]({% post_url 2026-03-19-Kubernetes-EKS-02-01-EKS-VPC-CNI %}#전략-1-eni-단위--warm_eni_target)이다. 이 설정은 "사용 중이 아닌 **여유 ENI 수**"를 지정하는데, 파드 1개가 ENI0의 IP를 하나라도 사용하면 ENI0은 더 이상 "여유"로 취급되지 않는다. warm ENI 수가 0으로 떨어지고, `WARM_ENI_TARGET=1`을 다시 충족하기 위해 ipamd가 새 ENI를 붙이는 것이다. IP가 부족해서가 아니라 warm ENI target 조건이 깨졌기 때문에 발생하는 동작이다.
+여기서 주의할 점은, 이것이 IP 풀이 바닥나서 발생한 것이 **아니라는** 것이다. ENI0(ens5)에는 아직 보조 IP 4개가 남아 있다. 트리거는 [`WARM_ENI_TARGET`]({% post_url 2026-03-19-Kubernetes-EKS-02-01-01-EKS-VPC-CNI %}#전략-1-eni-단위--warm_eni_target)이다. 이 설정은 "사용 중이 아닌 **여유 ENI 수**"를 지정하는데, 파드 1개가 ENI0의 IP를 하나라도 사용하면 ENI0은 더 이상 "여유"로 취급되지 않는다. warm ENI 수가 0으로 떨어지고, `WARM_ENI_TARGET=1`을 다시 충족하기 위해 ipamd가 새 ENI를 붙이는 것이다. IP가 부족해서가 아니라 warm ENI target 조건이 깨졌기 때문에 발생하는 동작이다.
 
-새 ENI가 붙는 메커니즘 자체는 [IP 풀 고갈 시 ENI 추가 확보]({% post_url 2026-03-19-Kubernetes-EKS-02-01-EKS-VPC-CNI %}#ip-풀-고갈-시-eni-추가-확보)에서 설명한 `CreateNetworkInterface` → `AttachNetworkInterface` → `AssignPrivateIpAddresses` 흐름과 동일하다. [설정별 실제 ENI/IP 소비 테이블]({% post_url 2026-03-19-Kubernetes-EKS-02-01-EKS-VPC-CNI %}#참고-설정별-실제-eniip-소비)에서 확인할 수 있듯, `WARM_ENI_TARGET=1`은 파드가 1개만 떠도 새 ENI를 통째로 붙이는 전략이다. 이로 인해 노드 2도 이제 ENI 2개에 보조 IP 10개를 갖게 된다.
+새 ENI가 붙는 메커니즘 자체는 [IP 풀 고갈 시 ENI 추가 확보]({% post_url 2026-03-19-Kubernetes-EKS-02-01-01-EKS-VPC-CNI %}#ip-풀-고갈-시-eni-추가-확보)에서 설명한 `CreateNetworkInterface` → `AttachNetworkInterface` → `AssignPrivateIpAddresses` 흐름과 동일하다. [설정별 실제 ENI/IP 소비 테이블]({% post_url 2026-03-19-Kubernetes-EKS-02-01-01-EKS-VPC-CNI %}#참고-설정별-실제-eniip-소비)에서 확인할 수 있듯, `WARM_ENI_TARGET=1`은 파드가 1개만 떠도 새 ENI를 통째로 붙이는 전략이다. 이로 인해 노드 2도 이제 ENI 2개에 보조 IP 10개를 갖게 된다.
 
 라우팅 테이블에도 새 파드의 경로가 추가된다.
 
