@@ -188,6 +188,35 @@ sudo installer -pkg AWSCLIV2.pkg -target /
 aws --version
 ```
 
+## Pager 설정
+
+AWS CLI v2는 기본적으로 명령어 출력을 **pager**(보통 `less`)로 보낸다. pager란 긴 출력을 한 화면씩 넘겨보기 위한 프로그램으로, 터미널에서 `man` 페이지를 읽을 때 쓰이는 방식과 같다.
+
+pager가 활성화되어 있으면 다음과 같은 불편이 있다.
+
+- 출력이 별도 화면에 표시되어, 이전 터미널 컨텍스트가 가려진다
+- 결과를 파이프(`|`)나 리다이렉션(`>`)으로 넘기는 스크립트와 충돌할 수 있다
+- 짧은 출력도 매번 `q`를 눌러 빠져나와야 한다
+
+EKS 실습 환경에서는 짧은 출력을 자주 확인하게 되므로, pager를 비활성화해 두는 것이 편하다.
+
+```bash
+# 영구 설정 — ~/.aws/config에 반영
+aws configure set cli_pager ""
+```
+
+일회성으로 끄고 싶다면 명령어 앞에 환경변수를 붙인다.
+
+```bash
+AWS_PAGER="" aws sts get-caller-identity
+```
+
+Shell 세션 단위로 끄려면 `export`를 사용한다.
+
+```bash
+export AWS_PAGER=""
+```
+
 <br>
 
 ## 기존 설치 확인 및 업그레이드

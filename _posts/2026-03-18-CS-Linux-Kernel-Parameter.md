@@ -108,7 +108,7 @@ cat /proc/sys/net/ipv4/ip_forward
 `sysctl`은 Linux 커널이 제공하는 `/proc/sys/` 인터페이스를 사용하므로, **Ubuntu, RHEL, Rocky, Amazon Linux, Debian, SUSE 등 모든 Linux 배포판에서 동일하게 동작**한다. `procps` 패키지(또는 `procps-ng`)에 포함되어 있으며 사실상 모든 배포판에 기본 설치된다.
 
 다만 배포판마다 다를 수 있는 것들이 있다:
-- **기본값**: 배포판에 따라 다를 수 있음 (예: `vm.dirty_ratio` 등)
+- **기본값**: 배포판에 따라 다를 수 있음. 예를 들어 `net.ipv4.ip_default_ttl`(IP 패킷의 초기 TTL)은 Linux 커널 기본 64, AL2023은 127, AL2는 255다. 같은 커널 파라미터인데 배포판이 다르면 기본 동작이 달라지는 대표적인 사례다.
 - **커널 버전에 따른 파라미터 차이**: 새 커널에서 파라미터가 추가되거나 동작이 변경될 수 있음
 - **설정 파일 경로 관례**: `/etc/sysctl.conf`만 사용하는 구형 배포판 vs `/etc/sysctl.d/`를 지원하는 최신 배포판
 

@@ -1,5 +1,5 @@
 ---
-title:  "[EKS] EKS: Networking - 쿠버네티스 네트워킹 모델"
+title:  "[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델"
 excerpt: "EKS Networking을 이해하기 위해 쿠버네티스가 요구하는 네트워킹 모델을 파드 간 통신 관점에서 살펴보자."
 categories:
   - Kubernetes
