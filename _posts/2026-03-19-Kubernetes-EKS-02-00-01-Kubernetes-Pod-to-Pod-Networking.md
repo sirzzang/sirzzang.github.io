@@ -1,6 +1,6 @@
 ---
-title:  "[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델 - 파드 간 통신"
-excerpt: "쿠버네티스 네트워킹 모델의 핵심인 파드 간 통신을 같은 노드, 다른 노드로 나누어 살펴본다."
+title:  "[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델 - 1. 파드 간 통신"
+excerpt: "쿠버네티스 네트워킹 모델의 핵심인 파드 간 통신을 같은 노드, 다른 노드로 나누어 살펴보자."
 categories:
   - Kubernetes
 toc: true

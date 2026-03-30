@@ -1,6 +1,6 @@
 ---
 title: "[EKS] EKS: Networking - 4. 파드와 외부 간 통신"
-excerpt: "VPC CNI 환경에서 파드가 인터넷과 통신할 때 SNAT이 어떻게 동작하는지 tcpdump와 iptables로 확인한다."
+excerpt: "VPC CNI 환경에서 파드가 인터넷과 통신할 때 SNAT이 어떻게 동작하는지 tcpdump와 iptables로 확인해보자."
 categories:
   - Kubernetes
 toc: true

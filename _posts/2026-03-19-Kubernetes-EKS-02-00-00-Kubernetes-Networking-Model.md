@@ -1,6 +1,6 @@
 ---
 title:  "[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델"
-excerpt: "쿠버네티스 네트워킹의 4가지 문제와 핵심 원칙인 'NAT 없이'를 정리한다."
+excerpt: "쿠버네티스 네트워킹의 4가지 문제와 핵심 원칙인 'NAT 없이'에 대해 알아보자."
 categories:
   - Kubernetes
 toc: true
