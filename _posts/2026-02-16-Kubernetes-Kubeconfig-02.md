@@ -1,5 +1,5 @@
 ---
-title:  "[Kubernetes] kubeconfig - 2. 다중 클러스터 접근 구성 실습"
+title:  "[Kubernetes] kubeconfig - 2. 다중 클러스터 접근 구성"
 excerpt: "여러 Kubernetes 클러스터를 하나의 kubeconfig로 관리해보자."
 categories:
   - Kubernetes

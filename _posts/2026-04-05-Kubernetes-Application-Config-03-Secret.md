@@ -14,7 +14,7 @@ tags:
   - docker-registry
   - security
   - etcd
-hidden: true
+hidden: false
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 8장의 학습 내용을 기반으로 합니다.*
@@ -393,15 +393,6 @@ Secret을 컨테이너에 주입할 때는 환경 변수 방식보다 볼륨 마
 
 <br>
 
----
-
-## 참고 링크
-
-- [Secrets \| Kubernetes](https://kubernetes.io/docs/concepts/configuration/secret/)
-- [Encrypting Confidential Data at Rest](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/)
-- [Reddit: Is there a reason to use secrets over configmap?](https://www.reddit.com/r/kubernetes/comments/1jqlgk1/is_there_a_reason_to_use_secrets_over_configmap/)
-- [Reddit: Mounted secrets more secure than env vars?](https://www.reddit.com/r/kubernetes/comments/1n0g3t3/mounted_secrets_more_secure_than_env_vars/)
-
----
-
 *다음 포스트: [어플리케이션 설정 - 4. Downward API]({% post_url 2026-04-05-Kubernetes-Application-Config-04-Downward-API %})*
+
+<br>
