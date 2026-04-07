@@ -14,7 +14,7 @@ tags:
   - docker-registry
   - security
   - etcd
-hidden: false
+hidden: true
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 8장의 학습 내용을 기반으로 합니다.*
@@ -390,9 +390,5 @@ tmpfs on /var/run/secrets/kubernetes.io/serviceaccount type tmpfs (ro,relatime)
 Secret은 ConfigMap과 구조적으로 유사하지만, 민감 데이터를 안전하게 다루기 위한 별도의 오브젝트다. `data`(Base64 인코딩), `stringData`(쓰기 전용 평문), `type`(유형 구분) 필드가 핵심이고, `kubectl create secret`이나 YAML 매니페스트로 생성할 수 있다. TLS Secret과 Docker 레지스트리 Secret 같은 내장 유형도 지원한다.
 
 Secret을 컨테이너에 주입할 때는 환경 변수 방식보다 볼륨 마운트 방식이 보안상 권장된다. 환경 변수는 로그나 자식 프로세스를 통해 노출될 위험이 있기 때문이다. 또한 쿠버네티스가 Secret을 필요한 노드에만 배포하고 메모리(tmpfs)에만 저장하는 등의 보호 메커니즘을 제공하지만, Base64 인코딩은 암호화가 아니고 etcd 저장 시 평문일 수 있으며 RBAC 설정 오류로 노출될 수 있다는 한계가 있다. 보안이 중요한 환경에서는 HashiCorp Vault 같은 외부 Secret 관리 도구를 함께 사용하는 것이 좋다.
-
-<br>
-
-*다음 포스트: [어플리케이션 설정 - 4. Downward API]({% post_url 2026-04-05-Kubernetes-Application-Config-04-Downward-API %})*
 
 <br>

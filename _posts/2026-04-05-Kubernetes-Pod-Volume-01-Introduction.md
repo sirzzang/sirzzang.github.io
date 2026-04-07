@@ -15,7 +15,7 @@ tags:
   - emptyDir
   - hostPath
   - ephemeral-volume
-hidden: false
+hidden: true
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 9장의 학습 내용을 기반으로 합니다.*
@@ -311,9 +311,5 @@ Kubernetes 볼륨은 크게 두 분류로 나뉜다.
 - Kubernetes에서 컨테이너 "재시작"은 실제로는 **재생성(recreate)**이다. 같은 컨테이너를 다시 켜는 메커니즘 자체가 없다
 - 볼륨은 Pod와 수명 주기를 공유하며, 컨테이너 수명 주기와는 독립적이다
 - 임시 볼륨(emptyDir, configMap, secret 등)은 Pod 삭제 시 사라지고, 영구 볼륨(PV/PVC)은 Pod와 독립적으로 존재한다
-
-<br>
-
-*다음 포스트: [Pod 볼륨 - 2. emptyDir]({% post_url 2026-04-05-Kubernetes-Pod-Volume-02-emptyDir %})*
 
 <br>

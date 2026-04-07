@@ -15,7 +15,7 @@ tags:
   - OCI
   - ImageVolume
   - security
-hidden: false
+hidden: true
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 9장의 학습 내용을 기반으로 합니다.*
@@ -696,11 +696,5 @@ Pod가 삭제되어도 crontab에 삽입한 백도어는 노드에 남아 있다
 - `image` 볼륨은 OCI 이미지의 파일을 컨테이너를 실행하지 않고 직접 마운트하는 볼륨 타입이다. 기존의 init 컨테이너 + emptyDir 조합을 대체할 수 있으며, 이미지를 순수한 파일 패키징/배포 매체로 활용할 수 있게 한다
 - `hostPath` 볼륨은 노드의 파일 시스템 경로를 Pod에 마운트한다. 시스템 레벨 Pod(로그 수집기, 모니터링 에이전트 등)에서 주로 사용되며, 일반 워크로드에서는 보안 위험 때문에 권장되지 않는다
 - `hostPath: /`는 노드의 root 접근 권한과 동일하다. Secret 탈취, kubelet 인증서 도용, 노드 백도어 삽입 등의 공격이 가능하므로, PodSecurityAdmission의 `restricted` 프로파일로 사용을 반드시 제한해야 한다
-
-<br>
-
-*이전 포스트: [Pod 볼륨 - 2. emptyDir]({% post_url 2026-04-05-Kubernetes-Pod-Volume-02-emptyDir %})*
-
-*다음 포스트: [Pod 볼륨 - 4. configMap, secret, downwardAPI, projected 볼륨]({% post_url 2026-04-05-Kubernetes-Pod-Volume-04-ConfigMap-Secret-DownwardAPI-Projected %})*
 
 <br>

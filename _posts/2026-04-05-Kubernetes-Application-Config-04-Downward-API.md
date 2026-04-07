@@ -13,7 +13,7 @@ tags:
   - fieldRef
   - resourceFieldRef
   - metadata
-hidden: false
+hidden: true
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 8장의 학습 내용을 기반으로 합니다.*

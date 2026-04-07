@@ -15,7 +15,7 @@ tags:
   - command
   - args
   - environment-variable
-hidden: false
+hidden: true
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 8장의 학습 내용을 기반으로 합니다.*
@@ -708,9 +708,5 @@ command terminated with exit code 1
 - `$(VAR_NAME)` 구문은 같은 매니페스트에 정의된 변수만 참조할 수 있다. 참조 대상이 먼저 정의되어 있어야 하고, resolve 불가 시 문자열 그대로 남는다
 - 이미지/OS가 설정한 변수를 참조하려면 `sh -c`로 셸을 통해 커맨드를 실행하고 `$VAR_NAME` 구문을 사용해야 한다
 - `$$(VAR_NAME)` 구문으로 리터럴 `$(VAR_NAME)` 문자열을 값에 넣을 수 있다
-
-<br>
-
-*다음 포스트: [어플리케이션 설정 - 2. ConfigMap]({% post_url 2026-04-05-Kubernetes-Application-Config-02-ConfigMap %})*
 
 <br>

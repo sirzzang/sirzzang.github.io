@@ -14,7 +14,7 @@ tags:
   - configMapKeyRef
   - environment-variable
   - immutable
-hidden: false
+hidden: true
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 8장의 학습 내용을 기반으로 합니다.*
@@ -703,9 +703,5 @@ spec:
 - 환경 변수로 주입된 ConfigMap은 컨테이너 재시작 전까지 반영되지 않는다
 - `immutable: true`로 ConfigMap 변경을 방지하면 설정 일관성과 API 서버 부하 감소를 도모할 수 있다
 - 볼륨 마운트 방식은 파드 재시작 없이 자동 반영되지만, subPath 마운트는 예외다
-
-<br>
-
-*다음 포스트: [어플리케이션 설정 - 3. Secret]({% post_url 2026-04-05-Kubernetes-Application-Config-03-Secret %})*
 
 <br>

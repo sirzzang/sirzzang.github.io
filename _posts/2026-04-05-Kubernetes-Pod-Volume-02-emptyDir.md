@@ -14,7 +14,7 @@ tags:
   - init-container
   - sidecar
   - tmpfs
-hidden: false
+hidden: true
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 9장의 학습 내용을 기반으로 합니다.*
@@ -428,11 +428,5 @@ volumes:
 - `medium: Memory`로 tmpfs 볼륨을 생성하면 I/O 성능이 향상되고, 민감한 데이터 저장에도 적합하다
 - init 컨테이너를 사용해 emptyDir 볼륨에 초기 데이터를 채울 수 있다. MongoDB의 `/docker-entrypoint-initdb.d/` 같은 메커니즘과 잘 어울린다
 - 동일한 emptyDir 볼륨을 여러 컨테이너에 마운트하면 사이드카 패턴, 로그 공유, ML 워크로드 등 다양한 시나리오에서 활용할 수 있다
-
-<br>
-
-*이전 포스트: [Pod 볼륨 - 1. 볼륨 소개]({% post_url 2026-04-05-Kubernetes-Pod-Volume-01-Introduction %})*
-
-*다음 포스트: [Pod 볼륨 - 3. image 볼륨과 hostPath]({% post_url 2026-04-05-Kubernetes-Pod-Volume-03-Image-Volume-HostPath %})*
 
 <br>
