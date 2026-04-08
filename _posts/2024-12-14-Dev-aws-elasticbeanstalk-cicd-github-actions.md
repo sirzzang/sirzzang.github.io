@@ -25,7 +25,7 @@ tags:
 
 ![aws-backend-structure]({{site.url}}/assets/images/aws-backend-structure.png){: .align-center}
 
-현재 AWS에 EC2와 Load Balancer를 이용한 dev 환경, prod 환경을 구성했는데, 환경 세팅 및 관리를 위해 Elastic Beanstalk을 사용했다. 각각의 환경에 앱을 배포할 때는 Elastic Beanstalk CLI인 Elastic Beanstalk CLI를 이용하는데, 브랜치 전략은 논외로 하고, dev 환경에서는 dev 브랜치의 소스 코드를, prod 환경에서는 prod 브랜치의 소스 코드를 배포한다. 
+현재 AWS에 EC2와 Load Balancer를 이용한 dev 환경, prod 환경을 구성했는데, 환경 세팅 및 관리를 위해 Elastic Beanstalk을 사용했다. 각각의 환경에 앱을 배포할 때는 Elastic Beanstalk CLI를 이용하는데, 브랜치 전략은 논외로 하고, dev 환경에서는 dev 브랜치의 소스 코드를, prod 환경에서는 prod 브랜치의 소스 코드를 배포한다. 
 
 - [AWS Elastic Beanstalk](https://aws.amazon.com/elasticbeanstalk/?gclid=CjwKCAiA9vS6BhA9EiwAJpnXw6pyJtPI1IYrXZDRR-bvyVSkxW2GSGoxoJhRMsSKY_mdWkzO8Em44BoCF_oQAvD_BwE&trk=3d211853-d899-491e-bd5a-fb5f17de6f0f&sc_channel=ps&ef_id=CjwKCAiA9vS6BhA9EiwAJpnXw6pyJtPI1IYrXZDRR-bvyVSkxW2GSGoxoJhRMsSKY_mdWkzO8Em44BoCF_oQAvD_BwE:G:s&s_kwcid=AL!4422!3!651510175878!e!!g!!elasticbeanstalk!19835789747!147297563979)
 - [Elastic Beanstalk CLI](https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/eb-cli3.html)
@@ -148,7 +148,7 @@ Github Actions로부터 Elastic Beanstalk에 접근하기 위한 목적이므로
 
 <br>
 
-## Github Action 설정
+## Github Actions 설정
 
 Github Actions에서 위의 IAM 사용자 Access Key를 이용해 Elastic Beanstalk에 접근할 수 있도록, Github Repository에 관련 설정을 해 준다.
 
@@ -199,11 +199,11 @@ jobs:
       run: zip -r deploy.zip . -i 'cmd/*' 'internal/*' Dockerfile go.*  
    
     - name: Get current time
-	    uses: josStorer/get-current-time@v2
-	    id: current-time
-	    with:
-	      format: YYYY-MM-DDTHH-mm-ss
-	      utcOffset: "+09:00"
+      uses: josStorer/get-current-time@v2
+      id: current-time
+      with:
+        format: YYYY-MM-DDTHH-mm-ss
+        utcOffset: "+09:00"
 
     - name: Deploy to EB
       uses: einaregilsson/beanstalk-deploy@v22
