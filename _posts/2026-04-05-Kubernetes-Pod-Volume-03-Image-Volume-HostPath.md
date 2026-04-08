@@ -33,7 +33,11 @@ hidden: true
 
 # image 볼륨
 
-컨테이너는 사전에 준비된 데이터에 접근해야 하는 경우가 많다. 이전 포스트에서 quiz Pod의 데이터베이스에 문제를 미리 채운 것이 대표적인 예이고, AI 모델 서빙 시 대용량 가중치 파일을 별도 패키징하는 것도 같은 맥락이다.
+## 컨테이너 이미지를 파일 배포 매체로
+
+컨테이너 이미지의 본래 목적은 어플리케이션 실행이지만, OCI 이미지 스펙은 단순히 "레이어로 구성된 파일 번들"일 뿐이다. 이 사실에 착안하면, 이미지를 **파일 배포 매체**로도 활용할 수 있다. `image` 볼륨은 바로 이 발상을 Kubernetes 네이티브하게 구현한 볼륨 타입이다.
+
+컨테이너는 사전에 준비된 데이터에 접근해야 하는 경우가 많다. `image` 볼륨은 OCI 이미지의 콘텐츠를 Pod 내 볼륨으로 직접 마운트하여 이 문제를 해결한다. Pod 생성 시 kubelet이 이미지를 pull하고 모든 콘텐츠를 볼륨으로 노출한다. ([Kubernetes 공식 문서: image Volume](https://kubernetes.io/docs/concepts/storage/volumes/#image)) 이전 포스트에서 quiz Pod의 데이터베이스에 문제를 미리 채운 것이 대표적인 예이고, AI 모델 서빙 시 대용량 가중치 파일을 별도 패키징하는 것도 같은 맥락이다.
 
 기존에는 파일이 담긴 컨테이너 이미지를 빌드하고, init 컨테이너가 시작 시 emptyDir 볼륨에 복사한 뒤, 메인 컨테이너가 해당 볼륨을 마운트하는 방식을 사용했다. 하지만 **"한 이미지의 파일을 다른 컨테이너에 전달"하는 단순한 목적치고는 과정이 지나치게 복잡하다** — 별도 이미지 빌드, init 컨테이너 정의, 볼륨 설정, 복사 커맨드까지 필요하기 때문이다.
 
@@ -68,7 +72,7 @@ ConfigMap이나 Secret처럼 파일을 제공하되, 그 소스가 컨테이너 
 - init 컨테이너 없이도 이미지에 담긴 파일을 볼륨으로 제공 가능
 - 데이터를 이미지로 **버전 관리**하고 배포할 수 있음
 - 읽기 전용으로 안전하게 마운트됨
-- Kubernetes 1.31에서 alpha로 도입, 1.33에서 beta로 승격 (ImageVolume 피처 게이트 필요)
+- Kubernetes 1.31에서 alpha(알파)로 도입, 1.33에서 beta(베타)로 승격 (ImageVolume 피처 게이트 필요). Kubernetes Feature Gate는 alpha → beta → GA(정식 출시) 순서로 졸업하며, beta부터 기본 활성화된다
 
 사용 사례는 다양하다.
 
@@ -254,11 +258,21 @@ curl localhost:8080/questions/random
 
 MongoDB가 시작 시 `insert-questions.js` 파일을 실행했으므로, 문제들이 데이터베이스에 정상적으로 저장되어 있다.
 
+## 향후 전망: OCI Artifacts와 ORAS
+
+현재 `image` 볼륨은 Dockerfile로 빌드한 컨테이너 이미지만 지원한다. 하지만 OCI 스펙에는 **OCI Artifacts**라는 개념이 있어, 컨테이너 이미지뿐 아니라 임의의 파일 번들을 레지스트리에 저장할 수 있다. [ORAS(OCI Registry As Storage)](https://oras.land/) CLI를 사용하면 Dockerfile 없이 `oras push`로 파일을 직접 레지스트리에 올릴 수 있다.
+
+향후 `image` 볼륨이 OCI Artifacts를 지원하게 되면, Dockerfile 빌드 과정 없이 설정 파일이나 모델 가중치를 레지스트리에 push하고 볼륨으로 마운트하는 워크플로우가 가능해진다.
+
 <br>
 
 # hostPath 볼륨
 
-대부분의 Pod는 자신이 어떤 호스트 노드에서 실행되고 있는지 몰라야 하고, 노드의 파일 시스템에 있는 어떠한 파일에도 접근해서는 안 된다. 다만 시스템 레벨의 Pod(DaemonSet 등)는 예외로, 이들은 노드의 파일을 읽거나 파일 시스템을 통해 노드 장치 등의 컴포넌트에 접근해야 할 필요가 있다. Kubernetes는 이를 위해 `hostPath` 볼륨 타입을 제공한다.
+## 노드와 Pod의 경계를 넘는 볼륨
+
+Kubernetes의 핵심 추상화는 워크로드를 노드에서 격리하는 것이다. Pod는 어떤 노드에서 실행되는지 몰라야 하고, 노드 교체/추가에도 영향받지 않아야 한다. `hostPath`는 이 추상화를 **의도적으로 깨뜨리는** 볼륨 타입이다. 노드의 파일시스템을 Pod에 직접 노출하므로, 사용 시 보안과 이식성 모두를 신중하게 따져야 한다.
+
+대부분의 Pod는 자신이 어떤 호스트 노드에서 실행되고 있는지 몰라야 하고, 노드의 파일 시스템에 있는 어떠한 파일에도 접근해서는 안 된다. `hostPath`는 이 원칙의 예외로, 호스트 노드의 파일시스템을 Pod에 직접 마운트한다. 공식 문서도 **보안 위험을 수반하며, 가능하면 사용을 피하라**고 명시하고 있다. ([Kubernetes 공식 문서: hostPath](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath)) 다만 시스템 레벨의 Pod(DaemonSet 등)는 예외로, 이들은 노드의 파일을 읽거나 파일 시스템을 통해 노드 장치 등의 컴포넌트에 접근해야 할 필요가 있다. Kubernetes는 이를 위해 `hostPath` 볼륨 타입을 제공한다.
 
 ## hostPath 소개
 
@@ -688,6 +702,32 @@ Pod가 삭제되어도 crontab에 삽입한 백도어는 노드에 남아 있다
 | `Socket` | 지정 경로가 UNIX 소켓이어야 한다 |
 
 > **Note:** `FileOrCreate` 또는 `DirectoryOrCreate` 타입에서 Kubernetes가 파일/디렉터리를 생성할 때, 파일 권한은 각각 644(`rw-r--r--`)와 755(`rwxr-xr-x`)로 설정된다. 어느 경우든 kubelet을 실행하는 사용자 및 그룹이 소유자가 된다.
+
+<br>
+
+# 실무 관점: PodSecurityAdmission으로 hostPath 차단
+
+hostPath의 위험성을 인지했다면, 프로덕션 환경에서는 **PodSecurityAdmission**을 사용하여 hostPath 사용을 제한해야 한다. PodSecurityAdmission은 네임스페이스 레벨에서 Pod 보안 표준(Pod Security Standards)을 강제하는 내장 admission controller다.
+
+세 가지 프로파일이 있다.
+
+| 프로파일 | hostPath 허용 | 대상 |
+| --- | --- | --- |
+| **privileged** | O | 시스템 데몬, 인프라 컴포넌트 |
+| **baseline** | O (제한적) | 일반 워크로드의 기본 보안 |
+| **restricted** | X | 보안이 중요한 워크로드 |
+
+```bash
+# 네임스페이스에 restricted 프로파일 적용
+kubectl label namespace my-app \
+  pod-security.kubernetes.io/enforce=restricted \
+  pod-security.kubernetes.io/warn=restricted
+
+# hostPath를 사용하는 Pod 생성 시도 → 차단됨
+# Error: ... violates PodSecurity "restricted:latest": hostPath volumes ...
+```
+
+`restricted` 프로파일이 적용된 네임스페이스에서는 hostPath 볼륨을 사용하는 Pod가 생성 자체가 거부된다. 시스템 레벨 Pod(kube-system 등)는 privileged로 유지하고, 일반 워크로드 네임스페이스에는 restricted를 적용하는 것이 권장 패턴이다.
 
 <br>
 

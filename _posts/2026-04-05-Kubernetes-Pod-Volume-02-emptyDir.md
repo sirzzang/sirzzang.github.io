@@ -33,7 +33,9 @@ hidden: true
 
 # emptyDir 볼륨 개요
 
-가장 단순한 볼륨 타입인 `emptyDir`은 **Pod와 수명 주기를 같이 하는 임시 볼륨**이다.
+`emptyDir`은 가장 단순하면서도 가장 자주 쓰이는 볼륨 타입이다. 사이드카 패턴에서 컨테이너 간 파일 공유, init 컨테이너를 통한 데이터 초기화, 어플리케이션 캐시, ML 워크로드의 shared memory 확장 등 다양한 시나리오에서 활용된다. 기능이 단순한 만큼 이해하기도 쉽고, 임시 데이터를 다루는 기본 빌딩 블록이다.
+
+가장 단순한 볼륨 타입인 `emptyDir`은 **Pod와 수명 주기를 같이 하는 임시 볼륨**이다. Pod가 노드에 할당될 때 생성되고, Pod가 해당 노드에서 제거되면 함께 삭제된다. ([Kubernetes 공식 문서: emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir))
 
 - 이름에서 알 수 있듯이 **빈 디렉토리**로 시작한다
 - `medium`을 `Memory`로 설정하면 데이터를 디스크 대신 메모리(tmpfs)에 저장할 수 있다
@@ -148,6 +150,10 @@ drwx------ 3  999 root             4096 Mar 31 16:31 .mongodb
 </details>
 
 MongoDB WiredTiger 스토리지 엔진 파일이 확인된다. 이 파일들이 emptyDir 볼륨을 통해 노드의 디스크에 실제로 저장된 것이다. **Pod가 삭제되면 이 디렉토리도 함께 지워진다.**
+
+### kubelet의 emptyDir 관리 방식
+
+kubelet은 emptyDir 볼륨을 `/var/lib/kubelet/pods/<pod_UID>/volumes/kubernetes.io~empty-dir/<volume_name>` 경로에 생성한다. Pod가 삭제되면 kubelet이 이 디렉토리를 정리한다. `medium: Memory`인 경우에는 같은 경로에 tmpfs를 마운트한다. emptyDir의 디스크 사용량은 kubelet이 주기적으로 모니터링하며, `sizeLimit`을 초과하거나 노드의 ephemeral-storage가 부족해지면 Pod eviction 대상이 될 수 있다.
 
 ```bash
 kubectl delete po quiz
@@ -418,6 +424,27 @@ volumes:
 - name: model-storage
   emptyDir: {}
 ```
+
+<br>
+
+# emptyDir 운영 주의사항
+
+## sizeLimit과 ephemeral-storage eviction
+
+`sizeLimit`을 설정하지 않은 emptyDir은 노드의 디스크를 무한정 소비할 수 있다. kubelet은 노드의 ephemeral-storage 사용량을 모니터링하며, 사용량이 임계치를 넘으면 가장 많이 사용하는 Pod부터 축출(eviction)한다. 프로덕션 환경에서는 `sizeLimit`을 반드시 설정하는 것이 안전하다.
+
+```yaml
+volumes:
+- name: cache
+  emptyDir:
+    sizeLimit: 500Mi
+```
+
+## medium: Memory 사용 시 메모리 제한
+
+`medium: Memory`로 생성한 emptyDir은 노드의 RAM을 소비하며, 이 사용량은 **Pod의 메모리 limit에 포함**된다. tmpfs에 데이터를 많이 쓰면 컨테이너가 메모리 limit을 초과하여 **OOM Kill** 당할 수 있다. `sizeLimit`과 컨테이너의 `resources.limits.memory`를 함께 고려해야 한다.
+
+기존 포스트 [Kubernetes Shared Memory]({% post_url 2024-07-22-Dev-Kubernetes-Shared-Memory %})에서 PyTorch DataLoader의 `/dev/shm` 문제와 해결 방법을 다룬 바 있다.
 
 <br>
 
