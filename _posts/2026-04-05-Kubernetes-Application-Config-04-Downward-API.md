@@ -85,47 +85,9 @@ Downward API를 이해하려면 두 가지 축을 파악하면 된다.
   - env → 환경 변수에 주입
   - volume → 파일 시스템에 파일로 투영
 
-그런데 완전한 2x2 조합은 아니다. `resourceFieldRef` 필드들은 env/volume 모두 가능하지만, `fieldRef` 필드들은 필드마다 제한이 다르다.
+그런데 완전한 2x2 조합은 아니다. `resourceFieldRef` 필드들은 env/volume 모든 전달 방식을 사용할 수 있지만, `fieldRef` 필드들은 필드마다 사용할 수 있는 전달 방식에 제한이 있다.
 
 ## fieldRef 필드별 지원 범위
-
-| 필드 | env | volume |
-| --- | --- | --- |
-| `metadata.name` | O | O |
-| `metadata.namespace` | O | O |
-| `metadata.uid` | O | O |
-| `metadata.labels` (전체) | X | O |
-| `metadata.annotations` (전체) | X | O |
-| `metadata.labels['key']` (개별) | O | O |
-| `metadata.annotations['key']` (개별) | O | O |
-| `spec.nodeName` | O | X |
-| `spec.serviceAccountName` | O | X |
-| `status.podIP` | O | X |
-| `status.hostIP` | O | X |
-
-## resourceFieldRef 필드별 지원 범위
-
-| 필드 | env | volume |
-| --- | --- | --- |
-| `requests.cpu` | O | O |
-| `requests.memory` | O | O |
-| `limits.cpu` | O | O |
-| `limits.memory` | O | O |
-| `requests.ephemeral-storage` | O | O |
-| `limits.ephemeral-storage` | O | O |
-
-## fieldRef 주입 방식 제한 이유
-
-왜 `fieldRef`는 필드마다 지원하는 전달 방식이 다를까?
-
-- **labels/annotations 전체**는 여러 줄의 키-값 쌍이라 단일 환경 변수에 담기 부적합하다. 그래서 volume만 허용된다
-- `spec.nodeName`, `status.podIP` 등은 파드가 스케줄링된 후에야 결정되는 런타임 값이다. 환경 변수 방식이 더 적합하므로 env만 허용된다
-
-<br>
-
-# 주입 가능한 메타데이터
-
-## fieldRef로 주입할 수 있는 필드
 
 | 필드 | 설명 | env | volume |
 | --- | --- | --- | --- |
@@ -141,9 +103,9 @@ Downward API를 이해하려면 두 가지 축을 파악하면 된다.
 | `status.podIP`, `status.podIPs` | 파드의 IP 주소 | O | X |
 | `status.hostIP`, `status.hostIPs` | 워커 노드의 IP 주소 | O | X |
 
-## resourceFieldRef로 주입할 수 있는 필드
+## resourceFieldRef 필드별 지원 범위
 
-| 리소스 필드 | 설명 | env | volume |
+| 필드 | 설명 | env | volume |
 | --- | --- | --- | --- |
 | `requests.cpu` | 컨테이너의 CPU 요청 | O | O |
 | `requests.memory` | 컨테이너의 메모리 요청 | O | O |
@@ -153,6 +115,13 @@ Downward API를 이해하려면 두 가지 축을 파악하면 된다.
 | `limits.memory` | 컨테이너의 메모리 제한 | O | O |
 | `limits.ephemeral-storage` | 컨테이너의 임시 스토리지 제한 | O | O |
 | `limits.hugepages-*` | 컨테이너의 hugepages 제한 | O | O |
+
+## fieldRef 주입 방식 제한 이유
+
+왜 `fieldRef`는 필드마다 지원하는 전달 방식이 다를까?
+
+- **labels/annotations 전체**는 여러 줄의 키-값 쌍이라 단일 환경 변수에 담기 부적합하다. 그래서 volume만 허용된다
+- `spec.nodeName`, `status.podIP` 등은 파드가 스케줄링된 후에야 결정되는 런타임 값이다. 환경 변수 방식이 더 적합하므로 env만 허용된다
 
 <br>
 
