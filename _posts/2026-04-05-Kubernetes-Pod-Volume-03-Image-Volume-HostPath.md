@@ -107,6 +107,20 @@ nodes:
 
 기존 클러스터를 삭제한 후, 이 설정 파일로 클러스터를 새로 생성한다. 새 클러스터는 control-plane 1개 + worker 2개의 멀티 노드 구성이며, ImageVolume 피처 게이트가 활성화된다.
 
+> **팁**: 설정 파일 대신 heredoc으로 인라인 주입하는 것도 편리하다.
+> ```bash
+> kind create cluster --image kindest/node:v1.35.0 --config - <<EOF
+> kind: Cluster
+> apiVersion: kind.x-k8s.io/v1alpha4
+> featureGates:
+>   ImageVolume: true
+> nodes:
+> - role: control-plane
+> - role: worker
+> - role: worker
+> EOF
+> ```
+
 ```bash
 # 기존에 설치된 kind 클러스터 삭제
 kind delete cluster --name kind
@@ -137,6 +151,13 @@ NAME                 STATUS   ROLES           AGE     VERSION
 kind-control-plane   Ready    control-plane   2m40s   v1.35.0
 kind-worker          Ready    <none>          2m30s   v1.35.0
 kind-worker2         Ready    <none>          2m30s   v1.35.0
+```
+
+피처 게이트가 정상 활성화되었는지 확인하려면, API 서버 파드의 args에서 `feature-gates`를 확인하면 된다.
+
+```bash
+kubectl describe pod -n kube-system kube-apiserver-kind-control-plane | grep feature-gates
+#       --feature-gates=ImageVolume=true
 ```
 
 ## Pod 매니페스트에서 image 볼륨 정의

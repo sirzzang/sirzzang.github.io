@@ -48,7 +48,7 @@ hidden: true
 
 5장에서 TLS 트래픽을 처리하는 Envoy 사이드카와 함께 kiada Pod를 배포할 때, Envoy 설정 파일과 TLS 인증서/키를 컨테이너 이미지에 직접 저장했다. 하지만 이는 올바른 방법이 아니다. 설정 파일은 ConfigMap에, 인증서와 개인 키는 Secret에 저장하고 볼륨으로 컨테이너에 주입하면 이미지를 다시 빌드하지 않고도 파일을 업데이트할 수 있다.
 
-> **Note:** ConfigMap이나 Secret에 저장 가능한 정보의 최대 크기는 etcd에 의해 결정되며, 현재 약 1MB이다.
+> **Note:** ConfigMap이나 Secret에 저장 가능한 정보의 최대 크기는 etcd에 의해 결정된다. etcd는 각 요청을 1.5MiB로, 각 키-값 쌍을 1MiB로 제한하므로, 단일 Kubernetes 오브젝트(ConfigMap, Secret, CRD 인스턴스 등)는 직렬화 시 1MiB를 초과할 수 없다. ([etcd breaks at scale](https://learnkube.com/etcd-breaks-at-scale))
 
 <br>
 
@@ -380,6 +380,31 @@ spec:
 
 ConfigMap을 업데이트해도 환경 변수로 주입된 값은 업데이트되지 않는다. 그러나 **`configMap` 볼륨을 사용하여 파일로 주입하면, ConfigMap의 변경 사항이 자동으로 파일에 반영**된다. 파일 업데이트까지 최대 1분 정도 소요될 수 있다.
 
+이 지연은 kubelet의 `configMapAndSecretChangeDetectionStrategy`가 기본적으로 **Watch** 모드이고, `syncFrequency`가 **1m0s**로 설정되어 있기 때문이다. `syncFrequency`를 줄이면 반영 속도가 빨라지지만, kubelet의 CPU/메모리 사용량과 API 서버 부하가 증가하는 트레이드오프가 있으므로 기본 1분을 유지하는 것이 권장된다. ([kubelet config file](https://kubernetes.io/docs/tasks/administer-cluster/kubelet-config-file/), [kubelet syncFrequency](https://foxutech.medium.com/do-you-know-about-kubelets-syncfrequency-ddf4718fb018))
+
+<details markdown="1">
+<summary><b>kubelet syncFrequency 확인 방법과 config 파일 값 차이</b></summary>
+
+kubelet의 실제 동작 설정은 `/configz` API로 확인할 수 있다.
+
+```bash
+NODE=kind-control-plane
+kubectl get --raw /api/v1/nodes/$NODE/proxy/configz | jq . | grep -E 'configMap|syncFrequency'
+#     "syncFrequency": "1m0s",
+#     "configMapAndSecretChangeDetectionStrategy": "Watch",
+```
+
+그런데 노드의 kubelet config 파일을 직접 확인하면 `syncFrequency: 0s`로 되어 있는 경우가 있다.
+
+```bash
+docker exec -it $NODE cat /var/lib/kubelet/config.yaml | grep syncFrequency
+# syncFrequency: 0s
+```
+
+이는 kubelet config 파일의 값이 그대로 사용되는 것이 아니라, **실제 실행 시 default + flag + dynamic config 병합 결과가 적용**되기 때문이다. `0s`나 빈 값은 invalid/special value로 처리되어 기본값(1m0s)으로 fallback된다. 실제 동작 설정을 확인하려면 항상 `/configz` API(`--raw`)의 출력을 참고해야 한다.
+
+</details>
+
 ```bash
 kubectl patch cm kiada-ssl-config --type merge -p '{"data":{"status-message":"새로운 상태 메시지"}}'
 # configmap/kiada-ssl-config patched
@@ -703,6 +728,62 @@ kubectl exec kiada-ssl -c envoy -- ls -lL /etc/certs
 - 파일의 user 소유자를 임의로 변경하면 보안 경계가 무너질 수 있다
 - 실무적으로 `fsGroup` + 적절한 파일 권한(`0640` 등)이면 대부분의 접근 제어 시나리오를 커버할 수 있다
 - 정말로 특정 UID로 파일을 소유해야 하는 경우, `securityContext.runAsUser`로 컨테이너 프로세스의 실행 UID를 변경하거나, initContainer에서 `chown`을 수행하는 방법을 사용할 수 있다
+
+<details markdown="1">
+<summary><b>실무 사례: NFS PV에서 non-root UID 사용 시 권한 문제 해결</b></summary>
+
+root UID를 사용하지 않는 어플리케이션 파드에서 NFS PV를 사용할 때, 파일 쓰기 권한 문제가 빈번하게 발생한다. `runAsUser`, `runAsGroup`, `fsGroup`을 하나씩 바꿔가며 테스트한 결과 예시이다.
+
+```yaml
+# 테스트 1: 쓰기 실패
+securityContext:
+  runAsUser: 1001
+  runAsGroup: 1001
+# id 결과: uid=1001 gid=1001 groups=1001
+
+# 테스트 2: 쓰기 실패 — fsGroup으로 nobody 추가
+securityContext:
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 65534
+# id 결과: uid=1001 gid=1001 groups=1001,65534(nobody)
+
+# 테스트 3: 쓰기 실패 — GID를 nobody로 변경
+securityContext:
+  runAsUser: 1001
+  runAsGroup: 65534
+# id 결과: uid=1001 gid=65534(nobody) groups=65534(nobody)
+
+# 테스트 4: 쓰기 실패 — fsGroup을 root(0)으로
+securityContext:
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 0
+# id 결과: uid=1001 gid=1001 groups=0(root),1001
+
+# 테스트 5: 쓰기 실패
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+# id 결과: uid=1000 gid=1000 groups=1000
+
+# 테스트 6: 쓰기 성공! — NFS 서버의 UID와 동일하게 설정
+securityContext:
+  runAsUser: 65534
+# id 결과: uid=65534(nobody) gid=65534(nobody) groups=65534(nobody)
+
+# 테스트 7: 쓰기 성공! — NFS 서버 상위 디렉터리의 그룹 권한을 7로 변경 후
+securityContext:
+  runAsUser: 1001
+  runAsGroup: 65534
+  fsGroup: 65534
+# id 결과: uid=1001 gid=65534(nobody) groups=65534(nobody)
+```
+
+핵심은 NFS의 권한 모델이 로컬 파일시스템과 다르다는 점이다. NFS 서버 측의 UID/GID 매핑과 디렉터리 권한이 결정적이므로, `fsGroup`만으로는 해결되지 않는 경우가 많다. NFS 서버의 export UID와 파드의 실행 UID를 맞추거나, NFS 서버 측 디렉터리 권한을 조정하는 것이 현실적인 해법이다.
+
+</details>
 
 <br>
 

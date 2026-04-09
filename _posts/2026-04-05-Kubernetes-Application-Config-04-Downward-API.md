@@ -58,6 +58,8 @@ Kubernetes 아키텍처 관점에서 **위(up)**는 Kubernetes API 서버(컨트
 
 파드 이름, IP 같은 기본 정보를 얻기 위해 매번 API 서버를 호출(upward)하는 건 과하고, 어플리케이션이 Kubernetes에 종속되게 만든다. Downward API는 이런 간단한 메타데이터를 환경 변수나 파일로 내려줘서 어플리케이션이 Kubernetes API를 전혀 모르고도 사용할 수 있게 해준다.
 
+> **API 서버 부하 절감 효과**: 대규모 파드가 빈번하게 동시 실행되고 삭제되는 환경에서, Downward API가 제공하는 정보(파드 이름, IP, 노드 정보 등)를 기존에 Kubernetes API를 통해 조회했다면 API 서버 부하가 상당했을 것이다. Downward API는 해당 노드의 kubelet이 파드에 직접 정보를 제공하므로, API 서버를 경유하지 않아 부하를 극적으로 줄일 수 있다. ([Minimize Kubernetes API Server Load with Downward API](https://www.srodi.com/posts/minimize-kubernetes-api-server-load-with-downward-api/))
+
 ## 데이터 소스와 전달 방식
 
 ConfigMap의 값을 가져올 때 `configMapKeyRef`, Secret의 값을 가져올 때 `secretKeyRef`를 사용했다. Downward API를 통해 값을 가져오려면, 주입하려는 정보에 따라 다음 두 가지를 사용한다.

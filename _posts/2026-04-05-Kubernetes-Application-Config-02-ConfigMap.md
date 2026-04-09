@@ -372,7 +372,7 @@ metadata:
 
 - `data`: UTF-8 텍스트로 읽을 수 있는 파일이 평문 그대로 저장된다
 - `binaryData`: UTF-8이 아닌 바이트 시퀀스가 포함된 파일이 Base64로 인코딩되어 저장된다. YAML/JSON은 바이너리 데이터를 직접 표현할 수 없으므로 Base64 인코딩이 필요하다
-- `kubectl`이 자동으로 `data`와 `binaryData`를 구분하므로, 사용자가 직접 판단할 필요 없다
+- `kubectl`이 자동으로 `data`와 `binaryData`를 구분하므로, 사용자가 직접 판단할 필요 없다. OS의 `file` 커맨드로도 파일 형식을 확인할 수 있다 (`file dummy.bin` → `data`, `file dummy.txt` → `ASCII text`)
 - 실무에서는 대부분 텍스트 설정 파일을 다루므로 `data` 필드만 사용하게 된다
 
 > ConfigMap 매니페스트를 파일에서 생성할 때, 파일의 각 줄 끝에 **불필요한 공백(trailing whitespace)**이 없는지 확인해야 한다. 줄 끝에 공백이 있으면 ConfigMap 항목이 따옴표로 감싸진 문자열(quoted string)로 포맷되어 가독성이 크게 떨어진다.
@@ -551,7 +551,7 @@ ConfigMap이나 Secret의 환경 변수 주입 방식은 `envFrom`(전체 주입
 - `envFrom.configMapRef` / `envFrom.secretRef`: ConfigMap이나 Secret의 모든 키-값 쌍을 한 번에 환경 변수로 주입
 - `env[].valueFrom.configMapKeyRef` / `env[].valueFrom.secretKeyRef`: ConfigMap이나 Secret에서 특정 키 하나만 골라서 환경 변수로 주입
 
-성능 차이는 무시할 수 있다. 환경 변수는 컨테이너 프로세스 시작 시 메모리에 한 번 로드되고, ConfigMap/Secret 자체가 최대 1MB 제한이 있어서 환경 변수 수백 개가 들어가도 메모리/CPU 오버헤드는 미미하다. 핵심적인 차이는 **운영/보안/가독성** 관점에서 나타난다.
+성능 차이는 무시할 수 있다. 환경 변수는 컨테이너 프로세스 시작 시 메모리에 한 번 로드되고, ConfigMap/Secret 자체가 최대 1MiB 제한이 있어서 환경 변수 수백 개가 들어가도 메모리/CPU 오버헤드는 미미하다. 이 제한은 etcd의 키-값 쌍 크기 제한에서 비롯된다 — etcd는 각 요청을 1.5MiB로, 각 키-값 쌍을 1MiB로 제한한다. 즉, ConfigMap, Secret, CRD 인스턴스 등 단일 Kubernetes 오브젝트는 직렬화 시 1MiB를 초과할 수 없다. ([etcd breaks at scale](https://learnkube.com/etcd-breaks-at-scale)) 핵심적인 차이는 **운영/보안/가독성** 관점에서 나타난다.
 
 | 관점 | `envFrom` (전체 주입) | `env[].valueFrom` (단일 주입) |
 | --- | --- | --- |
@@ -650,6 +650,8 @@ immutable ConfigMap의 이점은 다음과 같다.
 - 이 ConfigMap을 사용하는 **모든 파드가 동일한 설정 값을 사용**함을 보장한다
 - 다른 설정이 필요한 파드는 새로운 ConfigMap을 생성하여 사용한다
 - **성능 이점**: immutable로 표시되면 워커 노드의 kubelet이 ConfigMap 변경 알림을 받을 필요가 없으므로 API 서버 부하가 감소한다
+
+> **실무 사례: EKS aws-auth ConfigMap** — AWS EKS에서 [Cluster Access Entry(EKS API)](https://lakescript.net/entry/EKS%EC%97%90%EC%84%9C-ConfigMap-%EC%97%86%EC%9D%B4-API%EB%A1%9C-%EC%A0%91%EA%B7%BC-%EA%B4%80%EB%A6%AC%ED%95%98%EA%B8%B0Cluster-Access-Management) 방식이 도입되기 전에는, `aws-auth` ConfigMap으로 IAM 엔터티와 Kubernetes 주체 간의 인증 매핑을 관리했다. 이 ConfigMap이 잘못 수정되면 클러스터 접근 자체가 불가능해질 수 있었기 때문에 `immutable` 설정을 권장하던 시기가 있었다. 현재는 EKS API 방식을 사용하면 되어 훨씬 편리해졌다.
 
 ## 삭제 동작
 

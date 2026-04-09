@@ -201,7 +201,7 @@ MongoDB에 문제를 추가한 후, Quiz API를 통해 조회할 수 있다.
 
 ```bash
 # MongoDB에 문제 추가
-kubectl exec -it quiz -c mongo -- mongosh kiada --eval '
+kubectl exec -i quiz -c mongo -- mongosh kiada --eval '
 db.questions.insertOne({
   id: 1,
   text: "What does k8s mean?",
@@ -215,17 +215,19 @@ curl localhost:8080/questions/random
 # {"id":1,"text":"What does k8s mean?","correctAnswerIndex":1,...}
 ```
 
+> **팁**: `kubectl exec`에서 `--eval`이나 heredoc(`<<EOF`) 등 비대화형 입력을 사용할 때는 `-it` 대신 `-i`만 사용하는 것이 좋다. `-t`는 pseudo-TTY를 할당하므로 비대화형 입력에서 `stdin is not a tty` 경고 메시지가 발생할 수 있다.
+
 ## 컨테이너 재생성과 데이터 손실
 
 MongoDB 컨테이너가 재시작(실제로는 **재생성**)되면 파일시스템이 초기화되어 모든 데이터가 사라진다.
 
 ```bash
 # MongoDB 서버 강제 종료
-kubectl exec -it quiz -c mongo -- mongosh admin --eval "db.shutdownServer()"
+kubectl exec -i quiz -c mongo -- mongosh admin --eval "db.shutdownServer()"
 # command terminated with exit code 137
 
 # 데이터 확인 → 0건
-kubectl exec -it quiz -c mongo -- mongosh kiada --quiet --eval "db.questions.countDocuments()"
+kubectl exec -i quiz -c mongo -- mongosh kiada --quiet --eval "db.questions.countDocuments()"
 # 0
 ```
 

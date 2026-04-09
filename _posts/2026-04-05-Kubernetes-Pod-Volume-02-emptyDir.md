@@ -105,11 +105,11 @@ kubectl apply -f pod.quiz.emptydir.yaml
 ./insert-question.sh
 
 # 컨테이너 강제 종료
-kubectl exec -it quiz -c mongo -- mongosh admin --eval "db.shutdownServer()"
+kubectl exec -i quiz -c mongo -- mongosh admin --eval "db.shutdownServer()"
 # command terminated with exit code 137
 
 # 데이터 확인 → 1건 유지!
-kubectl exec -it quiz -c mongo -- mongosh kiada --quiet --eval "db.questions.countDocuments()"
+kubectl exec -i quiz -c mongo -- mongosh kiada --quiet --eval "db.questions.countDocuments()"
 # 1
 ```
 
@@ -234,7 +234,7 @@ Pod가 시작되면 **먼저 볼륨이 생성된 후 init 컨테이너가 시작
 ```bash
 kubectl apply -f pod.quiz.emptydir.init.yaml
 
-kubectl exec -it quiz -c mongo -- mongosh kiada --quiet --eval "db.questions.countDocuments()"
+kubectl exec -i quiz -c mongo -- mongosh kiada --quiet --eval "db.questions.countDocuments()"
 # 6
 ```
 
@@ -445,6 +445,90 @@ volumes:
 `medium: Memory`로 생성한 emptyDir은 노드의 RAM을 소비하며, 이 사용량은 **Pod의 메모리 limit에 포함**된다. tmpfs에 데이터를 많이 쓰면 컨테이너가 메모리 limit을 초과하여 **OOM Kill** 당할 수 있다. `sizeLimit`과 컨테이너의 `resources.limits.memory`를 함께 고려해야 한다.
 
 기존 포스트 [Kubernetes Shared Memory]({% post_url 2024-07-22-Dev-Kubernetes-Shared-Memory %})에서 PyTorch DataLoader의 `/dev/shm` 문제와 해결 방법을 다룬 바 있다.
+
+## emptyDir과 OS 디스크 용량 문제
+
+emptyDir(`medium` 미지정 시)은 노드의 OS 디스크를 사용한다. 컨테이너 이미지 레이어, 로그, 그리고 emptyDir이 모두 같은 디스크를 공유하기 때문에 디스크 용량 full 문제가 발생할 수 있다. 이런 경우 containerd의 `root`/`state`/`temp` 경로를 별도 디스크로 분리하는 것을 고려할 수 있다.
+
+containerd의 기본 경로 구조는 다음과 같다.
+
+| 항목 | 기본 경로 | 데이터 | 지속성 |
+| --- | --- | --- | --- |
+| `root` | `/var/lib/containerd` | 이미지, snapshot, metadata | persistent |
+| `state` | `/run/containerd` | sock, pid, runtime state | temp (휘발성) |
+| `temp` | `/tmp` 또는 커스텀 경로 | layer unpack temp | temp |
+
+```bash
+# containerd 경로 확인
+cat /etc/containerd/config.toml
+# root = "/var/lib/containerd"
+# state = "/run/containerd"
+# temp = ""
+```
+
+<details markdown="1">
+<summary><b>실무 사례: containerd root/state/temp 경로를 별도 디스크로 변경</b></summary>
+
+OS 디스크 용량 문제가 반복될 때, containerd 경로를 별도 마운트된 디스크(`/data`)로 변경하는 작업 절차다.
+
+```bash
+# Worker Node Drain
+kubectl drain k8s-w1 --ignore-daemonsets --delete-emptydir-data
+
+# 디렉터리 생성
+mkdir -p /data/containerd /data/run /data/temp
+
+# kubelet, containerd 중지
+systemctl stop kubelet
+systemctl stop containerd
+
+# 기존 컨테이너/이미지 데이터 이동 (root 디렉터리)
+# 이동하지 않으면 모든 이미지를 다시 pull해야 한다
+rsync -aHAXv /var/lib/containerd/ /data/containerd/
+
+# state는 이동하지 않는다 — containerd 재시작 시 자동 생성됨
+# 이동하면 오히려 socket/shim 문제가 발생할 수 있다
+
+# containerd config.toml 수정
+vi /etc/containerd/config.toml
+# root = "/data/containerd"
+# state = "/data/run"
+# temp = "/data/temp"
+
+# containerd 재시작
+systemctl daemon-reload
+systemctl start containerd
+systemctl status containerd
+
+# kubelet 재시작 (필수): containerd의 runtime 경로가 변경되면
+# kubelet도 container runtime과 다시 세션을 맺어야 한다
+systemctl restart kubelet
+
+# uncordon
+kubectl uncordon k8s-w1
+
+# 파드 정상 기동 확인
+kubectl get pod -owide
+```
+
+경로 변경 후 확인할 항목:
+
+```bash
+# root 디렉터리 이동 확인
+tree /data/containerd/ -L 1
+
+# 컨테이너 쓰기 레이어 확인
+kubectl exec -it deploy/test-app -- sh -c 'echo hello > /hello.txt'
+tree /data/containerd/io.containerd.snapshotter.v1.overlayfs/ | grep hello
+
+# state 디렉터리: overlay mount 확인
+df -hT | grep /data/run
+
+# temp 디렉터리: layer unpack 시 사용됨
+tree /data/temp/
+```
+
+</details>
 
 <br>
 
