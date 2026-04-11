@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Pod 볼륨 - 1. 볼륨 소개"
-excerpt: "Kubernetes Pod에서 볼륨이 필요한 이유, 마운트 기초, 볼륨 타입 개요를 정리한다."
+excerpt: "Kubernetes Pod에서 볼륨이 필요한 이유와 마운트 기초, 볼륨 타입 개요를 알아보자."
 categories:
   - Kubernetes
 toc: true
@@ -33,12 +33,15 @@ hidden: true
 
 # 시리즈 안내
 
-Kubernetes Pod에서 볼륨을 사용하는 방법을 다루는 시리즈다. 9장의 임시 볼륨(ephemeral volume)을 중심으로 정리한다.
+Kubernetes Pod에서 볼륨을 사용하는 방법을 다루는 시리즈다.
 
 1. 볼륨 소개 (이 글)
 2. [emptyDir]({% post_url 2026-04-05-Kubernetes-Pod-Volume-02-emptyDir %})
 3. [image 볼륨과 hostPath]({% post_url 2026-04-05-Kubernetes-Pod-Volume-03-Image-Volume-HostPath %})
 4. [configMap, secret, downwardAPI, projected 볼륨]({% post_url 2026-04-05-Kubernetes-Pod-Volume-04-ConfigMap-Secret-DownwardAPI-Projected %})
+5. [PersistentVolume, PersistentVolumeClaim, StorageClass]({% post_url 2026-04-05-Kubernetes-Pod-Volume-05-PV-PVC-StorageClass %})
+6. [정적 프로비저닝과 노드 로컬 PersistentVolume]({% post_url 2026-04-05-Kubernetes-Pod-Volume-06-Static-Provisioning %})
+7. [PV 관리와 Ephemeral PersistentVolume]({% post_url 2026-04-05-Kubernetes-Pod-Volume-07-PV-Management-Ephemeral %})
 
 ## 볼륨 타입 선택 가이드
 

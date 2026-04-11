@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Pod 볼륨 - 2. emptyDir"
-excerpt: "emptyDir 볼륨으로 컨테이너 재시작 간 데이터를 유지하고, init 컨테이너로 초기화하며, 컨테이너 간 파일을 공유하는 방법을 정리한다."
+excerpt: "emptyDir 볼륨으로 컨테이너 재시작 간 데이터를 유지하고, init 컨테이너로 초기화하며, 컨테이너 간 파일을 공유하는 방법을 알아보자."
 categories:
   - Kubernetes
 toc: true

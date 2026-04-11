@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] Pod 볼륨 - 3. image 볼륨과 hostPath"
-excerpt: "image 볼륨으로 컨테이너 이미지의 파일을 다른 컨테이너에 마운트하고, hostPath 볼륨의 동작과 위험성을 정리한다."
+excerpt: "image 볼륨으로 컨테이너 이미지의 파일을 다른 컨테이너에 마운트하고, hostPath 볼륨의 동작과 위험성을 알아보자."
 categories:
   - Kubernetes
 toc: true
