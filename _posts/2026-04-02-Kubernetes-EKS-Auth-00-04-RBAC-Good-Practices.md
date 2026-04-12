@@ -1,5 +1,5 @@
 ---
-title: "[[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 3. RBAC 모범 사례"
+title: "[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 3. RBAC 모범 사례"
 excerpt: "K8S RBAC에서 의도치 않은 권한 상승이 발생할 수 있는 경로를 정리하고, 안전한 설계 원칙을 살펴보자."
 categories:
   - Kubernetes
@@ -45,7 +45,7 @@ tags:
 - **namespace 수준에서 권한 부여**: ClusterRoleBinding 대신 RoleBinding을 사용하여 특정 namespace 내에서만 권한을 부여한다
 - **wildcard 권한 회피**: K8s는 확장 가능한 시스템이라 wildcard 접근을 주면 현재뿐 아니라 **미래에 만들어질 오브젝트 타입에 대해서도** 권한이 부여된다
 - **`cluster-admin` 자제**: 꼭 필요한 경우가 아니면 쓰지 않는다. 낮은 권한 계정에 impersonation 권한을 부여하면, 평소에는 최소 권한으로 운영하다가 필요할 때만 높은 권한으로 전환할 수 있다. Linux의 `sudo`와 같은 패턴이다
-- **`system:masters` 그룹 금지**: 이 그룹 멤버는 **모든 RBAC 검사를 우회**하며, RoleBinding/ClusterRoleBinding을 제거해도 접근을 취소할 수 없다. authorization webhook도 우회한다
+- **`system:masters` 그룹 금지**: 이 그룹 멤버는 **모든 RBAC 검사를 우회**하며, RoleBinding/ClusterRoleBinding을 제거해도 접근을 취소할 수 없다. authorization webhook도 우회한다. 실제로 K8s API 서버 소스 코드에 [하드코딩](https://github.com/kubernetes/kubernetes/blob/master/pkg/registry/rbac/escalation_check.go)되어 있다. `system:masters`(`SystemPrivilegedGroup` 상수로 [정의](https://github.com/kubernetes/apiserver/blob/master/pkg/authentication/user/user.go))에 속한 사용자는 `EscalationAllowed()` 함수에서 즉시 `true`를 반환하며, 주석에도 *"the API server uses it for privileged loopback connections, therefore we know that a member of system:masters can always do anything"*이라고 명시되어 있다. `system:masters`가 kube-apiserver의 인가 체인에 들어가면 Webhook(Access Policy 평가)에 도달하기 전에 즉시 Allow가 내려지므로, Access Policy를 변경하더라도 효과가 없는 제어 불가능한 영구 superuser가 된다. EKS가 클러스터 creator의 `system:masters`를 TokenReview 응답에 포함시키지 않는 것도 이 때문이다(상세 메커니즘은 [매핑과 인가 실습]({% post_url 2026-04-02-Kubernetes-EKS-Auth-02-03-EKS-Auth-AuthZ-Practice %}) 참고).
 
 > EKS에서 Access Entry로 IAM Role을 `system:masters` 그룹에 매핑하면 K8s에서 슈퍼유저가 된다. 편리하지만 위험하다. 필요한 최소 권한만 매핑하는 것이 원칙이다.
 
