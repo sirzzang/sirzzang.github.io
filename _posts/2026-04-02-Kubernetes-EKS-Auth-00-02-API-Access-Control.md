@@ -1,5 +1,5 @@
 ---
-title: "[EKS] EKS: 인증/인가 - K8S 인증/인가 기초 - 1. API 접근 통제"
+title: "[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 1. API 접근 통제"
 excerpt: "K8S API 서버로 들어오는 모든 요청이 거치는 파이프라인을 정리한다. TLS, 인증, 인가, Admission Control까지."
 categories:
   - Kubernetes

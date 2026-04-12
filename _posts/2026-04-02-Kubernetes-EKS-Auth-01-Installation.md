@@ -1,5 +1,5 @@
 ---
-title: "[EKS] EKS: 인증/인가 - 1. 실습 환경 배포"
+title: "[EKS] EKS: 인증/인가 - 2. 실습 환경 배포"
 excerpt: "4주차 인증/인가 실습을 위한 EKS 환경을 배포해 보자."
 categories:
   - Kubernetes
@@ -45,7 +45,7 @@ tags:
 | NAT Gateway | **Single** | 프라이빗 노드의 인터넷 접근용 |
 | 노드 접근 | **SSM** (SSH 없음) | 키 관리 불필요, 접근 로그 자동 기록 |
 | CP 로깅 | **전체 활성화** (5종) | authenticator/audit 로그로 인증 흐름 디버깅 |
-| addon | **7종** (coredns, kube-proxy, vpc-cni, metrics-server, external-dns, eks-pod-identity-agent, cert-manager) | 인증/인가 실습 준비 |
+| addon | **7종** (coredns<br>- kube-proxy<br>- vpc-cni<br>- metrics-server<br>- external-dns<br>- eks-pod-identity-agent<br>- cert-manager) | 인증/인가 실습 준비 |
 | 노드 IAM 정책 | **ExternalDNS + SSM** 추가 | addon 동작 + SSM 접근 |
 | IMDS hop limit | **2** (IMDSv2 강제) | 파드에서 IMDS 접근 허용 (학습용) |
 
