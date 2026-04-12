@@ -1,5 +1,5 @@
 ---
-title: "[EKS] EKS: 인증/인가 - 3. 사용자 → K8s API: 인증(AuthN) 실습"
+title: "[EKS] EKS: 인증/인가 - 4. 사용자 → K8s API: 인증(AuthN) 실습"
 excerpt: "사용자(IAM) → K8s API 인증 과정을 단계별로 실습하며, 토큰 생성부터 STS 검증까지의 전 과정을 직접 확인해 보자."
 categories:
   - Kubernetes

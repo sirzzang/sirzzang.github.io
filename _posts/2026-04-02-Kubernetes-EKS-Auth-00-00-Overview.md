@@ -1,6 +1,6 @@
 ---
 title: "[EKS] EKS: 인증/인가 - 0. 개요"
-excerpt: "EKS에서 두 인증 체계(K8s와 AWS IAM)가 만나면서 생기는 근본 문제와 세 가지 인증 흐름을 정리한다."
+excerpt: "EKS에서 두 인증 체계(K8s와 AWS IAM)가 만나면서 생기는 근본 문제와 세 가지 인증 흐름을 정리해 보자."
 categories:
   - Kubernetes
 toc: true

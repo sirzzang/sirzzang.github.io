@@ -185,6 +185,7 @@ API 서버 엔드포인트는 `endpoint_public_access = true`와 `endpoint_priva
 인증/인가 흐름을 디버깅하려면 `authenticator`와 `audit` 로그가 필수다. 예를 들어, 특정 IAM 사용자가 kubectl로 접근했을 때 어떤 Access Entry에 매핑되는지, RBAC에서 허용/거부되는지를 추적할 수 있다. 나머지 로그도 함께 켜 두면 전체 흐름을 종합적으로 파악할 수 있다.
 
 > 컨트롤 플레인 로그는 CloudWatch Logs의 `/aws/eks/<클러스터명>/cluster` 로그 그룹에 저장된다. 로그 보관 기간은 기본 90일이며, Terraform 모듈이 자동으로 로그 그룹을 생성한다.
+> ![eks-w4-cloudwatch-log-location]({{site.url}}/assets/images/eks-w4-cloudwatch-log-location.png)
 
 ## 노드 그룹
 
