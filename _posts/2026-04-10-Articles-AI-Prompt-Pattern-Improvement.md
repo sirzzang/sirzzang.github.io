@@ -12,6 +12,7 @@ tags:
   - Prompt Engineering
   - Retrospective
   - Productivity
+hidden: true
 ---
 
 <br>
