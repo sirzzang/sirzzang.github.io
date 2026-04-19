@@ -584,9 +584,9 @@ aws eks update-nodegroup-config \
 
 이 GPU 환경 위에서 다음 순서로 트러블슈팅 시나리오를 진행한다.
 
-1. **NCCL 통신 확인**: GPU 노드 간 멀티노드 집합 통신 테스트
-2. **보안그룹 차단 실험**: `node_sg_enable_recommended_rules=false`, `enable_aux_sg_vpc_allow=false`로 NCCL 차단 재현
-3. **Device Plugin 비활성화**: `kubectl edit clusterpolicy` → `devicePlugin.enabled: false`로 GPU Allocatable 소실 재현
-4. **실습 종료**: `aws eks update-nodegroup-config --scaling-config desiredSize=0`으로 GPU 노드 종료
+1. **[Device Plugin 비활성화]({% post_url 2026-04-09-Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending %})**: ClusterPolicy `devicePlugin.enabled: false` 패치로 GPU Allocatable 소실 → Pod Pending 장애 재현
+2. **[vLLM 기동 실패]({% post_url 2026-04-09-Kubernetes-EKS-GPU-TroubleShooting-03-02-vLLM-TroubleShooting %})**: vLLM 14B-AWQ 서빙 중 기동 실패 시나리오 4가지 재현 및 디버깅
+3. **[분산학습 배경 및 실험 설계]({% post_url 2026-04-09-Kubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background %})**: 분산학습 원리, NCCL 통신 계층, EKS에서의 재현 실험 설계
+4. **[SG 차단 네트워크 장애 재현]({% post_url 2026-04-09-Kubernetes-EKS-GPU-TroubleShooting-03-03-02-Distributed-Learning-Network-Failure %})**: EKS node SG ephemeral self-ref 제거로 분산학습 네트워크 장애 재현
 
 <br>
