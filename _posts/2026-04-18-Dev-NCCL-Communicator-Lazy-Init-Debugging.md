@@ -499,7 +499,7 @@ TorchConfig(backend='nccl', timeout_s=120)  # 30분 → 2분
 
 <br>
 
-# 참고: 새 GPU 도입 시 NCCL 호환성 검증 체크리스트</summary>
+# 참고: 새 GPU 도입 시 NCCL 호환성 검증 체크리스트
 
 ## 빌드 타임
 

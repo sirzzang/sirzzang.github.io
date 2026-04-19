@@ -208,8 +208,8 @@ variable "gpu_az_index" {
 핵심 포인트를 짚어 보자.
 
 - **`gpu_desired_size` (기본 0)**: 비용 가드의 출발점이다. 노드 그룹 **최초 생성 시** `scaling_config.desired_size`의 초기값을 결정한다. 다만, 이미 존재하는 노드 그룹에 대해 이 변수를 바꿔 `terraform apply`해도 실제 AWS에는 반영되지 않는다. EKS 모듈의 `lifecycle.ignore_changes` 설계 때문이다. 이후 스케일 up/down은 AWS CLI(`aws eks update-nodegroup-config`)로 수행한다. 상세한 배경은 [아래](#비용-가드의-실제-스케일링-경로)에서 다룬다
-- **`gpu_max_size` (기본 2)**: [사전 준비]({% post_url 2026-04-09-Kubernetes-EKS-GPU-TroubleShooting-01-PreRequisites %}#부분-승인8-vcpu-영향-분석)에서 G/VT 쿼터가 8 vCPU로 부분 승인되었다. g5.xlarge는 4 vCPU/대이므로 동시 실행 한도가 2대다. max_size를 4로 두면 ASG 롤링(새 노드 선행 기동 → 기존 노드 drain) 시 일시적으로 3~4대가 필요해져 쿼터 초과로 실패한다. **ASG 레벨에서 2로 잠가 쿼터 초과 경로를 차단**한다
-- **`gpu_node_disk_size` (100GB)**: GPU Operator 컴포넌트와 CUDA 컨테이너 이미지가 크므로 시스템 노드(30GB)보다 넉넉하게 잡았다
+- **`gpu_max_size` (기본 2)**: [사전 준비]({% post_url 2026-04-09-Kubernetes-EKS-GPU-TroubleShooting-01-PreRequisites %}#부분-승인8-vcpu-영향-분석)에서 G/VT 쿼터가 8 vCPU로 부분 승인되었다. g5.xlarge는 4 vCPU/대이므로 동시 실행 한도가 2대다. max_size를 4로 두면 ASG 롤링(새 노드 선행 기동 → 기존 노드 drain) 시 일시적으로 3~4대가 필요해져 쿼터 초과로 실패한다. **ASG 레벨에서 2로 잠가 쿼터 초과 경로를 차단**한다. 다만 이 제한은 LaunchTemplate 변경(예: [디스크 크기 수정](#disk_size)) 시 EKS가 자동으로 시도하는 rolling update도 차단한다 — surge 노드를 띄울 여유가 없어 `VcpuLimitExceeded`로 실패하므로, LT 변경 시에는 scale-down(0) → apply → scale-up(2)으로 우회해야 한다
+- **`gpu_node_disk_size` (100GB)**: GPU Operator 컴포넌트와 CUDA 컨테이너 이미지가 크므로 시스템 노드(30GB)보다 넉넉하게 잡았다. 이 변수는 `block_device_mappings.xvda.ebs.volume_size`로 전달된다. `disk_size` 속성으로 넘기면 custom LT 경로에서 무시되므로 주의한다([아래 참고](#disk_size))
 - **`gpu_az_index` (0)**: `availability_zones` 리스트에서 하나의 AZ만 선택한다. NCCL 실험에서 크로스-AZ 지연을 제거하기 위함이다
 
 ### 비용 가드의 실제 스케일링 경로
@@ -268,9 +268,9 @@ aws eks update-nodegroup-config \
 
 ```hcl
 variable "enable_gpu_operator" {
-  description = "true로 두면 NVIDIA GPU Operator helm_release를 생성."
+  description = "NVIDIA GPU Operator helm_release 생성 여부. 기본 true(운영 상태). 최초 클러스터 부트스트랩 시에만 -var enable_gpu_operator=false 로 명시적 override."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "gpu_operator_namespace" {
@@ -286,7 +286,9 @@ variable "gpu_operator_chart_version" {
 }
 ```
 
-GPU Operator도 기본 비활성(`false`)이다. GPU 노드가 올라온 뒤 별도 세션에서 `terraform apply -var enable_gpu_operator=true`로 활성화한다.
+**`default = true`로 둔 이유에 주의한다.** 이 프로젝트의 "일상 상태"는 GPU Operator가 설치되어 있는 운영 중 구성이다. 만약 `default = false`로 두면, GPU Operator 설치 후 매번 `-var enable_gpu_operator=true`를 빠뜨리지 않아야 한다. 빠뜨리는 순간 `count = var.enable_gpu_operator ? 1 : 0`이 `count = 0`으로 평가되어 **`helm_release.gpu_operator`가 destroy 대상**으로 잡힌다. 디스크 변경 같은 무관한 작업을 하다가 GPU Operator를 날릴 수 있다.
+
+`default = true`로 두면 평상시 `terraform apply`만으로 안전하다. 최초 클러스터 부트스트랩 시(아직 GPU 노드가 없어 Operator를 설치하면 안 되는 단계)에만 `-var enable_gpu_operator=false`로 명시적 override한다.
 
 차트 버전은 **반드시 핀(pin)해야 한다.** `null`(최신)로 두면 Helm이 repo 기준 latest를 받아오기 때문에, 실습 도중 예고 없이 major 버전이 바뀔 수 있다. 수개월 후에도 실습을 통해 동일한 환경을 재현할 수 있으려면 버전 고정이 필수다.
 
@@ -447,13 +449,20 @@ variable "gpu_az_index" {
 }
 
 ########################
-# GPU Operator (helm) — 기본 비활성
+# GPU Operator (helm) — 기본 활성
 ########################
 
+# default=true 인 이유: 이 프로젝트의 "일상 상태" 는 GPU Operator 가 설치되어 있는 운영 중 구성.
+# 매 plan/apply 마다 CLI 로 -var 를 빠뜨리면 state 의 helm_release 가 destroy 대상으로 잡히는 구조를 방지.
+#
+# 최초 배포 시(아직 operator 설치 전)에는 반드시 다음과 같이 명시:
+#   terraform plan  -var enable_gpu_operator=false -out=...
+#   terraform apply ...
+# GPU Operator 설치 단계부터는 -var 플래그 없이 default(true) 사용.
 variable "enable_gpu_operator" {
-  description = "true로 두면 NVIDIA GPU Operator helm_release를 생성."
+  description = "NVIDIA GPU Operator helm_release 생성 여부. 기본 true(운영 상태). 최초 클러스터 부트스트랩 시에만 -var enable_gpu_operator=false 로 명시적 override."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "gpu_operator_namespace" {
@@ -748,7 +757,18 @@ gpu = {
   desired_size    = var.gpu_desired_size
   max_size        = var.gpu_max_size
   min_size        = 0
-  disk_size       = var.gpu_node_disk_size
+
+  block_device_mappings = {
+    xvda = {
+      device_name = "/dev/xvda"
+      ebs = {
+        volume_size           = var.gpu_node_disk_size
+        volume_type           = "gp3"
+        delete_on_termination = true
+      }
+    }
+  }
+
   subnet_ids      = local.gpu_subnet_ids
   vpc_security_group_ids = [aws_security_group.node_group_sg.id]
 
@@ -804,13 +824,21 @@ gpu = {
 | `max_size` | `2` | G/VT 쿼터 8 vCPU 한도 대응 |
 | `min_size` | `0` | 완전 종료 가능 |
 | `subnet_ids` | `local.gpu_subnet_ids` | 단일 AZ 고정 (아래 참고) |
-| `disk_size` | `100` | GPU 이미지/Operator 고려 |
+| `block_device_mappings` | `xvda`, 100GB gp3 | LT에 직접 주입. `disk_size`는 custom LT 경로에서 무시됨 ([아래 참고](#disk_size)) |
 
 #### subnet_ids
 
 **`subnet_ids` 속성명에 주의해야 한다.** `terraform-aws-modules/eks/aws` v21의 managed node group submodule은 서브넷을 받는 변수명이 `subnet_ids`다. `subnets`처럼 다른 키를 넘기면 Terraform 모듈은 정의되지 않은 키를 **조용히 무시**하고, 내부의 `coalesce(each.value.subnet_ids, var.subnet_ids)` 로직에서 상위 모듈의 `subnet_ids`(= 3개 private subnet, multi-AZ)로 fallback한다. 단일 AZ를 의도했지만 실제 노드 그룹은 3개 서브넷(multi-AZ)으로 구성되는 것이다. `desired_size=0`이라 즉시 체감 영향은 없지만, desired를 올리는 순간 GPU 노드가 서로 다른 AZ에 분산될 수 있다.
 
 이후 NCCL SG 차단 실험은 "같은 AZ, 같은 서브넷 내에서 SG가 pod-pod 통신을 막는다"가 전제다. AZ가 달라지면 cross-AZ 라우팅과 레이턴시라는 의도하지 않은 변인이 추가되어 실험 해석이 흐려진다. 속성명을 `subnet_ids`로 정확히 지정하여 단일 AZ 고정 의도가 코드에 반영되도록 한다.
+
+#### disk_size
+
+**`disk_size`가 아니라 `block_device_mappings`를 사용해야 한다.** `terraform-aws-modules/eks/aws` v21의 managed node group submodule은 `ami_type`을 지정하면서 동시에 `cloudinit_pre_nodeadm` 등 custom Launch Template 경로를 타게 되는데, 이 경로에서 `disk_size` 속성은 **조용히 무시**된다. 모듈 내부의 Launch Template 리소스가 `block_device_mappings`를 직접 구성하지 않으면 AWS는 `BlockDeviceMappings=null`로 렌더하고, AMI 기본값으로 fallback한다. AL2023 NVIDIA AMI의 기본 루트 볼륨은 **20GB**이므로, `disk_size=100`을 넘겼더라도 실제 노드의 EBS는 20GB로 잡힌다.
+
+이 문제는 `subnet_ids` 속성명 문제와 같은 패턴이다. 모듈이 정의하지 않은 키를 넘기면 에러 없이 무시되고, 의도와 다른 기본값으로 동작한다. `desired_size=0`이라 즉시 체감하지 못하지만, 실제 GPU 노드를 올리는 순간 `ephemeral-storage`가 ~17GiB밖에 잡히지 않는다. vLLM 같은 대형 모델 서빙(Llama-3-8B FP16 ≈ 15GB 체크포인트)에서는 모델 로딩 시 ephemeral storage 부족으로 Pod이 Evict될 수 있다.
+
+`block_device_mappings`로 Launch Template에 직접 주입하면, 모듈이 LT의 `block_device_mappings` 블록을 렌더링하고 AWS에 100GB gp3가 정확히 전달된다.
 
 #### taint, label, CAS tag
 
@@ -1058,7 +1086,20 @@ module "eks" {
       desired_size           = var.gpu_desired_size
       max_size               = var.gpu_max_size
       min_size               = 0
-      disk_size              = var.gpu_node_disk_size
+
+      # disk_size 는 v21 custom LT 경로에서 무시된다.
+      # block_device_mappings 로 LT 에 직접 주입.
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = var.gpu_node_disk_size
+            volume_type           = "gp3"
+            delete_on_termination = true
+          }
+        }
+      }
+
       # 단일 AZ 고정. submodule 변수명이 subnet_ids 이므로 이 이름이어야 실제 적용된다.
       subnet_ids             = local.gpu_subnet_ids
       vpc_security_group_ids = [aws_security_group.node_group_sg.id]
@@ -2035,10 +2076,12 @@ output "ami_al2023_nvidia" {
 
 실제 배포는 다음 순서로 진행한다.
 
-1. **기반 인프라 먼저**: GPU 노드 수 0, GPU Operator 비활성 상태로 `terraform apply`
+1. **기반 인프라 먼저**: GPU 노드 수 0, GPU Operator 비활성 상태로 `terraform apply -var enable_gpu_operator=false`
 2. **GPU 세션 진입 시**: `aws eks update-nodegroup-config --scaling-config desiredSize=2`로 GPU 노드 기동
-3. **GPU Operator 설치**: `terraform apply -var enable_gpu_operator=true`
+3. **GPU Operator 설치**: `terraform apply` (`default = true`이므로 별도 플래그 불필요)
 4. **실습 종료 시**: `aws eks update-nodegroup-config --scaling-config desiredSize=0`으로 GPU 노드 종료
+
+> Step 1에서 `-var enable_gpu_operator=false`로 CLI override하는 이유는 [GPU Operator 변수](#gpu-operator-변수) 섹션을 참고한다. `default = true`이므로 최초 배포 시에만 명시적으로 꺼야 한다.
 
 > Step 2, 4가 Terraform이 아닌 AWS CLI인 이유는 [비용 가드의 실제 스케일링 경로](#비용-가드의-실제-스케일링-경로)를 참고한다.
 

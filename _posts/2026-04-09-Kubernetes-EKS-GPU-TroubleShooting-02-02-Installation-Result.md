@@ -16,7 +16,6 @@ tags:
   - GPU-Operator
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-5
-hidden: true
 ---
 
 *정영준님의 AWS EKS Workshop Study(AEWS) [5주차 학습 내용](https://devfloor9.github.io/engineering-playbook/slides/eks-debugging/)을 기반으로 합니다.*
@@ -133,6 +132,7 @@ plan에서 추출한 두 노드 그룹의 스펙을 비교한다.
 | 인스턴스 타입 | t3.medium | g5.xlarge |
 | 용량 타입 | ON_DEMAND | ON_DEMAND |
 | desired / max / min | 2 / 4 / 1 | **0** / 2 / 0 |
+| 디스크 | 30GB (`disk_size`) | **100GB gp3** (`block_device_mappings`) |
 | label | `tier=primary` | `tier=gpu`, `nvidia.com/gpu=true` |
 | taint | 없음 | `nvidia.com/gpu=true:NoSchedule` |
 

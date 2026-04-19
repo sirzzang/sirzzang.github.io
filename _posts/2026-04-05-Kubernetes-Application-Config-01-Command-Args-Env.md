@@ -516,30 +516,52 @@ kubectl set env pod kiada --list
 ```bash
 kubectl exec kiada -- env
 
-# 실행 결과
-# 시스템이 설정
+# 1. 이미지 Dockerfile ENV (이미지 빌드 시 박힘)
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-HOSTNAME=kiada
-# 컨테이너 이미지에서 설정
 NODE_VERSION=12.19.1
 YARN_VERSION=1.22.5
-# 파드 매니페스트에서 설정
+
+# 2. kubelet 기본 주입 (항상)
+HOSTNAME=kiada
+KUBERNETES_SERVICE_HOST=10.96.0.1
+KUBERNETES_SERVICE_PORT=443
+KUBERNETES_PORT=tcp://10.96.0.1:443
+KUBERNETES_PORT_443_TCP=tcp://10.96.0.1:443
+KUBERNETES_PORT_443_TCP_PROTO=tcp
+KUBERNETES_PORT_443_TCP_PORT=443
+KUBERNETES_PORT_443_TCP_ADDR=10.96.0.1
+
+# 3. kubelet Service Link 주입 (enableServiceLinks: true일 때만, 같은 ns의 모든 Service)
+KIADA_SERVICE_HOST=10.96.x.x
+KIADA_SERVICE_PORT=80
+KIADA_PORT=tcp://10.96.x.x:80
+KIADA_PORT_80_TCP=tcp://10.96.x.x:80
+KIADA_PORT_80_TCP_PROTO=tcp
+KIADA_PORT_80_TCP_PORT=80
+KIADA_PORT_80_TCP_ADDR=10.96.x.x
+
+# 4. 파드 매니페스트 spec.env / spec.envFrom (가장 우선순위 높음)
 POD_NAME=kiada
 INITIAL_STATUS_MESSAGE=This status message is set in the pod spec.
-# 쿠버네티스가 자동 설정 (Service 관련 — 11장에서 다룸)
-KUBERNETES_SERVICE_HOST=10.96.0.1
-...
-KUBERNETES_SERVICE_PORT=443
 ```
 
 환경 변수의 출처는 크게 네 가지다.
 
-1. **시스템:** `PATH`, `HOSTNAME` 등 OS/런타임이 설정
-2. **컨테이너 이미지:** Dockerfile의 `ENV`로 설정 (`NODE_VERSION`, `YARN_VERSION` 등)
-3. **파드 매니페스트:** `env` 필드에서 직접 설정 (`POD_NAME`, `INITIAL_STATUS_MESSAGE`)
-4. **쿠버네티스:** Service 객체 관련 변수를 자동 주입 (`KUBERNETES_SERVICE_HOST` 등)
+1. **컨테이너 이미지:** Dockerfile의 `ENV`로 설정 (`PATH`, `NODE_VERSION`, `YARN_VERSION` 등). `PATH`도 OS 커널이 아니라 베이스 이미지의 Dockerfile이 설정한다.
+2. **kubelet 기본 주입 (항상):** kubelet이 컨테이너 런타임에 Pod 이름을 hostname으로 설정하도록 지시하고, 셸/런타임이 이를 `HOSTNAME` 환경 변수로 노출한다. `KUBERNETES_SERVICE_HOST`, `KUBERNETES_SERVICE_PORT` 등 `default/kubernetes` Service에 대한 변수도 모든 Pod에 항상 주입된다.
+3. **kubelet Service Link 주입 (조건부):** 같은 네임스페이스의 모든 Service를 훑어 `{SVC}_SERVICE_HOST`, `{SVC}_PORT` 등의 변수를 자동 주입한다. `enableServiceLinks: true`(기본값)일 때만 동작하며, docker-compose의 `--link`에서 유래한 레거시 호환 기능이다(11장에서 다룸). 앱 환경 변수와 이름이 충돌하면 기동 실패를 일으킬 수 있다.
+4. **파드 매니페스트:** `spec.containers[].env` / `spec.containers[].envFrom`으로 직접 설정 (`POD_NAME`, `INITIAL_STATUS_MESSAGE`). **같은 이름의 변수가 있으면 위 1\~3을 덮어쓰므로 우선순위가 가장 높다.**
 
-각 변수의 출처를 확인하려면 파드 매니페스트와 컨테이너 이미지의 Dockerfile을 함께 확인해야 한다.
+각 변수의 값은 출처에 따라 변하는 조건이 다르다.
+
+| 출처 | 값이 변하는 조건 |
+|---|---|
+| 컨테이너 이미지 | 이미지 버전(태그)에 따라 |
+| kubelet 기본 주입 | Pod 이름, 네임스페이스에 따라 |
+| kubelet Service Link | 같은 네임스페이스의 Service 구성 및 `enableServiceLinks` 플래그에 따라 |
+| 파드 매니페스트 | Pod spec 자체에 명시한 값 |
+
+각 변수의 출처를 확인하려면 파드 매니페스트, 컨테이너 이미지의 Dockerfile, 같은 네임스페이스의 Service 목록, `enableServiceLinks` 설정을 함께 확인해야 한다.
 
 ## 다른 환경 변수 참조
 
