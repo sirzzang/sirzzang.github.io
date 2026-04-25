@@ -30,7 +30,7 @@ tags:
 $ scp bootstrap:/etc/rancher/rke2/rke2.yaml ~/.kube/config
 ```
 
-이 파일은 `system:masters` 그룹(= cluster-admin 권한)에 매핑되는 강한 자격증명이라는 점은 [뒤쪽 우회 방법](#insecure-skip-tls-verify-임시-한정)에서 다시 짚는다.
+> 사실 위에서 복사한 파일은 `system:masters` 그룹(= cluster-admin 권한)에 매핑되는 강한 자격증명이다. 이로 인해 야기될 수 있는 문제점은 [뒤쪽 우회 방법](#insecure-skip-tls-verify-임시-한정)에서 다시 짚는다.
 
 [이전에도 kubeconfig 인증서 문제로 kubectl이 깨진 경험]({% post_url 2026-01-10-Dev-Kubernetes-Certificate-Trouble-Shooting %})이 있다. 그때는 **클라이언트 인증서 만료**(mTLS에서 서버가 클라이언트를 검증하는 단계 실패)였다면, 이번에는 **서버 인증서 trust chain 불일치**(클라이언트가 서버를 검증하는 단계 실패)다. 같은 mTLS handshake의 다른 실패 지점이지만, 원인의 성격은 꽤 다르다. 인증서 자체의 시간 경과가 아니라, 네트워크 경로 위의 외부 개입이 문제였다.
 
@@ -140,6 +140,8 @@ issuer=CN=ExampleCorp_Untrust_ECDSA
 subject=CN=kube-apiserver
 ```
 
+> `openssl s_client`에서 `-servername`(SNI)을 지정하지 않으면, 서버가 default 인증서를 내려줄 수 있다. kube-apiserver는 단일 서빙 인증서 구조라서 이번 경우에는 영향이 없었지만, NGINX Ingress나 ALB처럼 멀티 인증서 환경에서는 SNI 하나 차이로 전혀 다른 인증서가 나올 수 있다. 정확한 진단을 위해 `-servername`을 kubeconfig의 `server` 주소와 맞추는 습관이 좋다. SNI와 SAN의 차이, 디버깅 시 `-servername` 활용법에 대해서는 [SNI와 SAN 글]({% post_url 2026-04-25-CS-TLS-SNI-SAN %})에서 자세히 다룬다.
+
 여기서 `subject`는 인증서가 누구에게 발급된 것인지(누구의 신원을 증명하는지), `issuer`는 그 인증서를 누가 서명했는지를 나타낸다. mTLS handshake 단계와 인증서의 역할에 대한 자세한 설명은 [Kubernetes PKI 글]({% post_url 2026-01-18-Kubernetes-PKI %})을 참고하자.
 
 서버 인증서의 subject가 `CN=kube-apiserver`인 것은 정상이다. 그런데 issuer가 `CN=ExampleCorp_Untrust_ECDSA` → 처음 보는 이름이다. RKE2가 만든 cluster CA가 아니다.
@@ -194,28 +196,53 @@ SSL Inspection과 SSL Interception은 실무에서 혼용되지만, 엄밀히는
 
 ![SSL Inspection 개입 (VPN 경로)]({{site.url}}/assets/images/kubectl-apiserver-with-firewall.png){: .align-center width="700"}
 
-핵심은 다음과 같다.
+핵심은 클라이언트와 서버 사이에 **완전히 독립된 두 TLS 세션**이 만들어진다는 점이다. 클라이언트의 패킷이 서버에 그대로 전달(릴레이)되는 것이 아니다. 방화벽이 중간에서 양쪽과 **각각 별도의 TCP 연결 + TLS handshake**를 수행하고, 각 세션은 서로 다른 인증서·세션 키·cipher suite를 갖는다. 
 
-- 클라이언트와 서버 사이에 **별도의 두 TLS 세션**이 만들어진다. 클라이언트 ↔ 방화벽 한 세션, 방화벽 ↔ 서버 한 세션이다.
-- 방화벽은 두 세션 사이에서 트래픽을 복호화 → 검사 → 재암호화한다.
-- 클라이언트가 받는 서버 인증서는 진짜 서버가 아니라 **방화벽이 즉석에서 만든 인증서**다.
 
-## 방화벽은 콘텐츠를 인지해서 가로채는가
+### Handshake 단계
 
-처음 이 동작을 보면 "방화벽이 어떻게 이게 `kube-apiserver` 인증서인지 알고 가로채는가" 같은 의문이 들 수 있다. 결론부터 말하면 **방화벽은 콘텐츠를 인지하고 동작하지 않는다.** TLS 프로토콜 자체를 가로챌 뿐이다.
+두 세션이 만들어지는 과정은 다음과 같다. 아래 1~7은 모두 TCP handshake가 끝난 뒤의 **TLS handshake** 과정이다. TCP 연결도 양쪽으로 따로 맺어지는데(클라이언트 ↔ 방화벽 TCP 연결, 방화벽 ↔ 서버 TCP 연결), TLS handshake는 그 위에서 각각 독립적으로 진행된다.
+
+![SSL Inspection 상세 과정]({{site.url}}/assets/images/vpn-ssl-inspection-detailed-process.png){: .align-center}
+
+- **①** 클라이언트가 ClientHello를 보낸다
+- **②** 방화벽이 이것을 가로채고, **자기가 직접 새로운 ClientHello를 만들어서** 진짜 서버(`kube-apiserver`)에 보낸다. 클라이언트의 ClientHello를 릴레이하는 것이 아니라, 방화벽이 독자적인 TLS 클라이언트로서 서버에 접속하는 것이다
+- **③** 진짜 서버가 방화벽에게 ServerHello + 서버 인증서를 돌려준다
+- **④** 방화벽 ↔ 서버 간 TLS handshake가 완료된다 **(세션 A)**
+- **⑤** 방화벽은 받은 진짜 인증서에서 Subject·SAN 등의 정보를 베껴 **위조 인증서를 즉석 발급**하고, 자기 CA 개인키로 서명한다
+- **⑥** 위조 인증서를 클라이언트에게 ServerHello로 보낸다
+- **⑦** 클라이언트 ↔ 방화벽 간 TLS handshake가 완료된다 **(세션 B)**
+
+
+핵심은 **②번**이다. 방화벽은 클라이언트의 ClientHello를 서버에 그대로 전달하지 않는다. 자기가 독자적인 TLS 클라이언트로서 **새로운 ClientHello를 만들어** 서버에 접속한다. 따라서 세션 A와 세션 B는 세션 키·cipher suite·인증서가 전부 다른, 완전히 별개의 TLS 세션이다.
+
+### 데이터 전송 단계
+
+TLS handshake 이후 실제 요청·응답이 오가는 과정도 릴레이가 아니라 복호화 → 검사 → 재암호화다.
+
+- 클라이언트 → 서버 방향: 클라이언트가 보낸 암호문을 **세션 B의 키로 복호화** → 평문을 검사(DLP, IDS 등) → **세션 A의 키로 재암호화** → 서버에 전달
+- 서버 → 클라이언트 방향: 서버가 보낸 암호문을 **세션 A의 키로 복호화** → 평문 검사 → **세션 B의 키로 재암호화** → 클라이언트에 전달
+
+결국 클라이언트 입장에서는 방화벽이 서버인 줄 알고, 서버 입장에서는 방화벽이 클라이언트인 줄 안다. 이것이 "MITM(Man-in-the-Middle)"이라 부르는 이유다 — 양쪽 어디에서도 중간자의 존재를 TLS 계층만으로는 알 수 없고, 오직 **인증서의 issuer를 확인해야만** 개입 여부를 판단할 수 있다.
+
+## 방화벽은 응답 인증서를 보고 가로채는가
+
+처음 이 동작을 보면 "방화벽이 어떻게 이게 `kube-apiserver` 인증서인지 알고 가로채는가" 같은 의문이 들 수 있다. 결론부터 말하면 **inspection 여부는 서버 응답을 보기 전, 클라이언트 요청 시점에 이미 결정된다.** 방화벽은 응답으로 돌아오는 인증서의 내용을 인지해서 가로채는 것이 아니라, TLS handshake의 첫 패킷(ClientHello)만 보고 이 연결을 inspection할지 결정한다. 일단 inspection 경로로 들어온 연결은 **서버가 어떤 인증서를 돌려주든 — `kube-apiserver`든, nginx든, 무엇이든 — 전부 가로채서 재서명**한다.
+
+구체적으로 방화벽이 보는 것은 다음과 같다.
 
 - 방화벽은 TCP 연결 위로 ClientHello 패킷이 보이는 순간 이 연결을 SSL Inspection 대상으로 가져간다
 - 포트가 6443이든 443이든 8443이든 무관하다. TLS 트래픽이면 동일하게 처리한다
 - 따라서 "이게 `kube-apiserver` 인증서인지 인지해서" 가 아니라, "TLS 연결이니까 일단 가로챈다" 가 정확한 표현이다
 
-조금 더 정확히 보면, 많은 방화벽은 ClientHello 안의 **SNI(Server Name Indication)** 값을 보고 inspection 여부를 분기한다.
+조금 더 정확히 보면, 많은 방화벽은 ClientHello 안의 **SNI(Server Name Indication)** 값을 보고 inspection 여부를 분기한다. 이것 역시 클라이언트가 보내는 정보다. SNI와 SAN의 역할 차이, 그리고 서버가 SNI를 어떻게 처리하는지에 대한 자세한 내용은 [SNI와 SAN 글]({% post_url 2026-04-25-CS-TLS-SNI-SAN %})에서 별도로 정리했다.
 
 - SNI는 TLS 1.2부터 표준화된 ClientHello 확장 필드로, 클라이언트가 "지금 접속하려는 서버 호스트명"을 **암호화 이전 평문**으로 실어 보낸다. 원래 목적은 한 IP에 여러 TLS 사이트(virtual host)가 올라가 있을 때 서버가 올바른 인증서를 골라 응답하도록 하기 위해서다.
 - 평문이라는 특성 때문에 방화벽도 별도 복호화 없이 SNI를 읽을 수 있다. 그래서 inspecting firewall은 **SNI 기준으로 정책을 분기**한다 — 예를 들어 `*.bank.com` 같이 민감한 도메인은 inspection 대상에서 제외하는 식이다.
 - 그런데 `kubectl`이 **IP 주소로 직접 연결**하는 경우(이번 사례의 `https://10.50.31.10:6443`처럼) Go의 `crypto/tls`는 RFC 6066 권고에 따라 **SNI를 비워 보낸다**. SNI는 호스트명을 위한 필드이고 IP literal은 여기에 들어갈 수 없기 때문이다.
 - 결과적으로 SNI 기반 bypass 룰이 정책에 있더라도 매칭되지 않고, 이 연결은 **"기타 TLS"로 분류되어 일괄 inspection 대상**이 되기 쉽다.
 
-즉 "방화벽이 콘텐츠를 인지하지 않는다"는 건, **SNI 같은 메타정보를 기반으로 한 분기는 가능하지만 그것이 매칭될 단서가 없을 때 일괄 처리 경로로 떨어진다**는 의미에 가깝다. SNI에 대한 자세한 사양은 [RFC 6066 §3](https://datatracker.ietf.org/doc/html/rfc6066#section-3)을 참고하자.
+정리하면 이렇다. 방화벽의 inspection 판단은 **ClientHello 시점에 완결**된다. SNI 같은 메타정보로 bypass 분기가 가능하지만, 이번 사례처럼 SNI가 비어 있으면 매칭될 단서가 없어 일괄 inspection 경로로 떨어진다. 그리고 일단 inspection 대상이 된 연결은 **서버 응답에 무엇이 담겨 있든 — 인증서가 공인 CA든 사설 CA든 — 무조건 가로채서 재서명**한다. SNI에 대한 자세한 사양은 [RFC 6066 §3](https://datatracker.ietf.org/doc/html/rfc6066#section-3)을 참고하자.
 
 ## CA만 바꾸는가, 인증서를 새로 만드는가
 
@@ -258,11 +285,11 @@ Trust와 Untrust를 둘로 나누는 1차 목적은 **방화벽/보안 담당자
 
 <br>
 
-# kubectl은 회사 CA를 신뢰하면 안 되는가
+# 그냥 회사 CA를 등록하면 안 되는 건가
 
-여기서 자연스럽게 떠오르는 질문이 있다. **macOS 키체인에는 회사 CA가 이미 신뢰됨으로 등록되어 있다.** 브라우저로 사내 사이트를 열 때는 SSL Inspection이 끼어 있어도 자물쇠 표시가 정상으로 뜨는 이유가 그것이다. 그렇다면 같은 방식으로 **kubeconfig에도 회사 CA를 등록해 놓으면 되는 것 아닌가?**
+SSL Inspection이 원인이라면, 방화벽이 재서명에 사용하는 회사 CA를 kubeconfig에 등록해 놓으면 되는 것 아닌가? 기술적으로는 가능하다. 하지만 **하면 안 된다.** 그 이유를 정리해 보자.
 
-기술적으로는 가능하다. 하지만 **하면 안 된다.** 그 이유를 정리해 보자.
+> 브라우저로 사내 사이트를 열 때는 SSL Inspection이 끼어 있어도 자물쇠 표시가 정상으로 뜬다. [다음 글]({% post_url 2026-04-25-Dev-Notion-MCP-VPN-SSL-Inspection %})의 "그런데 이건 왜 되는가" 절에서 다루겠지만, 이것은 **내 로컬 macOS 키체인에 회사 CA가 이미 신뢰됨으로 등록되어 있기 때문**이다. 그러니 같은 방식으로 kubeconfig에도 회사 CA를 등록하면 안 되는가 하는 의문이 자연스레 떠오른 것이다.
 
 ## kubeconfig CA는 cluster 전용 trust anchor
 
@@ -294,8 +321,6 @@ Trust와 Untrust를 둘로 나누는 1차 목적은 **방화벽/보안 담당자
    - 임시로 검증을 풀어야 한다면, 차라리 아래 [우회 방법](#우회-방법) 절에서 다룰 `insecure-skip-tls-verify=true`를 명시적으로 설정하는 편이 낫다
 
 정리하면, kubeconfig의 certificate-authority-data는 시스템 trust store와 분리된 PKI이며, 그 신뢰 범위는 "이 cluster의 API 서버가 진짜인가"를 판별하는 데만 쓰도록 좁게 유지하는 게 설계 의도에 맞다. 키체인의 "항상 신뢰" 설정과 kubeconfig의 `certificate-authority-data`는 같은 의미가 아니다. 키체인의 "항상 신뢰"를 추가하는 것처럼 회사 CA를 kubeconfig에 넣으면, TLS 검증은 통과하지만 의미 있는 검증은 사라진다.
-
-> 같은 SSL Inspection이라는 원인이지만, 도구의 trust 모델에 따라 해결 방향이 정반대가 될 수 있다. Node.js 같이 OS trust store를 무시하는 도구가 만나는 비슷한 문제와 그 해결법은 별도 글에서 다룰 예정이다.
 
 <br>
 
@@ -360,6 +385,6 @@ $ kubectl config set-cluster <cluster-name> --insecure-skip-tls-verify=false
 
 해결 방향도 그래서 두 갈래로 나뉜다. 본인 측에서는 bootstrap 노드 SSH로 SSL Inspection 경로 자체를 회피하거나(권장), 임시로 검증을 끄는 정도까지가 가능하다. 본질적인 해결은 방화벽/네트워크 정책 변경이 필요하므로, 인프라 팀에 SSL Inspection bypass(권장) 또는 VPN 라우팅 분기 적용을 요청해야 한다.
 
-마지막으로, 같은 "VPN SSL Inspection" 이슈여도 클라이언트 도구의 trust 모델에 따라 증상과 해결 방향이 달라질 수 있다. 예를 들어 Node.js 기반 도구는 OS trust store도 kubeconfig 같은 도구별 trust store도 보지 않고 자체 내장 CA bundle만 사용하므로, kubectl과는 또 다른 양상의 문제가 생긴다. 이 부분은 추후 별도 글에서 정리할 예정이다.
+마지막으로, 같은 "VPN SSL Inspection" 이슈여도 클라이언트 도구의 trust 모델에 따라 증상과 해결 방향이 달라질 수 있다. 예를 들어 Node.js 기반 도구는 OS trust store도 kubeconfig 같은 도구별 trust store도 보지 않고 자체 내장 CA bundle만 사용하므로, kubectl과는 또 다른 양상의 문제가 생긴다. 이 부분은 [VPN SSL Inspection으로 인한 Notion MCP 연결 실패]({% post_url 2026-04-25-Dev-Notion-MCP-VPN-SSL-Inspection %})에서 정리한다.
 
 <br>

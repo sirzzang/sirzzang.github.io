@@ -1,5 +1,5 @@
 ---
-title: "[CS] SSH 접속 원리"
+title: "[SSH] SSH 접속 원리"
 excerpt: "매번 아무렇지 않게 접속하던 SSH의 동작 원리를 알아보자."
 categories:
   - CS
@@ -95,7 +95,7 @@ SSH(Secure Shell, RFC 4251~4254)는 신뢰할 수 없는 네트워크 위에서 
 1. **암호화**: Diffie-Hellman 키 교환으로 세션 키를 만들어 모든 통신을 암호화
 2. **양방향 인증**: 서버도 자기 신원을 증명하고, 클라이언트도 자기 신원을 증명
 
-> 더 엄밀하게: 현대 OpenSSH의 기본 키 교환 알고리즘은 `curve25519-sha256`으로, ECDH(Elliptic Curve Diffie-Hellman)다. ECDH는 DH의 타원곡선 변형이므로 "Diffie-Hellman 키 교환"이라는 표현이 틀린 것은 아니지만, 고전적인 modular DH(`diffie-hellman-group14-sha256` 등)와 구분할 필요가 있을 때는 "DH 계열(ECDH/curve25519 포함)"로 쓰는 것이 정확하다.
+> 더 엄밀하게: 현대 OpenSSH(10.0+)의 기본 키 교환은 포스트 양자 하이브리드(`mlkem768x25519-sha256`)로, 내부에 X25519(ECDH)를 포함한다. 이전 버전에서도 `curve25519-sha256`(ECDH)이 기본이었다. 모두 DH의 변형이므로 "Diffie-Hellman 키 교환"이라는 표현은 틀리지 않지만, 고전적인 modular DH(`diffie-hellman-group14-sha256` 등)와는 다르다.
 
 서버 인증은 DH 키 교환과 함께 이루어지고, 사용자 인증은 암호화 터널이 수립된 후 그 안에서 진행된다.
 
@@ -135,7 +135,7 @@ SSH(Secure Shell, RFC 4251~4254)는 신뢰할 수 없는 네트워크 위에서 
 
 "SSH는 공개키 암호화를 쓴다"는 말이 자칫 "공개키로 데이터를 암호화한다"로 오해될 수 있는데, 실제로는 다르다. 공개키 암호화는 **인증에만** 사용되고, 실제 데이터 암호화는 **DH로 도출한 대칭키**가 담당한다.
 
-```
+```text
 DH 키 교환
     │
     ├─→ 공유 비밀 K (양쪽이 독립 계산, 네트워크에 노출되지 않음)
@@ -277,7 +277,7 @@ SSH는 프로토콜이고, 이를 구현한 프로그램은 여러 가지가 있
 
 host key는 서버의 공개키 그 자체로, 길이가 긴 Base64 문자열이다. 기계가 저장하고 비교한다. fingerprint(지문)는 host key의 해시값으로, 짧은 요약 문자열이다. 사람이 눈으로 비교할 때 사용한다.
 
-```
+```text
 host key (공개키 원본)
 AAAAB3NzaC1yc2EAAAADAQABAAABAQ...  ← 긴 Base64 문자열
 
@@ -312,7 +312,7 @@ ssh-keyscan 192.168.1.100 >> ~/.ssh/known_hosts  # 새 host key 등록
 
 ⑤(서명 검증)는 "이 키와 이 서명이 수학적으로 맞는가"만 확인한다. 공격자가 자기 DH 공개값 + 자기 host key + 자기 서명을 통째로 보내면, 수학적으로는 맞기 때문에 ⑤를 통과한다. MITM을 실제로 걸러내는 것은 ⑥의 known_hosts 대조다.
 
-```
+```text
 정상 접속:
 클라이언트 ─────────────────→ 진짜 서버
              host key: ABC      (known_hosts에 ABC 저장됨)
@@ -372,7 +372,7 @@ OpenSSH의 yes/no 프롬프트를 자동화하는 옵션이 [`StrictHostKeyCheck
 interactive 프롬프트를 일절 띄우지 않는 SSH 옵션이다.
 
 ```bash
-ssh -o BatchMode=yes user@host "hostname"
+ssh -o BatchMode=yes user@host "hostname"  # interactive 프롬프트 없이 접속 시도
 ```
 
 | 상황 | BatchMode=yes일 때 동작 |
@@ -474,7 +474,7 @@ expect eof                                  # 프로세스 종료 대기
 **sshpass**: SSH 전용 비밀번호 자동 입력 도구. expect보다 단순하지만 macOS에 기본 설치되어 있지 않다.
 
 ```bash
-sshpass -p 'my-password' ssh user@192.168.1.100 "hostname"
+sshpass -p 'my-password' ssh user@192.168.1.100 "hostname"  # 비밀번호를 인자로 전달하여 자동 입력
 ```
 
 | 도구 | 범용성 | 복잡도 | macOS 기본 |
@@ -490,7 +490,7 @@ sshpass -p 'my-password' ssh user@192.168.1.100 "hostname"
 
 **증상**: 같은 IP에 인스턴스를 재생성했더니 접속이 차단된다.
 
-```
+```text
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
@@ -510,7 +510,7 @@ ssh user@192.168.1.100                                     # 재접속
 
 **증상**: 공개키 인증이 안 되고, 비밀번호 프롬프트도 뜨지 않는다.
 
-```
+```text
 user@192.168.1.100: Permission denied (publickey).
 ```
 
@@ -557,7 +557,7 @@ SSH 접속 시 만나는 에러 메시지가 프로토콜의 어느 단계에서
 
 **interactive 모드** (`StrictHostKeyChecking=ask`):
 
-```
+```text
 The authenticity of host '192.168.1.100 (192.168.1.100)' can't be established.
 ED25519 key fingerprint is SHA256:W6Y3MRx9K2p...
 Are you sure you want to continue connecting (yes/no/[fingerprint])?
@@ -565,20 +565,20 @@ Are you sure you want to continue connecting (yes/no/[fingerprint])?
 
 **StrictHostKeyChecking=yes**:
 
-```
+```text
 No ED25519 host key is known for 192.168.1.100 and you have requested strict checking.
 Host key verification failed.
 ```
 
 **BatchMode=yes**:
 
-```
+```text
 Host key verification failed.
 ```
 
 ## ⑥-c: 이후 접속, host key 불일치
 
-```
+```text
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
@@ -593,20 +593,20 @@ Host key verification failed.
 
 **공개키 미등록 (authorized_keys에 없음)**:
 
-```
+```text
 user@192.168.1.100: Permission denied (publickey).
 ```
 
 **비밀번호 인증 실패**:
 
-```
+```text
 user@192.168.1.100's password:
 Permission denied, please try again.
 ```
 
 **클라이언트 개인키 퍼미션 문제**:
 
-```
+```text
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @         WARNING: UNPROTECTED PRIVATE KEY FILE!          @
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
