@@ -4,6 +4,7 @@ excerpt: "Public-Public 엔드포인트 구성을 가진 EKS 클러스터를 배
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

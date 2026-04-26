@@ -4,6 +4,7 @@ excerpt: "EKS 스터디를 위한 실습 환경을 구성해보자."
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

@@ -4,6 +4,7 @@ excerpt: "SSH로 워커 노드에 접속하여 kubelet, containerd, 인증서 �
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

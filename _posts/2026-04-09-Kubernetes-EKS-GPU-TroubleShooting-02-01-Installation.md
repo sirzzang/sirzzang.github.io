@@ -4,6 +4,7 @@ excerpt: "GPU 트러블슈팅 실습을 위한 EKS 환경을 Terraform으로 구
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

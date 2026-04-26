@@ -4,6 +4,7 @@ excerpt: "Terraform으로 GPU 트러블슈팅 실습 환경을 배포하고, 클
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

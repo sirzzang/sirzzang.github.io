@@ -4,6 +4,7 @@ excerpt: "EKS 클러스터의 구성 요소를 확인하고, 온프레미스 Kub
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

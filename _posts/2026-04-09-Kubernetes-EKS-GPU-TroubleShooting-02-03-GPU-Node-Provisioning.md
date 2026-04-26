@@ -4,6 +4,7 @@ excerpt: "GPU 노드를 프로비저닝하고 GPU Operator를 설치한 뒤, All
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
