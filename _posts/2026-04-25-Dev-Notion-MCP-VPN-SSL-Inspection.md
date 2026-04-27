@@ -24,6 +24,8 @@ tags:
 
 [이전 글]({% post_url 2026-04-23-Dev-Kubectl-VPN-SSL-Inspection %})에서 재택 VPN 환경의 SSL Inspection이 `kubectl` ↔ `kube-apiserver` TLS를 가로채 인증서 검증 실패를 일으키는 문제를 정리했다. 같은 시기에 **Claude Code의 Notion MCP**에서도 거의 동일한 원인으로 연결 실패가 발생했다.
 
+사실 이 트러블슈팅은 [프롬프트 패턴 개선기]({% post_url 2026-04-10-Articles-AI-Prompt-Pattern-Improvement %})에서 "52턴짜리 비효율 세션"으로 회고했던 바로 그 사건이다. 당시에는 환경 맥락을 첫 프롬프트에 담지 않아서 턴이 과도하게 소모된 사례로 분석했는데, 지금은 관점을 조금 바꿔서 그때 궁금했던 것들 — 왜 브라우저는 되고 Node.js는 안 되는지, 왜 Jira MCP는 되는데 Notion MCP만 안 되는지 — 을 제대로 확인해 보고자 한다.
+
 같은 "VPN SSL Inspection" 이라는 원인이지만, 도구의 trust 모델이 달라서 **증상도 다르고 해결 방향도 정반대**다. `kubectl`은 회사 CA를 trust에 넣으면 안 되는 반면, Node.js 기반 도구인 Notion MCP는 회사 CA를 **넣어야** 풀린다. 이 글에서는 왜 그런 차이가 생기는지를 중심으로 정리한다.
 
 <br>
