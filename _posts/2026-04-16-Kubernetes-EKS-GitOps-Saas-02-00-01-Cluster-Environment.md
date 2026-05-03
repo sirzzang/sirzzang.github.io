@@ -4,6 +4,7 @@ excerpt: "실습 환경에 이미 배포된 네임스페이스와 Flux 리소스
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
@@ -32,7 +33,7 @@ tags:
 
 # 사전 프로비저닝된 리소스 확인
 
-[이전 포스트]({% post_url 2026-04-16-Kubernetes-EKS-01-01-04-Installation-Result %})에서 CloudFormation으로 실습 환경 설치를 완료했다. 이번에는 설치 스크립트가 무엇을 만들었는지 확인해 보자.
+[이전 포스트]({% post_url 2026-04-16-Kubernetes-EKS-GitOps-Saas-01-01-04-Installation-Result %})에서 CloudFormation으로 실습 환경 설치를 완료했다. 이번에는 설치 스크립트가 무엇을 만들었는지 확인해 보자.
 
 
 ## 주요 구성 요소

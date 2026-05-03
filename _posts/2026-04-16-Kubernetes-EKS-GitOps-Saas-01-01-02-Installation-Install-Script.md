@@ -4,6 +4,7 @@ excerpt: "EKS SaaS GitOps 워크숍의 2단계 인프라 배포 스크립트(ins
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
@@ -25,7 +26,7 @@ tags:
 
 # TL;DR
 
-- `install.sh`는 [CloudFormation이 EC2 부팅 후 SSM을 통해 자동 실행]({% post_url 2026-04-16-Kubernetes-EKS-01-01-01-Installation-CloudFormation %})하는 2단계 스크립트다
+- `install.sh`는 [CloudFormation이 EC2 부팅 후 SSM을 통해 자동 실행]({% post_url 2026-04-16-Kubernetes-EKS-GitOps-Saas-01-01-01-Installation-CloudFormation %})하는 2단계 스크립트다
 - `main()` 함수가 Terraform을 **7단계**로 나눠서 실행한다
   1. `check_prerequisites` → 도구 확인
   2. `deploy_terraform_infra` → VPC, EKS, Gitea 등 기반 인프라
@@ -324,7 +325,7 @@ check_prerequisites() {
 }
 ```
 
-`terraform`, `aws` CLI 바이너리가 설치되어 있는지, Terraform 코드가 있는 `workshop` 디렉터리가 존재하는지 확인한다. 이 도구들은 [이전 포스트]({% post_url 2026-04-16-Kubernetes-EKS-01-01-01-Installation-CloudFormation %})에서 본 SSM 부트스트랩 스크립트가 `yum install`과 `curl`로 미리 설치해 둔 것이다.
+`terraform`, `aws` CLI 바이너리가 설치되어 있는지, Terraform 코드가 있는 `workshop` 디렉터리가 존재하는지 확인한다. 이 도구들은 [이전 포스트]({% post_url 2026-04-16-Kubernetes-EKS-GitOps-Saas-01-01-01-Installation-CloudFormation %})에서 본 SSM 부트스트랩 스크립트가 `yum install`과 `curl`로 미리 설치해 둔 것이다.
 
 마지막으로 `REPO_ROOT`를 설정한다. `${BASH_SOURCE[0]}`은 현재 실행 중인 스크립트 파일의 경로로, `install.sh`가 위치한 `terraform/` 디렉터리의 상위, 즉 `/home/ec2-user/environment/eks-saas-gitops`가 된다.
 
@@ -407,7 +408,7 @@ apply 후에는 Gitea 서버 정보를 조회하고 kubeconfig를 설정한다. 
 
 ### VPC 2개 구조
 
-이 함수에서 만드는 VPC(`module.vpc`)는 [이전 포스트]({% post_url 2026-04-16-Kubernetes-EKS-01-01-01-Installation-CloudFormation %})에서 CloudFormation이 만든 VPC와는 **별개의 VPC**다. 이 워크숍은 VPC가 2개인 구조로 동작한다.
+이 함수에서 만드는 VPC(`module.vpc`)는 [이전 포스트]({% post_url 2026-04-16-Kubernetes-EKS-GitOps-Saas-01-01-01-Installation-CloudFormation %})에서 CloudFormation이 만든 VPC와는 **별개의 VPC**다. 이 워크숍은 VPC가 2개인 구조로 동작한다.
 
 ![VPC 2개 구조]({{site.url}}/assets/images/eks-w6-saas-gitops-vpc-architecture.png){: .align-center}
 

@@ -4,6 +4,7 @@ excerpt: "Flux의 3-Layer 모델과 진입점 체계를 분석하고, Git 저장
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
@@ -32,7 +33,7 @@ tags:
 
 # Flux CLI 탐색 명령어
 
-[이전 포스트]({% post_url 2026-04-16-Kubernetes-EKS-02-00-01-Cluster-Environment %})에서 `flux get all`로 "무엇이 있는지"를 확인했다. 이번에는 구조를 파악하는 데 유용한 Flux CLI 명령어 5가지를 먼저 정리하고, 그 결과를 바탕으로 Flux 아키텍처를 분석해 보자.
+[이전 포스트]({% post_url 2026-04-16-Kubernetes-EKS-GitOps-Saas-02-00-01-Cluster-Environment %})에서 `flux get all`로 "무엇이 있는지"를 확인했다. 이번에는 구조를 파악하는 데 유용한 Flux CLI 명령어 5가지를 먼저 정리하고, 그 결과를 바탕으로 Flux 아키텍처를 분석해 보자.
 
 ## 큰 그림을 보는 5가지 명령어
 
@@ -54,7 +55,7 @@ tags:
 
 ## flux tree: 계층 구조 확인
 
-[이전 포스트]({% post_url 2026-04-16-Kubernetes-EKS-02-00-01-Cluster-Environment %})에서 `flux get all`은 입력 선언, `flux tree`는 그 결과물을 보여 준다고 정리했다. `flux tree kustomization flux-system`을 실행하면, 루트 Kustomization(flux-system)이 만들어낸 전체 리소스를 트리 형태로 볼 수 있다. 최상위 가지만 발췌하면 다음과 같다.
+[이전 포스트]({% post_url 2026-04-16-Kubernetes-EKS-GitOps-Saas-02-00-01-Cluster-Environment %})에서 `flux get all`은 입력 선언, `flux tree`는 그 결과물을 보여 준다고 정리했다. `flux tree kustomization flux-system`을 실행하면, 루트 Kustomization(flux-system)이 만들어낸 전체 리소스를 트리 형태로 볼 수 있다. 최상위 가지만 발췌하면 다음과 같다.
 
 ```bash
 # 루트 Kustomization의 자식 Kustomization별 핵심 리소스 발췌
@@ -902,7 +903,7 @@ Kustomization/flux-system/dataplane-tenants
 
 **현재는 ConfigMap 3개뿐이다.** basic, advanced, premium 세 티어의 더미(placeholder) ConfigMap만 있을 뿐, HelmRelease도 Terraform CRD도 없다.
 
-이 진입점이 비어 있는 것은 의도된 설계다. 새 테넌트 온보딩 시 Argo Workflows가 이 경로(`application-plane/production/tenants/`)에 Terraform CRD와 HelmRelease를 자동으로 추가하게 된다. [Tofu Controller 실습]({% post_url 2026-04-16-Kubernetes-EKS-02-02-OpenTofu-Controller %})에서 이 빈 공간에 실제로 CRD를 추가하는 과정을 다룬다.
+이 진입점이 비어 있는 것은 의도된 설계다. 새 테넌트 온보딩 시 Argo Workflows가 이 경로(`application-plane/production/tenants/`)에 Terraform CRD와 HelmRelease를 자동으로 추가하게 된다. [Tofu Controller 실습]({% post_url 2026-04-16-Kubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller %})에서 이 빈 공간에 실제로 CRD를 추가하는 과정을 다룬다.
 
 ## HelmRelease 분포 요약
 
@@ -948,7 +949,7 @@ Kustomization/flux-system/dataplane-tenants
 - **Terraform CRD**: AWS 리소스(SQS, DynamoDB, IAM Role 등)를 프로비저닝
 - **HelmRelease**: 테넌트별 애플리케이션 배포
 
-비어 있는 `dataplane-tenants`는 의도된 설계이며, [Tofu Controller 실습]({% post_url 2026-04-16-Kubernetes-EKS-02-02-OpenTofu-Controller %})에서 이 공간을 채워 나간다.
+비어 있는 `dataplane-tenants`는 의도된 설계이며, [Tofu Controller 실습]({% post_url 2026-04-16-Kubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller %})에서 이 공간을 채워 나간다.
 
 <br>
 

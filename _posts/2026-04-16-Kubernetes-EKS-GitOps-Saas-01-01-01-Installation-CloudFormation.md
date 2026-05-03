@@ -4,6 +4,7 @@ excerpt: "EKS SaaS GitOps 워크숍의 1단계 부트스트랩 코드(vs-code-ec
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
@@ -750,7 +751,7 @@ Outputs:
 
 스택 배포 완료 후 이 두 값을 클릭하면 바로 VS Code 웹 IDE에 접속할 수 있다. 
 
-> 실제 콘솔 출력 탭 화면과 접속 과정은 [설치 결과 확인]({% post_url 2026-04-16-Kubernetes-EKS-01-01-04-Installation-Result %})에서 스크린샷으로 확인한다.
+> 실제 콘솔 출력 탭 화면과 접속 과정은 [설치 결과 확인]({% post_url 2026-04-16-Kubernetes-EKS-GitOps-Saas-01-01-04-Installation-Result %})에서 스크린샷으로 확인한다.
 
 <br>
 

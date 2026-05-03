@@ -4,6 +4,7 @@ excerpt: "Tofu Controller로 Terraform CRD를 Git에 push하면 인프라가 생
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
@@ -35,7 +36,7 @@ tags:
 
 # Tofu Controller 동작 원리
 
-[이전 포스트]({% post_url 2026-04-16-Kubernetes-EKS-02-01-Terraform-Module %})에서는 Terraform CLI를 직접 실행하여 `tenant-apps` 모듈이 어떤 AWS 리소스를 만드는지 확인했다. 이번에는 그 모듈을 **GitOps 파이프라인 위에 올린다**. 핵심은 Tofu Controller(이하 tf-controller)다.
+[이전 포스트]({% post_url 2026-04-16-Kubernetes-EKS-GitOps-Saas-02-01-Terraform-Module %})에서는 Terraform CLI를 직접 실행하여 `tenant-apps` 모듈이 어떤 AWS 리소스를 만드는지 확인했다. 이번에는 그 모듈을 **GitOps 파이프라인 위에 올린다**. 핵심은 Tofu Controller(이하 tf-controller)다.
 
 tf-controller는 Kubernetes 클러스터 안에서 동작하는 컨트롤러로, **Terraform CRD**(Custom Resource Definition)를 감시한다. 여기서 Terraform CRD란 "어떤 Terraform 모듈을 어떤 변수로 실행할지"를 선언하는 Kubernetes 매니페스트(manifest)다. 실행되어야 할 AWS 리소스 자체가 아니라, **Terraform 실행 명세서**라고 생각하면 된다.
 
@@ -176,7 +177,7 @@ v0.0.1
 
 ## kustomization.yaml에 등록
 
-CRD 파일을 만들었다고 끝이 아니다. `kustomization.yaml`에 새 파일을 등록해야 Flux가 인식한다. [Flux 아키텍처 분석]({% post_url 2026-04-16-Kubernetes-EKS-02-00-02-Cluster-Flux-Architecture %}) 포스트에서 살펴본 것처럼, Kustomize의 `resources` 목록에 없는 파일은 폴더에 존재하더라도 Flux가 무시한다.
+CRD 파일을 만들었다고 끝이 아니다. `kustomization.yaml`에 새 파일을 등록해야 Flux가 인식한다. [Flux 아키텍처 분석]({% post_url 2026-04-16-Kubernetes-EKS-GitOps-Saas-02-00-02-Cluster-Flux-Architecture %}) 포스트에서 살펴본 것처럼, Kustomize의 `resources` 목록에 없는 파일은 폴더에 존재하더라도 Flux가 무시한다.
 
 ```yaml
 # application-plane/production/tenants/kustomization.yaml
