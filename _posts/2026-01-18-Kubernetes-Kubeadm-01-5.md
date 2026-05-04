@@ -60,7 +60,7 @@ CNI 솔루션은 여러 종류가 있다 (Calico, Cilium, Weave 등). 이 실습
 
 ## Flannel이란
 
-Flannel은 실제 네트워크 설정(veth 생성, IP 할당)을 `bridge`, `host-local` 같은 표준 플러그인에 **위임**하여 수행하게 하고, 자신은 이 플러그인들이 사용할 **설정 파일을 자동 생성**하고 **노드 간 [오버레이 네트워크]({% post_url 2026-01-05-Kubernetes-CNI %}#오버레이-네트워크)를 구성**하는 역할을 담당한다.
+Flannel은 실제 네트워크 설정(veth 생성, IP 할당)을 `bridge`, `host-local` 같은 표준 플러그인에 **위임**하여 수행하게 하고, 자신은 이 플러그인들이 사용할 **설정 파일을 자동 생성**하고 **노드 간 [오버레이 네트워크]({% post_url 2026-03-19-Kubernetes-CNI-Flow %})를 구성**하는 역할을 담당한다.
 
 위 역할을 담당하는 핵심 컴포넌트가 **flanneld** 데몬이며, 각 노드에서 실행되어 Pod 네트워크를 구성한다. flanneld는 호스트의 네트워크 인터페이스와 라우팅 테이블을 직접 조작해야 하므로 `hostNetwork: true`로 실행된다.
 
@@ -78,7 +78,7 @@ Pod 네트워크 구성의 계층별 역할은 다음과 같다:
 
 ![kubeadm-flannel]({{site.url}}/assets/images/kubeadm-flannel.png){: .align-center}
 
-flanneld는 Kubernetes API와 통신하여 노드별 서브넷 할당 정보를 동기화하고, 이를 기반으로 라우팅 테이블과 [VXLAN]({% post_url 2026-01-05-Kubernetes-CNI %}#vxlan) 터널을 설정한다.
+flanneld는 Kubernetes API와 통신하여 노드별 서브넷 할당 정보를 동기화하고, 이를 기반으로 라우팅 테이블과 [VXLAN]({% post_url 2026-03-19-Kubernetes-CNI-Flow %}) 터널을 설정한다.
 
 > 참고: **VXLAN(Virtual Extensible LAN)**
 >

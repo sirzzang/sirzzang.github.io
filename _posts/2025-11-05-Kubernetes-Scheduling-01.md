@@ -20,8 +20,7 @@ tags:
 - 쿠버네티스 스케줄링이란, `kube-scheduler`가 파드를 적합한 노드에 배치하는 프로세스다. 스케줄러는 노드가 결정되지 않은 파드를 감지하여, 스케줄링 요구 사항에 맞는 노드를 필터링하고 스코어링으로 최적 노드를 선택한다.
 - `kube-scheduler`는 컨트롤 플레인의 static pod으로 실행되며, 교체하거나 여러 스케줄러를 동시에 운영할 수 있다. 파드는 `spec.schedulerName`으로 사용할 스케줄러를 지정하며, 각 스케줄러는 자신의 이름과 일치하는 파드만 처리한다(경쟁 없음).
 - 스케줄러의 판단 기준은 오직 `spec.nodeName`이다. `status.phase: Pending`은 판단 기준이 아니다.
-- 스케줄러를 거치지 않는 수동 스케줄링은 파드 생성 시 `spec.nodeName`을 직접 지정하거나, 이미 생성된 파드에 대해 Binding 오브젝트를 생성하는 방식으로 가능하다.
-- DaemonSet은 v1.17부터 `kube-scheduler`를 통해 스케줄링된다. DaemonSet Controller가 `spec.nodeName` 대신 NodeAffinity(`matchFields`)를 설정하여 스케줄러에 위임하는 방식으로 변경되었다.
+- 스케줄러를 거치지 않는 수동 스케줄링은 파드 생성 시 `spec.nodeName`을 직접 지정하거나, 이미 생성된 파드에 대해 Binding 오브젝트를 생성하는 방식으로 가능하다. 수동 스케줄링이 실제로 활용된 대표 사례인 DaemonSet은 v1.16 이전까지 `spec.nodeName` 직접 지정 방식을 사용했으나, v1.17부터 NodeAffinity(`matchFields`) 기반으로 전환되어 `kube-scheduler`에 위임된다.
 - 스케줄러는 3개의 큐(Active / Backoff / Unschedulable)로 파드를 관리하며, Active Queue에 있는 파드만 스케줄링을 시도한다.
 
 <br>
@@ -35,9 +34,8 @@ tags:
 1. **스케줄링의 기본 개념**: 스케줄링이란 무엇이고, 무엇이 아닌지
 2. **스케줄러**: `kube-scheduler`의 실행 방식, 교체 가능 여부, 다중 스케줄러 운영과 파드 매칭 방식
 3. **스케줄링 대상**: 스케줄러의 유일한 판단 기준 (`spec.nodeName`)과 판단 기준이 아닌 것 (`Pending`, `PodScheduled`)
-4. **수동 스케줄링**: 스케줄러를 거치지 않는 노드 배치 방법 (`spec.nodeName` 직접 지정, Binding 오브젝트)
-5. **DaemonSet 스케줄링**: 과거 `spec.nodeName` 직접 지정 방식에서 NodeAffinity 기반 스케줄러 위임 방식으로의 전환
-6. **스케줄러 큐 구조**: 3개 큐(Active / Backoff / Unschedulable)의 역할과 파드 이동 메커니즘
+4. **수동 스케줄링**: 스케줄러를 거치지 않는 노드 배치 방법 (`spec.nodeName` 직접 지정, Binding 오브젝트)과 대표 사례인 DaemonSet의 v1.17 전환
+5. **스케줄러 큐 구조**: 3개 큐(Active / Backoff / Unschedulable)의 역할과 파드 이동 메커니즘
 
 [다음 글]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %})에서는 구체적인 스케줄링 프로세스(Filter, Score, PostFilter)와 선점 메커니즘을 다룬다.
 
@@ -371,47 +369,23 @@ Binding 오브젝트의 핵심 특성은 다음과 같다.
 
 두 방식 모두 스케줄러를 우회하므로, 노드의 리소스 상태나 taint/toleration 등을 사전에 확인해야 한다.
 
-<br>
+### 사례: DaemonSet의 수동 → 스케줄러 위임 전환
 
-## DaemonSet 스케줄링
+DaemonSet은 클러스터의 모든(또는 특정) 노드에 파드를 하나씩 배치하는 워크로드 리소스로, **수동 스케줄링이 실제로 활용되었던 대표 사례**이자 거기서 벗어나 `kube-scheduler`에 위임하게 된 전환의 대표 케이스다. DaemonSet의 스케줄링 방식은 Kubernetes 버전에 따라 크게 변화했다.
 
-DaemonSet은 클러스터의 모든(또는 특정) 노드에 파드를 하나씩 배치하는 워크로드 리소스다. DaemonSet의 스케줄링 방식은 Kubernetes 버전에 따라 크게 변화했다.
+**과거 (v1.16 이전): DaemonSet Controller가 직접 배치**
 
-### 과거: DaemonSet Controller가 직접 배치
-
-Kubernetes v1.12 이전(정확히는 `ScheduleDaemonSetPods` 기능이 활성화되기 전), DaemonSet Controller가 직접 `spec.nodeName`을 설정하여 파드를 노드에 배치했다. 이 방식은 앞서 설명한 "수동 스케줄링"과 동일한 메커니즘이다.
+`ScheduleDaemonSetPods` 기능이 활성화되기 전, DaemonSet Controller는 파드를 생성하면서 직접 `spec.nodeName`을 설정해 노드에 배치했다. 위에서 살펴본 두 가지 수동 스케줄링 방식 중 첫 번째(`spec.nodeName` 직접 지정)와 동일한 메커니즘이다.
 
 - DaemonSet Controller가 각 노드에 대해 파드를 생성하면서 `spec.nodeName`을 직접 지정
 - `kube-scheduler`를 거치지 않으므로 taint/toleration, affinity 등 스케줄러의 필터 검증이 적용되지 않음
 - DaemonSet Controller가 자체적으로 taint/toleration 등을 확인해야 했는데, 이로 인해 스케줄러와 DaemonSet Controller의 로직이 중복되고, 동작이 불일치하는 문제가 있었음
 
-### 현재: kube-scheduler를 통한 배치 (v1.12 beta, v1.17 GA)
+**현재 (v1.12 beta, v1.17 GA): kube-scheduler에 위임**
 
-`ScheduleDaemonSetPods` 기능이 v1.12에서 beta로 승격되고, **v1.17에서 GA(정식 기능)로 졸업**하면서, 현재는 DaemonSet 파드도 기본 스케줄러(`kube-scheduler`)를 통해 스케줄링된다.
+`ScheduleDaemonSetPods` 기능이 v1.12에서 beta로 승격되고, **v1.17에서 GA로 졸업**하면서, DaemonSet Controller는 `spec.nodeName`을 직접 설정하지 않는다. 대신 파드의 `spec.affinity.nodeAffinity`에 `matchFields`로 특정 노드를 지정하여 `kube-scheduler`에 위임한다. 그 결과 DaemonSet 파드도 스케줄러의 모든 필터 검증(taint/toleration, 리소스 확인 등)을 거치게 되었고, 스케줄러와 DaemonSet Controller 사이의 로직 불일치 문제가 해소되었다.
 
-동작 방식은 다음과 같다.
-
-1. DaemonSet Controller가 각 노드에 대해 파드를 생성하되, `spec.nodeName`을 직접 설정하지 않는다.
-2. 대신 파드의 `spec.affinity.nodeAffinity`에 **`matchFields`를 사용하여 특정 노드를 지정**한다.
-
-    ```yaml
-    spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchFields:
-              - key: metadata.name
-                operator: In
-                values:
-                - worker-1  # 이 노드에만 스케줄링
-    ```
-
-3. `kube-scheduler`가 이 NodeAffinity를 Filter 단계에서 평가하여 해당 노드에 스케줄링한다.
-
-이 변경으로 DaemonSet 파드도 스케줄러의 모든 필터 검증(taint/toleration, 리소스 확인 등)을 거치게 되었다. 스케줄러와 DaemonSet Controller 사이의 로직 불일치 문제가 해소되고, 스케줄링 동작의 일관성이 확보되었다.
-
-> **참고**: DaemonSet Controller가 `kubernetes.io/hostname` 라벨 대신 `metadata.name` 필드를 사용하는 이유는, hostname과 node name이 항상 일치하지 않을 수 있기 때문이다. `matchFields`로 `metadata.name`을 직접 참조하여 확실하게 노드를 특정한다.
+NodeAffinity와 `matchFields`의 구체적인 YAML과 동작은 [3편 - 스케줄링 제어]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %})에서 다룬다.
 
 <br>
 
@@ -468,9 +442,8 @@ Active Queue에서 파드 꺼냄
 1. **스케줄링은 배치 작업이다.** 파드 생성, 파드 실행, 리소스 할당은 스케줄링이 아니다. 스케줄러는 노드가 결정되지 않은 파드를 감지하여, 스케줄링 요구 사항에 맞는 노드를 필터링하고 스코어링하여 "어느 노드에서 실행할지"를 결정한다.
 2. **`kube-scheduler`는 교체 가능하고 다중 운영이 가능하다.** 단일 kube-scheduler에서 다중 프로필을 운영하거나, 별도 스케줄러 프로세스를 배포할 수 있다. 각 스케줄러는 `spec.schedulerName`이 자신의 이름과 일치하는 파드만 처리하며, 하나의 파드를 두고 여러 스케줄러가 경쟁하는 일은 없다.
 3. **스케줄러의 판단 기준은 `spec.nodeName`이다.** `status.phase: Pending`이나 `PodScheduled` 조건이 아니다. `spec.nodeName`이 비어 있는 파드만 스케줄링 대상이 된다.
-4. **수동 스케줄링은 두 가지 방법이 있다.** 파드 생성 시 `spec.nodeName`을 직접 지정하거나, 이미 생성된 파드에 Binding 오브젝트를 생성한다. 두 방식 모두 스케줄러의 Filter 검증을 우회한다.
-5. **DaemonSet은 v1.17부터 kube-scheduler를 통해 스케줄링된다.** DaemonSet Controller가 `spec.nodeName` 대신 NodeAffinity(`matchFields`)를 설정하여 스케줄러에 위임함으로써, 스케줄러의 필터 검증과 일관된 스케줄링 동작이 보장된다.
-6. **스케줄러는 3개의 큐로 파드를 관리한다.** Active Queue에서만 스케줄링을 시도하고, 실패 유형(일시적/구조적)에 따라 Backoff Queue 또는 Unschedulable Queue로 분류한 뒤, 조건 충족 시 Active Queue로 복귀시킨다.
+4. **수동 스케줄링은 두 가지 방법이 있다.** 파드 생성 시 `spec.nodeName`을 직접 지정하거나, 이미 생성된 파드에 Binding 오브젝트를 생성한다. 두 방식 모두 스케줄러의 Filter 검증을 우회한다. DaemonSet은 v1.16 이전까지 첫 번째 방식을 사용했으나, v1.17부터 NodeAffinity(`matchFields`) 기반으로 전환되어 `kube-scheduler`에 위임되도록 변경되었고, 이 덕분에 스케줄러의 필터 검증과 일관된 스케줄링 동작이 보장된다.
+5. **스케줄러는 3개의 큐로 파드를 관리한다.** Active Queue에서만 스케줄링을 시도하고, 실패 유형(일시적/구조적)에 따라 Backoff Queue 또는 Unschedulable Queue로 분류한 뒤, 조건 충족 시 Active Queue로 복귀시킨다.
 
 파드가 Pending 상태에 빠졌을 때, 먼저 `spec.nodeName`이 비어 있는지 확인하여 스케줄링 문제인지 아닌지를 구분하고, 스케줄링 문제라면 파드가 어느 큐에 있는지(Events 메시지 등)를 확인하여 원인을 좁혀 나가는 것이 효과적이다.
 

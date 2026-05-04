@@ -180,6 +180,27 @@ spec:
 
 > **`IgnoredDuringExecution`의 의미**: 파드가 이미 노드에서 실행 중일 때 노드 라벨이 변경되어도 파드를 축출하지 않는다는 뜻이다. 스케줄링 시점에만 조건을 평가한다.
 
+## 사례: DaemonSet의 NodeAffinity 위임
+
+[1편 - DaemonSet의 수동 → 스케줄러 위임 전환]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %})에서 다룬 것처럼, DaemonSet은 v1.17부터 `kube-scheduler`에 스케줄링을 위임한다. DaemonSet Controller는 `spec.nodeName`을 직접 설정하지 않고, 파드 생성 시 `spec.affinity.nodeAffinity`에 `matchFields`를 사용하여 특정 노드를 지정한다.
+
+```yaml
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchFields:
+          - key: metadata.name
+            operator: In
+            values:
+            - worker-1  # 이 노드에만 스케줄링
+```
+
+`kube-scheduler`가 이 NodeAffinity를 Filter 단계에서 평가하여 해당 노드에 파드를 바인딩한다. 위에서 본 일반 Node Affinity가 `matchExpressions`로 **노드 라벨**을 평가하는 것과 달리, DaemonSet은 `matchFields`로 **파드 객체의 필드**(`metadata.name`)를 직접 매칭한다.
+
+> **참고**: DaemonSet Controller가 `kubernetes.io/hostname` 라벨 대신 `metadata.name` 필드를 사용하는 이유는, hostname과 node name이 항상 일치하지 않을 수 있기 때문이다. `matchFields`로 `metadata.name`을 직접 참조하여 확실하게 노드를 특정한다.
+
 <br>
 
 # Pod Affinity / Anti-Affinity
