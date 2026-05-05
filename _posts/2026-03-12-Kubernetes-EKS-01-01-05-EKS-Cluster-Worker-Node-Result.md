@@ -1367,7 +1367,7 @@ ip addr
 | `ens6` | **Secondary ENI** | 192.168.2.24 | VPC CNI가 파드 IP 할당을 위해 추가한 ENI |
 | `enib3a22542c88` | **veth pair** (호스트 쪽) | - | 파드 네트워크 네임스페이스와 연결되는 가상 인터페이스. CNI 설정의 `vethPrefix: "eni"`에 의해 `eni`로 시작 |
 
-온프레미스(Calico/Flannel)에서는 `cali*`나 `flannel.*` 같은 오버레이 인터페이스가 보였다([Kubernetes CNI]({% post_url 2026-01-05-Kubernetes-CNI %})). EKS에서는 `ens*`(실제 ENI)와 `eni*`(veth pair)만 있고 오버레이 터널이 없다. 파드 IP가 VPC 서브넷의 실제 IP이므로 **캡슐화(encapsulation) 없이** 직접 라우팅된다. `ens5`, `ens6` 등 ENI 구조는 [다음 글]({% post_url 2026-03-12-Kubernetes-EKS-01-01-06-EKS-Owned-ENI %})에서 자세히 살펴본다.
+온프레미스(Calico/Flannel)에서는 `cali*`나 `flannel.*` 같은 오버레이 인터페이스가 보였다([Kubernetes CNI]({% post_url 2026-01-05-Kubernetes-Networking-02-CNI %})). EKS에서는 `ens*`(실제 ENI)와 `eni*`(veth pair)만 있고 오버레이 터널이 없다. 파드 IP가 VPC 서브넷의 실제 IP이므로 **캡슐화(encapsulation) 없이** 직접 라우팅된다. `ens5`, `ens6` 등 ENI 구조는 [다음 글]({% post_url 2026-03-12-Kubernetes-EKS-01-01-06-EKS-Owned-ENI %})에서 자세히 살펴본다.
 
 ## 라우팅 테이블
 

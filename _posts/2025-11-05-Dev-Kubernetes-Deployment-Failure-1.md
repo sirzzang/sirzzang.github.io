@@ -14,13 +14,17 @@ tags:
   - scheduler
 ---
 
+<br>
 
+# TL;DR
 
-> **TL;DR**
-> 
-> GPU가 1개뿐인 노드에 `nodeSelector`로 고정 배치한 Deployment를 업데이트했더니 새 파드가 Pending 상태에 빠졌다. 원인은 `strategy`를 명시하지 않아 RollingUpdate 기본값(`maxSurge: 25%` → 1, `maxUnavailable: 25%` → 0)이 적용되면서, 새 파드를 먼저 띄우려 했지만 GPU가 이미 점유 중이라 스케줄링에 실패한 것이다. 이 글에서는 문제 상황과 Deployment 업데이트 전략(`Recreate`, `RollingUpdate`)의 동작 방식을 알아본다.
+- GPU가 1개뿐인 노드에 `nodeSelector`로 고정 배치한 Deployment를 업데이트했더니 새 파드가 Pending 상태에 빠졌다. 
+- 원인은 `strategy`를 명시하지 않아 RollingUpdate 기본값(`maxSurge: 25%` → 1, `maxUnavailable: 25%` → 0)이 적용되면서, 새 파드를 먼저 띄우려 했지만 GPU가 이미 점유 중이라 스케줄링에 실패한 것이다.
+- 이 글에서는 문제 상황과 Deployment 업데이트 전략(`Recreate`, `RollingUpdate`)의 동작 방식을 알아본다.
 
 <br>
+
+# 들어가며
 
 ~~도대체 거의 1년 가까이 된 내용을 왜 이제서야 작성하게 되었는지 반성하며~~ 회사에서 Deployment를 재배포하다가 쿠버네티스에서의 스케줄링과 Deployment 업데이트 전략에 대해 공부하게 된 내용을 작성한다.
 
@@ -265,3 +269,5 @@ Deployment 업데이트 시 `strategy`를 명시하지 않으면 기본값인 `R
 ---
 
 다음 글에서는 이 Deployment 업데이트 전략과 스케줄링 개념을 바탕으로, **실제 문제를 분석하고 해결**해 본다. [다음 글 보기]({% post_url 2025-11-05-Dev-Kubernetes-Deployment-Failure-2 %})
+
+<br>

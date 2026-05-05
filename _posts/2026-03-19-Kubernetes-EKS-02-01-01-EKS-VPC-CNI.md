@@ -69,7 +69,7 @@ AWS VPC CNI가 쓰는 IP는 "가상의 로컬 IP"가 아니라 **VPC의 실제 I
 
 범용 CNI에서는 이 문제가 크게 부각되지 않는다. IP를 외부에 물어볼 필요가 없기 때문이다.
 
-[CNI 스펙](https://github.com/containernetworking/cni/blob/main/SPEC.md)에서 IP 할당은 **IPAM 플러그인**이 담당한다. 메인 플러그인(veth pair 생성, 라우팅 설정 등)이 "IP가 필요하다"고 IPAM에 위임하면, IPAM이 사용 가능한 IP를 골라 돌려주는 구조다. ([CNI 플러그인 실행 참고]({% post_url 2026-01-05-Kubernetes-CNI %}#cni-플러그인-실행))
+[CNI 스펙](https://github.com/containernetworking/cni/blob/main/SPEC.md)에서 IP 할당은 **IPAM 플러그인**이 담당한다. 메인 플러그인(veth pair 생성, 라우팅 설정 등)이 "IP가 필요하다"고 IPAM에 위임하면, IPAM이 사용 가능한 IP를 골라 돌려주는 구조다. ([CNI 플러그인 실행 참고]({% post_url 2026-01-05-Kubernetes-Networking-02-CNI %}#cni-플러그인-실행))
 
 범용 CNI에서 가장 흔한 IPAM인 `host-local`은, 노드에 할당된 CIDR 대역(예: `10.244.1.0/24`) 안에서 순번대로 IP를 골라 파드에 부여한다. 할당 기록은 로컬 파일(`/var/lib/cni/networks/`)에 기록만 하면 끝이다. 외부 API 호출이 없으니 파일 I/O 한 번(수μs)으로 완결된다.
 

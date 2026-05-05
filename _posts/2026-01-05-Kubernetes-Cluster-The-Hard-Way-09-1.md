@@ -32,11 +32,11 @@ Worker Node는 실제로 Pod를 실행하는 노드다. containerd(컨테이너 
 
 # CNI (Container Network Interface)
 
-CNI(Container Network Interface)는 컨테이너에 네트워크 설정을 자동화하기 위한 표준 인터페이스다. Kubernetes에서 Pod가 생성될 때 자동으로 네트워크 인터페이스를 구성하고 IP를 할당하는 역할을 한다. CNI의 개념, 동작 방식, 플러그인 종류, 설정 구조에 대한 상세한 내용은 [Kubernetes CNI]({% post_url 2026-01-05-Kubernetes-CNI %}) 글을 참고한다.
+CNI(Container Network Interface)는 컨테이너에 네트워크 설정을 자동화하기 위한 표준 인터페이스다. Kubernetes에서 Pod가 생성될 때 자동으로 네트워크 인터페이스를 구성하고 IP를 할당하는 역할을 한다. CNI의 개념, 동작 방식, 플러그인 종류, 설정 구조에 대한 상세한 내용은 [Kubernetes CNI]({% post_url 2026-01-05-Kubernetes-Networking-02-CNI %}) 글을 참고한다.
 
 ## 이번 실습에서의 CNI
 
-이 실습에서는 CNI 플러그인 중 가장 기본적인 **bridge 플러그인**을 사용한다. 실무에서 사용하는 Calico, Flannel, Cilium 등은 [오버레이 네트워크]({% post_url 2026-03-19-Kubernetes-CNI-Flow %})로 노드 간 Pod 통신을 자동 처리하지만, 이 실습에서는 [11. Provisioning Pod Network Routes]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-11 %}) 단계에서 라우팅 테이블을 **수동으로 설정**하여 해결한다. 원리적으로는 오버레이 없는 방식(host-gw)과 같다.
+이 실습에서는 CNI 플러그인 중 가장 기본적인 **bridge 플러그인**을 사용한다. 실무에서 사용하는 Calico, Flannel, Cilium 등은 [오버레이 네트워크]({% post_url 2026-03-19-Kubernetes-Networking-03-CNI-Flow %})로 노드 간 Pod 통신을 자동 처리하지만, 이 실습에서는 [11. Provisioning Pod Network Routes]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-11 %}) 단계에서 라우팅 테이블을 **수동으로 설정**하여 해결한다. 원리적으로는 오버레이 없는 방식(host-gw)과 같다.
 
 1. **CNI 플러그인 바이너리 설치**: `/opt/cni/bin/`에 bridge, loopback 등 기본 플러그인 설치
 2. **CNI 설정 파일 배치**: `/etc/cni/net.d/`에 Pod 네트워크 대역(10.200.x.0/24) 설정
@@ -49,7 +49,7 @@ CNI 플러그인 바이너리는 [2. Setup the Jumpbox]({% post_url 2026-01-05-K
 
 # CNI 설정 파일
 
-[CNI 설정 파일의 구조와 주요 필드]({% post_url 2026-01-05-Kubernetes-CNI %}#cni-설정)는 별도 글에서 정리했다. 여기서는 이 실습에서 사용하는 설정 파일을 분석한다.
+[CNI 설정 파일의 구조와 주요 필드]({% post_url 2026-01-05-Kubernetes-Networking-02-CNI %}#cni-설정)는 별도 글에서 정리했다. 여기서는 이 실습에서 사용하는 설정 파일을 분석한다.
 
 ## 10-bridge.conf
 
@@ -90,7 +90,7 @@ CNI 플러그인 바이너리는 [2. Setup the Jumpbox]({% post_url 2026-01-05-K
 
 ### IPAM 옵션 분석
 
-[IPAM(IP Address Management)]({% post_url 2026-01-05-Kubernetes-CNI %}#ipam)은 컨테이너에 IP 주소를 할당하는 방식을 정의한다.
+[IPAM(IP Address Management)]({% post_url 2026-01-05-Kubernetes-Networking-02-CNI %}#ipam)은 컨테이너에 IP 주소를 할당하는 방식을 정의한다.
 
 - `type: host-local`: 각 노드가 로컬에서 IP 관리. 별도 IPAM 서버 없이 노드별로 독립적으로 IP 할당
 - `ranges`: IP 할당 범위. 2차원 배열로 여러 대역 지정 가능

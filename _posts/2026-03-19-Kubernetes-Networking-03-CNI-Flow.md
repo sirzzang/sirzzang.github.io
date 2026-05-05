@@ -15,7 +15,7 @@ tags:
   - overlay
 
 ---
-앞선 [네트워킹 모델]({% post_url 2026-05-04-Kubernetes-Networking-00-Model %})·[파드 간 통신]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %})·[CNI 표준]({% post_url 2026-01-05-Kubernetes-CNI %})에서 다룬 개념들이 실제로 어떤 순서로 동작하는지, 어떤 네임스페이스에서 무슨 인터페이스가 만들어지고, 어떤 라우팅 규칙이 설정되는지를 **Flannel(VXLAN) 클러스터에서 Pod이 만들어지고 노드 간에 패킷이 오가는 한 시나리오**로 따라간다. 노드 간 도달 메커니즘이 왜 세 가지(오버레이/BGP/클라우드 네이티브)로 나뉘는지는 [파드 간 통신]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %}) 글의 분류·검증을 먼저 보면 도움이 된다. 이 토대 위에 Service 라우팅 계층이 얹히는 과정은 [Service와 kube-proxy]({% post_url 2026-05-04-Kubernetes-Networking-04-Service %})에서 이어진다.
+앞선 [네트워킹 모델]({% post_url 2026-05-04-Kubernetes-Networking-00-Model %})·[파드 간 통신]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %})·[CNI 표준]({% post_url 2026-01-05-Kubernetes-Networking-02-CNI %})에서 다룬 개념들이 실제로 어떤 순서로 동작하는지, 어떤 네임스페이스에서 무슨 인터페이스가 만들어지고, 어떤 라우팅 규칙이 설정되는지를 **Flannel(VXLAN) 클러스터에서 Pod이 만들어지고 노드 간에 패킷이 오가는 한 시나리오**로 따라간다. 노드 간 도달 메커니즘이 왜 세 가지(오버레이/BGP/클라우드 네이티브)로 나뉘는지는 [파드 간 통신]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %}) 글의 분류·검증을 먼저 보면 도움이 된다. 이 토대 위에 Service 라우팅 계층이 얹히는 과정은 [Service와 kube-proxy]({% post_url 2026-05-04-Kubernetes-Networking-04-Service %})에서 이어진다.
 
 시나리오 기준:
 - CNI 솔루션: **Flannel (VXLAN 모드)** — 오버레이 분류의 가장 보편적인 구현

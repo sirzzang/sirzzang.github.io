@@ -17,7 +17,7 @@ tags:
 
 Kubernetes에서 Pod이 생성될 때 네트워크 인터페이스는 어떻게 구성되고, IP는 어떻게 할당될까? 이 질문의 중심에 **CNI(Container Network Interface)**가 있다. 이번 글에서는 CNI의 배경, 개념, 플러그인 분류, 설정 구조, 그리고 컨테이너 런타임이 CNI 바이너리를 어떻게 호출하는지를 정리한다.
 
-Pod 간 통신이 어떤 문제를 풀어야 하는지는 [네트워킹 모델]({% post_url 2026-05-04-Kubernetes-Networking-00-Model %})과 [파드 간 통신]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %})에서 다루고, 그 통신이 실제로 어떤 순서로 동작하는지는 [CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-CNI-Flow %})에서 시나리오로 짚는다. 이 글은 그 모든 글의 토대가 되는 **CNI 표준 자체**에 집중한다.
+Pod 간 통신이 어떤 문제를 풀어야 하는지는 [네트워킹 모델]({% post_url 2026-05-04-Kubernetes-Networking-00-Model %})과 [파드 간 통신]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %})에서 다루고, 그 통신이 실제로 어떤 순서로 동작하는지는 [CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-Networking-03-CNI-Flow %})에서 시나리오로 짚는다. 이 글은 그 모든 글의 토대가 되는 **CNI 표준 자체**에 집중한다.
 
 <br>
 
@@ -207,7 +207,7 @@ Spec만 있으면 실제로 동작하는지 검증할 수 없으므로, **"이 S
 
 CNI Spec이 정의한 역할 기준으로, CNI 플러그인은 **네트워크 플러그인**(메인)과 **IPAM 플러그인** 두 종류로 나뉜다. CNI Spec은 이 둘을 조합해서 사용하도록 설계되어 있다.
 
-**네트워크 플러그인 (메인 플러그인)**: bridge, veth pair 생성, 오버레이 네트워크 등 **네트워크 연결 자체**를 담당한다. 여기서 오버레이 네트워크란, 물리 네트워크 위에 가상 네트워크를 한 겹 더 구성하여 서로 다른 노드의 Pod이 직접 통신할 수 있게 하는 방식이다(자세한 내용은 [CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-CNI-Flow %}) 글의 VXLAN 시나리오 참고). [설정 파일](#설정-파일-구조)의 `"type"` 필드로 지정한다.
+**네트워크 플러그인 (메인 플러그인)**: bridge, veth pair 생성, 오버레이 네트워크 등 **네트워크 연결 자체**를 담당한다. 여기서 오버레이 네트워크란, 물리 네트워크 위에 가상 네트워크를 한 겹 더 구성하여 서로 다른 노드의 Pod이 직접 통신할 수 있게 하는 방식이다(자세한 내용은 [CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-Networking-03-CNI-Flow %}) 글의 VXLAN 시나리오 참고). [설정 파일](#설정-파일-구조)의 `"type"` 필드로 지정한다.
 
 - 기본 플러그인(Reference): `bridge`, `loopback`, `vlan`, `macvlan`
 - 서드파티 플러그인: `flannel`, `calico`, `weave-net`, `cilium`
@@ -574,7 +574,7 @@ Pod의 IP 대역(`10.244.0.0/16` 등)과 노드의 물리 네트워크 대역(`1
 
 | 분류 | 핵심 발상 | 대표 구현 | 자세히 |
 | --- | --- | --- | --- |
-| **오버레이** | Pod 패킷을 노드 IP로 캡슐화해서 물리 네트워크를 우회 | Flannel(VXLAN), Calico(VXLAN/IPIP), Cilium(Geneve), WireGuard | [파드 간 통신 — 오버레이]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %}#오버레이-별도-대역--터널링) / [CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-CNI-Flow %}) |
+| **오버레이** | Pod 패킷을 노드 IP로 캡슐화해서 물리 네트워크를 우회 | Flannel(VXLAN), Calico(VXLAN/IPIP), Cilium(Geneve), WireGuard | [파드 간 통신 — 오버레이]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %}#오버레이-별도-대역--터널링) / [CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-Networking-03-CNI-Flow %}) |
 | **BGP 라우팅** | 물리 네트워크 라우터에 Pod 대역의 경로를 광고 | Calico(BGP) | [파드 간 통신 — BGP]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %}#bgp-별도-대역--라우팅-정보-전파) |
 | **클라우드 네이티브 라우팅** | Pod에게 인프라가 라우팅 가능한 IP를 직접 부여 | AWS VPC CNI, GKE VPC-native, Azure CNI | [파드 간 통신 — 클라우드 네이티브]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %}#클라우드-네이티브-라우팅-인프라가-파드-ip를-직접-라우팅) / [EKS VPC CNI]({% post_url 2026-03-19-Kubernetes-EKS-02-01-01-EKS-VPC-CNI %}) |
 
@@ -596,7 +596,7 @@ CNI는 결국 "컨테이너 런타임과 네트워크 플러그인 사이의 약
 
 - 같은 노드 Pod 간 통신의 veth pair / cni0 bridge 구조: [파드 간 통신 — 같은 노드]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %}#같은-노드의-파드-간-통신)
 - 노드 간 통신 3가지 방식의 비교와 검증: [파드 간 통신 — 다른 노드]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %}#다른-노드의-파드-간-통신)
-- Flannel VXLAN 시나리오로 따라가는 동작 흐름(VTEP, onlink, FDB, 캡슐화 단계): [CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-CNI-Flow %})
+- Flannel VXLAN 시나리오로 따라가는 동작 흐름(VTEP, onlink, FDB, 캡슐화 단계): [CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-Networking-03-CNI-Flow %})
 - AWS VPC CNI의 클라우드 네이티브 라우팅 구현: [EKS VPC CNI]({% post_url 2026-03-19-Kubernetes-EKS-02-01-01-EKS-VPC-CNI %})
 - Service 라우팅(kube-proxy/iptables/IPVS/eBPF): [Service와 kube-proxy]({% post_url 2026-05-04-Kubernetes-Networking-04-Service %})
 

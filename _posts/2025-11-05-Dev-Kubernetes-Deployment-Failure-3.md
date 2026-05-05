@@ -14,13 +14,16 @@ tags:
   - scheduler
 ---
 
+<br>
 
+# TL;DR
 
-> **TL;DR**
->
-> 이 Deployment 재배포 실패 상황은 OS의 Deadlock과 닮았다. 기존 파드는 새 파드가 Ready 되어야 종료되고, 새 파드는 기존 파드가 종료되어야 GPU를 확보할 수 있다. Mutual Exclusion, Hold and Wait, No Preemption, Circular Wait -- Deadlock의 4가지 조건에 비유해 볼 수 있으며, 해결 방법(리소스 늘리기, 순서 바꾸기)도 유사하다.
+- 이 Deployment 재배포 실패 상황은 OS의 Deadlock과 닮았다. 기존 파드는 새 파드가 Ready 되어야 종료되고, 새 파드는 기존 파드가 종료되어야 GPU를 확보할 수 있다.
+- Mutual Exclusion, Hold and Wait, No Preemption, Circular Wait — Deadlock의 4가지 조건에 비유해 볼 수 있으며, 해결 방법(리소스 늘리기, 순서 바꾸기)도 유사하다.
 
 <br>
+
+# 들어가며
 
 ~~도대체 거의 1년 가까이 된 내용을 왜 이제서야 작성하게 되었는지 반성하며~~ 회사에서 Deployment를 재배포하다가 쿠버네티스의 스케줄링과 Deployment 업데이트 전략에 대해 공부하게 된 내용을 작성한다. [분석 및 해결에 이어서]({% post_url 2025-11-05-Dev-Kubernetes-Deployment-Failure-2 %})
 
@@ -110,7 +113,7 @@ goroutine 1 [chan receive]:
 
 생각해 보면, Deadlock 상황과 참 닮았다. 전통적인 OS Deadlock 상황과 완전히 일치하지는 않지만, 그래도 Deadlock이 발생하는 조건을 아래와 같이 비유해서 생각해 볼 수 있다.
 
-1. manual exclusion: 자원은 한 번에 하나의 프로세스만 사용할 수 있음
+1. mutual exclusion: 자원은 한 번에 하나의 프로세스만 사용할 수 있음
    - GPU는 한 번에 하나의 파드에서만 사용할 수 있음
 
 2. hold and wait: 하나의 프로세스가 자원을 보유하면서, 동시에 추가 자원을 요청하며 대기하는 상황
@@ -152,7 +155,7 @@ goroutine 1 [chan receive]:
   ```go
   gpu <- 1
   go func() {
-  	<-gpu // 먼저 뻬기 = 기존 파드 먼저 내리기
+  	<-gpu // 먼저 빼기 = 기존 파드 먼저 내리기
   	gpu <- 2 // 다시 넣기 = 새 파드 배치하기	
   }
   ```
@@ -187,5 +190,7 @@ goroutine 1 [chan receive]:
 # 결론
 
 시리즈를 마무리하며 돌아보면, 이 문제의 핵심은 결국 **기본값을 맹신하지 말라**는 것이다. Kubernetes가 제공하는 기본값은 범용적인 상황에 맞춰져 있을 뿐, 내 환경의 리소스 제약까지 고려해 주지는 않는다. GPU가 1개뿐인 노드에 `replicas: 1`로 배포하면서 업데이트 전략을 명시하지 않은 건, goroutine에서 채널 크기를 고려하지 않고 코드를 짠 것과 다를 바 없었다. 도구를 쓸 때는 그 도구의 기본 동작을 이해하고, 내 상황에 맞게 설정해야 한다.
+
+<br>
 
 

@@ -626,7 +626,7 @@ VPC CNI + NLB 조합에서 사용 가능하다. LB가 **파드 IP:Port로 직접
 
 돌아보면, 쿠버네티스 네트워킹은 **인프라 계층이 만든 flat network 위에 추상화 계층을 얹는 구조**다. 컨테이너 네트워킹(문제 1)과 파드 간 통신(문제 2)이 "모든 파드가 고유 IP로 NAT 없이 직접 통신할 수 있는" 평면 네트워크를 만들고, Service(문제 3, 4)가 그 위에서 안정적인 접점과 로드밸런싱이라는 추상화를 제공한다. 이 추상화 안에서 일어나는 DNAT과 MASQUERADE는 인프라 계층의 flat network을 훼손하지 않는다 — 파드 A가 파드 B의 IP로 직접 패킷을 보내면, 그 경로에서 IP는 여전히 변하지 않는다. Service를 거치는 경로에서만 가상 IP가 실제 파드 IP로 변환될 뿐이다. "NAT 없이" 원칙과 Service의 NAT은 서로 다른 계층에서 작동하기에 모순이 아니라 **역할 분담**이다.
 
-여기까지가 *Kubernetes 네트워킹 (개념 시리즈)* 다섯 편을 통틀어 정리한 그림이다. 모델([Ch0]({% post_url 2026-05-04-Kubernetes-Networking-00-Model %}))이 정한 요구사항을 인프라 계층([Ch1]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %}))이 풀고, 그 인프라를 만드는 표준([Ch2]({% post_url 2026-01-05-Kubernetes-CNI %}))과 표준 위에서 동작하는 흐름([Ch3]({% post_url 2026-03-19-Kubernetes-CNI-Flow %}))이 있고, 그 위에 Service라는 추상화(이 글)가 얹힌다. 클라우드 네이티브 라우팅의 실제 구현이 궁금하다면 [EKS VPC CNI]({% post_url 2026-03-19-Kubernetes-EKS-02-01-01-EKS-VPC-CNI %}) 글을 보면 된다.
+여기까지가 *Kubernetes 네트워킹 (개념 시리즈)* 다섯 편을 통틀어 정리한 그림이다. 모델([Ch0]({% post_url 2026-05-04-Kubernetes-Networking-00-Model %}))이 정한 요구사항을 인프라 계층([Ch1]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %}))이 풀고, 그 인프라를 만드는 표준([Ch2]({% post_url 2026-01-05-Kubernetes-Networking-02-CNI %}))과 표준 위에서 동작하는 흐름([Ch3]({% post_url 2026-03-19-Kubernetes-Networking-03-CNI-Flow %}))이 있고, 그 위에 Service라는 추상화(이 글)가 얹힌다. 클라우드 네이티브 라우팅의 실제 구현이 궁금하다면 [EKS VPC CNI]({% post_url 2026-03-19-Kubernetes-EKS-02-01-01-EKS-VPC-CNI %}) 글을 보면 된다.
 
 <br>
 

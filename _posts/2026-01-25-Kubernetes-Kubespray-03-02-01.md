@@ -26,7 +26,6 @@ tags:
 - **Ansible 변수 우선순위**: 22단계 우선순위에 따라 변수가 덮어쓰임
 - **Kubespray 설계 전략**: role defaults(기본값) → inventory group_vars(사용자 설정) → role vars(내부 고정값)
 - **변수 분석 흐름**: docs 개요 파악 → role defaults → inventory group_vars 순으로 분석
-- **다음 글 예고**: 사용자가 실제로 수정할 수 있는 `inventory/group_vars/` 영역을 상세히 분석
 
 > **분석 환경**: Kubespray v2.28.x. 버전에 따라 기본값이나 파일 구조가 다를 수 있다.
 

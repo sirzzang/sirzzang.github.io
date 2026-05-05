@@ -278,7 +278,7 @@ Flannel은 간단하고 가볍지만, 단독으로 사용하면 네트워크 정
 
 | 역할 | 담당 | 특징 |
 | --- | --- | --- |
-| **네트워크 연결** (Pod-to-Pod 통신) | [Flannel](https://github.com/flannel-io/flannel) | 간단하고 가벼운 [VXLAN]({% post_url 2026-03-19-Kubernetes-CNI-Flow %}) 오버레이 네트워크 |
+| **네트워크 연결** (Pod-to-Pod 통신) | [Flannel](https://github.com/flannel-io/flannel) | 간단하고 가벼운 [VXLAN]({% post_url 2026-03-19-Kubernetes-Networking-03-CNI-Flow %}) 오버레이 네트워크 |
 | **네트워크 정책** (트래픽 제어) | [Calico](https://docs.tigera.io/calico/latest/about) | Kubernetes NetworkPolicy 구현 |
 
 <br>

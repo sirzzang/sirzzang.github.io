@@ -518,7 +518,7 @@ crictl ps
 # a96c89da4f25b   dcdb790dc2bfe   2 minutes ago        Running   kube-proxy     b2e21d4d0da3f   kube-proxy-dkczx        kube-system
 ```
 
-워커 노드가 클러스터에 join되면, DaemonSet으로 배포된 **kube-proxy**와 **kube-flannel**이 자동으로 해당 노드에 스케줄링된다. kube-proxy는 Service 네트워크 규칙(iptables)을 관리하고, kube-flannel은 Pod 네트워크([VXLAN]({% post_url 2026-03-19-Kubernetes-CNI-Flow %}) 오버레이)를 구성한다. 이 두 컴포넌트가 정상 실행되어야 노드가 `Ready` 상태가 된다.
+워커 노드가 클러스터에 join되면, DaemonSet으로 배포된 **kube-proxy**와 **kube-flannel**이 자동으로 해당 노드에 스케줄링된다. kube-proxy는 Service 네트워크 규칙(iptables)을 관리하고, kube-flannel은 Pod 네트워크([VXLAN]({% post_url 2026-03-19-Kubernetes-Networking-03-CNI-Flow %}) 오버레이)를 구성한다. 이 두 컴포넌트가 정상 실행되어야 노드가 `Ready` 상태가 된다.
 
 ### kubelet 상태 확인
 
@@ -720,7 +720,7 @@ ip -c route | grep flannel
 # 10.244.2.0/24 via 10.244.2.0 dev flannel.1 onlink
 ```
 
-`flannel.1` 인터페이스를 통해 [VXLAN 오버레이 네트워크]({% post_url 2026-03-19-Kubernetes-CNI-Flow %})로 라우팅된다. 이를 통해 컨트롤 플레인에서 워커 노드의 Pod CIDR로 통신이 가능하다:
+`flannel.1` 인터페이스를 통해 [VXLAN 오버레이 네트워크]({% post_url 2026-03-19-Kubernetes-Networking-03-CNI-Flow %})로 라우팅된다. 이를 통해 컨트롤 플레인에서 워커 노드의 Pod CIDR로 통신이 가능하다:
 
 ```bash
 # 다른 노드 Pod CIDR로 통신 가능 확인 (VXLAN 오버레이 사용)

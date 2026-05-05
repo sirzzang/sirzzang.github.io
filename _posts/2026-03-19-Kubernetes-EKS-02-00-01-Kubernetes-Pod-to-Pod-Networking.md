@@ -77,7 +77,7 @@ AWS VPC CNI가 어떤 문제를 어떻게 푸는지 보기 전에, 먼저 일반
 | **BGP** | 물리 네트워크에 **알려줌** — 라우팅 정보를 BGP로 전파 | 별도 대역 (`10.244.x.x`) | X | Calico BGP 모드 |
 | **클라우드 네이티브 라우팅** | 인프라가 **원래부터 앎** — 인프라가 라우팅 가능한 IP를 파드에 부여 | 인프라의 라우팅 도메인 IP (VPC 대역 등) | X | **AWS VPC CNI**, GKE VPC-native, Azure CNI |
 
-세 방식 모두 src/dst IP가 한 번도 변하지 않아 "NAT 없이"를 충족한다. 자세한 패킷 검증·노드 내부 구조 비교·요구사항 충족 분석은 [Kubernetes 네트워킹 — 다른 노드의 파드 간 통신]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %}#다른-노드의-파드-간-통신) 절에 정리했다. 오버레이의 캡슐화 디테일(VTEP, `onlink`, FDB)은 [CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-CNI-Flow %}) 글에서 다룬다.
+세 방식 모두 src/dst IP가 한 번도 변하지 않아 "NAT 없이"를 충족한다. 자세한 패킷 검증·노드 내부 구조 비교·요구사항 충족 분석은 [Kubernetes 네트워킹 — 다른 노드의 파드 간 통신]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %}#다른-노드의-파드-간-통신) 절에 정리했다. 오버레이의 캡슐화 디테일(VTEP, `onlink`, FDB)은 [CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-Networking-03-CNI-Flow %}) 글에서 다룬다.
 
 <br>
 
@@ -111,7 +111,7 @@ AWS VPC CNI가 어떤 문제를 어떻게 푸는지 보기 전에, 먼저 일반
 | --- | --- |
 | 같은 노드: veth + cni0 + MAC 학습의 디테일 | 별도 시리즈 [Ch1 — 같은 노드]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %}#같은-노드의-파드-간-통신) |
 | 다른 노드: 오버레이 / BGP / 클라우드 네이티브 비교, 단계별 패킷 검증 | 별도 시리즈 [Ch1 — 다른 노드]({% post_url 2026-05-04-Kubernetes-Networking-01-Pod-to-Pod %}#다른-노드의-파드-간-통신) |
-| 오버레이 캡슐화의 디테일 (VTEP, `onlink`, FDB) | 별도 시리즈 [Ch3 — CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-CNI-Flow %}) |
+| 오버레이 캡슐화의 디테일 (VTEP, `onlink`, FDB) | 별도 시리즈 [Ch3 — CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-Networking-03-CNI-Flow %}) |
 | AWS VPC CNI = 클라우드 네이티브 라우팅의 구체 구현 | EKS 시리즈 [02-01-01]({% post_url 2026-03-19-Kubernetes-EKS-02-01-01-EKS-VPC-CNI %}) |
 
 [다음 글]({% post_url 2026-03-19-Kubernetes-EKS-02-00-02-Kubernetes-Networking-Service %})에서는 쿠버네티스 네트워킹의 문제 3 — Service와 kube-proxy의 동작을 정리한다.

@@ -63,7 +63,7 @@ RayJob을 고른 이유는 KubeRay가 제공하는 세 CRD 중 가장 "일회성
 | **RayJob** | RayCluster를 자동으로 생성하고, 클러스터가 준비되면 작업을 제출하며, 작업 완료 후 클러스터를 정리(`shutdownAfterJobFinishes`)하는 것까지 한 번에 처리한다. |
 | **RayService** | RayCluster와 Ray Serve 배포 그래프를 결합해 제로 다운타임 업그레이드와 고가용성을 지원하는 서빙 전용 CRD다. |
 
-세 CRD 중 RayJob이 run-to-completion 모델에 가장 직접적으로 맞는다. 학습 작업마다 클러스터를 새로 만들고 정리하는 패턴: 이 "일회성(run-to-completion)"이라는 성격이 뒤에서 ArgoCD와 충돌하는 지점이 된다.
+세 CRD 중 RayJob이 run-to-completion 모델에 가장 직접적으로 맞는다. 학습 작업마다 클러스터를 새로 만들고 정리하는 패턴이 갖는 "일회성(run-to-completion)"이라는 성격이 뒤에서 ArgoCD와 충돌하는 지점이 된다.
 
 ## 결과: 항상 OutOfSync
 
@@ -163,7 +163,7 @@ ArgoCD 공식 문서의 [Diffing Customization](https://argo-cd.readthedocs.io/e
 
 **이 RayJob에 ArgoCD를 쓰는 게 적합한 구조인가?**
 
-ArgoCD의 본래 목적은 "이 상태를 유지해라"이다. Deployment의 이미지 태그가 바뀌었거나, replicas 수가 변경됐거나, 누가 수동으로 리소스를 건드렸을 때: drift(상태 편차)를 감지해서 desired state로 되돌리는 것이 핵심 가치다. 즉 ArgoCD는 **desired state가 장기적으로 유지되어야 하는 워크로드**를 위해 만들어진 도구다.
+ArgoCD의 본래 목적은 "이 상태를 유지해라"이다. Deployment의 이미지 태그가 바뀌었거나, replicas 수가 변경됐거나, 누가 수동으로 리소스를 건드렸을 때 drift(상태 편차)를 감지해서 desired state로 되돌리는 것이 핵심 가치다. 즉 ArgoCD는 **desired state가 장기적으로 유지되어야 하는 워크로드**를 위해 만들어진 도구다.
 
 그런데 RayJob은 다르다. 학습 Job은 한 번 실행하고 끝나는 일회성 작업이지, 상태가 지속적으로 관리될 필요가 있는 대상이 아니다.
 
@@ -211,7 +211,7 @@ ArgoCD UI는 초록색이지만 그 너머의 controller는 아무 일도 하지
 | Operator가 spec에 기본값을 주입해서 drift 발생 | CRD defaulting | `ignoreDifferences` | O |
 | 리소스 자체가 일회성이라 유지할 desired state가 없음 | 리소스의 본질 | 해결 수단 없음 | X |
 
-operator가 필드를 추가하고 자식 리소스를 만드는 것 자체는 RayJob만의 문제가 아니다. 다른 operator-managed 리소스들도 같은 패턴을 가지지만, 그것들은 ArgoCD로 잘 관리되고 있다.
+operator가 필드를 추가하고 자식 리소스를 만드는 것 자체는 RayJob만의 문제가 아니다. 다른 operator-managed 리소스들도 같은 패턴을 가지지만, 그렇다고 ArgoCD로 관리하기 부적합한 것은 아니다.
 
 - **Zalando PostgreSQL** (`acid.zalan.do/v1`): operator가 credential secret 생성, replica pod 관리. 하지만 "이 DB가 항상 존재해야 한다"는 desired state가 유효 → ArgoCD 적합
 - **KServe InferenceService**: Knative가 동적으로 revision, route 생성. 하지만 "이 서빙 엔드포인트가 항상 떠 있어야 한다"는 desired state가 유효 → ArgoCD 적합
@@ -227,7 +227,9 @@ RayJob이 다른 이유는 operator 때문이 아니다. `ignoreDifferences`로 
 
 이 의문이 타당한지 외부 레퍼런스를 찾아봤다. 같은 결론을 직접 명시한 글을 찾기는 어려웠지만, 같은 방향을 가리키는 단서들은 여럿 있었다.
 
-**ArgoCD 프로젝트 자체의 인식.** ArgoCD [Issue #1639](https://github.com/argoproj/argo-cd/issues/1639)는 `generateName`을 쓰는 Job/Workflow가 즉시 OutOfSync가 되는 문제를 보고한 이슈다. 작성자가 jessesuen(Argo 공동 창시자)이고, 2025년 2월에 closed as not planned로 종료되었다. 이 이슈가 다루는 범위 자체는 좁지만(`generateName` 지원에 한정), ArgoCD 팀이 sync를 trigger 메커니즘으로 쓰는 패턴을 핵심 범위로 보지 않는다는 신호로 읽을 수 있다.
+### ArgoCD 프로젝트 자체의 인식
+
+ArgoCD [Issue #1639](https://github.com/argoproj/argo-cd/issues/1639)는 `generateName`을 쓰는 Job/Workflow가 즉시 OutOfSync가 되는 문제를 보고한 이슈다. 작성자가 jessesuen(Argo 공동 창시자)이고, 2025년 2월에 closed as not planned로 종료되었다. 이 이슈가 다루는 범위 자체는 좁지만(`generateName` 지원에 한정), ArgoCD 팀이 sync를 trigger 메커니즘으로 쓰는 패턴을 핵심 범위로 보지 않는다는 신호로 읽을 수 있다.
 
 ArgoCD [Best Practices 문서](https://argo-cd.readthedocs.io/en/stable/user-guide/best_practices/)는 "Leaving Room For Imperativeness"라는 절에서 이렇게 말한다.
 
@@ -248,7 +250,7 @@ ArgoCD [Best Practices 문서](https://argo-cd.readthedocs.io/en/stable/user-gui
 
 ### ML 플랫폼들의 설계 선택
 
-[Kubeflow 아키텍처](https://www.kubeflow.org/docs/started/architecture/)는 이 구분을 잘 보여준다. Kubernetes가 인프라를 declarative하게 관리하고, 그 위에서 Kubeflow Pipelines가 ML workflow를 orchestrate한다. 인프라 계층(declarative)과 실행 계층(imperative)을 섞지 않는 설계다. KFP v2는 SDK 레벨에서 Argo Workflows로부터 디커플링되어 backend-agnostic한 IR YAML로 컴파일되지만, Kubernetes 환경의 실행 백엔드로는 여전히 Argo Workflows를 쓰고 있다.
+[Kubeflow 아키텍처](https://www.kubeflow.org/docs/started/architecture/)는 이 구분을 잘 보여준다. Kubernetes가 인프라를 declarative하게 관리하고, 그 위에서 Kubeflow Pipelines가 ML workflow를 orchestrate한다. 인프라 계층(declarative)과 실행 계층(imperative)을 섞지 않는 설계다. 실행 백엔드 선택에서도 이 분리가 드러나는데, KFP v2는 SDK 레벨에서 Argo Workflows로부터 디커플링되어 backend-agnostic한 IR YAML로 컴파일되면서도, Kubernetes 환경에서는 여전히 Argo Workflows를 실행 엔진으로 사용한다.
 
 [Ray 공식 문서](https://docs.ray.io/en/latest/cluster/kubernetes/getting-started/rayjob-quick-start.html)에서도 RayJob은 명시적인 one-shot execution model로 설명된다. `jobDeploymentStatus`가 `Complete` 또는 `Failed`로 전이되고, `shutdownAfterJobFinishes`와 `ttlSecondsAfterFinished`로 자동 정리하는 것이 권장 패턴이다. 완료 후 continuous reconciliation이 불필요한 리소스인 것이다.
 

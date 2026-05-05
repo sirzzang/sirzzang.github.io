@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] 파드 간 통신: 같은 노드 / 다른 노드"
-excerpt: "쿠버네티스 네트워킹 모델의 핵심인 파드 간 통신을 같은 노드(veth + bridge)와 다른 노드(오버레이 / BGP / 클라우드 네이티브)로 나누어, 각 방식이 NAT 없이 어떻게 도달하는지 패킷 단위로 검증한다."
+excerpt: "쿠버네티스 네트워킹 모델의 핵심인 파드 간 통신을 같은 노드(veth + bridge)와 다른 노드(오버레이 / BGP / 클라우드 네이티브)로 나누어, 각 방식이 NAT 없이 어떻게 도달하는지 패킷 단위로 살펴 보자."
 categories:
   - Kubernetes
 toc: true
@@ -44,7 +44,7 @@ hidden: true
 
 핵심은 요구사항 1이다. 같은 노드뿐 아니라 **다른 노드에 있는 파드까지** NAT 없이 도달 가능해야 한다. 이 요구사항을 어떻게 충족하는지 살펴보자.
 
-이 글에서 만든 인프라 위에, [CNI 표준]({% post_url 2026-01-05-Kubernetes-CNI %})·[CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-CNI-Flow %})·[Service와 kube-proxy]({% post_url 2026-05-04-Kubernetes-Networking-04-Service %})가 차례로 얹힌다.
+이 글에서 만든 인프라 위에, [CNI 표준]({% post_url 2026-01-05-Kubernetes-Networking-02-CNI %})·[CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-Networking-03-CNI-Flow %})·[Service와 kube-proxy]({% post_url 2026-05-04-Kubernetes-Networking-04-Service %})가 차례로 얹힌다.
 
 <br>
 
@@ -286,7 +286,7 @@ Flannel(VXLAN), Calico(IPIP) 등이 사용하는 방식이다. 각 노드에 파
 
 Outer IP 헤더가 추가/제거될 뿐, **Inner IP(파드 IP)는 출발부터 도착까지 한 번도 변하지 않는다**. 캡슐화는 NAT이 아니다. NAT은 IP를 **변조**하는 것이고, 캡슐화는 IP를 건드리지 않고 **바깥에 새 헤더를 씌우는** 것이다.
 
-> **참고**: 오버레이 네트워크의 더 상세한 구조 — VTEP 인터페이스, `onlink` 플래그, FDB(forwarding database) 테이블, 패킷이 단계별로 어떻게 흐르는지 — 는 [CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-CNI-Flow %}) 글의 Flannel(VXLAN) 시나리오에서 확인할 수 있다.
+> **참고**: 오버레이 네트워크의 더 상세한 구조 — VTEP 인터페이스, `onlink` 플래그, FDB(forwarding database) 테이블, 패킷이 단계별로 어떻게 흐르는지 — 는 [CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-Networking-03-CNI-Flow %}) 글의 Flannel(VXLAN) 시나리오에서 확인할 수 있다.
 
 <br>
 
@@ -454,7 +454,7 @@ AWS VPC CNI를 예로 들어 보면, 파드 IP 대역이 VPC 서브넷 대역과
 | **1. 모든 파드 ↔ 모든 파드 (NAT 없이)** | 같은 노드: veth pair + 브릿지로 L2 세그먼트 구성 / 다른 노드: 오버레이·BGP·클라우드 네이티브 중 하나로 도달 가능하게 함 |
 | **2. 노드 에이전트 ↔ 같은 노드 파드** | 브릿지에 IP 부여 → 호스트도 파드 네트워크에 참여 (요구사항 1의 부산물) |
 
-이 두 요구사항을 **모두 충족하는 구현체가 CNI 플러그인**이다. CNI라는 인터페이스가 어떻게 정의되어 있고, 솔루션 플러그인이 어떻게 두 레이어(바이너리 + 노드 에이전트)로 구성되는지는 [CNI 표준]({% post_url 2026-01-05-Kubernetes-CNI %}) 글에서 이어 본다. 그 표준 위에서 Flannel(VXLAN)이 Pod 생성부터 노드 간 패킷 전달까지 어떻게 동작하는지는 [CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-CNI-Flow %}) 글에서, AWS VPC CNI가 클라우드 네이티브 라우팅을 어떻게 구현하는지는 [EKS VPC CNI]({% post_url 2026-03-19-Kubernetes-EKS-02-01-01-EKS-VPC-CNI %}) 글에서 확인할 수 있다.
+이 두 요구사항을 **모두 충족하는 구현체가 CNI 플러그인**이다. CNI라는 인터페이스가 어떻게 정의되어 있고, 솔루션 플러그인이 어떻게 두 레이어(바이너리 + 노드 에이전트)로 구성되는지는 [CNI 표준]({% post_url 2026-01-05-Kubernetes-Networking-02-CNI %}) 글에서 이어 본다. 그 표준 위에서 Flannel(VXLAN)이 Pod 생성부터 노드 간 패킷 전달까지 어떻게 동작하는지는 [CNI 동작 흐름]({% post_url 2026-03-19-Kubernetes-Networking-03-CNI-Flow %}) 글에서, AWS VPC CNI가 클라우드 네이티브 라우팅을 어떻게 구현하는지는 [EKS VPC CNI]({% post_url 2026-03-19-Kubernetes-EKS-02-01-01-EKS-VPC-CNI %}) 글에서 확인할 수 있다.
 
 이 글에서는 파드 ↔ 파드 직접 통신만 다뤘다. 그 위에 얹히는 Service 추상화 — 안정적인 가상 IP(ClusterIP)와 kube-proxy의 DNAT — 는 [Service와 kube-proxy]({% post_url 2026-05-04-Kubernetes-Networking-04-Service %}) 글에서 다룬다.
 
