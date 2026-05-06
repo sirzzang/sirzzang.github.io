@@ -165,6 +165,8 @@ profiles:
 
 완전히 독립적인 스케줄러 바이너리를 Deployment 등으로 배포한다. [Volcano](https://volcano.sh/), [Kueue](https://kueue.sigs.k8s.io/) 등이 이 방식에 해당한다.
 
+> Profile만으로 충분한 경우와 별도 바이너리가 필요한 경우의 판단 기준, Volcano와 Kueue의 아키텍처 비교는 [5편]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %})에서 자세히 다룬다.
+
 <br>
 
 #### 파드와 스케줄러의 매칭: 경쟁은 없다

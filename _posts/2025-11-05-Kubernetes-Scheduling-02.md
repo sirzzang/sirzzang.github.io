@@ -252,7 +252,9 @@ Active Queue 내에서 파드의 정렬 순서를 결정한다. `Less(Pod1, Pod2
 
 ### PreScore
 
-Score 플러그인이 사용할 **공유 상태를 생성**하는 사전 처리 단계다. 오류를 반환하면 Scheduling Cycle이 중단된다.
+Score 플러그인이 사용할 **공유 상태를 생성**하는 사전 처리 단계다. 노드를 탈락시키거나 Pod을 reject하는 결정권은 없는 **informational** 성격의 단계이며, 오류를 반환하면 Scheduling Cycle이 중단된다.
+
+> `CycleState` 캐시 패턴, 대표 플러그인(InterPodAffinity, NodeResourcesFit, TaintToleration)의 구체적인 PreScore 동작은 [5편]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %})에서 자세히 다룬다.
 
 ### Score
 
@@ -598,6 +600,8 @@ nominatedNodeName은 선점 후 victim 파드가 종료되는 동안:
 6. **선점은 PriorityClass 기반으로 동작한다.** 우선순위가 정의되지 않으면 선점은 발생하지 않는다. 선점의 핵심 선택 기준은 PDB 위반 최소 → 최고 victim 우선순위 최소 → victim 개수 최소 순이다.
 7. **`nominatedNodeName`은 예약 마커일 뿐, 보장이 아니다.** 선점 후 다른 파드의 끼어들기를 방지하는 역할을 하지만, 해당 노드에 반드시 스케줄링된다는 보장은 없다.
 
-[이전 글]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %})의 큐 구조와 함께 이해하면, 파드가 왜 Pending 상태에 빠지는지, 어떤 조건에서 빠져나올 수 있는지를 체계적으로 파악할 수 있다. [다음 글]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %})에서는 스케줄링 제어 설정(Scheduling Gate, nodeSelector, Node Affinity, Taints/Tolerations 등)을 다룬다. 
+[이전 글]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %})의 큐 구조와 함께 이해하면, 파드가 왜 Pending 상태에 빠지는지, 어떤 조건에서 빠져나올 수 있는지를 체계적으로 파악할 수 있다. [다음 글]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %})에서는 스케줄링 제어 설정(Scheduling Gate, nodeSelector, Node Affinity, Taints/Tolerations 등)을 다룬다.
+
+> Extension Point의 결정권 분류, PreScore 역할, PodGroup 스케줄링 등 프레임워크 내부 동작은 [5편]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %})에서 자세히 다룬다.
 
 <br>
