@@ -204,9 +204,11 @@ kubectl create -f time-slicing-config.yaml -n gpu-operator
 # Helm 차트 배포
 helm install gpu-operator nvidia/gpu-operator \
     -n gpu-operator \
-    --version=v25.10.0 \
+    --version=v25.3.3 \
     --set devicePlugin.config.name=time-slicing-config
 ```
+
+> **참고**: `--version`에 지정하는 Helm 차트 버전은 시점에 따라 달라질 수 있다. 사용 가능한 버전 목록은 [NVIDIA GPU Operator Helm 릴리스](https://github.com/NVIDIA/gpu-operator/releases)에서 확인할 수 있다.
 
 
 <br>
@@ -434,6 +436,8 @@ Time Slicing 설정을 변경해도, 이미 스케줄링된 파드는 영향을 
 | **3편. 적용** | GPU Operator / Device Plugin 환경별 적용 방법. Fault Isolation 부재, DCGM 제한, replicas ≥ 2, 설정 변경 시 기존 파드 유지 |
 
 Time Slicing은 MIG를 지원하지 않는 GPU에서도 GPU 공유를 가능하게 해주는 실용적인 선택지다. 다만 Fault Isolation이 없으므로, 신뢰할 수 있는 워크로드(내부 추론 서빙, 개발/테스트 환경 등)에 적용하는 것이 권장된다.
+
+> 참고로, Kubernetes 1.32+에서는 Dynamic Resource Allocation(DRA)을 통해 Device Plugin 방식 대신 동적으로 GPU를 할당하는 패러다임도 등장하고 있다. NVIDIA는 [k8s-dra-driver-gpu](https://github.com/NVIDIA/k8s-dra-driver-gpu)를 통해 DRA 기반 GPU 할당을 지원하며, MIG 인스턴스의 동적 프로비저닝 등이 가능해지고 있다.
 
 <br>
 
