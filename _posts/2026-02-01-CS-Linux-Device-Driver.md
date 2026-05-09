@@ -1,5 +1,5 @@
 ---
-title:  "[CS] 리눅스 디바이스 드라이버 구조"
+title:  "[Linux] 디바이스 드라이버: 3계층 구조"
 excerpt: "리눅스에서 장치를 다루기 위한 3계층 구조를 알아보자."
 categories:
   - CS
@@ -8,13 +8,12 @@ header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
   - Linux
-  - Device
-  - Driver
-  - Kernel
-  - 리눅스
-  - 디바이스
-  - 드라이버
-  - 커널
+  - Device Driver
+  - Kernel Module
+  - ioctl
+  - VFS
+  - Character Device
+  - Block Device
 ---
 
 <br>
@@ -36,7 +35,7 @@ GPU를 컨테이너에 노출시키거나, 커널 모듈과 장치 파일의 관
 
 # 개요
 
-Unix/Linux에서는 **"Everything is a file"** 철학에 따라 하드웨어 장치도 파일처럼 다룬다 ([[CS] Everything is a File](/cs/CS-Everything-is-a-File/) 참고).
+Unix/Linux에서는 **["Everything is a file"]({% post_url 2026-01-31-CS-Everything-is-a-File %})** 철학에 따라 하드웨어 장치도 파일처럼 다룬다.
 
 ```bash
 # 1. 일반 파일 읽기
@@ -55,14 +54,14 @@ echo 1 > /proc/sys/net/ipv4/ip_forward  # IP 포워딩 활성화
 
 <br>
 
-장치를 파일처럼 다루면 `cat`, `echo` 같은 일반 명령어로 장치를 제어할 수 있다. [해당 철학의 한계에서 살펴봤듯이](/cs/CS-Everything-is-a-File/#한계와-확장) 복잡한 장치 제어(GPU 설정, 디스크 파티션 등)는 기본 파일 연산만으로는 부족하다. 이런 경우 `ioctl()` 같은 확장 시스템 콜을 사용한다 ([시스템 콜](#시스템-콜) 참고).
+장치를 파일처럼 다루면 `cat`, `echo` 같은 일반 명령어로 장치를 제어할 수 있다. [해당 철학의 한계]({% post_url 2026-01-31-CS-Everything-is-a-File %}#한계와-확장)에서 살펴봤듯이 복잡한 장치 제어(GPU 설정, 디스크 파티션 등)는 기본 파일 연산만으로는 부족하다. 이런 경우 `ioctl()` 같은 확장 시스템 콜을 사용한다 ([시스템 콜](#시스템-콜) 참고).
 
 
 <br>
 
 ## 파일 시스템 계층
 
-리눅스 시스템은 **FHS(Filesystem Hierarchy Standard)**를 따른다 ([[CS] Everything is a File](/cs/CS-Everything-is-a-File/#파일-시스템-계층) 참고). 장치와 드라이버를 다룰 때 주로 사용하는 경로는 다음과 같다.
+리눅스 시스템은 [이전 글]({% post_url 2026-01-31-CS-Everything-is-a-File %}#파일-시스템-계층)에서 살펴본 **FHS(Filesystem Hierarchy Standard)**를 따른다. 장치와 드라이버를 다룰 때 주로 사용하는 경로는 다음과 같다.
 
 | 경로 | 역할 | 용도 |
 |-----|------|------|
@@ -80,7 +79,7 @@ echo 1 > /proc/sys/net/ipv4/ip_forward  # IP 포워딩 활성화
 
 ## 파일 종류
 
-Linux에는 7가지 파일 종류가 있다 ([[CS] Everything is a File](/cs/CS-Everything-is-a-File/#파일-종류) 참고). 이 중 **`c`(문자 장치)**와 **`b`(블록 장치)**가 하드웨어를 나타내는 장치 파일이다.
+Linux에는 [7가지 파일 종류]({% post_url 2026-01-31-CS-Everything-is-a-File %}#파일-종류)가 있다. 이 중 **`c`(문자 장치)**와 **`b`(블록 장치)**가 하드웨어를 나타내는 장치 파일이다.
 
 ```bash
 ls -l /dev/ | head -5
@@ -103,18 +102,16 @@ crw-rw-rw- 1 root tty     1,   9 Feb  3 10:00 urandom # 문자 장치
 
 ### 문자 장치 (Character Device)
 
-데이터를 한 바이트씩 순차적으로 읽고 쓴다.
+블록 레이어와 페이지 캐시를 거치지 않는 **바이트 스트림** 인터페이스다.
 
-- **특징**: 랜덤 액세스 불가, 페이지 캐시 미사용
+- **특징**: 한 번의 `read()`/`write()`로 임의 크기를 전송할 수 있으며, 드라이버가 `llseek`을 구현하면 시킹도 가능(`/dev/mem` 등)
 - **용도**: 터미널, 시리얼 포트, 키보드, 마우스, GPU 제어, 사운드카드
 
-> 참고: **문자 장치와 버퍼링**
+> 참고: **문자 장치와 페이지 캐시**
 > 
-> 문자 장치도 커널 내부적으로는 작은 버퍼를 사용하지만, **페이지 캐시를 사용하지 않는다**. 실시간성이 중요하기 때문이다.
-> - 키보드 입력은 즉시 전달되어야 함
-> - 시리얼 포트 통신도 지연 없이 처리되어야 함
+> 문자 장치도 커널 내부적으로는 작은 버퍼를 사용하지만, **페이지 캐시를 사용하지 않는다**. 이는 문자 장치가 페이지 캐시가 가정하는 "고정 블록 단위로 주소화 가능한 저장소" 구조 자체를 갖지 않기 때문이다. 키보드 입력에는 캐싱할 "페이지"가 존재하지 않는다.
 >
-> 반면 블록 장치(디스크 등)는 효율을 위해 커널이 **페이지 캐시**를 적극 활용하여 I/O를 최적화한다.
+> 반면 블록 장치(디스크 등)는 효율을 위해 커널이 **페이지 캐시**를 적극 활용하여 I/O를 최적화한다. 다만 `O_DIRECT` 플래그로 페이지 캐시를 우회할 수도 있으며, NVMe 같은 빠른 장치에서는 우회가 오히려 유리한 경우가 많다.
 
 ```bash
 crw-rw-rw- 1 root root 1,  3 /dev/null      # 널 장치
@@ -152,14 +149,33 @@ crw-rw-rw- 1 root root 1, 3 /dev/null
 
 | 번호 | 역할 |
 |-----|------|
-| **Major** | 어떤 드라이버를 사용할지 (커널 모듈 식별) |
+| **Major** | 어떤 드라이버를 사용할지 (등록된 드라이버 식별) |
 | **Minor** | 같은 드라이버 내에서 어떤 장치인지 (장치 인스턴스 식별) |
 
 예시:
-- `/dev/sda` (8, 0) - SCSI 디스크 드라이버, 첫 번째 디스크
-- `/dev/sda1` (8, 1) - SCSI 디스크 드라이버, 첫 번째 파티션
+- `/dev/sda` (8, 0) - SCSI(Small Computer System Interface) 디스크 드라이버, 첫 번째 디스크 전체
+- `/dev/sda1` (8, 1) - SCSI 디스크 드라이버, 첫 번째 디스크의 파티션 1
 - `/dev/nvidia0` (195, 0) - NVIDIA 드라이버, GPU 0번
 - `/dev/nvidia1` (195, 1) - NVIDIA 드라이버, GPU 1번
+
+Minor 번호가 무엇을 식별하는지는 드라이버마다 다르다. SCSI 디스크 드라이버는 디스크 하나당 minor 16개를 묶어서 할당하므로(0=디스크 전체, 1~15=파티션, 16=두 번째 디스크 전체, ...) minor 번호가 디스크와 파티션을 동시에 인코딩한다. 반면 NVIDIA 드라이버는 각 minor가 독립된 GPU 한 장에 1:1 대응한다.
+
+실제로 시스템에 등록된 major number ↔ 드라이버 이름 매핑은 `cat /proc/devices`로 확인할 수 있다.
+
+```bash
+$ cat /proc/devices
+Character devices:
+  1 mem
+  4 tty
+  5 /dev/tty
+195 nvidia
+...
+
+Block devices:
+  8 sd
+259 blkext
+...
+```
 
 <br>
 
@@ -176,8 +192,12 @@ crw-rw-rw- 1 root root 1, 3 /dev/null
 | | `/dev/input/mouse0` | 마우스 |
 | | `/dev/nvidia0` | NVIDIA GPU |
 | **블록 장치** | `/dev/sda` | 첫 번째 SATA/SCSI 디스크 |
-| | `/dev/nvme0n1` | 첫 번째 NVMe SSD |
+| | `/dev/nvme0n1` | 첫 번째 NVMe(Non-Volatile Memory Express) SSD |
 | | `/dev/loop0` | 루프백 장치 (ISO 마운트 등) |
+
+> **참고: NVMe와 SATA**
+>
+> 위 테이블에서 `/dev/sda`(SATA 디스크)와 `/dev/nvme0n1`(NVMe SSD)은 같은 블록 장치이지만 사용하는 버스와 프로토콜이 다르다. SATA 버스의 AHCI(Advanced Host Controller Interface) 프로토콜은 HDD 시대에 설계되어 큐가 하나(깊이 32)뿐이다. NVMe는 PCIe 버스 위에서 동작하는 스토리지 전용 프로토콜로, 최대 65535개의 큐(각 깊이 65536)를 지원하여 플래시 메모리의 병렬성을 충분히 활용한다. PCIe와 NVMe의 관계는 [이전 글]({% post_url 2026-01-31-CS-Everything-is-a-File %}#2-시스템-설정-sys)의 PCIe 참고 노트를 참고하자.
 
 <br>
 
@@ -191,7 +211,7 @@ crw-rw-rw- 1 root root 1, 3 /dev/null
 
 리눅스에서 디바이스를 다루는 구조는 **3계층**으로 명확하게 분리되어 있다.
 
-```
+```text
 ┌─────────────────────────────────────┐
     User Application (애플리케이션)    
     - GPU 프로그램 (CUDA 코드 등)      
@@ -224,7 +244,7 @@ crw-rw-rw- 1 root root 1, 3 /dev/null
 
 ## 특징
 
-- **계층 분리**: User space ↔ Kernel space가 `/dev/` 파일을 통해 명확히 분리됨
+- **진입점**: `/dev/` 파일은 유저 공간에서 커널 드라이버에 접근하는 진입점 중 하나 (유저/커널 분리 자체는 CPU 보호 모드가 강제하며, `socket()`, `pipe()`, `mmap` 등도 그 경계를 넘는다)
 - **통신 방식**: 시스템 콜(`open()`, `read()`, `write()`, `ioctl()`)을 통해서만 커널 접근
 - **선택적 라이브러리**: 간단한 장치는 유저 라이브러리 없이 직접 `/dev/` 접근 가능
 
@@ -252,12 +272,13 @@ crw-rw-rw- 1 root root 1, 3 /dev/null
 
 | 장치 | 커널 모듈 | 장치 파일 | 유저 라이브러리 |
 |-----|----------|----------|----------------|
-| 네트워크 카드 | `e1000e.ko` | `/dev/eth0` | libc socket API |
+| 네트워크 카드 | `e1000e.ko` | 없음 (`socket()` API 사용) | libc socket API |
 | 사운드 카드 | `snd_hda_intel.ko` | `/dev/snd/*` | `libasound.so` |
 | NVIDIA GPU | `nvidia.ko` | `/dev/nvidia*` | `libcuda.so` |
 
-
-<br>
+> **참고: 네트워크 인터페이스에 `/dev/` 장치 파일이 없는 이유**
+>
+> 네트워크 인터페이스는 "Everything is a file" 철학의 대표적 예외다. 하나의 NIC이 수천 개의 동시 연결을 처리하는데, 각 연결은 (프로토콜, 출발 IP, 출발 포트, 도착 IP, 도착 포트)의 5-tuple로 식별된다. 이 다중화된 연결을 `/dev/eth0` 같은 단일 파일 경로로 표현할 수 없기 때문에, BSD가 `socket()` + `bind()` + `connect()`라는 별도 인터페이스를 설계했고 Linux가 이를 계승했다. 상세 배경은 [이전 글]({% post_url 2026-01-31-CS-Everything-is-a-File %}#4-네트워크-인터페이스-dev-파일이-없는-장치)을 참고하자.
 
 <br>
 
@@ -268,8 +289,17 @@ crw-rw-rw- 1 root root 1, 3 /dev/null
 ## 특징
 
 - 커널과 동일한 주소 공간에서 실행
-- 거의 항상 **C 언어**로 작성 (일부 어셈블리)
-- 리눅스 커널이 C로 작성되어 있어 커널 모듈도 C로만 개발 가능
+- 역사적으로 거의 모든 커널 코드가 **C 언어**로 작성되어 있고, 일부 어셈블리가 섞임
+- 커널 6.1(2022.12)부터 **Rust**도 공식 지원 언어로 합류하여, 일부 드라이버가 Rust로 작성·머지되고 있음
+
+> **참고: 커널 모듈이 하드웨어와 통신하는 세 가지 메커니즘**
+>
+> 커널 모듈은 다음 세 메커니즘을 조합하여 하드웨어를 제어한다.
+> - **MMIO(Memory-Mapped I/O)**: `ioremap()`으로 디바이스 레지스터 영역을 커널 가상 주소로 매핑하고, `writel()`/`readl()`로 명령을 내린다.
+> - **DMA(Direct Memory Access)**: 대량 데이터를 CPU 개입 없이 디바이스가 직접 RAM과 주고받는다.
+> - **인터럽트(IRQ)**: 디바이스가 작업 완료나 이벤트 발생을 CPU에 통보한다.
+>
+> 예를 들어 GPU 드라이버는 MMIO로 제어 레지스터에 명령을 쓰고, DMA로 대용량 텍스처를 GPU 메모리로 전송하며, 렌더링 완료 시 인터럽트를 받는다.
 
 ## 표준 경로
 
@@ -296,7 +326,7 @@ crw-rw-rw- 1 root root 1, 3 /dev/null
 | 명령어 | 설명 |
 |-------|------|
 | `modprobe <모듈명>` | 모듈 로드 (의존성 자동 해결) |
-| `modprobe -r <모듈명>` | 모듈 언로드 (의존 모듈도 함께 제거 시도) |
+| `modprobe -r <모듈명>` | 모듈 언로드 (이 모듈에 의존하는 모듈도 함께 제거 시도) |
 | `insmod <모듈파일.ko>` | 모듈 로드 (의존성 자동 해결 안 함) |
 | `rmmod <모듈명>` | 모듈 언로드 (의존 모듈이 있으면 실패) |
 
@@ -333,7 +363,7 @@ modinfo nvidia
 > $ sudo rmmod nvidia_modeset
 > $ sudo rmmod nvidia
 > ```
-> 또는 `modprobe -r nvidia`를 사용하면 의존 모듈도 함께 제거를 시도한다.
+> 또는 `modprobe -r nvidia`를 사용하면 이 모듈에 의존하는 모듈도 함께 제거를 시도한다.
 
 의존 관계는 `lsmod` 명령의 **Used by** 컬럼으로 확인할 수 있다.
 
@@ -362,7 +392,7 @@ lsmod | grep nvidia
 |-----|------|
 | **Module** | 모듈 이름 |
 | **Size** | 모듈이 사용하는 메모리 크기 (바이트) |
-| **Used by** | 이 모듈을 사용 중인 다른 모듈 수와 이름. 위 예시에서 `nvidia`는 `nvidia_uvm`, `nvidia_modeset`에 의존됨 |
+| **Used by** | 참조 카운트(reference count)와 의존 모듈 목록. 첫 번째 숫자는 이 모듈을 참조하는 fd·컨텍스트·의존 모듈의 총합이고(GPU를 여러 프로세스가 열면 그 수만큼 증가), 콤마로 나열되는 이름이 의존 관계에 있는 모듈 목록이다. 위 예시에서 `nvidia`의 1156은 참조 카운트, `nvidia_uvm,nvidia_modeset`이 의존 모듈 |
 
 <br>
 
@@ -405,6 +435,10 @@ nf_conntrack 188416 6 nf_conntrack_netlink,xt_nat,xt_MASQUERADE,xt_conntrack,nft
 └── input/            # 입력 장치
 ```
 
+> **참고: `/dev/` 엔트리는 누가 만드는가**
+>
+> 현대 리눅스에서 `/dev/`는 정적 디렉토리가 아니라 **udev**(또는 systemd-udevd)가 sysfs의 hotplug 이벤트를 받아 동적으로 생성하는 것이다. 예를 들어 GPU를 핫플러그하면 커널이 sysfs에 장치를 등록하고, udev가 규칙(rules)에 따라 `/dev/nvidia*` 엔트리를 만들어 준다.
+
 ## 확인 방법
 
 ### ls -l
@@ -434,6 +468,40 @@ ls -l /dev/sda*
 
 ## 시스템 콜
 
+### VFS와 `file_operations`
+
+커널의 VFS(Virtual File System) 계층은 파일처럼 다룰 수 있는 모든 객체가 구현해야 할 연산을 `struct file_operations`라는 함수 포인터 테이블로 정의한다. "Everything is a file" 철학이 실제로 작동하는 핵심 메커니즘이다.
+
+```c
+struct file_operations {
+    int (*open)(struct inode *, struct file *);
+    ssize_t (*read)(struct file *, char __user *, size_t, loff_t *);
+    ssize_t (*write)(struct file *, const char __user *, size_t, loff_t *);
+    long (*unlocked_ioctl)(struct file *, unsigned int cmd, unsigned long arg);
+    int (*release)(struct inode *, struct file *);
+    loff_t (*llseek)(struct file *, loff_t, int);
+    int (*mmap)(struct file *, struct vm_area_struct *);
+    // ... 약 30개 이상의 연산 슬롯
+};
+```
+
+각 장치 드라이버는 이 테이블에서 자신이 지원하는 연산만 구현하여 등록한다. 유저 공간에서 `open()`, `read()`, `write()`, `ioctl()` 등의 시스템 콜을 호출하면, VFS가 해당 fd에 연결된 드라이버의 대응 함수를 호출한다.
+
+```c
+// 드라이버: 지원하는 연산만 구현하여 등록
+static struct file_operations my_fops = {
+    .open = my_open,
+    .read = my_read,
+    .write = my_write,
+    .unlocked_ioctl = my_ioctl,
+    .release = my_release,
+};
+```
+
+아래에서 다루는 기본 파일 연산(`open`, `read`, `write`, `close`)과 `ioctl()`은 모두 이 테이블의 슬롯에 대응한다.
+
+<br>
+
 ### 기본 파일 연산
 
 장치 파일에 접근할 때 사용하는 기본 시스템 콜이다.
@@ -449,11 +517,60 @@ ls -l /dev/sda*
 
 ### ioctl
 
-`ioctl()`은 장치 드라이버에 특수한 명령을 보내는 시스템 콜이다.
+`ioctl()`은 `read()`/`write()`로 표현할 수 없는 **제어 명령**을 파일 디스크립터에 보내는 범용 시스템 콜이다.
+
 ```c
-// 시스템콜 시그니처
 int ioctl(int fd, unsigned long request, ...);
+//        ^fd     ^명령 코드              ^명령별 인자(포인터 등)
 ```
+
+하나의 시그니처 안에 `request` 코드를 분기하여 모든 제어 연산을 처리하는 구조다. 장치 파일에만 한정되지 않고, 해당 fd에 연결된 커널 객체(장치 드라이버, 파일시스템, 소켓 레이어 등)가 ioctl 핸들러를 구현했다면 사용할 수 있다.
+
+```c
+// 장치 파일: 터미널 설정
+ioctl(tty_fd, TCGETS, &settings);
+
+// 소켓: 네트워크 인터페이스 IP 조회
+ioctl(sock_fd, SIOCGIFADDR, &ifr);
+
+// 일반 파일: 파일시스템 플래그 조회
+ioctl(file_fd, FS_IOC_GETFLAGS, &flags);
+```
+
+<br>
+
+### 구조와 한계
+
+`ioctl()`의 핵심 구조는 **하나의 `request` 정수 코드로 모든 연산을 다중화(multiplexing)**하는 것이다. 커널은 해당 fd의 핸들러를 호출하고, 핸들러 내부에서 `request` 값에 따라 분기한다. `request`가 정수 하나이므로 `switch`로 분기하는 것이 사실상 관례적 패턴이다(커널이 강제하는 구조가 아니라 자연스럽게 정착된 것).
+
+```c
+// 사실상 표준 패턴: switch(cmd)로 분기
+static long my_ioctl(struct file *f, unsigned int cmd, unsigned long arg) {
+    switch (cmd) {
+    case MY_CMD_SET_CLOCK:   /* 클럭 설정 로직 */ break;
+    case MY_CMD_GET_STATUS:  /* 상태 조회 로직 */ break;
+    default: return -ENOTTY; // 미지원 명령
+    }
+}
+```
+
+명령이 수백 개로 많아지면 `switch` 대신 명령 코드→함수 포인터의 디스패치 테이블(배열)을 만들어 간접 호출하기도 한다(DRM(Direct Rendering Manager) 서브시스템 등). 하지만 "정수 코드로 분기한다"는 본질은 동일하다.
+
+이 구조는 본질적으로 아래와 같은 한계를 갖는다:
+
+- **명령 코드가 표준화되지 않음**: 각 드라이버/모듈이 자체 코드를 정의하므로, 같은 숫자가 드라이버마다 다른 의미를 가질 수 있다
+- **타입 안전성 없음**: 세 번째 인자가 `...`(가변 인자)이므로 컴파일러가 타입을 검증하지 못한다
+- **보안 검증 어려움**: 임의의 명령을 전달할 수 있어, 권한 검사가 각 핸들러 구현에 의존한다
+
+> **참고**: 이러한 한계 때문에 Linux는 가능한 것들을 `/proc`, `/sys` 파일 인터페이스로 노출시키려 한다. 예를 들어 CPU 주파수는 `ioctl()` 대신 `/sys/devices/system/cpu/*/cpufreq/*`에 `echo`로 쓸 수 있다([이전 글]({% post_url 2026-01-31-CS-Everything-is-a-File %}#한계와-확장) 참고).
+
+<br>
+
+### 장치 드라이버에서의 ioctl 구현
+
+`ioctl()`은 위의 `file_operations` 테이블에서 `.unlocked_ioctl` 슬롯에 해당한다. 드라이버는 자신만의 명령 코드를 정의하고, 핸들러를 등록하면 된다.
+
+유저 공간에서 `ioctl(fd, MY_CMD, &data)`를 호출하면, 커널이 해당 fd에 연결된 드라이버의 `.unlocked_ioctl` 핸들러를 호출한다. 따라서 드라이버마다 지원하는 명령 코드와 인자 형식이 다르며, 사용하려면 해당 드라이버의 헤더 파일(예: `<linux/videodev2.h>`, `<drm/drm.h>`)을 참조해야 한다.
 
 <br>
 
@@ -502,7 +619,7 @@ read(fd, buffer, 100);
 - 주로 C/C++이지만 다른 언어로도 작성 가능
   - Rust: `.so` 생성 가능 (예: `librsvg.so`)
   - Go: `.so` 생성 가능 (cgo 사용, 예: `libnvidia-container-go.so`)
-- ELF 포맷의 공유 라이브러리 파일 형식으로, 특정 언어에 종속된 것이 아님
+- ELF(Executable and Linkable Format) 포맷의 공유 라이브러리 파일 형식으로, 특정 언어에 종속된 것이 아님
 - C ABI(Application Binary Interface)를 준수하면 어떤 언어든 `.so` 생성 가능
 
 ## 표준 경로
@@ -564,20 +681,21 @@ echo "test" > /dev/null       # 데이터 버리기
 
 시리얼 포트는 데이터를 한 비트씩 순차적으로 전송하는 통신 인터페이스다.
 
-- **과거 용도**: 마우스, 모뎀, 프린터 연결 (RS-232 포트)
+- **과거 용도**: 마우스, 모뎀, 프린터 연결 (RS-232(Recommended Standard 232) 포트)
 - **현재 용도**: 임베디드 시스템 디버깅, 산업용 장비 제어, Arduino/Raspberry Pi 통신
 
 ```bash
 # 시리얼 포트 장치 파일
 /dev/ttyS0       # 하드웨어 시리얼 포트 (COM1)
 /dev/ttyUSB0     # USB-to-Serial 어댑터
-/dev/ttyACM0     # Arduino 같은 USB CDC 장치
+/dev/ttyACM0     # Arduino 같은 USB CDC(Communications Device Class) 장치
 
-# 시스템 콜만으로 직접 제어 가능
-cat /dev/ttyUSB0          # 데이터 읽기
+# 시스템 콜만으로 직접 제어 가능 (baud rate 등 설정이 선행되어야 정상 데이터를 볼 수 있다)
+stty -F /dev/ttyUSB0 115200  # baud rate 설정
+cat /dev/ttyUSB0             # 데이터 읽기
 echo "hello" > /dev/ttyUSB0  # 데이터 쓰기
 
-# 터미널 프로그램으로도 접근 가능
+# 터미널 프로그램으로도 접근 가능 (설정을 자동 처리해 줌)
 screen /dev/ttyUSB0 115200
 ```
 
@@ -783,9 +901,9 @@ $ ip link
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 state UNKNOWN    # 루프백
     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
 2: enp0s8: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP  # 물리 NIC
-    link/ether 08:00:27:90:ea:eb brd ff:ff:ff:ff:ff:ff           # MAC 주소
+    link/ether aa:bb:cc:dd:ee:01 brd ff:ff:ff:ff:ff:ff           # MAC 주소
 3: enp0s9: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP  # 물리 NIC
-    link/ether 08:00:27:80:63:35 brd ff:ff:ff:ff:ff:ff
+    link/ether aa:bb:cc:dd:ee:02 brd ff:ff:ff:ff:ff:ff
 ...
 ```
 
@@ -820,12 +938,14 @@ sudo ldconfig
 |-----|------|
 | **Everything is a file** | Unix/Linux에서 장치도 파일처럼 다룬다 |
 | **3계층 구조** | 유저 라이브러리 → 장치 파일 → 커널 모듈 → 하드웨어 |
-| **문자 장치 (c)** | 바이트 단위 순차 전송 (터미널, GPU, 시리얼 포트) |
+| **문자 장치 (c)** | 블록 레이어/페이지 캐시를 거치지 않는 바이트 스트림 (터미널, GPU, 시리얼 포트) |
 | **블록 장치 (b)** | 블록 단위 랜덤 액세스 (디스크, SSD) |
 | **시스템 콜** | `open()`, `read()`, `write()`, `ioctl()`로 커널과 통신 |
 | **커널 모듈 경로** | `/lib/modules/$(uname -r)/kernel/` |
 | **장치 파일 경로** | `/dev/` |
 | **유저 라이브러리 경로** | `/lib/`, `/usr/lib/`, `/usr/local/lib/` |
+
+> 참고: 이 3계층 구조를 컨테이너 환경에서 주입하는 방식(OCI Runtime Hook, CDI)은 [컨테이너 장치 주입]({% post_url 2026-02-02-CS-Container-Device-Injection %})을 참고하자.
 
 <br>
 

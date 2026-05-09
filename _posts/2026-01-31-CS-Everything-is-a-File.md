@@ -1,6 +1,6 @@
 ---
-title:  "[CS] Everything is a File 철학"
-excerpt: "Unix/Linux의 Everything is a File 철학에 대해 알아 보자."
+title:  "[Linux] Everything is a File 철학"
+excerpt: "Unix/Linux의 Everything is a File 철학에 대해 알아보자."
 categories:
   - CS
 toc: true
@@ -11,9 +11,6 @@ tags:
   - Unix
   - File
   - System Programming
-  - 리눅스
-  - 유닉스
-  - 파일
 ---
 
 <br>
@@ -98,7 +95,7 @@ Linux에는 7가지 파일 종류가 있다. `ls -l` 출력의 첫 번째 문자
 |-----|------|------|------|
 | `-` | 일반 파일 | 텍스트, 바이너리, 이미지 등 | `-rw-r--r-- file.txt` |
 | `d` | 디렉토리 | 폴더 | `drwxr-xr-x /home/` |
-| `l` | 심볼릭 링크 | 다른 파일을 가리키는 링크 | `lrwxrwxrwx rtc -> rtc0` |
+| `l` | 심볼릭 링크(symbolic link) | 다른 파일을 가리키는 링크 | `lrwxrwxrwx rtc -> rtc0` |
 | `c` | 문자 장치 | 한 바이트씩 스트림 방식 전송 | `crw-rw-rw- /dev/null` |
 | `b` | 블록 장치 | 블록 단위 랜덤 액세스 | `brw-rw---- /dev/sda` |
 | `s` | 소켓 | 프로세스 간 네트워크 통신 | `srwxrwxrwx /run/systemd/notify` |
@@ -160,10 +157,10 @@ srwxrwxrwx 1 root root          0 Feb  3 10:00 log        # 소켓
 |-----|------|
 | `/dev/` | 하드웨어 장치에 접근하는 인터페이스. <br>실제 장치 파일이 위치 |
 | `/proc/` | 커널이 런타임에 생성하는 가상 파일 시스템. <br>프로세스 정보(`/proc/[pid]/`)와 시스템 정보(`/proc/cpuinfo`, `/proc/meminfo` 등) 제공 |
-| `/sys/` | 커널 2.6부터 도입된 가상 파일 시스템. <br>장치와 드라이버 정보를 계층적으로 제공하며, 일부 설정은 쓰기도 가능 |
+| `/sys/` | 커널 2.6부터 도입된 가상 파일 시스템. <br>장치와 드라이버 정보를 계층적으로 제공하며, 일부 설정은 쓰기도 가능. <br>PCI/PCIe, USB 등 버스에 연결된 장치도 `/sys/bus/` 아래에 노출 |
 
 
-> **참고: 가상 파일 시스템**
+> **참고: 가상 파일 시스템(virtual filesystem)**
 >
 > `/proc`와 `/sys`는 디스크에 실제로 저장되지 않는다. 커널이 런타임에 메모리에서 동적으로 생성하며, 파일을 읽을 때마다 커널이 현재 상태를 조회해서 내용을 반환한다. `ls -l`로 보면 크기가 0으로 표시되지만, `cat`으로 읽으면 내용이 있다.
 >
@@ -185,11 +182,12 @@ srwxrwxrwx 1 root root          0 Feb  3 10:00 log        # 소켓
 > drwxr-xr-x. 158 root  root  0  module   # 커널 모듈 파라미터
 > ```
 
+<br>
+
 # 구체적인 예시
 
 위 장점들이 실제로 어떻게 활용되는지 살펴보자.
 
-<br>
 
 ## 1. 프로세스 정보 (`/proc`)
 
@@ -245,12 +243,22 @@ cat /proc/modules     # 로드된 커널 모듈
 # CPU 주파수 확인
 cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq
 
-# 디스크 스케줄러 변경
-echo noop > /sys/block/sda/queue/scheduler
+# 디스크 I/O 스케줄러 변경
+echo none > /sys/block/sda/queue/scheduler
 
-# PCI 장치 목록
+# PCI/PCIe 장치 목록
 ls /sys/bus/pci/devices/
 ```
+
+> **참고: 디스크 I/O 스케줄러**
+>
+> I/O 스케줄러는 디스크에 전달할 읽기/쓰기 요청의 순서를 결정한다. `none`(커널 4.11+ blk-mq)은 재정렬 없이 요청을 그대로 장치에 전달하는 스케줄러로, NVMe SSD처럼 장치 자체에 내부 스케줄링이 있는 경우에 적합하다. 레거시 단일 큐 시절에는 같은 역할을 `noop`이라 불렀으나, 커널 4.20 이후 완전히 제거되었다.
+
+> **참고: `/sys/bus/pci/`와 PCIe**
+>
+> PCI(Peripheral Component Interconnect)는 병렬 버스 규격이고, PCIe(PCI Express)는 그 후속 직렬 버스 규격이다. 현대 장치(GPU, NVMe, NIC 등)는 대부분 PCIe를 사용하지만, Linux 커널은 PCI 서브시스템이라는 이름으로 PCI와 PCIe 장치를 모두 관리한다. PCIe가 소프트웨어 호환성을 유지하도록 설계되었기 때문에, sysfs에서는 `/sys/bus/pci/` 경로 아래에 PCIe 장치도 함께 노출된다.
+>
+> 여기서 NVMe(Non-Volatile Memory Express)는 PCIe 위에서 동작하는 **스토리지 전용 프로토콜**로, 기존 SATA 버스의 AHCI(Advanced Host Controller Interface) 프로토콜을 대체한다. PCIe가 버스(데이터를 어떻게 전송할지)라면, NVMe는 프로토콜(스토리지 데이터를 어떻게 읽고 쓸지)이다. NVMe SSD가 SATA SSD보다 빠른 이유는 PCIe의 높은 대역폭을 플래시 메모리의 병렬성에 맞게 활용하도록 처음부터 설계되었기 때문이다.
 
 <br>
 
@@ -284,6 +292,8 @@ cat /dev/ttyS0          # 응답 읽기
 
 ### 1. 복잡한 장치 제어
 
+GPU 클럭 주파수를 변경하거나 터미널의 baud rate를 설정하는 것은 "데이터를 읽고 쓰는" 작업이 아니라 **장치의 동작 방식을 바꾸는 제어 명령**이다. 바이트 스트림에는 "이것은 데이터가 아니라 명령이다"라는 구분이 없으므로, `ioctl()` 같은 별도 시스템 콜이 필요하다.
+
 ```c
 // GPU 클럭 주파수 설정
 // read/write로는 불가능, ioctl() 필요
@@ -296,11 +306,10 @@ settings.c_cflag = B115200;     // baud rate 변경
 ioctl(fd, TCSETS, &settings);   // 설정 적용
 ```
 
-<br>
 
 ### 2. 구조화된 데이터 교환
 
-네트워크 라우팅 테이블, 복잡한 드라이버 설정 등은 단순 텍스트로 표현하기 어렵다.
+네트워크 인터페이스의 IP 주소를 읽으려면 `struct ifreq`라는 C 구조체를 커널과 주고받아야 한다. 바이트 스트림은 **"어디서 어디까지가 하나의 필드인지" 구조를 알 수 없으므로**, `ioctl()`을 통해 구조체 포인터를 직접 전달한다. 네트워크 라우팅 테이블이나 복잡한 드라이버 설정도 마찬가지다.
 
 ```c
 // 네트워크 인터페이스 설정
@@ -310,19 +319,44 @@ ioctl(sockfd, SIOCGIFADDR, &ifr);  // IP 주소 읽기
 
 <br>
 
-### 3. 양방향 통신 패턴
+## 파일 경로 추상화로 부족한 경우: 네트워크
 
-소켓은 파일 디스크립터를 사용하지만, 연결 설정은 별도 시스템 콜이 필요하다.
+위의 두 경우는 "fd는 있지만 `read()`/`write()`만으로는 부족하다"는 이야기였다. 네트워크는 한 단계 더 근본적인 문제가 있다. **하나의 파일 경로로 리소스를 식별하는 것 자체가 불가능**하다.
+
+대부분의 하드웨어 장치는 `/dev/` 아래에 장치 파일이 있다. `/dev/sda`(디스크), `/dev/nvidia0`(GPU) 등을 `open()`하면 된다. 그런데 네트워크 인터페이스는 `/dev/eth0`라는 파일이 존재하지 않는다. 커널 내부에서 `struct net_device`로 관리되며, 유저 공간에서는 `socket()` 시스템 콜을 통해서만 접근한다.
+
+핵심 이유는 **다중화(multiplexing)**다. 디스크나 GPU는 장치와 프로세스의 관계가 비교적 단순하지만, 하나의 NIC(네트워크 인터페이스 카드)은 수천 개의 동시 연결을 처리한다. 각 연결은 (프로토콜, 출발 IP, 출발 포트, 도착 IP, 도착 포트)의 5-tuple로 식별되는데, 이것을 하나의 파일 경로로 표현할 수 없다.
+
+```text
+/dev/eth0 ← 프로세스 A (TCP 10.0.0.1:8080 → 10.0.0.2:443)
+          ← 프로세스 B (TCP 10.0.0.1:9090 → 10.0.0.3:80)
+          ← 프로세스 C (UDP 10.0.0.1:5353 → 224.0.0.251:5353)
+          ← ... 수천 개의 동시 연결
+```
+
+`open("/dev/eth0")`를 한다고 해도, "어떤 프로토콜로, 어디에, 어떤 포트로 연결할지"를 파일 경로만으로는 지정할 수 없다. BSD(4.2BSD, 1983)는 이 문제를 `socket()` + `bind()` + `connect()`라는 별도 시스템 콜 체계로 해결했고, Linux가 이를 계승했다.
 
 ```c
-int sock = socket(AF_INET, SOCK_STREAM, 0);  // 소켓 생성
-bind(sock, &addr, sizeof(addr));              // 주소 바인딩
-listen(sock, 5);                              // 리스닝 시작
-int client = accept(sock, NULL, NULL);        // 연결 수락
+int sock = socket(AF_INET, SOCK_STREAM, 0);  // 프로토콜 지정
+bind(sock, &addr, sizeof(addr));              // 로컬 주소/포트 지정
+connect(sock, &remote_addr, sizeof(remote_addr));  // 원격 주소/포트 지정
 
-// 이후 read/write 사용 가능
-write(client, "Hello", 5);
+// 연결 수립 후에는 일반 파일처럼 read/write 가능
+write(sock, "Hello", 5);
+read(sock, buffer, sizeof(buffer));
 ```
+
+연결이 수립된 이후에는 fd를 통해 `read()`/`write()`를 쓸 수 있으므로, 파일 디스크립터 차원에서는 "Everything is a file" 철학을 부분적으로 따르고 있다. 또한 네트워크 인터페이스가 완전히 파일 세계 밖에 있는 것은 아니다. 인터페이스의 상태 정보는 `/sys/class/net/`에서 파일로 확인할 수 있다.
+
+```bash
+cat /sys/class/net/eth0/address     # MAC 주소
+cat /sys/class/net/eth0/operstate   # 인터페이스 상태 (up/down)
+cat /sys/class/net/eth0/speed       # 링크 속도 (Mbps)
+```
+
+> **참고: Plan 9의 네트워크 파일 인터페이스**
+>
+> Unix의 후속 연구 OS인 Plan 9에서는 네트워크도 파일로 표현하는 데 성공했다. `/net/tcp/clone`을 열면 새 연결 번호 N을 반환하고, `/net/tcp/N/ctl`에 `connect 10.0.0.2!80`을 써서 연결하고, `/net/tcp/N/data`로 데이터를 송수신하는 방식이다. 디렉토리 계층으로 각 연결을 분리하여 다중화 문제를 해결했다. 기술적으로 가능하다는 것을 증명했지만, Linux가 등장할 때 BSD 소켓이 이미 POSIX 표준으로 굳어진 상태여서 그 모델을 계승했다.
 
 <br>
 
@@ -356,13 +390,15 @@ Unix/Linux는 다음과 같은 균형을 택했다.
 
 <br>
 
-> **참고: ioctl()의 필요성**
+> **참고: ioctl()의 필요성과 한계**
 >
-> `ioctl()`은 복잡한 장치 제어를 위한 **실용적 해결책**이지만, Unix 철학과는 거리가 있다.
+> `read()`/`write()`는 순차적 데이터 전송만 담당한다. 장치 제어(클럭 변경, 상태 조회 등)처럼 데이터 입출력이 아닌 연산이 필요할 때 `ioctl()`을 사용한다. 하나의 시그니처(`ioctl(fd, request, ...)`)에 정수 명령 코드를 넘겨 모든 제어 연산을 처리하는 범용 시스템 콜이다. 구조와 드라이버별 구현 방식은 [리눅스 디바이스 드라이버 구조]({% post_url 2026-02-01-CS-Linux-Device-Driver %}#ioctl)를 참고하자.
 >
-> - 명령어가 표준화되지 않음 (장치마다 제각각)
+> 실용적 해결책이지만, Unix 철학과는 거리가 있다:
+>
+> - 명령 코드가 표준화되지 않음 (각 드라이버가 자체 정의하므로 같은 숫자가 다른 의미를 가질 수 있음)
 > - `read()`/`write()`만큼 직관적이지 않음
-> - 보안 검증이 어려움 (임의의 명령 전달)
+> - 보안 검증이 어려움 (임의의 명령을 전달할 수 있어 권한 검사가 각 구현에 의존)
 >
 > 이것이 Linux가 `/proc`, `/sys`를 통해 가능한 것들은 파일 인터페이스로 노출시키려는 이유다. 예를 들어 CPU 주파수는 `ioctl()` 대신 `/sys/devices/system/cpu/*/cpufreq/*`로 제어할 수 있다.
 
@@ -385,11 +421,26 @@ Windows는 이 철학을 따르지 않는다.
 
 ## macOS
 
-macOS는 Unix 계열이므로 "Everything is a file" 철학을 따른다. 다만 일부 확장이 있다.
+macOS는 BSD 기반 Unix 계열이므로 "Everything is a file" 철학을 부분적으로 따른다. `/dev`는 존재하지만, Linux의 `/proc`와 `/sys`는 제공하지 않는다. 시스템 정보 조회는 `sysctl` 커맨드와 API로 대체한다.
 
 ```bash
-# macOS도 /dev, /proc 사용
+# macOS에서 /dev는 존재
 ls /dev/disk*
+# disk0   disk0s1  disk0s2  disk1  disk1s1  ...
+
+# /proc는 존재하지 않음
+ls /proc
+# ls: /proc: No such file or directory
+
+# 시스템 정보는 sysctl로 조회
+sysctl hw.memsize        # 메모리 크기
+# hw.memsize: 34359738368
+
+sysctl hw.ncpu           # CPU 코어 수
+# hw.ncpu: 10
+
+sysctl kern.hostname     # 호스트명
+# kern.hostname: my-macbook.local
 ```
 
 <br>
@@ -414,11 +465,15 @@ ls /dev/disk*
 
 # 참고: 특정 상황에서의 활용
 
-프로덕션 환경에서는 Prometheus, node-exporter, cAdvisor 같은 전문 모니터링 도구를 사용하는 것이 권장된다. 하지만 **디버깅, 경량 모니터링, 커스텀 도구 개발** 등 특정 상황에서는 `/proc`, `/sys`를 직접 읽는 방식을 고려해볼 수 있다.
+앞에서 살펴본 것처럼 `/proc`, `/sys`는 시스템 메트릭(CPU 사용률, 메모리, 네트워크 통계 등)을 파일로 노출한다. 프로덕션 환경에서 이러한 메트릭을 수집하고 모니터링할 때는 Prometheus, node-exporter, cAdvisor 같은 전문 도구를 사용하는 것이 일반적이다. 이들 도구가 내부적으로 `/proc`, `/sys`를 파싱하여 메트릭을 수집하고, 알림·대시보드·장기 저장 등을 제공하기 때문이다.
+
+하지만 **디버깅, 경량 모니터링, 커스텀 도구 개발** 등 특정 상황에서는 `/proc`, `/sys`를 직접 읽는 방식을 고려해볼 수 있다.
 
 ## cgroup 정보 읽기
 
-컨테이너 내부에서 CPU/메모리 제한을 파일로 확인하는 예시다.
+cgroup(Control Groups)은 프로세스 그룹의 리소스 사용(CPU, 메모리, I/O 등)을 제한·격리하는 커널 기능이다. 컨테이너 런타임이 내부적으로 cgroup을 사용하므로, 컨테이너 내부에서 CPU/메모리 제한을 파일로 직접 확인할 수 있다.
+
+아래는 cgroup v1 기준 예시다. cgroup v2(커널 5.x+ 기본)에서는 경로가 다르다: `cpu.cfs_quota_us` → `cpu.max`, `memory.limit_in_bytes` → `memory.max`.
 
 ```go
 package main
@@ -430,7 +485,7 @@ import (
     "strings"
 )
 
-// CPU 쿼터 읽기 (파일로!)
+// CPU 쿼터 읽기 (cgroup v1 경로)
 func readCPUQuota() (int64, error) {
     data, err := os.ReadFile("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
     if err != nil {
@@ -439,7 +494,7 @@ func readCPUQuota() (int64, error) {
     return strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
 }
 
-// 메모리 제한 읽기 (파일로!)
+// 메모리 제한 읽기 (cgroup v1 경로)
 func readMemoryLimit() (int64, error) {
     data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.limit_in_bytes")
     if err != nil {
@@ -459,13 +514,13 @@ func main() {
 
 <br>
 
-## GPU 메모리 사용량 확인
+## GPU 상태 확인
 
-컨테이너에서 GPU 상태도 파일로 읽을 수 있다.
+컨테이너에서 GPU 상태도 파일로 읽을 수 있다. 단, sysfs 경로는 드라이버에 따라 다르다.
 
 ```go
-// GPU 메모리 사용량 확인 (파일로!)
-func getGPUMemory(deviceID int) (int64, error) {
+// AMD GPU VRAM 사용량 확인 (amdgpu 드라이버 전용)
+func getAMDGPUMemory(deviceID int) (int64, error) {
     path := fmt.Sprintf("/sys/class/drm/card%d/device/mem_info_vram_used", 
                         deviceID)
     data, err := os.ReadFile(path)
@@ -475,9 +530,10 @@ func getGPUMemory(deviceID int) (int64, error) {
     return strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
 }
 
-// NVIDIA GPU 온도 확인 (파일로!)
-func getGPUTemperature(deviceID int) (int, error) {
-    path := fmt.Sprintf("/sys/class/hwmon/hwmon%d/temp1_input", deviceID)
+// hwmon 센서를 통한 온도 확인 (AMD, Intel 등 hwmon 지원 장치)
+// NVIDIA GPU는 hwmon을 노출하지 않으므로 nvidia-smi 또는 NVML을 사용해야 한다
+func getGPUTemperature(hwmonID int) (int, error) {
+    path := fmt.Sprintf("/sys/class/hwmon/hwmon%d/temp1_input", hwmonID)
     data, err := os.ReadFile(path)
     if err != nil {
         return 0, err
