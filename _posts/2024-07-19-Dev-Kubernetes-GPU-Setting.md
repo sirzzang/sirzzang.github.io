@@ -13,9 +13,9 @@ tags:
   - gpu
 ---
 
+<br>
 
-
-![kubernetes-gpu]({{site.url}}/assets/images/kubernetes-gpu.png){: width="300"}{: .align-center}
+![kubernetes-gpu]({{site.url}}/assets/images/kubernetes-gpu.png){: width="400"}{: .align-center}
 
 <center><sup>무지한 자가 삽질하게 된 건에 대하여...</sup></center>
 
