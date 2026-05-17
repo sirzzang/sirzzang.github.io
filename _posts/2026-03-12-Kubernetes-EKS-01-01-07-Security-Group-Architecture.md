@@ -4,6 +4,7 @@ excerpt: "EKS 클러스터에 생성된 보안그룹을 분석하고, 컨트롤 
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

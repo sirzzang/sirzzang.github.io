@@ -4,6 +4,7 @@ excerpt: "Device Plugin 비활성화로 GPU Pod Pending 장애를 재현하고, 
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

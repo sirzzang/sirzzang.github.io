@@ -4,6 +4,7 @@ excerpt: "사용자(IAM) → K8s API 인증 과정을 단계별로 실습하며,
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

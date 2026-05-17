@@ -4,6 +4,7 @@ excerpt: "분산학습의 원리, NCCL 통신 계층, EKS에서의 실험 설계
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

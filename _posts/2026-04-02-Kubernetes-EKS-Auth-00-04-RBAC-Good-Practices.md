@@ -4,6 +4,7 @@ excerpt: "K8S RBAC에서 의도치 않은 권한 상승이 발생할 수 있는 
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

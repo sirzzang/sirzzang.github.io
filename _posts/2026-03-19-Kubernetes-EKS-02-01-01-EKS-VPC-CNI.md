@@ -4,6 +4,7 @@ excerpt: "AWS VPC CNI의 구조와 동작 원리에 대해 살펴보자."
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

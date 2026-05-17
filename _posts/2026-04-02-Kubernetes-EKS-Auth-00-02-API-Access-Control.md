@@ -4,6 +4,7 @@ excerpt: "K8S API 서버로 들어오는 모든 요청이 거치는 파이프라
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

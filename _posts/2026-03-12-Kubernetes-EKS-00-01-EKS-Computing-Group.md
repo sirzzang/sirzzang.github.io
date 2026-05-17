@@ -4,6 +4,7 @@ excerpt: "EKS 데이터 플레인을 구성하는 네 가지 방식을 비교하
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

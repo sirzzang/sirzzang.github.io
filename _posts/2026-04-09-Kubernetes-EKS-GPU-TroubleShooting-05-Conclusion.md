@@ -4,6 +4,7 @@ excerpt: "EKS GPU 트러블슈팅 시리즈를 마무리하며, 실습에서 도
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

@@ -4,6 +4,7 @@ excerpt: "EKS 시리즈에서 LoadBalancer Controller를 다루기 전에, Servi
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

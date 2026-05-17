@@ -4,6 +4,7 @@ excerpt: "Public-Public 구성에서 API 서버 엔드포인트 구성에 대해
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

@@ -4,6 +4,7 @@ excerpt: "EKS 시리즈에서 AWS VPC CNI를 다루기 전에, 파드 간 통신
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

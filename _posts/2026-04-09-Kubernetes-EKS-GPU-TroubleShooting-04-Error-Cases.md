@@ -4,6 +4,7 @@ excerpt: "EKS 관리형 환경에서 재현할 수 없는 GPU 주제 3가지를,
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

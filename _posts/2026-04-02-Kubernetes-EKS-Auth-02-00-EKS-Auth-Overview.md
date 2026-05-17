@@ -4,6 +4,7 @@ excerpt: "사용자(IAM)가 kubectl로 EKS API 서버에 접근할 때 인증되
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

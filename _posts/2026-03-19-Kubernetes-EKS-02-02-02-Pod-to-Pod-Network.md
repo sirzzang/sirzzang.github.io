@@ -4,6 +4,7 @@ excerpt: "VPC CNI가 파드 네트워크를 구성하는 와이어링 과정과 
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

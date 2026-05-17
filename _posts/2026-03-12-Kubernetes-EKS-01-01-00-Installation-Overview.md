@@ -4,6 +4,7 @@ excerpt: "EKS 클러스터를 배포하기 위한 방법을 비교하고, 이번
 categories:
   - Kubernetes
 toc: true
+hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
