@@ -239,3 +239,5 @@ plt.show()
 > *참고* 
 >
 >  Positional Encoding을 반드시 위의 공식으로만 구현할 수 있는 것은 아니다. 또 다른 Positional Encoding에 대해 다른 논문들도 많이 있다. 기본적으로 각 벡터 간 등간격 거리(**equidistant**)가 되도록 하는 게 조건이다. 
+
+<br>

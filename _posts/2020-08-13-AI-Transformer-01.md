@@ -29,10 +29,6 @@ last_modified_at: 2020-08-14
 
 ## 1. 개요
 
-
-
-
-
  구글에서 개발한 **Transformer**는, **Attention 메커니즘**만 이용해 기계 번역을 수행하는 모델이다. [Seq2Seq 모델](https://sirzzang.github.io/lecture/Lecture-Seq2Seq/){: .btn .btn--danger .btn--small} 과 마찬가지로 **인코더-디코더** 구조를 따르면서도, RNN 네트워크를 사용하지 않는다.
 
 <br>
@@ -136,5 +132,5 @@ last_modified_at: 2020-08-14
 
  이렇게 인코더와 디코더를 모두 거친 후, Linear 레이어와 Softmax 활성화 함수 레이어를 거쳐 다음 단어를 출력하게 된다. (더 정확하게 표현하자면, 어휘 집합의 크기와 같은 크기를 갖는 1차원 벡터를 출력한다. 이를 통해 예측된 단어를 알 수 있음은, 너무나도 자명하다.)
 
-
+<br>
 

@@ -127,3 +127,5 @@ last_modified_at: 2020-08-14
 아래 그림에서와 같이 상삼각행렬 부분에 마스킹을 씌우면 된다.
 
 ![Masking]({{site.url}}/assets/images/transformer-masking.png){: width="400"}{: .align-center}
+
+<br>
