@@ -64,10 +64,53 @@ NVIDIA GPU를 사용하려면 두 계층이 협력해야 한다.
 
 kernel module(`.ko`)의 적재에는 두 도구가 핵심 역할을 한다.
 
-- **`depmod`**: `/lib/modules/$(uname -r)/` 아래의 `.ko` 파일들을 스캔해서 `modules.dep`, `modules.alias` 등 의존성 DB를 생성한다. 커널 업그레이드 후 이 DB가 stale 상태면 `modprobe`가 모듈을 찾지 못할 수 있다
-- **`modprobe`**: `depmod`가 만든 DB를 참조해서 kernel module을 의존성과 함께 로드한다. `insmod`와 달리 의존 모듈까지 자동으로 처리한다
+- **`depmod`** — 모듈 의존성 지도를 만드는 도구. `/lib/modules/<커널 버전>/` 아래의 `.ko` 파일들을 스캔해서 다음 DB 파일들을 생성한다:
+  - `modules.dep`(텍스트) / `modules.dep.bin`(바이너리): 모듈 간 의존성 매핑. "A를 로드하려면 B, C가 먼저 필요하다"는 관계를 기록
+  - `modules.alias`(텍스트) / `modules.alias.bin`(바이너리): 하드웨어 ID(PCI, USB 등)와 모듈 간 매핑. 장치를 인식했을 때 어떤 드라이버를 로드할지 결정하는 인덱스
+  - `modules.symbols`(텍스트) / `modules.symbols.bin`(바이너리): 모듈이 export하는 커널 심볼(함수/변수)의 위치 정보
+- **`modprobe`** — `depmod`가 만든 DB를 참조해서 kernel module을 의존성과 함께 로드하는 도구. 예를 들어 `modprobe ip_vs`를 실행하면, `modules.dep`에서 `ip_vs`가 `nf_conntrack`에 의존한다는 것을 읽고 `nf_conntrack`을 먼저 로드한 뒤 `ip_vs`를 로드한다. `.ko` 파일 경로를 직접 지정해야 하는 `insmod`와 달리, 모듈 이름만으로 의존성까지 자동 처리한다
 
-이 메커니즘의 실전 사례가 2차 장애에서 등장한다. 지금은 여기까지만 알아두자.
+여기서 두 가지를 짚어 둔다.
+
+**첫째, DB는 커널 버전별로 독립이다.** 각 커널 버전은 `/lib/modules/<버전>/`에 자기만의 `.ko` 파일과 DB 파일을 갖는다. `modprobe`는 현재 부팅된 커널의 `uname -r` 값으로 어떤 디렉토리를 참조할지 결정한다.
+
+```
+/lib/modules/
+├── 5.15.0-177-generic/    ← 이전 커널 (DB 정상, ip_vs 잘 로드됨)
+│   ├── modules.dep
+│   ├── modules.dep.bin
+│   └── kernel/...
+└── 5.15.0-179-generic/    ← 새 커널 (DB가 불완전할 수 있음)
+    ├── modules.dep
+    ├── modules.dep.bin
+    └── kernel/...
+```
+
+**둘째, `modprobe`는 텍스트 파일이 아니라 바이너리 캐시(`.bin`)를 우선 참조한다.** 성능을 위해 `modules.dep.bin`을 먼저 읽고, 이 파일이 아예 없을 때만 텍스트 `modules.dep`로 폴백한다. 문제는 바이너리 캐시가 **존재는 하지만 내용이 불완전한** 경우다. `modprobe`는 파일이 있으니 신뢰하고 읽지만 원하는 항목을 찾지 못해 실패하고, 텍스트 파일로 폴백하지도 않는다.
+
+`depmod`는 데몬이 아니라 일회성 도구로, 보통 커널 패키지 설치 시 post-install hook으로 자동 실행된다. 전체 흐름을 정리하면 다음과 같다.
+
+```
+[새 Linux 커널 설치]
+       │
+       ▼
+1. depmod 실행 ──▶ /lib/modules/<새 커널>/ 아래 모듈들을 스캔하여
+                    의존성 지도(modules.dep + .bin 바이너리 캐시) 작성
+       │
+       ▼
+[reboot → 새 커널로 부팅]
+       │
+       ▼
+2. modprobe ip_vs 실행
+       │
+       ▼
+3. modprobe가 modules.dep.bin 확인 ──▶ "ip_vs를 로드하려면 nf_conntrack이 먼저 필요"
+       │
+       ▼
+4. nf_conntrack을 먼저 로드한 뒤, ip_vs를 로드
+```
+
+**`.ko` 파일이 디렉토리에 존재하더라도 바이너리 캐시가 최신화되지 않으면 `modprobe`는 모듈을 찾지 못한다.** 그리고 `depmod`는 주기적으로 실행되는 프로세스가 아니므로, 한번 stale 상태가 되면 누군가 명시적으로 `depmod -a`를 실행하지 않는 한 자동으로 복구되지 않는다. 이 메커니즘의 실전 사례가 2차 장애에서 등장한다. 지금은 여기까지만 알아두자.
 
 > 더 파고 싶다면 [Linux 디바이스 드라이버]({% post_url 2026-02-01-CS-Linux-Device-Driver %})의 커널 모듈 적재 섹션과 `modprobe(8)`, `depmod(8)` 매뉴얼을 참고하면 된다.
 
@@ -290,26 +333,28 @@ kube-proxy-gpu-worker-3   0/1   CrashLoopBackOff   23   95m   # kernel 5.15.0-17
 ~$ ssh gpu-worker-1 "dpkg -l | grep linux-modules-extra-5.15.0-179"
 ii  linux-modules-extra-5.15.0-179-generic  5.15.0-179.189  amd64
 
-# modules.dep DB 확인
+# modules.dep 텍스트 파일 확인
 ~$ ssh gpu-worker-1 "grep ip_vs /lib/modules/5.15.0-179-generic/modules.dep | head -1"
 kernel/net/netfilter/ipvs/ip_vs.ko: kernel/net/netfilter/nf_conntrack.ko ...
 ```
 
-`.ko` 파일 존재, 패키지 설치 정상, `modules.dep` DB에도 등록 — 그런데 `modprobe`가 "Module not found"를 뱉는 모순적 상황이었다.
+`.ko` 파일 존재, 패키지 설치 정상, `modules.dep` **텍스트 파일**에도 등록 — 그런데 `modprobe`가 "Module not found"를 뱉는 모순적 상황이었다.
 
-가장 가능성 높은 원인은 reboot 직후 `depmod`가 새 커널의 보조 DB(`modules.alias`, `modules.builtin`, `modules.symbols` 등)를 완전히 재구성하지 못한 상태에서, kube-proxy 컨테이너의 `modprobe`가 호출된 것이었다.
+배경에서 설명했듯이 `modprobe`는 텍스트 파일(`modules.dep`)이 아니라 **바이너리 캐시(`modules.dep.bin`)를 우선 참조**한다. 텍스트 파일을 `grep`하면 항목이 보이지만, `modprobe`가 실제로 읽는 바이너리 캐시가 새 커널(5.15.0-179)에 맞게 완전히 생성되지 않았을 가능성이 높다.
+
+혼동하지 말아야 할 것은, 이전 커널(5.15.0-177)에서는 `ip_vs`가 정상적으로 로드되어 kube-proxy가 IPVS mode로 잘 동작하고 있었다는 점이다. `ip_vs` 자체가 시스템에 없는 게 아니라, **새 커널 버전의 모듈 DB가 불완전한 것**이 문제였다. `unattended-upgrades`가 같은 cron 사이클에서 커널 패키지와 NVIDIA dkms를 연달아 설치하면서 여러 post-install hook의 `depmod` 호출이 겹친 것이 원인으로 추정된다.
 
 <br>
 
 # 해결 2: depmod + modprobe
 
-배경에서 설명한 `depmod`와 `modprobe`를 직접 사용할 차례다.
+배경에서 설명한 `depmod`와 `modprobe`를 직접 사용할 차례다. `depmod -a`는 텍스트 DB와 바이너리 캐시를 **모두** 재생성한다.
 
 ```bash
-# 1) modprobe 보조 DB 재구성
+# 1) 새 커널의 모듈 DB 전체 재생성 (텍스트 + 바이너리 캐시)
 ~$ ssh gpu-worker-1 "sudo depmod -a 5.15.0-179-generic"
 
-# 2) host kernel에 ip_vs 강제 적재
+# 2) host kernel에 ip_vs 적재
 ~$ ssh gpu-worker-1 "sudo modprobe ip_vs && lsmod | grep ip_vs"
 
 # 실행 결과
