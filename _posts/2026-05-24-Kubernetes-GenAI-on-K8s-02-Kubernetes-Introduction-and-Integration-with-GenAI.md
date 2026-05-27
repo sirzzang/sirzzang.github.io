@@ -1,5 +1,5 @@
 ---
-title: "[GenAI] GenAI on K8s: 컨테이너, K8s 아키텍처, GenAI 워크로드 통합"
+title: "[GenAI] GenAI on K8s: 2. 컨테이너, K8s 아키텍처, GenAI 워크로드 통합"
 excerpt: "컨테이너 기본 개념부터 K8s 아키텍처, 그리고 GenAI 워크로드에 K8s가 적합한 이유까지 정리해 보자."
 categories:
   - Kubernetes
