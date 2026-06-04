@@ -36,7 +36,25 @@ tags:
 
 특수하다는 것에는, 이렇게 쿠버네티스가 GPU를 스케줄 대상 자원으로 인식할 수 없다는 맥락 외에, 더 나아가, 쿠버네티스가 GPU를 **독점 자원**으로 취급한다는 의미가 담겨 있다.
 
-독점 자원이란, **쿠버네티스에서 파드를 할당할 때 하나의 파드에 하나의 GPU만 할당한다**는 의미이다. 스케줄러가 애초에 GPU를 요청하는 여러 개의 파드를 하나의 GPU만 있는 노드에 배치해 주지 않는다는 것이다. 결과적으로 쿠버네티스 환경에서는 애초에 하나의 프로세스만 GPU를 사용하게 된다. 
+독점 자원이란, **쿠버네티스에서 파드를 할당할 때 하나의 파드에 하나의 GPU만 할당한다**는 의미이다. 스케줄러가 애초에 GPU를 요청하는 여러 개의 파드를 하나의 GPU만 있는 노드에 배치해 주지 않는다는 것이다. 결과적으로 쿠버네티스 환경에서는 애초에 하나의 프로세스만 GPU를 사용하게 된다.
+
+## 왜 CPU/메모리와 다른가: compressible vs incompressible
+
+"왜 GPU만 독점인가?"의 본질은 리소스 성격 자체가 다르기 때문이다. 쿠버네티스가 다루는 리소스는 크게 세 가지 성격으로 나뉜다.
+
+| 리소스 | 성격 | burst 가능? | 초과 시 |
+|--------|------|------------|---------|
+| CPU | compressible (압축 가능) | O — CFS 스케줄러가 µs 단위로 시분할하여 여유 있으면 limit까지 더 줌 | throttle (느려짐) |
+| Memory | incompressible | request < limit 가능(overcommit). burst는 "마침 안 쓰는 메모리"를 빌리는 것 | OOM kill |
+| GPU (device) | **통째 독점 할당** | X | — (애초에 불가) |
+
+CPU가 burst될 수 있는 건 커널 스케줄러(CFS)가 매 순간 코어 시간을 잘게 쪼개 나눠줄 수 있기 때문이다. 그래서 `requests: 500m`, `limits: 2000m`으로 설정하면 여유 있을 때 2코어까지 쓸 수 있다. Memory도 overcommit이 가능하여 request보다 많은 메모리를 쓸 수 있되, 물리 메모리가 부족해지면 OOM Killer가 개입한다.
+
+그런데 GPU 디바이스는 구조가 근본적으로 다르다. [Device Plugin이 "N개의 이산적인 장치"로 광고]({% post_url 2024-07-23-Dev-Kubernetes-NVIDIA-GPU-Mechanism %}#extended-resource로서의-gpu)하고, kubelet이 특정 디바이스 ID를 컨테이너에 핀(`NVIDIA_VISIBLE_DEVICES`)으로 박아넣는다. Pod 수명 동안 그 컨테이너가 독점한다. 기본적으로 커널 레벨의 선점형 시분할이 없다. 그러니 "2개로 burst" 같은 개념이 성립할 자리가 없는 것이다. Extended Resource의 규칙(정수만 허용, request == limit 강제, limits 필수)도 이 성격에서 비롯된다.
+
+> 이 compressible/incompressible 구분이 이후 나오는 Time Slicing의 핵심과 직접 연결된다. Time Slicing은 **쿠버네티스 리소스 모델(request/limit)을 바꾸는 것이 아니라**, GPU 드라이버 레벨에서 연산 시간만 시분할하는 메커니즘이다. 메모리는 여전히 시분할되지 않으므로, OOM 관리는 운영자 몫으로 남는다.
+
+<br>
 
 ## GPU 분할의 필요성
 

@@ -197,11 +197,138 @@ NVIDIA Container Runtime의 내부 동작 구조에 대한 상세한 내용은 [
 
 <br>
 
+# Extended Resource로서의 GPU
+
+지금까지 Device Plugin이 GPU를 보고하고, 스케줄러가 배치하고, kubelet이 할당하는 흐름을 살펴보았다. 이 흐름을 이해했다면, 한 가지 더 짚고 넘어갈 것이 있다. **`nvidia.com/gpu`는 쿠버네티스 코어 리소스(`cpu`, `memory`)가 아니라, Device Plugin이 광고하는 [Extended Resource](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources)다.** Extended Resource에는 코어 리소스와 다른 강제 규칙이 있고, GPU를 다루려면 이 규칙을 알아야 한다.
+
+<br>
+
+## 코어 리소스와의 차이
+
+`cpu`와 `memory`는 쿠버네티스가 태생적으로 알고 있는 리소스다. kubelet이 직접 노드의 CPU 코어 수와 메모리 용량을 측정하여 보고한다. 반면 `nvidia.com/gpu` 같은 Extended Resource는 `kubernetes.io` 도메인 바깥의 이름을 쓰며, Device Plugin(또는 API 패치)을 통해 외부에서 광고된다. 쿠버네티스 입장에서는 "이 노드에 `nvidia.com/gpu`라는 것이 몇 개 있다"만 알 뿐, 그것이 물리적으로 무엇인지는 모른다.
+
+이 설계 차이 때문에 Extended Resource에는 코어 리소스에 없는 **세 가지 강제 규칙**이 적용된다.
+
+<br>
+
+## 규칙 1: 정수만 허용
+
+Extended Resource는 정수 단위로만 요청할 수 있다. `nvidia.com/gpu: 0.5` 같은 소수 요청은 API 서버가 거부한다.
+
+```yaml
+# 유효
+resources:
+  limits:
+    nvidia.com/gpu: 1
+
+# 무효 — API 서버가 거부
+resources:
+  limits:
+    nvidia.com/gpu: 0.5
+```
+
+코어 리소스인 `cpu`는 밀리코어 단위(`500m` = 0.5 코어)까지 쪼갤 수 있지만, Extended Resource는 "N개의 이산적인 장치"를 나타내는 설계이므로 정수만 허용된다.
+
+<br>
+
+## 규칙 2: request == limit 강제 (overcommit 불가)
+
+Extended Resource는 overcommit이 불가능하다. `requests`와 `limits`를 둘 다 명시하면 **반드시 같아야** 한다.
+
+```yaml
+# 유효 — 둘 다 같은 값
+resources:
+  requests:
+    nvidia.com/gpu: 1
+  limits:
+    nvidia.com/gpu: 1
+
+# 무효 — API 서버가 거부
+resources:
+  requests:
+    nvidia.com/gpu: 1
+  limits:
+    nvidia.com/gpu: 2
+```
+
+CPU의 경우 `requests: 500m`, `limits: 2000m`처럼 설정하여 여유가 있으면 burst할 수 있지만, GPU에서는 "1개 여유면 1개, 2개 여유면 2개" 같은 동적 할당이 존재하지 않는다. 왜 이런 차이가 나는지 — compressible/incompressible 리소스의 본질적 차이 — 는 [GPU Sharing: Time Slicing - 1. 개념]({% post_url 2025-11-22-Kubernetes-GPU-Time-Slicing-1 %})에서 더 자세히 다룬다.
+
+<br>
+
+## 규칙 3: limits 필수
+
+Extended Resource는 반드시 `limits`에 지정해야 한다. `requests`만 단독으로 지정하는 것은 허용되지 않는다.
+
+| 지정 방식 | 유효 여부 | 동작 |
+|-----------|-----------|------|
+| `limits`만 지정 | O | `requests`가 `limits`와 동일값으로 자동 채워짐 |
+| `limits` + `requests` (동일값) | O | 명시적으로 같은 값 |
+| `requests`만 지정 | **X** | API 서버 거부 |
+
+실무에서는 첫 번째 패턴이 가장 일반적이다. `limits`만 쓰면 `requests`는 자동으로 같은 값이 된다.
+
+```yaml
+resources:
+  limits:
+    nvidia.com/gpu: 1   # requests도 자동으로 1
+```
+
+<br>
+
+## 세 규칙의 배경
+
+세 규칙을 관통하는 설계 의도는 명확하다. GPU 디바이스는 커널 스케줄러가 매 순간 시간을 잘게 쪼개 나눠줄 수 있는 CPU와 달리, Device Plugin이 "N개의 이산적인 장치"로 광고하고, kubelet이 특정 디바이스 ID를 컨테이너에 핀(`NVIDIA_VISIBLE_DEVICES`)으로 박아넣어 Pod 수명 동안 독점시키는 구조다. 기본적으로 커널 레벨의 선점형 시분할이 없으므로, 소수 요청·overcommit·burst 같은 개념이 성립할 자리가 없다.
+
+그래서 "분수 GPU"가 필요하면, request/limit 의미론을 바꾸는 것이 아니라, [GPU 공유 메커니즘]({% post_url 2025-11-22-Dev-GPU-Sharing-Mechanisms %})([Time Slicing]({% post_url 2025-11-22-Kubernetes-GPU-Time-Slicing-1 %}), MPS, MIG)을 통해 **Device Plugin이 광고하는 단위 자체를 바꾸는** 별개 메커니즘을 사용해야 한다.
+
+<br>
+
+<details markdown="1">
+<summary><b>API 서버의 검증 로직: non-overcommitable resource</b></summary>
+
+위 규칙들은 NVIDIA Device Plugin이 아니라 **kube-apiserver의 Pod spec validation 코드 자체**에 하드코딩되어 있다. `pkg/apis/core/validation/validation.go`의 `ValidateContainerResourceRequirements` 함수가 Pod 생성/수정 시 검증한다.
+
+overcommit 가능 여부를 결정하는 것은 `helper.IsOvercommitAllowed` 함수다.
+
+```go
+func IsOvercommitAllowed(name core.ResourceName) bool {
+    return IsNativeResource(name) && !IsHugePageResourceName(name)
+}
+```
+
+overcommit이 허용되는 건 **native resource(`kubernetes.io` 도메인 또는 도메인 없는 리소스)이면서 hugepages가 아닌 것**뿐이다. 즉 GPU만이 아니라, `kubernetes.io` 도메인 바깥의 **모든 extended resource**와 **hugepages**가 non-overcommitable이다. 목록이 미리 정의된 것이 아니라, "native이면서 hugepages가 아닌 것만 허용"이라는 배제 로직이다.
+
+| 분류 | 예시 | overcommit |
+|------|------|-----------|
+| native, hugepages 아님 | `cpu`, `memory`, `ephemeral-storage` | 허용 |
+| native, hugepages | `hugepages-2Mi`, `hugepages-1Gi` | **불가** |
+| extended resource (전부) | `nvidia.com/gpu`, `amd.com/gpu`, FPGA, 커스텀 NIC 등 | **불가** |
+
+이 함수를 호출하는 검증 로직은 두 곳이다.
+
+```go
+// request != limit이면 거부
+if quantity.Cmp(limitQuantity) != 0 && !helper.IsOvercommitAllowed(resourceName) {
+    allErrs = append(allErrs, field.Invalid(reqPath, quantity.String(),
+        fmt.Sprintf("must be equal to %s limit of %s", resourceName, limitQuantity.String())))
+}
+
+// requests만 있고 limits가 없으면 거부
+} else if !helper.IsOvercommitAllowed(resourceName) {
+    allErrs = append(allErrs, field.Required(limPath,
+        "Limit must be set for non overcommitable resources"))
+}
+```
+
+NVIDIA든 AMD든 커스텀 FPGA든, `kubernetes.io` 도메인 바깥의 리소스 이름을 쓰는 순간 이 검증에 걸린다. Device Plugin이나 벤더와 무관한, K8s 코어의 extended resource 공통 규칙이다.
+
+</details>
+
+<br>
+
 # 결론
 
 위와 같은 단계를 거쳐, 최종적으로 쿠버네티스 환경에서 컨테이너가 GPU를 사용할 수 있게 된다. 알고 보면, 그 속에 숨어 있는 추상화 레벨과 책임 분리가, 놀라운 수준이다.
-
-한 가지 알아 둘 점은, `nvidia.com/gpu`는 Kubernetes의 Extended Resource로 등록되기 때문에 **정수 단위로만 요청 및 할당이 가능**하다는 것이다. 예를 들어, `nvidia.com/gpu: 0.5`와 같은 요청은 불가능하다. 하나의 GPU를 여러 파드가 나눠 쓰려면 [GPU Time-Slicing]({% post_url 2025-11-22-Kubernetes-GPU-Time-Slicing-1 %}), MIG(Multi-Instance GPU), MPS(Multi-Process Service) 등 별도의 기술이 필요하다.
 
 또한, 이 글에서 다룬 Device Plugin의 `Allocate` 방식 외에도, [CDI(Container Device Interface)]({% post_url 2026-02-02-CS-Container-Device-Injection %})라는 표준화된 장치 주입 방식이 등장하고 있다. 최신 NVIDIA Device Plugin(v0.14+)은 CDI를 지원하며, 컨테이너 런타임이 CDI 스펙을 직접 읽어 디바이스를 주입하는 방식으로 기존 OCI Runtime Hook 방식을 대체할 수 있다.
 
