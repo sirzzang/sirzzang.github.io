@@ -1,6 +1,6 @@
 ---
 title: "[GenAI] GenAI on K8s: 10.4 - GPU 공유: MPS와 Time-slicing"
-excerpt: "MPS(동시 공유)와 time-slicing(시분할 공유)의 메커니즘, K8s 적용 방법, 세 기법 비교, 그리고 time-slicing 실습까지 정리해 보자."
+excerpt: "MPS(동시 공유)와 time-slicing(시분할 공유)의 메커니즘, K8s 적용 방법, 세 기법 비교를 정리해 보자."
 categories:
   - Kubernetes
 toc: true
@@ -23,7 +23,7 @@ use_math: false
 
 <br>
 
-[이전 글]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG %})에서 MIG를 통한 GPU 하드웨어 파티셔닝을 다뤘다. 이번 글에서는 소프트웨어 기반의 GPU 공유 기법인 MPS와 time-slicing, 세 기법 비교, 그리고 time-slicing 실습을 정리한다.
+[이전 글]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG %})에서 MIG를 통한 GPU 하드웨어 파티셔닝을 다뤘다. 이번 글에서는 소프트웨어 기반의 GPU 공유 기법인 MPS와 time-slicing, 세 기법 비교를 정리한다. Ch10 time-slicing 실습 코드 분석은 [10.6]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-06-Ch10-Lab-Code-Analysis-Time-Slicing-and-Llama %})에서, 배포·검증·트러블슈팅은 [10.7]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification %})에서 다룬다.
 
 # TL;DR
 
@@ -52,7 +52,7 @@ Process B ──┘
 
 MPS Server라는 데몬 프로세스가 여러 client 프로세스의 CUDA 작업을 받아 **하나의 GPU에 동시에 제출**한다. GPU 입장에서는 여러 커널이 동시에 들어오므로, SM 스케줄러가 빈 SM에 서로 다른 프로세스의 커널을 배치할 수 있다. context switching이 발생하지 않으므로 전환 오버헤드가 없다.
 
-![NVIDIA MPS 개요]({{site.url}}/assets/images/genai-on-k8s-ch10-mps-overview.png){: .align-center}
+![NVIDIA MPS 개요]({{site.url}}/assets/images/Week04-ch10-nvidia-mps.png){: .align-center}
 
 > 3개 프로세스가 MPS를 통해 SM을 동시에 나눠 쓰는 모습이다. compute는 공간 공유(spatial sharing)다.
 
@@ -124,7 +124,7 @@ Volta 아키텍처는 MPS의 주요 한계 몇 가지를 개선했다:
 
 Time-slicing은 GPU 실행 시간을 슬라이스로 쪼개 여러 프로세스가 **순차적으로(sequential)** 공유하는 기법이다. GPU가 프로세스 사이를 시간으로 번갈아 가며 실행한다. MPS가 "동시에 여럿"이라면, time-slicing은 "번갈아 하나씩"이다.
 
-![GPU time-slicing]({{site.url}}/assets/images/genai-on-k8s-ch10-gpu-timeslicing.png){: .align-center}
+![GPU time-slicing]({{site.url}}/assets/images/Week04-ch10-nvidia-gpu-timeslicing.png){: .align-center}
 
 MPS와 대조하면 실행 패턴이 명확해진다:
 
@@ -387,7 +387,7 @@ time-slicing에서 각 프로세스는 자기 메모리를 따로 잡아(allocat
 
 MIG, MPS, time-slicing 세 기법을 한눈에 비교한다.
 
-![GPU sharing techniques 비교]({{site.url}}/assets/images/genai-on-k8s-ch10-gpu-sharing-comparison.png){: .align-center}
+![GPU sharing techniques 비교]({{site.url}}/assets/images/Week04-ch10-gpu-sharing-techniques-comparison.png){: .align-center}
 
 | 항목 | MIG | MPS | Time-slicing |
 |---|---|---|---|
@@ -415,118 +415,12 @@ MIG, MPS, time-slicing 세 기법을 한눈에 비교한다.
 
 <br>
 
-# 실습: Time-slicing 적용 확인
+# Ch10 실습으로 이어지기
 
-## 실습 환경 구성
+time-slicing 개념을 EKS + L4 환경에서 검증하려면, 인프라 코드(`nvidia-ts.yaml`, `aiml-addons.tf`)와 워크로드 코드(`llama32-deploy.yaml`)를 먼저 읽고 배포해야 한다. upstream 코드에는 Bottlerocket NVIDIA AMI와 맞지 않는 설정이 남아 있어, 그대로 돌리면 **스케줄링은 되는데 추론은 GPU를 못 보는** 상태가 된다.
 
-Ch10 실습은 Ch5에서 만든 EKS 클러스터 위에 GPU 노드 그룹(`g6.2xlarge`, L4 1장)과 NVIDIA device plugin 스택을 올린 뒤, time-slicing ConfigMap을 적용하고 Llama-3.2-1B 추론 Deployment를 배포하는 흐름이다.
-
-EKS 콘솔에서 `eks-demo` 클러스터가 생성 중인 상태:
-
-![EKS 클러스터 생성 중]({{site.url}}/assets/images/genai-on-k8s-ch10-lab-eks-cluster-creating.png){: .align-center}
-
-클러스터가 Active가 되면 개요 탭에서 Kubernetes 1.32, 노드 이슈 0건을 확인할 수 있다:
-
-![EKS 클러스터 개요]({{site.url}}/assets/images/genai-on-k8s-ch10-lab-eks-cluster-overview.png){: .align-center}
-
-컴퓨팅 탭에서 GPU 노드(`g6.2xlarge`)와 CPU 노드(`m6i.large` 등)가 함께 보인다:
-
-![EKS 컴퓨팅 노드 — g6.2xlarge GPU 노드]({{site.url}}/assets/images/genai-on-k8s-ch10-lab-eks-compute-nodes.png){: .align-center}
-
-<br>
-
-## 실습 전 알아둘 것 1 — time-slicing 없으면 "비싸지는" 게 아니라 "안 뜬다"
-
-실습의 Deployment 구성: `replicas: 5` × `limits: nvidia.com/gpu: 2` = **GPU 10단위 요청**. 노드는 `g6.2xlarge` = 물리 L4 **1장**.
-
-| 조건 | time-slicing ON (replicas: 10) | time-slicing OFF |
-|---|---|---|
-| allocatable GPU | 10 | 1 |
-| Pod 하나(gpu:2) 배치 | 가능 — 10 중 2 소비 | **불가능** — 1장인데 2 요청 |
-| 5 Pod 전부 | 가능 — 10 중 10 소비 | **불가능** — 1장으로 10 불가 |
-| 결과 | 정상 Running | **영원히 Pending** |
-
-핵심: Pod 하나의 GPU 요청은 **한 노드 안에서** 충족돼야 한다. `gpu: 2`인데 노드에 GPU가 1장뿐이면 스케줄러가 "이 노드에서 2를 충족할 수 없다"고 판단해 **영원히 Pending**이다. time-slicing이 allocatable을 10으로 뻥튀기하면, 한 노드 안에서 `gpu: 2`를 충족할 수 있게 된다.
-
-**비용 함정 — 흔한 오해 교정:**
-
-1. **"time-slicing 없으면 노드를 더 만들어서 비싸진다"** → 아니다. 노드를 10대 만들어도, 각 노드에 GPU 1장인데 Pod가 `gpu: 2`를 요청하면 **여전히 Pending**이다. 노드 수 문제가 아니라 **단일 노드 내 GPU 슬롯 수** 문제다
-2. **"time-slicing 없으면 멀티 GPU 노드를 써야 한다"** → 맞다. `gpu: 2`를 충족하려면 물리 GPU 2장이 있는 인스턴스(예: g6.12xlarge)가 필요하다. 이게 비싸다는 점은 맞지만, 핵심은 **비용이 아니라 Pending** 자체다
-3. **"time-slicing이 비용 절감 도구다"** → 부분적으로만 맞다. time-slicing의 본질은 "물리 1장을 여러 Pod가 공유"하는 것이지, "비용을 줄이는" 것이 아니다. 비용 절감은 결과이지 목적이 아니다
-
-**2차 사고 경고**: time-slicing으로 allocatable을 10으로 만들면, 클러스터 오토스케일러가 "이 노드에 GPU 여유가 있다"고 판단해 **새 노드를 안 만들 수 있다**. 의도한 동작이지만, 메모리 격리가 없으므로 Pod들의 실제 VRAM 합계를 관리하지 않으면 OOM이 발생한다.
-
-가드레일 — 현재 노드의 GPU 상태 확인:
-
-```bash
-kubectl describe node <gpu-node> | grep nvidia.com/gpu
-```
-
-> **Pending이 나는 또 다른 경로**: GPU Operator의 ClusterPolicy에서 device plugin을 비활성화하면 allocatable이 0이 되어 GPU Pod가 Pending된다. 이 경우는 time-slicing과 무관한 별도 문제다. 상세 내용은 [Device Plugin 비활성화 → GPU Pod Pending]({% post_url 2026-04-09-Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending %})에서 다뤘다.
-
-<br>
-
-## 실습 전 알아둘 것 2 — 왜 1B를 L4에, 왜 gpu:2, 왜 5개
-
-실습 구성의 각 요소가 왜 이렇게 선택됐는지 정리한다.
-
-| 사실 | 값 | 함의 |
-|---|---|---|
-| 인스턴스 | g6.2xlarge | 물리 L4 1장, 24GB VRAM |
-| 모델 | Llama-3.2-1B | FP16 기준 약 1.8GB VRAM |
-| 1 Pod 유휴 | 24GB - 1.8GB = 22.2GB | GPU의 92%가 놀고 있다 |
-| time-slicing replicas | 10 | allocatable 10, 물리는 여전히 1장 |
-| Deployment | gpu:2 × 5 Pod | 총 10 슬롯 사용 |
-| 메모리 산수 | 1.8GB × 5 Pod = 9GB | 24GB 안에 넉넉히 들어감 |
-
-**`gpu: 2`의 진실**: time-slicing에서 `gpu: 2`는 **같은 L4의 시분할 슬롯 2개**를 점유한다는 뜻이다. 물리 GPU 2장이 아니다. 한 Pod이 슬롯 2개를 가져가면 GPU 드라이버가 그만큼의 시분할 시간을 배정한다. 교육 목적으로 `gpu: 1`이 아닌 `gpu: 2`를 선택한 것이다 — replicas 10을 5 Pod × 2 슬롯으로 딱 맞게 소진하여, time-slicing의 슬롯 개념을 보여주기 위함이다.
-
-**핵심 교훈**: **1B라서 작동한다**. 1.8GB × 5 = 9GB < 24GB이므로 VRAM이 충분하다. 만약 Llama-3.2-**3B**(FP16 약 6GB)였다면 6GB × 5 = 30GB > 24GB로 **OOM**이다. time-slicing은 메모리를 분할해주지 않기 때문에, 모델 크기 × Pod 수가 물리 VRAM을 넘지 않는지 반드시 확인해야 한다.
-
-### Hugging Face 모델 접근
-
-실습 모델 `meta-llama/Llama-3.2-1B`는 gated model이다. Hugging Face에서 라이선스 동의 후 접근 요청을 제출해야 한다.
-
-![Llama-3.2-1B 모델 카드]({{site.url}}/assets/images/genai-on-k8s-ch10-lab-hf-llama32-model-card.png){: .align-center}
-
-라이선스 동의 폼을 작성하고 Submit한다:
-
-![Llama-3.2 라이선스 동의 폼]({{site.url}}/assets/images/genai-on-k8s-ch10-lab-hf-llama32-license-form.png){: .align-center}
-
-![Llama-3.2 라이선스 Submit]({{site.url}}/assets/images/genai-on-k8s-ch10-lab-hf-llama32-license-accept.png){: .align-center}
-
-제출 직후에는 접근 승인 대기 상태다:
-
-![Hugging Face 접근 승인 대기]({{site.url}}/assets/images/genai-on-k8s-ch10-lab-hf-llama32-access-pending.png){: .align-center}
-
-승인되면 이메일로 알림이 온다:
-
-![Hugging Face 접근 승인 이메일]({{site.url}}/assets/images/genai-on-k8s-ch10-lab-hf-access-granted-email.png){: .align-center}
-
-<br>
-
-### 배포 결과 (진행 중)
-
-time-slicing ConfigMap 적용 후 Deployment를 올리면, 현재까지는 Pod 5개가 `CrashLoopBackOff` 상태에 머물러 있다. time-slicing 자체는 allocatable을 10으로 늘려 스케줄링은 통과했지만, 컨테이너 기동 단계에서 추가 디버깅이 필요한 상태다.
-
-![Llama Pod CrashLoopBackOff]({{site.url}}/assets/images/genai-on-k8s-ch10-lab-llama-pods-crashloopbackoff.png){: .align-center}
-
-검증 방법 — 노드의 GPU 상태와 Pod 배치를 함께 확인:
-
-```bash
-# allocatable GPU 슬롯 확인
-kubectl get nodes -o custom-columns=NAME:.metadata.name,GPUs:.status.allocatable."nvidia\.com/gpu"
-
-# Pod 상태 확인 — 5개 모두 Running이어야 한다
-kubectl get pods -l app=llama-3-2-1b
-
-# GPU 메모리 사용량 확인 (nvidia-smi를 GPU 노드에서 실행)
-kubectl exec -it <gpu-pod> -- nvidia-smi
-```
-
-5개 Pod가 모두 Running이면 time-slicing이 정상 동작하는 것이다. `nvidia-smi`에서는 물리 GPU 1장만 보이지만, 여러 프로세스가 해당 GPU를 시분할로 공유하고 있다.
-
-<!-- TODO: 실습 뒷부분(DCGM 메트릭 확인, 배포 검증 등) 보충 예정 -->
+- [10.6 — Ch10 실습 코드 분석]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-06-Ch10-Lab-Code-Analysis-Time-Slicing-and-Llama %}): ConfigMap·device plugin·DCGM·Llama Deployment, upstream 결함과 수정 포인트
+- [10.7 — Ch10 실습 배포·검증]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification %}): terraform apply → time-slicing ON/OFF 대조 → HF gated 모델·GPU 주입 트러블슈팅 → nvidia-smi·DCGM 검증
 
 <br>
 

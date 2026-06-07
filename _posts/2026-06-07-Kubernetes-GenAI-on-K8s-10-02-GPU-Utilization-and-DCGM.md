@@ -64,7 +64,7 @@ exporter는 **변환·게시** 담당이지 측정 장치가 아니다. 어떤 G
 
 ### 메트릭이 Prometheus까지 가는 경로 — pull 모델
 
-![DCGM-Prometheus 메트릭 파이프라인]({{site.url}}/assets/images/genai-on-k8s-ch10-dcgm-pipeline.jpg){: .align-center}
+![DCGM-Prometheus 메트릭 파이프라인]({{site.url}}/assets/images/Week04-ch10-dcgm.jpg){: .align-center}
 
 dcgm-exporter는 kubelet의 **PodResources API**를 읽어 "이 GPU를 지금 어느 Pod/namespace가 쓰는지"를 메트릭 라벨로 붙인다. Grafana에서 Pod 단위 GPU 사용률이 나오는 건 이 연동 덕분이다. K8s에서 dcgm-exporter를 쓰는 핵심 이유 중 하나다.
 
