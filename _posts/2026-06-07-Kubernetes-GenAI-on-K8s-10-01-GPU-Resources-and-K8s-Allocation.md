@@ -15,6 +15,8 @@ tags:
   - NFD
   - GFD
   - EKS
+  - Kubernetes-for-Generative-AI-Solutions
+  - Kubernetes-for-Generative-AI-Solutions-Chapter-10
 use_math: false
 ---
 

@@ -14,6 +14,8 @@ tags:
   - RAG
   - Fine-tuning
   - Prompt-Engineering
+  - Kubernetes-for-Generative-AI-Solutions
+  - Kubernetes-for-Generative-AI-Solutions-Chapter-4
 use_math: false
 ---
 

@@ -17,6 +17,8 @@ tags:
   - Secrets-Store-CSI
   - Pod-Identity
   - Troubleshooting
+  - Kubernetes-for-Generative-AI-Solutions
+  - Kubernetes-for-Generative-AI-Solutions-Chapter-9
 use_math: false
 ---
 

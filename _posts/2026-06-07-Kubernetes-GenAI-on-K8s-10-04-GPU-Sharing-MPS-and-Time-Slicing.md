@@ -16,6 +16,8 @@ tags:
   - GPU-Sharing
   - EKS
   - Llama
+  - Kubernetes-for-Generative-AI-Solutions
+  - Kubernetes-for-Generative-AI-Solutions-Chapter-10
 use_math: false
 ---
 

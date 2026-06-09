@@ -16,6 +16,8 @@ tags:
   - PEFT
   - Llama
   - HuggingFace
+  - Kubernetes-for-Generative-AI-Solutions
+  - Kubernetes-for-Generative-AI-Solutions-Chapter-4
 use_math: false
 ---
 

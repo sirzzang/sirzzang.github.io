@@ -15,6 +15,8 @@ tags:
   - Container-Security
   - Pod-Identity
   - IRSA
+  - Kubernetes-for-Generative-AI-Solutions
+  - Kubernetes-for-Generative-AI-Solutions-Chapter-9
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 9장의 학습 내용을 바탕으로 합니다*
@@ -163,6 +165,25 @@ namespace에 `pod-security.kubernetes.io/enforce=<level>` 라벨로 적용한다
 | DNS | CoreDNS spoofing 방어. NetworkPolicy로 질의 제한, DNSSEC |
 | 모니터링 | Cilium, Calico, Datadog 등으로 트래픽 가시성 확보 |
 
+
+> **참고 — Ingress/Egress 보안 방향**
+> - **Ingress (들어오는 트래픽):** HTTPS/TLS 로 전송 구간 암호화 + **WAF(Web Application Firewall, 웹 애플리케이션 방화벽)** 으로 SQL injection·XSS 등 L7 공격 차단.
+> - **Egress (나가는 트래픽):** egress 정책으로 외부로 나가는 연결을 화이트리스트화 → 데이터 유출(exfiltration) 경로 제한.
+
+> **참고 — L7 방화벽(WAF) vs 일반 방화벽(L3/L4)**
+>
+> 우리가 흔히 "방화벽"이라 부르는 것(`iptables`, 보안그룹, K8s NetworkPolicy)은 대부분 **L3/L4** 에서 동작한다. 둘의 차이는 *패킷의 무엇을 보고 허용/차단을 결정하느냐* 에 있다.
+>
+> | 구분 | 일반 방화벽 (L3/L4) | WAF (L7) |
+> |---|---|---|
+> | 판단 기준 | IP(L3) + 포트·프로토콜(L4) — 5-tuple | HTTP 요청 내용: URL·헤더·쿼리·바디·쿠키 |
+> | 보는 범위 | 패킷 봉투(주소·포트)만, 내용물은 안 봄 | TLS 복호화 후 애플리케이션 메시지를 파싱 |
+> | 막는 것 | "이 IP·포트로의 연결 자체"를 허용/거부 | SQL injection, XSS, path traversal 등 **요청 내용**에 숨은 공격 |
+> | K8s 대응 | NetworkPolicy, 보안그룹 | ALB 앞단 AWS WAF, Ingress 게이트웨이 |
+>
+> **왜 둘 다 필요한가:** L3/L4 방화벽 입장에선 `443/TCP 로 들어오는 정상 HTTPS 연결`일 뿐이라, 그 안의 `GET /items?id=1' OR '1'='1` 같은 SQLi 페이로드를 구분할 수 없다. 포트·IP는 멀쩡하기 때문. WAF 는 그 HTTP 요청을 직접 열어보고 패턴/시그니처로 걸러낸다. 즉 **방어 계층(layer)이 달라 서로 대체가 아니라 보완** 관계다.
+
+
 ## Secrets 관리
 
 | 항목 | 내용 |
@@ -175,7 +196,29 @@ namespace에 `pod-security.kubernetes.io/enforce=<level>` 라벨로 적용한다
 | 전송 | 자격증명 교환 시 TLS |
 | 감사 | K8s audit log + SIEM 연동 |
 
+> **참고 — envelope encryption**
+>
 > **envelope encryption**이란 데이터를 **데이터 키**로 암호화하고, 그 데이터 키를 다시 **KMS 마스터 키**로 암호화하는 2단 구조다. 마스터 키는 KMS 밖으로 나오지 않고, etcd에는 암호화된 데이터 키만 남아 노출 위험이 줄어든다.
+
+
+> **참고 — SIEM(Security Information and Event Management)**
+>
+> 여러 소스의 보안 로그·이벤트를 **한 곳으로 모아 상관분석(correlation)·탐지·알림** 하는 시스템. 이름 그대로 두 축의 결합이다.
+> - **SIM (Information):** 로그를 장기 수집·저장·검색 → 사후 감사·컴플라이언스 증적.
+> - **SEM (Event):** 실시간 이벤트 상관분석 → 의심 패턴 탐지·즉시 알림.
+>
+> **K8s audit log 와의 관계:** API server 의 audit log 는 "누가(user) / 무엇을(verb·resource) / 언제 / 결과(allow·deny)" 를 남기는 *원천 데이터*일 뿐이다. 그 자체로는 노드 로컬 파일에 쌓일 뿐 탐지·알림 기능이 없다. SIEM 으로 흘려보내야 비로소
+> - 여러 클러스터·여러 소스(CloudTrail, VPC Flow Log, 앱 로그)와 **교차 상관분석**,
+> - "비정상 권한 상승 시도", "심야 대량 Secret 조회" 같은 **룰 기반 실시간 알림**,
+> - 장기 보존 + 검색으로 **사고 발생 시 역추적**
+> 이 가능해진다.
+>
+> | 대표 도구 | 비고 |
+> |---|---|
+> | Splunk, IBM QRadar, Microsoft Sentinel | 상용 SIEM |
+> | Elastic Stack(ELK), Wazuh | 오픈소스 계열 |
+> | **AWS:** GuardDuty + Security Hub | EKS audit log 연동 가능, 매니지드 위협 탐지 |
+
 
 <br>
 

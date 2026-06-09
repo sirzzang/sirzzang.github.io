@@ -14,6 +14,8 @@ tags:
   - DCGM
   - Prometheus
   - Monitoring
+  - Kubernetes-for-Generative-AI-Solutions
+  - Kubernetes-for-Generative-AI-Solutions-Chapter-10
 use_math: false
 ---
 
@@ -143,16 +145,18 @@ K8s는 기본적으로 GPU를 Pod에 **배타적(exclusive)**으로 할당한다
 
 # GPU 파티셔닝·공유 기법 개요
 
-GPU 파티셔닝·공유 기법은 대체로 벤더별(vendor-specific)이다. NVIDIA의 경우 MIG, MPS, time-slicing 세 가지가 대표적이다. 세 기법 모두 "GPU를 나눠 쓴다"고 말하지만, **얼마나 강하게 갈라 주느냐**는 전혀 다르다. NVIDIA 문서와 원서는 *"each process retains its memory allocations"*처럼 **allocation(소유)** 표현을 자주 쓰는데, 이걸 **isolation(격리)**으로 읽으면 MPS·time-slicing도 MIG만큼 안전하다고 오해하기 쉽다. 아래 용어를 먼저 구분해 두면 이후 MIG/MPS/time-slicing 비교가 훨씬 명확해진다.
+GPU 파티셔닝·공유 기법은 대체로 벤더별(vendor-specific)이다. NVIDIA의 경우 MIG, MPS, time-slicing 세 가지가 대표적이다. 
 
-> 참고: **allocation vs isolation** 용어 구분
->
-> | 용어 | 의미 |
-> |---|---|
-> | **allocation** (할당) | "이 메모리는 이 프로세스가 잡은(가진) 것" — 소유·점유 |
-> | **isolation** (격리) | "남이 못 건드리게 + 용량·대역폭·장애까지 갈라서 보장" |
->
-> 도서관 비유: allocation은 "이 책상은 내가 쓰고 있다"이고, isolation은 "칸막이가 있어서 옆 사람 소음·시야까지 차단된다"이다. MPS·time-slicing의 메모리 표현은 대부분 allocation(소유) 얘기지, MIG 같은 하드 격리가 아니다.
+세 기법 모두 "GPU를 나눠 쓴다"고 말하지만, **얼마나 강하게 갈라 주느냐**는 전혀 다르다. NVIDIA 문서와 책 원서는 *"each process retains its memory allocations"*처럼 **allocation(소유)** 표현을 자주 쓰는데, 이걸 **isolation(격리)**으로 읽으면 MPS·time-slicing도 MIG만큼 안전하다고 오해하기 쉽다. 
+
+아래 용어를 먼저 구분해 두면 이후 MIG/MPS/time-slicing 비교가 훨씬 명확해진다.
+
+| 용어 | 의미 |
+|---|---|
+| **allocation** (할당) | "이 메모리는 이 프로세스가 잡은(가진) 것" — 소유·점유 |
+| **isolation** (격리) | "남이 못 건드리게 + 용량·대역폭·장애까지 갈라서 보장" |
+
+> 도서관에 비유할 수 있다. allocation은 "이 책상은 내가 쓰고 있다"이고, isolation은 "칸막이가 있어서 옆 사람 소음·시야까지 차단된다"이다. MPS·time-slicing의 메모리 표현은 대부분 allocation(소유) 얘기지, MIG 같은 하드 격리가 아니다.
 
 세 가지 기법을 한 줄로 요약하면 다음과 같다:
 

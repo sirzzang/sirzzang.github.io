@@ -16,6 +16,8 @@ tags:
   - Pod-Identity
   - IRSA
   - ECR
+  - Kubernetes-for-Generative-AI-Solutions
+  - Kubernetes-for-Generative-AI-Solutions-Chapter-9
 use_math: false
 ---
 

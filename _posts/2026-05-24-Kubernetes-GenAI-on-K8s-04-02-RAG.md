@@ -15,6 +15,8 @@ tags:
   - Embedding
   - LangChain
   - OpenAI
+  - Kubernetes-for-Generative-AI-Solutions
+  - Kubernetes-for-Generative-AI-Solutions-Chapter-4
 use_math: false
 ---
 
