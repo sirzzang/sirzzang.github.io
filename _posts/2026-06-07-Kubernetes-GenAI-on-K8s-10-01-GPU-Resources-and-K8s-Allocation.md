@@ -26,6 +26,8 @@ use_math: false
 
 K8s에서 GenAI 워크로드를 배포할 때 GPU 효율을 극대화하는 방법을 다룬다. GPU는 비싸고, 대부분 저활용(underutilized) 상태로 방치된다. 이번 글에서는 GPU·커스텀 가속기의 개요와 K8s에서 GPU 자원을 할당하는 메커니즘을 정리한다.
 
+<br>
+
 # TL;DR
 
 - GPU는 massively parallel processing(MPP)으로 딥러닝 행렬곱에 압도적이지만, K8s가 네이티브로 인식하지 못해 device plugin이 필요하다

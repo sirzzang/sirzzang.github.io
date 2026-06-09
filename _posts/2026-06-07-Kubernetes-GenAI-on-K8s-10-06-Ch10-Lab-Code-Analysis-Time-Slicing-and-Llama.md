@@ -27,6 +27,8 @@ use_math: false
 
 [10.4]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-04-GPU-Sharing-MPS-and-Time-Slicing %})에서 time-slicing 개념을 다뤘다. 이번 글은 Ch10 실습 코드를 읽기 전 단계다 — `terraform apply` 전에 **무엇이 어떻게 연결되는지**, upstream 대비 **무엇을 고쳤는지**를 정리한다. 실제 배포·검증·트러블슈팅은 [10.7]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification %})에서 이어진다.
 
+<br>
+
 # TL;DR
 
 - Ch10 upstream은 overlay(`aiml-addons.tf`, `nvidia-ts.yaml`, `llama32-inf/`)만 있어 self-contained 실행본으로 ch3 토대 + ch9 베이스를 복사해 맞췄다

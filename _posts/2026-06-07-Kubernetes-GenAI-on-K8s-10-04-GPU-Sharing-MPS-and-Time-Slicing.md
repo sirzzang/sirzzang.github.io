@@ -36,8 +36,6 @@ use_math: false
 
 <br>
 
-<br>
-
 # NVIDIA MPS
 
 ## 개념
