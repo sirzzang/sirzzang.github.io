@@ -22,8 +22,8 @@ author_profile: true
 * 코드를 떠난 일상에서는 읽고, 쓰고, 걷고, 운전하는 시간을 좋아합니다.
 * 길 위를 걷거나 운전하며 생각을 정리하고, 다시금 에너지를 얻곤 합니다.
 
-### Side Projects
+### From Life
 
-생활 속에서 필요한 것이 보이면 직접 만들어 보는 것도 좋아합니다.
+생활 속에서 필요한 것을 직접 만들어 보는 것도 좋아합니다.
 * **[가족을 위한 투자 가이드](https://first-investment-guide.sirzzang.org)** — 동생과 함께 막내 동생을 위해 만든 투자 입문 웹.
 * **[Wedding Quest](https://wedding-quest.sirzzang.org)** *(진행 중)* — 결혼 비용 계산기로 시작해, 비용을 기록하고 정리하는 도구로 발전시키고 있는 웹.
