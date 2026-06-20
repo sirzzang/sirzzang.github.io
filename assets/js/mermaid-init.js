@@ -11,6 +11,13 @@ const DIRT = {
   lightgray: "#f3f3f3",
 };
 
+// 사이트 본문과 동일한 폰트 스택을 '명시'한다.
+// fontFamily: "inherit" 로 두면 mermaid 가 라벨 폭을 측정할 때의 폰트와
+// 실제 렌더 폰트가 어긋나 라벨 박스가 ~1글자만큼 좁게 잡혀 글자가 잘린다.
+// 측정·렌더 폰트를 같은 구체 스택으로 고정해 폭 계산을 일치시킨다.
+const FONT_STACK =
+  '-apple-system,BlinkMacSystemFont,"Nanum Gothic","Roboto","Segoe UI","Helvetica Neue","Lucida Grande",Arial,sans-serif';
+
 // Rouge 가 만든 코드블록 → mermaid 가 읽는 <pre class="mermaid"> 로 교체.
 // textContent 로 읽으면 Rouge 의 <span> 분할과 HTML 엔티티(--&gt;&gt; 등)가
 // 자동으로 디코드된 원본 다이어그램 텍스트를 얻는다.
@@ -27,8 +34,9 @@ if (document.querySelector("pre.mermaid")) {
   mermaid.initialize({
     startOnLoad: false,
     theme: "base",
+    fontFamily: FONT_STACK,
     themeVariables: {
-      fontFamily: "inherit",
+      fontFamily: FONT_STACK,
       background: DIRT.lightgray,
       primaryColor: DIRT.beige,
       primaryBorderColor: DIRT.charcoal,
