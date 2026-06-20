@@ -258,7 +258,7 @@ RAG의 4단계(Retrieval)에 해당하는 `db.similarity_search(query, k=5)` 호
 
 15개 셔츠의 1536차원 임베딩을 PCA(Principal Component Analysis, 주성분 분석)로 2차원에 투영했다. 아래 그림에서 marker는 Gender(Men ●, Women ▲), 색상은 Occasion(Formal / Casual / Party)을 나타낸다.
 
-> PCA는 데이터의 공분산 행렬을 고윳값 분해해서 분산이 큰 축(주성분)을 찾는 방법이다. 이 과정은 데이터 행렬의 SVD(Singular Value Decomposition, 특잇값 분해)와 수학적으로 동치다. 데이터 행렬 X의 SVD에서 V의 열벡터가 곧 PCA의 주성분이고, 특잇값의 제곱이 고윳값(= 분산)에 비례한다. SVD에 대해서는 [예전에 정리한 글]({% post_url 2021-02-12-etc-svd %})을 참고하자.
+> PCA는 데이터의 공분산 행렬을 고윳값 분해해서 분산이 큰 축(주성분)을 찾는 방법이다. 이 과정은 데이터 행렬의 SVD(Singular Value Decomposition, 특잇값 분해)와 수학적으로 동치다. 데이터 행렬 X의 SVD에서 V의 열벡터가 곧 PCA의 주성분이고, 특잇값의 제곱이 고윳값(= 분산)에 비례한다. SVD에 대해서는 [예전에 정리한 글]({% post_url 2021-02-12-Etc-svd %})을 참고하자.
 
 ![PCA Embeddings]({{site.url}}/assets/images/genai-on-k8s-ch04-rag-pca-embeddings.png){: .align-center}
 
