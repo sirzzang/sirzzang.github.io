@@ -27,6 +27,8 @@ use_math: false
 
 [11.1]({% post_url 2026-06-09-Kubernetes-GenAI-on-K8s-11-01-GenAIOps-Pipeline-and-Monitoring %})~[11.5]({% post_url 2026-06-09-Kubernetes-GenAI-on-K8s-11-05-Ray-KubeRay-and-vLLM-Inference %})에서 GenAIOps 도구를 각각 봤다. 이번 글은 **도구 비교**, **bias·drift 운영**, **평가 메트릭**으로 Ch11 이론 파트를 마무리한다. Ch11 hands-on(KubeRay + vLLM 서빙)은 **11.7**(코드 분석)·**11.8**(배포 검증)에서 이어질 예정이다.
 
+<br>
+
 # TL;DR
 
 - Kubeflow = K8s-native end-to-end, MLflow = 실험·레지스트리, Ray = 분산 Python, Argo = 범용 DAG 엔진 — **조합**이 일반적
@@ -123,9 +125,15 @@ K8s pipeline에 컨테이너 step으로 통합 가능하다.
 
 <br>
 
-# Drift 모니터링과 통계 측정
+# Drift 운영
 
-[11.1]({% post_url 2026-06-09-Kubernetes-GenAI-on-K8s-11-01-GenAIOps-Pipeline-and-Monitoring %})에서 data·concept·label drift 기초를 봤다. 운영 관점에서 drift는 더 세분화된다.
+[11.1]({% post_url 2026-06-09-Kubernetes-GenAI-on-K8s-11-01-GenAIOps-Pipeline-and-Monitoring %})에서 data·concept·label drift 기초를 봤다. 운영에서는 drift를 종류별로 세분화해 통계로 정량화하고, 임계치를 넘으면 자동 재학습으로 잇는다.
+
+<br>
+
+## 모니터링과 통계 측정
+
+운영 관점에서 drift는 더 세분화된다.
 
 | 종류 | 정의 | 예시 |
 |---|---|---|
@@ -155,7 +163,7 @@ K8s pipeline에 컨테이너 step으로 통합 가능하다.
 
 <br>
 
-# Drift 감지와 자동 재학습
+## 감지와 자동 재학습
 
 모니터링이 drift 임계치를 넘기면 [Argo Workflows]({% post_url 2026-06-09-Kubernetes-GenAI-on-K8s-11-04-Argo-Workflows %})·Kubeflow로 event-driven 재학습을 트리거한다.
 
@@ -269,7 +277,7 @@ Ch9(보안) → Ch10(GPU 효율) → **Ch11(운영·서빙 오케스트레이션
 
 # 참고 링크
 
-- [AIF360](https://aif360.mybluemix.net/)
+- [AIF360](https://aif360.readthedocs.io/)
 - [Fairlearn](https://fairlearn.org/)
 - [SHAP](https://shap.readthedocs.io/)
 
