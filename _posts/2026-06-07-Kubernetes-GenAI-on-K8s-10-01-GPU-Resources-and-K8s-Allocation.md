@@ -49,7 +49,7 @@ GenAI 워크로드에서 컴퓨팅 자원은 크게 세 가지로 나뉜다.
 
 > **MPP(Massively Parallel Processing), SIMD, SIMT**: GPU의 실행 모델은 **SIMT**(Single Instruction, Multiple Threads)다. 수천 개의 코어가 **동일한 명령**을 서로 **다른 데이터**에 동시에 적용한다. 행렬곱을 예로 들면, 결과 행렬의 각 원소 계산이 서로 독립적이므로 수천 개의 스레드에 분배해 한 번에 처리할 수 있다.
 >
-> CPU도 병렬 처리를 한다. 다만 방식이 다르다. CPU는 **SIMD**(Single Instruction, Multiple Data) — SSE, AVX, AVX-512 같은 **벡터 명령**으로, **하나의 코어 안에서** 고정 폭(예: 8개 float) 데이터 레인에 같은 연산을 한 번에 적용한다. 코어 수는 소수(8~128)지만 각 코어가 강하고, 분기·캐시·out-of-order 실행에 최적화되어 있다. GPU SIMT는 **수천 개의 단순 코어**가 **수천 개의 스레드**를 warp(32개) 단위로 묶어 동시 실행하는 모델이다. 한 줄로 정리하면 CPU SIMD는 "코어 하나가 벡터 레인 여러 개", GPU SIMT는 "코어 수천 개가 각자 다른 데이터"다.
+> CPU도 병렬 처리를 한다. 다만 방식이 다르다. CPU는 **SIMD**(Single Instruction, Multiple Data) — SSE, AVX, AVX-512 같은 **벡터 명령**으로, **하나의 코어 안에서** 고정 폭(예: 8개 float) 데이터 레인에 같은 연산을 한 번에 적용한다. 코어 수는 GPU 대비 소수(수십~수백)지만 각 코어가 강하고, 분기·캐시·out-of-order 실행에 최적화되어 있다. GPU SIMT는 **수천 개의 단순 코어**가 **수천 개의 스레드**를 warp(32개) 단위로 묶어 동시 실행하는 모델이다. 한 줄로 정리하면 CPU SIMD는 "코어 하나가 벡터 레인 여러 개", GPU SIMT는 "코어 수천 개가 각자 다른 데이터"다.
 >
 > 반면 분기(branch)가 많은 순차 로직은 스레드 간 실행 경로가 갈려 GPU의 강점인 warp 단위 병렬성을 해친다 — 이런 작업은 CPU가 낫다.
 

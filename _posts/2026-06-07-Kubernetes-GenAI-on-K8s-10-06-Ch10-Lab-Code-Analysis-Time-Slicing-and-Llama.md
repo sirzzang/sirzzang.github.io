@@ -38,8 +38,6 @@ use_math: false
 
 <br>
 
-<br>
-
 # 실습 구조
 
 Ch10은 ch9 베이스 위에 GPU 최적화를 얹는 챕터다. upstream `ch10/`에는 클러스터 토대가 없고 overlay만 있다.
@@ -82,7 +80,7 @@ metadata:
   name: time-slicing-config
   namespace: nvidia-device-plugin    # device plugin namespace와 일치해야 함
 data:
-  any: |-                            # catch-all — 라벨·default 없는 노드에 자동 적용
+  any: |-                            # 설정 프로파일 이름(예약어 아님) — 키가 1개라 자동 선택됨
     version: v1
     flags:
       migStrategy: none              # L4는 MIG 미지원
@@ -107,17 +105,18 @@ L4는 MIG 미지원이라 `none`이 유일한 선택이다. MIG 지원 GPU에서
 
 ConfigMap만 apply해도 광고량은 바뀌지 않는다. `aiml-addons.tf`의 **`config.name = time-slicing-config`** 가 plugin이 이 ConfigMap을 마운트하게 하는 고리다. `config.name`을 참조하는데 ConfigMap이 없으면 plugin init이 `FailedMount: configmap "time-slicing-config" not found`로 `Init:0/1`에 멈춘다 — [10.7]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification %}) Step 2.
 
-## `data.any` 키 — 필수 단어가 아닌 catch-all
+## `data.any` 키 — 예약어가 아니라 그냥 단일 키
 
-`data` 아래 키 이름(`any`)은 ConfigMap 안의 **설정 프로파일 이름**이다. `any`는 NVIDIA device plugin config-manager가 **예약한 catch-all 키**로, 노드에 `nvidia.com/device-plugin.config` 라벨이 없을 때 자동으로 이 키를 골라 적용한다.
+`data` 아래 키 이름(`any`)은 ConfigMap 안의 **설정 프로파일 이름**일 뿐, 특별한 예약어가 아니다. config-manager가 어떤 키를 적용할지는 다음 순서로 정해진다.
 
 | 조건 | 어떤 키가 적용되나 |
 |---|---|
 | 노드 라벨 `nvidia.com/device-plugin.config=<키>` 있음 | ConfigMap `data.<키>` |
 | helm `config.default=<키>` 지정 | 라벨 없는 노드에 `data.<키>` |
-| **라벨·default 둘 다 없음** | **`data.any`** (없으면 time-slicing 미적용 → 광고 1) |
+| 위 둘 다 없고 **키가 1개뿐** | 그 **단일 키가 이름과 무관하게 자동 선택** |
+| 위 둘 다 없고 **키가 2개 이상** | `default`라는 이름의 키가 있으면 그것, 없으면 **배포 실패** |
 
-키 이름을 `l4-config`처럼 바꿔도 된다. 다만 그때는 노드 라벨 `nvidia.com/device-plugin.config=l4-config`를 붙이거나, helm values에 `config.default: l4-config`를 지정해야 config-manager가 그 키를 찾는다. **이 실습은 라벨·default 없이 GPU 노드 1대만 쓰므로 `any`가 맞고, 다른 이름만 쓰면 광고가 1에 머문다.**
+즉 config-manager가 특별 취급하는 이름은 `any`가 아니라 **`default`**다. 이 실습은 키가 `any` 하나뿐이라 "단일 키 자동 선택" 규칙으로 적용되는 것이고, 이름을 `l4-config`로 바꿔도 **키가 1개면 그대로 적용**된다. 라벨이나 `config.default`가 필요해지는 건 키를 2개 이상 둘 때다.
 
 <br>
 
@@ -189,6 +188,8 @@ env는 파드 스펙에 누구나 `NVIDIA_VISIBLE_DEVICES=all`을 적어 GPU를 
 ### CDI — hook이 아니라 선언적 스펙
 
 CDI는 nvidia-container-runtime wrapper/hook 없이도 동작하는 vendor-neutral 표준이다. `/etc/cdi/nvidia.json`에 "이 device는 이 `/dev/nvidia*` + 이 드라이버 라이브러리 마운트"를 선언하고, containerd 1.7+가 `enable_cdi=true`면 런타임이 스펙을 OCI spec에 직접 병합한다. "런타임이 매번 계산"(hook) → "스펙에 적힌 대로 적용"(declarative)로 패러다임이 바뀐다.
+
+> 위 표·본문은 CDI 전략을 `cdi`로 통칭했지만, 현행 device plugin `deviceListStrategy` 값은 CDI를 `cdi-annotations`·`cdi-cri` 둘로 세분한다(콤마로 복수 지정도 가능). 개념은 동일하다.
 
 ### 이번 실습에서 검증한 것과 선택 근거
 

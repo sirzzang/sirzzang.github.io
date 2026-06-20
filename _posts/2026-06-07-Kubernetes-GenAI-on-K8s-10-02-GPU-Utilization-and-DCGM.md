@@ -27,6 +27,7 @@ use_math: false
 
 - DCGM은 GPU 지표를 수집하는 라이브러리/에이전트이고, dcgm-exporter는 이를 Prometheus 포맷으로 노출하는 얇은 래퍼다 — 측정과 노출의 역할이 다르다
 - 메트릭은 GPU → DCGM → dcgm-exporter(:9400/metrics) → Prometheus pull 모델로 흐른다
+- `DCGM_FI_DEV_GPU_UTIL`은 "커널이 돈 시간 비율"이라 100%여도 연산기는 놀 수 있다 — 진짜 가동률은 `DCGM_FI_PROF_*`(SM_ACTIVE / PIPE_TENSOR_ACTIVE)로 본다
 - K8s의 기본 GPU 할당은 배타적(exclusive) — Pod가 실제로 안 쓰는 순간에도 GPU를 독점해 underutilization을 부른다
 - 해결 수단은 GPU 파티셔닝·공유 기법(MIG / MPS / time-slicing)이고, 핵심 구분은 allocation(소유) vs isolation(격리)이다
 
@@ -123,6 +124,40 @@ curl localhost:9400/metrics
 
 <br>
 
+### 어떤 필드가 나오나 — 주요 DCGM 메트릭
+
+`curl :9400/metrics`로 떨어지는 메트릭 이름은 dcgm-exporter 기본 CSV가 정하는 `DCGM_FI_*` 필드다. 자주 보는 장치 단위(`DEV`) 지표만 추리면 다음과 같다.
+
+| 필드 | 의미 |
+|---|---|
+| `DCGM_FI_DEV_GPU_UTIL` | GPU utilization(%) — 시간 점유율 기반 (아래 함정 참고) |
+| `DCGM_FI_DEV_FB_USED` / `DCGM_FI_DEV_FB_FREE` | 프레임버퍼(VRAM) 사용량 / 여유량 (MiB) |
+| `DCGM_FI_DEV_MEM_COPY_UTIL` | 메모리 인터페이스(읽기/쓰기) 가동 시간 비율(%) |
+| `DCGM_FI_DEV_POWER_USAGE` | 전력 소비(W) |
+| `DCGM_FI_DEV_GPU_TEMP` | GPU 온도(℃) |
+
+`DEV` 계열이 "장치 단위 기본 지표"라면, 실제 연산기가 얼마나 바쁜지는 **프로파일링(`PROF`) 계열**이 따로 있다.
+
+| 필드 | 의미 |
+|---|---|
+| `DCGM_FI_PROF_GR_ENGINE_ACTIVE` | graphics/compute 엔진이 활성인 시간 비율 |
+| `DCGM_FI_PROF_SM_ACTIVE` | SM당 warp가 최소 1개 활성인 시간 비율 (전 SM 평균) |
+| `DCGM_FI_PROF_PIPE_TENSOR_ACTIVE` | Tensor 파이프(HMMA/IMMA)가 활성인 사이클 비율 |
+
+> 필드 이름은 dcgm-exporter 기본 CSV 기준(`DCGM_FI_DEV_*` / `DCGM_FI_PROF_*`)이다. DCGM API 문서에는 같은 의미의 다른 field ID(`..._RATIO`, `..._WATTS`, `..._CELSIUS` 등)도 있지만, exporter가 기본으로 노출해 curl 출력에 실제로 보이는 이름은 위 표 형태다.
+
+<br>
+
+### GPU utilization의 함정 — 점유 시간 ≠ 연산 가동률
+
+가장 흔히 보는 `DCGM_FI_DEV_GPU_UTIL`은 NVML의 `utilization.gpu` 값을 그대로 노출한 것이다. NVML 정의는 "지난 샘플 구간 동안 GPU에서 커널이 1개 이상 실행된 시간의 비율"이다. 즉 **"GPU가 일을 하긴 했나"의 시간 비율**이지, **연산 자원(SM·Tensor Core)을 얼마나 채웠나**가 아니다.
+
+그래서 작은 커널 하나가 GPU를 거의 못 채우면서 쉬지 않고 돌면 `GPU_UTIL`은 100%로 찍히지만 실제 SM 점유는 낮을 수 있다 — utilization(점유 시간)과 saturation(자원 포화)은 다르다. 정의상, 진짜 연산 가동률을 보려면 `DCGM_FI_PROF_SM_ACTIVE`(SM이 얼마나 바빴나)나 `DCGM_FI_PROF_PIPE_TENSOR_ACTIVE`(Tensor Core가 얼마나 돌았나)를 함께 봐야 한다.
+
+> `GPU_UTIL` 100%를 곧 "GPU를 다 쓰고 있다"로 읽으면 오히려 underutilization을 놓친다. 뒤에서 다룰 GPU 공유 기법(MIG / MPS / time-slicing)이 필요한지 판단할 때, time-based utilization만 보면 "이미 꽉 찼다"고 오판하기 쉽다 — `PROF` 계열로 실제 포화 여부를 확인하는 편이 안전하다. (NVIDIA가 "GPU_UTIL을 쓰지 말라"고 단정하는 건 아니고, 두 지표의 정의 차이에서 따라 나오는 결론이다.)
+
+<br>
+
 ## GPU utilization challenges
 
 K8s는 기본적으로 GPU를 Pod에 **배타적(exclusive)**으로 할당한다. Pod가 실제로 안 쓰는 순간에도 수명 내내 점유하며, 여러 Pod 간 GPU 공유나 부분 GPU 할당을 기본 지원하지 않는다.
@@ -135,7 +170,7 @@ K8s는 기본적으로 GPU를 Pod에 **배타적(exclusive)**으로 할당한다
 
 > **참고: AWS 블로그의 fractional GPU 사례 (비디오 인코딩)**
 >
-> [AWS 블로그](https://aws.amazon.com/blogs/containers/delivering-video-content-with-fractional-gpus-in-containers-on-amazon-eks/)는 GenAI/LLM이 아니라 **EKS 위 비디오 인코딩·트랜스코딩** 워크로드를 다룬다. ffmpeg + NVENC(CUDA)로 1080p25 스트림을 GPU에서 인코딩하는데, **작업 하나가 GPU의 약 10%만 쓴다** — 나머지 90%는 놀고 있다. 그래서 time-slicing으로 물리 GPU 1장을 10슬롯으로 광고하고, g4dn.2xlarge(T4) 한 대에 최대 **28개 동시 인코딩 세션**을 bin-pack한다.
+> [AWS 블로그](https://aws.amazon.com/blogs/containers/delivering-video-content-with-fractional-gpus-in-containers-on-amazon-eks/)는 GenAI/LLM이 아니라 **EKS 위 비디오 인코딩·트랜스코딩** 워크로드를 다룬다. ffmpeg + NVENC(CUDA)로 1080p25 스트림을 GPU에서 인코딩하는데, **워크로드 하나가 GPU의 ~10%만 쓴다고 가정하면** 물리 GPU 1장을 10슬롯으로 쪼갤 수 있다(블로그는 이 10%를 측정값으로 못박지 않고 슬롯 수 산정의 가정으로 든다). 그렇게 time-slicing으로 물리 GPU 1장을 여러 슬롯으로 광고하고, g4dn.2xlarge(T4) 한 대에 최대 **28개 동시 인코딩 세션**을 bin-pack한다. 이 28이라는 상한은 SM이나 메모리가 아니라 **T4의 단일 하드웨어 인코더(NVENC) capacity**가 먼저 포화하기 때문이다(같은 1080p25 기준 g5.2xlarge는 31세션).
 >
 > 결론의 "최대 95% price-performance 개선"은 time-slicing 단독 수치가 아니다. **fractional GPU + EKS + Bottlerocket(이미지 캐싱) + Karpenter(이종 인스턴스) + spot** 등을 묶은 **비디오 파이프라인 전체** 최적화 결과다. LLM 추론에 그대로 95%를 기대하면 안 된다.
 >
@@ -176,6 +211,8 @@ GPU 파티셔닝·공유 기법은 대체로 벤더별(vendor-specific)이다. N
 |---|---|
 | **DCGM vs dcgm-exporter** | 측정(NVML) vs 노출(Prometheus /metrics) |
 | **메트릭 흐름** | GPU → DCGM → exporter → Prometheus (pull) |
+| **주요 필드** | `DCGM_FI_DEV_*`(기본 지표) vs `DCGM_FI_PROF_*`(연산 가동률) |
+| **utilization 함정** | `GPU_UTIL`=점유 시간 ≠ 자원 포화 → `PROF_SM_ACTIVE`/`PIPE_TENSOR_ACTIVE`로 확인 |
 | **PodResources API** | exporter가 읽어 Pod/namespace 라벨 부착 |
 | **기본 할당 문제** | 배타적 → underutilization (모델 편차, 동적 패턴, 파편화) |
 | **파티셔닝 키워드** | allocation(소유) ≠ isolation(격리) |

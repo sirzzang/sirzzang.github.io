@@ -27,12 +27,14 @@ use_math: false
 
 [이전 글]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG %})에서 MIG를 통한 GPU 하드웨어 파티셔닝을 다뤘다. 이번 글에서는 소프트웨어 기반의 GPU 공유 기법인 MPS와 time-slicing, 세 기법 비교를 정리한다. Ch10 time-slicing 실습 코드 분석은 [10.6]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-06-Ch10-Lab-Code-Analysis-Time-Slicing-and-Llama %})에서, 배포·검증·트러블슈팅은 [10.7]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification %})에서 다룬다.
 
+<br>
+
 # TL;DR
 
 - MPS는 여러 프로세스의 커널을 한 GPU SM에 동시 co-resident시키는 병렬(parallel) 공유, time-slicing은 context를 타이머로 번갈아 전환하는 직렬(serial) 공유다
 - MPS의 메모리 격리는 Volta부터 주소공간 접근 분리가 추가됐지만, 용량·대역폭·fault 격리는 여전히 없다
 - time-slicing은 ConfigMap의 replicas로 물리 1장을 N개 슬롯으로 광고하며, 메모리 격리가 없어 Σ(모델 메모리) ≤ 물리 VRAM을 사용자가 직접 책임진다
-- 세 기법은 배타적이지 않다 — MIG로 큰 칸을 가르고 그 안을 MPS·time-slicing으로 다시 공유하는 스택도 가능하다
+- 세 기법은 배타적이지 않다 — MIG로 큰 칸을 가르고 그 안을 time-slicing으로 다시 공유하는 스택이 가능하다(공식 k8s-device-plugin 기준 MIG+time-slicing은 지원, MIG+MPS는 CUDA 레벨 한정)
 
 <br>
 
@@ -106,7 +108,7 @@ Volta 아키텍처는 MPS의 주요 한계 몇 가지를 개선했다:
 
 남은 한계: **대역폭 공유**(한 프로세스가 대역폭을 독식할 수 있음), **fault isolation 없음**(한 프로세스의 GPU fault가 같은 MPS Server를 쓰는 모든 프로세스에 영향).
 
-> **`CUDA_MPS_ACTIVE_THREAD_PERCENTAGE`의 동작**: 이 변수를 50으로 설정하면 해당 client가 전체 SM의 50%까지만 사용할 수 있다. 하지만 이는 hard partition이 아니라 **soft limit**이다. 나머지 50%를 다른 client가 안 쓰고 있어도 해당 client가 가져갈 수 없다. 반대로, `CUDA_MPS_PINNED_DEVICE_MEM_LIMIT`는 메모리 할당 상한을 설정하지만, 할당이 상한 안이라고 해서 대역폭이나 성능이 보장되는 것은 아니다.
+> **`CUDA_MPS_ACTIVE_THREAD_PERCENTAGE`의 동작**: 이 변수를 50으로 설정하면 해당 client가 쓸 수 있는 SM 비율의 **상한(cap)**이 50%로 걸린다. 핵심은 이게 **상한이지 예약(reservation)이 아니라는** 점이다 — 쓰지 않는 나머지 SM이 그 client용으로 떼어 잡히지도, 다른 client의 사용을 막지도 않는다. 즉 한 client가 자기 몫을 넘겨 독식하는 것만 막을 뿐, 각 client에 최소 성능(floor)을 보장하지는 않는다. 비슷하게 `CUDA_MPS_PINNED_DEVICE_MEM_LIMIT`는 메모리 할당 상한을 설정하지만, 할당이 상한 안이라고 해서 대역폭이나 성능이 보장되는 것은 아니다.
 
 <br>
 
@@ -114,7 +116,7 @@ Volta 아키텍처는 MPS의 주요 한계 몇 가지를 개선했다:
 
 책 기준으로는, 공식 NVIDIA k8s-device-plugin이 MPS partitioning을 지원하지 않아 [nebuly-ai fork](https://github.com/nebuly-ai/nos)로 우회하는 방법이 안내되어 있다.
 
-> 공식 NVIDIA k8s-device-plugin은 **2024년(v0.15.x)**부터 MPS 공유를 네이티브로 지원한다. ConfigMap에서 `sharing.mps.replicas`를 설정하면 time-slicing과 동일한 방식으로 슬롯이 광고되며, MPS daemon이 Pod 내에서 자동 관리된다. 현재 시점의 [플러그인 문서](https://github.com/NVIDIA/k8s-device-plugin#shared-access-to-gpus-with-cuda-mps)를 확인하는 것을 권장한다.
+> 공식 NVIDIA k8s-device-plugin은 **2024년 v0.15.0**부터 MPS 공유를 지원한다(릴리스 노트에 **experimental**로 표기됨). ConfigMap의 `sharing.mps.resources[].replicas`(축약하면 `sharing.mps.replicas`)를 설정하면 time-slicing과 동일한 방식으로 슬롯이 광고되며, MPS daemon이 Pod 내에서 관리된다. experimental 단계인 만큼 현재 시점의 [플러그인 문서](https://github.com/NVIDIA/k8s-device-plugin#shared-access-to-gpus-with-cuda-mps)를 확인하는 것을 권장한다.
 
 <br>
 
@@ -247,7 +249,7 @@ resource "helm_release" "nvidia_gpu_operator" {
 **설정 업데이트의 두 가지 경우**
 
 - **최초 연결** (ConfigMap 자체를 처음 연결): device plugin Pod 재시작이 필요하다. Helm upgrade, ClusterPolicy patch, 또는 Terraform apply 후 device plugin DaemonSet이 rolling restart된다
-- **내용만 변경** (이미 연결된 ConfigMap의 replicas 등 수정): device plugin이 ConfigMap 변경을 감지하여 자동 반영한다. Pod 재시작 없이 hot reload된다
+- **내용만 변경** (이미 연결된 ConfigMap의 replicas 등 수정): 버전·구성에 따라 device plugin이 변경을 감지해 자동 반영하기도 하지만, 반영되지 않으면 `kubectl rollout restart ds/nvidia-device-plugin`으로 device plugin을 재시작해 새 ConfigMap을 다시 읽게 해야 한다
 
 <br>
 
@@ -313,7 +315,7 @@ kubectl get nodes -o custom-columns=NAME:.metadata.name,INSTANCE:.metadata.label
 
 ### 데모: Llama-3.2-1B
 
-Llama-3.2-1B는 약 1.8GB의 VRAM만 사용한다. L4 24GB 기준으로 **92%가 논다**. time-slicing으로 10 슬롯을 만들면, Deployment에서 `replicas: 5` × `nvidia.com/gpu: 2`로 설정해 5개 Pod가 각각 2 슬롯을 점유하도록 구성할 수 있다. 1.8GB × 5 = 9GB이므로 24GB VRAM 안에 충분히 들어간다.
+Llama-3.2-1B는 약 1.8GB의 VRAM만 쓴다(정밀도·KV 캐시·런타임에 따라 달라지는 근사값). L4 24GB 기준으로 **90%가 넘게 논다**. time-slicing으로 10 슬롯을 만들면, Deployment에서 `replicas: 5` × `nvidia.com/gpu: 2`로 설정해 5개 Pod가 각각 2 슬롯을 점유하도록 구성할 수 있다. 1.8GB × 5 = 9GB이므로 24GB VRAM 안에 충분히 들어간다.
 
 Deployment 매니페스트 예시:
 
@@ -344,7 +346,9 @@ spec:
 
 <br>
 
-# MPS vs Time-slicing 비교
+# 공유 기법 비교
+
+## MPS vs time-slicing
 
 MPS와 time-slicing의 근본적인 차이는 **실행 방식**이다.
 
@@ -360,9 +364,7 @@ MPS와 time-slicing의 근본적인 차이는 **실행 방식**이다.
 
 > GPU의 기본 멀티프로세스 동작이 곧 time-slicing이다. 여러 프로세스가 GPU를 요청하면 드라이버가 context를 번갈아 전환하며 실행한다. **MPS는 그 스위칭을 없애고 동시 실행하려고** 나온 기능이다. MPS를 끄면 GPU는 자연스럽게 time-slicing으로 돌아간다.
 
-<br>
-
-# Time-slicing의 메모리
+## time-slicing의 메모리
 
 time-slicing에서 각 프로세스는 자기 메모리를 따로 잡아(allocate) 쓰고, VRAM에 그대로 남는다. context switch가 발생해도 메모리는 swap-out되지 않는다. **allocation ≠ isolation**이다.
 
@@ -381,9 +383,7 @@ time-slicing에서 각 프로세스는 자기 메모리를 따로 잡아(allocat
 > | **pre-Volta MPS** | 단일 공유 context, 동시 | 동시 | 없음 |
 > | **Volta+ MPS** | 분리 context, 동시 | 동시 | 있음 |
 
-<br>
-
-# 세 기법 비교
+## 세 기법 종합 비교
 
 MIG, MPS, time-slicing 세 기법을 한눈에 비교한다.
 
@@ -393,23 +393,23 @@ MIG, MPS, time-slicing 세 기법을 한눈에 비교한다.
 |---|---|---|---|
 | **자원 격리** | 완전 (SM/L2/메모리 하드 분할) | 제한적 (주소공간 접근만) | 없음 |
 | **성능 예측 가능성** | 높음 — 전용 SM/메모리 | 중간 — 동적 SM 공유 | 낮음 — context switch 오버헤드 |
-| **확장성** | 최대 7 인스턴스 | 최대 48 client | 제한 없음 (VRAM이 허용하는 한) |
+| **확장성** | 최대 7 인스턴스 | 최대 48 client (pre-Volta 16) | 제한 없음 (VRAM이 허용하는 한) |
 | **오버헤드** | 최소 | 낮음 (context switch 없음) | 높음 (context switch) |
 | **사용 사례** | 멀티테넌트 추론, 프로덕션 | HPC/MPI, 경량 추론 병렬화 | 개발/테스트, burst 워크로드 |
-| **호환성** | Ampere 이후 (A100, H100, H200) | Volta 이후 | Pascal 이후 |
+| **호환성** | Ampere 이후 (A100, H100, H200) | Kepler+ (격리·HW가속은 Volta+) | Pascal 이후 |
 
 <br>
 
-## 언제 무엇을 쓰나
+### 언제 무엇을 쓰나
 
 | 상황 | 추천 기법 | 이유 |
 |---|---|---|
 | 멀티테넌트 프로덕션, SLA 필요 | **MIG** | 유일한 하드웨어 격리 |
 | GPU 활용률 최적화, 각 작업이 GPU를 조금씩 사용 | **MPS** | 빈 SM을 다른 프로세스로 채움 |
 | 개발/테스트, 간헐적 추론 | **time-slicing** | 설정 간단, GPU 호환성 넓음 |
-| MIG로 큰 파티션 + 파티션 내 추가 공유 | **MIG + MPS** 또는 **MIG + time-slicing** | 격리와 활용률 모두 확보 |
+| MIG로 큰 파티션 + 파티션 내 추가 공유 | **MIG + time-slicing** | 격리와 활용률 모두 확보 (k8s-device-plugin은 MIG+time-slicing 지원; MIG+MPS는 CUDA 레벨만) |
 
-셋은 배타적이지 않다. MIG로 큰 칸을 가르고 그 안을 MPS·time-slicing으로 다시 공유하는 **스택 구성**이 가능하다. 예를 들어 A100을 3g.40gb 2개 MIG 인스턴스로 나눈 뒤, 각 인스턴스 안에서 time-slicing replicas 4를 적용하면 물리 1장으로 8개 슬롯(격리된 2그룹 × 4)을 운용할 수 있다.
+셋은 배타적이지 않다. MIG로 큰 칸을 가르고 그 안을 다시 공유하는 **스택 구성**이 가능하다. 예를 들어 A100을 3g.40gb 2개 MIG 인스턴스로 나눈 뒤, 각 인스턴스 안에서 time-slicing replicas 4를 적용하면 물리 1장으로 8개 슬롯(격리된 2그룹 × 4)을 운용할 수 있다. 단 K8s 맥락에서는 구분이 필요하다 — **MIG + time-slicing은 공식 k8s-device-plugin이 지원**하지만, **MIG + MPS는 현재 k8s-device-plugin이 MIG 활성 장치의 MPS 공유를 지원하지 않는다**(CUDA 레벨에선 MIG 인스턴스 위 MPS가 동작하나 플러그인 밖에서 별도로 구성해야 한다).
 
 > 5가지 GPU 공유 메커니즘(CUDA Streams, Time Slicing, MPS, MIG, vGPU) 전체를 비교한 개요는 [GPU 공유 메커니즘 개요]({% post_url 2025-11-22-Dev-GPU-Sharing-Mechanisms %})를 참고하자.
 
@@ -433,8 +433,8 @@ time-slicing 개념을 EKS + L4 환경에서 검증하려면, 인프라 코드(`
 | **메모리 격리** | 주소공간 접근만 (Volta+) | 없음 | 완전 (물리 분할) |
 | **fault 격리** | 없음 | 없음 | 있음 |
 | **K8s 적용** | ConfigMap + MPS replicas | ConfigMap + timeSlicing replicas | MIG 프로파일 + 별도 리소스 타입 |
-| **호환 GPU** | Volta 이후 | Pascal 이후 | Ampere 이후 |
-| **스택 가능** | MIG 위에 MPS 가능 | MIG 위에 time-slicing 가능 | 단독 또는 MPS/TS 결합 |
+| **호환 GPU** | Kepler+ (격리는 Volta+) | Pascal 이후 | Ampere 이후 |
+| **스택 가능** | MIG 위 MPS: CUDA 레벨만 (k8s 미지원) | MIG 위 time-slicing: k8s 지원 | 단독 또는 MPS/TS 결합 |
 
 GPU 공유의 핵심은 결국 **allocation과 isolation의 균형**이다. 격리가 강할수록 안전하지만 유연성이 줄고, 격리가 약할수록 유연하지만 운영 책임이 늘어난다. 워크로드의 특성과 운영 환경에 맞는 기법을 선택하되, 필요하면 스택으로 조합하는 것이 실무적 접근이다.
 
