@@ -124,7 +124,7 @@ kubectl apply -f nvidia-ts.yaml
 ```
 
 
-`data.any` 키는 필수 단어가 아니다. 다른 이름(l4-config 등)을 써도 되지만, 그러면 반드시 그걸 가리켜야 한다. 노드 라벨 `nvidia.com/device-plugin.config=<키>` 를 붙이거나, helm `config.default=<키>`로 설정하면 된다. 다만, 해당 단어는 config-manager 가 노드에 `nvidia.com/device-plugin.config` 라벨이 없을 때 자동 적용하는 **catch-all** 예약 키이다. 즉, 노드에 `nvidia.com/device-plugin.config` 라벨·helm `config.default`가 없으면 `any` 키를 자동 적용한다. 이 실습은 라벨·default 없이 GPU 노드 1대만 쓰므로 `any`를 사용한다. 다른 키 이름만 쓰면 time-slicing이 안 붙어 광고 1에 머문다. 자세히는 [10.6 — `data.any` 키]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-06-Ch10-Lab-Code-Analysis-Time-Slicing-and-Llama %}).
+`data.any`의 `any`는 예약어가 아니라 설정 프로파일 이름일 뿐이다. config-manager는 ① 노드 라벨 `nvidia.com/device-plugin.config=<키>`가 있으면 그 키를, ② helm `config.default=<키>`가 있으면 그 키를, ③ 둘 다 없고 ConfigMap에 **키가 1개뿐이면 그 단일 키를 이름과 무관하게** 자동 선택한다. 이 실습은 키가 `any` 하나뿐이라 ③으로 적용되는 것이고, 이름을 `l4-config`로 바꿔도 **키가 1개면 그대로 광고 10**이 된다. 라벨이나 `config.default`가 필요해지는 건 키를 2개 이상 둘 때이며, 그때 특별 취급되는 이름은 `any`가 아니라 `default`다. 자세히는 [10.6 — `data.any` 키]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-06-Ch10-Lab-Code-Analysis-Time-Slicing-and-Llama %}).
 
 ConfigMap이 생기면 plugin init의 FailedMount가 풀리고, 보통 1분 안에 Ready가 된다.
 

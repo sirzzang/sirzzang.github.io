@@ -55,7 +55,7 @@ DCGM (telemetry 수집) → dcgm-exporter (Prometheus 포맷 노출)
 
 ## GPU 사용률 기반 HPA
 
-**scale-out**: GPU utilization이 임계치(80%) 초과 → replica를 최대 10까지 늘려 분산한다.
+GPU utilization이 임계치를 넘으면 replica를 늘리고(scale-out), 낮게 유지되면 줄인다(scale-in). DCGM 커스텀 메트릭 기반 HPA는 `autoscaling/v2` 스키마로 다음처럼 쓴다.
 
 ```yaml
 apiVersion: autoscaling/v2
@@ -68,22 +68,21 @@ spec:
     kind: Deployment
     name: genai-training
   minReplicas: 1
-  maxReplicas: 10
+  maxReplicas: 10                      # scale-out 상한
   metrics:
-  - type: Object
-    object:
-      metricName: DCGM_FI_DEV_GPU_UTIL
-      targetAverageValue: 80
-```
-
-**scale-in**: utilization 20% 이하 10분 지속 → Pod를 축소한다.
-
-```yaml
-spec:
+  - type: Pods                         # Pod별 GPU 메트릭의 평균
+    pods:
+      metric:
+        name: DCGM_FI_DEV_GPU_UTIL
+      target:
+        type: AverageValue             # request 대비 %가 아니라 게이지 평균값
+        averageValue: "80"             # GPU util 평균 80 초과 시 scale-out
   behavior:
     scaleDown:
-      stabilizationWindowSeconds: 600
+      stabilizationWindowSeconds: 600  # 낮은 사용률이 10분 지속돼야 scale-in
 ```
+
+> **`autoscaling/v2` 스키마 주의**: 구 `v2beta1`에서 쓰던 `metricName`/`targetAverageValue`는 v2(GA)에서 제거됐다. v2는 `metric.name` + `target.{type, averageValue}` 구조를 쓴다. 또 DCGM GPU util은 특정 오브젝트 하나에 붙는 값이 아니라 Pod별 메트릭이므로 `type: Object`(이건 `describedObject` 필수)보다 **`type: Pods`**가 맞다. `averageUtilization`은 Pod의 resource request 대비 %라 커스텀 게이지엔 부적합해서 `AverageValue` + `averageValue`(여기선 게이지 값 80)를 쓴다.
 
 [10.2]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-02-GPU-Utilization-and-DCGM %})에서도 말했듯이, **DCGM ≠ dcgm-exporter**다. 전자(DCGM)는 NVML로 GPU 지표를 **측정**하고, 후자(dcgm-exporter)는 그 결과를 Prometheus 텍스트로 **노출**할 뿐이다 — 10.2는 여기까지(관측·Grafana)가 범위였다.
 
@@ -91,7 +90,7 @@ HPA까지 가려면 **10.2에서 다루지 않은** 역할이 하나 더 있다:
 
 ### 전체 체인: DCGM → HPA
 
-위 HPA manifest의 `metricName: DCGM_FI_DEV_GPU_UTIL`이 실제로 어디서 오는지, hop마다 정리하면 다음과 같다.
+위 HPA manifest의 `metric.name: DCGM_FI_DEV_GPU_UTIL`이 실제로 어디서 오는지, hop마다 정리하면 다음과 같다.
 
 | hop | 컴포넌트 | 하는 일 | 출력 |
 |---|---|---|---|
@@ -111,7 +110,7 @@ HPA까지 가려면 **10.2에서 다루지 않은** 역할이 하나 더 있다:
 |---|---|
 | **DCGM_FI_DEV_GPU_UTIL** | GPU 사용률 (%) |
 | **DCGM_FI_DEV_FB_USED** | framebuffer(VRAM) 사용량 |
-| **DCGM_FI_DEV_MEM_COPY_UTIL** | 메모리 대역폭 사용률 |
+| **DCGM_FI_DEV_MEM_COPY_UTIL** | 메모리 인터페이스(read/write) 가동 시간 비율(%) — 대역폭(GB/s) 대비 %가 아님 |
 | **DCGM_FI_DEV_POWER_USAGE** | 전력 소비 |
 | **DCGM_FI_DEV_GPU_TEMP** | GPU 온도 |
 | **DCGM_FI_DEV_XID_ERRORS** | XID 에러 |
@@ -180,6 +179,8 @@ NIM(NVIDIA Inference Microservices)은 NVIDIA AI Enterprise의 구성요소로, 
 ![NVIDIA NIM 컨테이너 구성]({{site.url}}/assets/images/Week04-ch10-nvidia-nim-architecture.png){: .align-center}
 
 위 그림은 NIM 컨테이너를 아래에서 위로 쌓은 **레이어 스택**이다. 맨 아래 CUDA runtime/driver 위에 TensorRT-LLM 같은 최적화 엔진과 모델 weights·engine cache가 올라가고, Triton Inference Server가 서빙 계층을 담당한다. 그 위 Enterprise/K8s 연동 레이어를 거쳐 REST/gRPC API로 노출된다. 즉 "모델 파일 + 추론 엔진 + 서빙 런타임 + 표준 API"를 한 이미지에 넣어, Ch10 실습의 `transformers.generate` 단순 서빙과 달리 프로덕션급 추론 스택을 바로 쓸 수 있게 하는 구조다.
+
+> 위 스택 그림(Triton 서빙 계층 중심)은 초기 NIM 아키텍처 기준이다. 최신 LLM NIM은 "한 컨테이너에 한 백엔드(vLLM/TensorRT-LLM/SGLang)"로 단순화되는 추세이고, 노출 API도 LLM NIM은 **OpenAI 호환 REST**가 표준이다. 그림은 개념 이해용으로 보고, 세부 구성은 버전에 따라 달라질 수 있다.
 
 | 계층 | 구성 |
 |---|---|
