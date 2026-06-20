@@ -190,6 +190,7 @@ Elastic Beanstalk 배포를 위해 GitHub Actions Marketplace에서 beanstalk de
 
 해당 action은 배포될 버전의 `zip` 파일이 이미 생성되었음을 가정한다. 따라서, 배포를 위한 `zip` 파일을 생성한 후, beanstalk deploy를 이용해 배포하는 Workflow를 작성하면 된다. 가장 무난한 `ubuntu` 플랫폼을 이용하도록 했다.
 
+{% raw %}
 ```yaml
 name: Deploy master
 on:
@@ -224,6 +225,7 @@ jobs:
         region: us-west-2
         deployment_package: deploy.zip
 ```
+{% endraw %}
 
 > *참고*: Action 버전
 >

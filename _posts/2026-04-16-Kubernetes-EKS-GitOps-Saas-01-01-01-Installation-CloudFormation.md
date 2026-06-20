@@ -110,6 +110,7 @@ Outputs:    { ... }   ← 만든 후 보여줄 값 (URL, 비밀번호 위치 등
 <details markdown="1">
 <summary><b>vs-code-ec2.yaml 전체 코드</b></summary>
 
+{% raw %}
 ```yaml
 AWSTemplateFormatVersion: 2010-09-09
 
@@ -394,6 +395,7 @@ Outputs:
     Description: The VS Code IDE password
     Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/coder-password"
 ```
+{% endraw %}
 
 </details>
 
@@ -604,6 +606,7 @@ SSMBootstrapAssociation:
 
 SSMDocument의 `runCommand`에 담긴 셸 명령이 EC2 부팅 후 순차 실행되며, 이 안에서 최종적으로 Terraform까지 호출된다. 주요 명령을 발췌하면 다음과 같다.
 
+{% raw %}
 ```bash
 #!/bin/bash
 
@@ -669,6 +672,7 @@ else
     --data-binary '{"Status":"FAILURE","Reason":"Terraform installation failed",...}' "$WAIT_HANDLE_URL"
 fi
 ```
+{% endraw %}
 
 실행 순서를 표로 요약하면 다음과 같다.
 

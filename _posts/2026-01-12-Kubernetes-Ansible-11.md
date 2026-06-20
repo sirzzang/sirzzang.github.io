@@ -60,6 +60,7 @@ tags:
 
 롤은 **Ansible이 자동으로 인식하는 표준화된 디렉터리 구조**를 제공한다:
 
+{% raw %}
 ```yaml
 # 롤 없이 (모든 것이 한 파일에)
 ---
@@ -82,6 +83,7 @@ tags:
         name: "{{ service_name }}"
         state: restarted
 ```
+{% endraw %}
 
 ```yaml
 # 롤 사용 (체계적으로 분리)
@@ -169,6 +171,7 @@ my-role/              # 최상위 디렉토리
 
 **예시: tasks 디렉터리**
 
+{% raw %}
 ```yaml
 # tasks/main.yml (진입점)
 ---
@@ -181,6 +184,7 @@ my-role/              # 최상위 디렉토리
 - name: Include configure tasks
   import_tasks: configure.yml
 ```
+{% endraw %}
 
 ```yaml
 # tasks/Debian.yml
@@ -368,6 +372,7 @@ my-role/
 - `ansible.builtin.copy` 모듈로 `files/index.html`을 `/var/www/html/index.html`로 복사
 - 파일이 변경되면 `notify`로 `restart service` 핸들러 호출
 
+{% raw %}
 ```bash
 # (server) #
 cd ~/my-ansible/my-role
@@ -391,6 +396,7 @@ cat <<'EOT' > tasks/main.yml
     - restart service
 EOT
 ```
+{% endraw %}
 
 <br>
 
@@ -405,6 +411,7 @@ echo "Hello! Ansible" > files/index.html
 
 ## handlers/main.yml (핸들러)
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > handlers/main.yml
@@ -417,6 +424,7 @@ cat <<'EOT' > handlers/main.yml
     state: restarted
 EOT
 ```
+{% endraw %}
 
 <br>
 
@@ -889,6 +897,7 @@ ansible-galaxy role init my-role2
 
 firewalld에 서비스를 추가하고 설정을 리로드한다.
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > my-role2/tasks/main.yml
@@ -908,6 +917,7 @@ cat <<'EOT' > my-role2/tasks/main.yml
     state: reloaded
 EOT
 ```
+{% endraw %}
 
 **주요 포인트**:
 - **`ansible.posix.firewalld`**: firewalld 설정 모듈
@@ -1225,6 +1235,7 @@ pre_tasks → roles → tasks → handlers → post_tasks
 
 ## Playbook 작성
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > special_role.yml
@@ -1259,6 +1270,7 @@ cat <<'EOT' > special_role.yml
         msg: "{{ curl_result.content }}"
 EOT
 ```
+{% endraw %}
 
 **주요 구성**:
 - **`pre_tasks`**: 시작 메시지 출력

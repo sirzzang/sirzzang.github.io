@@ -430,6 +430,7 @@ task vars도 확인해보려고 했는데, 역시 수가 많았다. 대략 20개
 
 자세히 살펴보니, 대부분 **include_tasks에 파라미터를 전달**하는 용도로 사용되고 있었다:
 
+{% raw %}
 ```yaml
 # 다운로드 파라미터 전달
 - name: Download containerd
@@ -437,6 +438,7 @@ task vars도 확인해보려고 했는데, 역시 수가 많았다. 대략 20개
   vars:                    # ← task vars (우선순위 17)
     download: "{{ download_defaults | combine(downloads.containerd) }}"
 ```
+{% endraw %}
 
 task vars에서 사용하는 변수명(`download`, `iface` 등)을 group_vars/defaults에서 검색해봤는데, 겹치는 게 없는 것 같았다. 즉, 상위 변수를 영구적으로 덮어쓰는 게 아니라 해당 task 범위에서만 유효한 **로컬 파라미터**로 사용하는 패턴이었다.
 
@@ -576,6 +578,7 @@ roles/kubespray_defaults/defaults/main/main.yml:131:enable_dns_autoscaler: true
 grep -Rn "allow_unsupported_distribution_setup" inventory/mycluster/ playbooks/ roles/ -A1 -B1
 ```
 
+{% raw %}
 ```bash
 inventory/mycluster/group_vars/all/all.yml-141-## If enabled it will allow kubespray to attempt setup even if the distribution is not supported.
 inventory/mycluster/group_vars/all/all.yml:142:allow_unsupported_distribution_setup: false
@@ -584,6 +587,7 @@ roles/kubernetes/preinstall/tasks/0040-verify-settings.yml-22-  assert:
 roles/kubernetes/preinstall/tasks/0040-verify-settings.yml:23:    that: (allow_unsupported_distribution_setup | default(false)) or ansible_distribution in supported_os_distributions
 roles/kubernetes/preinstall/tasks/0040-verify-settings.yml-24-    msg: "{{ ansible_distribution }} is not a known OS"
 ```
+{% endraw %}
 
 변수의 선언 위치(`group_vars`)와 실제 사용 위치(`task`)를 함께 확인할 수 있다. 이렇게 하면 변수가 어떤 맥락에서 사용되는지 이해하기 쉽다.
 

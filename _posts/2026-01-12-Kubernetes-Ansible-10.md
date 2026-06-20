@@ -386,6 +386,7 @@ tnode3                     : ok=3    changed=2    unreachable=0    failed=0    s
 
 **개선된 Playbook**:
 
+{% raw %}
 ```yaml
 ---
 - hosts: all
@@ -410,6 +411,7 @@ tnode3                     : ok=3    changed=2    unreachable=0    failed=0    s
         name: "{{ 'apache2' if ansible_facts['os_family'] == 'Debian' else 'httpd' }}"
         state: restarted
 ```
+{% endraw %}
 
 **개선 사항**:
 - **핸들러 하나로 통합**: `restart apache` 하나로 모든 OS 처리
@@ -824,6 +826,7 @@ total 4
 
 먼저 `failed_when` 없이 실행하여 기본 동작을 확인한다.
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > failed-when-1.yml
@@ -839,6 +842,7 @@ cat <<'EOT' > failed-when-1.yml
         msg: "{{ command_result.stdout }}"
 EOT
 ```
+{% endraw %}
 
 **실행**:
 
@@ -895,6 +899,7 @@ ansible2:x:1002:1002::/home/ansible2:/bin/sh
 
 이제 `failed_when`을 추가하여 특정 조건에서 실패로 처리하도록 한다. `command_result.stdout` 변수에 `"Please..."`라는 문자열이 있으면 작업을 실패로 처리하도록 한다.
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > failed-when-2.yml
@@ -911,6 +916,7 @@ cat <<'EOT' > failed-when-2.yml
         msg: "{{ command_result.stdout }}"
 EOT
 ```
+{% endraw %}
 
 **실행**:
 
@@ -975,6 +981,7 @@ ansible2:x:1002:1002::/home/ansible2:/bin/sh
 
 > **참고**: [fail 모듈](https://docs.ansible.com/ansible/latest/collections/ansible/builtin/fail_module.html)
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > failed-when-custom.yml
@@ -992,6 +999,7 @@ cat <<'EOT' > failed-when-custom.yml
       when: "'Please input user id and password' in command_result.stdout"
 EOT
 ```
+{% endraw %}
 
 **주요 차이점**:
 - **`ignore_errors: yes`**: 첫 번째 작업이 실패해도 계속 진행
@@ -1103,6 +1111,7 @@ tnode1                     : ok=2    changed=1    unreachable=0    failed=1    s
 > - `return_content: true`이면 HTTP 응답 본문을 반환값에 포함 (기본값: `false`)
 > - 성공/실패는 HTTP 상태 코드로 판단 (200번대: 성공, 400/500번대: 실패)
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > changed-when-example.yml
@@ -1123,6 +1132,7 @@ cat <<'EOT' > changed-when-example.yml
         msg: "{{ web_result.content }}"
 EOT
 ```
+{% endraw %}
 
 **실행**:
 
@@ -1259,6 +1269,7 @@ tasks:
 
 ## Playbook 작성
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > block-example.yml
@@ -1291,6 +1302,7 @@ cat <<'EOT' > block-example.yml
             mode: '0644'
 EOT
 ```
+{% endraw %}
 
 - **block**: 디렉터리 존재 확인 (없으면 실패)
 - **rescue**: 디렉터리가 없으면 생성
@@ -1412,6 +1424,7 @@ tnode2                     : ok=3    changed=1    unreachable=0    failed=0    s
 
 ## Playbook 작성
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > web-server-deploy.yml
@@ -1482,6 +1495,7 @@ cat <<'EOT' > web-server-deploy.yml
             msg: "{{ web_status.stdout_lines }}"
 EOT
 ```
+{% endraw %}
 
 **주요 구조**:
 - **`become: yes`**: root 권한으로 실행 (패키지 설치 필요)

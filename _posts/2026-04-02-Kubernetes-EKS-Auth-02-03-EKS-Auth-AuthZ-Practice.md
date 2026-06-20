@@ -879,6 +879,7 @@ aws eks create-access-entry \
   --type STANDARD
 ```
 
+{% raw %}
 ```json
 {
     "accessEntry": {
@@ -894,6 +895,7 @@ aws eks create-access-entry \
     }
 }
 ```
+{% endraw %}
 
 `username` 필드를 보면, 이 Role을 assume한 주체가 K8s에서 `arn:aws:sts::...:assumed-role/eks-viewer-test-role/{{SessionName}}`이라는 이름으로 인식된다는 것을 알 수 있다. `{{SessionName}}`은 `sts:AssumeRole` 호출 시 지정한 세션 이름으로 치환된다.
 
@@ -951,6 +953,7 @@ aws eks list-access-entries --cluster-name myeks | jq
 
 새 Role을 assume하여 kubectl을 실행한다. ViewPolicy이므로 읽기는 되지만 쓰기는 거부되어야 한다.
 
+{% raw %}
 ```bash
 # STS를 통해 Role assume → 임시 자격 증명(AccessKeyId, SecretAccessKey, SessionToken) 획득
 # --role-session-name: 세션 식별자. K8s username의 {{SessionName}} 자리에 들어감
@@ -966,6 +969,7 @@ export AWS_SESSION_TOKEN=$(echo $CREDS | jq -r '.Credentials.SessionToken')
 # 현재 identity 확인
 aws sts get-caller-identity
 ```
+{% endraw %}
 
 ```json
 {
@@ -1323,6 +1327,7 @@ aws eks update-access-entry \
   --kubernetes-groups '["custom-test-group"]'
 ```
 
+{% raw %}
 ```json
 {
     "accessEntry": {
@@ -1340,6 +1345,7 @@ aws eks update-access-entry \
     }
 }
 ```
+{% endraw %}
 
 `kubernetesGroups`에 `custom-test-group`이 추가되었다. 이제 이 Role을 assume한 주체는 K8s에서 `custom-test-group` 그룹에 속하게 되고, 해당 그룹에 바인딩된 RBAC 규칙이 적용된다.
 

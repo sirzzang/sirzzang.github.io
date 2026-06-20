@@ -81,12 +81,14 @@ tags:
 > - {% raw %}`{% %}`{% endraw %}: 제어문 (조건문, 반복문)
 > - {% raw %}`{# #}`{% endraw %}: 주석
 
+{% raw %}
 ```yaml
 - name: Create User {{ user }}
   ansible.builtin.user:
     name: "{{ user }}"
     state: present
 ```
+{% endraw %}
 
 <br>
 
@@ -122,6 +124,7 @@ EOT
 
 ## Playbook 작성
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > create-user.yml
@@ -134,6 +137,7 @@ cat <<'EOT' > create-user.yml
         state: present
 EOT
 ```
+{% endraw %}
 
 - `ansible.builtin.user`: 시스템 사용자를 관리하는 모듈
 - `state: present`: 사용자가 존재하도록 보장 (없으면 생성)
@@ -237,6 +241,7 @@ EOT
 ## Playbook 작성 및 실행
 
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > create-user1.yml
@@ -249,6 +254,7 @@ cat <<'EOT' > create-user1.yml
         state: present
 EOT
 ```
+{% endraw %}
 
 ```bash
 # (server) #
@@ -282,6 +288,7 @@ tnode3                     : ok=2    changed=1    unreachable=0    failed=0
 
 Playbook의 `vars:` 섹션에 변수를 선언할 수 있다.
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > create-user2.yml
@@ -296,6 +303,7 @@ cat <<'EOT' > create-user2.yml
         state: present
 EOT
 ```
+{% endraw %}
 
 <br>
 
@@ -351,6 +359,7 @@ mkdir -p vars
 echo "user: ansible3" > vars/users.yml
 ```
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > create-user3.yml
@@ -365,6 +374,7 @@ cat <<'EOT' > create-user3.yml
         state: present
 EOT
 ```
+{% endraw %}
 
 - `vars_files`: 외부 YAML 파일에서 변수를 불러옴
 - 변수 파일을 분리하면 환경별 설정 관리가 용이함
@@ -436,6 +446,7 @@ changed: [tnode3]
 
 ## Playbook 작성
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > create-user4.yml
@@ -453,6 +464,7 @@ cat <<'EOT' > create-user4.yml
         var: result # result 변수에 저장한 값 출력
 EOT
 ```
+{% endraw %}
 
 - `register: result`: Task 실행 결과를 `result` 변수에 저장
 - `debug` 모듈의 `var`: 변수 내용을 출력
@@ -531,6 +543,7 @@ tnode3                     : ok=3    changed=0    unreachable=0    failed=0    s
 
 ## Playbook 작성
 
+{% raw %}
 ```bash
 # (server) #
 cat <<'EOT' > remove-user.yml
@@ -544,6 +557,7 @@ cat <<'EOT' > remove-user.yml
         remove: yes
 EOT
 ```
+{% endraw %}
 
 - `state: absent`: 사용자가 없도록 보장 (있으면 삭제)
 - `remove: yes`: 홈 디렉터리도 함께 삭제
