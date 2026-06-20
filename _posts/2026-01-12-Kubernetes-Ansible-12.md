@@ -568,6 +568,7 @@ tasks:
 
 `never` 태그를 작업이나 플레이에 할당하면, 특별히 요청하지 않는 한(`--tags never`) 또는 해당 작업에 정의된 다른 태그를 사용하지 않는 한 **해당 작업이나 플레이를 건너뛴다**.
 
+{% raw %}
 ```yaml
 tasks:
   - name: Run the rarely-used debug task, either with ``--tags debug`` or ``--tags never``
@@ -575,6 +576,7 @@ tasks:
      msg: '{{ showmevar }}'
     tags: [ never, debug ]
 ```
+{% endraw %}
 
 위 예시에서 `--tags debug` 또는 `--tags never`로 실행해야만 해당 작업이 실행된다.
 
@@ -1271,6 +1273,7 @@ tnode1                     : ok=3    changed=2    unreachable=0    failed=0    s
 └── site.yml
 ```
 
+{% raw %}
 ```yaml
 # roles/webserver/tasks/main.yml
 ---
@@ -1286,6 +1289,7 @@ tnode1                     : ok=3    changed=2    unreachable=0    failed=0    s
   debug:
     msg: "Starting web service"
 ```
+{% endraw %}
 
 ```yaml
 # site.yml

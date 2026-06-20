@@ -314,6 +314,7 @@ metrics_server_nodeselector: {}
 
 **metrics-server-deployment.yaml.j2 (resources 부분):** 템플릿에서 아래처럼 `metrics_server_requests_cpu`, `metrics_server_requests_memory`를 사용한다. addons.yml에 넣은 값이 여기 적용된다.
 
+{% raw %}
 ```yaml
         resources:
           limits:
@@ -323,6 +324,7 @@ metrics_server_nodeselector: {}
             cpu: {{ metrics_server_requests_cpu }}
             memory: {{ metrics_server_requests_memory }}
 ```
+{% endraw %}
 
 | 변수 | defaults/main.yml | addons.yml 오버라이드 |
 |------|-------------------|------------------------|

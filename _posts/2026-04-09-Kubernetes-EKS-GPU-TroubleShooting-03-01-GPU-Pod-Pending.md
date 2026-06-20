@@ -629,6 +629,7 @@ nvidia-operator-validator                    2         2         2       3h56m
 
 ### Prometheus alert — Allocatable 0 on GPU 노드
 
+{% raw %}
 ```yaml
 # GPU 노드인데 Allocatable GPU가 0인 상태를 감지
 - alert: GpuAllocatableZeroOnGpuNode
@@ -643,6 +644,7 @@ nvidia-operator-validator                    2         2         2       3h56m
     summary: "GPU node {{ $labels.node }} advertises nvidia.com/gpu = 0"
     runbook: "Check ClusterPolicy spec.devicePlugin.enabled and gpu-operator logs"
 ```
+{% endraw %}
 
 - `== 0` 조건: 키 잔존 + 값 0 패턴을 잡는다 (`absent()`만으로는 누락)
 - `on(node) gpu.present=true` 조인: 시스템 노드의 false alarm 차단

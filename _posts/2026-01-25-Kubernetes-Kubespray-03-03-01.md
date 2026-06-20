@@ -129,12 +129,14 @@ k8s-ctr
 
 ## 사전 검증 (Play #1-2)
 
+{% raw %}
 ```bash
 Check {{ minimal_ansible_version }} <= Ansible version < {{ maximal_ansible_version }}
 Check that python netaddr is installed
 Stop if kube_control_plane group is empty
 Stop if unsupported version of Kubernetes
 ```
+{% endraw %}
 
 ## OS 준비 (Play #4)
 

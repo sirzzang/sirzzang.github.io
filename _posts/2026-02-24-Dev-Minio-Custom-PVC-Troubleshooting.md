@@ -224,6 +224,7 @@ mode: distributed
 
 `mode`가 `distributed`일 때만 이 템플릿이 렌더링된다. 스토리지는 `volumeClaimTemplates`로 정의된다.
 
+{% raw %}
 ```yaml
 volumeClaimTemplates:
   - metadata:
@@ -237,6 +238,7 @@ volumeClaimTemplates:
         requests:
           storage: {{ .Values.persistence.size }}
 ```
+{% endraw %}
 
 StatefulSet의 `volumeClaimTemplates`는 각 Pod마다 PVC를 자동으로 생성한다. `export`라는 이름과 Pod ordinal이 결합되어 `export-minio-0`, `export-minio-1`, `export-minio-2`와 같은 PVC가 만들어진다.
 

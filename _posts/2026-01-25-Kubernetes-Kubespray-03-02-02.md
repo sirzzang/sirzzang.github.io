@@ -279,6 +279,7 @@ Kubernetes 클러스터 노드(control plane + worker)에 적용되는 설정이
 grep "^[^#]" inventory/mycluster/group_vars/k8s_cluster/k8s-cluster.yml
 ```
 
+{% raw %}
 ```yaml
 ---
 kube_config_dir: /etc/kubernetes
@@ -327,6 +328,7 @@ kubeadm_patches_dir: "{{ kube_config_dir }}/patches"
 kubeadm_patches: []
 remove_anonymous_access: false
 ```
+{% endraw %}
 
 ### 주요 변수 카테고리별 정리
 
@@ -381,6 +383,7 @@ Kubernetes 애드온 설정이다:
 grep "^[^#]" inventory/mycluster/group_vars/k8s_cluster/addons.yml
 ```
 
+{% raw %}
 ```yaml
 ---
 helm_enabled: false
@@ -400,6 +403,7 @@ argocd_enabled: false
 kube_vip_enabled: false
 node_feature_discovery_enabled: false
 ```
+{% endraw %}
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|

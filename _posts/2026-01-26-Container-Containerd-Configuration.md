@@ -1273,6 +1273,7 @@ version = 2
 
 Go 템플릿 문법을 사용하면 아래와 같이 작성한다:
 
+{% raw %}
 ```toml
 # /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl
 version = 2
@@ -1284,8 +1285,9 @@ version = 2
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia]
   runtime_type = "io.containerd.runc.v2"
 ```
+{% endraw %}
 
-`{{ template "base" . }}`는 K3s의 기본 containerd 설정을 포함한다. 이를 통해 기본 설정을 유지하면서 필요한 부분만 추가할 수 있다.
+{% raw %}`{{ template "base" . }}`{% endraw %}는 K3s의 기본 containerd 설정을 포함한다. 이를 통해 기본 설정을 유지하면서 필요한 부분만 추가할 수 있다.
 
 > **팁**: 레지스트리 미러나 인증 설정만 변경하려면 `registries.yaml`을 사용하는 것이 더 간편하다.
 

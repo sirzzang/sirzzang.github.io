@@ -129,6 +129,7 @@ MLOps/플랫폼 관점의 최소 셋은 **dcgm-exporter(Cluster metric 계층) +
 
 ### Prometheus alert rule
 
+{% raw %}
 ```yaml
 groups:
   - name: gpu-xid
@@ -145,6 +146,7 @@ groups:
         expr: increase(DCGM_FI_DEV_XID_ERRORS{xid=~"48|63|64|74|79|92"}[1m]) > 0
         labels: { severity: pager }
 ```
+{% endraw %}
 
 ### 자동 격리 → 인스턴스 교체 흐름
 

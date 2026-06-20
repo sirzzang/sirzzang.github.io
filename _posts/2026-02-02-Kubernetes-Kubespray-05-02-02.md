@@ -336,6 +336,7 @@ metrics_server_nodeselector: {}
 
 **metrics-server-deployment.yaml.j2 (resources 부분):** 템플릿에서 아래처럼 `metrics_server_requests_cpu`, `metrics_server_requests_memory`를 사용한다. addons.yml에 넣은 값이 여기 적용된다.
 
+{% raw %}
 ```yaml
         resources:
           limits:
@@ -345,6 +346,7 @@ metrics_server_nodeselector: {}
             cpu: {{ metrics_server_requests_cpu }}
             memory: {{ metrics_server_requests_memory }}
 ```
+{% endraw %}
 
 | 변수 | defaults/main.yml | addons.yml 오버라이드 |
 |------|-------------------|------------------------|
@@ -1046,6 +1048,7 @@ kube-scheduler                         k8s-node2_c3bdf688-9708-4313-...        5
 cat roles/kubernetes/node/templates/loadbalancer/nginx.conf.j2
 ```
 
+{% raw %}
 ```jinja2
 error_log stderr notice;
 
@@ -1079,6 +1082,7 @@ stream {
 }
 ...
 ```
+{% endraw %}
 
 | 템플릿 변수 | 설명 |
 |------------|------|
@@ -1092,6 +1096,7 @@ stream {
 cat roles/kubernetes/node/tasks/loadbalancer/nginx-proxy.yml
 ```
 
+{% raw %}
 ```yaml
 - name: Nginx-proxy | Write nginx-proxy configuration
   template:
@@ -1101,6 +1106,7 @@ cat roles/kubernetes/node/tasks/loadbalancer/nginx-proxy.yml
     mode: "0755"
     backup: true
 ```
+{% endraw %}
 
 <br>
 
