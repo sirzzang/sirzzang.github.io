@@ -24,7 +24,7 @@ use_math: false
 
 <br>
 
-[10장]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation %})에서 GPU 자원 할당·활용·공유를 다뤘다. 11장은 그 위에 **운영(Ops)** 레이어를 올린다 — GenAI 모델의 전체 라이프사이클을 자동화·관리·최적화하는 **GenAIOps**다. 
+[10장]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation %})에서 GPU 자원 할당·활용·공유를 다뤘다. 11장은 그 위에 **운영(Ops)** 레이어를 올린다 — GenAI 모델의 전체 라이프사이클을 자동화·관리·최적화하는 **GenAIOps**다.
 
 이번 글에서는 파이프라인 5단계와 모니터링·drift 감지 기초를 정리하고, K8s 위 도구(Kubeflow·MLflow·Argo·Ray)는 [11.2]({% post_url 2026-06-09-Kubernetes-GenAI-on-K8s-11-02-Kubeflow-Ecosystem %})부터 순차적으로 다룬다.
 
@@ -77,7 +77,7 @@ GenAI 애플리케이션을 빌드·배포·유지보수하는 end-to-end 여정
 raw data를 수집·정제·구조화하여 **고품질 실험을 위한 토대**를 만든다.
 
 - **소스**: 내부 DB, third-party API, 스트리밍(Kafka 등), data lake, public dataset
-- **Feature engineering**: cleaning, normalization, structuring → 결과를 **offline feature store**에 저장해 재사용
+- **Feature engineering**: raw 데이터를 의미 있는 feature로 변환(cleaning, normalization, structuring) → 결과를 **offline feature store**에 저장해 재사용
 - **K8s 패턴**: 컨테이너화된 워크로드로 분산 전처리
   - **Spark on K8s** — TB 단위 데이터를 worker Pod에 분산
   - **[Data on EKS (DoEKS)](https://aws.amazon.com/eks/doe/)** — EKS 위 Spark·데이터 분석 운영 blueprint
@@ -155,7 +155,7 @@ Real-time inference와 batch inference는 K8s 패턴이 다르지만, 운영 관
 |---|---|---|---|
 | **Data drift** (covariate shift) | 입력 분포 P(X) | 학습 때 본 입력과 다른 입력 | 챗봇 학습은 영어 위주인데 운영 중 한국어 비중 급증 |
 | **Concept drift** | 관계 P(Y\|X) | 같은 X에 정답 Y가 바뀜 | "안전한 답변" 정책 변경으로 같은 질문의 적절한 답이 달라짐 |
-| **Label drift** | 출력 분포 P(Y) | 클래스 비중 변화 | 사기 거래 비중 1% → 5% |
+| **Label drift** | 출력 분포 P(Y) | 클래스 비중 변화 | 신규 캠페인으로 사기 거래 비중이 평소 1% → 5%로 증가 |
 
 종류를 구분했으면 다음은 *어디를 관측할지*다. data drift는 입력·예측 분포 쪽 신호로 빠르게 의심할 수 있고, concept drift는 ground truth 비교가 정공법이다. label drift는 출력 분포 자체를 추적한다. 실무 모니터링 파이프라인은 아래 신호를 조합해 쓴다.
 
