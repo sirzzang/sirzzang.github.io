@@ -434,7 +434,9 @@ Kubernetes 초기에는 스토리지 기술별 볼륨 플러그인이 코어에 
 | **Controller** | PV 프로비저닝/삭제, 스냅샷, 볼륨을 노드에 Attach/Detach | 클러스터에 1개 (또는 HA) |
 | **Node Agent** | 볼륨을 노드 파일시스템에 Stage, Pod 경로에 Mount | 모든 노드에 1개씩 (DaemonSet) |
 
-볼륨이 Pod에 마운트되기까지의 흐름:
+<br>
+
+볼륨이 Pod에 마운트되기까지의 흐름을 확인해 보자.
 
 ```mermaid
 sequenceDiagram
