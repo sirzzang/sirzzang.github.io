@@ -7,6 +7,7 @@ toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
+  - MLOps
   - Kubernetes
   - GenAI
   - Security
