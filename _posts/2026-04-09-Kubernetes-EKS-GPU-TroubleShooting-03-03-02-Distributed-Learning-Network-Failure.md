@@ -8,6 +8,7 @@ hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
+  - MLOps
   - Kubernetes
   - AWS
   - EKS
