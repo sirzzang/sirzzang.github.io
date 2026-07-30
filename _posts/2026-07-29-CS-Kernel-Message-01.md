@@ -88,10 +88,12 @@ flowchart TB
 dmesg | tail -1
 # [ 1234.567890] usb 1-1: new high-speed USB device number 5 using xhci_hcd
 
-# raw 출력(-r) - 헤더에 든 우선순위 접두 <6>이 그대로 노출된다 (6 = info)
+# raw 출력(-r) - 헤더에 든 syslog 우선순위 접두 <6>이 그대로 노출된다
 dmesg -r | tail -1
 # <6>[ 1234.567890] usb 1-1: new high-speed USB device number 5 using xhci_hcd
 ```
+
+이때 `<6>`은 level 값 그 자체가 아니라 **syslog 방식으로 인코딩된 우선순위**(facility × 8 + level)다. 커널이 직접 쓴 메시지는 facility가 0(kern)이라 값이 level(6 = info)과 같아 보일 뿐이다. 실제로 뒤에서 볼 `/dev/kmsg` 쓰기 실험처럼 유저스페이스가 접두 없이 주입한 메시지는 facility가 user(1)로 붙어, 기본 메시지 레벨이 4인 시스템이라면 `<12>`(1×8+4)로 찍힌다. 인코딩을 풀어서 보고 싶으면 `dmesg -x`가 `kern  :info  :`처럼 facility와 level을 이름으로 보여 준다.
 
 셋째, **printk는 시스템 콜이 아니라 커널 내부 함수다.** printf와 닮은 이름 때문에 시스템 콜이나 유저스페이스 API처럼 오해하기 쉬운데, printk는 커널 코드가 커널 안에서 부르는 내부 함수(커널판 printf)다. 커널 메시지는 유저스페이스를 경유하지 않고 커널 안에서 태어나 커널 메모리에 직접 적힌다. 시스템 콜이 등장하는 것은 오히려 반대 방향 — 유저스페이스가 링버퍼를 **읽을** 때 쓰는 `syslog(2)` — 이다.
 
@@ -142,7 +144,7 @@ flowchart LR
 
 # 커널 링버퍼
 
-커널 링버퍼(kernel log buffer, printk ring buffer)는 커널 메시지를 저장하는 **커널 내부의 고정 크기 메모리 영역**이다. 핵심 특징을 한 줄로 요약하면 이렇다 — **부팅 시 미리 잡아 둔 고정 크기 버퍼에, 포인터 전진만으로 쓴다 (O(1), 할당 없음, 실패 경로 없음).** 이 구조가 어떻게 생겼는지 먼저 보고, 왜 이런 구조여야 하는지, 그리고 이 구조가 무엇을 포기하는지 순서로 이해하는 것이 중요하다.
+커널 링버퍼(kernel log buffer, printk ring buffer)는 커널 메시지를 저장하는 **커널 내부의 고정 크기 메모리 영역**이다. 핵심 특징을 한 줄로 요약하면 이렇다 — **부팅 시 미리 잡아 둔 고정 크기 버퍼에, 포인터 전진만으로 쓴다 (O(1), 할당 없음, 실패 경로 없음).** 이 구조가 어떻게 생겼는지 먼저 보고, 왜 이런 구조여야 하는지, 그리고 이 구조가 무엇을 감수하는지 순서로 이해하는 것이 중요하다.
 
 ## 링 자료구조
 
@@ -171,16 +173,16 @@ flowchart LR
 
 이 관점에서 보면 자주 하는 오해 하나가 풀린다. "디스크보다 메모리가 유실될 일이 없어서 RAM에 쓰는 것 아닌가?" — 반대다. RAM은 전원이 나가면 유실되는 쪽이다. 링버퍼의 목적은 유실 방지가 아니라 **어떤 상황에서도 기록이 가능한 것**이고, 유실 방지는 링버퍼 밖의 사본(저널)이 맡는 몫이다. 이 역할 분담이 1·2편 전체의 뼈대다.
 
-## 구조가 포기하는 것: 소실과 크기
+## 구조가 감수하는 것: 소실과 크기
 
-이 구조는 두 가지를 포기한다.
+이 구조는 "어떤 상황에서도 기록 가능"의 대가로 두 가지를 감수한다.
 
 - **오래된 로그의 소실**: 버퍼가 가득 차면 가장 오래된 메시지부터 덮어쓴다. 메시지가 폭주하면 옛날 메시지가 밀려난다. 다만 이 소실은 결함이 아니라 **"로깅이 시스템을 죽일 수 있는 위험"과 맞바꾼 의도된 대가**이고, 그 대가를 밖에서 보완하는 것이 2편의 저널이다
-- **크기의 고정**: 버퍼 크기는 커널 빌드 옵션(`CONFIG_LOG_BUF_SHIFT`, 2의 거듭제곱 바이트 — 기본 128KB, 배포판 커널은 대개 256KB~1MB)에 CPU 수에 비례한 가산이 붙어 정해지고, 부트 파라미터 `log_buf_len`으로 조정할 수 있다. 언제 이 크기가 문제가 되고 언제 키우는 것이 의미 있는지는 2편의 실무 섹션에서 다룬다
+- **크기의 고정**: 버퍼 크기는 커널 빌드 옵션(`CONFIG_LOG_BUF_SHIFT`, 2의 거듭제곱 바이트 — 기본 128KB, 배포판 커널은 대개 256KB~1MB)으로 정해지고, 부트 파라미터 `log_buf_len`으로 조정할 수 있다. SMP(Symmetric Multi-Processing — 여러 CPU 코어가 하나의 메모리를 공유하며 대등하게 동작하는 구성으로, 오늘날 멀티코어 시스템 대부분이 해당) 시스템에서는 CPU 수에 비례한 가산이 붙기도 하는데, 가산분이 기본 버퍼의 절반을 넘을 때만 적용되는 조건부라서 기본 버퍼를 크게 잡는 배포판 커널에서는 CPU가 수십 개여도 안 붙는 경우가 흔하다. 언제 이 크기가 문제가 되고 언제 키우는 것이 의미 있는지는 2편의 실무 섹션에서 다룬다
 
 ## 로그 레벨과 printk의 다른 출력 경로
 
-각 레코드의 헤더에는 0(emerg)부터 7(debug)까지의 우선순위(level)가 들어 있다. `dmesg -r`에서 보이는 `<6>`이 바로 이 값(6 = info)이고, `dmesg -l err,warn`이나 2편의 `journalctl -p err` 같은 레벨 필터가 전부 이 공통 축 위에서 동작한다.
+각 레코드의 헤더에는 0(emerg)부터 7(debug)까지의 우선순위(level)가 들어 있다. `dmesg -r`의 `<6>`은 앞에서 봤듯 facility까지 인코딩된 값이지만 커널 메시지에서는 level 그대로 읽히고(6 = info), `dmesg -l err,warn`이나 2편의 `journalctl -p err` 같은 레벨 필터가 전부 이 공통 축 위에서 동작한다.
 
 한편 printk의 출력 경로가 링버퍼만은 아니다. 우선순위가 `kernel.printk` 커널 파라미터의 콘솔 로그레벨보다 높은(숫자가 작은) 메시지는 **콘솔에도 출력**되고, 콘솔 출력을 네트워크로 전송하는 netconsole, 크래시 순간의 로그를 비휘발 영역에 남기는 pstore(2편에서 재등장한다) 같은 특수 경로도 있다. [커널 파라미터 글]({% post_url 2026-03-18-CS-Linux-Kernel-Parameter %})의 EKS 노드 `sysctl --system` 출력에 등장했던 `kernel.printk = 8 4 1 7`이 바로 이 설정으로, 네 값은 순서대로 콘솔 로그레벨, 기본 메시지 레벨, 최소 콘솔 로그레벨, 콘솔 로그레벨의 기본값을 뜻한다. 다만 콘솔 출력은 표시 경로이고, **저장소 기준으로는 링버퍼가 유일한 원본**이라는 그림은 변하지 않는다.
 
@@ -195,7 +197,8 @@ flowchart LR
 `/dev/kmsg`의 성질 중 두 가지가 뒤에서 중요해진다.
 
 - **새로 연 리더는 버퍼의 가장 오래된 레코드부터 읽는다.** 그래서 부팅 중간에 뒤늦게 뜬 journald도 자기가 뜨기 전에 쌓인 초기 부팅 메시지를 소급해서 가져갈 수 있다 (아직 wrap되지 않았다면)
-- **쓰기도 가능하다.** 유저스페이스가 `echo test > /dev/kmsg`로 커널 로그에 메시지를 주입할 수 있다. 커널 메시지 파이프라인이 잘 동작하는지 확인하는 간단한 실험 도구가 된다
+- **쓰기도 가능하다.** 유저스페이스가 `echo test > /dev/kmsg`로 커널 로그에 메시지를 주입할 수 있다. 커널 메시지 파이프라인이 잘 동작하는지 확인하는 간단한 실험 도구가 된다. 다만 주입된 메시지는 facility 0(kern)으로는 기록될 수 없게 강제되므로, 커널이 직접 쓴 메시지와 언제나 구별된다
+- **느린 리더는 유실을 감지한다.** 리더가 다음 레코드를 읽기 전에 그 자리가 wrap으로 덮어써지면, 다음 `read()`가 `EPIPE`를 반환하고 읽기 위치는 남아 있는 다음 레코드로 점프한다. 놓쳤다는 사실 자체는 알 수 있다는 뜻이고, journald가 이 단절을 만났을 때 남기는 흔적을 2편에서 본다
 
 ## /dev/kmsg vs /proc/kmsg
 
@@ -253,25 +256,27 @@ user@gpu-node-01:~$ sudo dmesg -T | grep -i xid
 호스트 전체가 보이는 것이 당장 무슨 문제인가 싶을 수 있지만, 다음과 같은 이유로 문제가 된다.
 
 - **테넌트 격리 붕괴**: OOM killer 덤프에는 호스트 전체의 프로세스 목록과 메모리 상태가, segfault 메시지에는 다른 사용자 바이너리의 이름과 주소가 노출된다. 여러 팀이 공유하는 GPU 서버라면 다른 팀 워크로드의 흔적이 그대로 보인다
-- **커널 공격의 정찰 재료**: 커널 메시지에 노출되는 커널 주소는 KASLR(커널 주소 무작위화) 우회의 재료가 된다. 보이는 것은 커널 "메시지"이지 커널 메모리가 아니므로 그 자체로 탈출은 아니지만, 탈출 공격을 준비하는 정찰 재료가 된다
+- **커널 공격의 정찰 재료**: 커널 메시지에 노출되는 커널 주소는 KASLR(커널 주소 무작위화) 우회의 재료가 된다. 커널 4.15부터 `%p`로 찍히는 포인터는 해시된 값으로 출력되는 완화가 있지만, 코드가 해시를 거치지 않는 포맷으로 직접 찍은 값은 그대로 노출된다 — 앞의 Xid 예시 속 `pc:0xffffffff9300188a`가 해시되지 않은 커널 주소 형태 그대로 노출된 예다. 보이는 것은 커널 "메시지"이지 커널 메모리가 아니므로 그 자체로 탈출은 아니지만, 탈출 공격을 준비하는 정찰 재료가 된다
 - 하드웨어 구성·토폴로지 정보가 노출된다
 
 ## 세 겹의 차단과 두 창구
 
-그래서 일반적인 컨테이너에서는 `dmesg`가 막혀 있다. 차단 레이어는 세 겹인데, 앞에서 본 두 창구 각각에 걸린 자물쇠로 이해하면 구조가 보인다.
+그래서 컨테이너 환경에는 이 접근을 막는 자물쇠가 최대 세 겹 걸린다. 앞에서 본 두 창구 각각에 걸린 자물쇠로 이해하면 구조가 보인다 — 다만 뒤에서 보듯, 세 겹이 전부 걸려 있는지는 런타임과 클러스터 설정에 달렸다.
 
 | 차단 레이어 | 차단 대상 창구 | 동작 |
 | --- | --- | --- |
-| `kernel.dmesg_restrict=1` | `/dev/kmsg`·`syslog(2)` 모두 | `CAP_SYSLOG` 없는 프로세스의 링버퍼 읽기를 커널이 거부 — 일반 계정에서 `dmesg: read kernel buffer failed: Operation not permitted` |
-| 런타임 기본 seccomp 프로필 | `syslog(2)` | 시스템 콜 호출 자체를 차단 |
-| `/dev` 최소 구성 | `/dev/kmsg` | 컨테이너의 `/dev`는 호스트 것이 아니라 런타임이 표준 디바이스만 만들어 주는 별도 구성이라 `/dev/kmsg`가 없고, 목록 밖 디바이스는 cgroup 디바이스 컨트롤러가 접근을 차단한다 |
+| `kernel.dmesg_restrict=1` | `/dev/kmsg`·`syslog(2)` 모두 | `CAP_SYSLOG` 없는 프로세스의 링버퍼 읽기를 커널이 거부 — `/dev/kmsg`는 open 단계에서, `syslog(2)`는 호출 단계에서 `EPERM` |
+| 런타임 기본 seccomp 프로필 | `syslog(2)` | 시스템 콜 호출 자체를 차단 — Docker 기본 프로필(19.03부터)에 포함. 쿠버네티스는 기본 미적용(아래) |
+| `/dev` 최소 구성 | `/dev/kmsg` | 컨테이너의 `/dev`는 호스트 것이 아니라 런타임이 표준 디바이스만 만들어 주는 별도 구성이라 `/dev/kmsg`가 없고, 목록 밖 디바이스는 디바이스 cgroup(v1은 devices 컨트롤러, cgroup v2에서는 eBPF 프로그램이 같은 역할)이 접근을 차단한다 |
 
 > 컨테이너 `/dev`의 기본 구성은 OCI 런타임 스펙(config-linux)에 명시되어 있다. 기본 디바이스는 `null`·`zero`·`full`·`random`·`urandom`·`tty`·`console`·`ptmx`뿐이고 `/dev/kmsg`는 없으며, 스펙은 이 목록과 명시적으로 추가된 디바이스 외의 접근을 금지한다.
 
-- `kernel.dmesg_restrict`는 커널 파라미터(sysctl)로, 멀티유저 시스템에서 위의 정보 노출을 막기 위한 호스트 수준 스위치다. `CAP_SYSLOG`는 root 권한을 잘게 쪼갠 capability 조각 중 하나로, 컨테이너 런타임이 기본으로 주는 capability 셋에 포함되지 않는다
-- seccomp은 프로세스가 호출할 수 있는 시스템 콜을 커널이 필터링하는 기능이고, 컨테이너 런타임의 기본 프로필이 `syslog(2)`를 차단 목록에 넣어 둔다
+- `kernel.dmesg_restrict`는 커널 파라미터(sysctl)로, 멀티유저 시스템에서 위의 정보 노출을 막기 위한 호스트 수준 스위치다. `CAP_SYSLOG`는 root 권한을 잘게 쪼갠 capability 조각 중 하나로, 컨테이너 런타임이 기본으로 주는 capability 셋에 포함되지 않는다. 일반 계정에서 보는 `dmesg: read kernel buffer failed: Operation not permitted`는 `/dev/kmsg` open이 거부된 뒤 `syslog(2)` 폴백까지 실패했을 때 그 폴백 경로가 내는 문구다
+- seccomp은 프로세스가 호출할 수 있는 시스템 콜을 커널이 필터링하는 기능이다. Docker는 19.03부터 기본 프로필이 `CAP_SYSLOG` 없는 컨테이너의 `syslog(2)`를 차단한다
 
 그럼 `/dev/kmsg`가 없으면 `CAP_SYSLOG`를 줘도 못 읽는가 하면, 아니다. 창구가 두 개라는 것을 기억하면 된다. `dmesg`는 `/dev/kmsg`가 없으면 `syslog(2)`로 폴백하므로, seccomp이 그 시스템 콜을 허용하고 `CAP_SYSLOG`가 있으면 디바이스 없이도 읽힌다. 즉 세 겹 차단은 "같은 문에 자물쇠 세 개"가 아니라 **"두 창구에 각각 걸린 자물쇠"** 구조이고, 차단이든 허용이든 창구 단위로 생각해야 한다.
+
+그리고 세 겹이 모두 걸려 있는 것은 `docker run` 기본값 같은 Docker 단독 실행 기준이다. **쿠버네티스는 다르다.** Pod에 `securityContext.seccompProfile`을 지정하지 않으면 기본값이 `Unconfined`, 즉 seccomp 미적용이다 ([Kubernetes 공식 seccomp 튜토리얼](https://kubernetes.io/docs/tutorials/security/seccomp/)에 명시되어 있다). 런타임 기본 프로필(RuntimeDefault)을 클러스터 기본으로 만들려면 kubelet 설정(`seccompDefault: true`)을 명시적으로 켜야 하고, privileged 컨테이너는 설정과 무관하게 항상 Unconfined로 돈다. 그러면 일반 Pod의 방어선은 `/dev` 구성과 호스트 sysctl인 `dmesg_restrict` 두 겹이 되는데, 후자도 배포판마다 기본값이 갈린다 — 업스트림 커널 기본은 0이고, 우분투는 20.10부터·데비안은 9부터 1로 켜 두지만, Amazon Linux 2는 0이다(AL2023부터 1). 그래서 seccomp 미적용 클러스터에 `dmesg_restrict=0`인 노드(예: Amazon Linux 2 기반 노드) 조합이라면, `/dev/kmsg`가 없어도 일반 Pod에서 `syslog(2)` 폴백으로 `dmesg`가 실제로 읽힌다.
 
 > seccomp과 capability 자체의 상세(프로필 구조, capability 전체 목록 등)는 이 글 범위 밖이다. 여기서는 "시스템 콜 필터"와 "쪼개진 root 권한 조각" 수준의 이해면 충분하다.
 
@@ -279,7 +284,7 @@ user@gpu-node-01:~$ sudo dmesg -T | grep -i xid
 
 그렇다고 절대 열면 안 되는 것은 아니다. **노드의 커널 메시지를 읽는 것이 임무인 시스템 컴포넌트**에는 의도적으로 열어 준다. 대표적으로 Kubernetes의 node-problem-detector(커널 메시지에서 하드웨어·커널 문제를 감지해 노드 상태로 보고하는 DaemonSet)나 노드 로그 수집 에이전트가 그렇다.
 
-원칙은 이렇게 정리된다: **일반 워크로드 Pod에는 주지 않고, 노드 관측이 임무인 컴포넌트에만 명시적으로**(`securityContext.capabilities.add` 또는 privileged) 연다. 뒤집어 말하면, 일반 Pod에서 `dmesg`가 된다는 것은 세 겹 중 무언가를 누군가 풀어 놓았다는 뜻이므로 그 자체가 점검 신호다. GPU Pod에서 Xid를 확인하려면 결국 노드(호스트)에서 봐야 하는 실무 관행이 여기서 나온다.
+원칙은 이렇게 정리된다: **일반 워크로드 Pod에는 주지 않고, 노드 관측이 임무인 컴포넌트에만 명시적으로**(`securityContext.capabilities.add` 또는 privileged) 연다. 뒤집어 말하면, 일반 Pod에서 `dmesg`가 된다는 것은 누군가 자물쇠를 풀어 놓았거나 애초에 클러스터가 잠그지 않은(seccomp 미적용 + `dmesg_restrict=0`) 상태라는 뜻이므로, 어느 쪽이든 점검 신호다. GPU Pod에서 Xid를 확인하려면 결국 노드(호스트)에서 봐야 하는 실무 관행이 여기서 나온다.
 
 <br>
 
@@ -306,9 +311,9 @@ user@gpu-node-01:~$ sudo dmesg -T | grep -i xid
 # 정리
 
 - 커널 메시지는 커널 공간 코드(코어·모듈)가 `printk()`로 기록하는 구조화된 로그 레코드다. printk는 시스템 콜이 아니라 커널 내부 함수다
-- 커널이 직접 쓰는 저장소는 커널 링버퍼 하나뿐이다. RAM 고정 크기·wrap-around·휘발이라는 성질은 "실패할 수 있는 어떤 것에도 의존하지 않는다"는 설계 제약의 결과이고, 유실 방지는 링버퍼의 목적이 아니라 사본(저널)의 몫이다
+- 커널이 직접 쓰는 저장소는 커널 링버퍼 하나뿐이다. RAM 고정 크기·wrap-around·휘발이라는 성질은 printk 설계 제약의 결과이고, 유실 방지는 링버퍼의 목적이 아니라 사본(저널)의 몫이다
 - `/dev/kmsg`는 링버퍼를 유저스페이스에 노출하는 파일 인터페이스로, 리더별 독립 오프셋 덕분에 dmesg와 journald가 동시에 같은 원본을 읽는다. 여기까지가 배포판 무관 공통 영역이다
-- 링버퍼는 네임스페이스 격리가 없는 전역 자원이라, 컨테이너에서의 접근은 두 창구(`/dev/kmsg`·`syslog(2)`)에 걸린 세 겹의 자물쇠(dmesg_restrict, seccomp, /dev 구성)로 차단되며, 노드 관측이 임무인 컴포넌트에만 명시적으로 연다
+- 링버퍼는 네임스페이스 격리가 없는 전역 자원이라, 컨테이너에서의 접근은 두 창구(`/dev/kmsg`·`syslog(2)`)에 걸린 세 겹의 자물쇠(dmesg_restrict, seccomp, /dev 구성)로 차단된다 — 몇 겹이 실제로 걸려 있는지는 런타임·클러스터·호스트 설정에 달렸고, 노드 관측이 임무인 컴포넌트에만 명시적으로 연다
 - 커널 메시지는 앱 로그에 남지 않는 사건들의 원본 기록이지만, 휘발·wrap이라는 한계가 있어 유저스페이스의 영속 보관이 필요하다 — 2편에서 다룬다
 
 <br>
@@ -323,5 +328,6 @@ user@gpu-node-01:~$ sudo dmesg -T | grep -i xid
 - [OCI Runtime Specification - Default Devices](https://github.com/opencontainers/runtime-spec/blob/main/config-linux.md#default-devices)
 - [NVIDIA Xid Errors](https://docs.nvidia.com/deploy/xid-errors/index.html)
 - [Kubernetes node-problem-detector](https://github.com/kubernetes/node-problem-detector)
+- [Kubernetes - Restrict a Container's Syscalls with seccomp](https://kubernetes.io/docs/tutorials/security/seccomp/)
 
 <br>
