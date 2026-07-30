@@ -30,6 +30,7 @@ tags:
 - systemd-journald는 `/dev/kmsg`를 **이벤트 기반으로 상주 구독**하고(폴링 간격 없음), 자기가 뜨기 전 메시지도 소급 복사한다. 저장은 `/run`(RAM)에서 시작해 `/var` 마운트 후 flush되며, 영속 여부는 `Storage=` 설정이 결정한다
 - `dmesg`와 `journalctl -k`는 어긋날 수 있다 — wrap으로 밀린 메시지가 저널에만 남기도 하고(정방향), journald 중단 구간·rotation 역전으로 링버퍼에만 남기도 한다(역방향)
 - 저널의 보존은 무조건이 아니라 **용량 상한 안에서의 보존**이다. 정말 중요한 기록은 원본→사본 사슬을 한 칸 더 잇는다(중앙 수집, pstore, BMC)
+- 혼자 재부팅된 노드의 원인 추적은 이 사슬을 거슬러 오르는 일이다 — `dmesg`(소멸) → `journalctl -k -b -1` → 평문 파일 → 중앙 수집 → OS 밖(pstore·BMC) 순서로 뒤진다
 
 <br>
 
@@ -114,7 +115,7 @@ journald의 저장 위치는 부팅 진행에 따라 옮겨 간다.
 | `volatile` | 무조건 RAM(`/run/log/journal`)에만 — 재부팅하면 사라짐 |
 | `none` | 아예 저장하지 않음 (수집은 하되 전달만 가능) |
 
-`auto`는 "디렉토리 존재 여부를 관리자 스위치로 쓰겠다"는 설계다. 배포판이 패키징할 때 그 디렉토리를 만들어 두지 않으면 기본 휘발이 되는데, 과거 데비안/우분투가 정확히 이 경우였다 — 평문 영속은 rsyslog가 담당하니 저널은 휘발로 두는 의도된 선택이었고, 관리자가 디렉토리를 만들어 주면 그때부터 영속으로 바뀐다. 이 기본값은 이후 바뀌어서, **우분투는 18.04부터, 데비안은 11부터 패키징이 이 디렉토리를 만들어 두므로 영속이 기본**이 됐다.
+`auto`는 "디렉토리 존재 여부를 관리자 스위치로 쓰겠다"는 설계다. 배포판이 패키징할 때 그 디렉토리를 만들어 두지 않으면 기본 휘발이 되는데, 과거 데비안/우분투가 정확히 이 경우였다 — 평문 영속은 rsyslog가 담당하니 저널은 휘발로 두는 의도된 선택이었고, 관리자가 디렉토리를 만들어 주면 그때부터 영속으로 바뀐다. 이 기본값은 이후 바뀌어서, **우분투는 18.04부터, 데비안은 11부터 패키징이 이 디렉토리를 만들어 두므로 영속이 기본**이 됐다. 반면 **RHEL 계열은 RHEL 10까지도 기본이 비영속**이다 — 영속 보관은 rsyslog의 `/var/log/messages`가 담당하는 구성이 표준이라, 저널 영속이 필요하면 관리자가 직접 디렉토리를 만든다. "요즘은 저널 영속이 기본"이라는 일반화는 데비안·우분투 계열에서만 성립하는 셈이다.
 
 "저널 = 영속"이라는 등식도 여기서 깨진다. `volatile`을 일부러 선택하는 유스케이스가 있다 — flash 마모를 아끼는 임베디드/IoT, 라이브 부팅 매체, 읽기 전용 루트 시스템, 그리고 로그를 어차피 원격 중앙 수집기로 실시간 전송해서 로컬 보존이 필요 없는 노드. **저널의 본질은 통합 로그 저장소이고, 영속은 옵션이다.**
 
@@ -129,7 +130,7 @@ journald의 저장 위치는 부팅 진행에 따라 옮겨 간다.
 전통적으로 우분투/데비안에는 journald와 rsyslog가 함께 있었고, 그래서 `/var/log/syslog`·`/var/log/kern.log` 같은 평문 파일이 존재한다. "불안해서 두 벌" 두는 것인가 생각할 수 있지만, 우선은 **역할 분담**이다.
 
 - rsyslog는 journald 없이도 완전히 동작하는 독립 소프트웨어다. non-systemd 시스템에서는 자체 입력 모듈로 커널·앱 로그를 직접 수집한다
-- systemd 위에서 rsyslog가 커널 메시지를 받는 경로는 **배포판 기본 설정에 따라 갈린다.** 데비안/우분투의 기본 `rsyslog.conf`는 imklog 모듈을 로드해 rsyslog가 `/proc/kmsg`로 링버퍼를 **직접** 읽는다 — 이 경우 `/var/log/kern.log`는 journald를 거치지 않은 **병렬 사본**이고, 링버퍼의 구독자는 journald(`/dev/kmsg`)와 rsyslog(`/proc/kmsg`) 둘이다. 반면 RHEL 계열 표준 구성(imjournal)은 rsyslog가 저널을 입력으로 읽으므로 `링버퍼 → journald → 저널 → rsyslog → /var/log/messages`, 즉 **사본의 사본**이 된다. 참고로 journald는 커널 메시지를 syslog 소켓으로 포워딩하지 않으므로(유저스페이스 소스만 포워딩), 데비안/우분투 구성에서 두 경로가 중복 기록을 만들지는 않는다
+- systemd 위에서 rsyslog가 커널 메시지를 받는 경로는 **배포판 기본 설정에 따라 갈린다.** 데비안/우분투의 기본 `rsyslog.conf`는 imklog 모듈을 로드해 rsyslog가 `/proc/kmsg`로 링버퍼를 **직접** 읽는다 — 이 경우 `/var/log/kern.log`는 journald를 거치지 않은 **병렬 사본**이고, 링버퍼의 구독자는 journald(`/dev/kmsg`)와 rsyslog(`/proc/kmsg`) 둘이다. 반면 RHEL 계열 표준 구성(imjournal)은 rsyslog가 저널을 입력으로 읽으므로 `링버퍼 → journald → 저널 → rsyslog → /var/log/messages`, 즉 **사본의 사본**이 된다. 참고로 journald→syslog 포워딩(`journald.conf`의 `ForwardToSyslog=`)은 upstream 기본값이 no이고(데비안·우분투는 패키징 drop-in으로 yes를 실효 기본으로 둔다), 켜져 있더라도 **커널 메시지는 포워딩 대상이 아니다** — systemd의 SYSLOG 인터페이스 문서가 커널 메시지는 syslog 데몬이 직접 읽으라고 명시한다. 그래서 데비안/우분투 구성에서 두 경로가 중복 기록을 만들지는 않는다
 - rsyslog가 담당하는 것: grep/fail2ban 등 평문 `/var/log/*`에 의존하는 도구 생태계와의 호환, 그리고 원격 로그 전송·중앙 로그 서버 구축(전통적으로 rsyslog가 성숙한 영역). 과거에는 "저널이 휘발이니 영속 담당"이라는 역할도 있었다
 
 그리고 데비안/우분투처럼 두 데몬이 링버퍼를 각자 직접 구독하는 구성은 결과적으로 **안전장치 효과**도 낸다 — journald에 공백이 생겨도 rsyslog 쪽 `kern.log`는 독립적으로 남는다. 역할 분담이 우선이고, 안전장치는 따라오는 효과다.
@@ -227,7 +228,7 @@ sequenceDiagram
 ```
 
 - **`Storage=none`**: journald가 수집만 하고 저장하지 않는 구성이면 저널 쪽이 아예 빈다
-- **journald가 죽어 있거나 재시작 중인 구간**: 위 시퀀스의 경우다. 그 사이 도착한 메시지는 링버퍼에는 있지만 저널 파일에는 아직 없다. journald는 시퀀스 추적으로 재기동 시 이어받으므로 보통은 일시적 공백으로 끝나지만, 죽어 있는 동안 버퍼가 wrap해 버리면 그 구간은 저널에서 영구 결번이 된다
+- **journald가 죽어 있거나 재시작 중인 구간**: 위 시퀀스의 경우다. 그 사이 도착한 메시지는 링버퍼에는 있지만 저널 파일에는 아직 없다. journald는 시퀀스 추적으로 재기동 시 이어받으므로 보통은 일시적 공백으로 끝나지만, 죽어 있는 동안 버퍼가 wrap해 버리면 그 구간은 저널에서 영구 결번이 된다. 이 유실이 조용히 지나가는 것은 아니다 — 1편에서 본 `/dev/kmsg`의 EPIPE 점프 덕분에 놓친 구간의 존재는 리더에게 전해지고, journald는 시퀀스 번호로 놓친 개수를 세어 `Missed N kernel messages`라는 메시지를 저널에 남긴다. 사라진 내용은 복구하지 못해도 공백의 존재 자체는 기록되는 것이다
 - **rotation 역전 — 시끄러운 이웃**: 링버퍼에는 커널 메시지만 들어가지만, 저널 파일에는 모든 소스가 섞여 들어간다. 어떤 수다스러운 서비스가 저널을 폭주시키면 용량 상한에 걸려 오래된 저널 파일부터 vacuum되는데, 그 파일에 섞여 있던 초기 커널 메시지도 같이 지워진다. 반면 링버퍼는 커널 메시지만 담으니, 커널이 조용한 시스템에서는 부팅 이후 전부를 여전히 들고 있을 수 있다. **다른 소스의 폭주가 저널 쪽 커널 이력을 밀어내는 역전**이다
 
 세 번째 경우가 특히 "영속 목적의 저널이 원본보다 먼저 잊어버리는" 직관에 반하는 상황인데, 앞에서 본 명제 — **저널의 보존은 용량 상한 안에서의 보존** — 을 기억하면 이상할 것이 없다. 1차 대응은 용량 상한(`SystemMaxUse=`)을 키우는 것이지만, 상한을 아무리 키워도 "상한 안에서의 보존"이라는 성질 자체는 바뀌지 않는다. 그래서 보존이 정말 중요한 환경은 상한 조정에 그치지 않고, 중앙 로그 수집으로 사슬을 한 칸 더 이어 안전장치를 둔다.
@@ -296,7 +297,7 @@ Hint: You are currently not seeing messages from other users and the system.
  0 b7250de1a3c94f0899e2c47d1f6ab8e3 Wed 2026-05-27 07:22:37 UTC—Tue 2026-07-21 09:08:35 UTC
 ```
 
-직전 부팅(-1)이 목록에 잡히므로 영속 저장이 켜져 있는 노드이고, 따라서 해석 ① — 직전 부팅에는 Xid가 없었고, 이번 부팅에서 처음 발생한 하드웨어 이상 — 이 맞다. 출력 앞머리의 Hint는 앞에서 말한 저널 읽기 권한 그룹 안내다.
+직전 부팅(-1)이 목록에 잡히므로 영속 저장이 켜져 있는 노드이고, 따라서 해석 ① — 직전 부팅에는 Xid가 없었고, 이번 부팅에서 처음 발생한 하드웨어 이상 — 이 맞다. 출력 앞머리의 Hint는 앞에서 말한 저널 읽기 권한 그룹 안내인데, 단서가 하나 붙는다. 권한 없는 조회라 이 목록이 시스템 저널 전체를 반영하지 못해 불완전할 수 있다는 점이다. 그래도 "영속" 판정 자체는 흔들리지 않는다 — 휘발 구성이었다면 이전 부팅의 로그가 애초에 존재할 수 없으므로, 직전 부팅이 하나라도 보인다는 사실만으로 충분하다. 다만 부팅 이력의 완전한 목록이 필요한 조사라면 sudo로 다시 확인하는 편이 안전하다.
 
 ## 링버퍼 밀림 대응과 log_buf_len
 
@@ -304,6 +305,8 @@ Hint: You are currently not seeing messages from other users and the system.
 
 - **언제 밀리나**: 커널 메시지가 폭주할 때다. 하드웨어 에러 스톰(PCIe AER, 디스크 I/O 에러, GPU Xid 반복 발생), OOM killer 연쇄 발동(매번 수십~수백 줄의 메모리 덤프), iptables LOG 타깃이나 드라이버 debug 로깅을 켜 둔 경우
 - **밀리면 무엇이 문제인가**: 장애의 **최초 원인 메시지가 후속 에러 폭주에 밀려나는** 시나리오다. GPU가 버스에서 떨어진 뒤 후속 에러가 쏟아지면, 정작 첫 Xid나 그 직전의 PCIe 에러가 링버퍼에서 밀려나 `dmesg`만으로는 원인을 못 찾게 된다
+
+덧붙여 폭주 시나리오에는 wrap 말고 유실 경로가 하나 더 있다. 일부 커널 코드 경로는 같은 메시지가 쏟아질 때 스스로 rate limit을 걸어(`printk_ratelimited` 등) **링버퍼에 넣기 전에** 일부를 버리고, `... callbacks suppressed`라는 흔적만 남긴다. 이 유실은 원본 진입 전이므로 dmesg에도 저널에도 남지 않는다 — 로그에서 `callbacks suppressed`를 봤다면 "기록된 것이 전부가 아니다"로 읽어야 한다.
 
 버퍼를 키우는 선택지가 있지만, 우선순위를 정확히 잡아야 한다. **1차 방어선은 링버퍼 크기가 아니라 저널이다.** journald가 실시간으로 퍼가고 있었다면 링버퍼에서 밀려도 저널에 남는다. `log_buf_len`(재부팅 필요)이 의미를 갖는 경우는 따로 있다 — (a) 수집기가 뜨기 전인 부팅 극초기 메시지가 많아 밀리는 대형 서버, (b) 수집기가 없거나 죽은 상황, (c) 크래시 순간의 링버퍼를 그대로 건지는 kdump(크래시 시 메모리 덤프를 뜨는 커널 기능)·pstore 경로에서 버퍼가 클수록 확보되는 이력이 길어지는 경우. 구체적으로 몇 MB로 키울지는 워크로드에 따라 다르므로 여기서 단정하지 않는다.
 
@@ -362,6 +365,7 @@ vacuum은 파일 단위로 오래된 것부터 지우므로, 앞에서 본 rotat
 - [man systemd-journald.service(8)](https://man7.org/linux/man-pages/man8/systemd-journald.service.8.html)
 - [man systemd.journal-fields(7)](https://man7.org/linux/man-pages/man7/systemd.journal-fields.7.html)
 - [systemd Journal File Format](https://systemd.io/JOURNAL_FILE_FORMAT/)
+- [systemd - Syslog Interface](https://systemd.io/SYSLOG/)
 - [rsyslog documentation](https://www.rsyslog.com/doc/)
 - [Kubernetes Logging Architecture](https://kubernetes.io/docs/concepts/cluster-administration/logging/)
 - [NVIDIA Xid Errors](https://docs.nvidia.com/deploy/xid-errors/index.html)
