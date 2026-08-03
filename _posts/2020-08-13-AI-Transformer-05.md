@@ -13,7 +13,7 @@ tags:
   - Transformer
   - 언어 모델
 use_math: true
-last_modified_at: 2020-08-14
+last_modified_at: 2026-08-02
 ---
 
 
@@ -42,13 +42,15 @@ last_modified_at: 2020-08-14
 
 <br>
 
- Multi-head Attention 네트워크는 이전에 살펴 보았기 때문에, 간단히 Feed-Forwark와 Residual Connection 네트워크를 알아보도록 하자. 참고로, 인코더의 Multi-head Attention 네트워크는 **Self-Attention**이며, Masking이 필수는 아니다. 
+ Multi-head Attention 네트워크는 이전에 살펴 보았기 때문에, 간단히 Feed-Forward와 Residual Connection 네트워크를 알아보도록 하자. 참고로, 인코더의 Multi-head Attention 네트워크는 **Self-Attention**이며, Masking이 필수는 아니다. 
 
 <br>
 
 ### Residual Connection
 
- 이전의 네트워크에 입력된 정보를 $$x$$라고 하고, 이전의 네트워크(*Self-Attention* 혹은 *Feed Forward*)를 통과해서 나온 정보를 $$F(x)$$라고 하자. 다음 네트워크로 올라가기 전에 $$x$$와 $$F(x)$$를 더하고, [Layer Normalization](https://arxiv.org/abs/1607.06450)을 적용한다. 인코더 스택을 쌓을수록 층이 깊어지면서 과적합 혹은 학습이 잘 되지 않을 수 있음을 고려한 것으로 보인다.
+ 이전의 네트워크에 입력된 정보를 $$x$$라고 하고, 이전의 네트워크(*Self-Attention* 혹은 *Feed Forward*)를 통과해서 나온 정보를 $$F(x)$$라고 하자. 다음 네트워크로 올라가기 전에 $$x$$와 $$F(x)$$를 더하고, [Layer Normalization](https://arxiv.org/abs/1607.06450)을 적용한다.
+
+ 과적합을 막기 위한 장치는 아니다. 층이 깊어질수록 역전파 과정에서 **gradient가 앞쪽 층까지 도달하지 못하는 문제**에 대응하기 위한 것이다. $$x$$ 를 그대로 더해 두면 미분했을 때 항등항이 남기 때문에, gradient가 레이어를 우회해 앞쪽으로 흘러갈 수 있는 경로가 생긴다.
 
 > *참고*
 >
@@ -72,7 +74,13 @@ $$
 
 > *참고* : Feed-Forward Network의 역할
 >
->  [이 글]([https://medium.com/platfarm/%EC%96%B4%ED%85%90%EC%85%98-%EB%A9%94%EC%BB%A4%EB%8B%88%EC%A6%98%EA%B3%BC-transfomer-self-attention-842498fd3225](https://medium.com/platfarm/어텐션-메커니즘과-transfomer-self-attention-842498fd3225))을 참고하면, Feed-Forward Network를 통과함으로써 각 head가 만들어 낸 Self-Attention이 균등하게 섞인다고 한다. Attention이 한 쪽으로만 치우쳐지지 않도록 하는 과정이라고 하는데, 논문에서 다음과 같이 서로 다른 가중치를 사용한다고 한 부분에서 해당 글의 저자가 왜 이렇게 해석했는지에 대한 힌트를 찾을 수 있을 듯하다.
+>  head들이 만들어 낸 결과를 섞는 것은 Feed-Forward Network가 아니라, 그 앞에 있는 **Multi-head Attention의 출력 linear 네트워크**($$W^O$$)이다. head별 Attention Value를 concat한 뒤 $$W^O$$ 를 통과시키는 그 단계에서 head 간 혼합이 이미 끝난다. Feed-Forward Network는 그 다음에 오므로 섞을 것이 남아 있지 않다.
+>
+>  Feed-Forward Network는 이름 그대로 **position-wise**이다. 문장 내 각 토큰 벡터에 **똑같은 가중치를 독립적으로** 적용하며, 위치 간에는 아무 정보도 주고받지 않는다. 위치 간 정보 교환은 전적으로 Attention이 담당하고, Feed-Forward Network는 각 위치 안에서 차원을 $$d_{model}$$(512)에서 $$d_{ff}$$(2048)로 4배 늘렸다가 다시 $$d_{model}$$ 로 되돌리며 **비선형 변환**을 가한다. 논문은 이를 커널 크기가 1인 합성곱 두 개로도 볼 수 있다고 표현한다.
+>
+> > Another way of describing this is as two convolutions with kernel size 1.
+>
+>  참고로 아래 인용문은 "레이어마다 파라미터가 다르다"는 의미이지, head를 섞는다는 의미가 아니다.
 >
 > >  While the linear transformations are the same across different positions, they use different parameters from layer to layer.
 
@@ -82,22 +90,27 @@ $$
 
  이렇게 모든 인코더 네트워크를 통과하고 나면, 입력 문장의 임베딩 차원이 그대로 유지된다. 논문에서 구현한 인코더 네트워크 각각의 세부적 구성은 다음과 같다. 
 
-* 인코더 레이어 개수 = 6.
+* 인코더 레이어 개수($$N$$) = 6.
 * 임베딩 차원($$d_{model}$$) = 512.
-* Multi-head Attention 헤드 개수($$d_{k}$$) = 8. 
+* Multi-head Attention 헤드 개수($$h$$) = 8.
+* head 하나가 담당하는 차원($$d_{k} = d_{v} = d_{model} / h$$) = 64.
 * Feed-Forward 네트워크 은닉 노드 개수($$d_{ff}$$) = 2048.
+
+<br>
+
+ 이 숫자들만 있으면 레이어 하나의 파라미터가 어디에 몰려 있는지 바로 계산할 수 있다. Multi-head Attention은 $$W^Q$$, $$W^K$$, $$W^V$$, $$W^O$$ 네 개를 쓰는데 각각이 $$d_{model} \times d_{model}$$ 이므로 합이 $$4 d_{model}^2$$ 이다. Feed-Forward Network는 $$d_{model} \times d_{ff}$$ 와 $$d_{ff} \times d_{model}$$ 두 개인데 $$d_{ff} = 4 d_{model}$$ 이므로 합이 $$8 d_{model}^2$$ 이 된다. 편향을 빼고 세면 **Feed-Forward Network 쪽 파라미터가 Attention의 두 배**인 셈이다.
 
 <br>
 
 ## 2. Decoder
 
- 전체적인 인코더 모듈의 구조는 다음과 같다.
+ 전체적인 디코더 모듈의 구조는 다음과 같다.
 
 ![decoder-stack]({{site.url}}/assets/images/transformer-decoder.png){: width="500"}{: .align-center}
 
- 디코더 스택의 경우, 전체적인 구조는 인코더와 비슷하나, 중간에 하나의 네트워크가 **추가**된다. 두 개의 Multi-head Attention 네트워크와 Feed 하나의 Feed-Forward 네트워크로 구성된 3층 구조이다. 각 네트워크를 통과한 결과에 Residual Connection이 적용되는 것도 동일하다.
+ 디코더 스택의 경우, 전체적인 구조는 인코더와 비슷하나, 중간에 하나의 네트워크가 **추가**된다. 두 개의 Multi-head Attention 네트워크와 하나의 Feed-Forward 네트워크로 구성된 3층 구조이다. 각 네트워크를 통과한 결과에 Residual Connection이 적용되는 것도 동일하다.
 
- Multi-head Attention이 **Self Attention**과 **Encoder-Decoder Attention**의 두 층으로 구성된다는 것과, *Self Attention*을 적용할 때 **Masking이 필수**라는 점*(이전 글에서 설명했듯, 디코더에서는 예측을 수행해야 하기 때문이다.)* 만 달라진다. *Self Attention*을 적용한 뒤, 그 결과를 가지고 인코더의 결과와 Attention을 수행한다. 인코더와 디코더 간의 관계를 확인하는 것이다. *(이전에 Seq2Seq 모델에 Attention을 적용하여 챗봇을 만들었을 때와 동일한 구조라고 보면 된다.)* 따라서 *Encoder-Decoder Attention*을 수행할 때에는 Query, Key의 입력이 Encoder에서 넘어 오게 된다.(*그림에서는 삼각형 모양으로 표현되어 있다.*)
+ Multi-head Attention이 **Self Attention**과 **Encoder-Decoder Attention**의 두 층으로 구성된다는 것과, *Self Attention*을 적용할 때 **Masking이 필수**라는 점*(이전 글에서 설명했듯, 디코더에서는 예측을 수행해야 하기 때문이다.)* 만 달라진다. *Self Attention*을 적용한 뒤, 그 결과를 가지고 인코더의 결과와 Attention을 수행한다. 인코더와 디코더 간의 관계를 확인하는 것이다. *(이전에 Seq2Seq 모델에 Attention을 적용하여 챗봇을 만들었을 때와 동일한 구조라고 보면 된다.)* 따라서 *Encoder-Decoder Attention*을 수행할 때에는 **Key와 Value**의 입력이 Encoder에서 넘어 오게 된다.(*그림에서는 삼각형 모양으로 표현되어 있다.*) **Query는 디코더** 쪽, 정확히는 바로 앞의 masked Self-Attention을 통과한 결과이다.
 
  이렇게 두 개의 Attention을 수행한 후, 인코더 모듈과 동일하게 Feed Forward 네트워크를 적용하면 된다. 논문에서 디코더 모델에 적용한 각각의 파라미터도 인코더의 그것과 동일하다.
 

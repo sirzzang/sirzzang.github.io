@@ -13,7 +13,7 @@ tags:
   - Transformer
   - 언어 모델
 use_math: true
-last_modified_at: 2020-08-14
+last_modified_at: 2026-08-02
 ---
 
 
@@ -62,7 +62,17 @@ last_modified_at: 2020-08-14
 
 <br>
 
-* 단어 임베딩 행렬을 3개의 head로 나눈다. 각 head에 대해 서로 다른 가중치 행렬이 설정된다. 그 shape은 $$(embed\_dim, d_k)$$ 이다.
+* 각 head에 대해 서로 다른 가중치 행렬이 설정된다. 그 shape은 $$(d_{model}, d_k)$$ 이다. 단어 임베딩 행렬이 이 가중치를 통과하면, head 하나가 담당할 $$d_k$$ 차원의 Query, Key, Value가 나온다.
+
+  > *주의* : 위 그림과 논문 정의의 차이
+  >
+  >  위 그림은 이해를 돕기 위해 **임베딩 벡터를 head 개수만큼 먼저 쪼갠 뒤** 그 조각에 가중치를 곱하는 형태로 그렸다. 그러나 논문의 정의는 다르다. 쪼개지 않은 **$$d_{model}$$ 차원 전체**를 head별로 서로 다른 $$(d_{model}, d_k)$$ 가중치에 통과시켜 $$d_k$$ 차원으로 사영하는 것이다.
+  >
+  > > MultiHead(Q, K, V) = Concat(head_1, ..., head_h)W^O, where head_i = Attention(QW_i^Q, KW_i^K, VW_i^V). Where the projections are parameter matrices W_i^Q ∈ R^(d_model × d_k), W_i^K ∈ R^(d_model × d_k), W_i^V ∈ R^(d_model × d_v) and W^O ∈ R^(h·d_v × d_model).
+  >
+  >  차이가 중요한 이유는, 논문 방식에서 **각 head가 임베딩의 일부가 아니라 전체를 본다**는 데 있다. 3번 head가 임베딩의 3번째 조각만 담당하는 것이 아니라, 임베딩 전체를 자기만의 관점으로 압축해서 본다. 그래서 head마다 "다른 종류의 관계"를 잡아낼 수 있는 것이다.
+  >
+  >  실제 구현에서는 $$(d_{model}, d_{model})$$ 가중치 하나로 한 번에 사영한 뒤 결과를 head 개수만큼 reshape으로 나눈다. 이는 head별 $$(d_{model}, d_k)$$ 가중치를 옆으로 이어 붙인 것과 같으므로, 논문 정의와 동일한 연산이다.
 
   > *참고* : head와 input의 관계
   >
@@ -70,7 +80,7 @@ last_modified_at: 2020-08-14
 
 
 
-* head와 가중치 행렬을 곱한다. 그림 상으로는 한 부분(*정확히는, `love` 단어의 임베딩 벡터에서 3번 head에 해당하는 부분*)에 대해 Query, Key, Value를 얻는 과정만 표현했다. head 전체 행렬에 대해 이 과정을 수행하면 된다.
+* 임베딩과 가중치 행렬을 곱한다. 그림 상으로는 한 부분(*정확히는, `love` 단어에 대해 3번 head의 가중치를 적용하는 부분*)에 대해 Query, Key, Value를 얻는 과정만 표현했다. 문장의 모든 토큰, 그리고 모든 head에 대해 이 과정을 수행하면 된다.
 
  사실은 위의 과정이 모든 head에 대해 다 수행되므로, head별로 Query, Key, Value가 나온다. **Query, Key, Value가 head 개수만큼 있다**는 말이다. *~~(이를 어떻게든 나타내고 싶어 그림에서는 입체(?)적으로 표현하고자 했다.)~~* 또한, 각 Query, Key, Value가 문장 **자기 자신으로부터 나왔다**는 것이 *매우* 중요하다. (그래서 Self-Attention이다.)
 
@@ -109,9 +119,11 @@ last_modified_at: 2020-08-14
 
 <br>
 
- 이전까지의 과정을 요약해 Seq2Seq 모델과 트랜스포머 모델의 차이점을 생각해 보자. 트랜스포머 모델은 순환신경망 네트워크를 제거하고, Self-Attention 과정을 거쳐 문장의 정보를 효과적으로 추출해 낸다. 그런데 이 과정에서 문장 전체를 한번에 행렬 형태로 입력했다. 이 때문에 예측 과정에 문제가 발생할 수 있다. 학습 시에는 자기 자신보다 뒤에 있는 모든 위치의 단어들을 참고할 수 있었지만, 예측 시에는 입력되는 단어보다 **뒤에 있는 단어를 사용할 수 없기 때문**이다.
+ 이전까지의 과정을 요약해 Seq2Seq 모델과 트랜스포머 모델의 차이점을 생각해 보자. 트랜스포머 모델은 순환신경망 네트워크를 제거하고, Self-Attention 과정을 거쳐 문장의 정보를 효과적으로 추출해 낸다. 그런데 이 과정에서 문장 전체를 한번에 행렬 형태로 입력했다. 이 때문에 **학습 과정에 문제가 발생한다**.
 
- 따라서 *순차적으로* 결과를 만들어내야 하는 디코더의 경우에는 **Masking** 기법을 사용해 학습 및 예측하도록 한다. 특정 포지션 $$i$$에 단어가 들어 온다면, 그 뒤에 있는 위치의 단어들에 Attention을 주지 못하게 하는 것이다. 이미 알고 있는 결과를 활용하기만 해서 Attention을 주고 다음 단어를 예측하는 데에 활용하는 것이다. 특히 디코더에서 이렇게 학습한다. 
+ 예측 시에는 아직 만들어지지 않은 단어를 볼 방법이 애초에 없다. 그런데 학습 시에는 정답 문장 전체를 한 번에 넣기 때문에, 가만히 두면 **자기 자신보다 뒤에 있는 단어까지 참고**해 버린다. 정답을 미리 보고 정답을 맞히는 셈이라, 학습할 때와 예측할 때의 조건이 어긋나게 된다.
+
+ 따라서 *순차적으로* 결과를 만들어내야 하는 디코더의 경우에는 **Masking** 기법을 사용해 학습한다. 특정 포지션 $$i$$에 단어가 들어 온다면, 그 뒤에 있는 위치의 단어들에 Attention을 주지 못하게 하는 것이다. 이렇게 하면 학습 시에도 예측 시와 똑같이 **이미 알고 있는 결과만 가지고** 다음 단어를 예측하게 된다.
 
 > *참고* 
 >
@@ -127,5 +139,11 @@ last_modified_at: 2020-08-14
 아래 그림에서와 같이 상삼각행렬 부분에 마스킹을 씌우면 된다.
 
 ![Masking]({{site.url}}/assets/images/transformer-masking.png){: width="400"}{: .align-center}
+
+<br>
+
+ 실제로 "가린다"는 것이 값을 지운다는 뜻은 아니다. Softmax를 취하기 **직전**의 Attention Score 행렬에서, 가려야 할 상삼각 위치에 $$-\infty$$ (구현상으로는 -1e9 같은 아주 작은 값)를 더한다. 그러면 Softmax를 통과한 뒤 그 자리의 가중치가 0이 되어, Value를 가중합할 때 아무 기여도 하지 못한다.
+
+> We implement this inside of scaled dot-product attention by masking out (setting to $$-\infty$$) all values in the input of the softmax which correspond to illegal connections.
 
 <br>

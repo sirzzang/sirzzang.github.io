@@ -13,7 +13,7 @@ tags:
   - Transformer
   - 언어 모델
 use_math: true
-last_modified_at: 2020-08-14
+last_modified_at: 2026-08-02
 ---
 
 
@@ -48,6 +48,12 @@ last_modified_at: 2020-08-14
 
  Positional Encoding을 구현할 수 있는 방법은 여러 가지가 있다. **학습**을 통할 수도 있고(*learned*), 항상 **고정된 위치**의 값을 인코딩으로 사용할 수도 있다(*fixed*). 논문에서는 후자의 방법을 택한다. 학습을 통한다기 보다는, 조건을 만족하는 방식에 따라 각 단어의 위치에 일종의 번호를 부여한다는 의미이다.
 
+ 흥미로운 것은, 논문이 두 방법을 실제로 비교해 보고도 후자를 택했다는 점이다. 성능은 거의 같았는데, 고정된 값을 쓰면 **학습 때 본 것보다 긴 문장이 들어와도 인코딩 값을 계산해 낼 수 있기 때문**이다. 학습 방식은 학습 때 보지 못한 위치에 대한 벡터가 아예 존재하지 않는다.
+
+> We also experimented with using learned positional embeddings instead, and found that the two versions produced nearly identical results. We chose the sinusoidal version because it may allow the model to extrapolate to sequence lengths longer than the ones encountered during training.
+
+<br>
+
  Positional Encoding은 각 단어의 위치를 나타내기 때문에, 기본적으로 다음의 조건을 만족해야 한다.
 
 * 각 문장에서 단어의 위치마다 **유일한 encoding 값**이 출력되어야 한다.
@@ -81,7 +87,9 @@ last_modified_at: 2020-08-14
 
 
 
- 우선, 각 벡터 간 *거리가 일정해야*  한다. 이를 위해 원점으로부터 초기 벡터를 찾고, 원점과 초기 벡터 간 동일한 거리를 갖는 벡터를 찾는 방식을 택한다. 따라서 Positional Encoding된 각 벡터 간 **거리가 동일**해야 한다. 동시에, 각 위치가 서로 다른 위치에 종속되면 안 되므로, 각 벡터 간 **내적이 동일**해야 한다. 위치 정보 벡터들이 서로 독립적이어야 함을 의미한다.
+ 우선, 이웃한 위치끼리의 *거리가 일정해야*  한다. 이를 위해 원점으로부터 초기 벡터를 찾고, 원점과 초기 벡터 간 동일한 거리를 갖는 벡터를 찾는 방식을 택한다. 따라서 이웃한 Positional Encoding 벡터 간 **거리가 동일**해야 한다.
+
+ 동시에, 두 위치 벡터의 **내적이 절대 위치가 아니라 두 위치 사이의 간격에만 의존**해야 한다. 3번과 5번의 내적, 10번과 12번의 내적이 같아야 한다는 뜻이다. 그래야 모델이 "몇 번째 단어인가"가 아니라 "얼마나 떨어져 있는가"를 읽어 낼 수 있다. (내적이 *0*이어야 한다는 뜻은 아니다. 위치 벡터들이 서로 무관해야 하는 것이 아니라, 관계가 **간격에 대해서만** 정해져야 한다는 조건이다.)
 
  또한, 각 벡터가 원점으로부터 발산하지 않아야 한다. 내적이 동일한 벡터를 찾아 나가기 위해 동일한 일직선 상에서 벡터를 선택한다고 생각해 보자. 나중에는 계산량이 무한히 커질 것이다. 따라서 모든 벡터의 **노름이 동일**하도록, 이전 벡터에서 다음 벡터를 선택할 때 일정 크기의 각 $$\theta$$을 줘서 선택한다.
 
@@ -94,6 +102,14 @@ last_modified_at: 2020-08-14
  정리하면 다음과 같다. 인코더 입력 문장이 $$d_{model}$$ 차원의 벡터로 임베딩된다고 하자. Positional Encoding은 **1)** 위와 같은 방법론을 따라 선택된, **2)** 임베딩된 벡터와 같은 $$d_{model}$$ 차원 공간에서의 벡터로서, **3)** 각 단어 임베딩과 합쳐져 문장 내 위치 정보를 표현하게 된다. **임베딩 결과에 Positional Encoding을 통해 위치 정보를 추가**하는 것이다.
 
 > Similarly to other sequence transduction models, we use learned embeddings to convert the input tokens and output tokens to vectors of dimension $$d_{model}$$. (…) The positional encodings have the same dimension $$d_{model}$$ as the embeddings, so that the two can be summed.
+
+<br>
+
+> *참고* : 임베딩에 $$\sqrt{d_{model}}$$ 을 곱하는 이유
+>
+>  논문은 임베딩 레이어의 출력에 $$\sqrt{d_{model}}$$ 을 곱한 뒤 Positional Encoding을 더한다. 다만 논문 본문에 그 이유는 나와 있지 않다. 통상적으로는 두 값의 스케일을 맞추기 위한 것으로 해석한다. Positional Encoding 값은 $$sin$$, $$cos$$ 이라 항상 -1에서 1 사이인데, 임베딩 가중치는 분산이 $$1/d_{model}$$ 정도가 되도록 초기화하는 것이 보통이라 값의 크기가 훨씬 작다. 그대로 더하면 위치 정보가 의미 정보를 덮어 버릴 수 있으므로, $$\sqrt{d_{model}}$$ 을 곱해 임베딩 쪽 분산을 1 부근으로 끌어올린다는 설명이다.
+>
+> > In the embedding layers, we multiply those weights by $$\sqrt{d_{model}}$$.
 
 <br>
 
@@ -115,7 +131,13 @@ $$
 
  $$pos$$ 는 각 단어가 문장 내에서 몇 번째 단어인지를 의미하며, $$i$$ 는 임베딩 벡터의 차원에서의 순서를 나타낸다. 예컨대,  `"I love you so much"`의 문장 내 각 단어를 128차원으로 임베딩했다면 $$pos$$ 는 0부터 4까지,  $$i$$ 는 0부터 127까지가 될 것이다.
 
- $$sin$$, $$cos$$ 함수를 이용하기 때문에, 각 값이 모두 -1에서 1 사이로 통일되어 벡터가 발산하지 않는다. 또한, 홀수 인덱스의 경우 $$cos$$ 함수의 주기를, 짝수 인덱스의 경우 $$sin$$ 함수의 주기를 이용하기 때문에 각각의 값들이 모두 다르게 인코딩되며, 상대적인 위치 정보를 전달할 수 있게 된다. $$i$$ 에 따라 크기가 바뀌는데, $$i$$ 가 증가하는 크기가 일정하므로, 각 벡터 간 거리도 일정해 진다.  (자세한 수학적인 증명이 ~~나중에~~ 알고 싶어 진다면, [여기](https://kazemnejad.com/blog/transformer_architecture_positional_encoding/)를 참고하자.)
+ $$sin$$, $$cos$$ 함수를 이용하기 때문에, 각 값이 모두 -1에서 1 사이로 통일되어 벡터가 발산하지 않는다. 또한, 홀수 인덱스의 경우 $$cos$$ 함수의 주기를, 짝수 인덱스의 경우 $$sin$$ 함수의 주기를 이용하며, $$i$$ 가 커질수록 주기가 길어지기 때문에 각각의 값들이 모두 다르게 인코딩된다.
+
+ 상대적인 위치 정보를 전달할 수 있는 근거는 $$i$$ 가 증가하는 폭이 일정하다는 데 있는 것이 아니다. **$$PE_{pos+k}$$ 를 $$PE_{pos}$$ 의 선형 변환으로 쓸 수 있다**는 데 있다. 간격 $$k$$ 를 고정하면 그에 대응하는 회전 행렬이 하나 정해지고, 그 행렬은 $$pos$$ 가 무엇이든 동일하다. 그래서 모델이 절대 위치와 무관하게 "$$k$$ 만큼 떨어져 있다"를 일관된 방식으로 읽어 낼 수 있다. 논문도 이 성질을 sinusoid를 고른 이유로 든다.
+
+> We chose this function because we hypothesized it would allow the model to easily learn to attend by relative positions, since for any fixed offset $$k$$, $$PE_{pos+k}$$ can be represented as a linear function of $$PE_{pos}$$.
+
+ (자세한 수학적인 증명이 ~~나중에~~ 알고 싶어 진다면, [여기](https://kazemnejad.com/blog/transformer_architecture_positional_encoding/)를 참고하자.)
 
 <br>
 
@@ -147,7 +169,11 @@ def positional_encoding(position, d_model):
 
  `get_angles` 함수를 통해 단어의 위치에 따라 $$sin$$, $$cos$$ 함수 안에 들어갈 중심각의 크기를 구한다. 임베딩 벡터와 같은 크기의 텐서를 만들어야 하는데, 이 텐서의 행은 문장의 길이, 열은 임베딩 벡터의 차원이 될 것이다. `positional encoding`에서 `pos`를 행으로, `i`를 열로 하는 행렬로 만들고 각 위치를 전달한다. `sines`와 `cosines`에서는 각각 `i`가 0부터 시작해 2씩 증가하는 짝수 위치의 인덱스, 1부터 시작해 2씩 증가하는 홀수 위치의 인덱스에 대해 $$sin$$ 값과 $$cos$$ 값을 구한다. 그리고 각각의 값을 concat한다.
 
-
+> *참고* : 위 수식과 이 코드는 배치가 다르다
+>
+>  논문의 수식은 짝수 차원에 $$sin$$, 홀수 차원에 $$cos$$ 을 **번갈아** 배치한다. 그런데 이 코드는 `np.concatenate` 로 이어 붙이기 때문에 **앞 절반이 $$sin$$, 뒤 절반이 $$cos$$** 이 된다. 아래에서 확인할 출력값도 이 배치를 따른다.
+>
+>  차원의 *순서*만 다를 뿐 각 위치에 담기는 값의 집합은 같고, 뒤따르는 레이어의 가중치는 어차피 학습되는 것이라 결과에는 차이가 없다. 다만 수식과 코드가 다르다는 점은 알고 넘어가자.
 
 <br>
 
@@ -183,7 +209,7 @@ for i in range(PE.shape[0] - 1):
 
 
 
-  모두 동일한 것을 알 수 있다.
+  **이웃한 위치끼리는** 모두 동일한 것을 알 수 있다.
 
 ```python
 # 각 벡터 간 거리, 각 벡터의 노름, 내적
@@ -192,6 +218,12 @@ for i in range(PE.shape[0] - 1):
 2 - 3 : distance = 0.9600, norm = 1.7321, dot = 2.5392
 3 - 4 : distance = 0.9600, norm = 1.7321, dot = 2.5392
 ```
+
+> *주의* : 위 결과가 보여 주는 것과 보여 주지 않는 것
+>
+>  위 코드는 `PE[i]` 와 `PE[i+1]`, 즉 **간격이 1인 쌍만** 계산한다. 간격을 2, 3으로 벌려 보면 거리와 내적 값이 달라진다. 그리고 달라야 정상이다. 모든 쌍이 등거리라면 위치 사이의 원근을 구분할 수 없기 때문이다.
+>
+>  정확한 성질은 이렇다. **간격 $$k$$ 를 고정하면, 문장의 어느 지점에서 재든 거리와 내적이 같다.** `PE[0]`-`PE[3]` 과 `PE[10]`-`PE[13]` 이 같은 값을 갖는다는 뜻이다. 위 출력은 그 중 $$k=1$$ 인 경우만 확인한 것이다. 노름은 위치·간격과 무관하게 항상 $$\sqrt{d_{model}/2}$$ 로 동일하다. (위 예시는 $$d_{model} = 6$$ 이므로 $$\sqrt{3} = 1.7321$$ 이다.)
 
 <br>
 
