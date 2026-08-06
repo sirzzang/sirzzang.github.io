@@ -1,0 +1,1729 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[NCCL] NCCL Communicator 초기화 시점: Lazy vs Eager Init - Eraser’s StudyLog</title>
+<meta name="description" content="같은 root cause가 Ray와 torchrun에서 다른 증상으로 나타난 이유에 대해 알아보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[NCCL] NCCL Communicator 초기화 시점: Lazy vs Eager Init">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/">
+
+
+  <meta property="og:description" content="같은 root cause가 Ray와 torchrun에서 다른 증상으로 나타난 이유에 대해 알아보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-18T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[NCCL] NCCL Communicator 초기화 시점: Lazy vs Eager Init">
+    <meta itemprop="description" content="같은 root cause가 Ray와 torchrun에서 다른 증상으로 나타난 이유에 대해 알아보자.">
+    <meta itemprop="datePublished" content="2026-04-18T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[NCCL] NCCL Communicator 초기화 시점: Lazy vs Eager Init
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-18T00:00:00+09:00">2026년 04월 18일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  15 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#배경">배경</a></li>
+  <li><a href="#현상-같은-원인-다른-증상">현상: 같은 원인, 다른 증상</a>
+    <ul>
+      <li><a href="#pytorch-분산학습-초기화의-두-단계">PyTorch 분산학습 초기화의 두 단계</a></li>
+      <li><a href="#코드-경로-비교">코드 경로 비교</a>
+        <ul>
+          <li><a href="#standalone-torchrun--eager-init">Standalone torchrun — eager init</a></li>
+          <li><a href="#ray-torchtrainer--lazy-init">Ray TorchTrainer — lazy init</a></li>
+        </ul>
+      </li>
+      <li><a href="#비교-요약">비교 요약</a></li>
+      <li><a href="#드라이버-레벨에서의-증거">드라이버 레벨에서의 증거</a></li>
+    </ul>
+  </li>
+  <li><a href="#분석-lazy-init이-디버깅을-어렵게-만든-이유">분석: Lazy Init이 디버깅을 어렵게 만든 이유</a>
+    <ul>
+      <li><a href="#에러-발현-지점과-원인-지점의-분리">에러 발현 지점과 원인 지점의 분리</a></li>
+      <li><a href="#fail-fast-실패와-gpu-hour-낭비">Fail-fast 실패와 GPU-hour 낭비</a></li>
+      <li><a href="#환경마다-다른-증상-재현의-어려움">환경마다 다른 증상, 재현의 어려움</a></li>
+    </ul>
+  </li>
+  <li><a href="#원인-왜-ray는-lazy인가">원인: 왜 Ray는 Lazy인가</a>
+    <ul>
+      <li><a href="#pytorch의-역사적-기본값이-lazy였다">PyTorch의 역사적 기본값이 lazy였다</a></li>
+      <li><a href="#ray-torchtrainer의-현재-상태">Ray TorchTrainer의 현재 상태</a></li>
+      <li><a href="#pytorch의-방향-전환">PyTorch의 방향 전환</a></li>
+    </ul>
+  </li>
+  <li><a href="#해결-플랫폼-레벨-대안">해결: 플랫폼 레벨 대안</a>
+    <ul>
+      <li><a href="#학습-코드-변경의-한계">학습 코드 변경의 한계</a></li>
+      <li><a href="#대안-1-빌드-타임--cicd에서-호환성-검증">대안 1. 빌드 타임 — CI/CD에서 호환성 검증</a></li>
+      <li><a href="#대안-2-배포-타임--k8s-init-container-권장">대안 2. 배포 타임 — K8s Init Container (권장)</a></li>
+      <li><a href="#대안-3-런타임--환경변수--타임아웃-최소-변경">대안 3. 런타임 — 환경변수 + 타임아웃 (최소 변경)</a></li>
+      <li><a href="#비교">비교</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-새-gpu-도입-시-nccl-호환성-검증-체크리스트">참고: 새 GPU 도입 시 NCCL 호환성 검증 체크리스트</a>
+    <ul>
+      <li><a href="#빌드-타임">빌드 타임</a></li>
+      <li><a href="#배포-타임">배포 타임</a></li>
+      <li><a href="#런타임">런타임</a></li>
+      <li><a href="#진단-시-신호-매핑">진단 시 신호 매핑</a></li>
+    </ul>
+  </li>
+  <li><a href="#참고-자료">참고 자료</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li><strong>문제</strong>: NCCL 통신 실패의 동일한 root cause(sm_120 커널 부재)가, 실행 환경(러너)에 따라 완전히 다른 두 가지 증상으로 나타났다.</li>
+  <li><strong>원인</strong>: PyTorch의 NCCL communicator 초기화 시점이 프레임워크마다 다르다. <code class="highlighter-rouge">torchrun</code>은 <code class="highlighter-rouge">init_process_group</code>에서 <strong>즉시(eager)</strong> 생성하고, Ray TorchTrainer는 첫 collective op까지 <strong>지연(lazy)</strong> 생성한다.</li>
+  <li><strong>핵심</strong>: Lazy init은 에러의 발현 지점과 원인 지점을 분리시킨다. 이것이 디버깅을 어렵게 만든 본질적 원인이다.</li>
+  <li><strong>대안</strong>: Ray TorchTrainer에서는 사용자 코드로 eager init을 강제할 수 없으므로, 플랫폼 레벨(K8s init container)에서 GPU↔NCCL 호환성을 사전 검사하는 것을 권장한다.</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="배경">배경</h1>
+
+<p>이 글에서 반복적으로 등장하는 핵심 용어를 먼저 짚고 가자.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>용어</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>NCCL</strong></td>
+      <td>NVIDIA Collective Communications Library. GPU 간 데이터를 주고받기 위한 통신 라이브러리다</td>
+    </tr>
+    <tr>
+      <td><strong>NCCL Communicator</strong></td>
+      <td>NCCL이 GPU 간 통신 채널을 추상화한 객체. <code class="highlighter-rouge">ncclCommInitRank</code> 함수로 생성하며, 이것이 만들어져야 <code class="highlighter-rouge">all_reduce</code> 같은 collective op을 실행할 수 있다</td>
+    </tr>
+    <tr>
+      <td><strong><code class="highlighter-rouge">init_process_group</code></strong></td>
+      <td>PyTorch 분산학습의 진입점 함수(<code class="highlighter-rouge">torch.distributed.init_process_group</code>). 프로세스들을 하나의 통신 그룹으로 묶는다</td>
+    </tr>
+    <tr>
+      <td><strong>collective op</strong></td>
+      <td>그룹 내 모든 프로세스가 함께 참여하는 통신 연산. <code class="highlighter-rouge">all_reduce</code>(모든 rank의 텐서를 합산), <code class="highlighter-rouge">broadcast</code>(한 rank의 데이터를 전체에 전파) 등이 있다</td>
+    </tr>
+    <tr>
+      <td><strong><code class="highlighter-rouge">torchrun</code></strong></td>
+      <td>PyTorch 기본 분산학습 런처. 프로세스를 띄우고 환경변수(<code class="highlighter-rouge">RANK</code>, <code class="highlighter-rouge">WORLD_SIZE</code> 등)를 설정해 준다</td>
+    </tr>
+    <tr>
+      <td><strong>Ray TorchTrainer</strong></td>
+      <td>Ray 프레임워크의 분산학습 래퍼. 워커를 actor로 스폰하고, <code class="highlighter-rouge">init_process_group</code> 호출과 환경 설정을 자동으로 처리해 준다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<p><a href="/articles/Articles-NCCL-Troubleshooting-Collaboration-Retrospective/">NCCL 트러블슈팅</a>을 계속 진행하면서, 팀원이 겪은 증상(학습 중 <code class="highlighter-rouge">illegal memory access</code>)을 독립적으로 재현하려고 시도했다. 접근 방식은 <strong>변인을 통제</strong> — Ray라는 wrapper를 제거 — 하고, 다양한 GPU 통신 토폴로지(intra-node multi-GPU, inter-node multi-pod 1 GPU 등)에서 standalone <code class="highlighter-rouge">torchrun</code>으로 NCCL만 격리 테스트하는 것이었다.</p>
+
+<p>결과는 예상과 달랐다. 어떤 토폴로지에서도 팀원의 증상이 재현되지 않았다. 대신 <strong>다른 증상</strong>이 나타났다 — <code class="highlighter-rouge">init_process_group</code>에서 silent hang. 처음에는 별개의 문제로 보였지만, 추적 결과 <strong>동일한 root cause</strong>에서 비롯된 것임을 확인했다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>팀원 (Ray TorchTrainer)</th>
+      <th>나 (standalone torchrun)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>발현 시점</td>
+      <td>학습 중 첫 <code class="highlighter-rouge">all_reduce</code></td>
+      <td><code class="highlighter-rouge">init_process_group</code></td>
+    </tr>
+    <tr>
+      <td>증상</td>
+      <td><code class="highlighter-rouge">CUDA error: illegal memory access</code> (700)</td>
+      <td>silent hang</td>
+    </tr>
+    <tr>
+      <td>Root cause</td>
+      <td>NCCL 2.26.2가 CUDA 12.2로 빌드 → sm_120(RTX 5090) 커널 부재</td>
+      <td>동일</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>같은 root cause인데 증상이 갈린 이유는, <strong>NCCL communicator의 생성 시점이 프레임워크마다 다르기 때문</strong>이다.</p>
+
+<p><br /></p>
+
+<h1 id="현상-같은-원인-다른-증상">현상: 같은 원인, 다른 증상</h1>
+
+<h2 id="pytorch-분산학습-초기화의-두-단계">PyTorch 분산학습 초기화의 두 단계</h2>
+
+<p>PyTorch 분산학습 초기화는 두 단계로 나뉜다. 아래는 <code class="highlighter-rouge">backend="nccl"</code>일 때의 경로다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>단계</th>
+      <th>역할</th>
+      <th>사용 라이브러리</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>1. Rendezvous</strong> (제어 평면)</td>
+      <td>프로세스들이 서로 발견하고 연결</td>
+      <td>gloo / c10d (TCPStore)</td>
+    </tr>
+    <tr>
+      <td><strong>2. Backend Init</strong> (데이터 평면)</td>
+      <td>실제 GPU↔GPU 고속 통신 채널(communicator) 생성</td>
+      <td>NCCL (<code class="highlighter-rouge">ncclCommInitRank</code>)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>1단계는 <code class="highlighter-rouge">backend="nccl"</code>이든 <code class="highlighter-rouge">backend="gloo"</code>이든 <strong>항상 gloo / c10d(TCPStore)</strong>가 담당한다. rank 번호, IP 주소 같은 소량의 제어 정보를 TCP로 교환하는 것이므로 GPU가 필요 없기 때문이다. <code class="highlighter-rouge">backend</code> 인자가 결정하는 것은 2단계 — 실제 데이터를 주고받는 통신 채널의 구현체다.</p>
+
+<blockquote>
+  <p><code class="highlighter-rouge">backend="gloo"</code>를 사용하면 2단계에서 NCCL 대신 gloo 자체 통신 채널이 생성된다. gloo는 CPU 기반이라 GPU 커널 로드가 없으므로, 이 글에서 다루는 sm_120 호환성 문제와 lazy init 이슈가 발생하지 않는다. 팀이 gloo로 전환하여 문제를 우회한 것(<a href="/articles/Articles-NCCL-Troubleshooting-Collaboration-Retrospective/">이전 글</a>)도 이 때문이다.</p>
+</blockquote>
+
+<p><code class="highlighter-rouge">ncclCommInitRank</code>는 2단계에 해당하는 함수다. 모든 rank가 NCCL communicator를 만들어야 <code class="highlighter-rouge">all_reduce</code> 같은 collective op이 GPU 간 실제 데이터를 주고받을 수 있다.</p>
+
+<p><strong>이 2단계를 “언제” 수행하느냐</strong>가 프레임워크마다 다르다.</p>
+
+<h2 id="코드-경로-비교">코드 경로 비교</h2>
+
+<p>팀원의 증상을 재현하기 위해 Ray 변수를 제거하고 standalone <code class="highlighter-rouge">torchrun</code>으로 NCCL만 격리 테스트했다. 아래 두 코드 경로는 각각 그 테스트 코드(torchrun)와 팀원이 실제로 사용한 학습 코드(Ray TorchTrainer)다.</p>
+
+<h3 id="standalone-torchrun--eager-init">Standalone torchrun — eager init</h3>
+
+<p>내가 변인 통제를 위해 작성한 NCCL smoke test 코드다. 다양한 GPU 통신 토폴로지를 K8s Pod으로 구성해 <code class="highlighter-rouge">torchrun</code>으로 직접 실행했다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># intra-node 테스트: 단일 노드, 2 GPU</span>
+<span class="na">args</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="pi">|</span>
+    <span class="no">export NCCL_DEBUG=INFO</span>
+    <span class="no">export NCCL_DEBUG_SUBSYS=ALL</span>
+    <span class="no">torchrun --standalone --nproc_per_node=2 /tmp/test/nccl_smoke.py</span>
+</code></pre></div></div>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># inter-node 테스트: 2 노드, 각 1 GPU</span>
+<span class="na">args</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="pi">|</span>
+    <span class="no">export NCCL_DEBUG=INFO</span>
+    <span class="no">export NCCL_DEBUG_SUBSYS=ALL</span>
+    <span class="no">export NCCL_SOCKET_IFNAME=eth0</span>
+    <span class="no">timeout 300 torchrun \</span>
+      <span class="no">--nnodes=2 --nproc-per-node=1 \</span>
+      <span class="no">--rdzv-backend=c10d \</span>
+      <span class="no">--rdzv-endpoint=nccl-inter-0.nccl-svc.default.svc.cluster.local:29500 \</span>
+      <span class="no">--rdzv-id=nccl-inter-test \</span>
+      <span class="no">/tmp/test/nccl_smoke.py</span>
+</code></pre></div></div>
+
+<p>smoke test 코드 자체는 단순하다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="c"># init_process_group 호출 시 ncclCommInitRank 즉시 실행</span>
+    <span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s">"nccl"</span><span class="p">)</span>   <span class="c"># ← 여기서 hang</span>
+    <span class="n">rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span>
+    <span class="n">dev</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">f</span><span class="s">"cuda:{rank}"</span><span class="p">)</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="n">dev</span><span class="p">)</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">dev</span><span class="p">)</span>
+    <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>                        <span class="c"># ← 여기까지 도달 못함</span>
+</code></pre></div></div>
+
+<p>어떤 토폴로지에서든 동일한 결과가 나왔다. <code class="highlighter-rouge">init_process_group</code> 내부에서 <code class="highlighter-rouge">ncclCommInitRank</code>가 동기적으로 호출되고, sm_120 커널을 로드하려다 실패하면 이 줄에서 바로 hang이 걸린다. NCCL 로그에 <code class="highlighter-rouge">Comm Config Blocking set to 1</code>이 찍히는 것을 확인했다.</p>
+
+<h3 id="ray-torchtrainer--lazy-init">Ray TorchTrainer — lazy init</h3>
+
+<p>팀원이 실제로 사용한 학습 코드의 경로다. RayJob의 entrypoint에서 <code class="highlighter-rouge">TorchTrainer</code>를 구성하고 <code class="highlighter-rouge">trainer.fit()</code>을 호출한다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># driver에서 TorchTrainer 구성</span>
+<span class="n">trainer</span> <span class="o">=</span> <span class="n">TorchTrainer</span><span class="p">(</span>
+    <span class="n">train_loop_per_worker</span><span class="o">=</span><span class="n">train_func</span><span class="p">,</span>
+    <span class="n">train_loop_config</span><span class="o">=</span><span class="n">train_config</span><span class="p">,</span>
+    <span class="n">torch_config</span><span class="o">=</span><span class="n">TorchConfig</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s">'nccl'</span><span class="p">),</span>   <span class="c"># device_id 인터페이스 없음</span>
+    <span class="n">scaling_config</span><span class="o">=</span><span class="n">ScalingConfig</span><span class="p">(</span>
+        <span class="n">num_workers</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+        <span class="n">use_gpu</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+        <span class="n">resources_per_worker</span><span class="o">=</span><span class="p">{</span><span class="s">'CPU'</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span> <span class="s">'GPU'</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
+    <span class="p">),</span>
+    <span class="n">run_config</span><span class="o">=</span><span class="n">RunConfig</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">run_name</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">trainer</span><span class="o">.</span><span class="n">fit</span><span class="p">()</span>   <span class="c"># ← 워커 스폰, Ray가 init_process_group 자동 호출</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">trainer.fit()</code>이 워커를 스폰하면 Ray가 내부적으로 <code class="highlighter-rouge">init_process_group</code>을 호출한 뒤, 사용자의 <code class="highlighter-rouge">train_func</code>을 실행한다. 이때 <code class="highlighter-rouge">TorchConfig</code>에는 <code class="highlighter-rouge">device_id</code>가 없으므로 PyTorch 기본값인 lazy init이 적용된다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Ray가 워커 진입 전에 자동 실행</span>
+<span class="c"># - 환경변수 RANK, LOCAL_RANK, WORLD_SIZE 등 설정</span>
+<span class="c"># - init_process_group(backend='nccl') 호출 (rendezvous만 완료, communicator 미생성)</span>
+
+<span class="k">def</span> <span class="nf">train_func</span><span class="p">(</span><span class="n">config</span><span class="p">):</span>
+    <span class="c"># 이 시점에 init_process_group은 이미 끝남</span>
+
+    <span class="kn">from</span> <span class="nn">mmengine.config</span> <span class="kn">import</span> <span class="n">Config</span>    <span class="c"># import 수십 초</span>
+    <span class="n">runner</span> <span class="o">=</span> <span class="n">Runner</span><span class="o">.</span><span class="n">from_cfg</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>         <span class="c"># 모델 빌드 수십 초</span>
+    <span class="n">runner</span><span class="o">.</span><span class="n">_init_model_weights</span><span class="p">()</span>          <span class="c"># 가중치 초기화</span>
+    <span class="n">runner</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
+    <span class="c"># → DDP wrapping → DataLoader → 첫 forward pass</span>
+    <span class="c"># → 첫 dist.all_reduce()             ← 여기서 비로소 ncclCommInitRank 호출</span>
+    <span class="c">#                                     → sm_120 커널 부재 → illegal memory access (700)</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">init_process_group</code> 시점에는 rendezvous(1단계)만 끝내고 NCCL communicator는 만들지 않는다. 첫 collective op이 호출되는 순간 비로소 <code class="highlighter-rouge">ncclCommInitRank</code>가 실행되고, 그때 sm_120 커널 부재로 crash가 발생한다.</p>
+
+<h2 id="비교-요약">비교 요약</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>torchrun (standalone)</th>
+      <th>Ray TorchTrainer</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>NCCL communicator 생성 시점</td>
+      <td><code class="highlighter-rouge">init_process_group</code> 내부 (eager)</td>
+      <td>첫 <code class="highlighter-rouge">all_reduce</code> 시점 (lazy)</td>
+    </tr>
+    <tr>
+      <td>sm_120 커널 부재 시 증상</td>
+      <td>init 단계 hang</td>
+      <td>학습 중 crash</td>
+    </tr>
+    <tr>
+      <td>에러 메시지</td>
+      <td>(silent hang, timeout)</td>
+      <td><code class="highlighter-rouge">illegal memory access</code> (CUDA 700)</td>
+    </tr>
+    <tr>
+      <td>사용자 코드</td>
+      <td>동일</td>
+      <td>동일</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>사용자 코드(init_process_group → DDP → backward)는 <strong>동일</strong>하다. 차이는 “그 코드를 누가 어떻게 감싸서 실행하느냐”에 있다.</p>
+
+<h2 id="드라이버-레벨에서의-증거">드라이버 레벨에서의 증거</h2>
+
+<p>사용자 레벨의 <code class="highlighter-rouge">illegal memory access</code>(CUDA error 700)는 드라이버 레벨(dmesg)에서는 XID 에러로 남는다. Ray TorchTrainer 환경에서 crash가 발생했을 때의 dmesg 로그가 이를 보여준다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NVRM: Xid (PCI:0000:XX:00): 13, Graphics SM Warp Exception on (GPC 0, TPC 0, SM 0): Out Of Range Address
+NVRM: Xid (PCI:0000:XX:00): 13, Graphics SM Global Exception on (GPC 0, TPC 0, SM 0): Multiple Warp Errors
+NVRM: Xid (PCI:0000:XX:00): 43, pid=XXXXXX, name=ray::_RayTrainW, channel 0x00000002
+</code></pre></div></div>
+
+<ul>
+  <li><strong>Xid 13</strong>: GPU SM(Streaming Multiprocessor)에서 잘못된 메모리 주소에 접근했다는 뜻이다. 사용자 레벨의 CUDA error 700과 동일 사건이다.</li>
+  <li><strong>Xid 43</strong>: 해당 channel을 강제 리셋하여 복구를 시도한다.</li>
+  <li>Xid 43 리셋 이후 GR 엔진 카운터가 100%에 고정되고, DCGM exporter가 이 값을 그대로 리포트하면서 Grafana에서 GPU utilization이 100%로 보이는 현상이 발생한다.</li>
+</ul>
+
+<p>사용자 레벨과 드라이버 레벨의 매핑을 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>사용자 (Python/CUDA)</th>
+      <th>드라이버 (dmesg)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">CUDA error: an illegal memory access was encountered</code> (err 700)</td>
+      <td><code class="highlighter-rouge">Xid 13 Out Of Range Address</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">ProcessGroupNCCL.cpp:3356</code> NCCL collective 실패</td>
+      <td><code class="highlighter-rouge">Xid 43 channel reset, name=ray::_RayTrainW</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>동일 사건의 두 얼굴이다. 근본 원인 후보 중 하나로 지목했던 “CUDA driver와 NCCL 빌드 버전 호환성 불일치”(<a href="/articles/Articles-NCCL-Troubleshooting-Collaboration-Retrospective/">이전 글</a> 참고)가, sm_120 커널 부재로 구체화된 것이다.</p>
+
+<p><br /></p>
+
+<h1 id="분석-lazy-init이-디버깅을-어렵게-만든-이유">분석: Lazy Init이 디버깅을 어렵게 만든 이유</h1>
+
+<blockquote>
+  <p><strong>에러의 발현 지점과 원인 지점이 분리된 것</strong> — 이것이 lazy init의 본질적 운영 비용이다.</p>
+</blockquote>
+
+<h2 id="에러-발현-지점과-원인-지점의-분리">에러 발현 지점과 원인 지점의 분리</h2>
+
+<p>실제 lazy init 시나리오에서 에러가 <code class="highlighter-rouge">dist.all_reduce()</code>에서 나오면, 가장 자연스러운 가설은 “all_reduce를 호출하는 코드에 문제가 있다”이다. <a href="/articles/Articles-NCCL-Troubleshooting-Collaboration-Retrospective/#디버깅-타임라인">이전 글의 디버깅 타임라인</a>에서 팀원의 시도가 이를 잘 보여준다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>시도</th>
+      <th>가설</th>
+      <th>방향</th>
+      <th>결과</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2</td>
+      <td><code class="highlighter-rouge">reduce_mean</code> collective mismatch</td>
+      <td>모델 코드 수정</td>
+      <td>트리거 안 됨</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><code class="highlighter-rouge">CUDA_LAUNCH_BLOCKING=1</code></td>
+      <td>디버깅</td>
+      <td>에러 위치 특정에 성공</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><code class="highlighter-rouge">all_reduce</code> 자체 제거</td>
+      <td>모델 코드 수정</td>
+      <td>다른 곳에서 crash</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>gloo backend 전환</td>
+      <td>인프라</td>
+      <td>성공</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>에러가 <code class="highlighter-rouge">all_reduce</code>에서 발생했으므로, 팀원은 <code class="highlighter-rouge">reduce_mean</code>을 수정하고 collective op 불일치를 의심하고 심지어 <code class="highlighter-rouge">all_reduce</code>를 아예 제거하는 시도까지 했다. 해당 에러 메시지 하에서는 <strong>합리적인 디버깅 경로</strong>였다.</p>
+
+<p>만약 eager init이었다면 어떠했을까.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">init_process_group</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s">'nccl'</span><span class="p">)</span>
+  <span class="err">→</span> <span class="n">ncclCommInitRank</span> <span class="err">→</span> <span class="n">sm_120</span> <span class="err">커널</span> <span class="err">없음</span> <span class="err">→</span> <span class="n">hang</span> <span class="p">(</span><span class="err">또는</span> <span class="n">timeout</span><span class="p">)</span>
+  <span class="err">→</span> <span class="err">로그</span><span class="p">:</span> <span class="s">"Comm Config Blocking set to 1"</span> <span class="o">+</span> <span class="n">NCCL</span> <span class="n">WARN</span>
+  <span class="err">→</span> <span class="err">결론</span><span class="p">:</span> <span class="s">"NCCL 초기화 자체가 안 됨"</span> <span class="err">→</span> <span class="err">인프라</span> <span class="err">문제</span> <span class="err">명확</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">init_process_group</code> 시점에서 바로 hang/에러가 나고, <code class="highlighter-rouge">all_reduce</code>까지 도달하지 않았을 것이다. “NCCL 초기화 자체가 안 되네” → “인프라 문제”라는 결론에 시도 1~5 없이 바로 도달했을 가능성이 높다.</p>
+
+<h2 id="fail-fast-실패와-gpu-hour-낭비">Fail-fast 실패와 GPU-hour 낭비</h2>
+
+<p>lazy init 경로에서 <code class="highlighter-rouge">init_process_group</code>부터 첫 <code class="highlighter-rouge">all_reduce</code>까지의 타임라인을 보면, 낭비 규모가 드러난다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">init_process_group</span> <span class="p">(</span><span class="n">lazy</span><span class="p">,</span> <span class="s">"성공"</span><span class="p">)</span>
+  <span class="err">→</span> <span class="n">PYTHONPATH</span> <span class="err">설정</span>
+  <span class="err">→</span> <span class="n">MMEngine</span><span class="o">/</span><span class="n">MMDet3D</span> <span class="k">import</span>           <span class="err">←</span> <span class="err">수십</span> <span class="err">초</span>
+  <span class="err">→</span> <span class="n">Hook</span> <span class="err">등록</span>
+  <span class="err">→</span> <span class="n">Config</span> <span class="err">로드</span><span class="p">,</span> <span class="err">오버라이드</span>
+  <span class="err">→</span> <span class="n">Runner</span><span class="o">.</span><span class="n">from_cfg</span><span class="p">()</span>                 <span class="err">←</span> <span class="err">모델</span> <span class="err">빌드</span> <span class="err">수십</span> <span class="err">초</span>
+  <span class="err">→</span> <span class="n">runner</span><span class="o">.</span><span class="n">_init_model_weights</span><span class="p">()</span>      <span class="err">←</span> <span class="err">가중치</span> <span class="err">초기화</span>
+  <span class="err">→</span> <span class="n">runner</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
+    <span class="err">→</span> <span class="n">DataLoader</span> <span class="err">구성</span>
+    <span class="err">→</span> <span class="err">첫</span> <span class="n">batch</span> <span class="err">로드</span>                    <span class="err">←</span> <span class="err">데이터</span> <span class="n">I</span><span class="o">/</span><span class="n">O</span>
+    <span class="err">→</span> <span class="err">첫</span> <span class="n">forward</span> <span class="k">pass</span>
+    <span class="err">→</span> <span class="err">첫</span> <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">()</span>            <span class="err">←</span> <span class="err">드디어</span> <span class="err">에러</span> <span class="err">발견</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">init_process_group</code>부터 첫 <code class="highlighter-rouge">all_reduce</code>까지 최소 수 분이 소요된다. 8 GPU worker x 수 분 = 상당한 GPU-hour 낭비다. 게다가 에러 후 원인 분석 → 코드 수정 → 이미지 빌드 → 재배포 → 다시 수 분 대기의 루프를 여러 시도에 걸쳐 반복한 것이다.</p>
+
+<p>eager init이었다면 <code class="highlighter-rouge">init_process_group</code> 시점(워커 진입 직후, 모델 빌드 전)에 실패하므로, <strong>실패까지의 대기 시간이 초 단위로 줄어든다</strong>.</p>
+
+<h2 id="환경마다-다른-증상-재현의-어려움">환경마다 다른 증상, 재현의 어려움</h2>
+
+<p>내가 standalone torchrun을 선택한 이유는 “Ray 변수를 제거하고 NCCL만 격리 테스트”하기 위해서였다. 그런데 이 <strong>변수 제거가 역설적으로 증상 자체를 바꿔버렸다</strong>. “crash를 재현하려 했는데 hang이 나온다” → “같은 문제인지 다른 문제인지?”라는 추가 분석이 필요했다.</p>
+
+<p>재현의 어려움을 만든 구조적 원인을 되짚어 보자:</p>
+
+<ol>
+  <li>NCCL communicator의 eager/lazy 여부가 <strong>프레임워크에 의해 암묵적으로 결정</strong>된다 — 사용자가 제어하는 인터페이스가 아니다</li>
+  <li>같은 <code class="highlighter-rouge">init_process_group(backend='nccl')</code> 호출이 프레임워크 컨텍스트에 따라 다른 내부 경로를 탄다 — <strong>API 표면은 동일하지만 행동이 다르다</strong></li>
+  <li>에러 메시지가 root cause를 가리키지 않는다 — “illegal memory access”도 “silent hang”도 “sm_120 커널 없음”을 알려주지 않는다</li>
+</ol>
+
+<p>결국 “변인을 통제해서 재현한다”는 트러블슈팅의 기본 전략이, lazy/eager라는 보이지 않는 축 때문에 오히려 혼란을 키운 셈이다. 재현 환경을 바꾸면 증상까지 바뀌므로, root cause가 같다는 사실을 확인하기 위해 프레임워크 내부의 초기화 경로까지 추적해야 했다.</p>
+
+<p><br /></p>
+
+<h1 id="원인-왜-ray는-lazy인가">원인: 왜 Ray는 Lazy인가</h1>
+
+<p>결론부터 말하면, Ray의 의도적 설계라기보단 <strong>PyTorch의 역사적 기본값을 그대로 받은 것</strong>에 가깝다.</p>
+
+<h2 id="pytorch의-역사적-기본값이-lazy였다">PyTorch의 역사적 기본값이 lazy였다</h2>
+
+<p><code class="highlighter-rouge">torch.distributed</code>는 오래전부터 NCCL communicator 생성을 첫 collective op까지 미루는 게 default였다.</p>
+
+<ul>
+  <li>
+    <p><strong>Multi-process group 지원</strong>: 한 프로세스에서 여러 process group을 만들 수 있다 (data parallel + tensor parallel 등). 각 group이 실제로 쓰일 때 communicator를 만드는 게 합리적이다 — 안 쓰면 안 만들면 된다.</p>
+  </li>
+  <li>
+    <p><strong>Device 결정 시점 문제</strong>: <code class="highlighter-rouge">init_process_group()</code> 시점에는 PyTorch가 이 rank가 어느 GPU를 쓸지 아직 모를 수 있다. 사용자가 보통 <code class="highlighter-rouge">init_process_group</code> 후에 <code class="highlighter-rouge">torch.cuda.set_device(local_rank)</code>를 호출하기 때문이다. NCCL communicator는 device 바인딩이 필요하므로, 첫 collective op(텐서가 GPU에 있을 때)까지 미루면 device 정보가 확실해진다.</p>
+  </li>
+  <li>
+    <p><strong>시작 시간 단축</strong>: NCCL communicator 생성은 비싸고(수 초~수십 초), 모든 rank가 모여야 한다. “어차피 학습 시작하면 만들 거니까 미루자”는 lazy 철학이다.</p>
+  </li>
+</ul>
+
+<h2 id="ray-torchtrainer의-현재-상태">Ray TorchTrainer의 현재 상태</h2>
+
+<p>Ray <code class="highlighter-rouge">TorchConfig</code>는 <code class="highlighter-rouge">backend</code>, <code class="highlighter-rouge">init_method</code>, <code class="highlighter-rouge">timeout_s</code> 세 가지 인터페이스만 노출한다. <strong><code class="highlighter-rouge">device_id</code>를 전달하는 인터페이스가 없다</strong> (<a href="https://docs.ray.io/en/latest/train/api/doc/ray.train.torch.TorchConfig.html">Ray 2.54.1 docs</a>).</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Ray TorchConfig의 인터페이스 — device_id 옵션 없음</span>
+<span class="k">class</span> <span class="nc">TorchConfig</span><span class="p">:</span>
+    <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s">"nccl"</span>
+    <span class="n">init_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s">"env"</span>
+    <span class="n">timeout_s</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1800</span>
+</code></pre></div></div>
+
+<p>PyTorch에서 eager init을 활성화하려면 <code class="highlighter-rouge">init_process_group(..., device_id=torch.device(f"cuda:{local_rank}"))</code>를 호출해야 하는데, Ray가 이를 내부적으로 호출하면서 <code class="highlighter-rouge">device_id</code>를 지정하지 않기 때문에 PyTorch 기본값(lazy)이 그대로 적용된다.</p>
+
+<blockquote>
+  <p>PyTorch maintainer wconstab의 코멘트: <em>“adding device_id into init_process_group opts you into ‘eager init’ for nccl. Without eager init, you get lazy init which means nccl establishes its connections on the first collective.”</em> — <a href="https://github.com/pytorch/pytorch/issues/142356">pytorch/pytorch#142356</a></p>
+</blockquote>
+
+<p>Ray가 <code class="highlighter-rouge">device_id</code>를 노출하지 않는 이유를 추측하면, Ray TorchTrainer의 setup hook이 사용자 코드 <strong>전에</strong> <code class="highlighter-rouge">init_process_group</code>을 호출하는데, 이 시점에 사용자가 어떤 device 전략(FSDP? DDP? mixed device?)을 쓸지 모르기 때문에 보수적으로 <code class="highlighter-rouge">device_id</code>를 미지정한 것으로 보인다. 다만 이는 Ray 측의 명시적 디자인 문서로 확인된 내용은 아니다.</p>
+
+<h2 id="pytorch의-방향-전환">PyTorch의 방향 전환</h2>
+
+<p>PyTorch 커뮤니티도 lazy init의 디버깅 비용을 인지하고 있다. 최근 몇 가지 움직임을 보면:</p>
+
+<ul>
+  <li><strong>PyTorch 2.3+</strong>: <code class="highlighter-rouge">init_process_group(..., device_id=...)</code> 인자가 추가되어 <strong>eager init을 명시적으로 켤 수 있게</strong> 됐다. 공식 문서는 다음과 같이 안내한다: <em>“[device_id] has two effects, only under NCCL: the communicator is immediately formed… If you want to know NCCL initialization error early, you can also use this field.”</em></li>
+  <li><strong>Non-blocking API 기본값화</strong>: <code class="highlighter-rouge">ncclCommInitRank</code>의 blocking 여부를 non-blocking으로 전환하여 hang 시 bail out할 수 있도록 하는 RFC가 진행 중이다 (<a href="https://github.com/pytorch/pytorch/issues/117749">pytorch/pytorch#117749</a>, <a href="https://github.com/pytorch/pytorch/issues/137007">#137007</a>).</li>
+  <li><strong>Eager init 기반 P2P 최적화</strong>: P2P communicator 생성을 eager init 전제로 최적화하는 설계가 진행 중이다 (<a href="https://github.com/pytorch/pytorch/issues/129140">pytorch/pytorch#129140</a>).</li>
+  <li><strong>torchcomms</strong>: PyTorch의 차세대 통신 API인 torchcomms는 eager init을 기본 설계 원칙으로 채택했다. <em>“Current approaches, such as lazy initialization… constrain scalability within libraries like NCCL. Torchcomms introduces eager initialization (where backend resources are explicitly managed by the user)… paving the way for truly massive distributed jobs.”</em> — <a href="https://pytorch.org/blog/torchcomms/">PyTorch torchcomms 블로그</a></li>
+</ul>
+
+<p>단, <code class="highlighter-rouge">device_id</code>로 eager init을 켠다고 무조건 안전한 것은 아니다. <a href="https://github.com/pytorch/pytorch/issues/153960">pytorch/pytorch#153960</a>에서 <code class="highlighter-rouge">device_id</code>를 전달하면 NCCL이 간헐적으로 hang하는 PyTorch 2.7 regression이 보고되었고, 2.7.1에서 수정되었다. production 도입 시 충분한 사전 테스트가 필요하다.</p>
+
+<p>PyTorch 자체는 eager init으로 방향을 전환하고 있지만, Ray TorchTrainer가 이를 따라가기 전까지는 플랫폼 레벨에서 문제를 감지해야 한다.</p>
+
+<p><br /></p>
+
+<h1 id="해결-플랫폼-레벨-대안">해결: 플랫폼 레벨 대안</h1>
+
+<p>지금까지의 분석을 정리하면, lazy init 환경에서 NCCL 호환성 문제는 <strong>학습이 한참 진행된 뒤에야 발견</strong>되고, 에러 메시지는 root cause를 가리키지 않는다. 이 문제를 해결하려면 NCCL communicator 생성 전에 GPU↔NCCL 호환성을 먼저 검증하거나, 최소한 실패 시점을 앞당겨야 한다.</p>
+
+<h2 id="학습-코드-변경의-한계">학습 코드 변경의 한계</h2>
+
+<p>가장 직관적인 해결책은 학습 코드에서 eager init을 강제하는 것이다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 이론적으로는 이렇게 하면 된다</span>
+<span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span>
+    <span class="n">backend</span><span class="o">=</span><span class="s">"nccl"</span><span class="p">,</span>
+    <span class="n">device_id</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">f</span><span class="s">"cuda:{local_rank}"</span><span class="p">),</span>  <span class="c"># eager init 강제</span>
+<span class="p">)</span>
+</code></pre></div></div>
+
+<p>그러나 이 방법은 두 가지 이유로 현실적이지 않다.</p>
+
+<p><strong>첫째, Ray TorchTrainer에서는 기술적으로 불가능하다.</strong> Ray가 워커 진입 전에 <code class="highlighter-rouge">init_process_group</code>을 이미 호출하기 때문이다. Ray의 <code class="highlighter-rouge">_TorchBackend.on_start()</code>는 사용자의 <code class="highlighter-rouge">train_func</code> 실행 전에 <a href="https://github.com/ray-project/ray/blob/master/python/ray/train/torch/config.py"><code class="highlighter-rouge">_setup_torch_process_group()</code></a>을 호출하고, 이 함수 내부에서 <code class="highlighter-rouge">device_id</code> 없이 <code class="highlighter-rouge">init_process_group</code>을 실행한다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># ray/train/torch/config.py — _setup_torch_process_group()</span>
+<span class="c"># https://github.com/ray-project/ray/blob/master/python/ray/train/torch/config.py</span>
+<span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span>
+    <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span>
+    <span class="n">init_method</span><span class="o">=</span><span class="n">init_method</span><span class="p">,</span>
+    <span class="n">rank</span><span class="o">=</span><span class="n">world_rank</span><span class="p">,</span>
+    <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">,</span>
+    <span class="n">timeout</span><span class="o">=</span><span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="n">timeout_s</span><span class="p">),</span>
+    <span class="c"># device_id 미지정 → PyTorch 기본값(lazy init) 적용</span>
+<span class="p">)</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">train_func</code>이 실행되는 시점에 이미 default process group이 초기화되어 있다. 사용자가 <code class="highlighter-rouge">train_func</code> 내부에서 다시 <code class="highlighter-rouge">init_process_group</code>을 호출하면 PyTorch는 에러를 던진다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># torch/distributed/distributed_c10d.py — init_process_group()</span>
+<span class="c"># https://github.com/pytorch/pytorch/blob/main/torch/distributed/distributed_c10d.py#L1660</span>
+<span class="k">if</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="nb">ValueError</span><span class="p">(</span><span class="s">"trying to initialize the default process group twice!"</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">dist.destroy_process_group()</code> 후 재초기화하는 우회가 이론적으로는 가능하지만, worker 간 동기화 문제와 Ray 라이프사이클 충돌로 인해 권장하지 않는다.</p>
+
+<details>
+  <summary>destroy/reinit 우회가 위험한 이유</summary>
+
+  <p>첫째, 모든 worker의 destroy/reinit 타이밍을 동기화하기 어렵다 — 일부 worker가 destroy를 완료하기 전에 다른 worker가 reinit을 시작하면 NCCL이 invalid state에 빠질 수 있다 (<a href="https://github.com/pytorch/pytorch/issues/119196">pytorch/pytorch#119196</a>, 2026-02 기준 여전히 open).</p>
+
+  <p>둘째, Ray Train의 <a href="https://github.com/ray-project/ray/blob/master/python/ray/train/torch/config.py"><code class="highlighter-rouge">on_shutdown</code></a> hook이 별도로 <code class="highlighter-rouge">destroy_process_group()</code>을 호출하므로, 사용자가 먼저 destroy하면 Ray 측 라이프사이클과 충돌할 수 있다.</p>
+
+</details>
+
+<p><strong>둘째, 조직적으로도 부담이 크다.</strong> 설사 <code class="highlighter-rouge">torchrun</code> 환경이라 코드 수정이 기술적으로 가능하더라도, ML 엔지니어 전원에게 학습 코드의 <code class="highlighter-rouge">init_process_group</code> 호출을 일괄 변경해 달라고 요청해야 한다. 인프라 호환성 문제를 학습 코드에 전가하는 셈이고, 코드 변경이 누락되거나 새 프로젝트에서 빠지면 다시 같은 문제가 발생한다. 이건 강건하지 않은 해결책이다.</p>
+
+<p>따라서 <strong>ML 엔지니어의 코드를 건드리지 않고, 플랫폼 레벨에서 문제를 감지하는 접근</strong>이 필요하다. 문제를 빨리 감지할수록 좋다.</p>
+
+<h2 id="대안-1-빌드-타임--cicd에서-호환성-검증">대안 1. 빌드 타임 — CI/CD에서 호환성 검증</h2>
+
+<p>이미지를 빌드할 때 “이 NCCL 바이너리가 타겟 GPU를 지원하는가?”를 검증한다.</p>
+
+<div class="language-dockerfile highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Dockerfile 마지막 스테이지 — 빌드 타임 GPU 호환성 게이트</span>
+<span class="k">RUN </span><span class="nv">NCCL_LIB</span><span class="o">=</span><span class="k">$(</span>python3 <span class="nt">-c</span> <span class="s2">"import nvidia.nccl, os; </span><span class="se">\
+</span><span class="s2">      print(os.path.join(os.path.dirname(nvidia.nccl.__file__), 'lib/libnccl.so.2'))"</span><span class="k">)</span> <span class="o">&amp;&amp;</span> <span class="se">\
+</span>    <span class="nv">NCCL_ARCHS</span><span class="o">=</span><span class="k">$(</span>cuobjdump <span class="nt">-lelf</span> <span class="s2">"</span><span class="nv">$NCCL_LIB</span><span class="s2">"</span> | <span class="nb">grep</span> <span class="nt">-oP</span> <span class="s1">'sm_\d+'</span> | sort <span class="nt">-u</span> | tr <span class="s1">'\n'</span> <span class="s1">' '</span><span class="k">)</span> <span class="o">&amp;&amp;</span> <span class="se">\
+</span>    <span class="nv">TARGET_SM</span><span class="o">=</span><span class="s2">"sm_120"</span> <span class="o">&amp;&amp;</span> <span class="se">\
+</span>    <span class="nb">echo</span> <span class="s2">"NCCL SASS architectures: </span><span class="nv">$NCCL_ARCHS</span><span class="s2">"</span> <span class="o">&amp;&amp;</span> <span class="se">\
+</span>    <span class="k">if </span><span class="nb">echo</span> <span class="s2">"</span><span class="nv">$NCCL_ARCHS</span><span class="s2">"</span> | <span class="nb">grep</span> <span class="nt">-q</span> <span class="s2">"</span><span class="nv">$TARGET_SM</span><span class="s2">"</span><span class="p">;</span> <span class="k">then</span> <span class="se">\
+</span>      <span class="nb">echo</span> <span class="s2">"PASS: NCCL has native </span><span class="nv">$TARGET_SM</span><span class="s2"> kernel"</span><span class="p">;</span> <span class="se">\
+</span>    <span class="k">else</span> <span class="se">\
+</span>      <span class="nb">echo</span> <span class="s2">"FAIL: NCCL missing </span><span class="nv">$TARGET_SM</span><span class="s2"> kernel (has: </span><span class="nv">$NCCL_ARCHS</span><span class="s2">)"</span> <span class="o">&amp;&amp;</span> <span class="nb">exit </span>1<span class="p">;</span> <span class="se">\
+</span>    <span class="k">fi</span>
+</code></pre></div></div>
+
+<p><strong>장점</strong>: GPU를 할당하지 않고도 검증 가능하다. 배포 전에 차단할 수 있다.</p>
+
+<p><strong>한계</strong>: 타겟 GPU SM 값을 빌드 시 하드코딩해야 한다. 여러 GPU 종류를 지원하는 이미지에서는 유연성이 필요하다.</p>
+
+<h2 id="대안-2-배포-타임--k8s-init-container-권장">대안 2. 배포 타임 — K8s Init Container (권장)</h2>
+
+<p>K8s init container로 실제 GPU와 NCCL 바이너리의 호환성을 런타임에 검증한다. 학습 컨테이너가 뜨기 전에 실행된다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Ray workerGroupSpec의 template에 추가</span>
+<span class="na">initContainers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">gpu-compat-check</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">registry.example.com/ml-training:latest</span>  <span class="c1"># 학습과 동일 이미지</span>
+    <span class="na">command</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">python3"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">-c"</span><span class="pi">]</span>
+    <span class="na">args</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="pi">|</span>
+        <span class="no">import subprocess, sys, os</span>
+
+        <span class="no"># 1. GPU compute capability 확인</span>
+        <span class="no">import torch</span>
+        <span class="no">cap = torch.cuda.get_device_capability(0)</span>
+        <span class="no">gpu_sm = f"sm_{cap[0] * 10 + cap[1]}"</span>
+        <span class="no">gpu_name = torch.cuda.get_device_name(0)</span>
+
+        <span class="no"># 2. NCCL 바이너리의 SASS 아키텍처 확인</span>
+        <span class="no">import nvidia.nccl</span>
+        <span class="no">nccl_lib = os.path.join(</span>
+            <span class="no">os.path.dirname(nvidia.nccl.__file__), "lib/libnccl.so.2"</span>
+        <span class="no">)</span>
+        <span class="no">result = subprocess.run(</span>
+            <span class="no">["cuobjdump", "-lelf", nccl_lib],</span>
+            <span class="no">capture_output=True, text=True</span>
+        <span class="no">)</span>
+        <span class="no">sass_archs = sorted(set(</span>
+            <span class="no">line.split(".")[-1].replace(".cubin", "")</span>
+            <span class="no">for line in result.stdout.splitlines()</span>
+            <span class="no">if ".cubin" in line</span>
+        <span class="no">))</span>
+
+        <span class="no"># 3. 판정</span>
+        <span class="no">print(f"GPU: {gpu_name} ({gpu_sm})")</span>
+        <span class="no">print(f"NCCL SASS: {', '.join(sass_archs)}")</span>
+
+        <span class="no">if gpu_sm in sass_archs:</span>
+            <span class="no">print(f"PASS: NCCL has native kernel for {gpu_sm}")</span>
+            <span class="no">sys.exit(0)</span>
+
+        <span class="no">max_sass = max(sass_archs, key=lambda s: int(s.replace("sm_", "")))</span>
+        <span class="no">print(f"FAIL: NCCL has no kernel for {gpu_sm} (max: {max_sass})")</span>
+        <span class="no">print(f"  → NCCL needs to be rebuilt with CUDA that supports {gpu_sm}")</span>
+        <span class="no">sys.exit(1)</span>
+    <span class="na">resources</span><span class="pi">:</span>
+      <span class="na">limits</span><span class="pi">:</span>
+        <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">1</span>
+        <span class="na">cpu</span><span class="pi">:</span> <span class="s2">"</span><span class="s">1"</span>
+        <span class="na">memory</span><span class="pi">:</span> <span class="s2">"</span><span class="s">2Gi"</span>
+</code></pre></div></div>
+
+<p><strong>장점</strong>:</p>
+
+<ul>
+  <li>학습 코드 변경이 필요 없다</li>
+  <li>학습 시작 전에 초 단위로 판정한다 (모델 로딩, 데이터 I/O 없음)</li>
+  <li>에러 메시지가 root cause를 직접 가리킨다 (<code class="highlighter-rouge">NCCL has no kernel for sm_120</code>)</li>
+  <li>GPU가 실제로 할당된 상태에서 검사하므로 빌드 타임보다 정확하다</li>
+</ul>
+
+<p><strong>한계</strong>: GPU를 수 초간 점유한다. 하지만 학습에서 수 분 낭비하는 것보다 훨씬 저렴하다.</p>
+
+<h2 id="대안-3-런타임--환경변수--타임아웃-최소-변경">대안 3. 런타임 — 환경변수 + 타임아웃 (최소 변경)</h2>
+
+<p>Ray 워커의 환경변수로 blocking init을 강제하고, 타임아웃을 짧게 설정한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># workerGroupSpec containers env</span>
+<span class="na">env</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">TORCH_NCCL_USE_COMM_NONBLOCKING</span>
+    <span class="na">value</span><span class="pi">:</span> <span class="s2">"</span><span class="s">0"</span>                    <span class="c1"># blocking init 강제</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">NCCL_DEBUG</span>
+    <span class="na">value</span><span class="pi">:</span> <span class="s2">"</span><span class="s">INFO"</span>                 <span class="c1"># init 과정 로그</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">NCCL_DEBUG_SUBSYS</span>
+    <span class="na">value</span><span class="pi">:</span> <span class="s2">"</span><span class="s">INIT,NET"</span>             <span class="c1"># 커널 로드 단계 로그</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># TorchConfig에서 timeout 단축</span>
+<span class="n">TorchConfig</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s">'nccl'</span><span class="p">,</span> <span class="n">timeout_s</span><span class="o">=</span><span class="mi">120</span><span class="p">)</span>  <span class="c"># 30분 → 2분</span>
+</code></pre></div></div>
+
+<p><strong>효과</strong>: sm_120 커널 부재 시, 학습 코드 진입 전에 init에서 hang → 2분 후 timeout으로 프로세스 종료. <code class="highlighter-rouge">NCCL_DEBUG=INFO</code>로 커널 로드 시도 로그가 남아서 진단할 수 있다.</p>
+
+<p><strong>한계</strong>: 여전히 “hang → timeout → 종료”이지 “즉시 에러”가 아니다. 에러 메시지도 timeout이지 “sm_120 커널 없음”이 아니다.</p>
+
+<h2 id="비교">비교</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>빌드 타임 (CI/CD)</th>
+      <th>배포 타임 (Init Container)</th>
+      <th>런타임 (env var)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>감지 시점</td>
+      <td>이미지 빌드 시</td>
+      <td>Pod 시작 시 (학습 전)</td>
+      <td><code class="highlighter-rouge">init_process_group</code> 시</td>
+    </tr>
+    <tr>
+      <td>학습 코드 변경</td>
+      <td>없음</td>
+      <td>없음</td>
+      <td>없음 (TorchConfig만)</td>
+    </tr>
+    <tr>
+      <td>에러 메시지 명확도</td>
+      <td>높음</td>
+      <td>높음</td>
+      <td>낮음 (timeout)</td>
+    </tr>
+    <tr>
+      <td>GPU 점유</td>
+      <td>없음</td>
+      <td>수 초</td>
+      <td>2분 (timeout 대기)</td>
+    </tr>
+    <tr>
+      <td>이종 GPU 대응</td>
+      <td>수동 (SM 하드코딩)</td>
+      <td>자동 (실제 GPU 감지)</td>
+      <td>해당 없음</td>
+    </tr>
+    <tr>
+      <td>Manifest 변경</td>
+      <td>Dockerfile</td>
+      <td>Pod spec</td>
+      <td>Pod spec + TorchConfig</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>Init Container(대안 2)를 우선 적용</strong>하고, <strong>CI/CD 체크(대안 1)를 후속으로 추가</strong>하는 것을 권장한다. 런타임 env var(대안 3)는 추가 안전망으로 같이 넣어도 좋지만, 단독으로는 진단 품질이 낮다.</p>
+
+<p>세 가지 대안 모두 ML 엔지니어의 학습 코드를 수정하지 않는다. 그중 init container를 우선 권장하는 이유는 <strong>root cause를 직접 가리키는 에러 메시지</strong>(<code class="highlighter-rouge">NCCL has no kernel for sm_120</code>)와 <strong>실제 GPU 기반의 자동 감지</strong>를 동시에 제공하기 때문이다. GPU 종류가 바뀌거나 NCCL 버전이 바뀌어도 별도 수정 없이 대응된다.</p>
+
+<blockquote>
+  <p>대안 1과 2를 실제로 구현한 과정은 <a href="/dev/Dev-NCCL-GPU-Compat-CI-Runtime-Gate/">GPU 호환성 게이트: 빌드 타임과 배포 타임에서 NCCL 커널 미스매치 차단하기</a>에서 다룬다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<blockquote>
+  <p><strong>Lazy init은 “다 잘 동작할 때”는 시작 시간과 유연성 면에서 이득이지만, “환경이 망가졌을 때”는 디버깅 비용을 폭발시킨다.</strong></p>
+</blockquote>
+
+<p>이번 케이스에서 배운 것을 일반화하면:</p>
+
+<ul>
+  <li><strong>Lazy</strong>: “init 성공 → 학습 시작 → 첫 step crash” → “코드 문제인가? OOM인가?” 같은 잘못된 가설로 시간 낭비</li>
+  <li><strong>Eager</strong>: “init에서 즉시 hang/error” → 통신 스택 문제임이 명확</li>
+</ul>
+
+<p>프레임워크 설계 철학(lazy vs eager)이 단순한 성능 최적화 문제가 아니라 <strong>운영 가시성과 디버깅 효율에 직접 영향을 미친다</strong>는 것이 핵심 교훈이다. PyTorch 자체도 torchcomms를 통해 eager init을 기본 원칙으로 채택하는 방향으로 움직이고 있다.</p>
+
+<p>그리고 플랫폼 엔지니어 관점에서, 프레임워크가 fail-fast를 보장하지 않는 영역은 <strong>인프라 레벨에서 커버해야 한다</strong>. K8s init container로 GPU↔NCCL 호환성을 사전 검사하는 것은, 학습 코드를 건드리지 않으면서 이 문제를 해결하는 가장 실용적인 접근이다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-새-gpu-도입-시-nccl-호환성-검증-체크리스트">참고: 새 GPU 도입 시 NCCL 호환성 검증 체크리스트</h1>
+
+<h2 id="빌드-타임">빌드 타임</h2>
+
+<p><strong>NCCL 빌드 CUDA 버전 확인:</strong></p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># NCCL이 어떤 CUDA 버전으로 빌드되었는지 확인</span>
+strings <span class="k">$(</span>python <span class="nt">-c</span> <span class="s2">"import nvidia.nccl, os; </span><span class="se">\</span><span class="s2">
+  print(os.path.dirname(nvidia.nccl.__file__))"</span><span class="k">)</span>/lib/libnccl.so.2 <span class="se">\</span>
+  | <span class="nb">grep</span> <span class="s2">"compiled with"</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<p><strong>타겟 GPU compute capability가 빌드 CUDA에서 지원되는지 확인:</strong></p>
+<ul>
+  <li>Hopper(sm_90): CUDA 12.0+</li>
+  <li>Blackwell(sm_100 / sm_120): <strong>CUDA 12.8+ 필요</strong> — NVIDIA 엔지니어 ptrblck: <em>“Blackwell GPUs require CUDA 12.8+. All of our stable releases starting with PyTorch 2.7.0 use CUDA 12.8 or newer and already support Blackwell.”</em> (<a href="https://discuss.pytorch.org/t/solved-rtx-5090-sm-120-training-segfault-ddp-was-the-cause/224584">PyTorch 포럼</a>)</li>
+</ul>
+
+<p><br /></p>
+
+<p><strong>NCCL 바이너리에 타겟 SASS 포함 확인:</strong></p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># NCCL 바이너리의 SASS 아키텍처 목록 확인</span>
+cuobjdump <span class="nt">-lelf</span> libnccl.so.2 | <span class="nb">grep </span>sm_
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="배포-타임">배포 타임</h2>
+
+<ul>
+  <li>Init container로 GPU↔NCCL 호환성 사전 검사 (학습 코드 진입 전에 fail)</li>
+  <li>GPU device plugin이 init / main container에 동일 device를 할당하는지 확인</li>
+</ul>
+
+<h2 id="런타임">런타임</h2>
+
+<ul>
+  <li>NCCL 디버그 로그 활성화: <code class="highlighter-rouge">NCCL_DEBUG=INFO</code>, <code class="highlighter-rouge">NCCL_DEBUG_SUBSYS=INIT,NET</code></li>
+  <li>Init timeout 단축: Ray <code class="highlighter-rouge">TorchConfig(timeout_s=120)</code>, torchrun <code class="highlighter-rouge">timeout=timedelta(minutes=2)</code></li>
+  <li>사용자가 직접 <code class="highlighter-rouge">init_process_group</code>을 호출하는 경우 <code class="highlighter-rouge">device_id</code> 옵션 고려 (PyTorch 2.3+)</li>
+</ul>
+
+<h2 id="진단-시-신호-매핑">진단 시 신호 매핑</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>증상</th>
+      <th>가능한 원인</th>
+      <th>확인 방법</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">init_process_group</code>에서 silent hang</td>
+      <td>NCCL 커널 로드 실패 (eager init 경로)</td>
+      <td><code class="highlighter-rouge">cuobjdump -lelf libnccl.so.2</code></td>
+    </tr>
+    <tr>
+      <td>학습 중 <code class="highlighter-rouge">illegal memory access</code> (CUDA 700)</td>
+      <td>같은 원인이 lazy init으로 지연 발현</td>
+      <td>dmesg <code class="highlighter-rouge">Xid 13</code>, GPU sm vs NCCL SASS 비교</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">Comm Config Blocking set to 1</code> 로그 후 hang</td>
+      <td>Blocking init + 커널 부재</td>
+      <td><code class="highlighter-rouge">TORCH_NCCL_USE_COMM_NONBLOCKING</code> 환경변수 확인</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="참고-자료">참고 자료</h1>
+
+<ul>
+  <li><a href="https://github.com/pytorch/pytorch/issues/142356">pytorch/pytorch#142356</a> — <code class="highlighter-rouge">device_id</code>와 eager/lazy init 관계 (wconstab 코멘트)</li>
+  <li><a href="https://github.com/pytorch/pytorch/issues/136248">pytorch/pytorch#136248</a> — 첫 collective op에서의 lazy init blocking (wconstab 코멘트)</li>
+  <li><a href="https://github.com/pytorch/pytorch/issues/137007">pytorch/pytorch#137007</a> — ProcessGroupNCCL non-blocking API 기본값화 RFC</li>
+  <li><a href="https://github.com/pytorch/pytorch/issues/129140">pytorch/pytorch#129140</a> — eager init 기반 P2P communicator 최적화 RFC</li>
+  <li><a href="https://github.com/pytorch/pytorch/issues/152780">pytorch/pytorch#152780</a> — RTX 5090 + DDP + NCCL illegal memory access</li>
+  <li><a href="https://github.com/pytorch/pytorch/issues/153960">pytorch/pytorch#153960</a> — <code class="highlighter-rouge">device_id</code> 전달 시 NCCL hang regression (2.7 → 2.7.1 수정)</li>
+  <li><a href="https://pytorch.org/blog/torchcomms/">PyTorch torchcomms 블로그</a> — eager init을 기본 설계 원칙으로 채택</li>
+  <li><a href="https://docs.ray.io/en/latest/train/api/doc/ray.train.torch.TorchConfig.html">Ray TorchConfig docs</a> — <code class="highlighter-rouge">device_id</code> 인터페이스 부재 확인</li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#distributed-training" class="page__taxonomy-item" rel="tag">Distributed-Training</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#lazy-init" class="page__taxonomy-item" rel="tag">Lazy-Init</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nccl" class="page__taxonomy-item" rel="tag">NCCL</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#pytorch" class="page__taxonomy-item" rel="tag">PyTorch</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#ray" class="page__taxonomy-item" rel="tag">Ray</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#troubleshooting" class="page__taxonomy-item" rel="tag">Troubleshooting</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-18T00:00:00+09:00">April 18, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BNCCL%5D+NCCL+Communicator+%EC%B4%88%EA%B8%B0%ED%99%94+%EC%8B%9C%EC%A0%90%3A+Lazy+vs+Eager+Init%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-NCCL-Communicator-Lazy-Init-Debugging%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-NCCL-Communicator-Lazy-Init-Debugging%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-NCCL-Communicator-Lazy-Init-Debugging%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-NCCL-Communicator-Lazy-Init-Debugging?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller/" class="pagination--pager" title="[EKS] GitOps 기반 SaaS: 테넌트 인프라 배포 - 2. Tofu Controller
+">이전</a>
+    
+    
+      <a href="/dev/Dev-Container-Runtime-CLI-Missing-Node-Image-Query/" class="pagination--pager" title="[Kubernetes] Container Runtime CLI 없는 노드에서 이미지 조회하기
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-NCCL-Communicator-Lazy-Init-Debugging"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

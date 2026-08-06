@@ -1,0 +1,1578 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Go] Functional Options 패턴으로 생성자 리팩토링하기 - Eraser’s StudyLog</title>
+<meta name="description" content="Rob Pike의 생각을 좇아, Functional Options 패턴을 적용해 유연하고 확장 가능한 생성자를 만들어 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Go] Functional Options 패턴으로 생성자 리팩토링하기">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-Go-Functional-Options-Pattern-in-Refactoring/">
+
+
+  <meta property="og:description" content="Rob Pike의 생각을 좇아, Functional Options 패턴을 적용해 유연하고 확장 가능한 생성자를 만들어 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-01-01T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-Go-Functional-Options-Pattern-in-Refactoring/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Go] Functional Options 패턴으로 생성자 리팩토링하기">
+    <meta itemprop="description" content="Rob Pike의 생각을 좇아, Functional Options 패턴을 적용해 유연하고 확장 가능한 생성자를 만들어 보자.">
+    <meta itemprop="datePublished" content="2026-01-01T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Go] Functional Options 패턴으로 생성자 리팩토링하기
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-01-01T00:00:00+09:00">2026년 01월 01일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#패턴의-탄생">패턴의 탄생</a>
+    <ul>
+      <li><a href="#rob-pike의-문제의식">Rob Pike의 문제의식</a></li>
+      <li><a href="#왜-필요한가">왜 필요한가</a></li>
+      <li><a href="#기본-버전">기본 버전</a></li>
+      <li><a href="#이전-값-반환-버전">이전 값 반환 버전</a></li>
+      <li><a href="#self-referential-버전">Self-referential 버전</a></li>
+      <li><a href="#rob-pike의-제언">Rob Pike의 제언</a></li>
+    </ul>
+  </li>
+  <li><a href="#패턴의-특징">패턴의 특징</a>
+    <ul>
+      <li><a href="#1-선택적optional">1. 선택적(Optional)</a></li>
+      <li><a href="#2-타입-안전type-safe">2. 타입 안전(Type-safe)</a></li>
+      <li><a href="#3-확장-가능extensible">3. 확장 가능(Extensible)</a></li>
+      <li><a href="#4-자기-문서화self-documenting">4. 자기 문서화(Self-documenting)</a></li>
+    </ul>
+  </li>
+  <li><a href="#표준화">표준화</a>
+    <ul>
+      <li><a href="#uber-style-guide">Uber Style Guide</a></li>
+    </ul>
+  </li>
+  <li><a href="#실무-적용">실무 적용</a>
+    <ul>
+      <li><a href="#생성자-패턴으로의-전환">생성자 패턴으로의 전환</a></li>
+      <li><a href="#대안들과의-비교">대안들과의 비교</a></li>
+      <li><a href="#내-사례">내 사례</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고">참고</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<p>회사에서 Argo Workflow Client의 생성자를 리팩토링하면서 Functional Options 패턴을 적용해 보았다. 이 글에서는 해당 패턴이 무엇인지, 그리고 실제로 어떻게 적용했는지 정리한다.</p>
+
+<p><br /></p>
+
+<h1 id="패턴의-탄생">패턴의 탄생</h1>
+
+<h2 id="rob-pike의-문제의식">Rob Pike의 문제의식</h2>
+
+<p>흥미롭게도 이 패턴을 제안한 사람은 Rob Pike다. 제안의 배경이 무척 흥미롭다. <a href="https://commandcenter.blogspot.com/2014/01/self-referential-functions-and-design.html">Self-referential functions and the design of options</a>라는 글에서 그는 옵션 설정 문제로 오랫동안 고민했음을 밝히고 있다.</p>
+
+<blockquote>
+  <p>The package is intricate and there will probably end up being dozens of options. There are many ways to do this kind of thing, but I wanted one that felt nice to use, didn’t require too much API (or at least not too much for the user to absorb), and could grow as needed without bloat.</p>
+</blockquote>
+
+<ul>
+  <li>패키지가 복잡해서 결국 수십 개의 옵션이 필요하게 될 것 같았다.</li>
+  <li>이런 종류의 일을 처리하는 방법은 여러 가지가 있지만, 사용하기 좋고, API가 너무 많이 필요하지 않으면서(적어도 사용자가 흡수해야 할 양이 적으면서), 불필요한 비대화 없이 필요에 따라 확장될 수 있는 것을 원했다.</li>
+</ul>
+
+<p><br /></p>
+
+<blockquote>
+  <p>I’ve tried most of the obvious ways: option structs, lots of methods, variant constructors, and more, and found them all unsatisfactory. After a bunch of trial versions over the past year or so, and a lot of conversations with other Gophers making suggestions, I’ve finally found one I like.</p>
+</blockquote>
+
+<ul>
+  <li>옵션 구조체, 많은 메서드, 여러 변형 생성자 등 분명해 보이는 방법들은 대부분 시도해 봤지만, 모두 만족스럽지 않았다.</li>
+  <li>지난 1년여간 여러 시행 버전을 거치고, 다른 Gopher들과 많은 대화를 나눈 끝에 마침내 마음에 드는 방법을 찾았다.</li>
+</ul>
+
+<p><br /></p>
+
+<p>여기서 얼마나 많은 고민을 했을지 짐작해 볼 수 있다. Go의 아버지라고 불리는 분도 이렇게 고민하는구나 싶었다.</p>
+
+<p><br /></p>
+
+<h2 id="왜-필요한가">왜 필요한가</h2>
+
+<p>Go에는 함수 오버로딩이 없다. 기본값이 있는 선택적 매개변수도 지원하지 않는다. 그렇다 보니 수많은 선택적 옵션을 처리하는 것이 쉽지 않다. Rob Pike도 같은 문제에 봉착했고, 이를 해결하기 위한 패턴을 고안했다.</p>
+
+<p><br /></p>
+
+<h2 id="기본-버전">기본 버전</h2>
+
+<p>Rob Pike가 제시한 첫 번째 버전은 단순하다.</p>
+
+<p><br /></p>
+
+<p>먼저 option 타입을 정의한다.</p>
+
+<blockquote>
+  <p>First, we define an option type. It is a function that takes one argument, the Foo we are operating on.</p>
+</blockquote>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span><span class="x"> </span><span class="n">option</span><span class="x"> </span><span class="k">func</span><span class="p">(</span><span class="o">*</span><span class="n">Foo</span><span class="p">)</span><span class="x">
+</span></code></pre></div></div>
+
+<blockquote>
+  <p>The idea is that an option is implemented as a function we call to set the state of that option.</p>
+</blockquote>
+
+<ul>
+  <li>option은 해당 옵션의 상태를 설정하기 위해 호출하는 함수로 구현된다.</li>
+  <li>다시 말해, <strong>option 타입은 상태를 바꾸는 함수</strong>다.</li>
+</ul>
+
+<p><br /></p>
+
+<p>그 다음, option을 적용하는 메서드를 정의한다. option을 가변 인자로 받는다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// Option sets the options specified.</span><span class="x">
+</span><span class="k">func</span><span class="x"> </span><span class="p">(</span><span class="n">f</span><span class="x"> </span><span class="o">*</span><span class="n">Foo</span><span class="p">)</span><span class="x"> </span><span class="n">Option</span><span class="p">(</span><span class="n">opts</span><span class="x"> </span><span class="o">...</span><span class="n">option</span><span class="p">)</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="k">for</span><span class="x"> </span><span class="n">_</span><span class="p">,</span><span class="x"> </span><span class="n">opt</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="k">range</span><span class="x"> </span><span class="n">opts</span><span class="x"> </span><span class="p">{</span><span class="x">
+        </span><span class="n">opt</span><span class="p">(</span><span class="n">f</span><span class="p">)</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+</span><span class="p">}</span><span class="x">
+</span></code></pre></div></div>
+
+<ul>
+  <li>가변 인자로 받으니까, 원하는 옵션을 몇 개든 적용할 수 있다.</li>
+</ul>
+
+<p><br /></p>
+
+<p>마지막으로 실제 option 함수를 정의한다. verbosity라는 설정을 예로 들면:</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// Verbosity sets Foo's verbosity level to v.</span><span class="x">
+</span><span class="k">func</span><span class="x"> </span><span class="n">Verbosity</span><span class="p">(</span><span class="n">v</span><span class="x"> </span><span class="kt">int</span><span class="p">)</span><span class="x"> </span><span class="n">option</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="k">return</span><span class="x"> </span><span class="k">func</span><span class="p">(</span><span class="n">f</span><span class="x"> </span><span class="o">*</span><span class="n">Foo</span><span class="p">)</span><span class="x"> </span><span class="p">{</span><span class="x">
+        </span><span class="n">f</span><span class="o">.</span><span class="n">verbosity</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="n">v</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+</span><span class="p">}</span><span class="x">
+</span></code></pre></div></div>
+
+<ul>
+  <li>option 함수는 <strong>클로저(closure)</strong>를 반환한다.</li>
+  <li>클로저 안에서 필드를 설정한다.</li>
+</ul>
+
+<p><br /></p>
+
+<p>여기서 <strong>왜 클로저를 반환하는가?</strong>에 대해 Rob Pike는 다음과 같이 설명한다.</p>
+
+<blockquote>
+  <p>Why return a closure instead of just doing the setting? Because we don’t want the user to have to write the closure and we want the Option method to be nice to use.</p>
+</blockquote>
+
+<p>클로저를 반환하기 때문에, 사용하는 쪽에서 아래와 같이 깔끔하게 호출할 수 있다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">foo</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="n">pkg</span><span class="o">.</span><span class="n">Verbosity</span><span class="p">(</span><span class="m">3</span><span class="p">))</span><span class="x">
+</span></code></pre></div></div>
+
+<p>만약 클로저를 반환하지 않았다면, 사용자가 매번 아래처럼 작성해야 했을 것이다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">foo</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="k">func</span><span class="p">(</span><span class="n">f</span><span class="x"> </span><span class="o">*</span><span class="n">Foo</span><span class="p">)</span><span class="x"> </span><span class="p">{</span><span class="x"> </span><span class="n">f</span><span class="o">.</span><span class="n">verbosity</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="m">3</span><span class="x"> </span><span class="p">})</span><span class="x">
+</span></code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="이전-값-반환-버전">이전 값 반환 버전</h2>
+
+<p>Rob Pike는 여기서 멈추지 않고, 임시로 값을 변경했다가 복원해야 하는 상황을 위해 패턴을 발전시킨다.</p>
+
+<blockquote>
+  <p>That’s easy and probably good enough for most purposes, but for the package I’m writing, I want to be able to use the option mechanism to set temporary values, which means it would be nice if the Option method could return the previous state.</p>
+</blockquote>
+
+<ul>
+  <li>대부분의 경우에는 기본 버전으로 충분하지만, 임시 값을 설정하는 메커니즘으로 사용하고 싶었고, 그러려면 Option 메서드가 이전 상태를 반환할 수 있으면 좋겠다.</li>
+</ul>
+
+<p><br /></p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span><span class="x"> </span><span class="n">option</span><span class="x"> </span><span class="k">func</span><span class="p">(</span><span class="o">*</span><span class="n">Foo</span><span class="p">)</span><span class="x"> </span><span class="k">interface</span><span class="p">{}</span><span class="x">
+
+</span><span class="c">// Verbosity sets Foo's verbosity level to v.</span><span class="x">
+</span><span class="k">func</span><span class="x"> </span><span class="n">Verbosity</span><span class="p">(</span><span class="n">v</span><span class="x"> </span><span class="kt">int</span><span class="p">)</span><span class="x"> </span><span class="n">option</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="k">return</span><span class="x"> </span><span class="k">func</span><span class="p">(</span><span class="n">f</span><span class="x"> </span><span class="o">*</span><span class="n">Foo</span><span class="p">)</span><span class="x"> </span><span class="k">interface</span><span class="p">{}</span><span class="x"> </span><span class="p">{</span><span class="x">
+        </span><span class="n">previous</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="n">f</span><span class="o">.</span><span class="n">verbosity</span><span class="x">
+        </span><span class="n">f</span><span class="o">.</span><span class="n">verbosity</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="n">v</span><span class="x">
+        </span><span class="k">return</span><span class="x"> </span><span class="n">previous</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="c">// Option sets the options specified.</span><span class="x">
+</span><span class="c">// It returns the previous value of the last argument.</span><span class="x">
+</span><span class="k">func</span><span class="x"> </span><span class="p">(</span><span class="n">f</span><span class="x"> </span><span class="o">*</span><span class="n">Foo</span><span class="p">)</span><span class="x"> </span><span class="n">Option</span><span class="p">(</span><span class="n">opts</span><span class="x"> </span><span class="o">...</span><span class="n">option</span><span class="p">)</span><span class="x"> </span><span class="p">(</span><span class="n">previous</span><span class="x"> </span><span class="k">interface</span><span class="p">{})</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="k">for</span><span class="x"> </span><span class="n">_</span><span class="p">,</span><span class="x"> </span><span class="n">opt</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="k">range</span><span class="x"> </span><span class="n">opts</span><span class="x"> </span><span class="p">{</span><span class="x">
+        </span><span class="n">previous</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="n">opt</span><span class="p">(</span><span class="n">f</span><span class="p">)</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+    </span><span class="k">return</span><span class="x"> </span><span class="n">previous</span><span class="x">
+</span><span class="p">}</span><span class="x">
+</span></code></pre></div></div>
+
+<ul>
+  <li>option 함수가 새로운 값을 설정한 뒤, 이전 값을 반환한다.</li>
+  <li>Option 메서드는 마지막 option의 이전 값을 반환한다.</li>
+</ul>
+
+<p><br /></p>
+
+<p>아래와 같이 사용하면 된다:</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">prevVerbosity</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="n">foo</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="n">pkg</span><span class="o">.</span><span class="n">Verbosity</span><span class="p">(</span><span class="m">3</span><span class="p">))</span><span class="x">
+</span><span class="n">foo</span><span class="o">.</span><span class="n">DoSomeDebugging</span><span class="p">()</span><span class="x">
+</span><span class="n">foo</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="n">pkg</span><span class="o">.</span><span class="n">Verbosity</span><span class="p">(</span><span class="n">prevVerbosity</span><span class="o">.</span><span class="p">(</span><span class="kt">int</span><span class="p">)))</span><span class="x">
+</span></code></pre></div></div>
+
+<ul>
+  <li>그런데 복원할 때 type assertion(<code class="highlighter-rouge">prevVerbosity.(int)</code>)이 필요하다.</li>
+  <li>뭔가 좀 보기 싫다.</li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="self-referential-버전">Self-referential 버전</h2>
+
+<p>Rob Pike는 이 문제도 해결한다.</p>
+
+<blockquote>
+  <p>The type assertion in the restoring call to Option is clumsy. We can do better if we push a little harder on our design.</p>
+</blockquote>
+
+<ul>
+  <li>복원할 때의 type assertion이 어색하다며, 설계를 조금 더 밀어붙이면 더 나아질 수 있다고 한다.</li>
+</ul>
+
+<p><br /></p>
+
+<blockquote>
+  <p>First, redefine an option to be a function that sets a value and returns another option to restore the previous value.</p>
+</blockquote>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span><span class="x"> </span><span class="n">option</span><span class="x"> </span><span class="k">func</span><span class="p">(</span><span class="n">f</span><span class="x"> </span><span class="o">*</span><span class="n">Foo</span><span class="p">)</span><span class="x"> </span><span class="n">option</span><span class="x">
+</span></code></pre></div></div>
+
+<ul>
+  <li>option 타입이 자기 자신을 반환하도록 재정의한다.</li>
+  <li>값을 설정하고, <strong>이전 값을 복원할 수 있는 또 다른 option을 반환</strong>하는 함수다.</li>
+</ul>
+
+<p><br /></p>
+
+<p>“Self-referential”은 <strong>자기 자신을 참조한다</strong>는 의미다. 여기서는 두 가지 측면에서 self-referential이다.</p>
+
+<ol>
+  <li><strong>타입 정의 자체가 self-referential</strong>: <code class="highlighter-rouge">option</code> 타입이 자기 자신을 반환 타입으로 사용한다.</li>
+  <li><strong>구현에서 함수가 자기 자신을 사용</strong>: 아래 코드에서 Verbosity 함수가 내부에서 다시 Verbosity를 호출하여 새로운 option을 생성한다.</li>
+</ol>
+
+<p><br /></p>
+
+<p>최종 버전의 코드는 다음과 같다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// Option sets the options specified.</span><span class="x">
+</span><span class="c">// It returns an option to restore the last arg's previous value.</span><span class="x">
+</span><span class="k">func</span><span class="x"> </span><span class="p">(</span><span class="n">f</span><span class="x"> </span><span class="o">*</span><span class="n">Foo</span><span class="p">)</span><span class="x"> </span><span class="n">Option</span><span class="p">(</span><span class="n">opts</span><span class="x"> </span><span class="o">...</span><span class="n">option</span><span class="p">)</span><span class="x"> </span><span class="p">(</span><span class="n">previous</span><span class="x"> </span><span class="n">option</span><span class="p">)</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="k">for</span><span class="x"> </span><span class="n">_</span><span class="p">,</span><span class="x"> </span><span class="n">opt</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="k">range</span><span class="x"> </span><span class="n">opts</span><span class="x"> </span><span class="p">{</span><span class="x">
+        </span><span class="n">previous</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="n">opt</span><span class="p">(</span><span class="n">f</span><span class="p">)</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+    </span><span class="k">return</span><span class="x"> </span><span class="n">previous</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="c">// Verbosity sets Foo's verbosity level to v.</span><span class="x">
+</span><span class="k">func</span><span class="x"> </span><span class="n">Verbosity</span><span class="p">(</span><span class="n">v</span><span class="x"> </span><span class="kt">int</span><span class="p">)</span><span class="x"> </span><span class="n">option</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="k">return</span><span class="x"> </span><span class="k">func</span><span class="p">(</span><span class="n">f</span><span class="x"> </span><span class="o">*</span><span class="n">Foo</span><span class="p">)</span><span class="x"> </span><span class="n">option</span><span class="x"> </span><span class="p">{</span><span class="x">
+        </span><span class="n">previous</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="n">f</span><span class="o">.</span><span class="n">verbosity</span><span class="x">
+        </span><span class="n">f</span><span class="o">.</span><span class="n">verbosity</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="n">v</span><span class="x">
+        </span><span class="k">return</span><span class="x"> </span><span class="n">Verbosity</span><span class="p">(</span><span class="n">previous</span><span class="p">)</span><span class="x">  </span><span class="c">// Verbosity를 다시 호출하여 undo용 option 생성</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+</span><span class="p">}</span><span class="x">
+</span></code></pre></div></div>
+
+<blockquote>
+  <p>Instead of just returning the old value, it now calls the surrounding function (Verbosity) to create the undo closure, and returns that closure.</p>
+</blockquote>
+
+<ul>
+  <li>단순히 이전 값을 반환하는 대신, 감싸고 있는 함수(Verbosity)를 호출해서 undo 클로저를 만들고 그 클로저를 반환한다.</li>
+</ul>
+
+<p><br /></p>
+
+<p>사용하는 쪽에서도 아주 깔끔해진다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">prevVerbosity</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="n">foo</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="n">pkg</span><span class="o">.</span><span class="n">Verbosity</span><span class="p">(</span><span class="m">3</span><span class="p">))</span><span class="x">
+</span><span class="n">foo</span><span class="o">.</span><span class="n">DoSomeDebugging</span><span class="p">()</span><span class="x">
+</span><span class="n">foo</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="n">prevVerbosity</span><span class="p">)</span><span class="x">  </span><span class="c">// type assertion 불필요</span><span class="x">
+</span></code></pre></div></div>
+
+<p>거기다가 Go의 <code class="highlighter-rouge">defer</code>와 결합하면 더욱 우아해진다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span><span class="x"> </span><span class="n">DoSomethingVerbosely</span><span class="p">(</span><span class="n">foo</span><span class="x"> </span><span class="o">*</span><span class="n">Foo</span><span class="p">,</span><span class="x"> </span><span class="n">verbosity</span><span class="x"> </span><span class="kt">int</span><span class="p">)</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">prev</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="n">foo</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="n">pkg</span><span class="o">.</span><span class="n">Verbosity</span><span class="p">(</span><span class="n">verbosity</span><span class="p">))</span><span class="x">
+    </span><span class="k">defer</span><span class="x"> </span><span class="n">foo</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="n">prev</span><span class="p">)</span><span class="x">
+    </span><span class="c">// ... 높은 verbosity로 작업 수행</span><span class="x">
+</span><span class="p">}</span><span class="x">
+</span></code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="rob-pike의-제언">Rob Pike의 제언</h2>
+
+<p>Rob Pike는 글을 마무리하며 이렇게 말한다.</p>
+
+<blockquote>
+  <p>The implementation of all this may seem like overkill but it’s actually just a few lines for each option, and has great generality. Most important, <strong>it’s really nice to use from the point of view of the package’s client</strong>. I’m finally happy with the design. <strong>I’m also happy at the way this uses Go’s closures to achieve its goals with grace.</strong></p>
+</blockquote>
+
+<ul>
+  <li>이 모든 구현이 과한 것처럼 보일 수 있지만, 실제로는 각 옵션당 몇 줄에 불과하고 일반성이 뛰어나다.</li>
+  <li>가장 중요한 것은, <strong>패키지 사용자 관점에서 정말 사용하기 좋다</strong>는 것이다.</li>
+  <li>마침내 설계에 만족한다. <strong>Go의 클로저를 이용해 우아하게 목표를 달성하는 방식에도 만족</strong>한다.</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="패턴의-특징">패턴의 특징</h1>
+
+<p>결과적으로 Functional Options 패턴은 <strong>설정(configuration)을 함수(function)로 표현하고, 그 함수들을 가변 인자로 받아 객체의 상태를 변경하는 디자인 패턴</strong>이다.</p>
+
+<p>조금 더 정확하게 정의하자면,</p>
+<ul>
+  <li><strong>설정을 일급 함수(first-class function)로 표현</strong>하여,</li>
+  <li><strong>선택적이고 확장 가능하며 타입 안전한 방식으로 객체를 구성하는 패턴</strong>
+이라고 할 수 있다.</li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="1-선택적optional">1. 선택적(Optional)</h2>
+
+<p>필요한 옵션만 선택적으로 적용할 수 있다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">foo</span><span class="o">.</span><span class="n">Option</span><span class="p">()</span><span class="x">                              </span><span class="c">// 옵션 없이</span><span class="x">
+</span><span class="n">foo</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="n">Verbosity</span><span class="p">(</span><span class="m">3</span><span class="p">))</span><span class="x">                  </span><span class="c">// 하나만</span><span class="x">
+</span><span class="n">foo</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="n">Verbosity</span><span class="p">(</span><span class="m">3</span><span class="p">),</span><span class="x"> </span><span class="n">Timeout</span><span class="p">(</span><span class="m">30</span><span class="p">))</span><span class="x">     </span><span class="c">// 여러 개</span><span class="x">
+</span></code></pre></div></div>
+
+<h2 id="2-타입-안전type-safe">2. 타입 안전(Type-safe)</h2>
+
+<p>컴파일 타임에 타입 체크가 된다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">foo</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="n">Verbosity</span><span class="p">(</span><span class="m">3</span><span class="p">))</span><span class="x">       
+</span><span class="n">foo</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="n">Verbosity</span><span class="p">(</span><span class="s">"3"</span><span class="p">))</span><span class="x">     </span><span class="c">// 컴파일 에러</span><span class="x">
+</span></code></pre></div></div>
+
+<h2 id="3-확장-가능extensible">3. 확장 가능(Extensible)</h2>
+
+<p>새 옵션 추가 시 기존 코드를 수정하지 않아도 된다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// 새 옵션 추가</span><span class="x">
+</span><span class="k">func</span><span class="x"> </span><span class="n">NewOption</span><span class="p">(</span><span class="n">v</span><span class="x"> </span><span class="n">Value</span><span class="p">)</span><span class="x"> </span><span class="n">option</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="k">return</span><span class="x"> </span><span class="k">func</span><span class="p">(</span><span class="n">f</span><span class="x"> </span><span class="o">*</span><span class="n">Foo</span><span class="p">)</span><span class="x"> </span><span class="p">{</span><span class="x">
+        </span><span class="n">f</span><span class="o">.</span><span class="n">newField</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="n">v</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+</span><span class="p">}</span><span class="x">
+</span></code></pre></div></div>
+
+<h2 id="4-자기-문서화self-documenting">4. 자기 문서화(Self-documenting)</h2>
+
+<p>옵션 이름만 봐도 의미가 명확하다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">foo</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="x">
+    </span><span class="n">Verbosity</span><span class="p">(</span><span class="m">3</span><span class="p">),</span><span class="x">
+    </span><span class="n">Timeout</span><span class="p">(</span><span class="m">30</span><span class="x"> </span><span class="o">*</span><span class="x"> </span><span class="n">time</span><span class="o">.</span><span class="n">Second</span><span class="p">),</span><span class="x">
+    </span><span class="n">MaxRetries</span><span class="p">(</span><span class="m">5</span><span class="p">),</span><span class="x">
+</span><span class="p">)</span><span class="x">
+</span></code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="표준화">표준화</h1>
+
+<p>이 패턴은 Rob Pike가 2014년에 제안하고, Dave Cheney가 <a href="https://dave.cheney.net/2014/10/17/functional-options-for-friendly-apis">Functional options for friendly APIs</a>라는 블로그 글에서 널리 알리면서 Go 커뮤니티에서 표준처럼 자리 잡게 되었다.</p>
+
+<p><br /></p>
+
+<h2 id="uber-style-guide">Uber Style Guide</h2>
+
+<p><a href="https://github.com/uber-go/guide/blob/master/style.md#functional-options">Uber의 Go 스타일 가이드</a>에서도 Functional Options 패턴을 공식적으로 권장하고 있다.</p>
+
+<blockquote>
+  <p>Functional options is a pattern in which you declare an opaque <code class="highlighter-rouge">Option</code> type that records information in some internal struct. You accept a variadic number of these options and act upon the full information recorded by the options on the internal struct.</p>
+</blockquote>
+
+<ul>
+  <li>Functional options는 내부 구조체에 정보를 기록하는 불투명한(opaque) <code class="highlighter-rouge">Option</code> 타입을 선언하는 패턴이다.</li>
+  <li>이 옵션들을 가변 인자로 받아 내부 구조체에 기록된 전체 정보에 따라 동작한다.</li>
+</ul>
+
+<p><br /></p>
+
+<blockquote>
+  <p>Use this pattern for optional arguments in constructors and other public APIs that you foresee needing to expand, especially if you already have three or more arguments on those functions.</p>
+</blockquote>
+
+<ul>
+  <li>생성자나 다른 공개 API에서 확장이 필요할 것으로 예상되는 선택적 인자에 이 패턴을 사용하라.</li>
+  <li>특히 함수에 이미 3개 이상의 인자가 있다면 사용을 고려하라.</li>
+</ul>
+
+<p><br /></p>
+
+<p>Uber 가이드에서는 인터페이스 기반의 구현 방식을 권장한다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span><span class="x"> </span><span class="n">options</span><span class="x"> </span><span class="k">struct</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">cache</span><span class="x">  </span><span class="kt">bool</span><span class="x">
+    </span><span class="n">logger</span><span class="x"> </span><span class="o">*</span><span class="n">zap</span><span class="o">.</span><span class="n">Logger</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="k">type</span><span class="x"> </span><span class="n">Option</span><span class="x"> </span><span class="k">interface</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">apply</span><span class="p">(</span><span class="o">*</span><span class="n">options</span><span class="p">)</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="k">type</span><span class="x"> </span><span class="n">cacheOption</span><span class="x"> </span><span class="kt">bool</span><span class="x">
+
+</span><span class="k">func</span><span class="x"> </span><span class="p">(</span><span class="n">c</span><span class="x"> </span><span class="n">cacheOption</span><span class="p">)</span><span class="x"> </span><span class="n">apply</span><span class="p">(</span><span class="n">opts</span><span class="x"> </span><span class="o">*</span><span class="n">options</span><span class="p">)</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">opts</span><span class="o">.</span><span class="n">cache</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="kt">bool</span><span class="p">(</span><span class="n">c</span><span class="p">)</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="k">func</span><span class="x"> </span><span class="n">WithCache</span><span class="p">(</span><span class="n">c</span><span class="x"> </span><span class="kt">bool</span><span class="p">)</span><span class="x"> </span><span class="n">Option</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="k">return</span><span class="x"> </span><span class="n">cacheOption</span><span class="p">(</span><span class="n">c</span><span class="p">)</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="k">type</span><span class="x"> </span><span class="n">loggerOption</span><span class="x"> </span><span class="k">struct</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">Log</span><span class="x"> </span><span class="o">*</span><span class="n">zap</span><span class="o">.</span><span class="n">Logger</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="k">func</span><span class="x"> </span><span class="p">(</span><span class="n">l</span><span class="x"> </span><span class="n">loggerOption</span><span class="p">)</span><span class="x"> </span><span class="n">apply</span><span class="p">(</span><span class="n">opts</span><span class="x"> </span><span class="o">*</span><span class="n">options</span><span class="p">)</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">opts</span><span class="o">.</span><span class="n">logger</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="n">l</span><span class="o">.</span><span class="n">Log</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="k">func</span><span class="x"> </span><span class="n">WithLogger</span><span class="p">(</span><span class="n">log</span><span class="x"> </span><span class="o">*</span><span class="n">zap</span><span class="o">.</span><span class="n">Logger</span><span class="p">)</span><span class="x"> </span><span class="n">Option</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="k">return</span><span class="x"> </span><span class="n">loggerOption</span><span class="p">{</span><span class="n">Log</span><span class="o">:</span><span class="x"> </span><span class="n">log</span><span class="p">}</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="c">// Open creates a connection.</span><span class="x">
+</span><span class="k">func</span><span class="x"> </span><span class="n">Open</span><span class="p">(</span><span class="n">addr</span><span class="x"> </span><span class="kt">string</span><span class="p">,</span><span class="x"> </span><span class="n">opts</span><span class="x"> </span><span class="o">...</span><span class="n">Option</span><span class="p">)</span><span class="x"> </span><span class="p">(</span><span class="o">*</span><span class="n">Connection</span><span class="p">,</span><span class="x"> </span><span class="kt">error</span><span class="p">)</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">options</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="n">options</span><span class="p">{</span><span class="x">
+        </span><span class="n">cache</span><span class="o">:</span><span class="x">  </span><span class="n">defaultCache</span><span class="p">,</span><span class="x">
+        </span><span class="n">logger</span><span class="o">:</span><span class="x"> </span><span class="n">zap</span><span class="o">.</span><span class="n">NewNop</span><span class="p">(),</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+
+    </span><span class="k">for</span><span class="x"> </span><span class="n">_</span><span class="p">,</span><span class="x"> </span><span class="n">o</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="k">range</span><span class="x"> </span><span class="n">opts</span><span class="x"> </span><span class="p">{</span><span class="x">
+        </span><span class="n">o</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="o">&amp;</span><span class="n">options</span><span class="p">)</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+    </span><span class="c">// ...</span><span class="x">
+</span><span class="p">}</span><span class="x">
+</span></code></pre></div></div>
+
+<blockquote>
+  <p>Note that there’s a method of implementing this pattern with closures but we believe that the pattern above provides more flexibility for authors and is easier to debug and test for users.</p>
+</blockquote>
+
+<ul>
+  <li>클로저로 이 패턴을 구현하는 방법도 있지만, 위의 패턴이 작성자에게 더 많은 유연성을 제공하고 사용자가 디버그하고 테스트하기 더 쉽다.</li>
+  <li>특히, 옵션들을 테스트와 mock에서 서로 비교할 수 있게 해주는데, 클로저로는 불가능하다.</li>
+  <li>또한 <code class="highlighter-rouge">fmt.Stringer</code> 같은 다른 인터페이스를 구현할 수 있어서 사용자가 읽을 수 있는 문자열 표현도 가능하다.</li>
+</ul>
+
+<p><br /></p>
+
+<p>Rob Pike의 원문은 클로저 기반이고, Uber 가이드는 인터페이스 기반이다. 실무에서는 상황에 맞게 선택하면 된다. 단순한 경우에는 클로저 기반이 더 간결하고, 테스트 가능성이나 확장성이 중요한 경우에는 인터페이스 기반이 더 적합하다.</p>
+
+<p><br /></p>
+
+<h1 id="실무-적용">실무 적용</h1>
+
+<h2 id="생성자-패턴으로의-전환">생성자 패턴으로의 전환</h2>
+
+<p>Rob Pike의 원문은 사실 <strong>생성자가 아니라 이미 생성된 객체의 상태를 변경하는 패턴</strong>을 보여준다. 기존 객체에 옵션을 적용하는 형태다. 
+<code class="highlighter-rouge">foo.Option(pkg.Verbosity(3))</code>를 보면 알 수 있다.</p>
+
+<p><br /></p>
+
+<p>하지만 실무에서는 대부분 <strong>생성자 패턴</strong>에 적용된다고 한다. 그 이유는 다음과 같다:</p>
+
+<ul>
+  <li>생성 시점에 설정이 필요한 경우가 많고</li>
+  <li>불변성을 유지하기 위해 생성 이후 변경을 막고 싶어서</li>
+</ul>
+
+<p><br /></p>
+
+<p>생성자에 적용한 형태는 다음과 같다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span><span class="x"> </span><span class="n">ServerOption</span><span class="x"> </span><span class="k">func</span><span class="p">(</span><span class="o">*</span><span class="n">Server</span><span class="p">)</span><span class="x">
+
+</span><span class="k">func</span><span class="x"> </span><span class="n">NewServer</span><span class="p">(</span><span class="n">opts</span><span class="x"> </span><span class="o">...</span><span class="n">ServerOption</span><span class="p">)</span><span class="x"> </span><span class="o">*</span><span class="n">Server</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">s</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="o">&amp;</span><span class="n">Server</span><span class="p">{</span><span class="x">
+        </span><span class="n">host</span><span class="o">:</span><span class="x"> </span><span class="s">"localhost"</span><span class="p">,</span><span class="x">
+        </span><span class="n">port</span><span class="o">:</span><span class="x"> </span><span class="m">8080</span><span class="p">,</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+    </span><span class="k">for</span><span class="x"> </span><span class="n">_</span><span class="p">,</span><span class="x"> </span><span class="n">opt</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="k">range</span><span class="x"> </span><span class="n">opts</span><span class="x"> </span><span class="p">{</span><span class="x">
+        </span><span class="n">opt</span><span class="p">(</span><span class="n">s</span><span class="p">)</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+    </span><span class="k">return</span><span class="x"> </span><span class="n">s</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="k">func</span><span class="x"> </span><span class="n">WithPort</span><span class="p">(</span><span class="n">port</span><span class="x"> </span><span class="kt">int</span><span class="p">)</span><span class="x"> </span><span class="n">ServerOption</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="k">return</span><span class="x"> </span><span class="k">func</span><span class="p">(</span><span class="n">s</span><span class="x"> </span><span class="o">*</span><span class="n">Server</span><span class="p">)</span><span class="x"> </span><span class="p">{</span><span class="x">
+        </span><span class="n">s</span><span class="o">.</span><span class="n">port</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="n">port</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+</span><span class="p">}</span><span class="x">
+</span></code></pre></div></div>
+
+<p><br /></p>
+
+<p>사용할 때는 아래와 같이 사용한다.</p>
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// 사용</span><span class="x">
+</span><span class="n">server</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="n">NewServer</span><span class="p">(</span><span class="x">
+    </span><span class="n">WithPort</span><span class="p">(</span><span class="m">9090</span><span class="p">),</span><span class="x">
+    </span><span class="n">WithTimeout</span><span class="p">(</span><span class="m">30</span><span class="x"> </span><span class="o">*</span><span class="x"> </span><span class="n">time</span><span class="o">.</span><span class="n">Second</span><span class="p">),</span><span class="x">
+</span><span class="p">)</span><span class="x">
+</span></code></pre></div></div>
+
+<p>이는 Rob Pike의 기본 버전 형태를 생성자에 적용한 것이다.</p>
+
+<p><br /></p>
+
+<h2 id="대안들과의-비교">대안들과의 비교</h2>
+
+<p>생성자에 적용할 때 다른 대안들과 비교해 보면 Functional Options의 장점이 더 명확해진다.</p>
+
+<p><br /></p>
+
+<p><strong>대안 1: 생성자에 수많은 인자를 넣는 방식</strong></p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span><span class="x"> </span><span class="n">NewServer</span><span class="p">(</span><span class="n">host</span><span class="x"> </span><span class="kt">string</span><span class="p">,</span><span class="x"> </span><span class="n">port</span><span class="x"> </span><span class="kt">int</span><span class="p">,</span><span class="x"> </span><span class="n">timeout</span><span class="x"> </span><span class="n">time</span><span class="o">.</span><span class="n">Duration</span><span class="p">,</span><span class="x"> </span><span class="n">retries</span><span class="x"> </span><span class="kt">int</span><span class="p">,</span><span class="x"> </span><span class="o">...</span><span class="p">)</span><span class="x"> </span><span class="o">*</span><span class="n">Server</span><span class="x">
+</span></code></pre></div></div>
+
+<p>옵션이 늘어날 때마다 함수 시그니처가 복잡해지고, 필수/선택 구분이 어렵다.</p>
+
+<p><br /></p>
+
+<p><strong>대안 2: 여러 변형 생성자를 만드는 방식</strong></p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span><span class="x"> </span><span class="n">NewServer</span><span class="p">(</span><span class="n">host</span><span class="x"> </span><span class="kt">string</span><span class="p">)</span><span class="x"> </span><span class="o">*</span><span class="n">Server</span><span class="x">
+</span><span class="k">func</span><span class="x"> </span><span class="n">NewServerWithPort</span><span class="p">(</span><span class="n">host</span><span class="x"> </span><span class="kt">string</span><span class="p">,</span><span class="x"> </span><span class="n">port</span><span class="x"> </span><span class="kt">int</span><span class="p">)</span><span class="x"> </span><span class="o">*</span><span class="n">Server</span><span class="x">
+</span><span class="k">func</span><span class="x"> </span><span class="n">NewServerWithPortAndTimeout</span><span class="p">(</span><span class="n">host</span><span class="x"> </span><span class="kt">string</span><span class="p">,</span><span class="x"> </span><span class="n">port</span><span class="x"> </span><span class="kt">int</span><span class="p">,</span><span class="x"> </span><span class="n">timeout</span><span class="x"> </span><span class="n">time</span><span class="o">.</span><span class="n">Duration</span><span class="p">)</span><span class="x"> </span><span class="o">*</span><span class="n">Server</span><span class="x">
+</span><span class="c">// 조합 폭발</span><span class="x">
+</span></code></pre></div></div>
+
+<p>옵션 조합의 수만큼 생성자가 필요하다.</p>
+
+<p><br /></p>
+
+<p><strong>대안 3: Config 구조체 방식</strong></p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span><span class="x"> </span><span class="n">Config</span><span class="x"> </span><span class="k">struct</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">Port</span><span class="x">    </span><span class="kt">int</span><span class="x">
+    </span><span class="n">Timeout</span><span class="x"> </span><span class="n">time</span><span class="o">.</span><span class="n">Duration</span><span class="x">
+    </span><span class="n">Retries</span><span class="x"> </span><span class="kt">int</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="n">NewServer</span><span class="p">(</span><span class="n">Config</span><span class="p">{</span><span class="x">
+    </span><span class="n">Port</span><span class="o">:</span><span class="x">    </span><span class="m">8080</span><span class="p">,</span><span class="x">
+    </span><span class="n">Timeout</span><span class="o">:</span><span class="x"> </span><span class="m">30</span><span class="x"> </span><span class="o">*</span><span class="x"> </span><span class="n">time</span><span class="o">.</span><span class="n">Second</span><span class="p">,</span><span class="x">
+    </span><span class="c">// Retries 생략 → 제로값(0)이 됨. 의도한 것인가?</span><span class="x">
+</span><span class="p">})</span><span class="x">
+</span></code></pre></div></div>
+
+<p>선택적 필드 표현이 애매하다. 지정하지 않은 필드는 제로 값(Zero Value)이 되어 의도와 다르게 동작할 수 있다.</p>
+
+<p><br /></p>
+
+<p><strong>대안 4: Builder 패턴</strong></p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">NewServerBuilder</span><span class="p">()</span><span class="o">.</span><span class="x">
+    </span><span class="n">Port</span><span class="p">(</span><span class="m">8080</span><span class="p">)</span><span class="o">.</span><span class="x">
+    </span><span class="n">Timeout</span><span class="p">(</span><span class="m">30</span><span class="x"> </span><span class="o">*</span><span class="x"> </span><span class="n">time</span><span class="o">.</span><span class="n">Second</span><span class="p">)</span><span class="o">.</span><span class="x">
+    </span><span class="n">Build</span><span class="p">()</span><span class="x">
+</span></code></pre></div></div>
+
+<p>메서드 체이닝으로 장황해진다.</p>
+
+<p><br /></p>
+
+<p><strong>Functional Options</strong></p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">NewServer</span><span class="p">(</span><span class="x">
+    </span><span class="n">WithPort</span><span class="p">(</span><span class="m">8080</span><span class="p">),</span><span class="x">
+    </span><span class="n">WithTimeout</span><span class="p">(</span><span class="m">30</span><span class="x"> </span><span class="o">*</span><span class="x"> </span><span class="n">time</span><span class="o">.</span><span class="n">Second</span><span class="p">),</span><span class="x">
+</span><span class="p">)</span><span class="x">
+</span></code></pre></div></div>
+
+<p>간결하고 명확하며, 필요한 옵션만 선택적으로 전달할 수 있다.</p>
+
+<p><br /></p>
+
+<h2 id="내-사례">내 사례</h2>
+
+<p>회사에서 작성하는 Backend 코드에 학습 파이프라인 트리거를 위한 Argo Workflow Client가 있었다. 학습 제어 관련 변수(dataset split ratio, epoch, batch size 등), 데이터셋 augmentation 관련 변수들, checkpoint 및 로그 저장 관련 변수들 등 수많은 옵션이 필요했다.</p>
+
+<p>파이프라인 트리거 시 이 값들을 주입해 줘야 하는데, 사용자가 명시하지 않으면 기본값을 사용해야 했다. 초기 개발 당시에는 Client에 속성으로 가지고 있다 주입해 주는 방식을 선택했는데, 시간이 지날수록 학습 제어가 세밀해지며, 생성자에 넣어야 할 파라미터가 점점 늘어났다. 자연히 생성자가 점점 길어지는 문제가 발생했다.</p>
+
+<p><br /></p>
+
+<p>이를 해결하기 위해 Functional Options 패턴을 적용하면서, 추가로 <strong>생성 시점에 검증까지 할 수 있도록</strong> 변형했다. Option 함수가 error를 반환하도록 하면, 잘못된 옵션 조합을 생성 시점에 잡아낼 수 있다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">type</span><span class="x"> </span><span class="n">Option</span><span class="x"> </span><span class="k">func</span><span class="p">(</span><span class="o">*</span><span class="n">Client</span><span class="p">)</span><span class="x"> </span><span class="kt">error</span><span class="x">
+
+</span><span class="k">func</span><span class="x"> </span><span class="n">WithDatasetSplitRatio</span><span class="p">(</span><span class="n">train</span><span class="p">,</span><span class="x"> </span><span class="n">val</span><span class="x"> </span><span class="kt">float64</span><span class="p">)</span><span class="x"> </span><span class="n">Option</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="k">return</span><span class="x"> </span><span class="k">func</span><span class="p">(</span><span class="n">c</span><span class="x"> </span><span class="o">*</span><span class="n">Client</span><span class="p">)</span><span class="x"> </span><span class="kt">error</span><span class="x"> </span><span class="p">{</span><span class="x">
+        </span><span class="k">if</span><span class="x"> </span><span class="n">train</span><span class="x"> </span><span class="o">+</span><span class="x"> </span><span class="n">val</span><span class="x"> </span><span class="o">!=</span><span class="x"> </span><span class="m">1.0</span><span class="x"> </span><span class="p">{</span><span class="x">
+            </span><span class="k">return</span><span class="x"> </span><span class="n">errors</span><span class="o">.</span><span class="n">New</span><span class="p">(</span><span class="s">"split ratios must sum to 1.0"</span><span class="p">)</span><span class="x">
+        </span><span class="p">}</span><span class="x">
+        </span><span class="n">c</span><span class="o">.</span><span class="n">splitConfig</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="n">SplitConfig</span><span class="p">{</span><span class="n">TrainRatio</span><span class="o">:</span><span class="x"> </span><span class="n">train</span><span class="p">,</span><span class="x"> </span><span class="n">ValRatio</span><span class="o">:</span><span class="x"> </span><span class="n">val</span><span class="p">}</span><span class="x">
+        </span><span class="k">return</span><span class="x"> </span><span class="no">nil</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="k">func</span><span class="x"> </span><span class="n">WithTrainerConfig</span><span class="p">(</span><span class="n">maxEpochs</span><span class="p">,</span><span class="x"> </span><span class="n">maxBatchSize</span><span class="p">,</span><span class="x"> </span><span class="n">dropoutInterval</span><span class="x"> </span><span class="kt">int</span><span class="p">)</span><span class="x"> </span><span class="n">Option</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="k">return</span><span class="x"> </span><span class="k">func</span><span class="p">(</span><span class="n">c</span><span class="x"> </span><span class="o">*</span><span class="n">Client</span><span class="p">)</span><span class="x"> </span><span class="kt">error</span><span class="x"> </span><span class="p">{</span><span class="x">
+        </span><span class="k">if</span><span class="x"> </span><span class="n">maxEpochs</span><span class="x"> </span><span class="o">&lt;=</span><span class="x"> </span><span class="m">0</span><span class="x"> </span><span class="p">{</span><span class="x">
+            </span><span class="k">return</span><span class="x"> </span><span class="n">errors</span><span class="o">.</span><span class="n">New</span><span class="p">(</span><span class="s">"maxEpochs must be positive"</span><span class="p">)</span><span class="x">
+        </span><span class="p">}</span><span class="x">
+        </span><span class="n">c</span><span class="o">.</span><span class="n">trainerConfig</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="n">TrainerConfig</span><span class="p">{</span><span class="x">
+            </span><span class="n">MaxEpochs</span><span class="o">:</span><span class="x">           </span><span class="n">maxEpochs</span><span class="p">,</span><span class="x">
+            </span><span class="n">MaxBatchSize</span><span class="o">:</span><span class="x">        </span><span class="n">maxBatchSize</span><span class="p">,</span><span class="x">
+            </span><span class="n">DataDropoutInterval</span><span class="o">:</span><span class="x"> </span><span class="n">dropoutInterval</span><span class="p">,</span><span class="x">
+        </span><span class="p">}</span><span class="x">
+        </span><span class="k">return</span><span class="x"> </span><span class="no">nil</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="k">func</span><span class="x"> </span><span class="n">New</span><span class="p">(</span><span class="n">cfg</span><span class="x"> </span><span class="n">Config</span><span class="p">,</span><span class="x"> </span><span class="n">opts</span><span class="x"> </span><span class="o">...</span><span class="n">Option</span><span class="p">)</span><span class="x"> </span><span class="p">(</span><span class="o">*</span><span class="n">Client</span><span class="p">,</span><span class="x"> </span><span class="kt">error</span><span class="p">)</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">c</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="o">&amp;</span><span class="n">Client</span><span class="p">{</span><span class="x">
+        </span><span class="c">// 기본값 설정</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+    
+    </span><span class="k">for</span><span class="x"> </span><span class="n">_</span><span class="p">,</span><span class="x"> </span><span class="n">opt</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="k">range</span><span class="x"> </span><span class="n">opts</span><span class="x"> </span><span class="p">{</span><span class="x">
+        </span><span class="k">if</span><span class="x"> </span><span class="n">err</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="n">opt</span><span class="p">(</span><span class="n">c</span><span class="p">);</span><span class="x"> </span><span class="n">err</span><span class="x"> </span><span class="o">!=</span><span class="x"> </span><span class="no">nil</span><span class="x"> </span><span class="p">{</span><span class="x">
+            </span><span class="k">return</span><span class="x"> </span><span class="no">nil</span><span class="p">,</span><span class="x"> </span><span class="n">err</span><span class="x">
+        </span><span class="p">}</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+    
+    </span><span class="k">return</span><span class="x"> </span><span class="n">c</span><span class="p">,</span><span class="x"> </span><span class="no">nil</span><span class="x">
+</span><span class="p">}</span><span class="x">
+</span></code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>Functional Options 패턴을 학습하고 적용하면서, <strong>Go의 언어적 특성을 정말 잘 활용한 패턴</strong>이라는 생각이 들었다.</p>
+
+<ol>
+  <li>
+    <p><strong>함수가 일급 객체(first-class citizen)라는 점</strong>을 십분 활용한다. 함수를 타입으로 정의하고, 값으로 전달하고, 클로저로 상태를 캡처한다. 만약 함수가 일급 객체가 아니었다면, 이 패턴은 존재할 수 없었을 것이다.</p>
+  </li>
+  <li>
+    <p><strong>가변 인자(variadic parameters)를 지원한다는 점</strong>도 중요하다. <code class="highlighter-rouge">opts ...Option</code>으로 원하는 만큼의 옵션을 유연하게 받을 수 있다. 이 덕분에 <code class="highlighter-rouge">NewServer()</code>, <code class="highlighter-rouge">NewServer(WithPort(8080))</code>, <code class="highlighter-rouge">NewServer(WithPort(8080), WithTimeout(30))</code>처럼 호출 형태가 자유로워진다.</p>
+  </li>
+  <li>
+    <p><strong>오버로딩이 없다는 제약</strong>이 오히려 이런 창의적인 패턴을 낳았다는 점도 흥미롭다. 다른 언어였다면 그냥 오버로딩으로 해결했을 문제를, Go에서는 언어의 특성을 살려 더 우아하게 해결했다.</p>
+  </li>
+</ol>
+
+<p><br /></p>
+
+<p>Rob Pike가 “I’m also happy at the way this uses Go’s closures to achieve its goals with grace”라고 한 부분이 인상 깊다. 언어의 제약을 불평하기보다, 언어가 제공하는 것을 최대한 활용해서 우아한 해결책을 찾아낸 것. 이것이 바로 그 언어를 잘 쓴다는 것이 아닐까. 언어를 최대한 활용하며, 스스로의 설계에 만족하기까지 얼마나 많은 시간을 고민했을지 감히 상상조차 되지 않는다.</p>
+
+<p><br /></p>
+
+<p>항상 느끼면서도 어렵지만, 언어는 기본에 충실할 때 가장 잘 쓸 수 있는 것이라는 생각이 든다. 대가는 괜히 대가가 아니다.</p>
+
+<p><br /></p>
+
+<h1 id="참고">참고</h1>
+
+<ul>
+  <li><a href="https://commandcenter.blogspot.com/2014/01/self-referential-functions-and-design.html">Rob Pike - Self-referential functions and the design of options</a></li>
+  <li><a href="https://dave.cheney.net/2014/10/17/functional-options-for-friendly-apis">Dave Cheney - Functional options for friendly APIs</a></li>
+  <li><a href="https://github.com/uber-go/guide/blob/master/style.md#functional-options">Uber Go Style Guide - Functional Options</a></li>
+</ul>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/dev/Dev-Go-Backend-Refactoring-Journey/">[Go] 10일간의 리팩토링 여정: 스불재에서 Clean Architecture까지</a></li>
+    
+    <li><a href="/dev/Dev-Go-Github-SDK-Pattern-in-Refactoring-1/">[Go] go-github SDK 패턴을 적용한 리팩토링 - 1. 패턴 이해</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#design-pattern" class="page__taxonomy-item" rel="tag">Design Pattern</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#functional-options" class="page__taxonomy-item" rel="tag">Functional Options</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#go" class="page__taxonomy-item" rel="tag">Go</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#refactoring" class="page__taxonomy-item" rel="tag">Refactoring</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-01-01T00:00:00+09:00">January 1, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BGo%5D+Functional+Options+%ED%8C%A8%ED%84%B4%EC%9C%BC%EB%A1%9C+%EC%83%9D%EC%84%B1%EC%9E%90+%EB%A6%AC%ED%8C%A9%ED%86%A0%EB%A7%81%ED%95%98%EA%B8%B0%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Go-Functional-Options-Pattern-in-Refactoring%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Go-Functional-Options-Pattern-in-Refactoring%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Go-Functional-Options-Pattern-in-Refactoring%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-Go-Functional-Options-Pattern-in-Refactoring?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-Container-Duplicate-Container-Images-4/" class="pagination--pager" title="[Container] Docker와 containerd 이미지 관리 비교 - 4. DooD 환경에서의 이미지 분리 저장
+">이전</a>
+    
+    
+      <a href="/dev/Dev-Go-Github-SDK-Pattern-in-Refactoring-1/" class="pagination--pager" title="[Go] go-github SDK 패턴을 적용한 리팩토링 - 1. 패턴 이해
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-Go-Functional-Options-Pattern-in-Refactoring/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-Go-Functional-Options-Pattern-in-Refactoring"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

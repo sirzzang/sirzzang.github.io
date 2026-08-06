@@ -1,0 +1,1474 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[GenAI] GenAI on K8s: 9.2 - 보안 인프라 코드 분석: EKS + Secret 주입 흐름 - Eraser’s StudyLog</title>
+<meta name="description" content="Ch9 Terraform 코드를 따라가며 EKS 보안 설계(Bottlerocket, IMDSv2, Pod Identity, ECR 공급망)와 Secrets Store CSI Driver의 secret 주입 흐름을 분석해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[GenAI] GenAI on K8s: 9.2 - 보안 인프라 코드 분석: EKS + Secret 주입 흐름">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-09-02-Security-Infrastructure-Code/">
+
+
+  <meta property="og:description" content="Ch9 Terraform 코드를 따라가며 EKS 보안 설계(Bottlerocket, IMDSv2, Pod Identity, ECR 공급망)와 Secrets Store CSI Driver의 secret 주입 흐름을 분석해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-05-24T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-09-02-Security-Infrastructure-Code/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[GenAI] GenAI on K8s: 9.2 - 보안 인프라 코드 분석: EKS + Secret 주입 흐름">
+    <meta itemprop="description" content="Ch9 Terraform 코드를 따라가며 EKS 보안 설계(Bottlerocket, IMDSv2, Pod Identity, ECR 공급망)와 Secrets Store CSI Driver의 secret 주입 흐름을 분석해 보자.">
+    <meta itemprop="datePublished" content="2026-05-24T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[GenAI] GenAI on K8s: 9.2 - 보안 인프라 코드 분석: EKS + Secret 주입 흐름
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-05-24T00:00:00+09:00">2026년 05월 24일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  9 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#ekstf--클러스터-토대--host-보안">eks.tf — 클러스터 토대 + host 보안</a>
+    <ul>
+      <li><a href="#bottlerocket-ami">Bottlerocket AMI</a></li>
+      <li><a href="#imdsv2--코드에-없지만-적용되어-있다">IMDSv2 — 코드에 없지만 적용되어 있다</a></li>
+      <li><a href="#실습-편의를-위해-보안을-양보한-설정들">실습 편의를 위해 보안을 양보한 설정들</a></li>
+    </ul>
+  </li>
+  <li><a href="#addonstf--secret-주입-백본--클러스터-애드온">addons.tf — Secret 주입 백본 + 클러스터 애드온</a>
+    <ul>
+      <li><a href="#두-가지-secret-주입-경로--네이티브-vs-csi">두 가지 secret 주입 경로 — 네이티브 vs CSI</a></li>
+      <li><a href="#driver--provider-그리고-노드-로컬-흐름">Driver + Provider, 그리고 노드-로컬 흐름</a></li>
+      <li><a href="#syncsecret--편의-vs-보안-트레이드오프">syncSecret — 편의 vs 보안 트레이드오프</a></li>
+      <li><a href="#provider-tolerations--pod-identity-agent">Provider tolerations + pod-identity-agent</a></li>
+      <li><a href="#ebs-csi가-iam을-필요로-하는-이유">EBS CSI가 IAM을 필요로 하는 이유</a></li>
+      <li><a href="#gp2--gp3-default-storageclass-전환">gp2 → gp3 default StorageClass 전환</a></li>
+    </ul>
+  </li>
+  <li><a href="#iamtf--pod-identity--최소권한-secret-정책">iam.tf — Pod Identity + 최소권한 Secret 정책</a>
+    <ul>
+      <li><a href="#irsa-vs-pod-identity--한-클러스터에-공존">IRSA vs Pod Identity — 한 클러스터에 공존</a></li>
+      <li><a href="#최소권한-vs-과대권한">최소권한 vs 과대권한</a></li>
+    </ul>
+  </li>
+  <li><a href="#ecrtf--공급망-보안-암호화immutable스캔">ecr.tf — 공급망 보안 (암호화·immutable·스캔)</a>
+    <ul>
+      <li><a href="#이미지-암호화">이미지 암호화</a></li>
+      <li><a href="#basic-vs-enhanced-scanning">Basic vs Enhanced Scanning</a></li>
+      <li><a href="#두-스캔-빈도를-함께-거는-이유">두 스캔 빈도를 함께 거는 이유</a></li>
+      <li><a href="#차등-정책--모델은-불변-앱은-가변">차등 정책 — 모델은 불변, 앱은 가변</a></li>
+    </ul>
+  </li>
+  <li><a href="#워크로드-코드--secret이-파드까지-도달하는-경로">워크로드 코드 — Secret이 파드까지 도달하는 경로</a>
+    <ul>
+      <li><a href="#secretproviderclass--fetchsyncauth-세-블록">SecretProviderClass — fetch/sync/auth 세 블록</a></li>
+      <li><a href="#deploy--이중-secret-경로">Deploy — 이중 secret 경로</a>
+        <ul>
+          <li><a href="#kubectl-create-secret이-아니라-이-방식인-이유">kubectl create secret이 아니라 이 방식인 이유</a></li>
+          <li><a href="#serviceaccount와-실패-지점">serviceAccount와 실패 지점</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#정리--secret-한-줄-흐름">정리 — secret 한 줄 흐름</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions">Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)</a> 9장의 학습 내용을 바탕으로 합니다</em></p>
+
+<p><br /></p>
+
+<p><a href="/kubernetes/Kubernetes-GenAI-on-K8s-09-01-Security-Defense-in-Depth/">이전 글</a>에서 defense in depth와 K8s 보안 영역별 개념을 정리했다. 이번 글에서는 그 개념들이 <strong>실제 Terraform 코드</strong>에 어떻게 적용되어 있는지 분석한다.</p>
+
+<p>코드 읽는 순서는 <code class="highlighter-rouge">eks.tf</code>(클러스터 토대·host 보안) → <code class="highlighter-rouge">addons.tf</code>(secret 주입 백본) → <code class="highlighter-rouge">iam.tf</code>(Pod Identity) → <code class="highlighter-rouge">ecr.tf</code>(공급망)다. 클러스터를 세우고, 그 위 secret 흐름(addons→iam)을 묶어 본 뒤, 마지막에 이미지 공급망을 본다.</p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li><code class="highlighter-rouge">eks.tf</code>는 Bottlerocket AMI로 host 공격면을 최소화하고, IMDSv2는 EKS 모듈 기본값으로 자동 적용된다(명시 코드 없이도 <code class="highlighter-rouge">http_tokens=required</code>)</li>
+  <li><code class="highlighter-rouge">addons.tf</code>의 Secrets Store CSI Driver는 etcd를 거치지 않고 외부 store → 파드 tmpfs로 secret을 직행시킨다. <code class="highlighter-rouge">syncSecret=true</code>는 편의(env 주입)와 보안(etcd 미경유) 사이의 트레이드오프다</li>
+  <li><code class="highlighter-rouge">iam.tf</code>는 Pod Identity로 <code class="highlighter-rouge">hugging-face-secret*</code> 하나에만 권한을 묶는 최소권한 정책을 보여준다. 같은 클러스터에서 IRSA(EBS CSI)와 Pod Identity(앱)가 공존한다</li>
+  <li><code class="highlighter-rouge">ecr.tf</code>는 모델 이미지(<code class="highlighter-rouge">my-llama-finetuned</code>)에만 IMMUTABLE + CONTINUOUS_SCAN을 걸어 자산 가치에 맞춘 차등 보안 정책을 적용한다</li>
+  <li>secret 한 줄 흐름: Secrets Manager → CSI Driver + provider-aws → 파드 tmpfs(파일) + 동기화된 K8s Secret(env)</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="ekstf--클러스터-토대--host-보안"><code class="highlighter-rouge">eks.tf</code> — 클러스터 토대 + host 보안</h1>
+
+<pre><code class="language-hcl">module "eks" {
+  source  = "terraform-aws-modules/eks/aws"
+  version = "~&gt; 20.36"
+  cluster_name    = local.name       # "eks-demo"
+  cluster_version = "1.32"
+  enable_cluster_creator_admin_permissions = true
+  cluster_endpoint_public_access           = true
+
+  eks_managed_node_groups = {
+    eks-mng = {
+      instance_types = ["m5.large", "m6i.large", "m7i.large"]
+      ami_type       = "BOTTLEROCKET_x86_64"   # host 보안
+      max_size = 3; desired_size = 3
+      capacity_type = "SPOT"
+    }
+    # eks-gpu-mng = { ... }   # 보안 데모는 GPU 불필요 → 주석 처리
+  }
+}
+</code></pre>
+
+<p>보안 챕터의 주제(secret 주입, Pod Identity, 공급망 스캔)는 워크로드 종류와 무관하다. GPU 없이 CPU 노드만으로 모든 개념을 보여줄 수 있어, GPU 노드그룹은 주석 처리되어 있다.</p>
+
+<h2 id="bottlerocket-ami">Bottlerocket AMI</h2>
+
+<p><code class="highlighter-rouge">ami_type = "BOTTLEROCKET_x86_64"</code>로 host 보안을 확보한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>일반 AL2023</th>
+      <th>Bottlerocket</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>루트 파일시스템</td>
+      <td>읽기/쓰기</td>
+      <td><strong>읽기 전용</strong>(immutable)</td>
+    </tr>
+    <tr>
+      <td>패키지 매니저</td>
+      <td>있음</td>
+      <td><strong>없음</strong>(공격 표면 축소)</td>
+    </tr>
+    <tr>
+      <td>업데이트</td>
+      <td>in-place</td>
+      <td><strong>atomic</strong>(이미지 교체·롤백)</td>
+    </tr>
+    <tr>
+      <td>용도</td>
+      <td>범용</td>
+      <td>컨테이너 전용</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="imdsv2--코드에-없지만-적용되어-있다">IMDSv2 — 코드에 없지만 적용되어 있다</h2>
+
+<p><code class="highlighter-rouge">eks.tf</code>에 <code class="highlighter-rouge">metadata_options</code>가 명시되어 있지 않지만, <code class="highlighter-rouge">terraform-aws-modules/eks</code> 관리형 노드그룹이 런치템플릿 <code class="highlighter-rouge">metadata_options</code> <strong>기본값</strong>으로 <code class="highlighter-rouge">http_tokens="required"</code> + <code class="highlighter-rouge">http_put_response_hop_limit=2</code>를 설정한다. 따라서 <strong>IMDSv2 토큰 강제는 이미 적용되어 있고</strong>, 미적용인 건 <code class="highlighter-rouge">hop_limit=1</code> 하드닝뿐이다.</p>
+
+<p>컨테이너 → 노드 IMDS까지 막으려면 노드그룹에 <code class="highlighter-rouge">metadata_options</code>를 명시해 hop을 1로 내린다:</p>
+
+<pre><code class="language-hcl">eks-mng = {
+  instance_types   = ["m5.large", ...]
+  ami_type         = "BOTTLEROCKET_x86_64"
+  metadata_options = {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"   # IMDSv2 강제
+    http_put_response_hop_limit = 1            # 컨테이너에서 IMDS 접근 차단
+    instance_metadata_tags      = "enabled"
+  }
+}
+</code></pre>
+
+<h2 id="실습-편의를-위해-보안을-양보한-설정들">실습 편의를 위해 보안을 양보한 설정들</h2>
+
+<p>이 코드에는 실습을 단순하게 만들려고 일부러 보안을 느슨하게 둔 설정이 섞여 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>설정</th>
+      <th>왜 느슨한가</th>
+      <th>프로덕션이라면</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">enable_cluster_creator_admin_permissions = true</code></td>
+      <td>추가 RBAC 설정 없이 바로 <code class="highlighter-rouge">kubectl</code>이 되지만, 최소권한 위반</td>
+      <td><code class="highlighter-rouge">false</code>로 끄고 필요한 사용자·역할에만 RBAC으로 명시 부여</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">cluster_endpoint_public_access = true</code></td>
+      <td>API 서버가 인터넷에 공개되어 공격 표면이 넓다</td>
+      <td><code class="highlighter-rouge">public_access_cidrs</code>로 IP 화이트리스트하거나 private endpoint로 전환</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">llama_fine_tuning_irsa</code> 의 <code class="highlighter-rouge">AmazonS3FullAccess</code></td>
+      <td>계정 내 모든 S3 버킷에 전체 권한을 주는 과대권한</td>
+      <td>필요한 버킷·경로에만 최소 권한 정책 작성</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">llama_fine_tuning_irsa</code>의 과대권한은 뒤에서 살펴볼 <code class="highlighter-rouge">iam.tf</code>의 최소권한 정책과 대비되는 나쁜 예시다.</p>
+
+<p><br /></p>
+
+<h1 id="addonstf--secret-주입-백본--클러스터-애드온"><code class="highlighter-rouge">addons.tf</code> — Secret 주입 백본 + 클러스터 애드온</h1>
+
+<pre><code class="language-hcl">module "eks_blueprints_addons" {
+  enable_aws_load_balancer_controller          = true
+  enable_secrets_store_csi_driver              = true   # secret 전용 CSI driver
+  enable_secrets_store_csi_driver_provider_aws = true   # AWS provider
+  secrets_store_csi_driver = {
+    values = ["syncSecret:\n  enabled: true"]            # K8s Secret 미러링
+  }
+  secrets_store_csi_driver_provider_aws = {
+    values = ["tolerations:\n  - operator: Exists"]      # 전 노드 배포
+  }
+  eks_addons = {
+    aws-ebs-csi-driver = {
+      service_account_role_arn = module.ebs_csi_driver_irsa.iam_role_arn  # IRSA
+    }
+    eks-pod-identity-agent = {}   # Pod Identity 전제
+    metrics-server = {}; coredns = {}; kube-proxy = {}; vpc-cni = {}
+  }
+}
+</code></pre>
+
+<h2 id="두-가지-secret-주입-경로--네이티브-vs-csi">두 가지 secret 주입 경로 — 네이티브 vs CSI</h2>
+
+<p>K8s에서 secret을 파드에 넣는 코어(내장) 방식은 <code class="highlighter-rouge">Secret</code> 객체를 만들어 <strong>etcd에 저장</strong>하고, kubelet이 파일 volume 또는 env로 마운트하는 것이다. Secrets Store CSI Driver는 이를 대체하는 게 아니라, <strong>외부 store에서 가져와 마운트하는 별개의 애드온 경로</strong>다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/genai-on-k8s-ch09-native-secret-vs-csi-paths.svg" alt="네이티브 Secret(etcd·kubelet) vs Secrets Store CSI(외부 store·애드온) 경로 비교" class="align-center" /></p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>네이티브 Secret (코어)</th>
+      <th>Secrets Store CSI (애드온)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>source of truth</td>
+      <td>K8s <code class="highlighter-rouge">Secret</code> 객체(<strong>etcd</strong>)</td>
+      <td><strong>AWS Secrets Manager</strong>(클러스터 외부)</td>
+    </tr>
+    <tr>
+      <td>마운트 주체</td>
+      <td>kubelet(내장)</td>
+      <td>CSI Driver + AWS provider(DaemonSet)</td>
+    </tr>
+    <tr>
+      <td>etcd 경유</td>
+      <td>함(base64 = 사실상 평문)</td>
+      <td><strong>안 함</strong>(파드 tmpfs에만)</td>
+    </tr>
+    <tr>
+      <td>회전·IAM·감사</td>
+      <td>제한적</td>
+      <td>Secrets Manager가 제공</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>용어 주의</strong>: “CSI”(Container Storage Interface)는 원래 EBS 같은 디스크 볼륨을 붙이는 표준 플러그인 틀이다. <strong>Secrets Store CSI Driver</strong>는 그 틀에 얹은 <em>secret 전용</em> 드라이버이고, provider 플러그인으로 여러 백엔드(AWS/Vault/Azure)를 붙일 수 있다.</p>
+</blockquote>
+
+<h2 id="driver--provider-그리고-노드-로컬-흐름">Driver + Provider, 그리고 노드-로컬 흐름</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>구성요소</th>
+      <th>역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Secrets Store CSI <strong>Driver</strong></td>
+      <td>CSI 표준 인터페이스. “secret을 volume으로” 마운트하는 공통 층(backend 모름)</td>
+    </tr>
+    <tr>
+      <td><strong>provider-aws</strong></td>
+      <td>driver의 플러그인. 실제로 Secrets Manager / SSM에서 값을 가져옴</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://sirzzang.github.io//assets/images/genai-on-k8s-ch09-secrets-store-csi-flow.svg" alt="Secrets Store CSI 노드-로컬 흐름" class="align-center" /></p>
+
+<p>흐름은 노드 안에서 닫힌다: 파드가 볼륨을 요청하면 kubelet이 CSI driver 노드 플러그인을 호출하고, driver가 AWS provider를 거쳐 Secrets Manager에서 값을 fetch(이때 Pod Identity 자격증명 사용)해 파드 tmpfs에 파일로 올린다. <strong>etcd를 거치지 않는다</strong>는 게 이 경로의 핵심이다.</p>
+
+<h2 id="syncsecret--편의-vs-보안-트레이드오프">syncSecret — 편의 vs 보안 트레이드오프</h2>
+
+<p>CSI Driver의 기본 일은 secret을 파드에 <strong>파일</strong>로 마운트하는 것뿐이다. 그 자체로는 네이티브 K8s <code class="highlighter-rouge">Secret</code> 객체를 만들지 않는다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th><code class="highlighter-rouge">false</code>(driver 기본값)</th>
+      <th><code class="highlighter-rouge">true</code>(ch9 설정)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>파드에 노출</td>
+      <td><code class="highlighter-rouge">/mnt/secrets-store/...</code> 파일</td>
+      <td>파일 + K8s <code class="highlighter-rouge">Secret</code> 객체 추가 동기화(etcd)</td>
+    </tr>
+    <tr>
+      <td>앱이 읽는 법</td>
+      <td>파일 읽기</td>
+      <td>파일 + <strong>env <code class="highlighter-rouge">valueFrom.secretKeyRef</code></strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">false</code>여도 secret을 못 쓰는 게 아니라 <strong>파일로는 쓸 수 있다</strong>. 다만 env 변수로 주입하려면(<code class="highlighter-rouge">secretKeyRef</code>) K8s Secret 객체가 필요한데, <code class="highlighter-rouge">false</code>면 그게 없어 env 방식만 불가하다.</p>
+
+<p>CSI Driver를 쓰는 본래 목적이 <em>etcd를 안 거치는 것</em>이기 때문에, <code class="highlighter-rouge">syncSecret=true</code>는 그 이점을 일부 되돌린다(etcd에 사본을 만든다). ch9이 <code class="highlighter-rouge">true</code>를 쓴 이유는 deploy가 HF 토큰을 <code class="highlighter-rouge">secretKeyRef</code>로 <strong>env 주입</strong>하기 때문이다 — <strong>편의(env 주입) vs 보안(etcd 미경유)</strong> 트레이드오프다.</p>
+
+<h2 id="provider-tolerations--pod-identity-agent">Provider tolerations + pod-identity-agent</h2>
+
+<p>provider-aws는 <strong>DaemonSet</strong>이라 모든 노드에서 떠야 그 노드의 Pod도 secret을 마운트할 수 있다. <code class="highlighter-rouge">tolerations: [{operator: Exists}]</code>는 어떤 taint(GPU 노드 taint 포함)든 무조건 견뎌 전 노드 배포를 보장한다.</p>
+
+<p><code class="highlighter-rouge">eks-pod-identity-agent</code> 애드온은 Pod Identity가 동작하는 전제로, 노드에서 Pod에 임시 자격증명을 주입한다.</p>
+
+<h2 id="ebs-csi가-iam을-필요로-하는-이유">EBS CSI가 IAM을 필요로 하는 이유</h2>
+
+<p>EBS CSI controller는 PVC 요청 시 실제 AWS API(<code class="highlighter-rouge">ec2:CreateVolume</code>, <code class="highlighter-rouge">AttachVolume</code> 등)를 호출해 EBS를 프로비저닝한다. 그 권한이 IAM Role로 필요하며, 방식은 <strong>IRSA</strong>다. 같은 파일의 Karpenter는 <strong>Pod Identity</strong>(<code class="highlighter-rouge">create_pod_identity_association = true</code>)를 쓴다 — 한 클러스터에 IRSA(구방식)와 Pod Identity(신방식)가 혼용된다.</p>
+
+<h2 id="gp2--gp3-default-storageclass-전환">gp2 → gp3 default StorageClass 전환</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>gp2</th>
+      <th>gp3</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>IOPS</td>
+      <td>3 IOPS/GB(용량 비례)</td>
+      <td>baseline <strong>3,000 고정</strong></td>
+    </tr>
+    <tr>
+      <td>Throughput</td>
+      <td>용량 비례</td>
+      <td>baseline <strong>125 MB/s</strong> + 독립 구매</td>
+    </tr>
+    <tr>
+      <td>가격</td>
+      <td>$0.10/GB·월</td>
+      <td><strong>$0.08/GB·월(-20%)</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>EKS가 자동 생성한 gp2 StorageClass의 <code class="highlighter-rouge">is-default-class</code>를 <code class="highlighter-rouge">false</code>로, 새 gp3를 default로 만든다. 이후 annotation 없이 생성되는 PVC는 gp3를 쓴다.</p>
+
+<p><br /></p>
+
+<h1 id="iamtf--pod-identity--최소권한-secret-정책"><code class="highlighter-rouge">iam.tf</code> — Pod Identity + 최소권한 Secret 정책</h1>
+
+<pre><code class="language-hcl"># trust policy — Pod Identity의 표식
+data "aws_iam_policy_document" "my_llama_app_trust_policy" {
+  statement {
+    actions    = ["sts:AssumeRole", "sts:TagSession"]
+    principals {
+      type        = "Service"
+      identifiers = ["pods.eks.amazonaws.com"]   # Pod Identity
+    }
+  }
+}
+
+# 최소권한: hugging-face-secret 하나에만 GetSecretValue/DescribeSecret
+resource "aws_iam_policy" "hf_secrets_access_policy" {
+  # Resource = "secret:hugging-face-secret*"
+}
+
+# association: ns=default의 SA my-llama-sa에 이 Role을 연결
+resource "aws_eks_pod_identity_association" "my_llama_sa_pod_identity" {
+  cluster_name    = module.eks.cluster_name
+  namespace       = "default"
+  service_account = "my-llama-sa"
+  role_arn        = aws_iam_role.my_llama_app_role.arn
+}
+</code></pre>
+
+<h2 id="irsa-vs-pod-identity--한-클러스터에-공존">IRSA vs Pod Identity — 한 클러스터에 공존</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>IRSA(Ch5 / EBS CSI)</th>
+      <th>Pod Identity(Ch9 <code class="highlighter-rouge">iam.tf</code>)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>trust principal</td>
+      <td><code class="highlighter-rouge">oidc.eks.../id/...</code>(OIDC provider ARN)</td>
+      <td><strong><code class="highlighter-rouge">pods.eks.amazonaws.com</code></strong>(서비스 principal)</td>
+    </tr>
+    <tr>
+      <td>사전 준비</td>
+      <td>클러스터마다 OIDC provider 등록</td>
+      <td><strong>불필요</strong>(agent 애드온만)</td>
+    </tr>
+    <tr>
+      <td>SA 연결</td>
+      <td>SA annotation <code class="highlighter-rouge">eks.amazonaws.com/role-arn</code></td>
+      <td><strong>association 리소스</strong>(클러스터·ns·sa·role)</td>
+    </tr>
+    <tr>
+      <td>멀티클러스터</td>
+      <td>Role trust가 OIDC ARN 종속 → 재사용 어려움</td>
+      <td>trust가 일반 principal → 같은 Role <strong>재사용 쉬움</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>trust의 principal이 <code class="highlighter-rouge">pods.eks.amazonaws.com</code>인 것이 Pod Identity의 표식이다. 자격증명 흐름은 Pod(<code class="highlighter-rouge">my-llama-sa</code>) → <code class="highlighter-rouge">eks-pod-identity-agent</code>가 임시 자격증명 주입 → <code class="highlighter-rouge">AssumeRole</code> → <code class="highlighter-rouge">hf_secrets_access_policy</code> 권한으로 Secrets Manager 호출이다.</p>
+
+<h2 id="최소권한-vs-과대권한">최소권한 vs 과대권한</h2>
+
+<p><code class="highlighter-rouge">Resource = "secret:hugging-face-secret*"</code>로 그 secret 하나에만 <code class="highlighter-rouge">GetSecretValue</code>/<code class="highlighter-rouge">DescribeSecret</code>를 허용한다. 이 Role이 탈취돼도 다른 secret은 읽히지 않는다.</p>
+
+<p><code class="highlighter-rouge">eks.tf</code>의 fine-tune IRSA가 <code class="highlighter-rouge">AmazonS3FullAccess</code>(과대권한)인 것과 정확히 대비되는 모범 사례다.</p>
+
+<blockquote>
+  <p>association은 “ns=default의 SA <code class="highlighter-rouge">my-llama-sa</code>에 이 Role을 연결”한다는 선언일 뿐이고, SA 객체 자체는 워크로드 매니페스트(<code class="highlighter-rouge">finetuned-inf-deploy.yaml</code>의 <code class="highlighter-rouge">serviceAccount: my-llama-sa</code>)에서 만들어진다 — association이 이름표를 예약해 두고, 실제 SA는 배포 시점에 생긴다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="ecrtf--공급망-보안-암호화immutable스캔"><code class="highlighter-rouge">ecr.tf</code> — 공급망 보안 (암호화·immutable·스캔)</h1>
+
+<pre><code class="language-hcl">resource "aws_ecr_repository" "my-llama"           { image_tag_mutability = "MUTABLE" }
+resource "aws_ecr_repository" "my-llama-finetuned" { image_tag_mutability = "IMMUTABLE" }
+resource "aws_ecr_repository" "rag-app"            { }   # default MUTABLE
+
+resource "aws_ecr_registry_scanning_configuration" "ecr_scanning_configuration" {
+  scan_type = "ENHANCED"
+  rule {
+    scan_frequency    = "CONTINUOUS_SCAN"
+    repository_filter { filter = "my-llama-finetuned" }
+  }
+  rule {
+    scan_frequency    = "SCAN_ON_PUSH"
+    repository_filter { filter = "my-llama-finetuned" }
+  }
+}
+</code></pre>
+
+<h2 id="이미지-암호화">이미지 암호화</h2>
+
+<p>ECR은 기본적으로 S3 SSE(AES256)로 at-rest 암호화를 하므로 코드 없이 자동 적용된다. 더 강하게는 KMS 고객 관리 키(<code class="highlighter-rouge">encryption_type = "KMS"</code> + <code class="highlighter-rouge">kms_key</code>)로 키 회전·감사를 붙일 수 있다.</p>
+
+<h2 id="basic-vs-enhanced-scanning">Basic vs Enhanced Scanning</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>Basic</th>
+      <th>Enhanced(Amazon Inspector)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>범위</td>
+      <td>OS 패키지 CVE</td>
+      <td><strong>OS + 언어 패키지</strong>(pip/npm 등) CVE</td>
+    </tr>
+    <tr>
+      <td>정보</td>
+      <td>제한적</td>
+      <td>CVSS 점수·수정 가이드</td>
+    </tr>
+    <tr>
+      <td>과금</td>
+      <td>무료</td>
+      <td>이미지당 과금</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>GenAI 이미지는 torch/transformers 같은 언어 패키지가 핵심 공격면이라, 그걸 잡는 Enhanced가 적합하다.</p>
+
+<h2 id="두-스캔-빈도를-함께-거는-이유">두 스캔 빈도를 함께 거는 이유</h2>
+
+<p><code class="highlighter-rouge">SCAN_ON_PUSH</code>는 push 그 순간 1회 스캔하고, <code class="highlighter-rouge">CONTINUOUS_SCAN</code>은 이후 새 CVE가 공개될 때마다 이미 저장된 이미지를 재스캔한다. 둘 다 걸면 “올릴 때는 깨끗했지만 나중에 발견된 취약점”까지 커버한다.</p>
+
+<h2 id="차등-정책--모델은-불변-앱은-가변">차등 정책 — 모델은 불변, 앱은 가변</h2>
+
+<p><code class="highlighter-rouge">my-llama-finetuned</code>만 IMMUTABLE인 것은 fine-tuned 모델 이미지가 재현성·감사 추적이 생명이라 같은 태그 덮어쓰기를 막아야 하기 때문이다. <code class="highlighter-rouge">rag-app</code>과 <code class="highlighter-rouge">my-llama</code>는 앱 코드라 자주 재빌드되어 MUTABLE이 편하다. 스캔도 가장 민감한 <code class="highlighter-rouge">my-llama-finetuned</code> 한 repo에만 CONTINUOUS를 걸어, 이미지당 과금되는 Enhanced 비용을 자산 가치에 맞춰 집중시킨다.</p>
+
+<p><br /></p>
+
+<h1 id="워크로드-코드--secret이-파드까지-도달하는-경로">워크로드 코드 — Secret이 파드까지 도달하는 경로</h1>
+
+<p>인프라가 깔아 둔 토대 위에서, 두 매니페스트가 secret을 파드까지 실제로 가져온다.</p>
+
+<h2 id="secretproviderclass--fetchsyncauth-세-블록">SecretProviderClass — fetch/sync/auth 세 블록</h2>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">kind</span><span class="pi">:</span> <span class="s">SecretProviderClass</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">provider</span><span class="pi">:</span> <span class="s">aws</span>
+  <span class="na">secretObjects</span><span class="pi">:</span>                       <span class="c1"># (sync) → 네이티브 K8s Secret 생성</span>
+  <span class="pi">-</span> <span class="na">secretName</span><span class="pi">:</span> <span class="s">hugging-face-secret</span>
+    <span class="na">type</span><span class="pi">:</span> <span class="s">Opaque</span>
+    <span class="na">data</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">objectName</span><span class="pi">:</span> <span class="s">hugging-face-secret</span>
+      <span class="na">key</span><span class="pi">:</span> <span class="s">token</span>
+  <span class="na">parameters</span><span class="pi">:</span>
+    <span class="na">objects</span><span class="pi">:</span> <span class="pi">|</span>                         <span class="c1"># (fetch) ← Secrets Manager에서 가져올 대상</span>
+      <span class="no">- objectName: "hugging-face-secret"</span>
+        <span class="no">objectType: "secretsmanager"</span>
+    <span class="na">usePodIdentity</span><span class="pi">:</span> <span class="s2">"</span><span class="s">true"</span>             <span class="c1"># (auth) Pod Identity로 Secrets Manager 호출</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>블록</th>
+      <th>방향</th>
+      <th>역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">parameters.objects</code></td>
+      <td><strong>fetch</strong>(외부 → 클러스터)</td>
+      <td>Secrets Manager의 어느 시크릿을 가져올지</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">secretObjects</code></td>
+      <td><strong>sync</strong>(CSI → K8s Secret)</td>
+      <td>가져온 값을 네이티브 K8s Secret으로도 만든다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">usePodIdentity</code></td>
+      <td><strong>auth</strong></td>
+      <td>fetch를 어떤 자격증명으로 할지 — <code class="highlighter-rouge">"true"</code> = Pod Identity</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">parameters.objects</code>만 있으면 secret은 파일로만 마운트된다. <code class="highlighter-rouge">secretObjects</code>가 있어야(= <code class="highlighter-rouge">syncSecret.enabled=true</code>와 짝) 네이티브 K8s Secret이 생겨서, deploy가 <code class="highlighter-rouge">env.secretKeyRef</code>로 토큰을 받을 수 있다. 이 동기화된 Secret은 SPC를 volume으로 마운트한 파드가 살아있는 동안에만 존재한다.</p>
+
+<h2 id="deploy--이중-secret-경로">Deploy — 이중 secret 경로</h2>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">containers</span><span class="pi">:</span>
+<span class="pi">-</span> <span class="na">image</span><span class="pi">:</span> <span class="s">k8s4genai/my-llama:32</span>
+  <span class="na">resources</span><span class="pi">:</span> <span class="pi">{</span> <span class="nv">limits</span><span class="pi">:</span> <span class="pi">{</span> <span class="nv">nvidia.com/gpu</span><span class="pi">:</span> <span class="nv">1</span> <span class="pi">}</span> <span class="pi">}</span>
+  <span class="na">env</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">HUGGING_FACE_HUB_TOKEN</span>         <span class="c1"># 경로 A: env 주입</span>
+    <span class="na">valueFrom</span><span class="pi">:</span>
+      <span class="na">secretKeyRef</span><span class="pi">:</span> <span class="pi">{</span> <span class="nv">name</span><span class="pi">:</span> <span class="nv">hugging-face-secret</span><span class="pi">,</span> <span class="nv">key</span><span class="pi">:</span> <span class="nv">token</span> <span class="pi">}</span>
+  <span class="na">volumeMounts</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">aws-sm-secrets</span>                 <span class="c1"># 경로 B: 파일 마운트</span>
+    <span class="na">mountPath</span><span class="pi">:</span> <span class="s2">"</span><span class="s">/mnt/secrets-store"</span>
+    <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+<span class="na">serviceAccount</span><span class="pi">:</span> <span class="s">my-llama-sa</span>              <span class="c1"># Pod Identity 고리</span>
+<span class="na">volumes</span><span class="pi">:</span>
+<span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">aws-sm-secrets</span>
+  <span class="na">csi</span><span class="pi">:</span>
+    <span class="na">driver</span><span class="pi">:</span> <span class="s">secrets-store.csi.k8s.io</span>
+    <span class="na">volumeAttributes</span><span class="pi">:</span> <span class="pi">{</span> <span class="nv">secretProviderClass</span><span class="pi">:</span> <span class="s2">"</span><span class="s">aws-secret-provider-class"</span> <span class="pi">}</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>경로</th>
+      <th>코드</th>
+      <th>전제</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>A. env</strong></td>
+      <td><code class="highlighter-rouge">env.secretKeyRef</code></td>
+      <td>SPC의 <code class="highlighter-rouge">secretObjects</code> + <code class="highlighter-rouge">syncSecret=true</code>로 만든 K8s Secret</td>
+    </tr>
+    <tr>
+      <td><strong>B. 파일</strong></td>
+      <td><code class="highlighter-rouge">volumeMounts /mnt/secrets-store</code></td>
+      <td>CSI volume</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>겉보기엔 중복이지만, <strong>경로 B(volume 마운트)가 있어야 경로 A가 성립</strong>한다. 동기화된 K8s Secret은 SPC를 마운트하는 파드가 떠 있는 동안에만 유지되기 때문에, 앱이 env만 읽더라도 volume을 함께 둔다.</p>
+
+<h3 id="kubectl-create-secret이-아니라-이-방식인-이유"><code class="highlighter-rouge">kubectl create secret</code>이 아니라 이 방식인 이유</h3>
+
+<p>가장 근본적인 이유는 <strong>“secret을 애초에 Secrets Manager로 관리하기로 했다”는 전제</strong>다. 그 전제가 있으면 <code class="highlighter-rouge">kubectl create secret</code>은 Secrets Manager의 값을 손으로 꺼내 클러스터 etcd에 복사하는 셈이 되어, source of truth가 둘로 갈라지고 회전 시 수동 재동기화가 필요하며 드리프트가 생긴다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>축</th>
+      <th><code class="highlighter-rouge">kubectl create secret</code></th>
+      <th>SecretProviderClass + Secrets Manager</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>진실원천</td>
+      <td>etcd(복사본)</td>
+      <td>외부 Secrets Manager(단일)</td>
+    </tr>
+    <tr>
+      <td>회전</td>
+      <td>수동 재생성</td>
+      <td>SM이 회전, 파드는 재마운트로 반영</td>
+    </tr>
+    <tr>
+      <td>접근제어·감사</td>
+      <td>K8s RBAC만</td>
+      <td>IAM + CloudTrail 감사</td>
+    </tr>
+    <tr>
+      <td>노출 표면</td>
+      <td>값이 etcd·생성 명령에 남음</td>
+      <td>파일 경로만 쓰면 etcd 미경유</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="serviceaccount와-실패-지점">serviceAccount와 실패 지점</h3>
+
+<p><code class="highlighter-rouge">my-llama-sa</code>가 <code class="highlighter-rouge">iam.tf</code>의 Pod Identity association 대상이다. SA가 없거나 association이 안 걸리면, CSI provider가 Secrets Manager를 호출할 자격증명을 못 받아 <strong>secret mount 단계에서 AccessDenied</strong>로 파드가 못 뜬다.</p>
+
+<p><br /></p>
+
+<h1 id="정리--secret-한-줄-흐름">정리 — secret 한 줄 흐름</h1>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Secrets Manager (hugging-face-secret)     ← 단일 진실원천
+   │  ← SPC parameters.objects (fetch)
+   │  ← usePodIdentity=true (Pod Identity 자격증명)
+   ▼
+CSI Driver + provider-aws (노드 DaemonSet)
+   ├─ /mnt/secrets-store 파일 마운트 (경로 B)
+   └─ syncSecret → 네이티브 K8s Secret 생성 (파드 수명에 묶인 임시본)
+          │
+          ▼  env.secretKeyRef (경로 A)
+   파드: HUGGING_FACE_HUB_TOKEN
+   (serviceAccount: my-llama-sa로 떠야 Pod Identity가 작동)
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>인프라 파일</th>
+      <th>보안 포인트</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">eks.tf</code></td>
+      <td>Bottlerocket(host), IMDSv2(기본값), 실습 편의 양보 설정 식별</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">addons.tf</code></td>
+      <td>네이티브 vs CSI 경로, syncSecret 트레이드오프</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">iam.tf</code></td>
+      <td>Pod Identity, 최소권한(<code class="highlighter-rouge">hugging-face-secret*</code>만)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">ecr.tf</code></td>
+      <td>Enhanced Scanning + IMMUTABLE + 차등 CONTINUOUS</td>
+    </tr>
+    <tr>
+      <td>SPC + Deploy</td>
+      <td>fetch/sync/auth 세 블록, 이중 secret 경로</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 코드들이 실제로 동작하는지 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-09-03-Security-Deployment-Verification/">다음 글</a>에서 배포 후 5단계 검증으로 확인한다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions">Kubernetes for Generative AI Solutions — GitHub</a></li>
+  <li><a href="https://secrets-store-csi-driver.sigs.k8s.io/">Secrets Store CSI Driver</a></li>
+  <li><a href="https://github.com/aws/secrets-store-csi-driver-provider-aws">Secrets Store CSI Driver — AWS Provider</a></li>
+  <li><a href="https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html">EKS Pod Identity 소개</a></li>
+  <li><a href="https://docs.aws.amazon.com/AmazonECR/latest/userguide/image-scanning-enhanced.html">ECR Enhanced Scanning(Amazon Inspector)</a></li>
+  <li><a href="https://github.com/terraform-aws-modules/terraform-aws-eks">terraform-aws-modules/eks</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#ecr" class="page__taxonomy-item" rel="tag">ECR</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#genai" class="page__taxonomy-item" rel="tag">GenAI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#irsa" class="page__taxonomy-item" rel="tag">IRSA</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions-chapter-9" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions-Chapter-9</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#pod-identity" class="page__taxonomy-item" rel="tag">Pod-Identity</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#secrets-store-csi" class="page__taxonomy-item" rel="tag">Secrets-Store-CSI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#security" class="page__taxonomy-item" rel="tag">Security</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#terraform" class="page__taxonomy-item" rel="tag">Terraform</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-05-24T00:00:00+09:00">May 24, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BGenAI%5D+GenAI+on+K8s%3A+9.2+-+%EB%B3%B4%EC%95%88+%EC%9D%B8%ED%94%84%EB%9D%BC+%EC%BD%94%EB%93%9C+%EB%B6%84%EC%84%9D%3A+EKS+%2B+Secret+%EC%A3%BC%EC%9E%85+%ED%9D%90%EB%A6%84%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-09-02-Security-Infrastructure-Code%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-09-02-Security-Infrastructure-Code%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-09-02-Security-Infrastructure-Code%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-GenAI-on-K8s-09-02-Security-Infrastructure-Code?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-09-01-Security-Defense-in-Depth/" class="pagination--pager" title="[GenAI] GenAI on K8s: 9.1 - 보안 개념: Defense in Depth
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-09-03-Security-Deployment-Verification/" class="pagination--pager" title="[GenAI] GenAI on K8s: 9.3 - 보안 배포 실습: 5단계 검증 + GPU 트러블슈팅
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-09-02-Security-Infrastructure-Code/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-GenAI-on-K8s-09-02-Security-Infrastructure-Code"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

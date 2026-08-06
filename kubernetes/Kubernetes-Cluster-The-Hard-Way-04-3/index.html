@@ -1,0 +1,1608 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.3. Provisioning a CA and Generating TLS Certificates - Eraser’s StudyLog</title>
+<meta name="description" content="OpenSSL을 사용하여 Root CA 인증서와 각 컴포넌트 인증서를 생성하고 배포해보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.3. Provisioning a CA and Generating TLS Certificates">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-Cluster-The-Hard-Way-04-3/">
+
+
+  <meta property="og:description" content="OpenSSL을 사용하여 Root CA 인증서와 각 컴포넌트 인증서를 생성하고 배포해보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-01-05T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-Cluster-The-Hard-Way-04-3/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.3. Provisioning a CA and Generating TLS Certificates">
+    <meta itemprop="description" content="OpenSSL을 사용하여 Root CA 인증서와 각 컴포넌트 인증서를 생성하고 배포해보자.">
+    <meta itemprop="datePublished" content="2026-01-05T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.3. Provisioning a CA and Generating TLS Certificates
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-01-05T00:00:00+09:00">2026년 01월 05일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  12 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#prerequisite">Prerequisite</a></li>
+  <li><a href="#root-ca">Root CA</a>
+    <ul>
+      <li><a href="#개인키-생성">개인키 생성</a></li>
+      <li><a href="#개인키-내용-확인">개인키 내용 확인</a></li>
+      <li><a href="#인증서-생성">인증서 생성</a></li>
+      <li><a href="#인증서-내용-확인">인증서 내용 확인</a>
+        <ul>
+          <li><a href="#상세-정보-확인">상세 정보 확인</a></li>
+        </ul>
+      </li>
+      <li><a href="#생성된-파일-정리">생성된 파일 정리</a></li>
+    </ul>
+  </li>
+  <li><a href="#admin">Admin</a>
+    <ul>
+      <li><a href="#개인키-생성-1">개인키 생성</a></li>
+      <li><a href="#개인키-내용-확인-1">개인키 내용 확인</a></li>
+      <li><a href="#csr-생성">CSR 생성</a>
+        <ul>
+          <li><a href="#csr-내용-확인">CSR 내용 확인</a></li>
+        </ul>
+      </li>
+      <li><a href="#인증서-생성-1">인증서 생성</a></li>
+      <li><a href="#인증서-내용-확인-1">인증서 내용 확인</a></li>
+      <li><a href="#참고-systemmasters-그룹-사용-주의">참고: system:masters 그룹 사용 주의</a></li>
+    </ul>
+  </li>
+  <li><a href="#기타">기타</a>
+    <ul>
+      <li><a href="#반복-작업">반복 작업</a></li>
+      <li><a href="#생성된-파일-확인">생성된 파일 확인</a></li>
+      <li><a href="#각-인증서-확인">각 인증서 확인</a>
+        <ul>
+          <li><a href="#api-server-인증서">API Server 인증서</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#인증서-배포">인증서 배포</a>
+    <ul>
+      <li><a href="#배포-전략">배포 전략</a></li>
+      <li><a href="#worker-node-배포">Worker Node 배포</a></li>
+      <li><a href="#control-plane-배포">Control Plane 배포</a></li>
+    </ul>
+  </li>
+  <li><a href="#결과">결과</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 On-Premise K8s Hands-on Study 1주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<p>이번 글의 목표는 <strong>Kubernetes 클러스터를 위한 TLS 인증서 생성 및 배포</strong>다. <a href="https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/04-certificate-authority.md">Kubernetes the Hard Way 튜토리얼의 Provisioning a CA and Generating TLS Certificates 단계</a>를 수행한다.</p>
+
+<ul>
+  <li>Root CA 생성: Self-Signed 방식으로 클러스터 CA 생성</li>
+  <li>컴포넌트 인증서 생성: admin, kubelet, kube-proxy, kube-scheduler, kube-controller-manager, kube-api-server, service-accounts</li>
+  <li>인증서 배포: 각 노드에 필요한 인증서만 선별적으로 배포</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="prerequisite">Prerequisite</h1>
+
+<p><a href="https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/ca.conf#L155">Kubernetes the Hard Way 튜토리얼에서 제공하는 ca.conf kube-scheduler 섹션의 <code class="highlighter-rouge">O</code> 필드</a>에 <code class="highlighter-rouge">system</code>이 두 번 들어가 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># ca.conf 오타 확인</span>
+<span class="nb">cat </span>ca.conf | <span class="nb">grep</span> <span class="nt">-A</span> 1 <span class="s2">"</span><span class="se">\[</span><span class="s2">kube-scheduler</span><span class="se">\]</span><span class="s2">"</span>
+<span class="o">[</span>kube-scheduler]
+CN <span class="o">=</span> system:kube-scheduler
+O  <span class="o">=</span> system:system:kube-scheduler  <span class="c"># system이 두 번!</span>
+</code></pre></div></div>
+
+<p>Kubernetes에서 인증서의 <code class="highlighter-rouge">O</code>(Organization) 필드는 <strong>사용자가 속한 그룹</strong>을 나타낸다. RBAC에서 권한 부여 시 이 그룹명을 참조하므로, 오타가 있으면 kube-scheduler가 올바른 권한을 받지 못한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># (jumpbox) 오타 수정</span>
+sed <span class="nt">-i</span> <span class="s1">'s/system:system:kube-scheduler/system:kube-scheduler/'</span> ca.conf
+
+<span class="c"># 수정 확인</span>
+<span class="nb">cat </span>ca.conf | <span class="nb">grep</span> <span class="nt">-A</span> 2 <span class="s2">"</span><span class="se">\[</span><span class="s2">kube-scheduler</span><span class="se">\]</span><span class="s2">"</span>
+<span class="o">[</span>kube-scheduler]
+CN <span class="o">=</span> system:kube-scheduler
+O  <span class="o">=</span> system:kube-scheduler  <span class="c"># 수정됨</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="root-ca">Root CA</h1>
+
+<p>CA(Certificate Authority)는 다른 인증서에 서명하는 역할을 한다. 이 단계에서는 클러스터 RootCA의 개인키와 인증서를 생성한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>파일</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">ca.key</code></td>
+      <td>CA 개인키. 다른 인증서에 서명할 때 사용</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">ca.crt</code></td>
+      <td>CA 인증서(루트 인증서). CA의 공개키 포함</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="개인키-생성">개인키 생성</h2>
+
+<p><code class="highlighter-rouge">openssl genrsa</code> 명령어로 4096비트 RSA 개인키를 생성한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># (jumpbox) #</span>
+openssl genrsa <span class="nt">-out</span> ca.key 4096
+</code></pre></div></div>
+
+<p>개인키 파일의 권한이 <code class="highlighter-rouge">600</code>(<code class="highlighter-rouge">-rw-------</code>)인 것을 확인한다. 개인키는 소유자만 읽을 수 있어야 한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 결과 확인</span>
+<span class="nb">ls</span> <span class="nt">-l</span> ca.key
+<span class="nt">-rw-------</span> 1 root root 3272 Jan  7 23:21 ca.key 
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="개인키-내용-확인">개인키 내용 확인</h2>
+
+<p><code class="highlighter-rouge">openssl rsa -text</code> 명령어로 개인키의 구성 요소를 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>openssl rsa <span class="nt">-in</span> ca.key <span class="nt">-text</span> <span class="nt">-noout</span>
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 출력 예시 (축약)</span>
+Private-Key: <span class="o">(</span>4096 bit, 2 primes<span class="o">)</span>
+modulus:
+    00:af:9c:95:c5:6f:69:2c:fa:9f:15:20:7a:52:c0:
+    ... <span class="o">(</span>생략<span class="o">)</span>
+publicExponent: 65537 <span class="o">(</span>0x10001<span class="o">)</span> 
+privateExponent:
+    22:59:d3:54:24:f8:62:53:7d:d5:c0:9e:1c:dc:b7:
+    ... <span class="o">(</span>생략<span class="o">)</span>
+prime1, prime2, exponent1, exponent2, coefficient:
+    ... <span class="o">(</span>생략<span class="o">)</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="인증서-생성">인증서 생성</h2>
+
+<p>Root CA는 상위 CA가 없으므로, Self-Signed 방식으로 생성한다. 즉, CA가 자기 자신의 개인키로 자신의 인증서에 서명한다. 이 때, 위에서 생성한 개인키를 이용한다.</p>
+
+<p><code class="highlighter-rouge">openssl req</code>는 보통 CSR(Certificate Signing Request)을 만들 때 쓰지만, <strong><code class="highlighter-rouge">-x509</code> 옵션을 주면 CSR을 파일로 출력하지 않고</strong>, 설정에서 읽은 DN 정보로 곧바로 자기 서명 인증서를 만들어 <code class="highlighter-rouge">-out</code>에 지정한 파일로 <strong>인증서만</strong> 쓴다. 따라서 아래 명령을 실행하면 <strong>ca.crt만 생성되고, CSR 파일은 생성되지 않는다.</strong></p>
+
+<p><code class="highlighter-rouge">-section</code> 옵션을 지정하지 않았으므로, OpenSSL은 <code class="highlighter-rouge">ca.conf</code>의 기본 <code class="highlighter-rouge">[req]</code> 섹션을 사용한다. 뒤에서 이어질 다른 컴포넌트 인증서 생성 시에는 <code class="highlighter-rouge">-section</code> 옵션으로 각 섹션을 명시적으로 지정한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># (jumpbox)</span>
+<span class="c"># -x509: CSR을 출력하지 않고 Self-Signed 인증서만 직접 생성</span>
+<span class="c"># -new: 인증서에 넣을 요청 정보(DN 등) 생성</span>
+<span class="c"># -sha512: SHA-512 해시 알고리즘으로 서명</span>
+<span class="c"># -noenc: 개인키 암호호 없음(패스프레이즈 없음)</span>
+<span class="c"># -key ca.key: 서명에 사용할 개인키(위에서 생성한 개인키)</span>
+<span class="c"># -days 3653: 유효 기간 약 10년</span>
+<span class="c"># -config ca.conf: 설정 파일에서 DN 정보 읽기</span>
+<span class="c"># -out ca.crt: 출력 인증서 파일(CSR은 생성되지 않음)</span>
+openssl req <span class="nt">-x509</span> <span class="nt">-new</span> <span class="nt">-sha512</span> <span class="nt">-noenc</span> <span class="se">\</span>
+  <span class="nt">-key</span> ca.key <span class="nt">-days</span> 3653 <span class="se">\</span>
+  <span class="nt">-config</span> ca.conf <span class="se">\</span>
+  <span class="nt">-out</span> ca.crt
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 결과 확인</span>
+<span class="nb">ls</span> <span class="nt">-l</span> ca.crt
+<span class="nt">-rw-r--r--</span> 1 root root 1899 Jan  7 23:23 ca.crt
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="인증서-내용-확인">인증서 내용 확인</h2>
+
+<p><code class="highlighter-rouge">cat</code> 명령어로 인증서 파일을 확인하면 PEM 형식의 Base64 인코딩 텍스트가 출력된다. <code class="highlighter-rouge">-----BEGIN CERTIFICATE-----</code>와 <code class="highlighter-rouge">-----END CERTIFICATE-----</code> 사이가 인증서 데이터이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">cat </span>ca.crt
+<span class="nt">-----BEGIN</span> CERTIFICATE-----
+MIIFTDCCAzSgAwIBAgIUW8mqGlfxAkjpEL+xuhLrax2itNcwDQYJKoZIhvcNAQEN
+BQAwQTELMAkGA1UEBhMCVVMxEzARBgNVBAgMCldhc2hpbmd0b24xEDAOBgNVBAcM
+...
+<span class="nt">-----END</span> CERTIFICATE-----
+</code></pre></div></div>
+
+<h3 id="상세-정보-확인">상세 정보 확인</h3>
+
+<p><code class="highlighter-rouge">openssl x509 -text</code> 명령어로 인증서의 상세 정보를 확인한다. 이전 글에서 살펴 보았던 X.509 인증서 구조를 확인할 수 있다.</p>
+
+<p>Self-Signed 인증서이므로 <code class="highlighter-rouge">Issuer</code>와 <code class="highlighter-rouge">Subject</code>가 동일하며, <code class="highlighter-rouge">X509v3 Basic Constraints: CA:TRUE</code> 항목 덕분에 이 인증서로 다른 인증서에 서명할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>openssl x509 <span class="nt">-in</span> ca.crt <span class="nt">-text</span> <span class="nt">-noout</span>
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 출력 내용 (축약)</span>
+Certificate:
+    Data:
+        Version: 3 <span class="o">(</span>0x2<span class="o">)</span>
+        Serial Number:
+            5b:c9:aa:1a:57:f1:02:48:e9:10:bf:b1:ba:12:eb:6b:1d:a2:b4:d7
+        Signature Algorithm: sha512WithRSAEncryption
+        Issuer: C <span class="o">=</span> US, ST <span class="o">=</span> Washington, L <span class="o">=</span> Seattle, CN <span class="o">=</span> CA <span class="c"># 발급자. Self-Signed이므로 Subject와 동일</span>
+        Validity <span class="c"># 유효 기간. 약 10년</span>
+            Not Before: Jan  7 14:23:41 2026 GMT
+            Not After : Jan  8 14:23:41 2036 GMT
+        Subject: C <span class="o">=</span> US, ST <span class="o">=</span> Washington, L <span class="o">=</span> Seattle, CN <span class="o">=</span> CA <span class="c"># 인증서 소유자. CN = CA</span>
+        Subject Public Key Info:
+            Public Key Algorithm: rsaEncryption
+                Public-Key: <span class="o">(</span>4096 bit<span class="o">)</span> <span class="c"># 공개키. 4096 bit RSA</span>
+                Modulus:
+                    00:af:9c:95:c5:6f:69:2c:... <span class="o">(</span>생략<span class="o">)</span>
+                Exponent: 65537 <span class="o">(</span>0x10001<span class="o">)</span>
+        X509v3 extensions:
+            X509v3 Basic Constraints: 
+                CA:TRUE <span class="c"># CA 인증서임을 나타냄</span>
+            X509v3 Key Usage: <span class="c"># Certificate Sign, CRL Sign 권한</span>
+                Certificate Sign, CRL Sign
+            X509v3 Subject Key Identifier: 
+                F0:A4:CE:7F:0F:4A:C4:8D:74:7B:ED:C1:CD:50:4E:80:1C:09:DC:8D
+    Signature Algorithm: sha512WithRSAEncryption
+    Signature Value:
+        2e:6d:a0:cc:9f:32:16:56:... <span class="o">(</span>생략<span class="o">)</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="생성된-파일-정리">생성된 파일 정리</h2>
+
+<p>이 단계를 마치면 아래와 같은 파일이 생성되어야 한다. 이후 다음 각 단계에서 <code class="highlighter-rouge">ca.key</code>를 이용해 각 컴포넌트의 인증서에 서명하고, <code class="highlighter-rouge">ca.crt</code>는 모든 노드에 복사하는 과정을 진행한다. 거듭 말하지만, 클러스터 내 모든 컴포넌트는 <code class="highlighter-rouge">ca.crt</code>를 가지고 있어야 상대방 인증서를 검증할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">ls</span> <span class="nt">-la</span> ca.<span class="k">*</span>
+<span class="nt">-rw-r--r--</span> 1 root root 5863 Jan  6 00:15 ca.conf
+<span class="nt">-rw-r--r--</span> 1 root root 1899 Jan  7 23:23 ca.crt   <span class="c"># CA 인증서 (공개)</span>
+<span class="nt">-rw-------</span> 1 root root 3272 Jan  7 23:21 ca.key   <span class="c"># CA 개인키 (비공개)</span>
+</code></pre></div></div>
+<p><br /></p>
+
+<h1 id="admin">Admin</h1>
+
+<p>Root CA는 <code class="highlighter-rouge">-x509</code>로 인증서만 곧바로 냈지만, Admin처럼 <strong>상위 CA(Root CA)가 서명해 주는</strong> 인증서는 흐름이 다르다. <strong>개인키 → CSR 생성(파일로 출력) → CA가 CSR에 서명하여 인증서(crt) 생성</strong> 순서로 진행한다. 따라서 이 단계에서는 <strong>admin.csr이 실제로 디스크에 생성</strong>되고, 이어지는 인증서 생성 단계에서 그 CSR을 입력으로 넣어 <code class="highlighter-rouge">openssl x509 -req</code>로 CA가 서명한 뒤 <strong>admin.crt만 출력</strong>한다. CSR은 서명 과정에서 “소비”되는 입력일 뿐, 인증서 발급 후에도 남겨 둘 필요는 없다.</p>
+
+<p><br /></p>
+
+<h2 id="개인키-생성-1">개인키 생성</h2>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># (jumpbox) #</span>
+openssl genrsa <span class="nt">-out</span> admin.key 4096
+</code></pre></div></div>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 결과 확인</span>
+<span class="nb">ls</span> <span class="nt">-l</span> admin.key
+<span class="nt">-rw-------</span> 1 root root 3272 Jan  7 23:47 admin.key
+</code></pre></div></div>
+
+<h2 id="개인키-내용-확인-1">개인키 내용 확인</h2>
+
+<p><code class="highlighter-rouge">openssl rsa -in admin.key -text -noout</code>으로 <code class="highlighter-rouge">ca.key</code>를 확인했던 방법과 마찬가지로 구조를 볼 수 있다. 여기서는 생략한다.</p>
+
+<h2 id="csr-생성">CSR 생성</h2>
+
+<p><code class="highlighter-rouge">-x509</code> 없이 <code class="highlighter-rouge">openssl req -new</code>만 사용하므로, 이번에는 <strong>CSR만 생성되고 인증서는 생성되지 않는다.</strong> 출력은 <code class="highlighter-rouge">-out admin.csr</code>로 지정한 <strong>admin.csr 한 개</strong>뿐이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># (jumpbox) #</span>
+<span class="c"># -new -key: 개인키로 서명한 CSR 생성 (인증서는 생성하지 않음)</span>
+<span class="c"># -config -section admin: ca.conf의 [admin] 섹션에서 DN·확장 정보 읽기</span>
+<span class="c"># -out admin.csr: CSR 파일 출력 (crt는 이 단계에서 생성되지 않음)</span>
+openssl req <span class="nt">-new</span> <span class="nt">-key</span> admin.key <span class="nt">-sha256</span> <span class="se">\</span>
+  <span class="nt">-config</span> ca.conf <span class="nt">-section</span> admin <span class="se">\</span>
+  <span class="nt">-out</span> admin.csr
+<span class="nb">ls</span> <span class="nt">-l</span> admin.csr
+</code></pre></div></div>
+
+<h3 id="csr-내용-확인">CSR 내용 확인</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>openssl req <span class="nt">-in</span> admin.csr <span class="nt">-text</span> <span class="nt">-noout</span>
+</code></pre></div></div>
+
+<p>CSR의 서명은 CA가 아닌 요청자 본인의 개인키로 이루어진다. 즉, 아직 서명되지 않은 인증서 요청이므로 <code class="highlighter-rouge">Issuer</code>나 <code class="highlighter-rouge">Validity</code> 정보가 없다. 대신 <code class="highlighter-rouge">Subject</code>와 <code class="highlighter-rouge">Requested Extensions</code>가 핵심이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Certificate Request:
+    Data:
+        Version: 1 <span class="o">(</span>0x0<span class="o">)</span>
+        Subject: CN <span class="o">=</span> admin, O <span class="o">=</span> system:masters   <span class="c"># Kubernetes 관리자 그룹: Kubernetes 관리자 권한 부여</span>
+        Subject Public Key Info:
+            Public Key Algorithm: rsaEncryption
+                Public-Key: <span class="o">(</span>4096 bit<span class="o">)</span>
+                Modulus:
+                    00:b1:e3:ca:89:7e:67:95:14:99:ea:10:8e:68:d7:
+                    ... <span class="o">(</span>생략<span class="o">)</span>
+                Exponent: 65537 <span class="o">(</span>0x10001<span class="o">)</span>
+        Attributes:
+            Requested Extensions:
+                X509v3 Basic Constraints: 
+                    CA:FALSE                      <span class="c"># 일반 인증서로, 다른 인증서에 서명 불가</span>
+                X509v3 Extended Key Usage: 
+                    TLS Web Client Authentication <span class="c"># 클라이언트 인증 용도: kubectl 같은 클라이언트에서 사용</span>
+                X509v3 Key Usage: critical
+                    Digital Signature, Key Encipherment
+                Netscape Cert Type: 
+                    SSL Client
+                Netscape Comment: 
+                    Admin Client Certificate
+    Signature Algorithm: sha256WithRSAEncryption <span class="c"># CSR 자체의 서명 (자기 개인키로 서명)</span>
+</code></pre></div></div>
+
+<h2 id="인증서-생성-1">인증서 생성</h2>
+
+<p>앞에서 만든 <strong>CSR(admin.csr)을 입력</strong>으로 받아, Root CA(ca.crt, ca.key)가 서명한 <strong>인증서(admin.crt)만 출력</strong>한다. <code class="highlighter-rouge">openssl x509 -req</code>는 CSR을 읽어 인증서로 변환할 뿐, 새 CSR을 만들지 않는다. 생성되는 파일은 <strong>admin.crt 하나</strong>이며, ca.srl은 CA가 다음 인증서 발급 시 시리얼 번호를 위해 자동 생성·재사용하는 부가 파일이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># (jumpbox) #</span>
+<span class="c"># -req -in admin.csr: CSR을 입력으로 받아 인증서 생성 (Self-Signed 아님, CA가 서명)</span>
+<span class="c"># -out admin.crt: 출력은 인증서(admin.crt)만 생성, CSR은 그대로 두고 재사용 가능</span>
+<span class="c"># -copy_extensions copyall: CSR에 포함된 X.509 확장을 인증서에 그대로 복사</span>
+<span class="c"># -CA, -CAkey: 서명에 사용할 CA 인증서와 개인키</span>
+<span class="c"># -CAcreateserial: CA 시리얼 번호 파일(ca.srl) 자동 생성, 이후 발급 시 재사용</span>
+openssl x509 <span class="nt">-req</span> <span class="nt">-days</span> 3653 <span class="nt">-in</span> admin.csr <span class="se">\</span>
+  <span class="nt">-copy_extensions</span> copyall <span class="se">\</span>
+  <span class="nt">-sha256</span> <span class="nt">-CA</span> ca.crt <span class="se">\</span>
+  <span class="nt">-CAkey</span> ca.key <span class="se">\</span>
+  <span class="nt">-CAcreateserial</span> <span class="se">\</span>
+  <span class="nt">-out</span> admin.crt
+Certificate request self-signature ok
+<span class="nv">subject</span><span class="o">=</span>CN <span class="o">=</span> admin, O <span class="o">=</span> system:masters
+</code></pre></div></div>
+
+<h2 id="인증서-내용-확인-1">인증서 내용 확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># (jumpbox) #</span>
+openssl x509 <span class="nt">-in</span> admin.crt <span class="nt">-text</span> <span class="nt">-noout</span>
+</code></pre></div></div>
+
+<p>CSR과 달리 CA가 서명한 인증서에는 <code class="highlighter-rouge">Issuer</code>, <code class="highlighter-rouge">Validity</code> 정보가 추가되고, <code class="highlighter-rouge">X509v3 Authority Key Identifier</code>를 통해 어떤 CA가 서명했는지 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 출력 내용 (축약)</span>
+Certificate:
+    Data:
+        Version: 3 <span class="o">(</span>0x2<span class="o">)</span>
+        Serial Number:
+            02:da:41:2b:39:d1:c6:ff:97:8a:06:3c:e1:fd:65:2b:59:0a:fd:ed
+        Signature Algorithm: sha256WithRSAEncryption
+        Issuer: C <span class="o">=</span> US, ST <span class="o">=</span> Washington, L <span class="o">=</span> Seattle, CN <span class="o">=</span> CA <span class="c"># CA가 발급</span>
+        Validity
+            Not Before: Jan  7 14:55:57 2026 GMT
+            Not After : Jan  8 14:55:57 2036 GMT <span class="c"># 10년</span>
+        Subject: CN <span class="o">=</span> admin, O <span class="o">=</span> system:masters
+        Subject Public Key Info:
+            Public Key Algorithm: rsaEncryption
+                Public-Key: <span class="o">(</span>4096 bit<span class="o">)</span>
+                Modulus:
+                    00:b1:e3:ca:89:... <span class="o">(</span>생략<span class="o">)</span>
+                Exponent: 65537 <span class="o">(</span>0x10001<span class="o">)</span>
+        X509v3 extensions:
+            X509v3 Basic Constraints: 
+                CA:FALSE
+            X509v3 Extended Key Usage: 
+                TLS Web Client Authentication
+            X509v3 Key Usage: critical
+                Digital Signature, Key Encipherment
+            Netscape Cert Type: 
+                SSL Client
+            Netscape Comment: 
+                Admin Client Certificate
+            X509v3 Subject Key Identifier: <span class="c"># 이 인증서의 식별자</span>
+                B5:E2:57:FC:79:31:DB:B2:B4:68:9A:CC:3A:E7:02:41:CA:6C:E7:5B
+            X509v3 Authority Key Identifier: <span class="c"># 서명한 CA의 식별자 (ca.crt와 동일)</span>
+                F0:A4:CE:7F:0F:4A:C4:8D:74:7B:ED:C1:CD:50:4E:80:1C:09:DC:8D
+    Signature Algorithm: sha256WithRSAEncryption <span class="c"># CA 개인키로 서명</span>
+    Signature Value:
+        81:f4:08:5a:a7:3e:6f:47:... <span class="o">(</span>생략<span class="o">)</span>
+</code></pre></div></div>
+
+<h2 id="참고-systemmasters-그룹-사용-주의">참고: <code class="highlighter-rouge">system:masters</code> 그룹 사용 주의</h2>
+
+<p><code class="highlighter-rouge">system:masters</code>는 Kubernetes의 <strong>내장(built-in) 슈퍼유저 그룹</strong>이다.</p>
+
+<p>이 그룹에 속한 사용자는 막강한(?) 권한을 가진다:</p>
+<ul>
+  <li><strong>인증(Authentication)</strong> 통과 후 → <strong>인가(Authorization) 우회</strong></li>
+  <li>RBAC(<code class="highlighter-rouge">Role</code>/<code class="highlighter-rouge">ClusterRole</code>)이나 Webhook 기반 인가 검사를 <strong>거치지 않음</strong></li>
+  <li>API Server에서 모든 동작을 무조건 허용 (클러스터 슈퍼유저 권한)</li>
+</ul>
+
+<p><a href="https://kubernetes.io/docs/concepts/security/rbac-good-practices/#least-privilege">Kubernetes 공식 문서의 RBAC Good Practices — Least privilege</a>에서는 <strong>사용자를 <code class="highlighter-rouge">system:masters</code> 그룹에 추가하는 것을 피하라</strong>고 명시한다. 이 그룹 소속 사용자는 RBAC 검사와 인가 웹훅을 <strong>완전히 우회</strong>하며, RoleBinding·ClusterRoleBinding을 제거해도 권한을 <strong>회수할 수 없다</strong>(언제나 무제한 슈퍼유저 접근).</p>
+
+<p>실무에서는 다음을 권장한다:</p>
+<ul>
+  <li><strong>AWS Root 계정</strong>처럼 극소수·극도로 제한된 용도로만 사용:
+    <ul>
+      <li>클러스터 부트스트랩·복구 등 꼭 필요한 경우에만 사용</li>
+      <li>일상적인 관리에는 <code class="highlighter-rouge">system:masters</code> 대신 <a href="https://kubernetes.io/docs/reference/access-authn-authz/rbac/#user-facing-roles"><code class="highlighter-rouge">cluster-admin</code> ClusterRole</a>을 바인딩한 계정 사용 (공식 문서는 <code class="highlighter-rouge">cluster-admin</code>도 필요한 경우에만 쓰고, 일상 작업은 <a href="https://kubernetes.io/docs/reference/access-authn-authz/authentication/#user-impersonation">impersonation</a>을 고려하라고 권고함)</li>
+      <li><strong>인증서가 탈취되면</strong> RBAC로 회수할 수 없어 복구가 매우 어려움</li>
+    </ul>
+  </li>
+  <li>일반 관리자 권한이 필요할 때는 <code class="highlighter-rouge">system:masters</code>가 아닌, <code class="highlighter-rouge">cluster-admin</code> ClusterRole + ClusterRoleBinding으로 부여하는 편이 안전하다.</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="기타">기타</h1>
+
+<p>이후 다른 컴포넌트의 인증서 생성은 비슷한 단계를 거친다.</p>
+<ul>
+  <li>컴포넌트 개인키 생성</li>
+  <li>컴포넌트 CSR 생성</li>
+  <li>컴포넌트 인증서 생성</li>
+</ul>
+
+<p>반복 작업이기 때문에, 각 실행 내용 및 결과만 간단히 기록한다.</p>
+
+<h2 id="반복-작업">반복 작업</h2>
+
+<p>나머지 컴포넌트 인증서를 반복문으로 생성한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># (jumpbox) 인증서 목록 변수 지정</span>
+<span class="nv">certs</span><span class="o">=(</span>
+  <span class="s2">"node-0"</span> <span class="s2">"node-1"</span>
+  <span class="s2">"kube-proxy"</span> <span class="s2">"kube-scheduler"</span>
+  <span class="s2">"kube-controller-manager"</span>
+  <span class="s2">"kube-api-server"</span>
+  <span class="s2">"service-accounts"</span>
+<span class="o">)</span>
+
+<span class="c"># 반복문으로 각 컴포넌트 인증서 생성</span>
+<span class="k">for </span>cert <span class="k">in</span> <span class="s2">"</span><span class="k">${</span><span class="nv">certs</span><span class="p">[@]</span><span class="k">}</span><span class="s2">"</span><span class="p">;</span> <span class="k">do
+  </span>openssl genrsa <span class="nt">-out</span> <span class="k">${</span><span class="nv">cert</span><span class="k">}</span>.key 4096
+  openssl req <span class="nt">-new</span> <span class="nt">-key</span> <span class="k">${</span><span class="nv">cert</span><span class="k">}</span>.key <span class="nt">-sha256</span> <span class="se">\</span>
+    <span class="nt">-config</span> ca.conf <span class="nt">-section</span> <span class="k">${</span><span class="nv">cert</span><span class="k">}</span> <span class="se">\</span>
+    <span class="nt">-out</span> <span class="k">${</span><span class="nv">cert</span><span class="k">}</span>.csr
+  openssl x509 <span class="nt">-req</span> <span class="nt">-days</span> 3653 <span class="nt">-in</span> <span class="k">${</span><span class="nv">cert</span><span class="k">}</span>.csr <span class="se">\</span>
+    <span class="nt">-copy_extensions</span> copyall <span class="se">\</span>
+    <span class="nt">-sha256</span> <span class="nt">-CA</span> ca.crt <span class="nt">-CAkey</span> ca.key <span class="nt">-CAcreateserial</span> <span class="se">\</span>
+    <span class="nt">-out</span> <span class="k">${</span><span class="nv">cert</span><span class="k">}</span>.crt
+<span class="k">done</span>
+</code></pre></div></div>
+
+<p>각 인증서 생성 시 CA로부터 서명받는 과정이 성공하면 아래와 같은 메시지가 출력된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Certificate request self-signature ok
+<span class="nv">subject</span><span class="o">=</span>CN <span class="o">=</span> system:node:node-0, O <span class="o">=</span> system:nodes, ...
+Certificate request self-signature ok
+<span class="nv">subject</span><span class="o">=</span>CN <span class="o">=</span> system:node:node-1, O <span class="o">=</span> system:nodes, ...
+... <span class="o">(</span>각 컴포넌트별 출력<span class="o">)</span>
+</code></pre></div></div>
+
+<h2 id="생성된-파일-확인">생성된 파일 확인</h2>
+
+<p>모든 인증서 생성이 완료되면 각 컴포넌트별로 <code class="highlighter-rouge">.key</code>, <code class="highlighter-rouge">.csr</code>, <code class="highlighter-rouge">.crt</code> 파일 3개씩 생성된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># (jumpbox) 생성된 파일 확인</span>
+<span class="nb">ls</span> <span class="nt">-1</span> <span class="k">*</span>.<span class="o">{</span>crt,key,csr<span class="o">}</span> | wc <span class="nt">-l</span>
+27  <span class="c"># 9개 컴포넌트 × 3개 파일 = 27개</span>
+
+<span class="c"># 컴포넌트별 파일 확인</span>
+<span class="nb">ls</span> <span class="nt">-1</span> <span class="k">*</span>.crt
+admin.crt
+ca.crt
+kube-api-server.crt
+kube-controller-manager.crt
+kube-proxy.crt
+kube-scheduler.crt
+node-0.crt
+node-1.crt
+service-accounts.crt
+</code></pre></div></div>
+
+<h2 id="각-인증서-확인">각 인증서 확인</h2>
+
+<p>각 인증서별로 주요 필드만 확인한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># node-0: 워커 노드 인증서. Client + Server 역할</span>
+openssl x509 <span class="nt">-in</span> node-0.crt <span class="nt">-text</span> <span class="nt">-noout</span> | <span class="nb">grep</span> <span class="nt">-A</span> 2 <span class="s2">"Subject:"</span>
+        Subject: CN <span class="o">=</span> system:node:node-0, O <span class="o">=</span> system:nodes, C <span class="o">=</span> US, ST <span class="o">=</span> Washington, L <span class="o">=</span> Seattle
+        X509v3 extensions:
+            X509v3 Extended Key Usage: 
+                TLS Web Client Authentication, TLS Web Server Authentication
+            X509v3 Subject Alternative Name: 
+                DNS:node-0, IP Address:127.0.0.1
+
+<span class="c"># node-1: 워커 노드 인증서. Client + Server 역할</span>
+openssl x509 <span class="nt">-in</span> node-1.crt <span class="nt">-text</span> <span class="nt">-noout</span> | <span class="nb">grep</span> <span class="nt">-A</span> 1 <span class="s2">"Subject:"</span>
+        Subject: CN <span class="o">=</span> system:node:node-1, O <span class="o">=</span> system:nodes
+            X509v3 Subject Alternative Name: 
+                DNS:node-1, IP Address:127.0.0.1
+
+<span class="c"># kube-proxy: 클라이언트 인증서</span>
+openssl x509 <span class="nt">-in</span> kube-proxy.crt <span class="nt">-text</span> <span class="nt">-noout</span> | <span class="nb">grep</span> <span class="s2">"Subject:"</span>
+        Subject: CN <span class="o">=</span> system:kube-proxy, O <span class="o">=</span> system:node-proxier
+
+<span class="c"># kube-scheduler: 클라이언트 인증서</span>
+openssl x509 <span class="nt">-in</span> kube-scheduler.crt <span class="nt">-text</span> <span class="nt">-noout</span> | <span class="nb">grep</span> <span class="s2">"Subject:"</span>
+        Subject: CN <span class="o">=</span> system:kube-scheduler, O <span class="o">=</span> system:kube-scheduler
+
+<span class="c"># kube-controller-manager: 클라이언트 인증서</span>
+openssl x509 <span class="nt">-in</span> kube-controller-manager.crt <span class="nt">-text</span> <span class="nt">-noout</span> | <span class="nb">grep</span> <span class="s2">"Subject:"</span>
+        Subject: CN <span class="o">=</span> system:kube-controller-manager, O <span class="o">=</span> system:kube-controller-manager
+
+<span class="c"># kube-api-server: Client + Server 역할. SAN에 여러 DNS/IP 포함</span>
+openssl x509 <span class="nt">-in</span> kube-api-server.crt <span class="nt">-text</span> <span class="nt">-noout</span> | <span class="nb">grep</span> <span class="nt">-A</span> 2 <span class="s2">"Subject:"</span>
+        Subject: CN <span class="o">=</span> kubernetes, C <span class="o">=</span> US, ST <span class="o">=</span> Washington, L <span class="o">=</span> Seattle
+            Netscape Cert Type: 
+                SSL Client, SSL Server <span class="c"># 클라이언트이자 서버 역할</span>
+            X509v3 Subject Alternative Name: 
+                IP Address:127.0.0.1, IP Address:10.32.0.1, <span class="c"># 10.32.0.1은 kubernetes Service ClusterIP</span>
+                DNS:kubernetes, DNS:kubernetes.default, DNS:kubernetes.default.svc,
+                DNS:kubernetes.default.svc.cluster, DNS:kubernetes.svc.cluster.local,
+                DNS:server.kubernetes.local, DNS:api-server.kubernetes.local
+</code></pre></div></div>
+
+<h3 id="api-server-인증서">API Server 인증서</h3>
+
+<p>API Server 인증서의 SAN에는 <code class="highlighter-rouge">10.32.0.1</code>이 포함되어 있다. 중요하게 확인하자.</p>
+
+<p>이는 클러스터 내부에서 API Server에 접근할 때 사용하는 <strong>kubernetes Service의 ClusterIP</strong>이다. 참고로 실습 환경에서 사용하는 네트워크 대역은 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>네트워크 대역 or IP</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>clusterCIDR</strong></td>
+      <td>10.200.0.0/16</td>
+      <td>Pod들이 사용하는 전체 네트워크 대역</td>
+    </tr>
+    <tr>
+      <td>→ node-0 PodCIDR</td>
+      <td>10.200.0.0/24</td>
+      <td>node-0에 할당된 Pod IP 대역</td>
+    </tr>
+    <tr>
+      <td>→ node-1 PodCIDR</td>
+      <td>10.200.1.0/24</td>
+      <td>node-1에 할당된 Pod IP 대역</td>
+    </tr>
+    <tr>
+      <td><strong>ServiceCIDR</strong></td>
+      <td>10.32.0.0/24</td>
+      <td>Service들이 사용하는 네트워크 대역</td>
+    </tr>
+    <tr>
+      <td>→ <strong>kubernetes Service</strong></td>
+      <td><strong>10.32.0.1</strong></td>
+      <td>API Server에 접근하기 위한 ClusterIP</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>클러스터 내부의 Pod들은 <code class="highlighter-rouge">kubernetes</code> DNS 이름 또는 <code class="highlighter-rouge">10.32.0.1</code> IP를 통해 API Server에 접근한다. 따라서 API Server 인증서의 SAN에는 이러한 모든 접근 경로가 포함되어야 한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># service-accounts: ServiceAccount 토큰 서명용 인증서</span>
+openssl x509 <span class="nt">-in</span> service-accounts.crt <span class="nt">-text</span> <span class="nt">-noout</span> | <span class="nb">grep</span> <span class="s2">"Subject:"</span>
+        Subject: CN <span class="o">=</span> service-accounts
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="인증서-배포">인증서 배포</h1>
+
+<p>생성한 인증서를 각 노드에 배포한다. 각 노드는 역할에 따라 필요한 인증서만 받는다.</p>
+
+<h2 id="배포-전략">배포 전략</h2>
+
+<p>클러스터는 Control Plane 노드(server)와 Worker 노드(node-0, node-1)로 구성되어 있다. 각 노드 유형에 따라 필요한 인증서가 다르다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>노드 유형</th>
+      <th>필요한 인증서</th>
+      <th>이유</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Worker Node</strong></td>
+      <td><code class="highlighter-rouge">ca.crt</code>, <code class="highlighter-rouge">node-X.crt</code>, <code class="highlighter-rouge">node-X.key</code></td>
+      <td>kubelet이 API Server와 통신하기 위해 필요</td>
+    </tr>
+    <tr>
+      <td><strong>Control Plane</strong></td>
+      <td><code class="highlighter-rouge">ca.key</code>, <code class="highlighter-rouge">ca.crt</code>, <code class="highlighter-rouge">kube-api-server.*</code>, <code class="highlighter-rouge">service-accounts.*</code></td>
+      <td>API Server 운영 및 ServiceAccount 토큰 서명에 필요</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h2 id="worker-node-배포">Worker Node 배포</h2>
+
+<p>Worker Node(node-0, node-1)에는 kubelet이 실행된다. kubelet은 아래 역할을 한다.</p>
+<ul>
+  <li><strong>클라이언트 역할</strong>: API Server에 노드 상태와 Pod 정보를 보고</li>
+  <li><strong>서버 역할</strong>: API Server와 다른 컴포넌트로부터 요청을 받음</li>
+</ul>
+
+<p>따라서 각 Worker Node에는 다음이 필요하다:</p>
+<ul>
+  <li><code class="highlighter-rouge">ca.crt</code>: API Server 인증서 검증용</li>
+  <li><code class="highlighter-rouge">kubelet.crt</code>, <code class="highlighter-rouge">kubelet.key</code>: kubelet의 클라이언트/서버 인증서</li>
+</ul>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># (jumpbox) Worker Node에 인증서 배포</span>
+<span class="k">for </span>host <span class="k">in </span>node-0 node-1<span class="p">;</span> <span class="k">do
+  </span>ssh root@<span class="k">${</span><span class="nv">host</span><span class="k">}</span> mkdir /var/lib/kubelet/
+
+  scp ca.crt root@<span class="k">${</span><span class="nv">host</span><span class="k">}</span>:/var/lib/kubelet/
+
+  scp <span class="k">${</span><span class="nv">host</span><span class="k">}</span>.crt <span class="se">\</span>
+    root@<span class="k">${</span><span class="nv">host</span><span class="k">}</span>:/var/lib/kubelet/kubelet.crt
+
+  scp <span class="k">${</span><span class="nv">host</span><span class="k">}</span>.key <span class="se">\</span>
+    root@<span class="k">${</span><span class="nv">host</span><span class="k">}</span>:/var/lib/kubelet/kubelet.key
+<span class="k">done</span>
+</code></pre></div></div>
+
+<p>배포 후 node-0에 접속해 확인해 보자.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># (node-0) 배포된 인증서 확인</span>
+root@node-0:~# <span class="nb">ls</span> <span class="nt">-l</span> /var/lib/kubelet
+total 12
+<span class="nt">-rw-r--r--</span> 1 root root 1899 Jan  8 00:14 ca.crt
+<span class="nt">-rw-r--r--</span> 1 root root 2147 Jan  8 00:14 kubelet.crt
+<span class="nt">-rw-------</span> 1 root root 3272 Jan  8 00:14 kubelet.key
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="control-plane-배포">Control Plane 배포</h2>
+
+<p>Control Plane(server)에는 API Server를 비롯한 핵심 컴포넌트들이 실행된다. 필요한 인증서 목록은 다음과 같다.</p>
+<ul>
+  <li><code class="highlighter-rouge">ca.key</code>, <code class="highlighter-rouge">ca.crt</code>: 다른 인증서 서명 및 검증</li>
+  <li><code class="highlighter-rouge">kube-api-server.key</code>, <code class="highlighter-rouge">kube-api-server.crt</code>: API Server의 TLS 통신</li>
+  <li><code class="highlighter-rouge">service-accounts.key</code>, <code class="highlighter-rouge">service-accounts.crt</code>: ServiceAccount 토큰 생성 및 검증</li>
+</ul>
+
+<p>아래와 같이 배포한다. <code class="highlighter-rouge">root@server:~/</code> 경로는 server 노드의 root 사용자 홈 디렉토리(<code class="highlighter-rouge">/root</code>)를 의미한다. 이후 단계에서 API Server 설정 시 이 경로의 인증서를 참조한다.</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># (jumpbox) Control Plane에 인증서 배포</span>
+scp ca.key ca.crt <span class="se">\</span>
+    kube-api-server.key kube-api-server.crt <span class="se">\</span>
+    service-accounts.key service-accounts.crt <span class="se">\</span>
+    root@server:~/ 
+</code></pre></div></div>
+
+<p>배포 후 server 노드에서 확인해 보자.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># (server) 배포된 인증서 확인</span>
+root@server:~# <span class="nb">ls</span> <span class="nt">-l</span> /root
+total 24
+<span class="nt">-rw-r--r--</span> 1 root root 1899 Jan  8 00:21 ca.crt
+<span class="nt">-rw-------</span> 1 root root 3272 Jan  8 00:21 ca.key
+<span class="nt">-rw-r--r--</span> 1 root root 2354 Jan  8 00:21 kube-api-server.crt
+<span class="nt">-rw-------</span> 1 root root 3272 Jan  8 00:21 kube-api-server.key
+<span class="nt">-rw-r--r--</span> 1 root root 2004 Jan  8 00:21 service-accounts.crt
+<span class="nt">-rw-------</span> 1 root root 3272 Jan  8 00:21 service-accounts.key
+</code></pre></div></div>
+
+<p><br /></p>
+
+<p><em>나머지 인증서들(admin, kube-proxy, kube-scheduler, kube-controller-manager)은 다음 단계에서 kubeconfig 파일 생성에 사용된다.</em></p>
+
+<p><br /></p>
+
+<h1 id="결과">결과</h1>
+
+<p>이 단계를 완료하면 다음과 같은 결과를 얻을 수 있다:</p>
+
+<ol>
+  <li><strong>Root CA 생성</strong>: Self-Signed 방식으로 <code class="highlighter-rouge">ca.key</code>, <code class="highlighter-rouge">ca.crt</code> 생성</li>
+  <li><strong>컴포넌트 인증서 생성</strong>: admin, kubelet(node-0, node-1), kube-proxy, kube-scheduler, kube-controller-manager, kube-api-server, service-accounts</li>
+  <li><strong>인증서 배포</strong>: Worker Node에는 <code class="highlighter-rouge">ca.crt</code>와 각 노드의 kubelet 인증서, Control Plane에는 CA 키/인증서와 API Server, ServiceAccount 인증서 배포</li>
+</ol>
+
+<p><br /></p>
+
+<p>이번 실습을 통해 Kubernetes 클러스터의 mTLS 통신에 필요한 인증서들을 직접 생성하고 배포해 보았다. 각 컴포넌트의 Subject(CN, O)가 Kubernetes RBAC과 연동되는 방식, API Server 인증서에 다양한 SAN이 필요한 이유 등을 이해할 수 있었다. CA 개인키는 Control Plane 외에 배포하지 않도록 주의해야 한다.</p>
+
+<p><br /></p>
+
+<p>다음 단계에서는 생성한 인증서를 이용해 kubeconfig 파일을 생성한다.</p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-EKS-01-04-EKS-vs-Vanilla-K8s/">[EKS] EKS: EKS vs. Vanilla Kubernetes</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Kubeadm-00/">[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 0. Overview</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Kubespray-01/">[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 1. Kubespray 개요</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Kubespray-02/">[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 2. Kubernetes The Kubespray Way</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-05-1/">[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 5.1. Generating Kubernetes Configuration Files</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-05-2/">[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 5.2. Generating Kubernetes Configuration Files</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-08-1/">[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 8.1. Bootstrapping the Kubernetes Control Plane</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-PKI/">[Kubernetes] Kubernetes PKI</a></li>
+    
+    <li><a href="/dev/Dev-Kubernetes-Certificate-Trouble-Shooting/">[Kubernetes] Kubernetes 클러스터 API 액세스 에러 해결</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#on-premise-k8s-hands-on-study-week-1" class="page__taxonomy-item" rel="tag">On-Premise-K8s-Hands-On-Study-Week-1</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#on-premise-k8s-hands-on-study" class="page__taxonomy-item" rel="tag">On-Premise-K8s-Hands-On-Study</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-01-05T00:00:00+09:00">January 5, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+Cluster%3A+%EB%82%B4+%EC%86%90%EC%9C%BC%EB%A1%9C+%ED%81%B4%EB%9F%AC%EC%8A%A4%ED%84%B0+%EA%B5%AC%EC%84%B1%ED%95%98%EA%B8%B0+-+4.3.+Provisioning+a+CA+and+Generating+TLS+Certificates%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Cluster-The-Hard-Way-04-3%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Cluster-The-Hard-Way-04-3%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Cluster-The-Hard-Way-04-3%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-Cluster-The-Hard-Way-04-3?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-04-2/" class="pagination--pager" title="[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.2. Provisioning a CA and Generating TLS Certificates
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-05-1/" class="pagination--pager" title="[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 5.1. Generating Kubernetes Configuration Files
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-Cluster-The-Hard-Way-04-3/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-Cluster-The-Hard-Way-04-3"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

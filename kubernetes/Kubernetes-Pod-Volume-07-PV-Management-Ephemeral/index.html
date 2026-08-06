@@ -1,0 +1,1339 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] Pod 볼륨 - 7. PV 관리와 Ephemeral PersistentVolume - Eraser’s StudyLog</title>
+<meta name="description" content="PVC 리사이징, 볼륨 스냅샷/복원, 그리고 Pod 수명 주기에 종속되는 Ephemeral PersistentVolume을 알아보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] Pod 볼륨 - 7. PV 관리와 Ephemeral PersistentVolume">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-Pod-Volume-07-PV-Management-Ephemeral/">
+
+
+  <meta property="og:description" content="PVC 리사이징, 볼륨 스냅샷/복원, 그리고 Pod 수명 주기에 종속되는 Ephemeral PersistentVolume을 알아보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-05T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-Pod-Volume-07-PV-Management-Ephemeral/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] Pod 볼륨 - 7. PV 관리와 Ephemeral PersistentVolume">
+    <meta itemprop="description" content="PVC 리사이징, 볼륨 스냅샷/복원, 그리고 Pod 수명 주기에 종속되는 Ephemeral PersistentVolume을 알아보자.">
+    <meta itemprop="datePublished" content="2026-04-05T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] Pod 볼륨 - 7. PV 관리와 Ephemeral PersistentVolume
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-05T00:00:00+09:00">2026년 04월 05일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  5 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#시리즈-안내">시리즈 안내</a></li>
+  <li><a href="#pvc-리사이징">PVC 리사이징</a>
+    <ul>
+      <li><a href="#전제-조건">전제 조건</a></li>
+      <li><a href="#리사이즈-절차">리사이즈 절차</a></li>
+    </ul>
+  </li>
+  <li><a href="#볼륨-스냅샷과-복원">볼륨 스냅샷과 복원</a>
+    <ul>
+      <li><a href="#volumesnapshotclass">VolumeSnapshotClass</a></li>
+      <li><a href="#volumesnapshot-생성">VolumeSnapshot 생성</a></li>
+      <li><a href="#스냅샷에서-pv-복원">스냅샷에서 PV 복원</a></li>
+    </ul>
+  </li>
+  <li><a href="#ephemeral-persistentvolume">Ephemeral PersistentVolume</a>
+    <ul>
+      <li><a href="#ephemeral-볼륨-타입">ephemeral 볼륨 타입</a></li>
+      <li><a href="#volumeclaimtemplate">volumeClaimTemplate</a></li>
+      <li><a href="#pod-삭제-시-자동-정리">Pod 삭제 시 자동 정리</a></li>
+      <li><a href="#emptydir-vs-ephemeral-vs-일반-pvc-비교">emptyDir vs ephemeral vs 일반 PVC 비교</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.manning.com/books/kubernetes-in-action-second-edition">Kubernetes in Action 2nd Edition</a> 10장의 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>PVC 용량은 <strong>늘리기만</strong> 가능하다. StorageClass의 <code class="highlighter-rouge">allowVolumeExpansion: true</code>와 프로비저너의 resize 지원이 필요하며, 실제 파일시스템 리사이즈는 <strong>Pod 재생성 시</strong> 수행된다</li>
+  <li><strong>VolumeSnapshot</strong>으로 PV의 특정 시점 백업을 생성하고, <code class="highlighter-rouge">dataSourceRef</code>로 새 PVC를 복원할 수 있다. CSI 드라이버의 스냅샷 기능 지원이 필요하다</li>
+  <li><strong>Ephemeral PersistentVolume</strong>은 Pod 생성 시 PVC가 자동 생성되고, Pod 삭제 시 PVC도 함께 삭제된다. 일반 PV의 모든 기능(스냅샷, 리사이즈 등)을 사용하면서도 수명 주기만 Pod에 종속된다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="시리즈-안내">시리즈 안내</h1>
+
+<p>이 글은 Pod 볼륨 시리즈의 7편이다.</p>
+
+<ol>
+  <li><a href="/kubernetes/Kubernetes-Pod-Volume-01-Introduction/">볼륨 소개</a></li>
+  <li><a href="/kubernetes/Kubernetes-Pod-Volume-02-emptyDir/">emptyDir</a></li>
+  <li><a href="/kubernetes/Kubernetes-Pod-Volume-03-Image-Volume-HostPath/">image 볼륨과 hostPath</a></li>
+  <li><a href="/kubernetes/Kubernetes-Pod-Volume-04-ConfigMap-Secret-DownwardAPI-Projected/">configMap, secret, downwardAPI, projected 볼륨</a></li>
+  <li><a href="/kubernetes/Kubernetes-Pod-Volume-05-PV-PVC-StorageClass/">PersistentVolume, PersistentVolumeClaim, StorageClass</a></li>
+  <li><a href="/kubernetes/Kubernetes-Pod-Volume-06-Static-Provisioning/">정적 프로비저닝과 노드 로컬 PersistentVolume</a></li>
+  <li>PV 관리와 Ephemeral PersistentVolume (이 글)</li>
+</ol>
+
+<p><br /></p>
+
+<h1 id="pvc-리사이징">PVC 리사이징</h1>
+
+<p><a href="/kubernetes/Kubernetes-Pod-Volume-05-PV-PVC-StorageClass/">이전 글들</a>에서 PV의 생성, 사용, 삭제 라이프사이클을 다뤘다. 이 섹션에서는 운영 중인 PV의 관리를 다룬다.</p>
+
+<h2 id="전제-조건">전제 조건</h2>
+
+<p>PVC의 용량을 변경하려면 세 가지 조건이 필요하다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>조건</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>동적 프로비저닝된 PVC</strong></td>
+      <td>정적 프로비저닝된 PVC는 리사이즈 불가</td>
+    </tr>
+    <tr>
+      <td><strong>StorageClass의 <code class="highlighter-rouge">allowVolumeExpansion</code></strong></td>
+      <td><code class="highlighter-rouge">true</code>로 설정되어 있어야 함 (<code class="highlighter-rouge">kubectl get sc</code>로 확인)</td>
+    </tr>
+    <tr>
+      <td><strong>프로비저너의 resize 구현</strong></td>
+      <td>CSI 드라이버가 볼륨 확장을 실제로 구현해야 함</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>크기는 <strong>늘리기만 가능</strong>하고 줄일 수는 없다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get sc
+<span class="c"># NAME                 PROVISIONER             ALLOWVOLUMEEXPANSION</span>
+<span class="c"># standard (default)   rancher.io/local-path   false</span>
+</code></pre></div></div>
+
+<p>Kind 클러스터의 <code class="highlighter-rouge">rancher.io/local-path</code>는 <code class="highlighter-rouge">allowVolumeExpansion</code>이 <code class="highlighter-rouge">false</code>이고, 프로비저너 자체도 resize를 구현하지 않으므로 리사이즈가 불가능하다. 클라우드 환경(GKE, EKS, AKS)에서 정상 동작한다.</p>
+
+<h2 id="리사이즈-절차">리사이즈 절차</h2>
+
+<p>기존 PVC의 <code class="highlighter-rouge">resources.requests.storage</code>를 수정하면 된다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">PersistentVolumeClaim</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">quiz-data</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">resources</span><span class="pi">:</span>
+    <span class="na">requests</span><span class="pi">:</span>
+      <span class="na">storage</span><span class="pi">:</span> <span class="s">10Gi</span>       <span class="c1"># 1Gi → 10Gi로 변경</span>
+  <span class="na">accessModes</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="s">ReadWriteOncePod</span>
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl apply <span class="nt">-f</span> pvc.quiz-data.yaml
+</code></pre></div></div>
+
+<p>apply 후에도 <code class="highlighter-rouge">kubectl get pvc</code>의 CAPACITY는 바로 바뀌지 않는다. CAPACITY 열은 PVC의 요청값이 아니라 <strong>실제 바인딩된 PV의 크기</strong>를 보여주기 때문이다.</p>
+
+<p><code class="highlighter-rouge">kubectl describe pvc</code>로 확인하면 <code class="highlighter-rouge">FileSystemResizePending</code> Condition이 표시된다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Conditions:
+  Type                      Status    Message
+  ----                      ------    -------
+  FileSystemResizePending   True      Waiting for user to (re-)start a pod
+                                      to finish file system resize of volume on node.
+</code></pre></div></div>
+
+<p><strong>파일시스템 리사이즈는 Pod가 볼륨을 마운트하는 시점에 수행된다.</strong> 따라서 해당 PVC를 사용하는 Pod를 삭제하고 다시 생성해야 리사이즈가 완료된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl delete po quiz
+kubectl apply <span class="nt">-f</span> pod.quiz.yaml
+
+<span class="c"># 리사이즈 완료 확인</span>
+kubectl get pvc quiz-data
+<span class="c"># NAME        STATUS   VOLUME        CAPACITY   ACCESS MODES</span>
+<span class="c"># quiz-data   Bound    pvc-ed36b...  10Gi       RWOP</span>
+</code></pre></div></div>
+
+<p>PVC의 <code class="highlighter-rouge">spec</code>은 대부분 불변(immutable)이다. 바인딩된 PVC에서 수정할 수 있는 필드는 <code class="highlighter-rouge">resources.requests</code>(용량)와 <code class="highlighter-rouge">volumeAttributesClassName</code>뿐이다. StorageClass를 바꾸고 싶다면 새 PVC를 만들어야 한다.</p>
+
+<p><br /></p>
+
+<h1 id="볼륨-스냅샷과-복원">볼륨 스냅샷과 복원</h1>
+
+<p>Kubernetes는 PV의 <strong>특정 시점 스냅샷</strong>을 생성하고, 스냅샷으로부터 새 PV를 복원하는 것을 지원한다. 기반 CSI 드라이버가 스냅샷 기능(<code class="highlighter-rouge">CREATE_DELETE_SNAPSHOT</code>)을 지원해야 한다.</p>
+
+<p>Kind의 <code class="highlighter-rouge">local-path-provisioner</code>는 CSI 드라이버가 아니므로 스냅샷을 지원하지 않는다. GKE, EKS 같은 클라우드 환경이나, CSI Hostpath Driver, Longhorn 등을 설치한 환경에서 실습할 수 있다.</p>
+
+<h2 id="volumesnapshotclass">VolumeSnapshotClass</h2>
+
+<p>스냅샷을 생성하려면 먼저 <code class="highlighter-rouge">VolumeSnapshotClass</code>를 만든다. <a href="/kubernetes/Kubernetes-Pod-Volume-05-PV-PVC-StorageClass/">StorageClass</a>와 유사한 개념으로, CSI 드라이버와 삭제 정책을 지정한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">snapshot.storage.k8s.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">VolumeSnapshotClass</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">pd-csi</span>
+<span class="na">driver</span><span class="pi">:</span> <span class="s">pd.csi.storage.gke.io</span>
+<span class="na">deletionPolicy</span><span class="pi">:</span> <span class="s">Delete</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>필드</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">driver</code></td>
+      <td>스냅샷 생성에 사용할 CSI 드라이버</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">deletionPolicy</code></td>
+      <td><code class="highlighter-rouge">Delete</code>이면 VolumeSnapshot 삭제 시 VolumeSnapshotContent도 함께 삭제</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="volumesnapshot-생성">VolumeSnapshot 생성</h2>
+
+<p>실제 스냅샷을 요청하려면 <code class="highlighter-rouge">VolumeSnapshot</code> 오브젝트를 생성한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">snapshot.storage.k8s.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">VolumeSnapshot</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">quiz-data-1</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">volumeSnapshotClassName</span><span class="pi">:</span> <span class="s">pd-csi</span>
+  <span class="na">source</span><span class="pi">:</span>
+    <span class="na">persistentVolumeClaimName</span><span class="pi">:</span> <span class="s">quiz-data</span>
+</code></pre></div></div>
+
+<p>VolumeSnapshot이 생성되면 시스템이 자동으로 <code class="highlighter-rouge">VolumeSnapshotContent</code>을 만든다. 이 관계는 PVC와 PV의 관계와 정확히 동일하다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>요청 오브젝트 (네임스페이스 범위)</th>
+      <th>실제 리소스 (클러스터 범위)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>PersistentVolumeClaim (PVC)</td>
+      <td>PersistentVolume (PV)</td>
+    </tr>
+    <tr>
+      <td>VolumeSnapshot</td>
+      <td>VolumeSnapshotContent</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 스냅샷 상태 확인</span>
+kubectl get vs   <span class="c"># volumesnapshot 축약형</span>
+<span class="c"># NAME          READYTOUSE   SOURCEPVC   RESTORESIZE   AGE</span>
+<span class="c"># quiz-data-1   true         quiz-data   10Gi          66s</span>
+</code></pre></div></div>
+
+<h2 id="스냅샷에서-pv-복원">스냅샷에서 PV 복원</h2>
+
+<p>스냅샷으로부터 새 PVC를 복원하려면 <code class="highlighter-rouge">dataSourceRef</code>에 VolumeSnapshot을 지정한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">PersistentVolumeClaim</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">quiz-data-from-snapshot</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">resources</span><span class="pi">:</span>
+    <span class="na">requests</span><span class="pi">:</span>
+      <span class="na">storage</span><span class="pi">:</span> <span class="s">10Gi</span>
+  <span class="na">accessModes</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="s">ReadWriteOncePod</span>
+  <span class="na">dataSourceRef</span><span class="pi">:</span>
+    <span class="na">apiGroup</span><span class="pi">:</span> <span class="s">snapshot.storage.k8s.io</span>
+    <span class="na">kind</span><span class="pi">:</span> <span class="s">VolumeSnapshot</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">quiz-data-1</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">dataSourceRef</code>에서 VolumeSnapshot을 참조할 때는 <code class="highlighter-rouge">apiGroup: snapshot.storage.k8s.io</code>를 <strong>반드시 명시</strong>해야 한다. PVC를 참조할 때는 core 그룹이므로 생략 가능하지만, VolumeSnapshot은 다른 API 그룹에 속하기 때문이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>소스 종류</th>
+      <th><code class="highlighter-rouge">apiGroup</code></th>
+      <th>예시</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>PersistentVolumeClaim (복제)</td>
+      <td>생략 가능</td>
+      <td><code class="highlighter-rouge">kind: PersistentVolumeClaim</code></td>
+    </tr>
+    <tr>
+      <td>VolumeSnapshot (복원)</td>
+      <td><strong>필수</strong></td>
+      <td><code class="highlighter-rouge">apiGroup: snapshot.storage.k8s.io</code> + <code class="highlighter-rouge">kind: VolumeSnapshot</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>StorageClass의 <code class="highlighter-rouge">volumeBindingMode</code>가 <code class="highlighter-rouge">WaitForFirstConsumer</code>인 경우, 이 PVC를 사용하는 <strong>Pod를 생성해야</strong> 복원 프로세스가 시작된다.</p>
+
+<p><br /></p>
+
+<h1 id="ephemeral-persistentvolume">Ephemeral PersistentVolume</h1>
+
+<p>지금까지 다룬 PV는 Pod와 독립적인 수명 주기를 가진다. 하지만 때로는 PV의 기능(용량 보장, 네트워크 스토리지, 스냅샷 등)은 필요하되, <strong>Pod 종료 시 자동으로 정리</strong>되길 원하는 경우가 있다. 이때 <code class="highlighter-rouge">ephemeral</code> 볼륨 타입을 사용한다.</p>
+
+<h2 id="ephemeral-볼륨-타입">ephemeral 볼륨 타입</h2>
+
+<p><code class="highlighter-rouge">ephemeral</code> 볼륨은 Pod 매니페스트 안에 PVC 템플릿(<code class="highlighter-rouge">volumeClaimTemplate</code>)을 내장한다. Pod 생성 시 이 템플릿으로 PVC가 자동 생성되고, Pod 삭제 시 PVC도 함께 삭제된다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">demo-ephemeral</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">volumes</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">my-volume</span>
+    <span class="na">ephemeral</span><span class="pi">:</span>
+      <span class="na">volumeClaimTemplate</span><span class="pi">:</span>
+        <span class="na">spec</span><span class="pi">:</span>
+          <span class="na">accessModes</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="s">ReadWriteOnce</span>
+          <span class="na">resources</span><span class="pi">:</span>
+            <span class="na">requests</span><span class="pi">:</span>
+              <span class="na">storage</span><span class="pi">:</span> <span class="s">1Gi</span>
+  <span class="na">containers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">main</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">busybox</span>
+    <span class="na">command</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="s">sh</span>
+    <span class="pi">-</span> <span class="s">-c</span>
+    <span class="pi">-</span> <span class="pi">|</span>
+      <span class="no">touch /mnt/ephemeral/file-created-by-$HOSTNAME.txt ;</span>
+      <span class="no">sleep infinity</span>
+    <span class="na">volumeMounts</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/mnt/ephemeral</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">my-volume</span>
+  <span class="na">terminationGracePeriodSeconds</span><span class="pi">:</span> <span class="s">0</span>
+</code></pre></div></div>
+
+<h2 id="volumeclaimtemplate">volumeClaimTemplate</h2>
+
+<p>Pod가 생성되면 ephemeral volume controller가 PVC를 자동 생성한다. PVC 이름은 <strong><code class="highlighter-rouge">{Pod 이름}-{볼륨 이름}</code></strong> 형식이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl apply <span class="nt">-f</span> pod.demo-ephemeral.yaml
+
+<span class="c"># 자동 생성된 PVC 확인</span>
+kubectl get pvc | <span class="nb">grep </span>ephemeral
+<span class="c"># demo-ephemeral-my-volume   Bound    pvc-16f7b...   1Gi   RWO   standard</span>
+
+<span class="c"># PV도 자동 생성됨 (Reclaim Policy: Delete)</span>
+kubectl get pv pvc-16f7b075-063a-48c1-9b37-b7a3194a33f2
+<span class="c"># NAME          CAPACITY   RECLAIM POLICY   STATUS   CLAIM</span>
+<span class="c"># pvc-16f7b...  1Gi        Delete           Bound    default/demo-ephemeral-my-volume</span>
+</code></pre></div></div>
+
+<p>Pod 내부에서 볼륨을 정상적으로 사용할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl <span class="nb">exec </span>demo-ephemeral <span class="nt">--</span> <span class="nb">ls</span> /mnt/ephemeral
+<span class="c"># file-created-by-demo-ephemeral.txt</span>
+</code></pre></div></div>
+
+<h2 id="pod-삭제-시-자동-정리">Pod 삭제 시 자동 정리</h2>
+
+<p>Ephemeral PVC의 수명 주기는 Pod에 종속되어 있다. Pod를 삭제하면 PVC → PV → 기반 스토리지까지 연쇄 삭제된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl delete po demo-ephemeral
+
+<span class="c"># PVC, PV 모두 자동 삭제됨</span>
+kubectl get pvc | <span class="nb">grep </span>ephemeral
+<span class="c"># (결과 없음)</span>
+</code></pre></div></div>
+
+<h2 id="emptydir-vs-ephemeral-vs-일반-pvc-비교">emptyDir vs ephemeral vs 일반 PVC 비교</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>일반 PVC + PV</th>
+      <th>Ephemeral PVC + PV</th>
+      <th>emptyDir</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>PVC 생성 주체</strong></td>
+      <td>사용자가 직접</td>
+      <td>Pod 생성 시 <strong>자동</strong></td>
+      <td>PVC 없음</td>
+    </tr>
+    <tr>
+      <td><strong>PV 프로비저닝</strong></td>
+      <td>동적 또는 정적</td>
+      <td>동적</td>
+      <td>PV 없음 (노드 로컬)</td>
+    </tr>
+    <tr>
+      <td><strong>실제 스토리지</strong></td>
+      <td>네트워크/클라우드 블록 등</td>
+      <td>네트워크/클라우드 블록 등</td>
+      <td>노드 메모리 또는 디스크</td>
+    </tr>
+    <tr>
+      <td><strong>수명 주기</strong></td>
+      <td>Pod과 <strong>독립적</strong></td>
+      <td>Pod에 <strong>종속</strong></td>
+      <td>Pod에 <strong>종속</strong></td>
+    </tr>
+    <tr>
+      <td><strong>데이터 지속성</strong></td>
+      <td>Pod 삭제 후에도 유지</td>
+      <td>Pod 삭제 시 소멸</td>
+      <td>Pod 삭제 시 소멸</td>
+    </tr>
+    <tr>
+      <td><strong>용량 보장</strong></td>
+      <td>StorageClass에 따라 다양</td>
+      <td>StorageClass에 따라 다양</td>
+      <td>노드 자원에 제한</td>
+    </tr>
+    <tr>
+      <td><strong>스냅샷/리사이즈</strong></td>
+      <td>가능</td>
+      <td>가능</td>
+      <td>불가</td>
+    </tr>
+    <tr>
+      <td><strong>사용 사례</strong></td>
+      <td>DB 데이터, 장기 보관</td>
+      <td>고성능 임시 작업 공간</td>
+      <td>컨테이너 간 파일 공유, 캐시</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Ephemeral PV의 핵심은 <strong>일반 PV와 완전히 동일한 기능</strong>을 가지면서 수명 주기만 Pod에 묶여 있다는 것이다. <code class="highlighter-rouge">emptyDir</code>로는 부족하지만(용량 보장, 성능, IOPS 등) Pod보다 오래 살 필요는 없는 임시 스토리지가 필요할 때 사용한다. 예를 들어, ML 학습 중간 체크포인트를 고성능 SSD에 저장하되 학습 Pod이 끝나면 자동 정리되길 원하는 경우다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<ul>
+  <li><strong>PVC 리사이징</strong>: 동적 프로비저닝 + <code class="highlighter-rouge">allowVolumeExpansion: true</code> + 프로비저너 지원이 필요하다. 크기는 늘리기만 가능하고, 파일시스템 리사이즈는 Pod 재생성 시 완료된다</li>
+  <li><strong>VolumeSnapshot</strong>: CSI 드라이버가 스냅샷을 지원하면 PV의 특정 시점 백업을 생성할 수 있다. VolumeSnapshot과 VolumeSnapshotContent는 PVC와 PV의 관계와 동일하다</li>
+  <li><strong>스냅샷 복원</strong>: <code class="highlighter-rouge">dataSourceRef</code>에 VolumeSnapshot을 지정하여 새 PVC를 생성한다. VolumeSnapshot은 <code class="highlighter-rouge">apiGroup: snapshot.storage.k8s.io</code>를 반드시 명시해야 한다</li>
+  <li><strong>Ephemeral PV</strong>: <code class="highlighter-rouge">ephemeral</code> 볼륨 타입으로 Pod 매니페스트에 PVC 템플릿을 내장한다. Pod 생성 시 PVC가 자동 생성되고, Pod 삭제 시 PVC와 PV까지 연쇄 삭제된다</li>
+  <li>Ephemeral PV는 일반 PV의 모든 기능을 가지면서 수명 주기만 Pod에 종속된다. <code class="highlighter-rouge">emptyDir</code>보다 강력하지만 Pod와 함께 사라지는 임시 스토리지가 필요할 때 사용한다</li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-Pod-Volume-01-Introduction/">[Kubernetes] Pod 볼륨 - 1. 볼륨 소개</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Pod-Volume-05-PV-PVC-StorageClass/">[Kubernetes] Pod 볼륨 - 5. PersistentVolume, PersistentVolumeClaim, StorageClass</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Pod-Volume-06-Static-Provisioning/">[Kubernetes] Pod 볼륨 - 6. 정적 프로비저닝과 노드 로컬 PersistentVolume</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#ephemeral-volume" class="page__taxonomy-item" rel="tag">ephemeral-volume</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-in-action-2nd" class="page__taxonomy-item" rel="tag">Kubernetes-in-Action-2nd</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#persistentvolume" class="page__taxonomy-item" rel="tag">PersistentVolume</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#resize" class="page__taxonomy-item" rel="tag">resize</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#volumeclaimtemplate" class="page__taxonomy-item" rel="tag">volumeClaimTemplate</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#volumesnapshot" class="page__taxonomy-item" rel="tag">VolumeSnapshot</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#volume" class="page__taxonomy-item" rel="tag">volume</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-05T00:00:00+09:00">April 5, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+Pod+%EB%B3%BC%EB%A5%A8+-+7.+PV+%EA%B4%80%EB%A6%AC%EC%99%80+Ephemeral+PersistentVolume%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Pod-Volume-07-PV-Management-Ephemeral%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Pod-Volume-07-PV-Management-Ephemeral%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Pod-Volume-07-PV-Management-Ephemeral%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-Pod-Volume-07-PV-Management-Ephemeral?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-Pod-Volume-06-Static-Provisioning/" class="pagination--pager" title="[Kubernetes] Pod 볼륨 - 6. 정적 프로비저닝과 노드 로컬 PersistentVolume
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-00-Overview/" class="pagination--pager" title="[EKS] EKS GPU 트러블슈팅: 0. 개요
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-Pod-Volume-07-PV-Management-Ephemeral/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-Pod-Volume-07-PV-Management-Ephemeral"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,1543 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Ubuntu] OS 자동 업데이트가 K8s GPU 노드를 두 번 깨뜨린 이야기 - Eraser’s StudyLog</title>
+<meta name="description" content="unattended-upgrades가 NVIDIA 드라이버 버전 불일치와 kube-proxy IPVS 장애를 연쇄적으로 일으킨 과정과 교훈을 정리해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Ubuntu] OS 자동 업데이트가 K8s GPU 노드를 두 번 깨뜨린 이야기">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-Unattended-Upgrades-K8s-GPU-Node-Cascading-Failure/">
+
+
+  <meta property="og:description" content="unattended-upgrades가 NVIDIA 드라이버 버전 불일치와 kube-proxy IPVS 장애를 연쇄적으로 일으킨 과정과 교훈을 정리해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-05-24T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-Unattended-Upgrades-K8s-GPU-Node-Cascading-Failure/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Ubuntu] OS 자동 업데이트가 K8s GPU 노드를 두 번 깨뜨린 이야기">
+    <meta itemprop="description" content="unattended-upgrades가 NVIDIA 드라이버 버전 불일치와 kube-proxy IPVS 장애를 연쇄적으로 일으킨 과정과 교훈을 정리해 보자.">
+    <meta itemprop="datePublished" content="2026-05-24T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Ubuntu] OS 자동 업데이트가 K8s GPU 노드를 두 번 깨뜨린 이야기
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-05-24T00:00:00+09:00">2026년 05월 24일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  13 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#배경">배경</a>
+    <ul>
+      <li><a href="#환경">환경</a></li>
+      <li><a href="#unattended-upgrades">unattended-upgrades</a></li>
+      <li><a href="#nvidia-드라이버의-userspace--kernel-module-구조">NVIDIA 드라이버의 userspace ↔ kernel module 구조</a></li>
+      <li><a href="#linux-커널-모듈-적재-depmod와-modprobe">Linux 커널 모듈 적재: depmod와 modprobe</a></li>
+    </ul>
+  </li>
+  <li><a href="#1차-장애-nvidia-드라이버-버전-불일치">1차 장애: NVIDIA 드라이버 버전 불일치</a>
+    <ul>
+      <li><a href="#발견">발견</a></li>
+      <li><a href="#진단">진단</a>
+        <ul>
+          <li><a href="#kernel-module-vs-userspace-library-버전-비교">kernel module vs userspace library 버전 비교</a></li>
+          <li><a href="#누가-업그레이드했는가">누가 업그레이드했는가</a></li>
+        </ul>
+      </li>
+      <li><a href="#원인">원인</a></li>
+    </ul>
+  </li>
+  <li><a href="#해결-1-cordon--reboot">해결 1: cordon + reboot</a>
+    <ul>
+      <li><a href="#cordon">cordon</a></li>
+      <li><a href="#reboot-및-사후-검증">reboot 및 사후 검증</a></li>
+    </ul>
+  </li>
+  <li><a href="#2차-장애-kube-proxy-crashloopbackoff">2차 장애: kube-proxy CrashLoopBackOff</a>
+    <ul>
+      <li><a href="#발견-1">발견</a></li>
+      <li><a href="#로그-분석">로그 분석</a></li>
+      <li><a href="#범위-확인">범위 확인</a></li>
+      <li><a href="#모순-상황">모순 상황</a></li>
+    </ul>
+  </li>
+  <li><a href="#해결-2-depmod--modprobe">해결 2: depmod + modprobe</a></li>
+  <li><a href="#교훈">교훈</a>
+    <ul>
+      <li><a href="#왜-k8s-노드에서-os-자동-업데이트를-통제해야-하는가">왜 K8s 노드에서 OS 자동 업데이트를 통제해야 하는가</a>
+        <ul>
+          <li><a href="#1-부분-upgrade-후-reboot-누락-시-상태-부정합">1. 부분 upgrade 후 reboot 누락 시 상태 부정합</a></li>
+          <li><a href="#2-검증-안-된-조합의-첫-활성화">2. 검증 안 된 조합의 첫 활성화</a></li>
+          <li><a href="#3-타이밍-무통제로-노드-간-비대칭">3. 타이밍 무통제로 노드 간 비대칭</a></li>
+          <li><a href="#4-운영자가-변경을-모름">4. 운영자가 변경을 모름</a></li>
+          <li><a href="#근거">근거</a></li>
+        </ul>
+      </li>
+      <li><a href="#어떻게-막을-수-있는가">어떻게 막을 수 있는가</a></li>
+      <li><a href="#권장-패턴-drain--upgrade--reboot--uncordon">권장 패턴: drain → upgrade → reboot → uncordon</a></li>
+    </ul>
+  </li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<p>자정 무렵, 주기적으로 K8s GPU 클러스터 상태를 검토하다가 GPU 워커 노드 풀의 일부에서 <code class="highlighter-rouge">nvidia-smi</code>가 실패하는 것을 우연히 발견했다. 다행히 해당 노드에서 돌고 있던 GPU Pod가 없어서 실제 장애로 이어지지는 않았지만, 만약 학습 잡이 스케줄된 상태였다면 GPU 할당 실패로 이어졌을 상황이었다.</p>
+
+<p>원인을 추적해 보니 Ubuntu의 <code class="highlighter-rouge">unattended-upgrades</code>가 새벽에 NVIDIA 드라이버와 Linux 커널을 동시에 자동 업그레이드한 것이 시작이었다. reboot 전에는 NVIDIA 드라이버 버전 불일치가, reboot 후에는 kube-proxy의 IPVS 모듈 로딩 실패가 발생하면서, 하나의 자동 업데이트가 두 단계의 연쇄 장애로 이어졌다. 업무 시간이 아니라 발견이 늦었을 뿐, 문제는 이미 잠복해 있었다.</p>
+
+<p>이 글에서는 발견부터 해결까지의 과정을 따라가면서, 왜 K8s 프로덕션 노드(특히 GPU 노드)에서 OS 자동 업데이트를 통제해야 하는지 정리해 본다.</p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>Ubuntu <code class="highlighter-rouge">unattended-upgrades</code>가 K8s GPU 노드에서 NVIDIA 드라이버(580.126 → 580.159) + Linux 커널(5.15.0-177 → 5.15.0-179)을 동시에 자동 업그레이드</li>
+  <li><strong>reboot 전</strong>: kernel module(580.126)과 userspace library(580.159) 버전 불일치 → <code class="highlighter-rouge">nvidia-smi</code> NVML 초기화 실패</li>
+  <li><strong>reboot 후</strong>: 새 커널에서 <code class="highlighter-rouge">ip_vs</code> 모듈 로딩 실패 → kube-proxy CrashLoopBackOff → K8s 시스템 파드 연쇄 장애</li>
+  <li><strong>교훈</strong>: K8s GPU 노드에서는 <code class="highlighter-rouge">unattended-upgrades</code>를 비활성화하고, <code class="highlighter-rouge">drain</code> → upgrade → reboot → <code class="highlighter-rouge">uncordon</code> 패턴으로 통제해야 한다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="배경">배경</h1>
+
+<h2 id="환경">환경</h2>
+
+<ul>
+  <li>K8s(RKE2 v1.34) GPU 워커 노드 풀</li>
+  <li>Ubuntu 22.04 LTS</li>
+  <li>NVIDIA driver 580 branch (<code class="highlighter-rouge">nvidia-driver-580-server-open</code>), RTX 5090 x 8</li>
+  <li><code class="highlighter-rouge">unattended-upgrades</code> 기본 설정 활성화 상태</li>
+</ul>
+
+<h2 id="unattended-upgrades">unattended-upgrades</h2>
+
+<p>Ubuntu의 <code class="highlighter-rouge">unattended-upgrades</code>는 보안 패치를 자동으로 설치하는 데몬이다. <code class="highlighter-rouge">/etc/apt/apt.conf.d/50unattended-upgrades</code>에 설정된 <code class="highlighter-rouge">Allowed-Origins</code>에 따라, cron 주기로 패키지를 자동 업그레이드한다. 일반 서버에서는 보안 패치를 자동으로 받아오는 편리한 도구지만, K8s 노드에서는 예상치 못한 부작용을 일으킬 수 있다. 이 글이 정확히 그 사례다.</p>
+
+<h2 id="nvidia-드라이버의-userspace--kernel-module-구조">NVIDIA 드라이버의 userspace ↔ kernel module 구조</h2>
+
+<p>NVIDIA GPU를 사용하려면 두 계층이 협력해야 한다.</p>
+
+<ul>
+  <li><strong>kernel module</strong> (<code class="highlighter-rouge">nvidia.ko</code>): 커널 공간에서 GPU 하드웨어와 직접 통신. <code class="highlighter-rouge">modprobe nvidia</code>로 적재되며, reboot 시 자동 로드</li>
+  <li><strong>userspace library</strong> (<code class="highlighter-rouge">libnvidia-ml.so</code> 등): 사용자 공간에서 동작. <code class="highlighter-rouge">nvidia-smi</code> 같은 CLI 도구가 이 라이브러리를 동적 로딩하여 kernel module과 <code class="highlighter-rouge">ioctl()</code>로 통신</li>
+</ul>
+
+<p>이 구조는 <a href="/cs/CS-Linux-Device-Driver/">Linux 디바이스 드라이버 3계층</a>에서 다룬 “유저 라이브러리(<code class="highlighter-rouge">.so</code>) → 장치 파일(<code class="highlighter-rouge">/dev/*</code>) → 커널 모듈(<code class="highlighter-rouge">.ko</code>)” 패턴 그대로다. <a href="/cs/CS-Linux-Shared-Library/">Linux 공유 라이브러리</a>에서 다룬 soname/ABI 계약도 여기에 적용된다. NVML은 초기화 시 kernel module의 ioctl 인터페이스 버전을 확인하는데, <strong>userspace library 버전과 kernel module 버전이 다르면 초기화를 거부</strong>한다.</p>
+
+<p>핵심은 이것이다: <code class="highlighter-rouge">apt upgrade</code>로 userspace 패키지(<code class="highlighter-rouge">libnvidia-ml.so</code>, <code class="highlighter-rouge">nvidia-smi</code> 등)는 즉시 교체되지만, <strong>kernel module은 이미 메모리에 로드되어 있어서 reboot(또는 명시적 unload/reload) 전까지 옛 버전이 그대로 살아있다.</strong> 이 시간차가 1차 장애의 원인이다.</p>
+
+<h2 id="linux-커널-모듈-적재-depmod와-modprobe">Linux 커널 모듈 적재: depmod와 modprobe</h2>
+
+<p>kernel module(<code class="highlighter-rouge">.ko</code>)의 적재에는 두 도구가 핵심 역할을 한다.</p>
+
+<ul>
+  <li><strong><code class="highlighter-rouge">depmod</code></strong> — 모듈 의존성 지도를 만드는 도구. <code class="highlighter-rouge">/lib/modules/&lt;커널 버전&gt;/</code> 아래의 <code class="highlighter-rouge">.ko</code> 파일들을 스캔해서 다음 DB 파일들을 생성한다:
+    <ul>
+      <li><code class="highlighter-rouge">modules.dep</code>(텍스트) / <code class="highlighter-rouge">modules.dep.bin</code>(바이너리): 모듈 간 의존성 매핑. “A를 로드하려면 B, C가 먼저 필요하다”는 관계를 기록</li>
+      <li><code class="highlighter-rouge">modules.alias</code>(텍스트) / <code class="highlighter-rouge">modules.alias.bin</code>(바이너리): 하드웨어 ID(PCI, USB 등)와 모듈 간 매핑. 장치를 인식했을 때 어떤 드라이버를 로드할지 결정하는 인덱스</li>
+      <li><code class="highlighter-rouge">modules.symbols</code>(텍스트) / <code class="highlighter-rouge">modules.symbols.bin</code>(바이너리): 모듈이 export하는 커널 심볼(함수/변수)의 위치 정보</li>
+    </ul>
+  </li>
+  <li><strong><code class="highlighter-rouge">modprobe</code></strong> — <code class="highlighter-rouge">depmod</code>가 만든 DB를 참조해서 kernel module을 의존성과 함께 로드하는 도구. 예를 들어 <code class="highlighter-rouge">modprobe ip_vs</code>를 실행하면, <code class="highlighter-rouge">modules.dep</code>에서 <code class="highlighter-rouge">ip_vs</code>가 <code class="highlighter-rouge">nf_conntrack</code>에 의존한다는 것을 읽고 <code class="highlighter-rouge">nf_conntrack</code>을 먼저 로드한 뒤 <code class="highlighter-rouge">ip_vs</code>를 로드한다. <code class="highlighter-rouge">.ko</code> 파일 경로를 직접 지정해야 하는 <code class="highlighter-rouge">insmod</code>와 달리, 모듈 이름만으로 의존성까지 자동 처리한다</li>
+</ul>
+
+<p>여기서 두 가지를 짚어 둔다.</p>
+
+<p><strong>첫째, DB는 커널 버전별로 독립이다.</strong> 각 커널 버전은 <code class="highlighter-rouge">/lib/modules/&lt;버전&gt;/</code>에 자기만의 <code class="highlighter-rouge">.ko</code> 파일과 DB 파일을 갖는다. <code class="highlighter-rouge">modprobe</code>는 현재 부팅된 커널의 <code class="highlighter-rouge">uname -r</code> 값으로 어떤 디렉토리를 참조할지 결정한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>/lib/modules/
+├── 5.15.0-177-generic/    ← 이전 커널 (DB 정상, ip_vs 잘 로드됨)
+│   ├── modules.dep
+│   ├── modules.dep.bin
+│   └── kernel/...
+└── 5.15.0-179-generic/    ← 새 커널 (DB가 불완전할 수 있음)
+    ├── modules.dep
+    ├── modules.dep.bin
+    └── kernel/...
+</code></pre></div></div>
+
+<p><strong>둘째, <code class="highlighter-rouge">modprobe</code>는 텍스트 파일이 아니라 바이너리 캐시(<code class="highlighter-rouge">.bin</code>)를 우선 참조한다.</strong> 성능을 위해 <code class="highlighter-rouge">modules.dep.bin</code>을 먼저 읽고, 이 파일이 아예 없을 때만 텍스트 <code class="highlighter-rouge">modules.dep</code>로 폴백한다. 문제는 바이너리 캐시가 <strong>존재는 하지만 내용이 불완전한</strong> 경우다. <code class="highlighter-rouge">modprobe</code>는 파일이 있으니 신뢰하고 읽지만 원하는 항목을 찾지 못해 실패하고, 텍스트 파일로 폴백하지도 않는다.</p>
+
+<p><code class="highlighter-rouge">depmod</code>는 데몬이 아니라 일회성 도구로, 보통 커널 패키지 설치 시 post-install hook으로 자동 실행된다. 전체 흐름을 정리하면 다음과 같다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[새 Linux 커널 설치]
+       │
+       ▼
+1. depmod 실행 ──▶ /lib/modules/&lt;새 커널&gt;/ 아래 모듈들을 스캔하여
+                    의존성 지도(modules.dep + .bin 바이너리 캐시) 작성
+       │
+       ▼
+[reboot → 새 커널로 부팅]
+       │
+       ▼
+2. modprobe ip_vs 실행
+       │
+       ▼
+3. modprobe가 modules.dep.bin 확인 ──▶ "ip_vs를 로드하려면 nf_conntrack이 먼저 필요"
+       │
+       ▼
+4. nf_conntrack을 먼저 로드한 뒤, ip_vs를 로드
+</code></pre></div></div>
+
+<p><strong><code class="highlighter-rouge">.ko</code> 파일이 디렉토리에 존재하더라도 바이너리 캐시가 최신화되지 않으면 <code class="highlighter-rouge">modprobe</code>는 모듈을 찾지 못한다.</strong> 그리고 <code class="highlighter-rouge">depmod</code>는 주기적으로 실행되는 프로세스가 아니므로, 한번 stale 상태가 되면 누군가 명시적으로 <code class="highlighter-rouge">depmod -a</code>를 실행하지 않는 한 자동으로 복구되지 않는다. 이 메커니즘의 실전 사례가 2차 장애에서 등장한다. 지금은 여기까지만 알아두자.</p>
+
+<blockquote>
+  <p>더 파고 싶다면 <a href="/cs/CS-Linux-Device-Driver/">Linux 디바이스 드라이버</a>의 커널 모듈 적재 섹션과 <code class="highlighter-rouge">modprobe(8)</code>, <code class="highlighter-rouge">depmod(8)</code> 매뉴얼을 참고하면 된다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="1차-장애-nvidia-드라이버-버전-불일치">1차 장애: NVIDIA 드라이버 버전 불일치</h1>
+
+<h2 id="발견">발견</h2>
+
+<p>클러스터 인벤토리 갱신 중 SSH로 각 노드의 <code class="highlighter-rouge">nvidia-smi</code>를 호출했더니, 4 2대에서 실패했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 전체 GPU 워커 노드 driver 버전 매트릭스 수집</span>
+~<span class="nv">$ </span><span class="k">for </span>h <span class="k">in</span> <span class="nv">$GPU_WORKERS</span><span class="p">;</span> <span class="k">do
+    </span><span class="nb">echo</span> <span class="s2">"=== </span><span class="nv">$h</span><span class="s2"> ==="</span>
+    ssh <span class="nv">$h</span> <span class="s2">"nvidia-smi --query-gpu=index,driver_version,name --format=csv,noheader 2&gt;&amp;1 | head -3"</span>
+  <span class="k">done</span>
+
+<span class="c"># 실행 결과 (발췌)</span>
+<span class="o">===</span> gpu-worker-1 <span class="o">===</span>
+Failed to initialize NVML: Driver/library version mismatch
+NVML library version: 580.159
+<span class="o">===</span> gpu-worker-2 <span class="o">===</span>
+0, 580.126.09, NVIDIA GeForce RTX 5090, 32607 MiB
+<span class="o">===</span> gpu-worker-3 <span class="o">===</span>
+Failed to initialize NVML: Driver/library version mismatch
+NVML library version: 580.159
+<span class="c"># ... 나머지 노드는 580.126.09로 정상</span>
+</code></pre></div></div>
+
+<p>gpu-worker-1, gpu-worker-3만 <code class="highlighter-rouge">NVML library version: 580.159</code>로 시작에 실패했다. 나머지 노드는 580.126.09로 정상이었다. 같은 노드 풀인데 호스트 상태가 갈렸다.</p>
+
+<p>K8s 측에서는 전체 노드가 <code class="highlighter-rouge">Ready</code>로 보이고, NFD(Node Feature Discovery) label도 <code class="highlighter-rouge">nvidia.com/gpu.present=true</code>, capacity도 <code class="highlighter-rouge">nvidia.com/gpu: 8</code>로 살아있었다. 즉, <strong>K8s scheduler는 이 호스트 측 부정합을 전혀 감지하지 못하고</strong> 있었다.</p>
+
+<h2 id="진단">진단</h2>
+
+<h3 id="kernel-module-vs-userspace-library-버전-비교">kernel module vs userspace library 버전 비교</h3>
+
+<p><code class="highlighter-rouge">Driver/library version mismatch</code> 에러는 NVML이 초기화 시 kernel module과 ioctl 버전 매칭에 실패했다는 뜻이다. 에러 메시지에 <code class="highlighter-rouge">NVML library version: 580.159</code>(userspace 쪽)는 찍혀 있으므로, 비교 대상인 kernel module 쪽 버전을 먼저 확인해야 어느 쪽이 어긋났는지 알 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># /proc/driver/nvidia/version: 현재 커널에 로드된 nvidia.ko 버전</span>
+~<span class="nv">$ </span><span class="k">for </span>h <span class="k">in</span> <span class="nv">$GPU_WORKERS</span><span class="p">;</span> <span class="k">do
+    </span><span class="nb">echo</span> <span class="s2">"=== </span><span class="nv">$h</span><span class="s2"> ==="</span>
+    ssh <span class="nv">$h</span> <span class="s2">"cat /proc/driver/nvidia/version | head -1"</span>
+  <span class="k">done</span>
+
+<span class="c"># 실행 결과: 전체 노드 동일</span>
+<span class="o">===</span> gpu-worker-1 <span class="o">===</span>
+NVRM version: NVIDIA UNIX Open Kernel Module <span class="k">for </span>x86_64  580.126.09  Release Build ...
+<span class="o">===</span> gpu-worker-2 <span class="o">===</span>
+NVRM version: NVIDIA UNIX Open Kernel Module <span class="k">for </span>x86_64  580.126.09  Release Build ...
+<span class="o">===</span> gpu-worker-3 <span class="o">===</span>
+NVRM version: NVIDIA UNIX Open Kernel Module <span class="k">for </span>x86_64  580.126.09  Release Build ...
+<span class="c"># ... 나머지 노드도 동일</span>
+</code></pre></div></div>
+
+<p>전체 노드 kernel module은 <strong>580.126.09 동일</strong>. 그런데 gpu-worker-1, gpu-worker-3의 NVML(userspace)은 <strong>580.159</strong>. “userspace만 새 버전, kmod은 옛 버전” 패턴이 확정됐다.</p>
+
+<h3 id="누가-업그레이드했는가">누가 업그레이드했는가</h3>
+
+<p><code class="highlighter-rouge">apt/history.log</code>의 <code class="highlighter-rouge">Commandline:</code> 필드로 호출 주체를 확인했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># gpu-worker-1의 apt history.log에서 해당 날짜 트랜잭션 확인</span>
+~<span class="nv">$ </span>ssh gpu-worker-1 <span class="s2">"awk '/Start-Date: 2026-05-21/,/End-Date: 2026-05-21/' /var/log/apt/history.log | head -20"</span>
+
+<span class="c"># 실행 결과 (발췌)</span>
+Start-Date: 2026-05-21  06:52:45
+Commandline: /usr/bin/unattended-upgrade
+Install: nvidia-firmware-580-server-580.159.03:amd64 ...
+Upgrade: libnvidia-common-580-server, nvidia-driver-580-server-open, nvidia-dkms-580-server-open,
+         libnvidia-compute-580-server, nvidia-utils-580-server, libnvidia-gl-580-server ...
+         <span class="o">(</span>모두 580.126.09 → 580.159.03<span class="o">)</span>
+End-Date: 2026-05-21  06:55:58
+Start-Date: 2026-05-21  06:56:07
+Commandline: /usr/bin/unattended-upgrade
+Install: linux-image-5.15.0-179-generic, linux-headers-5.15.0-179-generic ...
+Upgrade: linux-generic <span class="o">(</span>5.15.0.177.162 → 5.15.0.179.163<span class="o">)</span>
+End-Date: 2026-05-21  06:57:34
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">Commandline: /usr/bin/unattended-upgrade</code> — <strong>사용자가 아닌 <code class="highlighter-rouge">unattended-upgrade</code> 데몬</strong>이 호출 주체였다. 인프라 팀에도 확인한 결과 “패키지 관련 작업 별도 없었음”이었다.</p>
+
+<p>같은 cron 사이클에서 세 묶음이 동시에 올라갔다.</p>
+
+<ol>
+  <li><strong>NVIDIA driver userspace + dkms</strong> 580.126.09 → 580.159.03 (15개 패키지)</li>
+  <li><strong>Linux kernel image</strong> 5.15.0-177 → 5.15.0-179 (headers, modules 동반)</li>
+  <li>기타 (<code class="highlighter-rouge">libgnutls30</code>, <code class="highlighter-rouge">rsync</code> 등)</li>
+</ol>
+
+<p>나머지 노드에서는 같은 업그레이드 흔적이 없었다. <code class="highlighter-rouge">unattended-upgrades</code>의 cron이 노드별로 다른 시각에 실행되기 때문에, 이 노드들은 아직 자동 업그레이드가 트리거되지 않은 상태였을 뿐이다.</p>
+
+<h2 id="원인">원인</h2>
+
+<p>배경에서 설명한 구조 그대로다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>계층</th>
+      <th>업그레이드 전</th>
+      <th>업그레이드 후 (reboot 전)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>userspace (<code class="highlighter-rouge">libnvidia-ml.so</code>, <code class="highlighter-rouge">nvidia-smi</code>)</td>
+      <td>580.126.09</td>
+      <td><strong>580.159.03</strong> (apt가 즉시 교체)</td>
+    </tr>
+    <tr>
+      <td>kernel module (<code class="highlighter-rouge">nvidia.ko</code>)</td>
+      <td>580.126.09</td>
+      <td><strong>580.126.09</strong> (메모리에 로드된 옛 버전 그대로)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>NVML은 초기화 첫 단계에서 kernel module과 ioctl 인터페이스 버전을 매칭한다. 불일치를 감지하면 <code class="highlighter-rouge">Failed to initialize NVML: Driver/library version mismatch</code>로 fail-fast한다.</p>
+
+<p>여기서 중요한 한 가지: <strong>NVIDIA driver만 올라간 게 아니라 Linux kernel image 자체도 5.15.0-177 → 5.15.0-179로 교체됐다.</strong> DKMS(Dynamic Kernel Module Support)가 새 kernel용 <code class="highlighter-rouge">nvidia.ko</code> 580.159.03을 빌드해 두었으므로, reboot 하면 새 kernel + 새 driver 조합이 활성화된다. 이 사실이 2차 장애의 복선이다.</p>
+
+<p><br /></p>
+
+<h1 id="해결-1-cordon--reboot">해결 1: cordon + reboot</h1>
+
+<h2 id="cordon">cordon</h2>
+
+<p>reboot 전에 K8s scheduler가 두 노드에 워크로드를 배치하지 않도록 차단했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 학습 잡이 mismatch 노드에 스케줄되는 것을 방지</span>
+~<span class="nv">$ </span>kubectl cordon gpu-worker-1 gpu-worker-3
+</code></pre></div></div>
+
+<h2 id="reboot-및-사후-검증">reboot 및 사후 검증</h2>
+
+<p>인프라 팀에 reboot를 요청하고, 완료 후 사후 검증을 실행했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># kmod과 userspace lib 버전 일치 확인</span>
+~<span class="nv">$ </span><span class="k">for </span>h <span class="k">in </span>gpu-worker-1 gpu-worker-3<span class="p">;</span> <span class="k">do
+    </span><span class="nb">echo</span> <span class="s2">"=== </span><span class="nv">$h</span><span class="s2"> ==="</span>
+    ssh <span class="nv">$h</span> <span class="s2">"cat /proc/driver/nvidia/version | head -1"</span>
+    ssh <span class="nv">$h</span> <span class="s2">"nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1"</span>
+    ssh <span class="nv">$h</span> <span class="s2">"uname -r"</span>
+  <span class="k">done</span>
+
+<span class="c"># 실행 결과</span>
+<span class="o">===</span> gpu-worker-1 <span class="o">===</span>
+NVRM version: NVIDIA UNIX Open Kernel Module <span class="k">for </span>x86_64  580.159.03 ...
+580.159.03
+5.15.0-179-generic
+<span class="o">===</span> gpu-worker-3 <span class="o">===</span>
+NVRM version: NVIDIA UNIX Open Kernel Module <span class="k">for </span>x86_64  580.159.03 ...
+580.159.03
+5.15.0-179-generic
+</code></pre></div></div>
+
+<p>kernel module과 userspace library 모두 580.159.03으로 일치. GPU도 8장 전부 정상 인식. 호스트 측 정합성은 100% 회복됐다.</p>
+
+<p>“끝난 줄 알았는데” — K8s 측 시스템 파드를 점검하니 또 다른 문제가 기다리고 있었다.</p>
+
+<p><br /></p>
+
+<h1 id="2차-장애-kube-proxy-crashloopbackoff">2차 장애: kube-proxy CrashLoopBackOff</h1>
+
+<h2 id="발견-1">발견</h2>
+
+<p>reboot 후 노드 STATUS는 <code class="highlighter-rouge">Ready,SchedulingDisabled</code>(cordon 유지)로 정상이었지만, 시스템 파드 상태가 문제였다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 시스템 파드 상태 확인</span>
+~<span class="nv">$ </span>kubectl get pods <span class="nt">-A</span> <span class="nt">--field-selector</span> spec.nodeName<span class="o">=</span>gpu-worker-1 | <span class="nb">grep</span> <span class="nt">-vE</span> <span class="s1">'Completed|Succeeded'</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Namespace</th>
+      <th>Pod</th>
+      <th>STATUS</th>
+      <th>RESTARTS</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>kube-system</td>
+      <td>kube-proxy-gpu-worker-1</td>
+      <td><strong>CrashLoopBackOff</strong></td>
+      <td>22회 (90분간)</td>
+    </tr>
+    <tr>
+      <td>kube-system</td>
+      <td>rke2-canal (CNI)</td>
+      <td>Unknown</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>gpu-operator</td>
+      <td>nvidia-device-plugin</td>
+      <td>Unknown</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>gpu-operator</td>
+      <td>gpu-feature-discovery</td>
+      <td>Unknown</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>gpu-operator</td>
+      <td>nvidia-container-toolkit</td>
+      <td>Unknown</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>gpu-operator</td>
+      <td>nvidia-dcgm-exporter</td>
+      <td>Unknown</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>metallb-system</td>
+      <td>metallb-speaker</td>
+      <td>CrashLoopBackOff</td>
+      <td>37회</td>
+    </tr>
+    <tr>
+      <td>monitoring</td>
+      <td>fluent-bit</td>
+      <td>Unknown</td>
+      <td>0</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>gpu-worker-3도 동일한 패턴이었다. kube-proxy가 죽으니 같은 노드의 CNI, gpu-operator daemonset, metallb, monitoring
+까지 줄줄이 Unknown / CrashLoopBackOff로 무너졌다.</p>
+
+<blockquote>
+  <p>kube-proxy가 죽으면 왜 다른 파드까지 무너지는가? kube-proxy는 노드의 iptables/IPVS 규칙을 관리해서 K8s Service → Pod 트래픽을 라우팅한다. kube-proxy가 없으면 해당 노드에서 ClusterIP/NodePort 기반의 서비스 통신이 끊기고, 이에 의존하는 파드들이 liveness/readiness probe 실패나 API server 통신 장애로 Unknown 또는 CrashLoopBackOff에 빠진다. 이 노드에서는 CNI(rke2-canal), gpu-operator daemonset, metallb, monitoring까지 연쇄적으로 영향을 받았다.</p>
+</blockquote>
+
+<h2 id="로그-분석">로그 분석</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>kubectl <span class="nt">-n</span> kube-system logs kube-proxy-gpu-worker-1 <span class="nt">--tail</span><span class="o">=</span>10
+
+<span class="c"># 실행 결과 (핵심만 발췌)</span>
+<span class="nb">time</span><span class="o">=</span><span class="s2">"2026-05-21T15:58:07Z"</span> <span class="nv">level</span><span class="o">=</span>warning <span class="nv">msg</span><span class="o">=</span><span class="s2">"Running modprobe ip_vs failed with message:
+  </span><span class="sb">`</span>modprobe: WARNING: Module ip_vs not found <span class="k">in </span>directory /lib/modules/5.15.0-179-generic<span class="sb">`</span><span class="s2">,
+  error: exit status 1"</span>
+<span class="nb">time</span><span class="o">=</span><span class="s2">"2026-05-21T15:58:07Z"</span> <span class="nv">level</span><span class="o">=</span>error <span class="nv">msg</span><span class="o">=</span><span class="s2">"Could not get ipvs family information from the kernel.
+  It is possible that ipvs is not enabled in your kernel.
+  Native loadbalancing will not work until this is fixed."</span>
+E0521 15:58:07.143666 server.go:135 <span class="s2">"Error running ProxyServer"</span>
+  <span class="nv">err</span><span class="o">=</span><span class="s2">"can't use the IPVS proxier: Ipvs not supported"</span>
+</code></pre></div></div>
+
+<p>이 RKE2 클러스터의 kube-proxy는 IPVS(IP Virtual Server) mode로 동작한다. 시작 시 <code class="highlighter-rouge">modprobe ip_vs</code>를 실행하는데, 새 커널(5.15.0-179)에서 <code class="highlighter-rouge">ip_vs</code> 모듈을 찾지 못해 fail-fast로 종료한 것이다. 22회 CrashLoopBackOff의 근본 원인이다.</p>
+
+<h2 id="범위-확인">범위 확인</h2>
+
+<p>클러스터 전체 kube-proxy 상태를 대조해 보니, <strong>새 커널 5.15.0-179 노드 2개만 fail</strong>이었다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>kubectl get pods <span class="nt">-n</span> kube-system | <span class="nb">grep </span>kube-proxy | <span class="nb">grep</span> <span class="nt">-E</span> <span class="s1">'gpu-worker'</span>
+
+<span class="c"># 실행 결과 (발췌)</span>
+kube-proxy-gpu-worker-1   0/1   CrashLoopBackOff   23   94m   <span class="c"># kernel 5.15.0-179</span>
+kube-proxy-gpu-worker-2   1/1   Running            0    66d   <span class="c"># kernel 5.15.0-171</span>
+kube-proxy-gpu-worker-3   0/1   CrashLoopBackOff   23   95m   <span class="c"># kernel 5.15.0-179</span>
+<span class="c"># ... 나머지 노드는 Running (kernel 5.15.0-171)</span>
+</code></pre></div></div>
+
+<p>같은 RKE2 v1.34 + 같은 kube-proxy 이미지인데 새 커널 노드만 fail. 이미지 버그가 아니라 <strong>kernel 5.15.0-179 환경에서의 모듈 로딩 문제</strong>임이 확정됐다.</p>
+
+<h2 id="모순-상황">모순 상황</h2>
+
+<p>호스트에 직접 들어가 확인해 보니, 모듈 파일 자체는 정상이었다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># ip_vs.ko 파일 존재 확인</span>
+~<span class="nv">$ </span>ssh gpu-worker-1 <span class="s2">"ls /lib/modules/5.15.0-179-generic/kernel/net/netfilter/ipvs/ip_vs.ko"</span>
+/lib/modules/5.15.0-179-generic/kernel/net/netfilter/ipvs/ip_vs.ko
+
+<span class="c"># 패키지 설치 확인</span>
+~<span class="nv">$ </span>ssh gpu-worker-1 <span class="s2">"dpkg -l | grep linux-modules-extra-5.15.0-179"</span>
+ii  linux-modules-extra-5.15.0-179-generic  5.15.0-179.189  amd64
+
+<span class="c"># modules.dep 텍스트 파일 확인</span>
+~<span class="nv">$ </span>ssh gpu-worker-1 <span class="s2">"grep ip_vs /lib/modules/5.15.0-179-generic/modules.dep | head -1"</span>
+kernel/net/netfilter/ipvs/ip_vs.ko: kernel/net/netfilter/nf_conntrack.ko ...
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">.ko</code> 파일 존재, 패키지 설치 정상, <code class="highlighter-rouge">modules.dep</code> <strong>텍스트 파일</strong>에도 등록 — 그런데 <code class="highlighter-rouge">modprobe</code>가 “Module not found”를 뱉는 모순적 상황이었다.</p>
+
+<p>배경에서 설명했듯이 <code class="highlighter-rouge">modprobe</code>는 텍스트 파일(<code class="highlighter-rouge">modules.dep</code>)이 아니라 <strong>바이너리 캐시(<code class="highlighter-rouge">modules.dep.bin</code>)를 우선 참조</strong>한다. 텍스트 파일을 <code class="highlighter-rouge">grep</code>하면 항목이 보이지만, <code class="highlighter-rouge">modprobe</code>가 실제로 읽는 바이너리 캐시가 새 커널(5.15.0-179)에 맞게 완전히 생성되지 않았을 가능성이 높다.</p>
+
+<p>혼동하지 말아야 할 것은, 이전 커널(5.15.0-177)에서는 <code class="highlighter-rouge">ip_vs</code>가 정상적으로 로드되어 kube-proxy가 IPVS mode로 잘 동작하고 있었다는 점이다. <code class="highlighter-rouge">ip_vs</code> 자체가 시스템에 없는 게 아니라, <strong>새 커널 버전의 모듈 DB가 불완전한 것</strong>이 문제였다. <code class="highlighter-rouge">unattended-upgrades</code>가 같은 cron 사이클에서 커널 패키지와 NVIDIA dkms를 연달아 설치하면서 여러 post-install hook의 <code class="highlighter-rouge">depmod</code> 호출이 겹친 것이 원인으로 추정된다.</p>
+
+<p><br /></p>
+
+<h1 id="해결-2-depmod--modprobe">해결 2: depmod + modprobe</h1>
+
+<p>배경에서 설명한 <code class="highlighter-rouge">depmod</code>와 <code class="highlighter-rouge">modprobe</code>를 직접 사용할 차례다. <code class="highlighter-rouge">depmod -a</code>는 텍스트 DB와 바이너리 캐시를 <strong>모두</strong> 재생성한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 1) 새 커널의 모듈 DB 전체 재생성 (텍스트 + 바이너리 캐시)</span>
+~<span class="nv">$ </span>ssh gpu-worker-1 <span class="s2">"sudo depmod -a 5.15.0-179-generic"</span>
+
+<span class="c"># 2) host kernel에 ip_vs 적재</span>
+~<span class="nv">$ </span>ssh gpu-worker-1 <span class="s2">"sudo modprobe ip_vs &amp;&amp; lsmod | grep ip_vs"</span>
+
+<span class="c"># 실행 결과</span>
+ip_vs                 176128  0
+nf_conntrack          172032  3 xt_conntrack,nf_nat,ip_vs
+nf_defrag_ipv6         24576  2 nf_conntrack,ip_vs
+libcrc32c              16384  6 nf_conntrack,nf_nat,btrfs,nf_tables,raid456,ip_vs
+</code></pre></div></div>
+
+<p>host kernel에 <code class="highlighter-rouge">ip_vs</code>가 정상 적재됐다. 의존 모듈(<code class="highlighter-rouge">nf_conntrack</code>, <code class="highlighter-rouge">nf_defrag_ipv6</code>, <code class="highlighter-rouge">libcrc32c</code>)도 자동으로 잡혔다.</p>
+
+<p>별도로 kube-proxy pod를 강제 restart하지 않았다. CrashLoopBackOff의 exponential backoff 타이머가 약 5분 후 다음 시도를 트리거했고, 이번에는 host kernel에 <code class="highlighter-rouge">ip_vs</code>가 이미 적재되어 있어 <code class="highlighter-rouge">modprobe</code>가 성공했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># kube-proxy 자동 회복 확인</span>
+~<span class="nv">$ </span>kubectl get pods <span class="nt">-n</span> kube-system | <span class="nb">grep </span>kube-proxy-gpu-worker-1
+kube-proxy-gpu-worker-1    1/1   Running    25 <span class="o">(</span>5m ago<span class="o">)</span>   103m
+</code></pre></div></div>
+
+<p>25번째 재시작에서 정상 시작. kube-proxy가 살아나자 나머지 시스템 파드도 연쇄적으로 회복됐다.</p>
+
+<p>gpu-worker-3에도 동일한 sequence를 적용한 후, 모든 시스템 파드가 Running으로 돌아온 것을 확인하고 uncordon했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 두 노드 uncordon</span>
+~<span class="nv">$ </span>kubectl uncordon gpu-worker-1 gpu-worker-3
+
+<span class="c"># 최종 상태 확인</span>
+~<span class="nv">$ </span>kubectl get nodes <span class="nt">-o</span> wide | <span class="nb">grep </span>gpu-worker
+gpu-worker-1   Ready   ray   66d   v1.34.3+rke2r1   ...   5.15.0-179-generic   containerd://2.1.5
+gpu-worker-2   Ready   ray   66d   v1.34.3+rke2r1   ...   5.15.0-171-generic   containerd://2.1.5
+gpu-worker-3   Ready   ray   66d   v1.34.3+rke2r1   ...   5.15.0-179-generic   containerd://2.1.5
+<span class="c"># ... 나머지 노드도 Ready (kernel 5.15.0-171)</span>
+</code></pre></div></div>
+
+<p>두 노드 모두 <code class="highlighter-rouge">Ready</code>, 학습 잡 재개 가능 상태로 복귀했다.</p>
+
+<p><br /></p>
+
+<h1 id="교훈">교훈</h1>
+
+<h2 id="왜-k8s-노드에서-os-자동-업데이트를-통제해야-하는가">왜 K8s 노드에서 OS 자동 업데이트를 통제해야 하는가</h2>
+
+<p>이번 사건은 하나의 <code class="highlighter-rouge">unattended-upgrades</code> cron 사이클에서 NVIDIA driver + Linux kernel이 동시에 자동 업그레이드된 것에서 시작했다. 결과적으로 <strong>reboot 전에도, reboot 후에도</strong> 장애가 발생했다.</p>
+
+<p>K8s 노드에서 OS 자동 업데이트가 위험한 이유를 4가지로 정리할 수 있다.</p>
+
+<h3 id="1-부분-upgrade-후-reboot-누락-시-상태-부정합">1. 부분 upgrade 후 reboot 누락 시 상태 부정합</h3>
+
+<p>이번 사건의 1차 장애가 정확히 이 패턴이다. userspace library는 <code class="highlighter-rouge">apt</code>가 즉시 교체하지만, kernel module은 reboot 전까지 옛 버전이 메모리에 살아있다. 이 시간차 동안 NVML 같은 라이브러리는 kernel module과 버전 매칭에 실패한다.</p>
+
+<p>K8s scheduler는 이런 호스트 측 부정합을 감지하지 못한다. 이 사건에서도 두 노드 모두 <code class="highlighter-rouge">Ready</code> + NFD label 정상 + GPU capacity 8이었다. 만약 cordon 없이 학습 잡이 먼저 스케줄됐다면, 학습이 GPU를 잡지 못하고 실패한 후에야 문제를 인지했을 것이다.</p>
+
+<h3 id="2-검증-안-된-조합의-첫-활성화">2. 검증 안 된 조합의 첫 활성화</h3>
+
+<p>reboot은 단순히 <code class="highlighter-rouge">nvidia.ko</code>를 재로드하는 게 아니다. 이 사건에서는 <strong>Linux kernel 자체가 5.15.0-177 → 5.15.0-179로 바뀌었다.</strong> reboot 후 새 kernel + 새 NVIDIA driver + 기존 kubelet + 기존 containerd + 기존 CNI 조합이 이 클러스터에서 <strong>처음</strong> 활성화된다.</p>
+
+<p>2차 장애(kube-proxy의 <code class="highlighter-rouge">ip_vs</code> 모듈 로딩 실패)가 이 케이스다. kernel minor patch 수준에서 ABI가 크게 바뀌는 일은 드물지만, 모듈 로딩 보조 DB(<code class="highlighter-rouge">modules.alias</code> 등)의 상태나 모듈 적재 순서 같은 환경 의존적 문제는 새 kernel에서 처음 노출될 수 있다.</p>
+
+<h3 id="3-타이밍-무통제로-노드-간-비대칭">3. 타이밍 무통제로 노드 간 비대칭</h3>
+
+<p><code class="highlighter-rouge">unattended-upgrades</code>의 cron은 노드별로 다른 시각에 실행된다(random sleep 포함). 이 사건에서도 풀의 일부 노드만 업그레이드가 트리거되고 나머지는 아직 실행되지 않았다.</p>
+
+<p>결과적으로 같은 노드 풀 안에서 kernel/driver 버전이 비대칭이 된다(gpu-worker-1,3은 5.15.0-179/580.159, gpu-worker-2,4는 5.15.0-171/580.126). GPU 분산학습(multi-node training)에서는 노드 간 driver 차이가 NCCL 호환성 문제로 표면화될 수 있다.</p>
+
+<h3 id="4-운영자가-변경을-모름">4. 운영자가 변경을 모름</h3>
+
+<p>자동 업데이트는 <code class="highlighter-rouge">dpkg.log</code>나 <code class="highlighter-rouge">apt/history.log</code>를 봐야 사후에 인지할 수 있다. 이 사건도 인벤토리 갱신 중 우연히 발견한 것이다.</p>
+
+<p>K8s Node object의 <code class="highlighter-rouge">.status.nodeInfo.kernelVersion</code>은 reboot 후에 갱신되므로 모니터링은 가능하지만, <strong>reboot 전에는 userspace만 바뀌므로 K8s 측에서 감지할 수 없다.</strong></p>
+
+<h3 id="근거">근거</h3>
+
+<p>이 권장은 “어딘가에 한 줄로 적혀 있어서”가 아니라, 여러 출처에서 수렴하는 커뮤니티 합의다.</p>
+
+<ul>
+  <li><strong>kubeadm 업그레이드 문서</strong>: K8s 패키지(kubeadm/kubelet/kubectl)에 <code class="highlighter-rouge">apt-mark hold</code>를 사용하고, <code class="highlighter-rouge">drain</code> → upgrade → <code class="highlighter-rouge">uncordon</code> 수동 패턴을 규정한다. OS 패키지에 대한 직접 언급은 없지만, K8s 컴포넌트도 자동 업그레이드를 안 하는데 kernel/driver는 더 위험하다</li>
+  <li><strong>Safely Drain a Node</strong>: “<code class="highlighter-rouge">kubectl drain</code>을 kernel upgrade, hardware maintenance 등 전에 사용하라”고 명시한다</li>
+  <li><strong>AKS (Azure Kubernetes Service)</strong>: SecurityPatch/NodeImage 채널에서 “Linux unattended upgrades are disabled by default”로 명시적 비활성화</li>
+  <li><strong>kured (CNCF Sandbox)</strong>: K8s 노드 reboot를 <code class="highlighter-rouge">drain</code> → reboot → <code class="highlighter-rouge">uncordon</code>으로 자동화하는 daemon. 존재 자체가 “노드 reboot는 통제되어야 한다”는 합의</li>
+  <li><strong>NVIDIA GPU Operator</strong>: driver upgrade controller가 <code class="highlighter-rouge">drain</code> → kmod unload → upgrade → reload 패턴을 자동화한다. host OS의 자동 driver 업그레이드는 위험하다는 전제가 설계에 내재되어 있다</li>
+</ul>
+
+<h2 id="어떻게-막을-수-있는가">어떻게 막을 수 있는가</h2>
+
+<p>강한 순서대로 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>옵션</th>
+      <th>동작</th>
+      <th>trade-off</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><code class="highlighter-rouge">unattended-upgrades</code> 완전 비활성</td>
+      <td>자동 upgrade 0건</td>
+      <td>보안 패치도 안 들어옴. 별도 maintenance window 운영 필수 <strong>(GPU 노드 권장)</strong></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><code class="highlighter-rouge">Allowed-Origins</code>에서 nvidia/kernel 제외</td>
+      <td>security만 허용, nvidia driver + kernel 자동 upgrade 차단</td>
+      <td>어떤 패키지가 reboot 필요한지 enumeration 필요. 누락 시 동일 사고 재발</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><code class="highlighter-rouge">apt-mark hold</code></td>
+      <td>특정 패키지만 자동 upgrade 차단</td>
+      <td>hold가 단일 패키지 단위라 의존 lib가 단독 upgrade 될 수 있음</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><code class="highlighter-rouge">Automatic-Reboot "true"</code> + 시각 지정</td>
+      <td>upgrade 직후 자동 reboot → mismatch 윈도우 닫힘</td>
+      <td>in-flight 학습 강제 종료 가능. GPU 노드에는 위험</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>모니터링/alert만 추가</td>
+      <td>mismatch 발생 시 자동 감지</td>
+      <td>사고 발생 자체는 못 막음. fail-fast 보조 수단</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>GPU 노드에는 <strong>옵션 1 + 옵션 5 병행</strong>이 가장 안전하다. 보안 패치는 정해진 maintenance window에 아래 패턴으로 일괄 처리한다.</p>
+
+<h2 id="권장-패턴-drain--upgrade--reboot--uncordon">권장 패턴: drain → upgrade → reboot → uncordon</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 1. drain: 워크로드를 다른 노드로 이동</span>
+~<span class="nv">$ </span>kubectl drain gpu-worker-1 <span class="nt">--ignore-daemonsets</span> <span class="nt">--delete-emptydir-data</span>
+
+<span class="c"># 2. upgrade: OS 패키지 업그레이드</span>
+~<span class="nv">$ </span>ssh gpu-worker-1 <span class="s2">"sudo apt update &amp;&amp; sudo apt upgrade -y"</span>
+
+<span class="c"># 3. reboot: 새 kernel + 새 driver 활성화</span>
+~<span class="nv">$ </span>ssh gpu-worker-1 <span class="s2">"sudo reboot"</span>
+
+<span class="c"># 4. 사후 검증</span>
+~<span class="nv">$ </span>ssh gpu-worker-1 <span class="s2">"uname -r; nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1"</span>
+
+<span class="c"># 5. uncordon: 노드를 다시 스케줄 가능으로</span>
+~<span class="nv">$ </span>kubectl uncordon gpu-worker-1
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">cordon</code>만으로는 기존 pod가 그대로 남는다. <code class="highlighter-rouge">drain</code>은 기존 pod까지 evict하므로, in-flight 워크로드 없이 안전하게 유지보수할 수 있다. PodDisruptionBudget을 설정해 두면 <code class="highlighter-rouge">drain</code> 시에도 서비스 가용성을 보장할 수 있다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://kubernetes.io/ko/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/">kubeadm 클러스터 업그레이드</a></li>
+  <li><a href="https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/">Safely Drain a Node</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/cluster-administration/node-shutdown/">Node Shutdowns — unattended-upgrades 충돌 주의</a></li>
+  <li><a href="https://kured.dev/">kured — Kubernetes Reboot Daemon</a></li>
+  <li><a href="https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/gpu-driver-upgrades.html">NVIDIA GPU Operator — GPU Driver Upgrades</a></li>
+  <li><a href="https://learn.microsoft.com/en-us/azure/aks/auto-upgrade-node-os-image">AKS — Node OS Auto-upgrade</a></li>
+  <li><a href="/cs/CS-Linux-Device-Driver/">Linux 디바이스 드라이버: 3계층 구조</a></li>
+  <li><a href="/cs/CS-Linux-Shared-Library/">Linux 공유 라이브러리(.so)</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#ipvs" class="page__taxonomy-item" rel="tag">IPVS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kube-proxy" class="page__taxonomy-item" rel="tag">kube-proxy</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nvidia" class="page__taxonomy-item" rel="tag">NVIDIA</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#troubleshooting" class="page__taxonomy-item" rel="tag">Troubleshooting</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#ubuntu" class="page__taxonomy-item" rel="tag">Ubuntu</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#unattended-upgrades" class="page__taxonomy-item" rel="tag">unattended-upgrades</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-05-24T00:00:00+09:00">May 24, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BUbuntu%5D+OS+%EC%9E%90%EB%8F%99+%EC%97%85%EB%8D%B0%EC%9D%B4%ED%8A%B8%EA%B0%80+K8s+GPU+%EB%85%B8%EB%93%9C%EB%A5%BC+%EB%91%90+%EB%B2%88+%EA%B9%A8%EB%9C%A8%EB%A6%B0+%EC%9D%B4%EC%95%BC%EA%B8%B0%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Unattended-Upgrades-K8s-GPU-Node-Cascading-Failure%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Unattended-Upgrades-K8s-GPU-Node-Cascading-Failure%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Unattended-Upgrades-K8s-GPU-Node-Cascading-Failure%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-Unattended-Upgrades-K8s-GPU-Node-Cascading-Failure?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/articles/Articles-AI-Skill-Writing-Observation/" class="pagination--pager" title="AI 스킬 작성 관찰기: 자연어 문서가 프로그래밍 단위가 되는 순간
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-01-GenAI-Fundamentals/" class="pagination--pager" title="[GenAI] GenAI on K8s: 1. 생성형 AI 기초
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-Unattended-Upgrades-K8s-GPU-Node-Cascading-Failure/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-Unattended-Upgrades-K8s-GPU-Node-Cascading-Failure"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

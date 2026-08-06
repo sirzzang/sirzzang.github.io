@@ -1,0 +1,1436 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[CS] 컨테이너 네트워킹 기본 원리: 네임스페이스 네트워킹 - Eraser’s StudyLog</title>
+<meta name="description" content="리눅스 네트워크 네임스페이스를 이용해 컨테이너 네트워킹의 기본 원리를 직접 구성해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[CS] 컨테이너 네트워킹 기본 원리: 네임스페이스 네트워킹">
+<meta property="og:url" content="https://sirzzang.github.io//cs/CS-Container-Networking-Namespace/">
+
+
+  <meta property="og:description" content="리눅스 네트워크 네임스페이스를 이용해 컨테이너 네트워킹의 기본 원리를 직접 구성해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-03-19T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//cs/CS-Container-Networking-Namespace/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[CS] 컨테이너 네트워킹 기본 원리: 네임스페이스 네트워킹">
+    <meta itemprop="description" content="리눅스 네트워크 네임스페이스를 이용해 컨테이너 네트워킹의 기본 원리를 직접 구성해 보자.">
+    <meta itemprop="datePublished" content="2026-03-19T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[CS] 컨테이너 네트워킹 기본 원리: 네임스페이스 네트워킹
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-03-19T00:00:00+09:00">2026년 03월 19일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  7 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#실습-환경">실습 환경</a></li>
+  <li><a href="#네임스페이스-생성-및-격리-확인">네임스페이스 생성 및 격리 확인</a></li>
+  <li><a href="#네임스페이스-간-연결">네임스페이스 간 연결</a>
+    <ul>
+      <li><a href="#veth-pair로-11-직접-연결">veth pair로 1:1 직접 연결</a>
+        <ul>
+          <li><a href="#가상-케이블-생성">가상 케이블 생성</a></li>
+          <li><a href="#각-인터페이스를-네임스페이스에-연결">각 인터페이스를 네임스페이스에 연결</a></li>
+          <li><a href="#ip-주소-할당">IP 주소 할당</a></li>
+          <li><a href="#인터페이스-활성화">인터페이스 활성화</a></li>
+          <li><a href="#확인">확인</a></li>
+        </ul>
+      </li>
+      <li><a href="#bridge-경유-nn-연결">bridge 경유 N:N 연결</a>
+        <ul>
+          <li><a href="#기존-veth-pair-삭제">기존 veth pair 삭제</a></li>
+          <li><a href="#bridge-인터페이스-생성">bridge 인터페이스 생성</a></li>
+          <li><a href="#가상-케이블-생성-1">가상 케이블 생성</a></li>
+          <li><a href="#네임스페이스-및-bridge에-연결">네임스페이스 및 bridge에 연결</a></li>
+          <li><a href="#ip-주소-할당-1">IP 주소 할당</a></li>
+          <li><a href="#인터페이스-활성화-1">인터페이스 활성화</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#호스트--네임스페이스-연결">호스트 ↔ 네임스페이스 연결</a>
+    <ul>
+      <li><a href="#문제">문제</a></li>
+      <li><a href="#해결-bridge에-ip-부여">해결: bridge에 IP 부여</a></li>
+      <li><a href="#확인-1">확인</a></li>
+    </ul>
+  </li>
+  <li><a href="#네임스페이스--외부-네트워크">네임스페이스 ↔ 외부 네트워크</a>
+    <ul>
+      <li><a href="#네임스페이스--외부-outbound">네임스페이스 → 외부 (Outbound)</a>
+        <ul>
+          <li><a href="#1단계-라우팅-추가">1단계: 라우팅 추가</a></li>
+          <li><a href="#2단계-nat-설정">2단계: NAT 설정</a></li>
+          <li><a href="#3단계-디폴트-게이트웨이-추가">3단계: 디폴트 게이트웨이 추가</a></li>
+        </ul>
+      </li>
+      <li><a href="#외부--네임스페이스-inbound">외부 → 네임스페이스 (Inbound)</a>
+        <ul>
+          <li><a href="#방법-1-외부-호스트에-라우팅-추가">방법 1: 외부 호스트에 라우팅 추가</a></li>
+          <li><a href="#방법-2-포트포워딩-dnat">방법 2: 포트포워딩 (DNAT)</a></li>
+          <li><a href="#수동-dnat의-한계">수동 DNAT의 한계</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<p>컨테이너 네트워킹은 결국 리눅스 네트워크 네임스페이스 위에 만들어진다. Docker의 <code class="highlighter-rouge">docker0</code> bridge, Kubernetes의 <code class="highlighter-rouge">cni0</code> bridge, Pod의 <code class="highlighter-rouge">eth0</code> — 이 모든 것이 네임스페이스, veth pair, bridge, 라우팅, NAT라는 동일한 building block 위에 서 있다. 이번 글에서는 이 building block을 하나씩 직접 구성하며, 컨테이너 네트워킹의 기본 원리를 이해한다.</p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li><strong>네임스페이스 격리</strong>: <code class="highlighter-rouge">ip netns add</code>로 격리된 네트워크 공간을 만든다. 각 네임스페이스는 독립된 인터페이스, ARP, 라우팅 테이블을 가진다.</li>
+  <li><strong>veth pair (1:1 연결)</strong>: 가상 케이블로 두 네임스페이스를 직접 연결한다. 네임스페이스가 많아지면 O(N²) 연결이 필요해 확장성이 없다.</li>
+  <li><strong>bridge (N:N 연결)</strong>: 가상 스위치(bridge)를 두고, 각 네임스페이스의 veth를 bridge에 연결한다. N개의 네임스페이스가 bridge 하나로 통신할 수 있다.</li>
+  <li><strong>호스트 ↔ 네임스페이스</strong>: bridge에 IP를 부여하면 호스트도 네임스페이스 네트워크에 참여한다.</li>
+  <li><strong>외부 통신</strong>: 라우팅 + NAT(MASQUERADE)로 outbound, 포트포워딩(DNAT)으로 inbound 트래픽을 처리한다.</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="실습-환경">실습 환경</h1>
+
+<blockquote>
+  <p><strong>TODO</strong>: 실습 환경 프로비저닝 방법 정리. VM, Vagrant, multipass 등 사용할 환경에 맞게 작성할 것.</p>
+</blockquote>
+
+<p>실습에는 리눅스 호스트가 필요하다. 네트워크 네임스페이스(<code class="highlighter-rouge">ip netns</code>)를 사용하므로 root 권한이 필요하다.</p>
+
+<p>필요한 도구:</p>
+
+<ul>
+  <li><code class="highlighter-rouge">iproute2</code> (<code class="highlighter-rouge">ip</code> 명령어)</li>
+  <li><code class="highlighter-rouge">iptables</code></li>
+  <li><code class="highlighter-rouge">ping</code> (연결 확인용)</li>
+</ul>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 도구 확인</span>
+ip <span class="nt">-V</span>
+iptables <span class="nt">-V</span>
+</code></pre></div></div>
+
+<blockquote>
+  <p>실습이 끝난 후 정리:</p>
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip netns del red
+ip netns del blue
+ip link del v-net-0
+iptables <span class="nt">-t</span> nat <span class="nt">-F</span>
+</code></pre></div>  </div>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="네임스페이스-생성-및-격리-확인">네임스페이스 생성 및 격리 확인</h1>
+
+<!-- TODO: 네임스페이스 격리 개념도 -->
+
+<p>네트워크 네임스페이스는 프로세스에게 독립된 네트워크 스택(인터페이스, ARP 테이블, 라우팅 테이블, iptables 규칙)을 제공한다. 컨테이너가 각자의 <code class="highlighter-rouge">eth0</code>을 가질 수 있는 이유다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip netns add red
+ip netns add blue
+
+ip netns
+<span class="c"># red</span>
+<span class="c"># blue</span>
+</code></pre></div></div>
+
+<p>네임스페이스 안에서 인터페이스를 확인하면 loopback만 보인다. 호스트의 <code class="highlighter-rouge">eth0</code> 등은 보이지 않는다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip netns <span class="nb">exec </span>red ip link
+<span class="c"># 1: lo: &lt;LOOPBACK&gt; ...</span>
+
+ip <span class="nt">-n</span> red link
+<span class="c"># 동일한 결과 (축약 문법)</span>
+</code></pre></div></div>
+
+<p>ARP 테이블, 라우팅 테이블도 호스트와 완전히 별개다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip netns <span class="nb">exec </span>red arp
+ip netns <span class="nb">exec </span>red route
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="네임스페이스-간-연결">네임스페이스 간 연결</h1>
+
+<p>격리된 네임스페이스끼리 통신하려면 가상 케이블(veth pair)이 필요하다. 연결 방식은 두 가지다:</p>
+
+<ul>
+  <li><strong>veth pair 직접 연결 (1:1)</strong>: 두 네임스페이스를 케이블로 직접 연결</li>
+  <li><strong>bridge 경유 (N:N)</strong>: 가상 스위치(bridge)를 두고 각 네임스페이스를 연결</li>
+</ul>
+
+<p>어느 방식이든 공통 절차는 동일하다:</p>
+
+<ol>
+  <li>격리된 공간을 만든다: <code class="highlighter-rouge">ip netns add</code></li>
+  <li>가상 케이블을 만든다: <code class="highlighter-rouge">ip link add ... type veth peer ...</code></li>
+  <li>케이블 끝을 원하는 곳에 꽂는다: <code class="highlighter-rouge">ip link set ... netns ...</code> 또는 <code class="highlighter-rouge">ip link set ... master ...</code></li>
+  <li>IP 주소를 붙인다: <code class="highlighter-rouge">ip addr add</code></li>
+  <li>인터페이스를 활성화한다: <code class="highlighter-rouge">ip link set ... up</code></li>
+</ol>
+
+<h2 id="veth-pair로-11-직접-연결">veth pair로 1:1 직접 연결</h2>
+
+<p>veth pair는 양 끝이 있는 가상 케이블이다. 한쪽에 패킷을 넣으면 다른 쪽으로 나온다.</p>
+
+<h3 id="가상-케이블-생성">가상 케이블 생성</h3>
+
+<!-- TODO: veth pair 생성 다이어그램 -->
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip link add veth-red <span class="nb">type </span>veth peer name veth-blue
+</code></pre></div></div>
+
+<p>두 개의 가상 인터페이스(<code class="highlighter-rouge">veth-red</code>, <code class="highlighter-rouge">veth-blue</code>)가 한 쌍으로 생성된다.</p>
+
+<h3 id="각-인터페이스를-네임스페이스에-연결">각 인터페이스를 네임스페이스에 연결</h3>
+
+<!-- TODO: veth를 네임스페이스에 연결하는 다이어그램 -->
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip link <span class="nb">set </span>veth-red netns red
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip link <span class="nb">set </span>veth-blue netns blue
+</code></pre></div></div>
+
+<p>각 끝을 해당 네임스페이스에 꽂는다. 물리 케이블의 한쪽을 기기에 꽂는 것과 같다.</p>
+
+<h3 id="ip-주소-할당">IP 주소 할당</h3>
+
+<!-- TODO: IP 할당 다이어그램 -->
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip <span class="nt">-n</span> red addr add 192.168.15.1/24 dev veth-red
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip <span class="nt">-n</span> blue addr add 192.168.15.2/24 dev veth-blue
+</code></pre></div></div>
+
+<h3 id="인터페이스-활성화">인터페이스 활성화</h3>
+
+<!-- TODO: 인터페이스 활성화 다이어그램 -->
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip <span class="nt">-n</span> red link <span class="nb">set </span>veth-red up
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip <span class="nt">-n</span> blue link <span class="nb">set </span>veth-blue up
+</code></pre></div></div>
+
+<h3 id="확인">확인</h3>
+
+<p>통신 확인:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip netns <span class="nb">exec </span>red ping 192.168.15.2
+</code></pre></div></div>
+
+<p>ARP 테이블 확인 — 각 네임스페이스에서 상대방의 MAC 주소가 등록되어 있다:</p>
+
+<!-- TODO: ARP 테이블 확인 스크린샷 -->
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip netns <span class="nb">exec </span>red arp
+<span class="c"># 192.168.15.2 → blue의 MAC 주소</span>
+
+ip netns <span class="nb">exec </span>blue arp
+<span class="c"># 192.168.15.1 → red의 MAC 주소</span>
+</code></pre></div></div>
+
+<p>호스트의 ARP 테이블에는 네임스페이스 내부의 veth IP가 보이지 않는다. 네임스페이스가 격리된 것이다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>arp
+</code></pre></div></div>
+
+<h2 id="bridge-경유-nn-연결">bridge 경유 N:N 연결</h2>
+
+<p>veth pair의 1:1 직접 연결은 네임스페이스가 많아질수록 O(N²) 연결이 필요하다. 가상 스위치(bridge)를 두면 N개의 네임스페이스가 하나의 bridge를 통해 통신할 수 있다.</p>
+
+<h3 id="기존-veth-pair-삭제">기존 veth pair 삭제</h3>
+
+<!-- TODO: veth pair 삭제 다이어그램 -->
+
+<p>veth pair는 한쪽을 삭제하면 다른 쪽도 자동 삭제된다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip <span class="nt">-n</span> red link del veth-red
+</code></pre></div></div>
+
+<h3 id="bridge-인터페이스-생성">bridge 인터페이스 생성</h3>
+
+<!-- TODO: bridge 생성 다이어그램 -->
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip link add v-net-0 <span class="nb">type </span>bridge
+</code></pre></div></div>
+
+<p>호스트 입장에서 bridge는 <code class="highlighter-rouge">eth0</code> 같은 또 다른 네트워크 인터페이스일 뿐이다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip link
+<span class="c"># ...</span>
+<span class="c"># 6: v-net-0: &lt;BROADCAST,MULTICAST&gt; mtu 1500 qdisc noop ...</span>
+</code></pre></div></div>
+
+<p>생성 직후 인터페이스는 DOWN 상태다. 활성화해야 한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip link <span class="nb">set </span>dev v-net-0 up
+</code></pre></div></div>
+
+<h3 id="가상-케이블-생성-1">가상 케이블 생성</h3>
+
+<!-- TODO: bridge용 veth pair 다이어그램 -->
+
+<p>이번에는 veth pair의 한쪽 이름에 <code class="highlighter-rouge">-br</code> 접미사를 붙여 bridge에 연결될 쪽임을 나타낸다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip link add veth-red <span class="nb">type </span>veth peer name veth-red-br
+ip link add veth-blue <span class="nb">type </span>veth peer name veth-blue-br
+</code></pre></div></div>
+
+<h3 id="네임스페이스-및-bridge에-연결">네임스페이스 및 bridge에 연결</h3>
+
+<p>1:1 직접 연결에서는 veth 양쪽을 각각의 네임스페이스에 넣었지만, 이번에는 한쪽을 네임스페이스에, 다른 쪽을 bridge에 연결한다.</p>
+
+<!-- TODO: 네임스페이스 + bridge 연결 단계별 다이어그램 -->
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip link <span class="nb">set </span>veth-red netns red
+ip link <span class="nb">set </span>veth-red-br master v-net-0
+
+ip link <span class="nb">set </span>veth-blue netns blue
+ip link <span class="nb">set </span>veth-blue-br master v-net-0
+</code></pre></div></div>
+
+<blockquote>
+  <p><code class="highlighter-rouge">-br</code> 접미사 네이밍 컨벤션으로 어떤 네임스페이스와 관련된 bridge 쪽 인터페이스인지 알 수 있다.</p>
+</blockquote>
+
+<h3 id="ip-주소-할당-1">IP 주소 할당</h3>
+
+<p>각 네임스페이스 쪽 veth에 IP를 할당한다. bridge 인터페이스는 스위치 역할만 하면 되니 IP를 할당하지 않는다:</p>
+
+<!-- TODO: IP 할당 다이어그램 -->
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip <span class="nt">-n</span> red addr add 192.168.15.1/24 dev veth-red
+ip <span class="nt">-n</span> blue addr add 192.168.15.2/24 dev veth-blue
+</code></pre></div></div>
+
+<h3 id="인터페이스-활성화-1">인터페이스 활성화</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip <span class="nt">-n</span> red link <span class="nb">set </span>veth-red up
+ip <span class="nt">-n</span> blue link <span class="nb">set </span>veth-blue up
+</code></pre></div></div>
+
+<!-- TODO: 최종 bridge 연결 완성 다이어그램 -->
+
+<p>이제 모든 네임스페이스가 가상 스위치(bridge)에 연결되었고, 서로 통신할 수 있다.</p>
+
+<p><br /></p>
+
+<h1 id="호스트--네임스페이스-연결">호스트 ↔ 네임스페이스 연결</h1>
+
+<!-- TODO: 호스트-네임스페이스 연결 다이어그램 -->
+
+<h2 id="문제">문제</h2>
+
+<p>호스트와 네임스페이스의 네트워크 스택은 분리되어 있다. 호스트에서 네임스페이스 내부 IP(<code class="highlighter-rouge">192.168.15.x</code>)로 ping해도 도달할 수 없다.</p>
+
+<h2 id="해결-bridge에-ip-부여">해결: bridge에 IP 부여</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip addr add 192.168.15.5/24 dev v-net-0
+</code></pre></div></div>
+
+<p>IP를 부여하는 것만으로 되는 이유는 L2 연결이 이미 갖춰져 있기 때문이다:</p>
+
+<ol>
+  <li>bridge(<code class="highlighter-rouge">v-net-0</code>)는 이미 UP 상태</li>
+  <li>네임스페이스들의 veth pair가 이미 bridge에 연결됨</li>
+  <li>네임스페이스 안의 veth에 IP가 이미 할당됨</li>
+</ol>
+
+<p><strong>IP 부여가 트리거하는 일:</strong></p>
+
+<ol>
+  <li>호스트 커널이 bridge를 <strong>자기 인터페이스 중 하나</strong>로 인식한다 (마치 <code class="highlighter-rouge">eth0</code>처럼)</li>
+  <li>커널이 <strong>자동으로 라우팅 테이블에 경로를 추가</strong>한다: <code class="highlighter-rouge">192.168.15.0/24 dev v-net-0</code></li>
+  <li>호스트가 <code class="highlighter-rouge">192.168.15.x</code>로 패킷을 보내면, 커널이 bridge로 전달하고, bridge가 L2 스위칭으로 올바른 veth에 전달한다</li>
+</ol>
+
+<p>비유하자면, bridge는 이미 네임스페이스들에 물리적으로 꽂혀 있는 스위치다. IP를 주기 전에는 호스트가 이 스위치에 연결되지 않은 상태였고, IP를 주는 순간 호스트도 이 스위치에 랜선을 꽂은 것이다.</p>
+
+<h2 id="확인-1">확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ping 192.168.15.1   <span class="c"># red 네임스페이스</span>
+ping 192.168.15.2   <span class="c"># blue 네임스페이스</span>
+
+ip route
+<span class="c"># 192.168.15.0/24 dev v-net-0 proto kernel scope link src 192.168.15.5</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="네임스페이스--외부-네트워크">네임스페이스 ↔ 외부 네트워크</h1>
+
+<p>여태까지의 네트워크는 호스트 내부에 격리되어 있다. 외부 세계로 통하는 유일한 관문은 호스트의 ethernet port(<code class="highlighter-rouge">eth0</code>)다.</p>
+
+<h2 id="네임스페이스--외부-outbound">네임스페이스 → 외부 (Outbound)</h2>
+
+<h3 id="1단계-라우팅-추가">1단계: 라우팅 추가</h3>
+
+<!-- TODO: 라우팅 추가 전 unreachable 다이어그램 -->
+
+<p>네임스페이스에서 LAN(<code class="highlighter-rouge">192.168.1.0/24</code>)으로 ping하면 <code class="highlighter-rouge">Network is unreachable</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip netns <span class="nb">exec </span>blue ping 192.168.1.3  <span class="c"># unreachable</span>
+ip netns <span class="nb">exec </span>blue route              <span class="c"># 외부 경로 없음</span>
+</code></pre></div></div>
+
+<p>bridge IP(<code class="highlighter-rouge">192.168.15.5</code>)를 게이트웨이로 지정하는 라우팅을 추가한다:</p>
+
+<!-- TODO: 라우팅 추가 후 다이어그램 -->
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip netns <span class="nb">exec </span>blue ip route add 192.168.1.0/24 via 192.168.15.5
+</code></pre></div></div>
+
+<p>호스트는 두 네트워크 모두에 발을 걸치고 있으므로(<code class="highlighter-rouge">192.168.15.5</code> + <code class="highlighter-rouge">192.168.1.x</code>) 패킷을 전달할 수 있다.</p>
+
+<h3 id="2단계-nat-설정">2단계: NAT 설정</h3>
+
+<!-- TODO: NAT 설정 다이어그램 -->
+
+<p>라우팅을 추가해서 <code class="highlighter-rouge">unreachable</code>은 해결됐지만, 응답이 돌아오지 않는다. 패킷은 나가지만, 외부 호스트가 <code class="highlighter-rouge">192.168.15.x</code>(private IP)로 응답을 보낼 방법이 없기 때문이다.</p>
+
+<p>호스트에서 MASQUERADE(SNAT) 설정으로 나가는 패킷의 출발지 IP를 호스트 IP로 변환한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>iptables <span class="nt">-t</span> nat <span class="nt">-A</span> POSTROUTING <span class="nt">-s</span> 192.168.15.0/24 <span class="nt">-j</span> MASQUERADE
+</code></pre></div></div>
+
+<h3 id="3단계-디폴트-게이트웨이-추가">3단계: 디폴트 게이트웨이 추가</h3>
+
+<!-- TODO: 디폴트 게이트웨이 다이어그램 -->
+
+<p>LAN 대역은 통신되지만, 인터넷(예: <code class="highlighter-rouge">8.8.8.8</code>)은 여전히 <code class="highlighter-rouge">unreachable</code>이다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip netns <span class="nb">exec </span>blue ping 8.8.8.8       <span class="c"># unreachable</span>
+ip netns <span class="nb">exec </span>blue route
+<span class="c"># 192.168.15.0   ← 자기 네트워크</span>
+<span class="c"># 192.168.1.0    ← 1단계에서 추가한 LAN 대역</span>
+<span class="c"># → 그 외 대역에 대한 경로가 없음</span>
+</code></pre></div></div>
+
+<p>디폴트 게이트웨이를 추가하여 모든 알 수 없는 대역을 bridge를 통해 호스트로 보낸다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip netns <span class="nb">exec </span>blue ip route add default via 192.168.15.5
+</code></pre></div></div>
+
+<h2 id="외부--네임스페이스-inbound">외부 → 네임스페이스 (Inbound)</h2>
+
+<h3 id="방법-1-외부-호스트에-라우팅-추가">방법 1: 외부 호스트에 라우팅 추가</h3>
+
+<p><code class="highlighter-rouge">192.168.15.0/24</code>는 <code class="highlighter-rouge">192.168.1.2</code>를 통하라고 외부 호스트에 설정한다. 모든 외부 호스트에 일일이 설정해야 하므로 확장성이 없다.</p>
+
+<h3 id="방법-2-포트포워딩-dnat">방법 2: 포트포워딩 (DNAT)</h3>
+
+<!-- TODO: 포트포워딩 다이어그램 -->
+
+<p>호스트의 특정 포트로 들어오는 트래픽을 네임스페이스로 전달한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>iptables <span class="nt">-t</span> nat <span class="nt">-A</span> PREROUTING <span class="nt">-p</span> tcp <span class="nt">--dport</span> 80 <span class="nt">--to-destination</span> 192.168.15.2:80 <span class="nt">-j</span> DNAT
+</code></pre></div></div>
+
+<p>패킷 흐름:</p>
+
+<ol>
+  <li>외부 클라이언트가 <code class="highlighter-rouge">192.168.1.2:80</code>으로 요청</li>
+  <li>패킷이 호스트의 <code class="highlighter-rouge">eth0</code>에 도착</li>
+  <li><strong>PREROUTING</strong> 체인에서 DNAT 적용: 목적지를 <code class="highlighter-rouge">192.168.1.2:80</code> → <code class="highlighter-rouge">192.168.15.2:80</code>으로 변경</li>
+  <li>호스트가 <code class="highlighter-rouge">192.168.15.2</code>를 보고 bridge를 통해 blue 네임스페이스로 전달</li>
+  <li>blue 네임스페이스의 프로세스가 응답</li>
+  <li>응답 시 커널의 conntrack이 자동으로 출발지를 <code class="highlighter-rouge">192.168.15.2</code> → <code class="highlighter-rouge">192.168.1.2</code>로 되돌림</li>
+</ol>
+
+<p>외부에서는 호스트 IP만 알면 된다. 네임스페이스 내부 IP를 노출할 필요 없다. 단, 호스트 IP + 매핑된 포트는 알아야 한다. Docker의 <code class="highlighter-rouge">-p 80:80</code> 포트 매핑이 바로 이 원리다.</p>
+
+<h3 id="수동-dnat의-한계">수동 DNAT의 한계</h3>
+
+<p>위 예시는 포트 하나(80)에 대한 매핑일 뿐이다. 컨테이너가 많아지면 호스트 포트를 수동으로 매핑해야 하고, 포트 충돌도 수동으로 관리해야 한다.</p>
+
+<p>이 섹션은 컨테이너 네트워킹의 building block을 보여주는 것일 뿐이다. Docker, Kubernetes Service, Ingress가 이 한계를 자동화하고 확장한다:</p>
+
+<ul>
+  <li><strong>Kubernetes Service (ClusterIP)</strong>: 포트가 아니라 가상 IP + DNS 이름으로 접근. kube-proxy가 iptables 규칙을 자동 관리</li>
+  <li><strong>Kubernetes NodePort</strong>: 모든 노드에서 같은 포트(30000~32767)로 접근 가능하도록 자동 설정</li>
+  <li><strong>Ingress</strong>: 80/443 하나로 들어와서 도메인/경로 기반으로 여러 서비스에 라우팅</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>요소</th>
+      <th>역할</th>
+      <th>없으면?</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Namespace</strong></td>
+      <td>격리된 네트워크 공간</td>
+      <td>격리할 대상이 없음</td>
+    </tr>
+    <tr>
+      <td><strong>veth pair</strong></td>
+      <td>격리된 공간을 연결하는 가상 케이블</td>
+      <td>패킷이 네임스페이스 밖으로 못 나감</td>
+    </tr>
+    <tr>
+      <td><strong>Bridge</strong></td>
+      <td>N:N 내부 통신을 위한 가상 스위치</td>
+      <td>1:1로만 연결 가능</td>
+    </tr>
+    <tr>
+      <td><strong>Routing + ip_forward</strong></td>
+      <td>외부로의 경로</td>
+      <td>호스트 내부에 갇힘</td>
+    </tr>
+    <tr>
+      <td><strong>iptables/NAT</strong></td>
+      <td>주소 변환</td>
+      <td>패킷은 나가지만 응답이 안 돌아옴</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>각 요소를 좀 더 풀어 보면:</p>
+
+<p><strong>veth pair</strong> — 양 끝이 있는 가상 케이블. 격리된 네임스페이스를 외부와 물리적으로 잇는 유일한 수단이다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">ip link add veth-red type veth peer name veth-red-br</code>로 두 개의 가상 인터페이스가 한 쌍으로 생성된다</li>
+  <li>한쪽에 패킷을 넣으면 다른 쪽으로 나온다. 물리 케이블과 동일한 동작</li>
+  <li><strong>1:1 직접 연결</strong>: 양쪽을 각각의 네임스페이스에 넣는다</li>
+  <li><strong>bridge 경유</strong>: 한쪽을 네임스페이스에, 다른 쪽을 bridge에 연결한다 (<code class="highlighter-rouge">ip link set ... master v-net-0</code>)</li>
+</ul>
+
+<p><strong>bridge</strong> — 이중 역할을 할 수 있다:</p>
+
+<ul>
+  <li><strong>L2 스위치 역할</strong>: 네임스페이스끼리 통신 → IP 없이도 된다</li>
+  <li><strong>L3 게이트웨이 역할</strong>: 호스트가 네임스페이스에 접근 → IP가 필요하다</li>
+</ul>
+
+<p><strong>routing + ip_forward</strong> — 외부로 나가기 위한 경로 결정:</p>
+
+<ul>
+  <li>네임스페이스에 게이트웨이 라우팅 추가 (<code class="highlighter-rouge">ip route add ... via</code>)</li>
+  <li>호스트에서 <code class="highlighter-rouge">ip_forward</code> 활성화 (패킷 전달 허용)</li>
+  <li>이게 없으면 패킷이 bridge에서 멈춘다</li>
+</ul>
+
+<p><strong>iptables/NAT</strong> — 주소 변환. 라우팅만으로는 응답이 돌아오지 않는다 (private IP 문제):</p>
+
+<ul>
+  <li><strong>SNAT/MASQUERADE</strong>: 나가는 패킷의 출발지를 호스트 IP로 변환 (outbound)</li>
+  <li><strong>DNAT/포트포워딩</strong>: 들어오는 패킷의 목적지를 네임스페이스 IP로 변환 (inbound)</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<blockquote>
+  <p><strong>TODO</strong>: 참고 자료 링크 추가</p>
+</blockquote>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-Networking-03-CNI-Flow/">[Kubernetes] CNI 동작 흐름: Pod 생성부터 노드 간 통신까지</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#bridge" class="page__taxonomy-item" rel="tag">bridge</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#container" class="page__taxonomy-item" rel="tag">Container</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#linux" class="page__taxonomy-item" rel="tag">Linux</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#namespace" class="page__taxonomy-item" rel="tag">namespace</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nat" class="page__taxonomy-item" rel="tag">NAT</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#networking" class="page__taxonomy-item" rel="tag">Networking</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#veth" class="page__taxonomy-item" rel="tag">veth</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#cs" class="page__taxonomy-item" rel="tag">CS</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-03-19T00:00:00+09:00">March 19, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BCS%5D+%EC%BB%A8%ED%85%8C%EC%9D%B4%EB%84%88+%EB%84%A4%ED%8A%B8%EC%9B%8C%ED%82%B9+%EA%B8%B0%EB%B3%B8+%EC%9B%90%EB%A6%AC%3A+%EB%84%A4%EC%9E%84%EC%8A%A4%ED%8E%98%EC%9D%B4%EC%8A%A4+%EB%84%A4%ED%8A%B8%EC%9B%8C%ED%82%B9%20https%3A%2F%2Fsirzzang.github.io%2F%2Fcs%2FCS-Container-Networking-Namespace%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fcs%2FCS-Container-Networking-Namespace%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fcs%2FCS-Container-Networking-Namespace%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fcs%2FCS-Container-Networking-Namespace?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/cs/CS-Linux-Kernel-Parameter/" class="pagination--pager" title="[Linux] 커널 파라미터와 sysctl
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-EKS-02-00-00-Kubernetes-Networking-Model/" class="pagination--pager" title="[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//cs/CS-Container-Networking-Namespace/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/cs/CS-Container-Networking-Namespace"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

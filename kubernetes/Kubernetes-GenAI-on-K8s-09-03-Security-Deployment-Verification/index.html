@@ -1,0 +1,1297 @@
+<!DOCTYPE html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+--><html lang="ko" class="no-js">
+  <head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[GenAI] GenAI on K8s: 9.3 - 보안 배포 실습: 5단계 검증 + GPU 트러블슈팅 - Eraser’s StudyLog</title>
+<meta name="description" content="Ch9 인프라를 실제로 배포하고, ECR 공급망부터 Bottlerocket host, PSS, Secret 주입까지 5단계 보안 검증을 수행한다. GPU 추론 시도 중 만난 Bottlerocket ephemeral-storage 문제도 다룬다. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[GenAI] GenAI on K8s: 9.3 - 보안 배포 실습: 5단계 검증 + GPU 트러블슈팅">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-09-03-Security-Deployment-Verification/">
+
+
+  <meta property="og:description" content="Ch9 인프라를 실제로 배포하고, ECR 공급망부터 Bottlerocket host, PSS, Secret 주입까지 5단계 보안 검증을 수행한다. GPU 추론 시도 중 만난 Bottlerocket ephemeral-storage 문제도 다룬다. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-05-24T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-09-03-Security-Deployment-Verification/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer">
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links">
+<li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/">Kubernetes</a>
+            </li>
+<li class="masthead__menu-item">
+              <a href="/categories/Dev/">Dev</a>
+            </li>
+<li class="masthead__menu-item">
+              <a href="/categories/CS/">CS</a>
+            </li>
+<li class="masthead__menu-item">
+              <a href="/categories/AI/">AI</a>
+            </li>
+<li class="masthead__menu-item">
+              <a href="/categories/Language/">Language</a>
+            </li>
+<li class="masthead__menu-item">
+              <a href="/categories/articles/">Articles</a>
+            </li>
+<li class="masthead__menu-item">
+              <a href="/categories/etc/">Etc</a>
+            </li>
+<li class="masthead__menu-item">
+              <a href="/about/">About</a>
+            </li>
+<li class="masthead__menu-item">
+              <a href="/categories/">All Posts</a>
+            </li>
+</ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewbox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[GenAI] GenAI on K8s: 9.3 - 보안 배포 실습: 5단계 검증 + GPU 트러블슈팅">
+    <meta itemprop="description" content="Ch9 인프라를 실제로 배포하고, ECR 공급망부터 Bottlerocket host, PSS, Secret 주입까지 5단계 보안 검증을 수행한다. GPU 추론 시도 중 만난 Bottlerocket ephemeral-storage 문제도 다룬다.">
+    <meta itemprop="datePublished" content="2026-05-24T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[GenAI] GenAI on K8s: 9.3 - 보안 배포 실습: 5단계 검증 + GPU 트러블슈팅
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-05-24T00:00:00+09:00">2026년 05월 24일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  6 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title">
+<i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#%EC%A0%81%EC%9A%A9-%ED%98%84%ED%99%A9">적용 현황</a></li>
+  <li><a href="#step-1--terraform-apply">Step 1 — terraform apply</a></li>
+  <li><a href="#step-2--%EA%B3%B5%EA%B8%89%EB%A7%9D-%EB%B3%B4%EC%95%88-%EA%B2%80%EC%A6%9D-ecr">Step 2 — 공급망 보안 검증 (ECR)</a></li>
+  <li><a href="#step-3--host-%EB%B3%B4%EC%95%88-%EA%B2%80%EC%A6%9D-bottlerocket">Step 3 — Host 보안 검증 (Bottlerocket)</a></li>
+  <li><a href="#step-4--pod-security-standards-pss">Step 4 — Pod Security Standards (PSS)</a></li>
+  <li><a href="#step-5--secret-%EC%A3%BC%EC%9E%85-%EA%B2%80%EC%A6%9D-csi--pod-identity">Step 5 — Secret 주입 검증 (CSI + Pod Identity)</a></li>
+  <li>
+<a href="#step-6--gpu-%EC%B6%94%EB%A1%A0-%EC%8B%9C%EB%8F%84--%ED%8A%B8%EB%9F%AC%EB%B8%94%EC%8A%88%ED%8C%85">Step 6 — GPU 추론 시도 + 트러블슈팅</a>
+    <ul>
+      <li><a href="#gpu-%EC%97%86%EC%9D%B4-%EB%B0%B0%ED%8F%AC--pending-%ED%99%95%EC%9D%B8">GPU 없이 배포 → Pending 확인</a></li>
+      <li><a href="#gpu-%EB%85%B8%EB%93%9C-%EC%BC%9C%EA%B8%B0--%EB%85%B8%EB%93%9C%EB%8A%94-ready-%EA%B7%B8%EB%9F%AC%EB%82%98-%ED%8C%8C%EB%93%9C%EB%8A%94-eviction">GPU 노드 켜기 → 노드는 Ready, 그러나 파드는 eviction</a></li>
+      <li>
+<a href="#%EC%9B%90%EC%9D%B8--gpu%EA%B0%80-%EC%95%84%EB%8B%88%EB%9D%BC-ephemeral-storage%EB%94%94%EC%8A%A4%ED%81%AC">원인 — GPU가 아니라 ephemeral-storage(디스크)</a>
+        <ul>
+          <li><a href="#%EA%B7%BC%EB%B3%B8-%EC%9B%90%EC%9D%B8-bottlerocket%EC%9D%98-%EB%B3%BC%EB%A5%A8-%EA%B5%AC%EC%A1%B0">근본 원인: Bottlerocket의 볼륨 구조</a></li>
+          <li><a href="#%EC%88%98%EC%A0%95--%EB%8D%B0%EC%9D%B4%ED%84%B0-%EB%B3%BC%EB%A5%A8xvdb%EC%9D%84-%ED%82%A4%EC%9B%8C%EC%95%BC-%ED%95%9C%EB%8B%A4">수정 — 데이터 볼륨(xvdb)을 키워야 한다</a></li>
+        </ul>
+      </li>
+      <li><a href="#%EA%B2%B0%EC%A0%95--ch10%EC%9C%BC%EB%A1%9C-%EC%9D%B4%EC%97%B0">결정 — Ch10으로 이연</a></li>
+    </ul>
+  </li>
+  <li><a href="#teardown">Teardown</a></li>
+  <li><a href="#%EC%A0%95%EB%A6%AC">정리</a></li>
+  <li><a href="#%EC%B0%B8%EA%B3%A0-%EB%A7%81%ED%81%AC">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions">Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)</a> 9장의 학습 내용을 바탕으로 합니다</em></p>
+
+<p><br></p>
+
+<p><a href="/kubernetes/Kubernetes-GenAI-on-K8s-09-02-Security-Infrastructure-Code/">이전 글</a>에서 분석한 Terraform 코드를 실제로 배포하고, 보안 기능이 동작하는지 5단계 검증을 수행한다.</p>
+
+<p><br></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>Ch9 보안 베스트 프랙티스의 적용 현황은 세 갈래다: terraform 자동(ECR, Bottlerocket, IMDSv2 토큰, CSI, Pod Identity) / 배포 시 kubectl·aws(PSS, HF secret) / 미적용(hop_limit=1, securityContext)</li>
+  <li>ECR: AES256 암호화 + IMMUTABLE + Enhanced Scanning(CONTINUOUS + SCAN_ON_PUSH) 확인</li>
+  <li>Host: 3대 모두 Bottlerocket OS, IMDSv2 Required 확인</li>
+  <li>PSS: <code class="highlighter-rouge">baseline</code> enforce로 privileged 파드가 <strong>Forbidden</strong>으로 차단되는 것을 확인</li>
+  <li>
+<strong>Secret 주입이 이 챕터의 핵심</strong>: Secrets Manager → CSI → env·파일 두 경로로 토큰이 파드에 도달</li>
+  <li>GPU 추론 시도 시 Bottlerocket의 <strong>데이터 볼륨(xvdb) 18GB 부족</strong>으로 ephemeral-storage eviction 루프 발생 → 원인 규명 후 Ch10으로 이연</li>
+</ul>
+
+<p><br></p>
+
+<h1 id="적용-현황">적용 현황</h1>
+
+<p><a href="/kubernetes/Kubernetes-GenAI-on-K8s-09-02-Security-Infrastructure-Code/">이전 글</a>의 코드가 보여주는 보안 베스트 프랙티스의 적용 방식은 세 갈래로 갈린다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>베스트 프랙티스</th>
+      <th>적용</th>
+      <th>검증 단계</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>ECR 암호화(AES256)</td>
+      <td>terraform 자동</td>
+      <td>Step 2</td>
+    </tr>
+    <tr>
+      <td>Tag immutability</td>
+      <td>terraform 자동</td>
+      <td>Step 2</td>
+    </tr>
+    <tr>
+      <td>Enhanced Scanning</td>
+      <td>terraform 자동</td>
+      <td>Step 2</td>
+    </tr>
+    <tr>
+      <td>Host: Bottlerocket</td>
+      <td>terraform 자동</td>
+      <td>Step 3</td>
+    </tr>
+    <tr>
+      <td>Host: IMDSv2(토큰 강제)</td>
+      <td>EKS 모듈 기본값으로 자동</td>
+      <td>Step 3</td>
+    </tr>
+    <tr>
+      <td>Host: IMDS <code class="highlighter-rouge">hop_limit=1</code>
+</td>
+      <td>
+<strong>미적용</strong>(기본 2)</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>Pod Security Standards</td>
+      <td>배포 시 <code class="highlighter-rouge">kubectl label</code>
+</td>
+      <td>Step 4</td>
+    </tr>
+    <tr>
+      <td>Secrets Store CSI + provider</td>
+      <td>terraform 자동</td>
+      <td>Step 5</td>
+    </tr>
+    <tr>
+      <td>최소권한 IAM + Pod Identity</td>
+      <td>terraform 자동</td>
+      <td>Step 5</td>
+    </tr>
+    <tr>
+      <td>HF 토큰 → Secrets Manager + SPC + 앱배포</td>
+      <td>배포 시 aws·kubectl</td>
+      <td>Step 5</td>
+    </tr>
+    <tr>
+      <td>런타임 securityContext/limit</td>
+      <td>
+<strong>미적용</strong>(deploy yaml에 없음)</td>
+      <td>—</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br></p>
+
+<h1 id="step-1--terraform-apply">Step 1 — terraform apply</h1>
+
+<p>한 번의 apply로 EKS·VPC·addon(ALB, Karpenter, EBS CSI, Secrets Store CSI)·IRSA·ECR을 일괄 생성한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>terraform init
+<span class="c"># ... 모듈·provider 다운로드</span>
+Terraform has been successfully initialized!
+
+<span class="nv">$ </span>terraform plan
+<span class="c"># Plan: 110 to add, 0 to change, 0 to destroy.</span>
+
+<span class="nv">$ </span>terraform apply <span class="nt">-auto-approve</span>   <span class="c"># ~15-20분</span>
+<span class="c"># Apply complete!</span>
+</code></pre></div></div>
+
+<p>kubeconfig 갱신 후 노드 상태 확인:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>aws eks <span class="nt">--region</span> ap-northeast-2 update-kubeconfig <span class="nt">--name</span> eks-demo
+<span class="nv">$ </span>kubectl get nodes
+
+<span class="c"># 실행 결과</span>
+NAME                 STATUS   ROLES    AGE   VERSION
+ip-10-0-2-136...     Ready    &lt;none&gt;   12m   v1.32.12-eks-f69f56f
+ip-10-0-29-75...     Ready    &lt;none&gt;   12m   v1.32.12-eks-f69f56f
+ip-10-0-42-85...     Ready    &lt;none&gt;   12m   v1.32.12-eks-f69f56f
+</code></pre></div></div>
+
+<p>HuggingFace 토큰을 Secrets Manager에 등록한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>aws secretsmanager create-secret <span class="se">\</span>
+    <span class="nt">--name</span> hugging-face-secret <span class="se">\</span>
+    <span class="nt">--secret-string</span> <span class="s2">"</span><span class="nv">$HF_TOKEN</span><span class="s2">"</span> <span class="se">\</span>
+    <span class="nt">--region</span> ap-northeast-2
+
+<span class="c"># 실행 결과</span>
+<span class="o">{</span> <span class="s2">"ARN"</span>: <span class="s2">"arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:hugging-face-secret-AbCdEf"</span>,
+  <span class="s2">"Name"</span>: <span class="s2">"hugging-face-secret"</span> <span class="o">}</span>
+</code></pre></div></div>
+
+<p><img src="https://sirzzang.github.io//assets/images/genai-on-k8s-ch09-ec2-cpu-nodes.png" alt="EC2 콘솔 — eks-mng CPU 노드 인스턴스" class="align-center"></p>
+
+<p><br></p>
+
+<h1 id="step-2--공급망-보안-검증-ecr">Step 2 — 공급망 보안 검증 (ECR)</h1>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 암호화 타입 확인</span>
+<span class="nv">$ </span>aws ecr describe-repositories <span class="nt">--repository-names</span> my-llama-finetuned <span class="se">\</span>
+    <span class="nt">--query</span> <span class="s1">'repositories[0].encryptionConfiguration.encryptionType'</span> <span class="se">\</span>
+    <span class="nt">--output</span> text <span class="nt">--region</span> ap-northeast-2
+
+<span class="c"># 실행 결과</span>
+AES256
+
+<span class="c"># 태그 불변성 확인</span>
+<span class="nv">$ </span>aws ecr describe-repositories <span class="nt">--repository-names</span> my-llama-finetuned <span class="se">\</span>
+    <span class="nt">--query</span> <span class="s1">'repositories[0].imageTagMutability'</span> <span class="se">\</span>
+    <span class="nt">--output</span> text <span class="nt">--region</span> ap-northeast-2
+
+<span class="c"># 실행 결과</span>
+IMMUTABLE
+
+<span class="c"># 스캔 설정 확인</span>
+<span class="nv">$ </span>aws ecr get-registry-scanning-configuration <span class="nt">--region</span> ap-northeast-2
+
+<span class="c"># 실행 결과</span>
+<span class="o">{</span> <span class="s2">"scanType"</span>: <span class="s2">"ENHANCED"</span>,
+  <span class="s2">"rules"</span>: <span class="o">[</span>
+    <span class="o">{</span> <span class="s2">"scanFrequency"</span>: <span class="s2">"SCAN_ON_PUSH"</span>,   <span class="s2">"repositoryFilters"</span>: <span class="o">[{</span> <span class="s2">"filter"</span>: <span class="s2">"my-llama-finetuned"</span> <span class="o">}]</span> <span class="o">}</span>,
+    <span class="o">{</span> <span class="s2">"scanFrequency"</span>: <span class="s2">"CONTINUOUS_SCAN"</span>, <span class="s2">"repositoryFilters"</span>: <span class="o">[{</span> <span class="s2">"filter"</span>: <span class="s2">"my-llama-finetuned"</span> <span class="o">}]</span> <span class="o">}</span>
+  <span class="o">]</span> <span class="o">}</span>
+</code></pre></div></div>
+
+<p>공급망 3중 확인 완료: <strong>AES256</strong> 암호화, <strong>IMMUTABLE</strong> 태그, <strong>ENHANCED</strong>(Inspector) 스캔(push 시 + 지속).</p>
+
+<p><br></p>
+
+<h1 id="step-3--host-보안-검증-bottlerocket">Step 3 — Host 보안 검증 (Bottlerocket)</h1>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get nodes <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{range .items[*]}{.metadata.name}{"\t"}{.status.nodeInfo.osImage}{"\n"}{end}'</span>
+
+<span class="c"># 실행 결과</span>
+ip-10-0-2-136...    Bottlerocket OS 1.62.0 <span class="o">(</span>aws-k8s-1.32<span class="o">)</span>
+ip-10-0-29-75...    Bottlerocket OS 1.62.0 <span class="o">(</span>aws-k8s-1.32<span class="o">)</span>
+ip-10-0-42-85...    Bottlerocket OS 1.62.0 <span class="o">(</span>aws-k8s-1.32<span class="o">)</span>
+</code></pre></div></div>
+
+<p>3대 모두 <strong>Bottlerocket OS</strong> = host 공격면 최소화 확인.</p>
+
+<p><strong>IMDSv2</strong>(<code class="highlighter-rouge">http_tokens=required</code>)는 <code class="highlighter-rouge">eks.tf</code>에 명시하지 않았어도 <code class="highlighter-rouge">terraform-aws-modules/eks</code> 모듈 기본값으로 적용되어 있다. EC2 콘솔에서 “IMDSv2: Required”로 확인할 수 있다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/genai-on-k8s-ch09-imdsv2-required.png" alt="EC2 인스턴스 요약 — IMDSv2: Required" class="align-center"></p>
+
+<p>다만 <code class="highlighter-rouge">hop_limit</code>은 기본 <strong>2</strong>라 컨테이너 → 노드 IMDS 차단(<code class="highlighter-rouge">hop_limit=1</code>)은 미적용이다. 미적용인 건 IMDSv2가 아니라 hop_limit 하드닝뿐이다.</p>
+
+<p><br></p>
+
+<h1 id="step-4--pod-security-standards-pss">Step 4 — Pod Security Standards (PSS)</h1>
+
+<p>namespace에 PSS 라벨을 적용한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl label <span class="nt">--overwrite</span> namespace default <span class="se">\</span>
+    pod-security.kubernetes.io/enforce<span class="o">=</span>baseline <span class="se">\</span>
+    pod-security.kubernetes.io/warn<span class="o">=</span>restricted <span class="se">\</span>
+    pod-security.kubernetes.io/audit<span class="o">=</span>restricted
+
+<span class="c"># 실행 결과</span>
+namespace/default labeled
+</code></pre></div></div>
+
+<p>privileged 파드를 생성 시도하면 <strong>baseline enforce에 의해 차단</strong>된다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl run pss-demo <span class="nt">--image</span><span class="o">=</span>nginx <span class="nt">--privileged</span>
+
+<span class="c"># 실행 결과</span>
+Error from server <span class="o">(</span>Forbidden<span class="o">)</span>: pods <span class="s2">"pss-demo"</span> is forbidden:
+  violates PodSecurity <span class="s2">"baseline:latest"</span>: privileged
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">enforce=baseline</code>이 privileged 파드를 실제 차단하는 것을 확인했다. <code class="highlighter-rouge">warn=restricted</code>도 걸어뒀기 때문에 이후 모든 파드 생성 시 restricted 경고가 뜨지만, enforce가 아니므로 생성은 된다.</p>
+
+<p><br></p>
+
+<h1 id="step-5--secret-주입-검증-csi--pod-identity">Step 5 — Secret 주입 검증 (CSI + Pod Identity)</h1>
+
+<p><strong>이 챕터의 핵심</strong>이다. CPU 노드만으로 secret 주입 전체를 검증한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># CSI driver + provider DaemonSet 확인</span>
+<span class="nv">$ </span>kubectl get ds <span class="nt">-n</span> kube-system | <span class="nb">grep </span>secrets-store
+secrets-store-csi-driver              ...
+secrets-store-csi-driver-provider-aws ...
+
+<span class="c"># Pod Identity association 확인</span>
+<span class="nv">$ </span>aws eks list-pod-identity-associations <span class="nt">--cluster-name</span> eks-demo <span class="nt">--region</span> ap-northeast-2 <span class="se">\</span>
+    <span class="nt">--query</span> <span class="s2">"associations[?serviceAccount=='my-llama-sa']"</span>
+
+<span class="c"># 실행 결과</span>
+<span class="o">[</span> <span class="o">{</span> <span class="s2">"namespace"</span>: <span class="s2">"default"</span>,
+    <span class="s2">"serviceAccount"</span>: <span class="s2">"my-llama-sa"</span>,
+    <span class="s2">"associationId"</span>: <span class="s2">"a-xxxxxxxxxxxx"</span> <span class="o">}</span> <span class="o">]</span>
+</code></pre></div></div>
+
+<p>SecretProviderClass와 SA를 생성하고, CPU 전용 테스트 파드를 배포한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl apply <span class="nt">-f</span> inference/secret-provider-class.yaml
+secretproviderclass.../aws-secret-provider-class created
+
+<span class="nv">$ </span>kubectl create serviceaccount my-llama-sa <span class="nt">-n</span> default
+serviceaccount/my-llama-sa created
+
+<span class="nv">$ </span>kubectl apply <span class="nt">-f</span> inference/secret-test-pod.yaml
+Warning: would violate PodSecurity <span class="s2">"restricted:latest"</span>: ...
+pod/secret-test created
+
+<span class="nv">$ </span>kubectl get pod secret-test
+
+<span class="c"># 실행 결과</span>
+NAME          READY   STATUS    RESTARTS   AGE
+secret-test   1/1     Running   0          30s
+</code></pre></div></div>
+
+<blockquote>
+  <p><code class="highlighter-rouge">warn=restricted</code> 경고가 떴지만 <code class="highlighter-rouge">enforce=baseline</code>이라 생성은 된다. warn vs enforce 차이를 눈으로 확인할 수 있다.</p>
+</blockquote>
+
+<p>secret이 두 경로로 모두 들어왔는지 확인한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 경로 A: env 주입 (secretKeyRef)</span>
+<span class="nv">$ </span>kubectl <span class="nb">exec </span>secret-test <span class="nt">--</span> env | <span class="nb">grep </span>HUGGING_FACE
+<span class="nv">HUGGING_FACE_HUB_TOKEN</span><span class="o">=</span>hf_<span class="k">***</span>
+
+<span class="c"># 경로 B: 파일 마운트 (CSI)</span>
+<span class="nv">$ </span>kubectl <span class="nb">exec </span>secret-test <span class="nt">--</span> <span class="nb">cat</span> /mnt/secrets-store/hugging-face-secret
+hf_<span class="k">***</span>
+</code></pre></div></div>
+
+<p><strong>env·파일 두 경로 모두에 동일 토큰으로 주입</strong> = Secrets Manager → CSI → 파드 흐름 성공. <strong>이 챕터의 핵심 검증 완료.</strong></p>
+
+<p><br></p>
+
+<h1 id="step-6--gpu-추론-시도--트러블슈팅">Step 6 — GPU 추론 시도 + 트러블슈팅</h1>
+
+<h2 id="gpu-없이-배포--pending-확인">GPU 없이 배포 → Pending 확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl apply <span class="nt">-f</span> inference/finetuned-inf-deploy.yaml
+deployment.apps/my-llama-finetuned-deployment created
+service/my-llama-finetuned-svc created
+
+<span class="nv">$ </span>kubectl describe pod <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>my-llama-finetuned | <span class="nb">grep</span> <span class="nt">-A5</span> Events
+
+<span class="c"># 실행 결과</span>
+Warning  FailedScheduling  ...  0/3 nodes are available: 3 Insufficient nvidia.com/gpu.
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">nvidia.com/gpu: 1</code> 요청이 CPU 노드에 맞지 않아 Pending — 예상대로다.</p>
+
+<h2 id="gpu-노드-켜기--노드는-ready-그러나-파드는-eviction">GPU 노드 켜기 → 노드는 Ready, 그러나 파드는 eviction</h2>
+
+<p><code class="highlighter-rouge">eks.tf</code>의 <code class="highlighter-rouge">eks-gpu-mng</code>를 On-Demand로 apply하면 GPU 노드가 합류한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get nodes <span class="nt">-o</span> wide | <span class="nb">grep </span>nvidia
+
+<span class="c"># 실행 결과</span>
+ip-10-0-35-212...   Ready   ...   Bottlerocket OS 1.62.0 <span class="o">(</span>aws-k8s-1.32-nvidia<span class="o">)</span>
+
+<span class="nv">$ </span>kubectl get node ip-10-0-35-212... <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.allocatable.nvidia\.com/gpu}'</span>
+1
+</code></pre></div></div>
+
+<p><img src="https://sirzzang.github.io//assets/images/genai-on-k8s-ch09-eks-console-nodegroups.png" alt="EKS 콘솔 — 노드그룹 2개(eks-mng, eks-gpu-mng)" class="align-center"></p>
+
+<p><img src="https://sirzzang.github.io//assets/images/genai-on-k8s-ch09-ec2-gpu-node-g6.png" alt="EC2 콘솔 — eks-gpu-mng 노드 = g6.2xlarge(L4)" class="align-center"></p>
+
+<p>GPU 노드는 Ready이고 <code class="highlighter-rouge">nvidia.com/gpu: 1</code>을 광고하지만, 파드는 스케줄 후 <code class="highlighter-rouge">ContainerCreating</code>에서 죽고 다시 Pending — eviction 루프에 빠진다.</p>
+
+<h2 id="원인--gpu가-아니라-ephemeral-storage디스크">원인 — GPU가 아니라 ephemeral-storage(디스크)</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get pod my-llama-finetuned-...-98x5q <span class="se">\</span>
+    <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.reason}{"\t"}{.status.message}'</span>
+
+<span class="c"># 실행 결과</span>
+Evicted    The node was low on resource: ephemeral-storage.
+           Threshold quantity: 2888722137, available: 84Ki.
+</code></pre></div></div>
+
+<p>GPU 노드의 디스크 용량을 보면 <strong>데이터 볼륨이 18GB</strong>뿐이다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl describe node ip-10-0-35-212... | <span class="nb">grep</span> <span class="nt">-A4</span> Allocatable
+
+<span class="c"># 실행 결과 (발췌)</span>
+Allocatable:
+  ephemeral-storage:  16258590282     <span class="c"># ~16.25GB</span>
+  nvidia.com/gpu:     1
+</code></pre></div></div>
+
+<h3 id="근본-원인-bottlerocket의-볼륨-구조">근본 원인: Bottlerocket의 볼륨 구조</h3>
+
+<p>Bottlerocket은 볼륨이 둘이다:</p>
+<ul>
+  <li>
+<code class="highlighter-rouge">/dev/xvda</code>(OS 볼륨) — 루트 파일시스템, 읽기전용</li>
+  <li>
+<code class="highlighter-rouge">/dev/xvdb</code>(<strong>데이터 볼륨</strong>) — 컨테이너 이미지 + ephemeral-storage가 여기 쌓인다</li>
+</ul>
+
+<p><code class="highlighter-rouge">eks.tf</code>에서 키운 100GB는 <code class="highlighter-rouge">xvda</code>(OS 볼륨)로 갔고, 정작 이미지가 쌓이는 <strong><code class="highlighter-rouge">xvdb</code> 데이터 볼륨은 AMI 기본 18GB</strong> 그대로였다. <code class="highlighter-rouge">k8s4genai/my-llama:32</code>는 모델을 구워넣은 대형 이미지라 추출 중 18GB를 다 채우면 kubelet이 ephemeral-storage threshold에서 파드를 evict한다.</p>
+
+<h3 id="수정--데이터-볼륨xvdb을-키워야-한다">수정 — 데이터 볼륨(xvdb)을 키워야 한다</h3>
+
+<pre><code class="language-hcl">eks-gpu-mng = {
+  # ...
+  block_device_mappings = {
+    xvdb = {                          # OS가 아니라 데이터 볼륨!
+      device_name = "/dev/xvdb"
+      ebs = {
+        volume_size           = 100   # 18GB → 100GB
+        volume_type           = "gp3"
+        encrypted             = true
+        delete_on_termination = true
+      }
+    }
+  }
+}
+</code></pre>
+
+<blockquote>
+  <p>Bottlerocket에서는 OS(<code class="highlighter-rouge">xvda</code>)가 아니라 <strong>데이터 볼륨(<code class="highlighter-rouge">xvdb</code>)</strong>을 키워야 대형 이미지가 들어간다.</p>
+</blockquote>
+
+<h2 id="결정--ch10으로-이연">결정 — Ch10으로 이연</h2>
+
+<p>이 챕터의 핵심인 <strong>secret 주입은 Step 5에서 이미 완료</strong>됐다. GPU 추론 Running은 보안 개념 검증에 필수가 아니고, Ch10(GPU 최적화)이 같은 클러스터 위에서 같은 대형 이미지를 5 replica로 띄우므로, fix를 코드에 반영해 두고 <strong>Ch10에서 데이터 볼륨을 키워 GPU 추론을 이어가기로 결정</strong>했다.</p>
+
+<p><br></p>
+
+<h1 id="teardown">Teardown</h1>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl delete <span class="nt">-f</span> inference/finetuned-inf-deploy.yaml <span class="nt">--ignore-not-found</span>
+<span class="nv">$ </span>kubectl delete pod secret-test <span class="nt">--ignore-not-found</span>
+<span class="nv">$ </span>kubectl delete <span class="nt">-f</span> inference/secret-provider-class.yaml <span class="nt">--ignore-not-found</span>
+
+<span class="nv">$ </span>terraform destroy <span class="nt">-auto-approve</span>
+
+<span class="nv">$ </span>aws secretsmanager delete-secret <span class="se">\</span>
+    <span class="nt">--secret-id</span> hugging-face-secret <span class="se">\</span>
+    <span class="nt">--force-delete-without-recovery</span> <span class="se">\</span>
+    <span class="nt">--region</span> ap-northeast-2
+</code></pre></div></div>
+
+<p>destroy 완료 후 orphan audit(과금원 잔존 확인):</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>카테고리</th>
+      <th>결과</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>EKS 클러스터 / EC2(running) / NAT GW / 미연결 EIP</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>orphan EBS(available) / ELB·NLB·ALB</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>ECR repo 3종 / Secrets Manager</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>VPC(eks-demo) / 잔여 ENI / IAM role / 로그그룹</td>
+      <td>0</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>단계</th>
+      <th>검증 내용</th>
+      <th>결과</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Step 1</td>
+      <td>terraform apply + 노드 3대 Ready</td>
+      <td>성공</td>
+    </tr>
+    <tr>
+      <td>Step 2</td>
+      <td>ECR: AES256 / IMMUTABLE / ENHANCED</td>
+      <td>성공</td>
+    </tr>
+    <tr>
+      <td>Step 3</td>
+      <td>노드 OS = Bottlerocket, IMDSv2 = Required</td>
+      <td>성공</td>
+    </tr>
+    <tr>
+      <td>Step 4</td>
+      <td>privileged 파드 Forbidden(PSS baseline)</td>
+      <td>성공</td>
+    </tr>
+    <tr>
+      <td><strong>Step 5</strong></td>
+      <td><strong>secret env·파일 두 경로 주입(이 챕터 핵심)</strong></td>
+      <td><strong>성공</strong></td>
+    </tr>
+    <tr>
+      <td>Step 6</td>
+      <td>GPU 추론 시도 → ephemeral-storage eviction</td>
+      <td>원인 규명, Ch10 이연</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Step 5까지가 Ch9 보안 챕터의 본질이다. GPU 추론은 보안 개념 검증과 무관하며, Bottlerocket의 xvdb 데이터 볼륨 크기 문제는 Ch10에서 해결한다.</p>
+
+<p><br></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions">Kubernetes for Generative AI Solutions — GitHub</a></li>
+  <li><a href="https://bottlerocket.dev/en/os/latest/#/api/settings/kubernetes/">Bottlerocket 데이터 볼륨 설정</a></li>
+  <li><a href="https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html">EKS Pod Identity 소개</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/security/pod-security-standards/">Kubernetes Pod Security Standards</a></li>
+  <li><a href="https://secrets-store-csi-driver.sigs.k8s.io/">Secrets Store CSI Driver</a></li>
+  <li><a href="https://docs.aws.amazon.com/AmazonECR/latest/userguide/image-scanning-enhanced.html">ECR Enhanced Scanning</a></li>
+</ul>
+
+<p><br></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#bottlerocket" class="page__taxonomy-item" rel="tag">Bottlerocket</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#genai" class="page__taxonomy-item" rel="tag">GenAI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions-chapter-9" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions-Chapter-9</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#pod-identity" class="page__taxonomy-item" rel="tag">Pod-Identity</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#pss" class="page__taxonomy-item" rel="tag">PSS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#secrets-store-csi" class="page__taxonomy-item" rel="tag">Secrets-Store-CSI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#security" class="page__taxonomy-item" rel="tag">Security</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#terraform" class="page__taxonomy-item" rel="tag">Terraform</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#troubleshooting" class="page__taxonomy-item" rel="tag">Troubleshooting</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-05-24T00:00:00+09:00">May 24, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BGenAI%5D+GenAI+on+K8s%3A+9.3+-+%EB%B3%B4%EC%95%88+%EB%B0%B0%ED%8F%AC+%EC%8B%A4%EC%8A%B5%3A+5%EB%8B%A8%EA%B3%84+%EA%B2%80%EC%A6%9D+%2B+GPU+%ED%8A%B8%EB%9F%AC%EB%B8%94%EC%8A%88%ED%8C%85%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-09-03-Security-Deployment-Verification%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-09-03-Security-Deployment-Verification%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&amp;url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-09-03-Security-Deployment-Verification%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-GenAI-on-K8s-09-03-Security-Deployment-Verification?color=green&amp;label=hits&amp;size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-09-02-Security-Infrastructure-Code/" class="pagination--pager" title="[GenAI] GenAI on K8s: 9.2 - 보안 인프라 코드 분석: EKS + Secret 주입 흐름
+">이전</a>
+    
+    
+      <a href="/dev/Dev-GPU-ECC-Memory-Integrity/" class="pagination--pager" title="[GPU] GPU ECC: 메모리 오류를 검출하고 정정하는 원리
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src="/assets/images/blog-AI.jpg" alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src="/assets/images/blog-AI.jpg" alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src="/assets/images/blog-AI.jpg" alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src="/assets/images/blog-AI.jpg" alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap">
+<form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요...">
+  </form>
+  <div id="results" class="results"></div>
+</div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-1813896769045927" data-ad-slot="4300544769" data-ad-format="auto" data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">© 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-09-03-Security-Deployment-Verification/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-GenAI-on-K8s-09-03-Security-Deployment-Verification"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+</noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

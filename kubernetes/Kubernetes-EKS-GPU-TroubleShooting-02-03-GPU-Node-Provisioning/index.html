@@ -1,0 +1,1884 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[EKS] EKS GPU 트러블슈팅: 2. 실습 환경 구성 - 3. GPU 노드 프로비저닝 결과 - Eraser’s StudyLog</title>
+<meta name="description" content="GPU 노드를 프로비저닝하고 GPU Operator를 설치한 뒤, Allocatable GPU와 nvidia-smi로 end-to-end 검증해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[EKS] EKS GPU 트러블슈팅: 2. 실습 환경 구성 - 3. GPU 노드 프로비저닝 결과">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-03-GPU-Node-Provisioning/">
+
+
+  <meta property="og:description" content="GPU 노드를 프로비저닝하고 GPU Operator를 설치한 뒤, Allocatable GPU와 nvidia-smi로 end-to-end 검증해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-09T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-03-GPU-Node-Provisioning/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[EKS] EKS GPU 트러블슈팅: 2. 실습 환경 구성 - 3. GPU 노드 프로비저닝 결과">
+    <meta itemprop="description" content="GPU 노드를 프로비저닝하고 GPU Operator를 설치한 뒤, Allocatable GPU와 nvidia-smi로 end-to-end 검증해 보자.">
+    <meta itemprop="datePublished" content="2026-04-09T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[EKS] EKS GPU 트러블슈팅: 2. 실습 환경 구성 - 3. GPU 노드 프로비저닝 결과
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-09T00:00:00+09:00">2026년 04월 09일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  10 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#pre-apply-상태-확인">Pre-apply 상태 확인</a>
+    <ul>
+      <li><a href="#쿼터-재확인">쿼터 재확인</a></li>
+      <li><a href="#클러스터-현황">클러스터 현황</a></li>
+    </ul>
+  </li>
+  <li><a href="#gpu-노드-스케일업">GPU 노드 스케일업</a>
+    <ul>
+      <li><a href="#cli-스케일업">CLI 스케일업</a></li>
+      <li><a href="#gpu-노드-ready-대기">GPU 노드 Ready 대기</a></li>
+      <li><a href="#노드-상태-확인">노드 상태 확인</a>
+        <ul>
+          <li><a href="#라벨-확인">라벨 확인</a></li>
+          <li><a href="#pre-operator-allocatable">Pre-operator Allocatable</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#gpu-operator-설치">GPU Operator 설치</a>
+    <ul>
+      <li><a href="#terraform-plan--apply">terraform plan + apply</a></li>
+      <li><a href="#helm-wait의-범위">Helm wait의 범위</a></li>
+      <li><a href="#helmoperator-상태-확인">Helm/Operator 상태 확인</a></li>
+    </ul>
+  </li>
+  <li><a href="#gpu-검증">GPU 검증</a>
+    <ul>
+      <li><a href="#post-operator-allocatable">Post-operator Allocatable</a></li>
+      <li><a href="#nvidia-smi-pod">nvidia-smi Pod</a></li>
+    </ul>
+  </li>
+  <li><a href="#helm-vs-operator-reconcile-분리">Helm vs Operator reconcile 분리</a>
+    <ul>
+      <li><a href="#분리-조회">분리 조회</a></li>
+      <li><a href="#1-helm이-직접-생성한-리소스">1. Helm이 직접 생성한 리소스</a></li>
+      <li><a href="#2-operator-reconcile-산물">2. Operator reconcile 산물</a></li>
+      <li><a href="#crd와-nfd-라벨">CRD와 NFD 라벨</a>
+        <ul>
+          <li><a href="#nfd-라벨-변화">NFD 라벨 변화</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a>
+    <ul>
+      <li><a href="#클러스터-규모-변화">클러스터 규모 변화</a></li>
+      <li><a href="#gpu-노드-상세">GPU 노드 상세</a></li>
+      <li><a href="#핵심-발견">핵심 발견</a></li>
+      <li><a href="#재현용-명령-요약">재현용 명령 요약</a></li>
+      <li><a href="#다음-단계">다음 단계</a></li>
+    </ul>
+  </li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em>정영준님의 AWS EKS Workshop Study(AEWS) <a href="https://devfloor9.github.io/engineering-playbook/slides/eks-debugging/">5주차 학습 내용</a>을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-02-Installation-Result/">이전 글</a>에서 배포한 기반 인프라(GPU 0대, Helm 0개) 위에 GPU 노드 2대를 프로비저닝하고 GPU Operator를 설치한다.</p>
+
+<ul>
+  <li><strong>GPU 노드 프로비저닝</strong>: <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-01-Installation/#비용-가드의-실제-스케일링-경로">이전 코드 분석</a>에서 확인한 대로 AWS CLI로 스케일업. g5.xlarge × 2, 단일 AZ, ~2-3분만에 Ready</li>
+  <li><strong>GPU Operator 설치</strong>: Helm apply 25초 완료. 단, Helm <code class="highlighter-rouge">wait</code>는 chart template 리소스(Deployment 3 + DaemonSet 1)만 감시하고, ClusterPolicy reconcile 산물(DaemonSet 6, Service 2 등)은 <strong>비동기로 생성</strong>된다</li>
+  <li><strong>end-to-end 검증</strong>: nvidia-smi Pod에서 <strong>Driver 580.126.09, CUDA 13.0, NVIDIA A10G 24GB</strong> 확인. AMI 내장 드라이버가 컨테이너까지 정상 전달됨</li>
+  <li><strong>Helm vs Operator 경계</strong>: Helm이 직접 생성하는 ~30개 리소스와 Operator가 reconcile로 만드는 ~50개 리소스의 경계를 확인</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="pre-apply-상태-확인">Pre-apply 상태 확인</h1>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-02-Installation-Result/">이전 글</a>의 배포 종료 시점에서 시작한다. GPU 노드 0대, Helm release 0개인 기반 인프라만 올라가 있는 상태다.</p>
+
+<h2 id="쿼터-재확인">쿼터 재확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>aws sts get-caller-identity
+aws service-quotas get-service-quota <span class="se">\</span>
+  <span class="nt">--service-code</span> ec2 <span class="nt">--quota-code</span> L-DB2E81BA <span class="nt">--region</span> ap-northeast-2
+</code></pre></div></div>
+
+<div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+    </span><span class="s2">"Account"</span><span class="p">:</span><span class="w"> </span><span class="s2">"123456789012"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"Arn"</span><span class="p">:</span><span class="w"> </span><span class="s2">"arn:aws:iam::123456789012:user/admin"</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div></div>
+
+<div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+    </span><span class="s2">"Quota"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+        </span><span class="s2">"ServiceCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ec2"</span><span class="p">,</span><span class="w">
+        </span><span class="s2">"QuotaCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"L-DB2E81BA"</span><span class="p">,</span><span class="w">
+        </span><span class="s2">"QuotaName"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Running On-Demand G and VT instances"</span><span class="p">,</span><span class="w">
+        </span><span class="s2">"Value"</span><span class="p">:</span><span class="w"> </span><span class="mf">8.0</span><span class="p">,</span><span class="w">
+        </span><span class="s2">"Unit"</span><span class="p">:</span><span class="w"> </span><span class="s2">"None"</span><span class="w">
+    </span><span class="p">}</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div></div>
+
+<p>g5.xlarge × 2 = <strong>8 vCPU</strong>가 필요하고, 쿼터도 <strong>8 vCPU</strong>다. <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-01-PreRequisites/">사전 준비</a>에서 증설한 딱 그 값이다. 여유가 없으므로 ASG 최대 노드 수 2 제한이 유효하다.</p>
+
+<h2 id="클러스터-현황">클러스터 현황</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get nodes <span class="nt">-o</span> wide
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NAME                                               STATUS   ROLES    AGE   VERSION               INTERNAL-IP
+ip-192-168-xx-xx.ap-northeast-2.compute.internal   Ready    &lt;none&gt;   62m   v1.35.3-eks-bbe087e   192.168.xx.xx
+ip-192-168-yy-yy.ap-northeast-2.compute.internal   Ready    &lt;none&gt;   62m   v1.35.3-eks-bbe087e   192.168.yy.yy
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm list <span class="nt">-A</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NAME    NAMESPACE       REVISION        UPDATED STATUS  CHART   APP VERSION
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get ns
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NAME              STATUS   AGE
+cert-manager      Active   62m
+default           Active   72m
+external-dns      Active   62m
+kube-node-lease   Active   72m
+kube-public       Active   72m
+kube-system       Active   72m
+</code></pre></div></div>
+
+<p>시스템 노드 t3.medium × 2(AZ 2a/2c)가 62분째 Ready, Helm release 0개, <code class="highlighter-rouge">gpu-operator</code> 네임스페이스 없음. <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-02-Installation-Result/#정리">이전 글</a>의 종료 상태와 일치한다.</p>
+
+<p><br /></p>
+
+<h1 id="gpu-노드-스케일업">GPU 노드 스케일업</h1>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-01-Installation/#비용-가드의-실제-스케일링-경로">코드 분석</a>에서 확인한 대로, 이미 존재하는 노드 그룹의 <code class="highlighter-rouge">desiredSize</code>는 EKS 모듈의 <code class="highlighter-rouge">lifecycle.ignore_changes</code> 때문에 Terraform으로 변경할 수 없다. AWS CLI로 직접 호출한다.</p>
+
+<h2 id="cli-스케일업">CLI 스케일업</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>aws eks update-nodegroup-config <span class="se">\</span>
+  <span class="nt">--cluster-name</span> myeks5w <span class="se">\</span>
+  <span class="nt">--nodegroup-name</span> myeks5w-ng-gpu <span class="se">\</span>
+  <span class="nt">--scaling-config</span> <span class="nv">minSize</span><span class="o">=</span>0,maxSize<span class="o">=</span>2,desiredSize<span class="o">=</span>2 <span class="se">\</span>
+  <span class="nt">--region</span> ap-northeast-2
+</code></pre></div></div>
+
+<div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+    </span><span class="s2">"update"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+        </span><span class="s2">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"abcd1234-5678-90ef-ghij-klmnopqrstuv"</span><span class="p">,</span><span class="w">
+        </span><span class="s2">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"InProgress"</span><span class="p">,</span><span class="w">
+        </span><span class="s2">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ConfigUpdate"</span><span class="w">
+    </span><span class="p">}</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div></div>
+
+<p><code class="highlighter-rouge">desiredSize=2</code>로 설정했다. Terraform state는 건드리지 않으므로, TF 입장에서 이 노드 그룹의 <code class="highlighter-rouge">desiredSize</code>는 여전히 0이다. 의도된 드리프트(drift)다.</p>
+
+<h2 id="gpu-노드-ready-대기">GPU 노드 Ready 대기</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">while </span><span class="nb">true</span><span class="p">;</span> <span class="k">do
+  </span><span class="nv">READY</span><span class="o">=</span><span class="k">$(</span>kubectl get nodes <span class="nt">-l</span> <span class="nv">tier</span><span class="o">=</span>gpu <span class="nt">--no-headers</span> 2&gt;/dev/null <span class="se">\</span>
+    | awk <span class="s1">'$2=="Ready"'</span> | wc <span class="nt">-l</span><span class="k">)</span>
+  <span class="nv">TOTAL</span><span class="o">=</span><span class="k">$(</span>kubectl get nodes <span class="nt">-l</span> <span class="nv">tier</span><span class="o">=</span>gpu <span class="nt">--no-headers</span> 2&gt;/dev/null | wc <span class="nt">-l</span><span class="k">)</span>
+  <span class="nb">echo</span> <span class="s2">"gpu nodes: </span><span class="k">${</span><span class="nv">READY</span><span class="k">}</span><span class="s2">/</span><span class="k">${</span><span class="nv">TOTAL</span><span class="k">}</span><span class="s2"> Ready"</span>
+  <span class="o">[</span> <span class="s2">"</span><span class="nv">$READY</span><span class="s2">"</span> <span class="o">=</span> <span class="s2">"2"</span> <span class="o">]</span> <span class="o">&amp;&amp;</span> <span class="nb">break
+  </span>sleep 20
+<span class="k">done</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>gpu nodes: 2/2 Ready
+</code></pre></div></div>
+
+<p>g5.xlarge 2대가 단일 AZ(ap-northeast-2a)에서 <strong>~2-3분</strong> 만에 Ready 상태에 도달했다. AL2023 NVIDIA AMI 부팅 후 nodeadm이 kubelet 등록을 완료하는 데까지 포함된 시간이다.</p>
+
+<p><br /></p>
+
+<p><img src="https://sirzzang.github.io//assets/images/myeks5w-gpu-node-provisioned.png" alt="myeks5w-gpu-node-provisioned" class="align-center" /></p>
+
+<center><sup>EKS 콘솔 컴퓨팅 탭 — 노드 4대(primary 2 + gpu 2), 노드 그룹 2개(ng-1, ng-gpu 각 desired=2)</sup></center>
+
+<h2 id="노드-상태-확인">노드 상태 확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get nodes <span class="nt">-o</span> wide
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NAME                                               STATUS   ROLES    AGE   VERSION               INTERNAL-IP      NODE
+ip-192-168-xx-xx.ap-northeast-2.compute.internal   Ready    &lt;none&gt;   65m   v1.35.3-eks-bbe087e   192.168.xx.xx    # primary, AZ 2a
+ip-192-168-yy-yy.ap-northeast-2.compute.internal   Ready    &lt;none&gt;   65m   v1.35.3-eks-bbe087e   192.168.yy.yy    # primary, AZ 2c
+ip-192-168-aa-aa.ap-northeast-2.compute.internal   Ready    &lt;none&gt;   2m    v1.35.3-eks-bbe087e   192.168.aa.aa    # gpu, AZ 2a
+ip-192-168-bb-bb.ap-northeast-2.compute.internal   Ready    &lt;none&gt;   2m    v1.35.3-eks-bbe087e   192.168.bb.bb    # gpu, AZ 2a
+</code></pre></div></div>
+
+<p>GPU 노드 2대가 모두 <strong>ap-northeast-2a</strong> 단일 AZ에 배치된 것을 확인할 수 있다. <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-01-Installation/#subnetids">코드 분석</a>에서 의도한 대로 NCCL 레이턴시를 최소화하는 배치다.</p>
+
+<h3 id="라벨-확인">라벨 확인</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get nodes <span class="nt">-l</span> <span class="nv">tier</span><span class="o">=</span>gpu <span class="nt">--show-labels</span>
+</code></pre></div></div>
+
+<p>GPU 노드에 붙은 주요 라벨을 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>라벨</th>
+      <th>값</th>
+      <th>출처</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">tier</code></td>
+      <td><code class="highlighter-rouge">gpu</code></td>
+      <td>Terraform labels</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nvidia.com/gpu</code></td>
+      <td><code class="highlighter-rouge">true</code></td>
+      <td>Terraform labels</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nvidia.com/gpu.present</code></td>
+      <td><code class="highlighter-rouge">true</code></td>
+      <td><strong>AMI bootstrap</strong></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">node.kubernetes.io/instance-type</code></td>
+      <td><code class="highlighter-rouge">g5.xlarge</code></td>
+      <td>EKS 자동</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">topology.kubernetes.io/zone</code></td>
+      <td><code class="highlighter-rouge">ap-northeast-2a</code></td>
+      <td>EKS 자동</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">nvidia.com/gpu.present=true</code>가 눈에 띈다. 이 라벨은 Terraform <code class="highlighter-rouge">labels</code>에 명시하지 않았고 NFD(Node Feature Discovery)도 아직 설치되지 않은 상태다. AL2023 NVIDIA AMI의 nodeadm/bootstrap 스크립트가 kubelet 등록 시점에 직접 주입한 것이다. <code class="highlighter-rouge">nodeSelector: nvidia.com/gpu.present=true</code> 형태의 간단한 셀렉터는 <strong>NFD 없이도</strong> 동작할 수 있다는 뜻이다.</p>
+
+<h3 id="pre-operator-allocatable">Pre-operator Allocatable</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl describe node ip-192-168-aa-aa.ap-northeast-2.compute.internal
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Allocatable:
+  cpu:                3920m
+  ephemeral-storage:  95491281146
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             15147936Ki
+  pods:               50
+</code></pre></div></div>
+
+<p><strong><code class="highlighter-rouge">nvidia.com/gpu</code> 항목이 없다.</strong> Device Plugin이 아직 동작하지 않으므로, kubelet은 GPU를 인식하지 못한다. 이 상태에서 <code class="highlighter-rouge">nvidia.com/gpu: 1</code>을 요청하는 Pod는 <code class="highlighter-rouge">Insufficient nvidia.com/gpu</code>로 Pending에 빠진다.</p>
+
+<p><br /></p>
+
+<h1 id="gpu-operator-설치">GPU Operator 설치</h1>
+
+<p>GPU 노드가 Ready된 상태에서 GPU Operator를 설치한다.</p>
+
+<h2 id="terraform-plan--apply">terraform plan + apply</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>terraform plan <span class="nt">-var</span> <span class="nv">gpu_desired_size</span><span class="o">=</span>2 <span class="nt">-var</span> <span class="nv">enable_gpu_operator</span><span class="o">=</span><span class="nb">true</span> <span class="nt">-out</span><span class="o">=</span>e4.tfplan
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Plan: 1 to add, 0 to change, 0 to destroy.
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">helm_release.gpu_operator[0]</code> create 1건이다. 노드 그룹 scaling 변경은 <code class="highlighter-rouge">ignore_changes</code> 때문에 plan에 잡히지 않는다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>terraform apply e4.tfplan
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm_release.gpu_operator[0]: Creating...
+helm_release.gpu_operator[0]: Creation complete after 25s [id=gpu-operator]
+
+Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+</code></pre></div></div>
+
+<p><strong>25초</strong>만에 완료되었다. <code class="highlighter-rouge">helm_release</code>의 설정은 <code class="highlighter-rouge">wait=true, timeout=900</code>인데, 왜 이렇게 빠를까?</p>
+
+<h2 id="helm-wait의-범위">Helm wait의 범위</h2>
+
+<p>Helm의 <code class="highlighter-rouge">wait</code>는 chart template에 <strong>직접 포함된</strong> Deployment/DaemonSet/Service의 Readiness만 감시한다. <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-02-Installation-Result/#렌더-프리뷰">이전 글</a>에서 확인한 대로, Helm template이 직접 생성하는 리소스는 27개이고, 그중 Readiness를 기다리는 대상은 Deployment 3개 + DaemonSet 1개(nfd-worker)뿐이다.</p>
+
+<p><strong>ClusterPolicy CR</strong>은 Helm 입장에서 단순한 manifest create다. 이 CR을 Operator 컨트롤러가 watch하다가 reconcile로 DaemonSet, Service, ConfigMap 등을 <strong>비동기로</strong> 만들어낸다. 즉, Helm이 “deployed” 상태를 선언한 25초 시점에 Operator reconcile 산물은 아직 생성 중일 수 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Helm “deployed” (25초)</th>
+      <th>Operator reconcile 완료</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Deployment 3 (operator, nfd-master, nfd-gc)</td>
+      <td>DaemonSet 6개</td>
+    </tr>
+    <tr>
+      <td>DaemonSet 1 (nfd-worker)</td>
+      <td>Service 2개</td>
+    </tr>
+    <tr>
+      <td>ServiceAccount 2</td>
+      <td>ServiceAccount/Role/RoleBinding 6세트</td>
+    </tr>
+    <tr>
+      <td>ClusterPolicy CR 1 (manifest create만)</td>
+      <td>ConfigMap 3개</td>
+    </tr>
+    <tr>
+      <td>…</td>
+      <td>Validator Job 4개</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>Helm release deployed ≠ “모든 GPU가 준비됨”</strong>이다. 실제 준비 완료 판단 기준은 <code class="highlighter-rouge">kubectl get clusterpolicy -o jsonpath='{.items[0].status.state}'</code>가 <code class="highlighter-rouge">ready</code>인 시점 + GPU 노드 Allocatable에 <code class="highlighter-rouge">nvidia.com/gpu</code>가 노출되는 시점이다.</p>
+</blockquote>
+
+<h2 id="helmoperator-상태-확인">Helm/Operator 상태 확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm list <span class="nt">-n</span> gpu-operator
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NAME            NAMESPACE       REVISION   STATUS     CHART                  APP VERSION
+gpu-operator    gpu-operator    1          deployed   gpu-operator-v26.3.1   v26.3.1
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get pods <span class="nt">-n</span> gpu-operator <span class="nt">-o</span> wide
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>STATUS</th>
+      <th>개수</th>
+      <th>Pod</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Running</td>
+      <td>13</td>
+      <td>operator, nfd-master/gc/worker, gpu-feature-discovery, dcgm-exporter, device-plugin, operator-validator 등</td>
+    </tr>
+    <tr>
+      <td>Completed</td>
+      <td>4</td>
+      <td>nvidia-cuda-validator × 2, nvidia-device-plugin-validator × 2</td>
+    </tr>
+    <tr>
+      <td><strong>합계</strong></td>
+      <td><strong>17</strong></td>
+      <td>driver/toolkit Pod 0개 (AMI 내장, disabled 의도)</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get ds <span class="nt">-n</span> gpu-operator
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>DaemonSet</th>
+      <th>DESIRED</th>
+      <th>READY</th>
+      <th>비고</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>gpu-operator-node-feature-discovery-worker</td>
+      <td>4</td>
+      <td>4</td>
+      <td>전체 노드(primary 2 + gpu 2)</td>
+    </tr>
+    <tr>
+      <td>nvidia-gpu-feature-discovery</td>
+      <td>2</td>
+      <td>2</td>
+      <td>GPU 노드만</td>
+    </tr>
+    <tr>
+      <td>nvidia-dcgm-exporter</td>
+      <td>2</td>
+      <td>2</td>
+      <td>GPU 노드만</td>
+    </tr>
+    <tr>
+      <td>nvidia-device-plugin-daemonset</td>
+      <td>2</td>
+      <td>2</td>
+      <td>GPU 노드만</td>
+    </tr>
+    <tr>
+      <td>nvidia-operator-validator</td>
+      <td>2</td>
+      <td>2</td>
+      <td>GPU 노드만</td>
+    </tr>
+    <tr>
+      <td>nvidia-device-plugin-mps-control-daemon</td>
+      <td>0</td>
+      <td>0</td>
+      <td>MPS 미사용</td>
+    </tr>
+    <tr>
+      <td>nvidia-mig-manager</td>
+      <td>0</td>
+      <td>0</td>
+      <td>MIG 미사용</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>DaemonSet 7개 중 활성 5개, 비활성 2개(MPS/MIG). nfd-worker만 전체 노드에, 나머지는 GPU 노드에만 배치된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get clusterpolicy <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.items[0].status.state}'</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ready
+</code></pre></div></div>
+
+<p>ClusterPolicy <code class="highlighter-rouge">status.state</code>가 <code class="highlighter-rouge">ready</code>다. “all resources have been successfully reconciled” — Operator가 필요한 리소스를 모두 생성하고 정상 상태를 확인한 것이다.</p>
+
+<p><br /></p>
+
+<h1 id="gpu-검증">GPU 검증</h1>
+
+<h2 id="post-operator-allocatable">Post-operator Allocatable</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl describe node ip-192-168-aa-aa.ap-northeast-2.compute.internal
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Capacity:
+  nvidia.com/gpu:     1
+Allocatable:
+  cpu:                3920m
+  ephemeral-storage:  95491281146
+  memory:             15147936Ki
+  nvidia.com/gpu:     1
+  pods:               50
+</code></pre></div></div>
+
+<p><strong><code class="highlighter-rouge">nvidia.com/gpu: 1</code></strong>이 Capacity와 Allocatable 모두에 나타난다. Device Plugin DaemonSet이 GPU를 kubelet에 등록한 결과다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>Pre-operator</th>
+      <th>Post-operator</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">nvidia.com/gpu</code></td>
+      <td>없음</td>
+      <td><strong>1</strong></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">cpu</code></td>
+      <td>3920m</td>
+      <td>3920m</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">memory</code></td>
+      <td>15147936Ki</td>
+      <td>15147936Ki</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>GPU 외 다른 Allocatable 값은 변하지 않았다. Device Plugin은 GPU 리소스 광고(advertisement)만 담당하고, CPU/메모리에는 영향을 주지 않는다.</p>
+
+<h2 id="nvidia-smi-pod">nvidia-smi Pod</h2>
+
+<p>GPU taint toleration과 <code class="highlighter-rouge">nvidia.com/gpu: 1</code> resource limits를 지정해 Pod를 실행하고, 컨테이너 내부에서 GPU 드라이버가 보이는지 최종 검증한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl run smi <span class="nt">--restart</span><span class="o">=</span>Never <span class="se">\</span>
+  <span class="nt">--image</span><span class="o">=</span>nvidia/cuda:12.4.1-base-ubuntu22.04 <span class="se">\</span>
+  <span class="nt">--overrides</span><span class="o">=</span><span class="s1">'{
+    "spec": {
+      "containers": [{
+        "name": "smi",
+        "image": "nvidia/cuda:12.4.1-base-ubuntu22.04",
+        "command": ["nvidia-smi"],
+        "resources": {
+          "limits": {"nvidia.com/gpu": "1"}
+        }
+      }],
+      "tolerations": [{
+        "key": "nvidia.com/gpu",
+        "operator": "Exists",
+        "effect": "NoSchedule"
+      }]
+    }
+  }'</span>
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl logs smi
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>+-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.09              Driver Version: 580.126.09      CUDA Version: 13.0   |
+|--------------------------------------------+------------------------+-------------------+
+| GPU  Name                 Persistence-M    | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap    |          Memory-Usage  | GPU-Util  Compute M. |
+|============================================+========================+====================+
+|   0  NVIDIA A10G                      On   | 00000000:00:1E.0  Off  |                    0 |
+|  0%   28C    P8              24W / 300W    |      0MiB / 23028MiB   |      0%      Default |
++--------------------------------------------+------------------------+-------------------+
+</code></pre></div></div>
+
+<blockquote>
+  <p><strong>트러블슈팅</strong>: 처음 <code class="highlighter-rouge">kubectl run --rm -i</code> 조합으로 실행했을 때 stdout 캡처에 실패했다. <code class="highlighter-rouge">--rm</code>을 제거하고 <code class="highlighter-rouge">kubectl logs</code> → <code class="highlighter-rouge">kubectl delete pod</code> 순서로 재실행하면 정상 수집된다.</p>
+</blockquote>
+
+<p>Pod 내부에서 <strong>NVIDIA A10G(23028MiB)가 정상 인식</strong>되었다. 주요 필드를 해석하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>필드</th>
+      <th>값</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>NVIDIA-SMI / Driver Version</td>
+      <td><strong>580.126.09</strong></td>
+      <td>호스트(AMI)에 설치된 커널 드라이버 버전. Operator가 아닌 AL2023 NVIDIA AMI 내장</td>
+    </tr>
+    <tr>
+      <td>CUDA Version</td>
+      <td><strong>13.0</strong></td>
+      <td>드라이버가 지원하는 최대 CUDA 런타임 버전. 실제 사용 버전은 애플리케이션이 결정</td>
+    </tr>
+    <tr>
+      <td>GPU 0</td>
+      <td><strong>NVIDIA A10G</strong></td>
+      <td>g5.xlarge에 탑재된 Ampere 아키텍처 GPU</td>
+    </tr>
+    <tr>
+      <td>Memory</td>
+      <td><strong>0MiB / 23028MiB</strong></td>
+      <td>VRAM 24GB 중 사용량 0 — idle 상태 정상</td>
+    </tr>
+    <tr>
+      <td>Persistence-M</td>
+      <td><strong>On</strong></td>
+      <td>Persistence Mode 활성화. GPU 초기화 오버헤드 없이 즉시 사용 가능</td>
+    </tr>
+    <tr>
+      <td>Perf</td>
+      <td><strong>P8</strong></td>
+      <td>최저 성능 상태(P0이 최고). idle 시 전력 절약을 위해 자동 전환</td>
+    </tr>
+    <tr>
+      <td>Pwr</td>
+      <td><strong>24W / 300W</strong></td>
+      <td>idle 전력 24W, TDP 300W</td>
+    </tr>
+    <tr>
+      <td>ECC</td>
+      <td><strong>0</strong></td>
+      <td>Uncorrectable ECC 에러 0건. 메모리 정상</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Driver 580.126.09는 AL2023 NVIDIA AMI에 내장된 드라이버다. <code class="highlighter-rouge">gpu-operator</code> 네임스페이스에 <code class="highlighter-rouge">nvidia-driver-daemonset</code>이 없는 것과 함께, <strong>AMI가 드라이버를 담당하고 Operator는 관측/device-plugin 레이어만 담당</strong>하는 아키텍처가 검증되었다.</p>
+
+<p>이제 검증용 Pod을 삭제한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl delete pod smi
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="helm-vs-operator-reconcile-분리">Helm vs Operator reconcile 분리</h1>
+
+<p>GPU Operator의 리소스는 두 경로로 나뉜다. Helm이 직접 생성하는 것(1)과 Operator 컨트롤러가 ClusterPolicy reconcile로 만들어내는 것(2)이다.</p>
+
+<h2 id="분리-조회">분리 조회</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Helm이 직접 생성한 리소스 (managed-by=Helm 라벨)</span>
+kubectl get all,sa,role,rolebinding,configmap,secret <span class="se">\</span>
+  <span class="nt">-n</span> gpu-operator <span class="nt">-l</span> app.kubernetes.io/managed-by<span class="o">=</span>Helm
+
+<span class="c"># 전체 네임스페이스 객체 (Operator reconcile 산물 포함)</span>
+kubectl get all,sa,role,rolebinding,configmap,secret <span class="nt">-n</span> gpu-operator
+
+<span class="c"># cluster-scoped 분리</span>
+kubectl get clusterrole,clusterrolebinding <span class="se">\</span>
+  <span class="nt">-l</span> app.kubernetes.io/managed-by<span class="o">=</span>Helm
+</code></pre></div></div>
+
+<p>두 결과의 차이가 곧 Operator reconcile 산물이다.</p>
+
+<h2 id="1-helm이-직접-생성한-리소스">1. Helm이 직접 생성한 리소스</h2>
+
+<p><code class="highlighter-rouge">app.kubernetes.io/managed-by=Helm</code> 라벨이 붙은 리소스다. <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-02-Installation-Result/#렌더-프리뷰">이전 글</a>에서 <code class="highlighter-rouge">helm template</code>으로 확인한 27개 리소스에 설치 시점 Job/CRD 몇 개가 더해진다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>종류</th>
+      <th>개수</th>
+      <th>리소스</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Deployment</td>
+      <td>3</td>
+      <td><code class="highlighter-rouge">gpu-operator</code>(controller), <code class="highlighter-rouge">nfd-master</code>, <code class="highlighter-rouge">nfd-gc</code></td>
+    </tr>
+    <tr>
+      <td>DaemonSet</td>
+      <td><strong>1</strong></td>
+      <td><code class="highlighter-rouge">nfd-worker</code> (전체 노드 4개)</td>
+    </tr>
+    <tr>
+      <td>ServiceAccount</td>
+      <td>2</td>
+      <td><code class="highlighter-rouge">gpu-operator</code>, <code class="highlighter-rouge">node-feature-discovery</code></td>
+    </tr>
+    <tr>
+      <td>Role / RoleBinding</td>
+      <td>2 / 2</td>
+      <td><code class="highlighter-rouge">gpu-operator</code>, <code class="highlighter-rouge">nfd-worker</code></td>
+    </tr>
+    <tr>
+      <td>ConfigMap</td>
+      <td>2</td>
+      <td><code class="highlighter-rouge">nfd-master-conf</code>, <code class="highlighter-rouge">nfd-worker-conf</code></td>
+    </tr>
+    <tr>
+      <td>ClusterRole / ClusterRoleBinding</td>
+      <td>10</td>
+      <td>cluster-scope</td>
+    </tr>
+    <tr>
+      <td>ClusterPolicy (CR)</td>
+      <td>1</td>
+      <td><code class="highlighter-rouge">cluster-policy</code> — Helm values에서 렌더링</td>
+    </tr>
+    <tr>
+      <td>Jobs (install hooks)</td>
+      <td>2</td>
+      <td><code class="highlighter-rouge">nfd-prune</code>, <code class="highlighter-rouge">upgrade-crd-hook</code></td>
+    </tr>
+    <tr>
+      <td>CRDs</td>
+      <td>5</td>
+      <td><code class="highlighter-rouge">clusterpolicies</code>, <code class="highlighter-rouge">nvidiadrivers</code>, <code class="highlighter-rouge">nodefeatures</code>, <code class="highlighter-rouge">nodefeaturegroups</code>, <code class="highlighter-rouge">nodefeaturerules</code></td>
+    </tr>
+    <tr>
+      <td><strong>소계</strong></td>
+      <td><strong>~30</strong></td>
+      <td> </td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Helm이 직접 만드는 DaemonSet은 <strong>nfd-worker 단 1개</strong>다. device-plugin, dcgm-exporter, gpu-feature-discovery 등은 여기에 포함되지 않는다.</p>
+
+<h2 id="2-operator-reconcile-산물">2. Operator reconcile 산물</h2>
+
+<p>Operator 컨트롤러가 ClusterPolicy CR을 watch하고, reconcile 과정에서 추가 생성한 리소스다.</p>
+
+<details>
+  <summary><b>Operator reconcile 리소스 상세</b></summary>
+
+  <table>
+    <thead>
+      <tr>
+        <th>종류</th>
+        <th>개수</th>
+        <th>리소스</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>DaemonSet</td>
+        <td><strong>6</strong></td>
+        <td><code class="highlighter-rouge">gpu-feature-discovery</code>, <code class="highlighter-rouge">nvidia-dcgm-exporter</code>, <code class="highlighter-rouge">nvidia-device-plugin-daemonset</code>, <code class="highlighter-rouge">nvidia-device-plugin-mps-control-daemon</code>(0/0), <code class="highlighter-rouge">nvidia-mig-manager</code>(0/0), <code class="highlighter-rouge">nvidia-operator-validator</code></td>
+      </tr>
+      <tr>
+        <td>Service</td>
+        <td><strong>2</strong></td>
+        <td><code class="highlighter-rouge">gpu-operator:8080</code>(metrics), <code class="highlighter-rouge">nvidia-dcgm-exporter:9400</code>(Prometheus)</td>
+      </tr>
+      <tr>
+        <td>ServiceAccount</td>
+        <td>7</td>
+        <td>각 컴포넌트당 1개 + k8s default</td>
+      </tr>
+      <tr>
+        <td>Role / RoleBinding</td>
+        <td>6 / 6</td>
+        <td>6개 컴포넌트 매핑</td>
+      </tr>
+      <tr>
+        <td>ConfigMap</td>
+        <td>3</td>
+        <td><code class="highlighter-rouge">default-gpu-clients</code>, <code class="highlighter-rouge">default-mig-parted-config</code>, <code class="highlighter-rouge">nvidia-device-plugin-entrypoint</code> 등</td>
+      </tr>
+      <tr>
+        <td>Validator Job Pod</td>
+        <td>4</td>
+        <td><code class="highlighter-rouge">nvidia-cuda-validator</code> × 2, <code class="highlighter-rouge">nvidia-device-plugin-validator</code> × 2</td>
+      </tr>
+      <tr>
+        <td>NodeFeature CR</td>
+        <td>6</td>
+        <td>NFD worker가 각 노드의 feature를 CR로 기록</td>
+      </tr>
+      <tr>
+        <td>Node 라벨</td>
+        <td>89개/gpu-node</td>
+        <td><code class="highlighter-rouge">nvidia.com/*</code>, <code class="highlighter-rouge">feature.node.kubernetes.io/*</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+</details>
+
+<p>한 가지 눈에 띄는 점은 <code class="highlighter-rouge">nvidia-driver-daemonset</code>과 <code class="highlighter-rouge">nvidia-container-toolkit-daemonset</code>이 <strong>없다</strong>는 것이다. 이 둘도 원래는 Operator reconcile 산물이지만, <code class="highlighter-rouge">gpu_operator.tf</code>의 Helm values에서 <code class="highlighter-rouge">driver.enabled=false</code>, <code class="highlighter-rouge">toolkit.enabled=false</code>로 비활성화했기 때문에 생성되지 않았다. AL2023 NVIDIA AMI에 Driver 580 + nvidia-container-toolkit이 이미 번들되어 있으므로 Operator가 별도로 설치할 필요가 없는 것이다.</p>
+
+<p>이를 2중으로 증명할 수 있다.</p>
+
+<ol>
+  <li><code class="highlighter-rouge">gpu-operator</code> 네임스페이스에 driver/toolkit DaemonSet이 없음</li>
+  <li>nvidia-smi Pod 로그에서 Driver 580.126.09가 노출됨 → AMI 내장 드라이버가 컨테이너까지 전달</li>
+</ol>
+
+<p>이것이 EKS GPU 운영의 권장 경로다. <strong>AMI가 드라이버/toolkit을 담당하고, Operator는 device-plugin·NFD·DCGM 등 관측/스케줄링 레이어만 담당</strong>한다.</p>
+
+<h2 id="crd와-nfd-라벨">CRD와 NFD 라벨</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get crd | <span class="nb">grep</span> <span class="nt">-iE</span> <span class="s1">'nvidia|nfd'</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NAME                                        CREATED AT
+clusterpolicies.nvidia.com                  2026-04-19T05:39:15Z
+nvidiadrivers.nvidia.com                    2026-04-19T05:39:15Z
+nodefeatures.nfd.k8s-sigs.io                2026-04-19T05:39:16Z
+nodefeaturegroups.nfd.k8s-sigs.io           2026-04-19T05:39:16Z
+nodefeaturerules.nfd.k8s-sigs.io            2026-04-19T05:39:16Z
+</code></pre></div></div>
+
+<p>5개 CRD가 Helm install 과정에서 등록되었다. CRD는 cluster-scoped이므로 네임스페이스에는 보이지 않지만, ClusterPolicy와 NodeFeature CR이 이 CRD로부터 인스턴스화된다. Helm uninstall 시에도 CRD는 삭제되지 않는 것이 현재 chart의 기본 동작이다(데이터 손실 방지).</p>
+
+<h3 id="nfd-라벨-변화">NFD 라벨 변화</h3>
+
+<p>GPU 노드의 <code class="highlighter-rouge">nvidia.com/*</code>, <code class="highlighter-rouge">feature.node.kubernetes.io/*</code> 라벨 수를 비교하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>시점</th>
+      <th>라벨 수</th>
+      <th>출처</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Pre-operator</td>
+      <td>3개 (<code class="highlighter-rouge">tier=gpu</code>, <code class="highlighter-rouge">nvidia.com/gpu=true</code>, <code class="highlighter-rouge">nvidia.com/gpu.present=true</code>)</td>
+      <td>Terraform 2개 + AMI bootstrap 1개</td>
+    </tr>
+    <tr>
+      <td>Post-operator</td>
+      <td><strong>89개</strong></td>
+      <td>+ NFD worker + gpu-feature-discovery</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>NFD worker와 gpu-feature-discovery가 GPU 노드의 하드웨어/드라이버 정보를 감지하고, <code class="highlighter-rouge">nvidia.com/cuda.driver.major</code>, <code class="highlighter-rouge">nvidia.com/gpu.compute.major</code>, <code class="highlighter-rouge">feature.node.kubernetes.io/cpu-model.vendor_id</code> 등 상세 라벨을 추가한다.</p>
+
+<p>앞서 언급한 대로 <code class="highlighter-rouge">nvidia.com/gpu.present=true</code>는 NFD 이전부터 AMI bootstrap이 주입한다. NFD 미설치 경량 운영에서도 이 라벨 기반의 간단한 nodeSelector는 동작하지만, 나머지 86개 세부 라벨은 사용할 수 없다는 trade-off가 있다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<h2 id="클러스터-규모-변화">클러스터 규모 변화</h2>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-02-Installation-Result/">이전 글</a>의 배포 결과(E-bundle)와 이번 GPU 프로비저닝 결과(E-4)를 비교한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>배포 직후 (E-bundle)</th>
+      <th>GPU 프로비저닝 후 (E-4)</th>
+      <th>변화</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>노드 총수</td>
+      <td>2 (t3.medium × 2)</td>
+      <td><strong>4</strong> (+ g5.xlarge × 2)</td>
+      <td>+2, CLI 경로</td>
+    </tr>
+    <tr>
+      <td>GPU NG desired/max</td>
+      <td>0 / 2</td>
+      <td><strong>2 / 2</strong></td>
+      <td>CLI 경로</td>
+    </tr>
+    <tr>
+      <td>Helm releases</td>
+      <td>0</td>
+      <td><strong>1</strong> (gpu-operator v26.3.1)</td>
+      <td>TF 경로</td>
+    </tr>
+    <tr>
+      <td>gpu-operator ns</td>
+      <td>없음</td>
+      <td>Pod 17개 (Running 13 + Completed 4)</td>
+      <td>Helm <code class="highlighter-rouge">create_namespace=true</code></td>
+    </tr>
+    <tr>
+      <td>CRD (nvidia/nfd)</td>
+      <td>0</td>
+      <td><strong>5</strong></td>
+      <td>Helm install</td>
+    </tr>
+    <tr>
+      <td>GPU 노드 Allocatable <code class="highlighter-rouge">nvidia.com/gpu</code></td>
+      <td>—</td>
+      <td><strong>1/node</strong></td>
+      <td>device-plugin</td>
+    </tr>
+    <tr>
+      <td>GPU 노드 라벨 수</td>
+      <td>—</td>
+      <td><strong>89개/node</strong></td>
+      <td>NFD + gpu-feature-discovery</td>
+    </tr>
+    <tr>
+      <td>일 비용(대략)</td>
+      <td>~$6/일</td>
+      <td><strong>~$54/일</strong></td>
+      <td>g5.xlarge × 2 on-demand 가산</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="gpu-노드-상세">GPU 노드 상세</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>값</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>인스턴스</td>
+      <td>g5.xlarge × 2</td>
+    </tr>
+    <tr>
+      <td>AMI</td>
+      <td>AL2023_x86_64_NVIDIA</td>
+    </tr>
+    <tr>
+      <td>AZ</td>
+      <td>ap-northeast-2a (단일 AZ 고정)</td>
+    </tr>
+    <tr>
+      <td>Taint</td>
+      <td><code class="highlighter-rouge">nvidia.com/gpu=true:NoSchedule</code></td>
+    </tr>
+    <tr>
+      <td>Pre-operator Allocatable GPU</td>
+      <td>없음</td>
+    </tr>
+    <tr>
+      <td>Post-operator Allocatable GPU</td>
+      <td><strong>1</strong></td>
+    </tr>
+    <tr>
+      <td>Driver</td>
+      <td>580.126.09 (AMI 내장)</td>
+    </tr>
+    <tr>
+      <td>CUDA</td>
+      <td>13.0</td>
+    </tr>
+    <tr>
+      <td>GPU</td>
+      <td>NVIDIA A10G, 23028MiB (24GB)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="핵심-발견">핵심 발견</h2>
+
+<p><strong>1. Helm wait과 Operator reconcile의 비대칭</strong></p>
+
+<p><code class="highlighter-rouge">terraform apply</code>가 25초만에 완료되지만, Helm <code class="highlighter-rouge">wait</code>가 감시하는 범위는 chart template의 Deployment 3 + DaemonSet 1뿐이다. Device Plugin, DCGM Exporter, GPU Feature Discovery 등 핵심 컴포넌트는 ClusterPolicy reconcile의 비동기 산물이므로, <strong>Helm deployed 직후에는 아직 GPU가 준비되지 않았을 수 있다</strong>. 실제 준비 완료 판단은 <code class="highlighter-rouge">clusterpolicy.status.state == ready</code> + Allocatable에 <code class="highlighter-rouge">nvidia.com/gpu</code> 노출 여부로 해야 한다.</p>
+
+<p><strong>2. AMI 내장 드라이버 + Operator 레이어만 아키텍처</strong></p>
+
+<p>AL2023 NVIDIA AMI가 Driver 580 + nvidia-container-toolkit을 제공하고, GPU Operator는 <code class="highlighter-rouge">driver.enabled=false</code>, <code class="highlighter-rouge">toolkit.enabled=false</code>로 device-plugin·NFD·DCGM 등 관측/스케줄링 레이어만 운영한다. nvidia-smi로 AMI 드라이버가 컨테이너까지 정상 전달됨을 확인했다.</p>
+
+<p><strong>3. AMI bootstrap 라벨 <code class="highlighter-rouge">nvidia.com/gpu.present=true</code></strong></p>
+
+<p>NFD 미설치 상태에서도 AL2023 NVIDIA AMI의 nodeadm이 <code class="highlighter-rouge">nvidia.com/gpu.present=true</code> 라벨을 주입한다. NFD 설치 후에는 89개로 증가하지만, 경량 운영에서는 이 라벨만으로도 GPU 노드 셀렉터가 동작한다.</p>
+
+<h2 id="재현용-명령-요약">재현용 명령 요약</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 1) GPU NG 스케일업 (CLI — TF의 ignore_changes 때문에 CLI 필수)</span>
+aws eks update-nodegroup-config <span class="se">\</span>
+  <span class="nt">--cluster-name</span> myeks5w <span class="nt">--nodegroup-name</span> myeks5w-ng-gpu <span class="se">\</span>
+  <span class="nt">--scaling-config</span> <span class="nv">minSize</span><span class="o">=</span>0,maxSize<span class="o">=</span>2,desiredSize<span class="o">=</span>2 <span class="se">\</span>
+  <span class="nt">--region</span> ap-northeast-2
+
+<span class="c"># 2) GPU 노드 Ready 대기</span>
+kubectl get nodes <span class="nt">-l</span> <span class="nv">tier</span><span class="o">=</span>gpu
+
+<span class="c"># 3) GPU Operator Helm 설치</span>
+terraform plan <span class="nt">-var</span> <span class="nv">gpu_desired_size</span><span class="o">=</span>2 <span class="nt">-var</span> <span class="nv">enable_gpu_operator</span><span class="o">=</span><span class="nb">true</span> <span class="nt">-out</span><span class="o">=</span>e4.tfplan
+terraform apply e4.tfplan
+
+<span class="c"># 4) 검증</span>
+kubectl get clusterpolicy <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.items[0].status.state}'</span>   <span class="c"># ready</span>
+kubectl describe node &lt;gpu-node&gt; | <span class="nb">grep </span>nvidia.com/gpu              <span class="c"># Allocatable: 1</span>
+kubectl run smi <span class="nt">--restart</span><span class="o">=</span>Never <span class="se">\</span>
+  <span class="nt">--image</span><span class="o">=</span>nvidia/cuda:12.4.1-base-ubuntu22.04 <span class="se">\</span>
+  <span class="nt">--overrides</span><span class="o">=</span><span class="s1">'...'</span>                                                 <span class="c"># Driver 580, CUDA 13.0, A10G</span>
+kubectl logs smi <span class="o">&amp;&amp;</span> kubectl delete pod smi
+
+<span class="c"># 5) 종료 시 (비용 가드)</span>
+aws eks update-nodegroup-config <span class="se">\</span>
+  <span class="nt">--cluster-name</span> myeks5w <span class="nt">--nodegroup-name</span> myeks5w-ng-gpu <span class="se">\</span>
+  <span class="nt">--scaling-config</span> <span class="nv">minSize</span><span class="o">=</span>0,maxSize<span class="o">=</span>2,desiredSize<span class="o">=</span>0 <span class="se">\</span>
+  <span class="nt">--region</span> ap-northeast-2
+</code></pre></div></div>
+
+<h2 id="다음-단계">다음 단계</h2>
+
+<p>이 GPU 환경 위에서 다음 순서로 트러블슈팅 시나리오를 진행한다.</p>
+
+<ol>
+  <li><strong><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending/">Device Plugin 비활성화</a></strong>: ClusterPolicy <code class="highlighter-rouge">devicePlugin.enabled: false</code> 패치로 GPU Allocatable 소실 → Pod Pending 장애 재현</li>
+  <li><strong><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-02-vLLM-TroubleShooting/">vLLM 기동 실패</a></strong>: vLLM 14B-AWQ 서빙 중 기동 실패 시나리오 4가지 재현 및 디버깅</li>
+  <li><strong><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background/">분산학습 배경 및 실험 설계</a></strong>: 분산학습 원리, NCCL 통신 계층, EKS에서의 재현 실험 설계</li>
+  <li><strong><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-02-Distributed-Learning-Network-Failure/">SG 차단 네트워크 장애 재현</a></strong>: EKS node SG ephemeral self-ref 제거로 분산학습 네트워크 장애 재현</li>
+</ol>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study-week-5" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study-Week-5</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws" class="page__taxonomy-item" rel="tag">AWS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu-operator" class="page__taxonomy-item" rel="tag">GPU-Operator</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nvidia" class="page__taxonomy-item" rel="tag">NVIDIA</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#terraform" class="page__taxonomy-item" rel="tag">Terraform</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-09T00:00:00+09:00">April 9, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEKS%5D+EKS+GPU+%ED%8A%B8%EB%9F%AC%EB%B8%94%EC%8A%88%ED%8C%85%3A+2.+%EC%8B%A4%EC%8A%B5+%ED%99%98%EA%B2%BD+%EA%B5%AC%EC%84%B1+-+3.+GPU+%EB%85%B8%EB%93%9C+%ED%94%84%EB%A1%9C%EB%B9%84%EC%A0%80%EB%8B%9D+%EA%B2%B0%EA%B3%BC%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-02-03-GPU-Node-Provisioning%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-02-03-GPU-Node-Provisioning%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-02-03-GPU-Node-Provisioning%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-02-03-GPU-Node-Provisioning?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-02-Installation-Result/" class="pagination--pager" title="[EKS] EKS GPU 트러블슈팅: 2. 실습 환경 구성 - 2. 배포 결과
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending/" class="pagination--pager" title="[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 1. Device Plugin 비활성화
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-03-GPU-Node-Provisioning/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-03-GPU-Node-Provisioning"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

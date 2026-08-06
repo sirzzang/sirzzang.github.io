@@ -1,0 +1,1078 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델 - Eraser’s StudyLog</title>
+<meta name="description" content="EKS 네트워킹 시리즈를 시작하기 전에, AWS VPC CNI가 구현해야 하는 쿠버네티스 네트워킹 모델의 4가지 문제와 ‘NAT 없이’ 원칙을 짧게 확인해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-02-00-00-Kubernetes-Networking-Model/">
+
+
+  <meta property="og:description" content="EKS 네트워킹 시리즈를 시작하기 전에, AWS VPC CNI가 구현해야 하는 쿠버네티스 네트워킹 모델의 4가지 문제와 ‘NAT 없이’ 원칙을 짧게 확인해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-03-19T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-02-00-00-Kubernetes-Networking-Model/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델">
+    <meta itemprop="description" content="EKS 네트워킹 시리즈를 시작하기 전에, AWS VPC CNI가 구현해야 하는 쿠버네티스 네트워킹 모델의 4가지 문제와 ‘NAT 없이’ 원칙을 짧게 확인해 보자.">
+    <meta itemprop="datePublished" content="2026-03-19T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-03-19T00:00:00+09:00">2026년 03월 19일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  3 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#들어가며">들어가며</a></li>
+  <li><a href="#4가지-문제-한눈에-보기">4가지 문제 한눈에 보기</a></li>
+  <li><a href="#nat-없이-원칙--eks-관점">“NAT 없이” 원칙 — EKS 관점</a></li>
+  <li><a href="#정리">정리</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 AWS EKS Workshop Study(AEWS) 2주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<p>AWS VPC CNI를 본격적으로 파헤치기 전에, 먼저 모든 CNI 플러그인이 구현해야 하는 쿠버네티스 네트워킹 모델부터 짚고 간다. 모델 자체의 정의·증명은 <a href="/kubernetes/Kubernetes-Networking-00-Model/">Kubernetes 네트워킹 모델</a> 글에 정리했고, 여기서는 EKS 맥락에서 그 모델이 왜 중요한지를 확인해 본다.</p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>쿠버네티스 네트워킹은 통신 범위에 따라 <strong>4가지 문제</strong>로 나뉜다: 컨테이너 간, 파드 간, 파드-서비스, 외부-서비스</li>
+  <li>핵심 원칙은 <strong>“NAT 없이”</strong> — 모든 파드가 고유 IP로 직접 통신할 수 있어야 한다 (flat network). 단, 이 원칙은 <strong>파드 ↔ 파드 직접 통신(문제 2)</strong> 경로에만 적용된다</li>
+  <li>파드 간 통신의 해결 방식은 셋: <strong>오버레이 / BGP / 클라우드 네이티브 라우팅</strong>. AWS VPC CNI는 클라우드 네이티브 방식이다</li>
+  <li>자세한 모델 정의·NAT 적용 범위 분석은 <a href="/kubernetes/Kubernetes-Networking-00-Model/">Kubernetes 네트워킹 모델</a> 글에서 다룬다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="들어가며">들어가며</h1>
+
+<p>1주차에서 EKS 클러스터를 배포하고 내부 구조를 확인하면서, 이미 AWS VPC CNI의 흔적을 여러 번 만났다.</p>
+
+<ul>
+  <li><a href="/kubernetes/Kubernetes-EKS-01-01-06-EKS-Owned-ENI/#vpc에-eni가-6개인-이유">EKS Owned ENI</a>: 워커 노드마다 <strong>VPC CNI Secondary ENI</strong>가 생성되어 파드 IP 할당을 준비하고 있었다</li>
+  <li><a href="/kubernetes/Kubernetes-EKS-01-01-07-Public-Public-Endpoint/#노드--api-서버-ss--tnp">엔드포인트 분석</a>: <code class="highlighter-rouge">ss -tnp</code>에서 <strong>aws-k8s-agent</strong>(VPC CNI 에이전트)가 API 서버와 연결을 유지하며 ENI 관리와 IP 할당 정보를 동기화하고 있었다</li>
+</ul>
+
+<p>2주차의 주제는 이 AWS VPC CNI를 비롯한 EKS 네트워킹을 본격적으로 파헤치는 것이다. 그런데 EKS 네트워킹의 핵심인 AWS VPC CNI가 “무엇을 해결하는지”를 이해하려면, 먼저 <strong>쿠버네티스가 네트워킹에 대해 무엇을 요구하는지</strong>를 알아야 한다. VPC CNI든 Flannel이든 Calico든, 모든 CNI 플러그인은 쿠버네티스의 네트워킹 모델이 정한 요구사항을 구현하는 것이기 때문이다.</p>
+
+<p>이 모델의 정의·이론은 <a href="/kubernetes/Kubernetes-Networking-00-Model/">Kubernetes 네트워킹 모델</a> 글에서 정리했다. 여기서는 EKS 시리즈 진행에 필요한 핵심만 한 화면 분량으로 추린다.</p>
+
+<p><br /></p>
+
+<h1 id="4가지-문제-한눈에-보기">4가지 문제 한눈에 보기</h1>
+
+<p>쿠버네티스 공식 문서는 클러스터 네트워킹을 통신 범위에 따라 <a href="https://kubernetes.io/docs/concepts/cluster-administration/networking/">4가지 문제</a>로 분류한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>문제</th>
+      <th>해결 주체</th>
+      <th>EKS에서</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><strong>컨테이너 ↔ 컨테이너</strong> (같은 파드 내)</td>
+      <td>pause 컨테이너 + 공유 네트워크 네임스페이스 + localhost</td>
+      <td>EKS도 동일</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>파드 ↔ 파드</strong> (같은/다른 노드)</td>
+      <td>CNI 플러그인</td>
+      <td><strong>AWS VPC CNI</strong>가 담당 — 시리즈 후반의 주제</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>파드 ↔ 서비스</strong></td>
+      <td>kube-proxy (iptables/IPVS DNAT)</td>
+      <td>EKS도 동일하나 <a href="#">VPC CNI Service</a> 글에서 LoadBalancer 통합 부분을 확장</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><strong>외부 ↔ 서비스</strong></td>
+      <td>NodePort, LoadBalancer, Ingress</td>
+      <td>AWS Load Balancer Controller로 ALB/NLB와 통합</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>문제 2가 본 시리즈의 핵심이다. 문제 1·3·4의 자세한 내용과 각 항목의 상호 관계는 <a href="/kubernetes/Kubernetes-Networking-00-Model/#쿠버네티스-네트워킹의-4가지-문제">Kubernetes 네트워킹 모델 — 4가지 문제</a> 절에서 확인할 수 있다.</p>
+
+<p><br /></p>
+
+<h1 id="nat-없이-원칙--eks-관점">“NAT 없이” 원칙 — EKS 관점</h1>
+
+<p>쿠버네티스 <a href="https://kubernetes.io/docs/concepts/services-networking/#the-kubernetes-network-model">네트워킹 모델</a>은 다음을 요구한다.</p>
+
+<blockquote>
+  <p>All pods can communicate with all other pods, whether they are on the same node or on different nodes. Pods can communicate with each other directly, without the use of proxies or address translation (NAT).</p>
+</blockquote>
+
+<p>핵심은 두 가지다.</p>
+
+<ol>
+  <li><strong>파드 ↔ 파드 직접 통신 경로의 어느 지점에서도 IP가 변조되면 안 된다</strong> (SNAT/DNAT 모두 금지)</li>
+  <li><strong>이 원칙은 문제 2에만 적용된다</strong> — 문제 3의 Service DNAT, 문제 4 영역의 외부 SNAT은 이 원칙과 다른 계층에서 동작하므로 위배가 아니다</li>
+</ol>
+
+<p>이 원칙이 의미하는 “flat network”의 정의, 왜 이게 어려운 일인지, 그리고 NAT 적용 범위에 대한 자세한 분석은 <a href="/kubernetes/Kubernetes-Networking-00-Model/#핵심-원칙-nat-없이">Kubernetes 네트워킹 모델 — “NAT 없이” 원칙</a> 절에 정리했다. 본 시리즈의 EKS 글들은 이 원칙을 전제로, AWS VPC CNI가 어떻게 이를 만족시키는지를 검증한다.</p>
+
+<p>문제 2의 해결 방식은 셋이다.</p>
+
+<ul>
+  <li><strong>오버레이</strong> (Flannel VXLAN 등): 파드 패킷을 노드 IP로 캡슐화하여 터널링</li>
+  <li><strong>BGP</strong> (Calico BGP 모드): 라우팅 정보를 물리 네트워크에 직접 전파</li>
+  <li><strong>클라우드 네이티브 라우팅</strong> (<strong>AWS VPC CNI</strong>, GKE VPC-native, Azure CNI): 파드에게 인프라가 라우팅 가능한 IP를 부여</li>
+</ul>
+
+<p>세 방식 모두 src/dst IP가 한 번도 변하지 않아 “NAT 없이”를 충족한다. 자세한 비교는 <a href="/kubernetes/Kubernetes-Networking-01-Pod-to-Pod/#다른-노드의-파드-간-통신">파드 간 통신</a> 글에서 다룬다.</p>
+
+<blockquote>
+  <p>AWS VPC CNI의 <a href="https://github.com/aws/amazon-vpc-cni-k8s/blob/master/docs/cni-proposal.md">설계 문서(Proposal)</a>는 위 모델 요구사항에 더해, 파드 네트워킹이 EC2 수준의 처리량과 지연을 제공해야 하고, VPC Flow Logs/라우팅 정책/보안 그룹을 파드 트래픽에도 적용할 수 있어야 한다는 추가 목표를 정의한다. 이 시리즈에서 이 목표가 어떻게 달성되는지 살펴본다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>EKS 시리즈에서의 위치</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>4가지 문제, “NAT 없이” 원칙의 정의·증명</td>
+      <td>별도 시리즈 <a href="/kubernetes/Kubernetes-Networking-00-Model/">Ch0</a></td>
+    </tr>
+    <tr>
+      <td>파드 간 통신 3가지 방식 비교</td>
+      <td>별도 시리즈 <a href="/kubernetes/Kubernetes-Networking-01-Pod-to-Pod/">Ch1</a> + EKS 시리즈 <a href="/kubernetes/Kubernetes-EKS-02-00-01-Kubernetes-Pod-to-Pod-Networking/">02-00-01</a></td>
+    </tr>
+    <tr>
+      <td>AWS VPC CNI = 클라우드 네이티브 라우팅의 구체 구현</td>
+      <td>EKS 시리즈 <a href="/kubernetes/Kubernetes-EKS-02-01-01-EKS-VPC-CNI/">02-01-01</a></td>
+    </tr>
+    <tr>
+      <td>Service DNAT, kube-proxy</td>
+      <td>별도 시리즈 <a href="/kubernetes/Kubernetes-Networking-04-Service/">Ch4</a> + EKS 시리즈 <a href="/kubernetes/Kubernetes-EKS-02-00-02-Kubernetes-Networking-Service/">02-00-02</a></td>
+    </tr>
+    <tr>
+      <td>EKS Service / LoadBalancer 통합</td>
+      <td>EKS 시리즈 02-01-02(예정)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>다음 글에서는 문제 2(파드 간 통신)의 세 해결 방식과 AWS VPC CNI가 “클라우드 네이티브”에 해당한다는 점을 짚고 넘어간다.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-EKS-02-00-01-Kubernetes-Pod-to-Pod-Networking/">[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델 - 1. 파드 간 통신</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-EKS-02-00-02-Kubernetes-Networking-Service/">[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델 - 2. Service와 kube-proxy</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-EKS-02-02-03-Pod-to-External-Network/">[EKS] EKS: Networking - 4. 파드와 외부 간 통신</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study-week-2" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study-Week-2</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws" class="page__taxonomy-item" rel="tag">AWS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#cni" class="page__taxonomy-item" rel="tag">CNI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nat" class="page__taxonomy-item" rel="tag">NAT</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#networking" class="page__taxonomy-item" rel="tag">Networking</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-03-19T00:00:00+09:00">March 19, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEKS%5D+EKS%3A+Networking+-+0.+%EC%BF%A0%EB%B2%84%EB%84%A4%ED%8B%B0%EC%8A%A4+%EB%84%A4%ED%8A%B8%EC%9B%8C%ED%82%B9+%EB%AA%A8%EB%8D%B8%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-02-00-00-Kubernetes-Networking-Model%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-02-00-00-Kubernetes-Networking-Model%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-02-00-00-Kubernetes-Networking-Model%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-EKS-02-00-00-Kubernetes-Networking-Model?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/cs/CS-Container-Networking-Namespace/" class="pagination--pager" title="[CS] 컨테이너 네트워킹 기본 원리: 네임스페이스 네트워킹
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-EKS-02-00-01-Kubernetes-Pod-to-Pod-Networking/" class="pagination--pager" title="[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델 - 1. 파드 간 통신
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-EKS-02-00-00-Kubernetes-Networking-Model/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-EKS-02-00-00-Kubernetes-Networking-Model"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

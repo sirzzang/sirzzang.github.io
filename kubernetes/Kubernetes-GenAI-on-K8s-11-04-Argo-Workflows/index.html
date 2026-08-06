@@ -1,0 +1,1312 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[GenAI] GenAI on K8s: 11.4 - Argo Workflows와 ML 파이프라인 오케스트레이션 - Eraser’s StudyLog</title>
+<meta name="description" content="Argo Workflows의 Workflow CRD 실행 모델(step = Pod, init/main/wait 3컨테이너), Kubeflow Pipelines와의 레이어 관계, Argo CD와의 책임 분리, parallelism 세 층위를 정리해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[GenAI] GenAI on K8s: 11.4 - Argo Workflows와 ML 파이프라인 오케스트레이션">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-11-04-Argo-Workflows/">
+
+
+  <meta property="og:description" content="Argo Workflows의 Workflow CRD 실행 모델(step = Pod, init/main/wait 3컨테이너), Kubeflow Pipelines와의 레이어 관계, Argo CD와의 책임 분리, parallelism 세 층위를 정리해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-06-09T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-11-04-Argo-Workflows/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[GenAI] GenAI on K8s: 11.4 - Argo Workflows와 ML 파이프라인 오케스트레이션">
+    <meta itemprop="description" content="Argo Workflows의 Workflow CRD 실행 모델(step = Pod, init/main/wait 3컨테이너), Kubeflow Pipelines와의 레이어 관계, Argo CD와의 책임 분리, parallelism 세 층위를 정리해 보자.">
+    <meta itemprop="datePublished" content="2026-06-09T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[GenAI] GenAI on K8s: 11.4 - Argo Workflows와 ML 파이프라인 오케스트레이션
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-06-09T00:00:00+09:00">2026년 06월 09일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  7 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#argo-workflows-개요">Argo Workflows 개요</a></li>
+  <li><a href="#workflow-실행-모델">Workflow 실행 모델</a>
+    <ul>
+      <li><a href="#workflow-spec--entrypoint와-templates">Workflow spec — entrypoint와 templates</a></li>
+      <li><a href="#일을-하는-템플릿-vs-흐름을-짜는-템플릿">일을 하는 템플릿 vs 흐름을 짜는 템플릿</a></li>
+      <li><a href="#steps-vs-dag">steps vs dag</a>
+        <ul>
+          <li><a href="#steps">steps</a></li>
+          <li><a href="#dag">dag</a></li>
+        </ul>
+      </li>
+      <li><a href="#step이-pod가-되기까지--controller와-3컨테이너">step이 Pod가 되기까지 — controller와 3컨테이너</a></li>
+      <li><a href="#artifact-passing--step-간-파일-전달">artifact passing — step 간 파일 전달</a></li>
+      <li><a href="#crd-패밀리--workflow--workflowtemplate--cronworkflow">CRD 패밀리 — Workflow / WorkflowTemplate / CronWorkflow</a></li>
+    </ul>
+  </li>
+  <li><a href="#argo와-다른-도구의-관계">Argo와 다른 도구의 관계</a>
+    <ul>
+      <li><a href="#argo를-내부-엔진으로-쓰는-도구">Argo를 내부 엔진으로 쓰는 도구</a></li>
+      <li><a href="#kubeflow-pipelines와의-레이어-관계">Kubeflow Pipelines와의 레이어 관계</a></li>
+      <li><a href="#argo-workflows-vs-argo-cd">Argo Workflows vs Argo CD</a></li>
+    </ul>
+  </li>
+  <li><a href="#유스케이스">유스케이스</a></li>
+  <li><a href="#parallelism-세-층위와-ray-scheduling">parallelism 세 층위와 Ray scheduling</a></li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions">Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)</a> 11장의 학습 내용을 바탕으로 합니다</em></p>
+
+<p><br /></p>
+
+<p><a href="/kubernetes/Kubernetes-GenAI-on-K8s-11-02-Kubeflow-Ecosystem/">11.2</a>에서 Kubeflow Pipelines가 Argo Workflows를 백엔드로 쓴다고 했다. 이번 글은 그 <strong>백엔드 자체</strong>를 본다. Argo Workflows가 워크플로우를 실제로 어떻게 실행하는지(CRD 구조와 step이 Pod가 되는 과정), Kubeflow Pipelines·Argo CD와의 관계, ML·인프라·CI/CD 유스케이스, 그리고 Ray와 한 클러스터에 있을 때 겹쳐 보이는 parallelism 제한까지 정리한다.</p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li><strong>Argo Workflows</strong> = K8s-native 범용 DAG 실행 엔진. 워크플로우를 <code class="highlighter-rouge">Workflow</code> CRD로 정의하고, 그 안의 step/task 하나가 <strong>Pod 하나</strong>로 뜬다</li>
+  <li>Pod 안은 <code class="highlighter-rouge">init</code>(입력 artifact·parameter fetch) → <code class="highlighter-rouge">main</code>(사용자 이미지 실행) → <code class="highlighter-rouge">wait</code>(출력 저장·cleanup) <strong>3컨테이너 구조</strong>. v3.4 이후 실행은 <strong>Emissary executor</strong>(<code class="highlighter-rouge">argoexec</code>)가 담당한다</li>
+  <li>템플릿은 <strong>일을 하는 것</strong>(<code class="highlighter-rouge">container</code>·<code class="highlighter-rouge">script</code>·<code class="highlighter-rouge">resource</code>·<code class="highlighter-rouge">suspend</code>)과 <strong>흐름을 짜는 것</strong>(<code class="highlighter-rouge">steps</code>·<code class="highlighter-rouge">dag</code>)으로 갈린다. <code class="highlighter-rouge">dag</code>는 <code class="highlighter-rouge">dependencies</code>로 의존 그래프를, <code class="highlighter-rouge">steps</code>는 list-of-lists로 순차·병렬을 표현한다</li>
+  <li><strong>Kubeflow Pipelines</strong> = Argo 위에 ML DSL·artifact tracking·metadata store를 얹은 layer다. <strong>Argo CD</strong> = GitOps 상태 reconcile — 같은 Argo 패밀리지만 “절차 실행” vs “상태 동기화”로 책임이 다르다.</li>
+  <li><code class="highlighter-rouge">parallelism</code>은 <strong>세 층위</strong>(컨트롤러 = 동시 워크플로우 수, workflow <code class="highlighter-rouge">spec.parallelism</code> = 워크플로우 내 동시 Pod 수, template 수준)로 나뉘고, 이는 Ray task scheduling과는 별개 레이어다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="argo-workflows-개요">Argo Workflows 개요</h1>
+
+<p>Argo Workflows는 K8s 위에서 복잡한 파이프라인을 실행하기 위한 <strong>범용 워크플로우 엔진</strong>이다. 특정 도메인(ML 전용 등)에 묶이지 않고, “여러 단계를 순서·의존 관계에 맞춰 컨테이너로 돌린다”는 일을 K8s-native 방식으로 한다.</p>
+
+<p>핵심 설계는 한 문장으로 줄일 수 있다 — <strong>워크플로우의 각 step을 K8s Pod로 실행한다.</strong> 이 결정 하나에서 Argo의 성격 대부분이 따라 나온다.</p>
+
+<ul>
+  <li>step이 Pod이므로, K8s의 스케줄링·자원 할당·fault tolerance·노드 확장을 <strong>그대로</strong> 물려받는다. Argo가 별도 실행자 인프라를 두지 않는 이유다</li>
+  <li>워크플로우는 <code class="highlighter-rouge">DAG</code>(의존 그래프) 또는 step-by-step 시퀀스로 정의하고, step 간에는 artifact(파일)와 parameter(값)를 주고받는다</li>
+  <li>조건 분기, 자동 retry, 에러 핸들링, 수평 확장(수천 워크플로우 동시 실행)이 엔진 차원에서 제공된다</li>
+</ul>
+
+<p>전부 K8s <strong>CRD</strong>로 표현된다. 워크플로우 정의·재사용·스케줄이 각각 별도 리소스 종류로 나뉘는데, 이건 뒤에서 따로 본다.</p>
+
+<p><br /></p>
+
+<h1 id="workflow-실행-모델">Workflow 실행 모델</h1>
+
+<p>개요의 “step = Pod”가 실제로 어떻게 돌아가는지를 CRD 구조부터 따라가 보자. 이 절이 이 글에서 다른 Argo 소개 글과 갈리는 지점이다.</p>
+
+<p><br /></p>
+
+<h2 id="workflow-spec--entrypoint와-templates">Workflow spec — entrypoint와 templates</h2>
+
+<p><code class="highlighter-rouge">Workflow</code> 리소스의 spec은 본질적으로 <strong>템플릿 목록 + 시작점</strong>이다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">argoproj.io/v1alpha1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Workflow</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">generateName</span><span class="pi">:</span> <span class="s">hello-world-</span>   <span class="c1"># Workflow 인스턴스 이름 prefix</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">entrypoint</span><span class="pi">:</span> <span class="s">main</span>             <span class="c1"># 어느 템플릿부터 실행할지 (main 함수 격)</span>
+  <span class="na">arguments</span><span class="pi">:</span>                   <span class="c1"># 워크플로우 전역 입력</span>
+    <span class="na">parameters</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">message</span>
+        <span class="na">value</span><span class="pi">:</span> <span class="s">hello</span>
+  <span class="na">templates</span><span class="pi">:</span>                   <span class="c1"># 실행 단위 정의 목록</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">main</span>
+      <span class="c1"># ...</span>
+</code></pre></div></div>
+
+<ul>
+  <li><code class="highlighter-rouge">spec.entrypoint</code>: 워크플로우를 시작할 템플릿 이름. 프로그램의 <code class="highlighter-rouge">main()</code>에 해당한다</li>
+  <li><code class="highlighter-rouge">spec.templates</code>: 실행 단위(template) 정의의 목록</li>
+  <li><code class="highlighter-rouge">spec.arguments</code>: 워크플로우 전체에 넘기는 입력 parameter·artifact</li>
+</ul>
+
+<p><code class="highlighter-rouge">templates</code>에 정의만 나열한다고 실행 순서가 정해지는 건 아니다. 순서는 <strong>흐름을 짜는 템플릿</strong>이 따로 표현한다.</p>
+
+<p><br /></p>
+
+<h2 id="일을-하는-템플릿-vs-흐름을-짜는-템플릿">일을 하는 템플릿 vs 흐름을 짜는 템플릿</h2>
+
+<p>Argo 템플릿은 역할이 둘로 갈린다. 이 구분을 잡아야 YAML이 읽힌다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>분류</th>
+      <th>템플릿 타입</th>
+      <th>하는 일</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>정의 템플릿</strong> (일을 함)</td>
+      <td><code class="highlighter-rouge">container</code></td>
+      <td>사용자 이미지를 컨테이너로 실행</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td><code class="highlighter-rouge">script</code></td>
+      <td><code class="highlighter-rouge">source:</code>에 인라인 스크립트를 넣어 실행 (container의 wrapper)</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td><code class="highlighter-rouge">resource</code></td>
+      <td>클러스터 리소스 조작 (get/create/apply/delete/patch)</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td><code class="highlighter-rouge">suspend</code></td>
+      <td>지정 시간 또는 수동 resume까지 일시정지</td>
+    </tr>
+    <tr>
+      <td><strong>호출 템플릿</strong> (흐름을 짬)</td>
+      <td><code class="highlighter-rouge">steps</code></td>
+      <td>step들을 순차·병렬로 나열</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td><code class="highlighter-rouge">dag</code></td>
+      <td>task 간 의존 관계를 그래프로 선언</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">container</code>·<code class="highlighter-rouge">script</code>는 실제로 Pod를 띄워 일을 하고, <code class="highlighter-rouge">steps</code>·<code class="highlighter-rouge">dag</code>는 그 일들을 <strong>어떤 순서로 엮을지</strong>만 정한다. 호출 템플릿이 정의 템플릿을 <code class="highlighter-rouge">template:</code> 이름으로 참조하는 구조다.</p>
+
+<p><br /></p>
+
+<h2 id="steps-vs-dag">steps vs dag</h2>
+
+<p>흐름을 짜는 방식이 둘인데, 표현력과 가독성이 다르다. 결론부터 보면, 단순한 직선·고정 분기는 <code class="highlighter-rouge">steps</code>가 읽기 쉽고, 의존 관계가 복잡해질수록 <code class="highlighter-rouge">dag</code>가 그래프를 그대로 옮기기 좋다. ML 파이프라인(전처리 → 학습 → 평가 → 배포)처럼 단계가 갈라지고 합쳐지면 보통 <code class="highlighter-rouge">dag</code>를 쓴다. 둘을 차례로 본다.</p>
+
+<h3 id="steps">steps</h3>
+
+<p>list-of-lists 구조다. 바깥 리스트는 순차 실행, 안쪽 리스트는 병렬 실행이다. <code class="highlighter-rouge">- -</code>(이중 하이픈)이 “이 단계는 앞 단계가 끝난 뒤”를 뜻한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">hello-hello-hello</span>
+    <span class="na">steps</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">step1</span>
+          <span class="na">template</span><span class="pi">:</span> <span class="s">prepare-data</span>      <span class="c1"># 먼저 실행</span>
+      <span class="pi">-</span> <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">step2a</span>
+          <span class="na">template</span><span class="pi">:</span> <span class="s">run-first-half</span>    <span class="c1"># step1 이후, step2a·step2b는</span>
+        <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">step2b</span>                <span class="c1">#   서로 병렬</span>
+          <span class="na">template</span><span class="pi">:</span> <span class="s">run-second-half</span>
+</code></pre></div></div>
+
+<h3 id="dag">dag</h3>
+
+<p><code class="highlighter-rouge">dag.tasks</code>에 task를 나열하고 각 task의 <code class="highlighter-rouge">dependencies</code>로 선행 조건을 선언한다. 의존이 없는 task는 즉시 시작되고, 나머지는 의존이 충족되는 대로 풀린다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">diamond</span>
+    <span class="na">dag</span><span class="pi">:</span>
+      <span class="na">tasks</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">A</span>
+          <span class="na">template</span><span class="pi">:</span> <span class="s">echo</span>
+        <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">B</span>
+          <span class="na">dependencies</span><span class="pi">:</span> <span class="pi">[</span><span class="nv">A</span><span class="pi">]</span>   <span class="c1"># A가 끝나야 B</span>
+          <span class="na">template</span><span class="pi">:</span> <span class="s">echo</span>
+        <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">C</span>
+          <span class="na">dependencies</span><span class="pi">:</span> <span class="pi">[</span><span class="nv">A</span><span class="pi">]</span>   <span class="c1"># A가 끝나야 C (B와 병렬)</span>
+          <span class="na">template</span><span class="pi">:</span> <span class="s">echo</span>
+        <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">D</span>
+          <span class="na">dependencies</span><span class="pi">:</span> <span class="pi">[</span><span class="nv">B</span><span class="pi">,</span> <span class="nv">C</span><span class="pi">]</span>  <span class="c1"># B·C 둘 다 끝나야 D</span>
+          <span class="na">template</span><span class="pi">:</span> <span class="s">echo</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="step이-pod가-되기까지--controller와-3컨테이너">step이 Pod가 되기까지 — controller와 3컨테이너</h2>
+
+<p>정의·흐름을 선언했으면, 그걸 실제 Pod로 바꾸는 주체가 있어야 한다. 그게 <strong>workflow-controller</strong>다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">workflow-controller</code>는 <code class="highlighter-rouge">Workflow</code> 리소스와 그 Pod들을 watch하면서 reconcile한다. 워크플로우를 큐에 넣고 worker goroutine이 하나씩 처리하며, 의존이 충족된 step에 대해 Pod를 생성한다</li>
+  <li>사용자가 API·UI로 워크플로우를 제출·조회하는 창구는 별도 컴포넌트인 <code class="highlighter-rouge">argo-server</code>다 (API + UI 호스팅)</li>
+</ul>
+
+<p>여기서 핵심은 <strong>step Pod 내부 구조</strong>다. step/task 하나가 Pod 하나로 뜨는데, 그 Pod 안에는 컨테이너가 셋 들어간다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>컨테이너</th>
+      <th>역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">init</code> (InitContainer)</td>
+      <td>입력 artifact·parameter를 받아 <code class="highlighter-rouge">main</code>이 쓸 수 있게 준비</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">main</code></td>
+      <td>사용자가 지정한 이미지 실행. <code class="highlighter-rouge">argoexec</code>가 volume mount되어 entrypoint로 들어가고, 원래 커맨드를 <strong>subprocess로 실행</strong>하며 출력을 캡처</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">wait</code></td>
+      <td>출력 parameter·artifact 저장과 cleanup</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>즉 <code class="highlighter-rouge">main</code> 컨테이너가 곧장 사용자 커맨드를 PID 1로 실행하는 게 아니라, <code class="highlighter-rouge">argoexec</code>(executor)가 한 겹 감싸서 입출력 수집과 라이프사이클 관리를 한다. 이 executor를 <strong>Emissary</strong>라고 부르며, <strong>v3.4 이후로는 유일한 executor</strong>다. 과거 <code class="highlighter-rouge">docker</code>·<code class="highlighter-rouge">pns</code>·<code class="highlighter-rouge">k8sapi</code>·<code class="highlighter-rouge">kubelet</code> executor는 제거됐으므로, 옛 자료의 <code class="highlighter-rouge">containerRuntimeExecutor</code> 설정은 최신 버전에서 더 이상 유효하지 않다.</p>
+
+<p><br /></p>
+
+<h2 id="artifact-passing--step-간-파일-전달">artifact passing — step 간 파일 전달</h2>
+
+<p>step이 각자 다른 Pod라는 건, step 사이에 메모리·로컬 디스크를 공유하지 않는다는 뜻이다. 그래서 단계 간 데이터 전달은 두 갈래로 표현된다.</p>
+
+<ul>
+  <li><strong>parameter</strong>: 작은 값(문자열·숫자). 한 step의 output을 다음 step의 input으로 `` 식으로 참조</li>
+  <li><strong>artifact</strong>: 파일·디렉토리. 한 step이 <code class="highlighter-rouge">outputs.artifacts</code>로 내보내고 다음 step이 <code class="highlighter-rouge">inputs.artifacts</code>로 받는다</li>
+</ul>
+
+<p>artifact는 Pod 로컬에 머물 수 없으므로 <strong>artifact repository</strong>(S3 호환 object storage 등)를 거쳐 전달된다. <code class="highlighter-rouge">init</code> 컨테이너가 저장소에서 받아오고 <code class="highlighter-rouge">wait</code> 컨테이너가 올려보내는, 앞 절의 3컨테이너 구조가 여기서 그대로 쓰인다.</p>
+
+<blockquote>
+  <p>이 artifact 저장소를 직접 설정하고 MinIO를 붙여 ML 파이프라인 step 간에 데이터를 넘긴 실습은 따로 정리해 둔 적이 있다 — <a href="/dev/Dev-Kubernetes-Argo-Workflow-Artifact/">Argo Workflow Artifact 기능 사용하기</a>에서 <code class="highlighter-rouge">workflow-controller-configmap</code>의 <code class="highlighter-rouge">artifactRepository</code> 설정과 S3 호환 저장소 연동을 다룬다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="crd-패밀리--workflow--workflowtemplate--cronworkflow">CRD 패밀리 — Workflow / WorkflowTemplate / CronWorkflow</h2>
+
+<p>Argo는 “한 번 실행”, “재사용 정의”, “스케줄 실행”을 각각 다른 CRD로 나눈다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>CRD</th>
+      <th>성격</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">Workflow</code></td>
+      <td>워크플로우 <strong>한 번의 실행 인스턴스</strong>. 제출하면 곧장 돈다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">WorkflowTemplate</code></td>
+      <td>클러스터에 저장해 두는 <strong>재사용 정의</strong>(namespace 범위). 그 자체로는 실행 단위가 아니라, 다른 워크플로우가 참조하거나 <code class="highlighter-rouge">--from</code>으로 인스턴스화</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">ClusterWorkflowTemplate</code></td>
+      <td><code class="highlighter-rouge">WorkflowTemplate</code>의 <strong>클러스터 범위</strong> 버전</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">CronWorkflow</code></td>
+      <td>cron 스케줄에 맞춰 <code class="highlighter-rouge">Workflow</code>를 주기 생성</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">WorkflowTemplate</code>은 두 방식으로 참조된다 — 전체 spec을 끌어다 쓰는 <code class="highlighter-rouge">workflowTemplateRef</code>, 그리고 <code class="highlighter-rouge">steps</code>·<code class="highlighter-rouge">dag</code> 안에서 개별 템플릿만 불러오는 <code class="highlighter-rouge">templateRef</code>다. 같은 전처리·학습 정의를 여러 워크플로우가 공유할 때 정의를 한 곳에 모으는 용도다.</p>
+
+<p><br /></p>
+
+<h1 id="argo와-다른-도구의-관계">Argo와 다른 도구의 관계</h1>
+
+<p>Argo가 범용 엔진이다 보니, 여러 도구가 Argo를 자기 백엔드로 끌어다 쓰거나(Pipelines) 같은 패밀리로 역할을 나눠 갖는다(Argo CD). 이 관계를 세 각도로 본다.</p>
+
+<p><br /></p>
+
+<h2 id="argo를-내부-엔진으로-쓰는-도구">Argo를 내부 엔진으로 쓰는 도구</h2>
+
+<p>여러 ML 도구가 자기 실행 백엔드로 Argo를 끌어다 쓴다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>도구</th>
+      <th>사용 방식</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Kubeflow Pipelines</strong></td>
+      <td>Pipelines DSL → Argo Workflow로 컴파일해 실행</td>
+    </tr>
+    <tr>
+      <td><strong>Katib</strong> (옵션)</td>
+      <td>trial orchestrator로 Argo 선택 가능</td>
+    </tr>
+    <tr>
+      <td><strong>Seldon Core</strong></td>
+      <td>모델 배포 워크플로우 일부</td>
+    </tr>
+    <tr>
+      <td><strong>MLflow Projects</strong></td>
+      <td><code class="highlighter-rouge">mlflow run</code>을 Argo step으로 오케스트레이션</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 중 가장 밀접한 Kubeflow Pipelines와의 관계를 다음 절에서 본다.</p>
+
+<p><br /></p>
+
+<h2 id="kubeflow-pipelines와의-레이어-관계">Kubeflow Pipelines와의 레이어 관계</h2>
+
+<p>Kubeflow Pipelines와 Argo Workflows는 같은 백엔드(Argo)를 공유하지만, 추상화 레벨과 타깃 사용자가 다르다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/argo-workflows.png" alt="argo-workflows" class="align-center" /></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>Argo Workflows</th>
+      <th>Kubeflow Pipelines</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>카테고리</td>
+      <td>범용 K8s workflow engine</td>
+      <td>ML 특화 플랫폼</td>
+    </tr>
+    <tr>
+      <td>인터페이스</td>
+      <td>YAML / WorkflowTemplate</td>
+      <td>Python DSL (<code class="highlighter-rouge">@dsl.component</code>, <code class="highlighter-rouge">@dsl.pipeline</code>)</td>
+    </tr>
+    <tr>
+      <td>타깃 사용자</td>
+      <td>플랫폼/DevOps</td>
+      <td>데이터 사이언티스트</td>
+    </tr>
+    <tr>
+      <td>ML 통합</td>
+      <td>일반 컨테이너 step</td>
+      <td>artifact tracking, metadata, metric 시각화</td>
+    </tr>
+    <tr>
+      <td>백엔드</td>
+      <td>(본인)</td>
+      <td><strong>Argo Workflows</strong> (default)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Kubeflow Pipelines는 <strong>Argo 위에 ML metadata·UI·SDK를 얹은 layer</strong>다. 데이터 사이언티스트는 Python DSL로 파이프라인을 짜고, 그게 내려가면 결국 앞에서 본 <code class="highlighter-rouge">Workflow</code> CRD로 컴파일돼 같은 controller가 Pod를 띄운다. 둘은 경쟁이 아니라 <strong>레이어 관계</strong>다.</p>
+
+<p><br /></p>
+
+<h2 id="argo-workflows-vs-argo-cd">Argo Workflows vs Argo CD</h2>
+
+<p>이름이 비슷해 헷갈리지만, 같은 Argo 패밀리 안에서 책임이 명확히 다르다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>도구</th>
+      <th>책임</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Argo Workflows</strong></td>
+      <td>step-by-step task DAG 실행. “build → test → deploy” <strong>절차</strong> 자동화</td>
+    </tr>
+    <tr>
+      <td><strong>Argo CD</strong></td>
+      <td>GitOps 컨트롤러. Git의 desired state ↔ K8s의 actual state <strong>상태 reconcile</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>한쪽은 “정해진 절차를 한 번 끝까지 돌린다”(Workflows), 다른 쪽은 “선언된 상태를 계속 맞춰 둔다”(Argo CD)는 점이 다르다. CI/CD에서는 둘이 보완 관계로 엮인다 — Workflows로 빌드·테스트·이미지 push까지 하고, 그 결과 manifest를 Git에 반영하면, Argo CD가 그 Git 상태를 클러스터에 지속적으로 동기화한다.</p>
+
+<p><br /></p>
+
+<h1 id="유스케이스">유스케이스</h1>
+
+<p>범용 엔진이라 적용 범위가 넓다. 책이 드는 대표 사례는 네 갈래다.</p>
+
+<ul>
+  <li><strong>ML 파이프라인</strong> — 데이터 전처리 → 학습 → 평가 → 배포를 DAG로 묶는다. <a href="/kubernetes/Kubernetes-GenAI-on-K8s-11-01-GenAIOps-Pipeline-and-Monitoring/">11.1</a> 파이프라인 5단계 중 adaptation·serving 사이를 자동화하는 지점이다</li>
+  <li><strong>데이터 배치 처리</strong> — ETL, 스케줄된 데이터 sync. 주기 실행은 <code class="highlighter-rouge">CronWorkflow</code>로 표현한다</li>
+  <li><strong>인프라 자동화</strong> — EKS 프로비저닝, namespace·RBAC 자동 생성, 테넌트 온보딩. <code class="highlighter-rouge">resource</code> 템플릿으로 클러스터 리소스를 직접 다루는 패턴이 여기 들어맞는다</li>
+  <li><strong>CI/CD</strong> — 코드 빌드 → 테스트 → 이미지 push → manifest apply</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="parallelism-세-층위와-ray-scheduling">parallelism 세 층위와 Ray scheduling</h1>
+
+<p>Argo Workflows와 Ray가 같은 클러스터에 있으면 “동시 실행 제한”이 겹쳐 보이지만 <strong>레이어가 다르다.</strong> 먼저 Argo 안에서도 <code class="highlighter-rouge">parallelism</code>이 한 가지가 아니라는 점부터 짚는다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>층위</th>
+      <th>설정 위치</th>
+      <th>무엇을 제한</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>컨트롤러</td>
+      <td>controller configmap <code class="highlighter-rouge">parallelism</code> / <code class="highlighter-rouge">namespaceParallelism</code></td>
+      <td>동시에 도는 <strong>워크플로우 개수</strong>(전체 / namespace 단위)</td>
+    </tr>
+    <tr>
+      <td>워크플로우</td>
+      <td><code class="highlighter-rouge">spec.parallelism</code></td>
+      <td>한 워크플로우 안에서 동시에 뜨는 <strong>Pod(step) 수</strong></td>
+    </tr>
+    <tr>
+      <td>템플릿</td>
+      <td><code class="highlighter-rouge">steps</code>/<code class="highlighter-rouge">dag</code> 템플릿의 <code class="highlighter-rouge">parallelism</code></td>
+      <td>그 템플릿 범위 내 동시 실행 수</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 셋은 전부 <strong>Argo가 띄우는 워크플로우 step Pod</strong>를 대상으로 한다. 반면 Ray와는 다음과 같이 갈린다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>레이어</th>
+      <th>제한 주체</th>
+      <th>무엇을 제한</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Argo</strong></td>
+      <td>위 세 층위의 <code class="highlighter-rouge">parallelism</code></td>
+      <td>동시 실행 <strong>워크플로우 step Pod</strong> 수</td>
+    </tr>
+    <tr>
+      <td><strong>Ray</strong></td>
+      <td>Ray scheduler + autoscaler</td>
+      <td>task/actor/PG bundle이 <strong>Ray node</strong>에 배치되는 수</td>
+    </tr>
+    <tr>
+      <td><strong>K8s</strong></td>
+      <td>Resource quota, scheduler</td>
+      <td>namespace·노드 단위 Pod·자원</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Argo step 안에서 Ray cluster를 띄우는 구성을 생각하면 경계가 분명해진다. Argo는 “이 step Pod가 떠 있는가”까지만 관리하고, 그 Pod 안에서 Ray가 task를 어느 raylet에 배치하는지는 Ray scheduler의 몫이다. 병목이 Argo의 동시 Pod 상한인지, Ray의 logical resource인지, K8s 노드 capacity인지를 분리해서 봐야 한다 — Ray 쪽 계층적 스케줄링은 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-11-05-Ray-KubeRay-and-vLLM-Inference/">11.5</a>에서 다룬다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>영역</th>
+      <th>핵심</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>실행 모델</strong></td>
+      <td><code class="highlighter-rouge">Workflow</code> CRD, step/task = Pod 1개, 그 안 <code class="highlighter-rouge">init</code>/<code class="highlighter-rouge">main</code>/<code class="highlighter-rouge">wait</code> 3컨테이너</td>
+    </tr>
+    <tr>
+      <td><strong>executor</strong></td>
+      <td>v3.4+ Emissary(<code class="highlighter-rouge">argoexec</code>)가 사용자 커맨드를 subprocess로 감싸 입출력 수집</td>
+    </tr>
+    <tr>
+      <td><strong>흐름 표현</strong></td>
+      <td><code class="highlighter-rouge">steps</code>(list-of-lists) vs <code class="highlighter-rouge">dag</code>(<code class="highlighter-rouge">dependencies</code> 그래프)</td>
+    </tr>
+    <tr>
+      <td><strong>CRD 패밀리</strong></td>
+      <td><code class="highlighter-rouge">Workflow</code>(1회) / <code class="highlighter-rouge">WorkflowTemplate</code>(재사용 정의) / <code class="highlighter-rouge">CronWorkflow</code>(스케줄)</td>
+    </tr>
+    <tr>
+      <td><strong>vs Pipelines</strong></td>
+      <td>Argo = 엔진, Pipelines = 그 위 ML layer</td>
+    </tr>
+    <tr>
+      <td><strong>vs Argo CD</strong></td>
+      <td>절차 실행 vs GitOps 상태 reconcile</td>
+    </tr>
+    <tr>
+      <td><strong>parallelism</strong></td>
+      <td>컨트롤러·워크플로우·템플릿 세 층위 — Ray task scheduling과는 별개 레이어</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://argo-workflows.readthedocs.io/">Argo Workflows</a></li>
+  <li><a href="https://argo-workflows.readthedocs.io/en/latest/workflow-concepts/">Argo Workflows — Core Concepts</a></li>
+  <li><a href="https://argo-workflows.readthedocs.io/en/latest/architecture/">Argo Workflows — Architecture</a></li>
+  <li><a href="https://argo-workflows.readthedocs.io/en/latest/workflow-executors/">Argo Workflows — Workflow Executors</a></li>
+  <li><a href="https://argo-workflows.readthedocs.io/en/latest/parallelism/">Argo Workflows — Limiting Parallelism</a></li>
+  <li><a href="https://argo-cd.readthedocs.io/">Argo CD</a></li>
+  <li><a href="/dev/Dev-Kubernetes-Argo-Workflow-Artifact/">Argo Workflow Artifact 기능 사용하기</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#argo-cd" class="page__taxonomy-item" rel="tag">Argo-CD</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#argo-workflows" class="page__taxonomy-item" rel="tag">Argo-Workflows</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#dag" class="page__taxonomy-item" rel="tag">DAG</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#genai" class="page__taxonomy-item" rel="tag">GenAI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubeflow-pipelines" class="page__taxonomy-item" rel="tag">Kubeflow-Pipelines</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions-chapter-11" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions-Chapter-11</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-06-09T00:00:00+09:00">June 9, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BGenAI%5D+GenAI+on+K8s%3A+11.4+-+Argo+Workflows%EC%99%80+ML+%ED%8C%8C%EC%9D%B4%ED%94%84%EB%9D%BC%EC%9D%B8+%EC%98%A4%EC%BC%80%EC%8A%A4%ED%8A%B8%EB%A0%88%EC%9D%B4%EC%85%98%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-11-04-Argo-Workflows%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-11-04-Argo-Workflows%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-11-04-Argo-Workflows%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-GenAI-on-K8s-11-04-Argo-Workflows?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-11-03-MLflow-Tracking-and-Registry/" class="pagination--pager" title="[GenAI] GenAI on K8s: 11.3 - MLflow: Tracking, Model Registry, Models
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-11-05-Ray-KubeRay-and-vLLM-Inference/" class="pagination--pager" title="[GenAI] GenAI on K8s: 11.5 - Ray/KubeRay와 vLLM 추론 아키텍처
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-11-04-Argo-Workflows/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-GenAI-on-K8s-11-04-Argo-Workflows"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,1335 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[GenAI] GenAI on K8s: 10.1 - GPU 자원 개요와 K8s 할당 메커니즘 - Eraser’s StudyLog</title>
+<meta name="description" content="K8s에서 GenAI 워크로드에 GPU를 할당하는 메커니즘을 device plugin, NFD/GFD, 그리고 extended resource 규칙까지 정리해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[GenAI] GenAI on K8s: 10.1 - GPU 자원 개요와 K8s 할당 메커니즘">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/">
+
+
+  <meta property="og:description" content="K8s에서 GenAI 워크로드에 GPU를 할당하는 메커니즘을 device plugin, NFD/GFD, 그리고 extended resource 규칙까지 정리해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-06-07T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[GenAI] GenAI on K8s: 10.1 - GPU 자원 개요와 K8s 할당 메커니즘">
+    <meta itemprop="description" content="K8s에서 GenAI 워크로드에 GPU를 할당하는 메커니즘을 device plugin, NFD/GFD, 그리고 extended resource 규칙까지 정리해 보자.">
+    <meta itemprop="datePublished" content="2026-06-07T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[GenAI] GenAI on K8s: 10.1 - GPU 자원 개요와 K8s 할당 메커니즘
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-06-07T00:00:00+09:00">2026년 06월 07일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  8 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#gpu와-커스텀-가속기">GPU와 커스텀 가속기</a>
+    <ul>
+      <li><a href="#커스텀-가속기">커스텀 가속기</a></li>
+    </ul>
+  </li>
+  <li><a href="#k8s에서의-gpu-자원-할당">K8s에서의 GPU 자원 할당</a>
+    <ul>
+      <li><a href="#device-plugin-동작-흐름">device plugin 동작 흐름</a></li>
+      <li><a href="#노드플러그인-프로비저닝">노드·플러그인 프로비저닝</a></li>
+      <li><a href="#노드-피쳐-라벨링--nfd--gfd">노드 피쳐 라벨링 — NFD / GFD</a></li>
+      <li><a href="#gpu를-요청하는-pod">GPU를 요청하는 Pod</a></li>
+      <li><a href="#gpu-requestlimit-동작--cpu메모리와-다른-점">GPU request/limit 동작 — CPU·메모리와 다른 점</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions">Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)</a> 10장의 학습 내용을 바탕으로 합니다</em></p>
+
+<p><br /></p>
+
+<p>K8s에서 GenAI 워크로드를 배포할 때 GPU 효율을 극대화하는 방법을 다룬다. GPU는 비싸고, 대부분 저활용(underutilized) 상태로 방치된다. 이번 글에서는 GPU·커스텀 가속기의 개요와 K8s에서 GPU 자원을 할당하는 메커니즘을 정리한다.</p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>GPU는 massively parallel processing(MPP)으로 딥러닝 행렬곱에 압도적이지만, K8s가 네이티브로 인식하지 못해 device plugin이 필요하다</li>
+  <li>device plugin은 DaemonSet으로 배포되어 kubelet에 GPU를 등록하고, NFD/GFD가 하드웨어 정보를 노드 라벨로 표면화한다</li>
+  <li>GPU는 extended resource로 정수 단위로 할당되고, <code class="highlighter-rouge">limits</code>가 필수고, <code class="highlighter-rouge">request==limit</code> 강제된다 — CPU·메모리와 근본적으로 다른 이산(discrete) 장치다</li>
+  <li>GPU “쪼개 쓰기”는 overcommit이 아니라 광고 단위를 재정의하는 별개 메커니즘(MIG / MPS / time-slicing)이다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="gpu와-커스텀-가속기">GPU와 커스텀 가속기</h1>
+
+<p>GenAI 워크로드에서 컴퓨팅 자원은 크게 세 가지로 나뉜다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>컴퓨팅</th>
+      <th>특징</th>
+      <th>적합 워크로드</th>
+      <th>K8s 인식</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>CPU</strong></td>
+      <td>소수 코어 × 높은 클럭, 분기·순차 로직에 강함</td>
+      <td>범용 애플리케이션, 전처리, 서빙 로직</td>
+      <td>네이티브 (<code class="highlighter-rouge">cpu</code>)</td>
+    </tr>
+    <tr>
+      <td><strong>GPU</strong></td>
+      <td>수천 코어 × 낮은 클럭, 동일 연산을 대량 데이터에 병렬 적용(MPP)</td>
+      <td>행렬곱 중심의 학습·추론, 이미지·영상 처리</td>
+      <td><strong>네이티브 아님</strong> → device plugin 필요</td>
+    </tr>
+    <tr>
+      <td><strong>커스텀 가속기</strong></td>
+      <td>AI/ML 연산만을 위해 설계된 ASIC</td>
+      <td>대규모 학습·추론(특정 벤더 SDK 필수)</td>
+      <td><strong>네이티브 아님</strong> → device plugin 필요</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>MPP(Massively Parallel Processing), SIMD, SIMT</strong>: GPU의 실행 모델은 <strong>SIMT</strong>(Single Instruction, Multiple Threads)다. 수천 개의 코어가 <strong>동일한 명령</strong>을 서로 <strong>다른 데이터</strong>에 동시에 적용한다. 행렬곱을 예로 들면, 결과 행렬의 각 원소 계산이 서로 독립적이므로 수천 개의 스레드에 분배해 한 번에 처리할 수 있다.</p>
+
+  <p>CPU도 병렬 처리를 한다. 다만 방식이 다르다. CPU는 <strong>SIMD</strong>(Single Instruction, Multiple Data) — SSE, AVX, AVX-512 같은 <strong>벡터 명령</strong>으로, <strong>하나의 코어 안에서</strong> 고정 폭(예: 8개 float) 데이터 레인에 같은 연산을 한 번에 적용한다. 코어 수는 GPU 대비 소수(수십~수백)지만 각 코어가 강하고, 분기·캐시·out-of-order 실행에 최적화되어 있다. GPU SIMT는 <strong>수천 개의 단순 코어</strong>가 <strong>수천 개의 스레드</strong>를 warp(32개) 단위로 묶어 동시 실행하는 모델이다. 한 줄로 정리하면 CPU SIMD는 “코어 하나가 벡터 레인 여러 개”, GPU SIMT는 “코어 수천 개가 각자 다른 데이터”다.</p>
+
+  <p>반면 분기(branch)가 많은 순차 로직은 스레드 간 실행 경로가 갈려 GPU의 강점인 warp 단위 병렬성을 해친다 — 이런 작업은 CPU가 낫다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="커스텀-가속기">커스텀 가속기</h2>
+
+<p>GPU가 아닌, AI/ML 전용으로 설계된 커스텀 가속기(ASIC)도 있다.</p>
+
+<ul>
+  <li><strong>AWS Inferentia</strong> — 추론 최적화 칩. Inf1/Inf2 인스턴스</li>
+  <li><strong>AWS Trainium</strong> — 학습 최적화 칩. Trn1/Trn2 인스턴스</li>
+  <li><strong>Google TPU</strong> — TensorFlow/JAX 학습·추론</li>
+  <li><strong>FPGA</strong>(Field-Programmable Gate Array, 현장 재구성 가능 게이트 배열) — 회로 배선을 소프트웨어로 바꿀 수 있는 재구성 가능 가속기. <strong>벤더 중립적 개념</strong>이며, Xilinx(AMD)·Intel(Altera) 등 여러 제조사 제품이 있다</li>
+  <li><strong>ASIC</strong>(Application-Specific Integrated Circuit, 용도 특화 집적회로) — 특정 연산만을 위해 설계된 맞춤 칩. <strong>벤더 중립적 개념</strong>이며, 위 TPU·Trainium·Inferentia도 모두 ASIC의 한 종류다</li>
+</ul>
+
+<blockquote>
+  <p><strong>GPU vs 커스텀 가속기(ASIC) 비교</strong></p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>구분</th>
+        <th>GPU</th>
+        <th>커스텀 가속기(ASIC)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>출발</strong></td>
+        <td>그래픽 렌더링 → GPGPU로 범용 병렬 컴퓨팅 확장</td>
+        <td>처음부터 AI/ML 연산 전용으로 설계</td>
+      </tr>
+      <tr>
+        <td><strong>그래픽 기능</strong></td>
+        <td>있음 (렌더링, 디스플레이 출력)</td>
+        <td>없음</td>
+      </tr>
+      <tr>
+        <td><strong>AI 가속</strong></td>
+        <td>Tensor Core로 행렬곱 가속 (범용 코어와 공존)</td>
+        <td>systolic array 등 AI 연산 전용 데이터패스</td>
+      </tr>
+      <tr>
+        <td><strong>유연성</strong></td>
+        <td>CUDA/OpenCL로 다양한 알고리즘 실행 가능</td>
+        <td>특정 프레임워크·SDK에 종속</td>
+      </tr>
+      <tr>
+        <td><strong>효율</strong></td>
+        <td>범용성 대가로 AI 전용 대비 전력·면적 오버헤드</td>
+        <td>특정 워크로드에서 와트당 처리량 우위</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>GPU는 그래픽에서 출발해 범용 병렬 컴퓨팅(GPGPU)으로 진화했고, Tensor Core가 추가되며 AI 가속기 역할을 겸하게 되었다. 반면 커스텀 가속기는 처음부터 AI 연산만을 위해 설계된 ASIC으로, systolic array 같은 전용 데이터패스를 통해 특정 워크로드에서 와트당 처리량을 극대화한다.</p>
+</blockquote>
+
+<p>AWS Trainium 라인업은 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>칩</th>
+      <th>인스턴스</th>
+      <th>특징</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Trainium (Trn1)</strong></td>
+      <td>Trn1</td>
+      <td>NeuronCore-v2 탑재, 학습용 최적화. BF16/FP16 지원</td>
+    </tr>
+    <tr>
+      <td><strong>Trainium2 (Trn2 / UltraServers)</strong></td>
+      <td>Trn2, UltraServers</td>
+      <td>NeuronCore-v3, Trn1 대비 4배 성능. 대규모 학습용 UltraServer 구성 가능</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>NeuronSDK</strong>: Trainium/Inferentia는 GPU와 ISA(명령어 집합)가 다르기 때문에 CUDA를 쓸 수 없다. 대신 AWS가 제공하는 <strong>Neuron SDK</strong>(컴파일러 + 런타임 + 라이브러리)를 통해 PyTorch·TensorFlow 모델을 Neuron 디바이스용으로 컴파일하고 실행한다. SDK가 프레임워크 수준의 호환 레이어를 제공하므로, 코드 변경을 최소화하면서 커스텀 가속기를 활용할 수 있다.</p>
+</blockquote>
+
+<blockquote>
+  <p><strong>용어 정리</strong></p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>용어</th>
+        <th>풀네임</th>
+        <th>설명</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>SIMD</strong></td>
+        <td>Single Instruction, Multiple Data</td>
+        <td>하나의 명령이 여러 데이터에 동시 적용. CPU의 벡터 확장(AVX 등)이 대표적</td>
+      </tr>
+      <tr>
+        <td><strong>SIMT</strong></td>
+        <td>Single Instruction, Multiple Threads</td>
+        <td>SIMD의 GPU 확장. Warp(32스레드) 단위로 같은 명령을 실행하되, 각 스레드가 독립 레지스터·PC를 가짐</td>
+      </tr>
+      <tr>
+        <td><strong>GPGPU</strong></td>
+        <td>General-Purpose computing on GPU</td>
+        <td>그래픽 외 범용 병렬 연산에 GPU를 사용하는 것. CUDA가 대표 프레임워크</td>
+      </tr>
+      <tr>
+        <td><strong>FPGA</strong></td>
+        <td>Field-Programmable Gate Array</td>
+        <td>회로를 소프트웨어로 재구성할 수 있는 칩. 벤더 중립적 기술 분류</td>
+      </tr>
+      <tr>
+        <td><strong>ASIC</strong></td>
+        <td>Application-Specific Integrated Circuit</td>
+        <td>특정 용도 전용 집적회로. AI 가속기(TPU, Trainium)가 이에 해당</td>
+      </tr>
+    </tbody>
+  </table>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="k8s에서의-gpu-자원-할당">K8s에서의 GPU 자원 할당</h1>
+
+<p>K8s는 CPU·메모리를 네이티브로 인식하지만, GPU·커스텀 가속기는 그렇지 않다. 이들을 사용하려면 <strong>device plugin</strong>과 <strong>device driver</strong> 두 가지가 모두 필요하다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>가속기</th>
+      <th>device plugin</th>
+      <th>resource name</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>NVIDIA GPU</td>
+      <td><a href="https://github.com/NVIDIA/k8s-device-plugin">NVIDIA device plugin</a></td>
+      <td><code class="highlighter-rouge">nvidia.com/gpu</code></td>
+    </tr>
+    <tr>
+      <td>AWS Inferentia / Trainium</td>
+      <td><a href="https://github.com/aws-neuron/aws-neuron-sdk">Neuron device plugin</a></td>
+      <td><code class="highlighter-rouge">aws.amazon.com/neuroncore</code></td>
+    </tr>
+    <tr>
+      <td>Google TPU</td>
+      <td>TPU device plugin</td>
+      <td><code class="highlighter-rouge">google.com/tpu</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>드라이버는 노드 OS에 미리 설치되어야 한다. EKS처럼 관리형 서비스에서는 <strong>accelerated AMI</strong>에 NVIDIA 드라이버·CUDA toolkit·Neuron 드라이버 등이 사전 설치되어 있어 별도 설정 없이 사용할 수 있다.</p>
+
+<p><br /></p>
+
+<h2 id="device-plugin-동작-흐름">device plugin 동작 흐름</h2>
+
+<p><img src="https://sirzzang.github.io//assets/images/Week04-ch10-k8s-device-plugin-architecture.png" alt="K8s device plugin 아키텍처" class="align-center" /></p>
+
+<p>device plugin은 다음 6단계로 동작한다.</p>
+
+<ol>
+  <li><strong>DaemonSet 배포</strong>: device plugin이 DaemonSet으로 각 노드에 배포된다</li>
+  <li><strong>벤더별 초기화 + device ready 확인</strong>: 플러그인이 해당 벤더의 장치(GPU 등)를 탐색하고 사용 가능 상태를 확인한다</li>
+  <li><strong>kubelet에 등록 + custom resource 선언</strong>: 플러그인이 kubelet의 Registration gRPC 서비스에 자신을 등록하고, 관리할 리소스 이름(<code class="highlighter-rouge">nvidia.com/gpu</code> 등)을 선언한다</li>
+  <li><strong>device 목록 제공 → kubelet이 node status 갱신 → API server에 광고(advertise)</strong>: 플러그인이 <code class="highlighter-rouge">ListAndWatch</code> gRPC를 통해 사용 가능한 device 목록과 상태를 kubelet에 스트리밍한다. kubelet은 이를 <code class="highlighter-rouge">node.status.capacity</code>/<code class="highlighter-rouge">allocatable</code>에 반영하고, API server가 이 정보를 스케줄러에 노출한다</li>
+  <li><strong>Pod 스케줄 시 kubelet이 plugin에 할당 요청</strong>: 스케줄러가 해당 노드에 Pod를 배치하면, kubelet이 <code class="highlighter-rouge">Allocate</code> gRPC로 플러그인에 device 할당을 요청한다. 플러그인은 환경변수·마운트 등을 반환하고, kubelet이 이를 컨테이너 설정에 주입한다</li>
+  <li><strong>device health 지속 모니터링</strong>: 플러그인이 device 상태를 지속적으로 모니터링하고, unhealthy 상태가 감지되면 kubelet에 알린다</li>
+</ol>
+
+<p>다음과 같이 노드에 광고된 GPU 수를 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get node <span class="nt">-o</span> json | jq <span class="s1">'.items[] | {name: .metadata.name, capacity: .status.capacity}'</span>
+</code></pre></div></div>
+
+<details>
+  <summary>출력 예시</summary>
+
+  <div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+  </span><span class="s2">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"gpu-worker-1"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"capacity"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+    </span><span class="s2">"cpu"</span><span class="p">:</span><span class="w"> </span><span class="s2">"8"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"ephemeral-storage"</span><span class="p">:</span><span class="w"> </span><span class="s2">"104845292Ki"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"hugepages-1Gi"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"hugepages-2Mi"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"memory"</span><span class="p">:</span><span class="w"> </span><span class="s2">"32874496Ki"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"nvidia.com/gpu"</span><span class="p">:</span><span class="w"> </span><span class="s2">"4"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"pods"</span><span class="p">:</span><span class="w"> </span><span class="s2">"110"</span><span class="w">
+  </span><span class="p">}</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div>  </div>
+
+</details>
+
+<blockquote>
+  <p>참고: device plugin의 광고</p>
+
+  <p><strong>광고(advertise)</strong>란 device plugin이 kubelet을 통해 API server에 “이 노드에 <code class="highlighter-rouge">nvidia.com/gpu</code> 4개가 있다”고 알리는 과정이다. 스케줄러는 이 광고된 수량을 기반으로 Pod 배치 여부를 결정한다. device plugin은 gRPC로 kubelet과 통신하며, 핵심 RPC는 <code class="highlighter-rouge">ListAndWatch</code>(device 목록·상태 스트리밍)와 <code class="highlighter-rouge">Allocate</code>(device 할당 요청 처리)다.</p>
+
+  <p>NVIDIA 환경에서는 device plugin이 <code class="highlighter-rouge">Allocate</code> 시 <code class="highlighter-rouge">NVIDIA_VISIBLE_DEVICES</code> 환경변수로 할당할 GPU ID를 지정하고, <strong>NVIDIA Container Runtime</strong>이 이를 받아 실제 GPU 장치를 컨테이너에 주입한다. 이 흐름에 대해서는 이전 글을 참고하자.</p>
+
+  <ul>
+    <li><a href="/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/">device plugin의 ListAndWatch/Allocate 노출 흐름</a></li>
+    <li><a href="/dev/Dev-Nvidia-Container-Runtime/">Container Runtime의 GPU 주입 과정</a></li>
+    <li><a href="/dev/Dev-Kubernetes-GPU-Setting/">드라이버·toolkit부터 plugin 배포까지 전체 셋업</a></li>
+  </ul>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="노드플러그인-프로비저닝">노드·플러그인 프로비저닝</h2>
+
+<p>EKS에서 NVIDIA device plugin과 GPU 노드 그룹을 프로비저닝하는 Terraform 예시다.</p>
+
+<p>NVIDIA device plugin을 EKS addon으로 배포한다.</p>
+
+<pre><code class="language-hcl">resource "aws_eks_addon" "nvidia_device_plugin" {
+  cluster_name = module.eks.cluster_name
+  addon_name   = "nvidia-device-plugin"
+}
+</code></pre>
+
+<p>GPU 워커 노드 그룹에는 taint와 label을 설정한다.</p>
+
+<pre><code class="language-hcl">gpu_node_group = {
+  ami_type       = "AL2_x86_64_GPU"
+  instance_types = ["g5.xlarge"]
+  min_size       = 0
+  max_size       = 4
+  desired_size   = 2
+
+  taints = {
+    gpu = {
+      key    = "nvidia.com/gpu"
+      value  = "true"
+      effect = "NO_SCHEDULE"
+    }
+  }
+
+  labels = {
+    "hardware-type" = "gpu"
+  }
+}
+</code></pre>
+
+<ul>
+  <li><strong>taint</strong> <code class="highlighter-rouge">nvidia.com/gpu=true:NoSchedule</code>: GPU가 필요한 Pod만 GPU 노드에 스케줄되도록 한다. GPU를 요청하지 않는 일반 Pod가 비싼 GPU 노드에 올라가는 것을 방지한다</li>
+  <li><strong>label</strong> <code class="highlighter-rouge">hardware-type=gpu</code>: <code class="highlighter-rouge">nodeSelector</code>나 <code class="highlighter-rouge">nodeAffinity</code>로 GPU 워크로드를 특정 노드에 타겟팅할 수 있게 한다</li>
+</ul>
+
+<p>배포 확인 명령이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm list <span class="nt">-n</span> nvidia-device-plugin
+kubectl get ds <span class="nt">-n</span> nvidia-device-plugin <span class="nt">--no-headers</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="노드-피쳐-라벨링--nfd--gfd">노드 피쳐 라벨링 — NFD / GFD</h2>
+
+<p>K8s 스케줄러는 하드웨어를 직접 알지 못한다. 스케줄러가 아는 것은 <strong>노드 라벨</strong>과 <strong>리소스 requests/limits</strong>뿐이다. 따라서 “이 노드에 어떤 GPU가 있는지”를 라벨로 표면화해야 스케줄러가 올바른 배치 결정을 내릴 수 있다. 이 역할을 하는 것이 NFD(Node Feature Discovery)와 GFD(GPU Feature Discovery)다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>컴포넌트</th>
+      <th>무엇을 라벨링</th>
+      <th>용도</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>NFD</strong></td>
+      <td>범용 노드 피쳐 — <code class="highlighter-rouge">feature.node.kubernetes.io/pci-10de.present=true</code> (10de = NVIDIA 벤더 ID)</td>
+      <td>“이 노드에 NVIDIA 장치 있음” → 1차 필터</td>
+    </tr>
+    <tr>
+      <td><strong>GFD</strong></td>
+      <td>GPU 상세 — <code class="highlighter-rouge">nvidia.com/gpu.product=NVIDIA-L4</code>, <code class="highlighter-rouge">nvidia.com/gpu.memory</code> 등</td>
+      <td>“어떤 GPU냐” → 워크로드 배치·MIG/공유 인지</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>NVIDIA GPU Operator는 NFD 라벨을 기반으로 <code class="highlighter-rouge">nodeAffinity</code>를 설정해, GPU가 탐지된 노드에만 device plugin·드라이버 컨테이너를 배포한다. GFD는 NFD 위에 GPU 상세 정보를 추가하는 구조다.</p>
+
+<p>정리하면 NFD = <strong>“GPU가 있나”</strong> / GFD = <strong>“어떤 GPU냐”</strong>다.</p>
+
+<p>실습에서 GPU 노드에 올라간 NVIDIA 스택 DaemonSet은 다음과 같다. device plugin, GFD, NFD worker가 GPU 노드 1대에 각각 배포되고, MPS control daemon은 replicas 0으로 대기 상태다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/Week04-ch10-eks-console-daemonsets.png" alt="NVIDIA device plugin DaemonSet" class="align-center" /></p>
+
+<p><br /></p>
+
+<h2 id="gpu를-요청하는-pod">GPU를 요청하는 Pod</h2>
+
+<p>GPU를 사용하는 Pod는 다음과 같이 작성한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">gpu-workload</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">tolerations</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">key</span><span class="pi">:</span> <span class="s2">"</span><span class="s">nvidia.com/gpu"</span>
+      <span class="na">operator</span><span class="pi">:</span> <span class="s2">"</span><span class="s">Equal"</span>
+      <span class="na">value</span><span class="pi">:</span> <span class="s2">"</span><span class="s">true"</span>
+      <span class="na">effect</span><span class="pi">:</span> <span class="s2">"</span><span class="s">NoSchedule"</span>
+  <span class="na">nodeSelector</span><span class="pi">:</span>
+    <span class="na">hardware-type</span><span class="pi">:</span> <span class="s">gpu</span>
+  <span class="na">containers</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">training</span>
+      <span class="na">image</span><span class="pi">:</span> <span class="s">my-training-image:latest</span>
+      <span class="na">resources</span><span class="pi">:</span>
+        <span class="na">limits</span><span class="pi">:</span>
+          <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">1</span>
+</code></pre></div></div>
+
+<ul>
+  <li><code class="highlighter-rouge">tolerations</code> — 앞서 설정한 GPU 노드의 taint를 허용한다</li>
+  <li><code class="highlighter-rouge">nodeSelector</code> — <code class="highlighter-rouge">hardware-type=gpu</code> 라벨이 있는 노드에만 배치한다</li>
+  <li><code class="highlighter-rouge">resources.limits</code> — GPU는 <strong>반드시 <code class="highlighter-rouge">limits</code>로 요청</strong>한다. <code class="highlighter-rouge">requests</code>만 단독으로 지정할 수 없다</li>
+</ul>
+
+<p>Trainium/Inferentia를 사용하는 경우 리소스 이름만 다르다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">resources</span><span class="pi">:</span>
+  <span class="na">limits</span><span class="pi">:</span>
+    <span class="s">aws.amazon.com/neuroncore</span><span class="pi">:</span> <span class="s">2</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="gpu-requestlimit-동작--cpu메모리와-다른-점">GPU request/limit 동작 — CPU·메모리와 다른 점</h2>
+
+<p>GPU의 request/limit 규칙이 CPU·메모리와 다른 것은 우연이 아니다. <code class="highlighter-rouge">nvidia.com/gpu</code>는 K8s의 <strong>extended resource</strong>이며, 다음 세 가지 규칙이 적용된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>규칙</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>정수만 허용</strong></td>
+      <td><code class="highlighter-rouge">nvidia.com/gpu: 0.5</code> 같은 소수 지정 불가. 1, 2, 3… 정수 단위만 가능</td>
+    </tr>
+    <tr>
+      <td><strong>limits 필수</strong></td>
+      <td><code class="highlighter-rouge">requests</code>만 단독 지정 불가. <code class="highlighter-rouge">limits</code>가 반드시 있어야 한다</td>
+    </tr>
+    <tr>
+      <td><strong>request == limit</strong></td>
+      <td><code class="highlighter-rouge">requests</code>를 생략하면 <code class="highlighter-rouge">limits</code> 값으로 자동 설정된다. <code class="highlighter-rouge">requests</code>를 명시하면 <code class="highlighter-rouge">limits</code>와 같아야 한다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>따라서 유효한 지정 형태는 두 가지뿐이다.</p>
+
+<ul>
+  <li><strong>(가)</strong> <code class="highlighter-rouge">limits</code>만 지정 → <code class="highlighter-rouge">requests</code>가 자동으로 같은 값으로 설정</li>
+  <li><strong>(나)</strong> <code class="highlighter-rouge">requests</code>와 <code class="highlighter-rouge">limits</code>를 둘 다 지정 → 반드시 같은 값</li>
+</ul>
+
+<p>CPU·메모리처럼 <code class="highlighter-rouge">request &lt; limit</code>으로 burst를 허용하는 것이 불가능하다. GPU는 연속량(continuous quantity)이 아니라 <strong>이산 장치(discrete device)</strong>이기 때문이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>리소스</th>
+      <th>분할 모델</th>
+      <th>request &lt; limit burst</th>
+      <th>한계 초과 시</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>CPU</strong></td>
+      <td>연속량 (밀리코어 단위 분할)</td>
+      <td>가능</td>
+      <td>throttle</td>
+    </tr>
+    <tr>
+      <td><strong>Memory</strong></td>
+      <td>연속량 (바이트 단위 분할)</td>
+      <td>가능</td>
+      <td>OOM kill</td>
+    </tr>
+    <tr>
+      <td><strong>GPU (device)</strong></td>
+      <td>이산 장치 (분할 불가, 정수)</td>
+      <td>개념 자체가 없음</td>
+      <td>해당 없음</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p>CPU·메모리에서 말하는 compressible(압축 가능 — CPU)과 incompressible(비압축 — 메모리) 축은 <strong>연속량</strong>을 전제로 한 구분이다. GPU는 그 전 단계에서 이미 이산 장치라 이 분류 자체가 적용되지 않는다.</p>
+</blockquote>
+
+<p>device plugin이 N개의 이산 장치를 kubelet에 광고하면, 스케줄러는 남은 개수만으로 배치 가능 여부를 판단한다. kubelet은 <code class="highlighter-rouge">Allocate</code> 시 특정 device ID를 컨테이너에 pin한다(NVIDIA의 경우 <code class="highlighter-rouge">NVIDIA_VISIBLE_DEVICES</code> 환경변수). 해당 device는 Pod 수명 동안 독점(exclusive)이다. GPU 하나를 “절반만” 쓰게 해주는 커널 수준의 메커니즘은 기본적으로 없다.</p>
+
+<p>그렇다면 GPU를 “쪼개 쓰기”는 불가능한가? 아니다. 하지만 이것은 CPU·메모리 스타일의 <strong>overcommit이 아니다</strong>. MIG(Multi-Instance GPU), MPS(Multi-Process Service), time-slicing은 <strong>device plugin이 광고하는 단위 자체를 재정의</strong>하는 별개 메커니즘이다. 예를 들어 MIG는 물리 GPU 하나를 여러 개의 독립 인스턴스로 파티셔닝하고, 각 인스턴스를 별개 device로 광고한다. 이에 대해서는 다음 글에서 다룬다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>영역</th>
+      <th>핵심 포인트</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>GPU 종류</strong></td>
+      <td>CPU(범용) → GPU(병렬·행렬곱) → custom accelerator(AI 전용 ASIC)</td>
+    </tr>
+    <tr>
+      <td><strong>K8s 인식</strong></td>
+      <td>네이티브 아님 → device plugin + driver</td>
+    </tr>
+    <tr>
+      <td><strong>라벨링</strong></td>
+      <td>NFD(GPU 유무) + GFD(GPU 상세)</td>
+    </tr>
+    <tr>
+      <td><strong>할당 규칙</strong></td>
+      <td>extended resource: 정수, limits 필수, req==limit</td>
+    </tr>
+    <tr>
+      <td><strong>공유</strong></td>
+      <td>overcommit 불가 → 광고 단위 재정의(MIG/MPS/time-slicing)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions">Kubernetes for Generative AI Solutions — GitHub</a></li>
+  <li><a href="https://github.com/NVIDIA/k8s-device-plugin">NVIDIA Device Plugin for Kubernetes</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/">Kubernetes Device Plugin Framework</a></li>
+  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/">AWS Neuron SDK</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#device-plugin" class="page__taxonomy-item" rel="tag">Device-Plugin</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#genai" class="page__taxonomy-item" rel="tag">GenAI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gfd" class="page__taxonomy-item" rel="tag">GFD</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions-chapter-10" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions-Chapter-10</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nfd" class="page__taxonomy-item" rel="tag">NFD</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nvidia" class="page__taxonomy-item" rel="tag">NVIDIA</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-06-07T00:00:00+09:00">June 7, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BGenAI%5D+GenAI+on+K8s%3A+10.1+-+GPU+%EC%9E%90%EC%9B%90+%EA%B0%9C%EC%9A%94%EC%99%80+K8s+%ED%95%A0%EB%8B%B9+%EB%A9%94%EC%BB%A4%EB%8B%88%EC%A6%98%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-Heterogeneous-GPU-Distributed-Training/" class="pagination--pager" title="[Distributed Training] 이기종 GPU 분산학습: 다른 기종을 한 DDP 잡에 섞으면 벌어지는 일
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-02-GPU-Utilization-and-DCGM/" class="pagination--pager" title="[GenAI] GenAI on K8s: 10.2 - GPU Utilization 이해와 DCGM
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,1564 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] 파드 간 통신: 같은 노드 / 다른 노드 - Eraser’s StudyLog</title>
+<meta name="description" content="쿠버네티스 네트워킹 모델의 핵심인 파드 간 통신을 같은 노드(veth + bridge)와 다른 노드(오버레이 / BGP / 클라우드 네이티브)로 나누어, 각 방식이 NAT 없이 어떻게 도달하는지 패킷 단위로 살펴 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] 파드 간 통신: 같은 노드 / 다른 노드">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-Networking-01-Pod-to-Pod/">
+
+
+  <meta property="og:description" content="쿠버네티스 네트워킹 모델의 핵심인 파드 간 통신을 같은 노드(veth + bridge)와 다른 노드(오버레이 / BGP / 클라우드 네이티브)로 나누어, 각 방식이 NAT 없이 어떻게 도달하는지 패킷 단위로 살펴 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-05-04T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-Networking-01-Pod-to-Pod/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] 파드 간 통신: 같은 노드 / 다른 노드">
+    <meta itemprop="description" content="쿠버네티스 네트워킹 모델의 핵심인 파드 간 통신을 같은 노드(veth + bridge)와 다른 노드(오버레이 / BGP / 클라우드 네이티브)로 나누어, 각 방식이 NAT 없이 어떻게 도달하는지 패킷 단위로 살펴 보자.">
+    <meta itemprop="datePublished" content="2026-05-04T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] 파드 간 통신: 같은 노드 / 다른 노드
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-05-04T00:00:00+09:00">2026년 05월 04일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  17 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#들어가며">들어가며</a></li>
+  <li><a href="#같은-노드의-파드-간-통신">같은 노드의 파드 간 통신</a>
+    <ul>
+      <li><a href="#문제-네트워크-네임스페이스-격리">문제: 네트워크 네임스페이스 격리</a></li>
+      <li><a href="#해결-veth-pair--브릿지">해결: veth pair + 브릿지</a>
+        <ul>
+          <li><a href="#veth-pair로-네임스페이스-벽을-관통한다">veth pair로 네임스페이스 벽을 관통한다</a></li>
+          <li><a href="#브릿지cni0로-하나의-네트워크로-묶는다">브릿지(cni0)로 하나의 네트워크로 묶는다</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#다른-노드의-파드-간-통신">다른 노드의 파드 간 통신</a>
+    <ul>
+      <li><a href="#과제-파드-ip가-다른-노드에서도-도달-가능해야-한다">과제: 파드 IP가 다른 노드에서도 도달 가능해야 한다</a></li>
+      <li><a href="#nat을-허용했다면-docker-bridge-모드">NAT을 허용했다면: Docker bridge 모드</a></li>
+      <li><a href="#해결-방식">해결 방식</a>
+        <ul>
+          <li><a href="#오버레이-별도-대역--터널링">오버레이: 별도 대역 + 터널링</a></li>
+          <li><a href="#bgp-별도-대역--라우팅-정보-전파">BGP: 별도 대역 + 라우팅 정보 전파</a></li>
+          <li><a href="#클라우드-네이티브-라우팅-인프라가-파드-ip를-직접-라우팅">클라우드 네이티브 라우팅: 인프라가 파드 IP를 직접 라우팅</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a>
+    <ul>
+      <li><a href="#세-가지-방식-비교">세 가지 방식 비교</a></li>
+      <li><a href="#노드-내부-구조">노드 내부 구조</a></li>
+      <li><a href="#노드-간-도달-방법">노드 간 도달 방법</a></li>
+      <li><a href="#nat-없음-검증">NAT 없음 검증</a></li>
+      <li><a href="#요구사항은-어떻게-충족되는가">요구사항은 어떻게 충족되는가</a></li>
+    </ul>
+  </li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <h1 id="tldr">TL;DR</h1>
+
+<p><a href="/kubernetes/Kubernetes-Networking-00-Model/">이전 글</a>에서 살펴본 쿠버네티스 네트워킹의 4가지 문제 중, 핵심인 <strong>문제 2 — 파드 간 통신</strong>을 정리한다.</p>
+
+<ul>
+  <li><strong>같은 노드 파드 간 통신</strong>: veth pair로 네임스페이스 벽을 관통하고, bridge(cni0)가 L2 스위치 역할을 하여 하나의 네트워크로 묶는다</li>
+  <li><strong>다른 노드 파드 간 통신</strong>: 물리 네트워크가 파드 IP를 모르는 것이 근본 문제. 해결 방식은 세 가지:
+    <ul>
+      <li><strong>오버레이</strong> (Flannel VXLAN 등): 파드 패킷을 노드 IP로 캡슐화하여 터널링</li>
+      <li><strong>BGP</strong>(Border Gateway Protocol, Calico BGP 모드): 라우팅 정보를 물리 네트워크에 직접 전파</li>
+      <li><strong>클라우드 네이티브 라우팅</strong> (AWS VPC CNI): 파드에게 VPC 실제 IP를 부여하여, 별도 라우팅 메커니즘 없이 도달 가능하게 함</li>
+    </ul>
+  </li>
+  <li>세 방식 모두 파드 간 통신에서 src/dst IP가 한 번도 변하지 않는다. <strong>방법만 다를 뿐 “NAT 없이 파드 IP로 직접 통신”이라는 결과는 동일</strong>하다.</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="들어가며">들어가며</h1>
+
+<p><a href="/kubernetes/Kubernetes-Networking-00-Model/">이전 글</a>에서 쿠버네티스 네트워킹의 4가지 문제와 핵심 원칙인 <a href="/kubernetes/Kubernetes-Networking-00-Model/#핵심-원칙-nat-없이">“NAT 없이”</a>를 살펴봤다. 이 글에서는 그 중 <strong>문제 2 — 파드 간 통신</strong>을 다룬다.</p>
+
+<p>쿠버네티스가 파드 간 통신에 대해 요구하는 것은 두 가지다:</p>
+
+<ol>
+  <li><strong>모든 파드는 같은 노드든 다른 노드든, NAT 없이 다른 모든 파드와 직접 통신할 수 있어야 한다</strong></li>
+  <li><strong>노드의 에이전트(kubelet 등 시스템 데몬)는 동일한 노드의 모든 파드와 통신할 수 있어야 한다</strong></li>
+</ol>
+
+<p>핵심은 요구사항 1이다. 같은 노드뿐 아니라 <strong>다른 노드에 있는 파드까지</strong> NAT 없이 도달 가능해야 한다. 이 요구사항을 어떻게 충족하는지 살펴보자.</p>
+
+<p>이 글에서 만든 인프라 위에, <a href="/kubernetes/Kubernetes-Networking-02-CNI/">CNI 표준</a>·<a href="/kubernetes/Kubernetes-Networking-03-CNI-Flow/">CNI 동작 흐름</a>·<a href="/kubernetes/Kubernetes-Networking-04-Service/">Service와 kube-proxy</a>가 차례로 얹힌다.</p>
+
+<p><br /></p>
+
+<h1 id="같은-노드의-파드-간-통신">같은 노드의 파드 간 통신</h1>
+
+<p>“동일한 노드의 파드가 NAT 없이 통신할 수 있어야 한다”는  요구사항이 어떻게 해결되는지 살펴본다.</p>
+
+<h2 id="문제-네트워크-네임스페이스-격리">문제: 네트워크 네임스페이스 격리</h2>
+
+<p>각 파드는 자신만의 네트워크 네임스페이스를 가진다. 독립된 네트워크 스택(네트워크 인터페이스, IP 주소, 라우팅 테이블, iptables 규칙, 소켓)을 갖는다는 뜻이다. 물리적으로 분리된 두 대의 컴퓨터와 같다고 생각하면 된다. 실제로는 같은 호스트의 커널 위에서 돌아가지만, 서로의 네트워크를 볼 수 없다. 네트워크 네임스페이스가 격리를 목적으로 만들어진 것이니 당연하다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-networking-model-pod-on-same-nodes-1.png" alt="kubernetes-networking-model-pod-on-same-nodes-1" class="align-center" width="600" /></p>
+
+<center><sup>컴퓨터는 네트워크 인터페이스(eth0), IP 주소, 라우팅 테이블로 구성된 네트워크 스택을 가지고 있다. 이것이 네트워크 통신의 기본 단위다.</sup></center>
+
+<blockquote>
+  <p><strong>참고</strong>: 네트워크 스택이라고 하면 엄밀히는 자체 네트워크 인터페이스, 자체 IP, 자체 라우팅 테이블, 자체 iptables 규칙, 자체 소켓까지를 포함한다. 여기서는 독립된 네트워크 환경 자체를 간단히 표현하기 위해 eth0 + IP + 라우팅 테이블로만 그렸다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-networking-model-pod-on-same-nodes-2.png" alt="kubernetes-networking-model-pod-on-same-nodes-2" class="align-center" width="600" /></p>
+
+<center><sup>파드도 자신만의 네트워크 네임스페이스를 가진다. 즉 독립적인 네트워크 스택을 갖는다.</sup></center>
+
+<p><br /></p>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-networking-model-pod-on-same-nodes-3.png" alt="kubernetes-networking-model-pod-on-same-nodes-3" class="align-center" width="600" /></p>
+
+<center><sup>두 파드가 같은 호스트 커널 위에서 돌아가고 있지만, 네트워크 네임스페이스가 격리되어 있어 서로의 존재를 모른다. 호스트는 eth0을 통해 외부와 연결되어 있다.</sup></center>
+
+<blockquote>
+  <p><strong>참고</strong>: 파드의 네트워크 네임스페이스는 pause 컨테이너가 소유한다. pause가 먼저 뜨면서 네임스페이스를 만들고, 이후 앱 컨테이너가 그 네임스페이스에 합류한다. pause 프로세스는 <a href="https://man7.org/linux/man-pages/man2/pause.2.html"><code class="highlighter-rouge">pause(2)</code> syscall</a>로 시그널 대기 상태에 진입해 거의 0에 가까운 풋프린트로 네임스페이스만 유지한다. 자세한 내용은 <a href="/kubernetes/Kubernetes-Networking-00-Model/#문제-1-컨테이너--컨테이너">네트워킹 모델 — 문제 1</a> 참고.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="해결-veth-pair--브릿지">해결: veth pair + 브릿지</h2>
+
+<h3 id="veth-pair로-네임스페이스-벽을-관통한다">veth pair로 네임스페이스 벽을 관통한다</h3>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-networking-model-pod-on-same-nodes-4.png" alt="kubernetes-networking-model-pod-on-same-nodes-4" class="align-center" width="600" /></p>
+
+<center><sup>veth pair가 각 파드의 네임스페이스를 호스트 네임스페이스와 연결한다. 파드 안에 eth0이 생기고 IP가 할당된다. 호스트 쪽에 파드 네임스페이스와 연결된 veth가 나타난다.</sup></center>
+
+<p><strong>veth pair</strong>는 커널이 만드는 가상 이더넷 케이블이다. 양쪽 끝이 항상 연결되어 있어서, 한쪽에 패킷을 넣으면 반대쪽에서 나온다. 물리적으로 두 NIC를 케이블로 직접 연결한 것과 동일한 효과를 커널 내부에서 소프트웨어로 구현한 것이다.</p>
+
+<p>파드의 eth0이 veth pair의 한쪽 끝이고, 호스트의 veth-xxx가 반대쪽 끝이다. 이 둘은 생성 시점부터 쌍으로 묶여 있다. 파드 안에서 eth0으로 패킷을 보내면, 커널이 그 패킷을 veth pair의 반대쪽 끝(호스트의 veth-xxx)으로 즉시 전달한다. 네임스페이스 경계를 넘는 것처럼 보이지만, 실제로는 커널이 한쪽 인터페이스의 송신 큐 데이터를 반대쪽 인터페이스의 수신 큐로 복사하는 것이다.</p>
+
+<p>veth pair 자체가 <strong>네임스페이스 벽을 관통하는 양방향 파이프</strong>인 것이다. 파드 입장에서는 그냥 eth0으로 패킷을 보낸 것이고, 호스트 입장에서는 veth-xxx에서 패킷이 나타난 것이다.</p>
+
+<p>여기까지는 일반적인 컨테이너 네트워크 네임스페이스 격리와 <strong>같은 원리</strong>다. 파드에서 호스트까지는 도달할 수 있지만, <strong>두 파드 간의 직접 통신은 여전히 미지수다</strong>. Pod Red의 패킷이 Pod Blue에 도달하려면 어떻게 해야 할까?</p>
+
+<h3 id="브릿지cni0로-하나의-네트워크로-묶는다">브릿지(cni0)로 하나의 네트워크로 묶는다</h3>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-networking-model-pod-on-same-nodes-5.png" alt="kubernetes-networking-model-pod-on-same-nodes-5" class="align-center" /></p>
+
+<center><sup>cni0 브릿지가 L2 스위치 역할을 하며 같은 노드의 veth들을 하나의 네트워크로 묶는다. Pod Red → veth → cni0 → veth → Pod Blue 경로가 완성된다.</sup></center>
+
+<p>이 문제를 <strong>브릿지 인터페이스</strong>로 해결한다. CNI 플러그인이 만드는 가상 브릿지(Flannel의 경우 <code class="highlighter-rouge">cni0</code>)가 <strong>L2 스위치 역할</strong>을 하며, 같은 노드의 veth들을 하나의 네트워크 세그먼트로 묶는다. Docker의 <code class="highlighter-rouge">docker0</code> 브릿지도 같은 원리다.</p>
+
+<p><br /></p>
+
+<p><img src="https://sirzzang.github.io//assets/images/pod-network-same-node.gif" alt="pod-network-same-node" class="align-center" /></p>
+
+<p>패킷의 흐름은 다음과 같다:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>파드 A(10.244.0.2) → veth → cni0 브릿지 → veth → 파드 B(10.244.0.3)
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">cni0</code> 브릿지가 같은 L2 세그먼트를 만들어주기 때문에, 파드 A가 보낸 패킷의 출발지 IP(10.244.1.2)가 그대로 파드 B에 도착한다. IP를 바꿀 필요가 없다. <strong>NAT이 없다</strong>는 것이다. 마치 같은 스위치에 물린 두 대의 컴퓨터처럼 동작한다.</p>
+
+<p><br /></p>
+
+<p>그런데 cni0 브릿지가 “같은 스위치에 물린 것처럼” 동작한다고 했다. 물리 스위치가 프레임을 올바른 포트로 전달하려면 <strong>어떤 MAC 주소가 어떤 포트에 있는지</strong> 알아야 한다. cni0도 마찬가지다. veth가 여러 개 연결되어 있을 때, 파드 B로 향하는 프레임을 파드 B의 veth로 정확히 보내려면 MAC 주소 테이블이 필요하다. 이 테이블을 채우는 과정이 <strong>MAC 학습</strong>이며, 물리 스위치와 동일한 메커니즘이다:</p>
+
+<ol>
+  <li>파드가 생기면 CNI 플러그인이 veth pair를 만들고, 호스트 쪽 veth를 cni0 브릿지에 포트로 연결한다 (<code class="highlighter-rouge">ip link set veth-xxx master cni0</code>)</li>
+  <li>해당 veth를 통해 프레임이 오면, cni0이 출발지 MAC을 보고 “이 MAC은 이 포트(veth)에 있다”고 MAC 주소 테이블에 기록한다</li>
+  <li>다른 파드가 해당 MAC으로 프레임을 보내면, cni0이 테이블을 참조해서 올바른 veth 포트로 전달한다</li>
+</ol>
+
+<p>정리하면, <strong>veth pair</strong>로 각 파드의 네임스페이스를 호스트 네임스페이스에 연결하고, <strong>브릿지(cni0)</strong>로 같은 노드의 veth들을 하나의 L2 세그먼트로 묶어서 같은 노드 파드 간 통신 문제를 해결한다.</p>
+
+<p><br /></p>
+
+<h1 id="다른-노드의-파드-간-통신">다른 노드의 파드 간 통신</h1>
+
+<p>같은 노드 안에서는 브릿지로 해결됐다. 하지만 요구사항은 <strong>“같은 노드든 다른 노드든”</strong>이라고 말한다. 노드 A의 파드 a(10.244.0.5)가 노드 B의 파드 b(10.244.1.3)에게도 NAT 없이 패킷을 보낼 수 있어야 한다. 여기가 진짜 어려운 부분이다.</p>
+
+<h2 id="과제-파드-ip가-다른-노드에서도-도달-가능해야-한다">과제: 파드 IP가 다른 노드에서도 도달 가능해야 한다</h2>
+
+<p>같은 노드 안에서는 브릿지가 L2 세그먼트를 만들어줬지만, <strong>노드 밖으로 나가면 그런 보장이 없다</strong>. 노드 A의 파드 IP가 노드 B에서 도달 가능하려면, 그 사이의 물리 네트워크(또는 클라우드 네트워크)가 파드 IP를 라우팅할 수 있어야 한다. 그리고 쿠버네티스 네트워킹 모델은 이 과정에서 <strong>NAT을 사용하지 말라</strong>고 요구한다.</p>
+
+<p>이 과제를 어떻게 풀 것인지는, <strong>파드에 어떤 IP를 부여하느냐</strong>에 따라 문제의 성격 자체가 달라진다:</p>
+
+<ul>
+  <li><strong>별도의 파드 전용 대역</strong>(예: <code class="highlighter-rouge">10.244.x.x</code>)을 사용하면, 물리 네트워크가 이 대역을 <strong>모른다</strong>. <code class="highlighter-rouge">10.244.1.3</code>이라는 IP는 노드 B 내부에서만 의미가 있고, 물리 네트워크 라우터는 이 대역에 대한 경로 정보를 갖고 있지 않다. 이 경우 “물리 네트워크가 파드 IP를 모른다”는 문제를 <strong>해결해야</strong> 한다.</li>
+  <li><strong>인프라의 실제 IP</strong>(예: VPC 대역)를 파드에 직접 부여하면, 물리 네트워크가 이미 그 IP를 라우팅할 수 있으므로 이 문제가 <strong>애초에 발생하지 않는다</strong>.</li>
+</ul>
+
+<p>비유하면 이렇다. 서울 아파트(노드 A)에서 부산 아파트(노드 B)로 택배를 보내는 상황이다. 아파트마다 자체적인 동호수 체계(별도 파드 대역)를 쓰면, 택배 시스템은 “부산 아파트”까지만 알고 “305동 402호”가 어디인지는 모른다. 반면 전국 공통 주소 체계(인프라 IP)를 쓰면 택배 시스템이 처음부터 해당 주소를 안다. 어느 쪽이든 쿠버네티스가 요구하는 것은 동일하다 — <strong>305동 402호까지 어떻게든 찾아가되, 송장을 바꿔 붙이지 마라</strong>.</p>
+
+<h2 id="nat을-허용했다면-docker-bridge-모드">NAT을 허용했다면: Docker bridge 모드</h2>
+
+<p>이 문제를 이해하기 위해, 먼저 NAT을 <strong>허용</strong>했을 때 어떤 방식이 가능한지 살펴보자. 이것이 Docker의 기본 bridge 모드 동작이다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>호스트 IP: 192.168.1.10
+
+컨테이너 A: nginx (172.17.0.2:80) → -p 8080:80 → 192.168.1.10:8080
+컨테이너 B: nginx (172.17.0.3:80) → -p 8081:80 → 192.168.1.10:8081
+컨테이너 C: nginx (172.17.0.4:80) → -p 8082:80 → 192.168.1.10:8082
+</code></pre></div></div>
+
+<p>Docker bridge 모드에서는 컨테이너마다 별도 네트워크 네임스페이스를 가지고, veth pair로 <code class="highlighter-rouge">docker0</code> 브릿지에 연결되며, 고유한 사설 IP(172.17.0.x)를 할당받는다. 여기까지는 쿠버네티스의 같은 노드 파드 간 통신과 동일한 원리다.</p>
+
+<p>차이는 <strong>외부와의 통신</strong>에서 나타난다. Docker 데몬이 iptables에 NAT 규칙을 자동으로 추가한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># DNAT: 외부 → 컨테이너 (포트 매핑)</span>
+<span class="nt">-A</span> DOCKER <span class="nt">-p</span> tcp <span class="nt">--dport</span> 8080 <span class="nt">-j</span> DNAT <span class="nt">--to-destination</span> 172.17.0.2:80
+
+<span class="c"># SNAT(MASQUERADE): 컨테이너 → 외부</span>
+<span class="c"># 172.17.0.0/16 대역에서 출발한 패킷이 docker0가 아닌 다른 인터페이스(즉, 외부)로 나갈 때</span>
+<span class="c"># 출발지 IP를 호스트 IP로 바꿔라</span>
+<span class="nt">-A</span> POSTROUTING <span class="nt">-s</span> 172.17.0.0/16 <span class="o">!</span> <span class="nt">-o</span> docker0 <span class="nt">-j</span> MASQUERADE
+</code></pre></div></div>
+
+<ul>
+  <li><strong>외부 → 컨테이너 A</strong>: <code class="highlighter-rouge">192.168.1.10:8080</code>으로 보내면, 패킷이 호스트의 외부 인터페이스로 들어오고 iptables PREROUTING 체인에서 DNAT이 적용되어 목적지가 <code class="highlighter-rouge">172.17.0.2:80</code>으로 변환된다. 커널이 변환 후 <code class="highlighter-rouge">docker0</code> 브릿지를 통해 컨테이너로 전달한다. 브릿지는 그냥 전달만 할 뿐, 이미 그 전에 IP 주소가 바뀌어 있다.</li>
+  <li><strong>컨테이너 A → 외부</strong>: 컨테이너에서 veth를 통해 <code class="highlighter-rouge">docker0</code> 브릿지로 나오고, 호스트 네트워크 스택을 타면서 iptables POSTROUTING 체인의 MASQUERADE 규칙이 출발지를 <code class="highlighter-rouge">172.17.0.2</code>에서 호스트 IP <code class="highlighter-rouge">192.168.1.10</code>으로 바꾼다.</li>
+</ul>
+
+<p><br /></p>
+
+<p>이 방식의 문제는 명확하다:</p>
+
+<ul>
+  <li><strong>IP 불일치</strong>: 컨테이너 A 입장에서 자기 IP는 <code class="highlighter-rouge">172.17.0.2</code>인데, 외부에서 보는 주소는 <code class="highlighter-rouge">192.168.1.10:8080</code>이다. 컨테이너가 자기 IP를 다른 서비스에 알려줄 때 <code class="highlighter-rouge">172.17.0.2</code>를 알려주면 외부에서 도달할 수 없다.</li>
+  <li><strong>포트 충돌</strong>: 두 컨테이너가 같은 호스트 포트(예: 8080)를 쓸 수 없다. 컨테이너가 100개면 포트 100개를 수동으로 매핑해야 한다.</li>
+</ul>
+
+<p><br /></p>
+
+<p>쿠버네티스 네트워킹 모델은 이것을 거부한다. 파드가 <strong>고유 IP를 갖고</strong>, 그 IP로 <strong>NAT 없이 직접 통신</strong>할 수 있어야 한다. 패킷 관점에서 Docker bridge 모드와 비교하면 차이가 명확하다:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[Docker bridge 모드]
+  외부 → 컨테이너 A:  src=203.0.113.50  dst=192.168.1.10:8080
+                          ↓ DNAT
+                      src=203.0.113.50  dst=172.17.0.2:80      ← dst가 바뀜
+
+  컨테이너 A → 외부:  src=172.17.0.2    dst=203.0.113.50
+                          ↓ SNAT (MASQUERADE)
+                      src=192.168.1.10  dst=203.0.113.50       ← src가 바뀜
+
+[쿠버네티스]
+  파드 A → 파드 B:    src=10.244.1.2    dst=10.244.1.3
+                          ↓ (경로 전체)
+                      src=10.244.1.2    dst=10.244.1.3         ← 아무것도 안 바뀜
+</code></pre></div></div>
+
+<p>쿠버네티스에서는 파드마다 고유 IP를 가지므로 같은 포트도 충돌 없이 사용할 수 있고, 경로 전체에서 src/dst IP가 한 번도 변하지 않는다.</p>
+
+<blockquote>
+  <p><strong>참고: Docker와 쿠버네티스의 네트워킹 모델이 다른 이유</strong></p>
+
+  <p>Docker는 <strong>단일 호스트</strong>에서 컨테이너를 실행하는 도구로 시작했다. 단일 호스트에서 컨테이너를 격리하면서 외부 접근을 허용하려면 NAT 포트 매핑이 가장 간단하다. 물리 네트워크 인프라를 건드릴 필요 없이 iptables 규칙만 추가하면 된다.</p>
+
+  <p>반면 쿠버네티스는 처음부터 <strong>멀티 노드 클러스터</strong>를 전제로 설계했고, 수백~수천 개 파드가 서로 직접 통신해야 하니 포트 매핑 방식이 성립하지 않았다. 풀어야 하는 문제 자체가 다르니 네트워킹 모델도 근본적으로 달라진 것이다.</p>
+
+  <p>Docker도 네트워크 모드를 여러 가지 제공한다:</p>
+  <ul>
+    <li><strong>bridge</strong> (기본): 컨테이너마다 별도 네트워크 네임스페이스 + veth pair + docker0 브릿지 연결. 고유 사설 IP를 가지지만, 외부 접근은 <code class="highlighter-rouge">-p</code>로 포트 매핑(NAT)</li>
+    <li><strong>host</strong> (<code class="highlighter-rouge">--network=host</code>): 컨테이너가 호스트의 네트워크 네임스페이스를 그대로 공유한다. 별도 IP 없이 호스트 IP를 직접 사용한다. NAT이 없지만 격리도 없다. 컨테이너 두 개가 같은 포트(80)를 쓰면 충돌</li>
+    <li><strong>none</strong>: 네트워크 인터페이스가 루프백(lo)만 있다. 외부 통신 불가</li>
+  </ul>
+</blockquote>
+
+<h2 id="해결-방식">해결 방식</h2>
+
+<p>이 과제를 직접 풀어야 한다고 생각해 보자. NAT을 쓰면 간단하지만, 네트워킹 모델이 금지한다. 그렇다면 NAT 없이 파드 IP를 노드 밖에서도 도달 가능하게 만들어야 한다. 앞서 봤듯이 <strong>파드에 어떤 IP를 부여하느냐</strong>에 따라 접근이 달라진다:</p>
+
+<ol>
+  <li>
+    <p><strong>물리 네트워크를 우회한다 (오버레이)</strong>: 물리 네트워크가 파드 IP를 모른다면, 물리 네트워크한테 알려주는 대신 우회하면 된다. 각 노드에 파드 대역을 할당하고(노드 A는 <code class="highlighter-rouge">10.244.0.0/24</code>, 노드 B는 <code class="highlighter-rouge">10.244.1.0/24</code>), 파드 패킷을 노드 IP로 한 번 감싸서 보낸다. 물리 네트워크는 파드 대역을 여전히 모르지만, 노드 간 IP 통신만 되면 패킷이 전달된다.</p>
+  </li>
+  <li>
+    <p><strong>물리 네트워크한테 파드 IP 대역을 알려준다 (BGP)</strong>: 우회 대신 정면 돌파도 가능하다. 물리 네트워크 라우터에게 “10.244.1.0/24는 노드 B로 보내라”는 경로 정보를 BGP 프로토콜로 직접 광고한다. 라우터가 이 정보를 반영하면, 캡슐화 없이 파드 IP가 물리 네트워크를 날것 그대로 돌아다닐 수 있다.</p>
+  </li>
+  <li>
+    <p><strong>인프라 자체가 알게 만들어 버린다 (클라우드 네이티브 라우팅)</strong>: 여기가 발상이 다르다. 파드에게 <strong>인프라가 네이티브하게 라우팅 가능한 IP</strong>를 부여한다. 인프라의 라우팅 테이블이 이미 해당 IP를 라우팅할 수 있으므로, 별도의 오버레이나 BGP 광고가 애초에 필요 없다. 인프라 네트워크는 원래 하던 대로 자기 라우팅 도메인의 IP를 처리하는 것이고, 파드가 그 도메인의 IP를 받은 것뿐이다. <strong>AWS VPC CNI</strong>가 바로 이 방식이다(<a href="/kubernetes/Kubernetes-EKS-02-01-01-EKS-VPC-CNI/">구체 구현</a>). 기본 모드에서는 노드와 같은 서브넷 IP를, Custom Networking 모드에서는 별도 서브넷(secondary CIDR) IP를 파드에 부여하는데, 어느 쪽이든 VPC가 라우팅 가능한 IP라는 점은 동일하다.</p>
+  </li>
+</ol>
+
+<p>정리하면 다음과 같다:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>방식</th>
+      <th>핵심 발상</th>
+      <th>파드 IP 대역</th>
+      <th>복잡도</th>
+      <th>단점</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>오버레이</strong> (VXLAN, IPIP)</td>
+      <td>물리 네트워크를 <strong>우회</strong> — 노드 IP로 감싸서 터널링</td>
+      <td>별도 대역 (10.244.x.x)</td>
+      <td>중간</td>
+      <td>캡슐화/디캡슐화 오버헤드, 디버깅 어려움</td>
+    </tr>
+    <tr>
+      <td><strong>BGP 라우팅 전파</strong> (Calico 방식)</td>
+      <td>물리 네트워크에 <strong>알려줌</strong> — 라우팅 정보를 BGP로 전파</td>
+      <td>별도 대역 (10.244.x.x)</td>
+      <td>높음</td>
+      <td>모든 노드가 BGP 피어링 필요, 라우터 설정 필요</td>
+    </tr>
+    <tr>
+      <td><strong>클라우드 네이티브 라우팅</strong> (AWS VPC CNI 등)</td>
+      <td>인프라가 <strong>원래부터 앎</strong> — 인프라가 라우팅 가능한 IP를 부여</td>
+      <td>인프라의 라우팅 도메인 내</td>
+      <td><strong>클라우드가 다 해줌</strong></td>
+      <td>클라우드 환경에 종속, 인스턴스 타입별 IP 제한</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>참고: ARP/GARP 방식</strong>: 같은 L2 서브넷 내에서 ARP/GARP로 “이 IP 여기 있어요”라고 브로드캐스트하는 원시적인 방법도 이론적으로 가능하다(NIC에 IP를 여러 개 붙이는 가장 단순한 형태). 하지만 같은 서브넷 안에서만 동작하고 스케일이 안 되므로, 실제 프로덕션 쿠버네티스 환경에서는 거의 사용되지 않는다. 개념 이해 차원에서만 참고하자.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h3 id="오버레이-별도-대역--터널링">오버레이: 별도 대역 + 터널링</h3>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-networking-model-pod-on-different-nodes-overlay.png" alt="kubernetes-networking-model-pod-on-different-nodes-overlay" class="align-center" /></p>
+
+<center><sup>오버레이 방식 — 물리 네트워크가 모르는 파드 IP 대역을 노드 IP로 캡슐화하여 터널링한다. 물리 네트워크는 노드 간 통신만 보인다.</sup></center>
+
+<p>Flannel(VXLAN), Calico(IPIP) 등이 사용하는 방식이다. 각 노드에 파드 대역을 할당하고(노드 A는 <code class="highlighter-rouge">10.244.0.0/24</code>, 노드 B는 <code class="highlighter-rouge">10.244.1.0/24</code>), 각 파드마다 별도의 가상 인터페이스(veth)를 만들어 별도 대역의 IP를 할당한다. 물리 네트워크가 모르는 이 파드 IP 대역을 <strong>노드 IP로 한 번 감싸서(캡슐화)</strong> 전달한다.</p>
+
+<p>노드의 라우팅 테이블에 오버레이 인터페이스를 통한 경로가 설정된다:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># flannel(VXLAN) 설치한 노드 A의 라우팅 테이블</span>
+<span class="s">10.244.0.0/24  →  cni0       (로컬 파드, 브릿지로 직접 전달)</span>
+<span class="s">10.244.1.0/24  →  flannel.1  (노드 B의 파드, VXLAN 터널로 전달)</span>
+</code></pre></div></div>
+
+<p>로컬 파드는 <code class="highlighter-rouge">cni0</code> 브릿지로 직접 전달하고(같은 노드 파드 간 통신과 동일), 다른 노드의 파드 대역은 오버레이 인터페이스(<code class="highlighter-rouge">flannel.1</code>, <code class="highlighter-rouge">tunl0</code> 등)로 보낸다. 이 오버레이 인터페이스가 원본 패킷을 <strong>노드 IP로 캡슐화</strong>한다:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[오버레이 패킷 구조]
+┌─────────────────────────────────┐
+│ Outer: src=192.168.1.10 (노드)   │  ← 물리 네트워크가 아는 IP
+│        dst=192.168.1.20 (노드)   │
+│ ┌─────────────────────────────┐ │
+│ │ Inner: src=10.244.1.5 (파드) │ │  ← 물리 네트워크가 모르는 IP
+│ │        dst=10.244.2.3 (파드) │ │
+│ └─────────────────────────────┘ │
+└─────────────────────────────────┘
+</code></pre></div></div>
+
+<p>물리 네트워크 입장에서는 그저 노드 간 통신으로만 보인다. 목적지 노드에서 디캡슐화하면 원래 파드 IP가 나온다.</p>
+
+<p><br /></p>
+
+<p><strong>파드 IP가 변하지 않는지 경로를 검증</strong>해 보자. 파드 X(<code class="highlighter-rouge">10.244.0.5</code>, 노드 A)가 파드 Y(<code class="highlighter-rouge">10.244.1.3</code>, 노드 B)에게 패킷을 보내는 경우다:</p>
+
+<ol>
+  <li><strong>파드 X가 패킷 생성</strong>: <code class="highlighter-rouge">src=10.244.0.5</code>, <code class="highlighter-rouge">dst=10.244.1.3</code></li>
+  <li><strong>veth를 통해 호스트로 나옴</strong>: 노드 A의 라우팅 테이블에서 <code class="highlighter-rouge">10.244.1.0/24 → flannel.1</code> 경로를 타고 오버레이 인터페이스로 전달</li>
+  <li><strong>VXLAN 캡슐화</strong>: <code class="highlighter-rouge">flannel.1</code>이 원본 패킷을 건드리지 않고 바깥에 노드 IP 헤더를 씌움
+    <ul>
+      <li>Outer IP: <code class="highlighter-rouge">src=192.168.1.10(노드 A)</code>, <code class="highlighter-rouge">dst=192.168.1.20(노드 B)</code> — 물리 네트워크가 아는 IP</li>
+      <li>Inner IP: <code class="highlighter-rouge">src=10.244.0.5(파드 X)</code>, <code class="highlighter-rouge">dst=10.244.1.3(파드 Y)</code> — <strong>그대로</strong></li>
+    </ul>
+  </li>
+  <li><strong>물리 네트워크 전달</strong>: 라우터는 Outer IP만 보고 노드 B로 전달</li>
+  <li><strong>노드 B에서 디캡슐화</strong>: <code class="highlighter-rouge">flannel.1</code>이 Outer 헤더를 벗기면 원본 파드 패킷이 나옴. <code class="highlighter-rouge">src=10.244.0.5</code>, <code class="highlighter-rouge">dst=10.244.1.3</code> — <strong>그대로</strong></li>
+  <li><strong>파드 Y가 수신</strong>: 노드 B의 라우팅 테이블 <code class="highlighter-rouge">10.244.1.0/24 → cni0 → veth</code>를 거쳐 파드 Y에 도착. <code class="highlighter-rouge">src=10.244.0.5</code>, <code class="highlighter-rouge">dst=10.244.1.3</code> — <strong>변하지 않음</strong></li>
+</ol>
+
+<p>Outer IP 헤더가 추가/제거될 뿐, <strong>Inner IP(파드 IP)는 출발부터 도착까지 한 번도 변하지 않는다</strong>. 캡슐화는 NAT이 아니다. NAT은 IP를 <strong>변조</strong>하는 것이고, 캡슐화는 IP를 건드리지 않고 <strong>바깥에 새 헤더를 씌우는</strong> 것이다.</p>
+
+<blockquote>
+  <p><strong>참고</strong>: 오버레이 네트워크의 더 상세한 구조 — VTEP 인터페이스, <code class="highlighter-rouge">onlink</code> 플래그, FDB(forwarding database) 테이블, 패킷이 단계별로 어떻게 흐르는지 — 는 <a href="/kubernetes/Kubernetes-Networking-03-CNI-Flow/">CNI 동작 흐름</a> 글의 Flannel(VXLAN) 시나리오에서 확인할 수 있다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h3 id="bgp-별도-대역--라우팅-정보-전파">BGP: 별도 대역 + 라우팅 정보 전파</h3>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-networking-model-pod-on-different-nodes-bgp.png" alt="kubernetes-networking-model-pod-on-different-nodes-bgp" class="align-center" /></p>
+
+<center><sup>BGP 방식 — 캡슐화 없이 파드 IP가 물리 네트워크 위를 그대로 돌아다닌다. 물리 라우터가 BGP로 파드 대역의 경로를 알고 있으므로 가능하다.</sup></center>
+
+<p>Calico BGP 모드가 사용하는 방식이다. 각 노드에 파드 대역을 할당하는 것은 오버레이와 동일하지만, <strong>캡슐화 대신 물리 네트워크 라우터에게 경로 정보를 직접 광고</strong>한다는 것이 차이다.</p>
+
+<p>Calico 에이전트(bird)가 “10.244.1.0/24는 노드 B(192.168.1.20)로 보내라”는 경로 정보를 BGP 프로토콜로 다른 노드와 물리 라우터에게 전파한다. 물리 라우터가 이 정보를 받아 자신의 라우팅 테이블에 반영하면, 파드 IP 대역의 패킷을 올바른 노드로 직접 전달할 수 있게 된다.</p>
+
+<p>캡슐화 오버헤드가 없지만, 네트워크 인프라가 BGP를 지원해야 한다.</p>
+
+<p><br /></p>
+
+<p><strong>파드 IP가 변하지 않는지 경로를 검증</strong>해 보자. 파드 X(<code class="highlighter-rouge">10.244.0.5</code>, 노드 A)가 파드 Y(<code class="highlighter-rouge">10.244.1.3</code>, 노드 B)에게 패킷을 보내는 경우다. 캡슐화도 없다. 파드 IP가 물리 네트워크 위를 날것 그대로 돌아다닌다. 물리 라우터가 BGP로 파드 대역의 경로를 알고 있으니 가능한 것이다.</p>
+
+<ol>
+  <li><strong>파드 X가 패킷 생성</strong>: <code class="highlighter-rouge">src=10.244.0.5</code>, <code class="highlighter-rouge">dst=10.244.1.3</code></li>
+  <li><strong>veth를 통해 호스트로 나옴</strong>: 노드 A의 라우팅 테이블에서 <code class="highlighter-rouge">10.244.1.0/24 → via 192.168.1.20(노드 B)</code> 경로를 탐 — BGP가 심어준 경로</li>
+  <li><strong>캡슐화 없이 그대로 물리 네트워크로 전달</strong>: <code class="highlighter-rouge">src=10.244.0.5</code>, <code class="highlighter-rouge">dst=10.244.1.3</code> — 파드 IP <strong>그대로</strong></li>
+  <li><strong>물리 라우터가 전달</strong>: 라우터의 라우팅 테이블에도 BGP로 <code class="highlighter-rouge">10.244.1.0/24 → 192.168.1.20</code> 경로가 전파되어 있으므로, 노드 B로 전달</li>
+  <li><strong>노드 B가 수신</strong>: <code class="highlighter-rouge">src=10.244.0.5</code>, <code class="highlighter-rouge">dst=10.244.1.3</code> — 파드 IP <strong>그대로</strong>. 노드 B의 라우팅 테이블 <code class="highlighter-rouge">10.244.1.3 → veth</code>를 거쳐 파드 Y에 도착</li>
+  <li><strong>파드 Y가 수신한 패킷</strong>: <code class="highlighter-rouge">src=10.244.0.5</code>, <code class="highlighter-rouge">dst=10.244.1.3</code> — <strong>변하지 않음</strong></li>
+</ol>
+
+<p><br /></p>
+
+<h3 id="클라우드-네이티브-라우팅-인프라가-파드-ip를-직접-라우팅">클라우드 네이티브 라우팅: 인프라가 파드 IP를 직접 라우팅</h3>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-networking-model-pod-on-different-nodes-cloud-native.png" alt="kubernetes-networking-model-pod-on-different-nodes-cloud-native" class="align-center" /></p>
+
+<center><sup>클라우드 네이티브 라우팅 방식 — 파드에게 VPC 실제 IP를 부여하여, VPC 패브릭이 파드 IP를 직접 라우팅한다. 실제 구현은 link-local 주소를 사용하지만 개념적으로 단순화했다.</sup></center>
+
+<p>오버레이와 BGP는 모두 <strong>인프라가 모르는 파드 전용 대역</strong>(10.244.x.x)을 별도로 만들고, 그 대역을 물리 네트워크가 어떻게든 도달할 수 있게 만드는 방식이다. 클라우드 네이티브 라우팅은 접근 자체가 다르다. <strong>파드에게 인프라가 네이티브하게 라우팅 가능한 IP를 부여</strong>한다.</p>
+
+<p>핵심은 <strong>클라우드 SDN이 파드 IP를 1급 시민으로 인지하고 라우팅</strong>해준다는 것이다. 프로그래밍에서 1급 시민이 “변수에 담을 수 있고, 함수에 넘길 수 있고, 반환할 수 있는” 것처럼, 클라우드 네트워크에서 파드 IP가 1급 시민이라는 건 “라우팅 테이블에 등록되고, 보안 정책이 적용되고, 네트워크 어디서든 직접 라우팅 가능한” 것을 의미한다. 오버레이에서 파드 IP(10.244.x.x)는 클라우드 네트워크가 “모르는” IP다. 라우팅 테이블에 등록되지 않고, 보안 그룹도 적용할 수 없고, 네트워크 패브릭이 직접 전달할 수도 없다. 캡슐화라는 우회 수단 없이는 도달 자체가 불가능하니, 1급 시민이 될 수 없다.</p>
+
+<p>파드 IP가 인프라의 라우팅 도메인 안에 있으니, <strong>클라우드의 라우팅 테이블이 이미 해당 IP를 해당 노드로 라우팅할 수 있다</strong>. 별도의 오버레이나 BGP 광고가 필요 없다. 클라우드 네트워크 패브릭은 원래 하던 대로 자기 라우팅 도메인의 IP를 처리하는 것이고, 파드가 그 도메인의 IP를 받은 것뿐이다. 노드와 같은 서브넷이든(기본 모드), 다른 서브넷이든(Custom Networking) 상관없다. VPC에 속한 CIDR이면 VPC가 라우팅한다.</p>
+
+<p>주요 클라우드 모두 비슷한 메커니즘을 제공한다. 구현 디테일은 다르지만, 클라우드 SDN이 파드 IP를 직접 라우팅한다는 핵심 원리는 동일하다:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>클라우드</th>
+      <th>CNI</th>
+      <th>방식</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>AWS</strong></td>
+      <td><a href="/kubernetes/Kubernetes-EKS-02-01-01-EKS-VPC-CNI/">VPC CNI</a></td>
+      <td>ENI 보조 IP + VPC 패브릭 자동 라우팅</td>
+    </tr>
+    <tr>
+      <td><strong>GCP</strong></td>
+      <td>GKE VPC-native</td>
+      <td>Alias IP ranges — 서브넷의 secondary range를 파드에 할당, VPC가 자동 라우팅</td>
+    </tr>
+    <tr>
+      <td><strong>Azure</strong></td>
+      <td>Azure CNI</td>
+      <td>VNet의 IP를 파드에 직접 할당</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<p>오버레이와의 구조 차이를 비교하면 명확하다:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[클라우드 네이티브 라우팅 (예: AWS VPC CNI)]
+호스트 ENI (192.168.1.10)      ← 클라우드 네트워크가 이 IP들을 다 알고 있음
+ ├ 보조 IP: 192.168.1.11 → Pod A에 할당   ← VPC가 라우팅 가능한 IP
+ └ 보조 IP: 192.168.1.12 → Pod B에 할당
+
+[오버레이 (Calico/Flannel)]
+호스트 NIC (192.168.1.10)       ← 물리 네트워크가 아는 IP는 이것뿐
+ └ cni0 브릿지
+    ├ veth → Pod A (10.244.1.5)   ← 인프라가 모르는 대역
+    └ veth → Pod B (10.244.1.6)   ← 물리 네트워크는 이 IP를 모름
+</code></pre></div></div>
+
+<p><br /></p>
+
+<p><strong>파드 IP가 변하지 않는지 경로를 검증</strong>해 보자. 파드 X(<code class="highlighter-rouge">192.168.1.55</code>, 노드 A)가 파드 Y(<code class="highlighter-rouge">192.168.1.77</code>, 노드 B)에게 패킷을 보내는 경우다:</p>
+
+<ol>
+  <li><strong>파드 X가 패킷 생성</strong>: <code class="highlighter-rouge">src=192.168.1.55</code>, <code class="highlighter-rouge">dst=192.168.1.77</code></li>
+  <li><strong>veth를 통해 호스트로 나옴</strong>: <code class="highlighter-rouge">192.168.1.77</code>은 같은 VPC 서브넷 대역 → 별도 처리 없이 그냥 VPC 패브릭으로 보냄</li>
+  <li><strong>VPC 패브릭이 전달</strong>: <code class="highlighter-rouge">src=192.168.1.55</code>, <code class="highlighter-rouge">dst=192.168.1.77</code> — <strong>VPC가 아는 IP</strong>. <code class="highlighter-rouge">192.168.1.77</code>은 노드 B의 ENI에 붙어 있으므로 노드 B로 전달. 캡슐화 없음</li>
+  <li><strong>노드 B가 수신</strong>: <code class="highlighter-rouge">src=192.168.1.55</code>, <code class="highlighter-rouge">dst=192.168.1.77</code> — 파드 IP <strong>그대로</strong>. 노드 B의 라우팅 <code class="highlighter-rouge">192.168.1.77 → veth</code>를 거쳐 파드 Y에 도착</li>
+  <li><strong>파드 Y가 수신한 패킷</strong>: <code class="highlighter-rouge">src=192.168.1.55</code>, <code class="highlighter-rouge">dst=192.168.1.77</code> — <strong>변하지 않음</strong></li>
+</ol>
+
+<p>AWS VPC CNI를 예로 들어 보면, 파드 IP 대역이 VPC 서브넷 대역과 동일하니 VPC 입장에서 파드 IP는 그냥 자기 서브넷의 IP이므로 특별한 처리 없이 기존 라우팅으로 전달할 수 있다. 오버레이처럼 캡슐화할 필요도 없고, BGP처럼 별도 경로를 광고할 필요도 없다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<h2 id="세-가지-방식-비교">세 가지 방식 비교</h2>
+
+<p>세 가지 방식 모두 <strong>파드 X가 보낸 패킷의 src/dst IP가 파드 Y에 도착할 때까지 한 번도 변하지 않는다</strong>. 방법만 다를 뿐 “NAT 없이 파드 IP로 직접 통신”이라는 결과는 동일하다. 일관된 기준으로 비교해 보자.</p>
+
+<h2 id="노드-내부-구조">노드 내부 구조</h2>
+
+<p>파드에게 IP를 <strong>어떻게 부여</strong>하고, 그 IP가 <strong>인프라가 라우팅 가능한 IP인지 아닌지</strong>에서 차이가 시작된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>오버레이 (Flannel VXLAN)</th>
+      <th>BGP (Calico)</th>
+      <th>클라우드 네이티브 (AWS VPC CNI)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>파드 IP 대역</strong></td>
+      <td>별도 대역 (10.244.x.x)</td>
+      <td>별도 대역 (10.244.x.x)</td>
+      <td>VPC의 라우팅 도메인 내 IP</td>
+    </tr>
+    <tr>
+      <td><strong>IP 할당 방식</strong></td>
+      <td>파드마다 veth를 만들고 별도 대역 IP 할당</td>
+      <td>파드마다 veth를 만들고 별도 대역 IP 할당</td>
+      <td>ENI에 보조 IP를 추가하고 파드에 할당</td>
+    </tr>
+    <tr>
+      <td><strong>물리 네트워크의 인지</strong></td>
+      <td>파드 IP를 <strong>모름</strong></td>
+      <td>BGP 전파 후 <strong>알게 됨</strong></td>
+      <td><strong>원래부터 앎</strong> (인프라의 라우팅 도메인)</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[오버레이 / BGP]
+호스트 NIC (192.168.1.10)       ← 물리 네트워크가 아는 IP는 이것뿐
+ └ cni0 브릿지
+    ├ veth → Pod A (10.244.1.5)   ← 인프라가 모르는 대역
+    └ veth → Pod B (10.244.1.6)   ← 물리 네트워크는 이 IP를 모름
+
+[AWS VPC CNI]
+호스트 ENI (192.168.1.10)
+ ├ 보조 IP: 192.168.1.11 → Pod A에 할당   ← VPC가 라우팅 가능한 IP
+ ├ 보조 IP: 192.168.1.12 → Pod B에 할당
+ └ VPC가 이 IP들을 다 알고 있음
+</code></pre></div></div>
+
+<h2 id="노드-간-도달-방법">노드 간 도달 방법</h2>
+
+<p>파드 IP를 다른 노드에서 <strong>어떻게 도달 가능하게 만드느냐</strong>가 각 방식의 핵심 차이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>오버레이</th>
+      <th>BGP</th>
+      <th>클라우드 네이티브</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>도달 방법</strong></td>
+      <td>캡슐화 (노드 IP로 감싸서 터널링)</td>
+      <td>라우팅 정보를 물리 네트워크에 전파</td>
+      <td>인프라가 원래부터 라우팅 가능</td>
+    </tr>
+    <tr>
+      <td><strong>누가 알려주나</strong></td>
+      <td>알려주지 않음 (캡슐화로 우회)</td>
+      <td>Calico 에이전트(bird)가 BGP로 <strong>광고</strong></td>
+      <td>ipamd가 <code class="highlighter-rouge">AssignPrivateIpAddresses</code> API <strong>호출</strong></td>
+    </tr>
+    <tr>
+      <td><strong>누가 반영하나</strong></td>
+      <td>노드의 오버레이 인터페이스가 처리</td>
+      <td>물리 라우터/다른 노드가 BGP 수신 후 <strong>스스로 반영</strong></td>
+      <td>VPC 패브릭이 API 호출을 받아 <strong>즉시 자동 반영</strong></td>
+    </tr>
+    <tr>
+      <td><strong>캡슐화</strong></td>
+      <td>O (VXLAN, IPIP)</td>
+      <td>X</td>
+      <td>X</td>
+    </tr>
+    <tr>
+      <td><strong>인프라 요구</strong></td>
+      <td>노드 간 IP 통신만 되면 됨</td>
+      <td>라우터가 BGP를 지원해야 함</td>
+      <td>클라우드 환경 (AWS, GCP, Azure)</td>
+    </tr>
+    <tr>
+      <td><strong>오버헤드</strong></td>
+      <td>캡슐화/디캡슐화 처리 비용</td>
+      <td>없음</td>
+      <td>없음</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="nat-없음-검증">NAT 없음 검증</h2>
+
+<p>세 방식 모두 파드 간 통신에서 src/dst IP가 경로 전체에서 변하지 않는다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>오버레이</th>
+      <th>BGP</th>
+      <th>클라우드 네이티브</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>패킷이 물리 네트워크를 탈 때</strong></td>
+      <td>Outer 헤더 추가, Inner IP <strong>불변</strong></td>
+      <td>파드 IP <strong>그대로</strong> 노출</td>
+      <td>파드 IP <strong>그대로</strong> 노출</td>
+    </tr>
+    <tr>
+      <td><strong>NAT 여부</strong></td>
+      <td>Inner IP 불변 → <strong>NAT 없음</strong></td>
+      <td>IP 불변 → <strong>NAT 없음</strong></td>
+      <td>IP 불변 → <strong>NAT 없음</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h2 id="요구사항은-어떻게-충족되는가">요구사항은 어떻게 충족되는가</h2>
+
+<p>다시 처음으로 돌아가 요구사항 두 가지를 꺼내고, 각각이 어떻게 충족되는지 짚어 보자.</p>
+
+<p><strong>요구사항 1 — 모든 파드는 같은 노드든 다른 노드든, NAT 없이 직접 통신할 수 있어야 한다</strong></p>
+
+<p>이 글의 본론 전체가 이 요구사항에 대한 답이다.</p>
+
+<ul>
+  <li><strong>같은 노드</strong>: <a href="#같은-노드의-파드-간-통신">같은 노드의 파드 간 통신</a>에서 다뤘다. veth pair로 네임스페이스 벽을 관통하고, 브릿지가 L2 스위치 역할을 하여 파드들을 하나의 네트워크 세그먼트로 묶는다. 브릿지 내부에서는 IP 변환이 일어나지 않으므로 NAT 없이 통신된다.</li>
+  <li><strong>다른 노드</strong>: <a href="#다른-노드의-파드-간-통신">다른 노드의 파드 간 통신</a>에서 다뤘다. 파드 IP를 노드 밖에서도 도달 가능하게 만들어야 하며, 오버레이(터널링으로 우회), BGP(라우팅 정보 전파), 클라우드 네이티브(인프라 IP 직접 부여) 세 가지 방식이 있다.</li>
+</ul>
+
+<p><strong>요구사항 2 — 노드의 에이전트(kubelet 등)는 동일한 노드의 모든 파드와 통신할 수 있어야 한다</strong></p>
+
+<p>이 요구사항은 별도로 다루지 않았는데, 요구사항 1이 해결되면 <strong>자연스럽게 충족</strong>된다.</p>
+
+<ul>
+  <li><strong>오버레이 / BGP의 경우</strong>: 브릿지(cni0)에 IP가 부여되면 호스트 네임스페이스도 파드 네트워크에 참여하게 된다. kubelet이 파드에 접근할 때, 호스트에서 cni0 브릿지를 거쳐 veth를 통해 파드에 도달한다. 호스트도 브릿지에 연결된 “또 하나의 참여자”인 셈이다.</li>
+  <li><strong>클라우드 네이티브(AWS VPC CNI)의 경우</strong>: 호스트의 ENI와 파드가 같은 VPC 대역을 공유하므로, 호스트 프로세스가 파드 IP로 직접 통신할 수 있다.</li>
+</ul>
+
+<blockquote>
+  <p><strong>참고: <code class="highlighter-rouge">hostNetwork: true</code> 파드의 경우</strong></p>
+
+  <p><code class="highlighter-rouge">hostNetwork: true</code> 파드는 별도의 네트워크 네임스페이스를 만들지 않고 노드의 네트워크 네임스페이스를 그대로 공유한다. 즉 노드의 라우팅 테이블을 그대로 타므로, 오버레이라면 <code class="highlighter-rouge">10.244.1.0/24 → flannel.1</code> 같은 룰이, BGP라면 전파된 경로가, VPC CNI라면 VPC 라우팅이 이미 호스트에 있다. 목적지 파드까지의 <strong>도달 메커니즘은 동일</strong>하다. 차이는 출발지뿐이다. 일반 파드는 <code class="highlighter-rouge">src=파드IP</code>로 보내지만, hostNetwork 파드는 <code class="highlighter-rouge">src=노드IP</code>로 보낸다. 노드 IP는 물리 네트워크에서 원래 라우팅 가능하므로 응답 경로는 오히려 더 단순하다. 어느 쪽이든 경로상 NAT은 일어나지 않는다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<p>정리하면 결론은 아래와 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>요구사항</th>
+      <th>충족 메커니즘</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>1. 모든 파드 ↔ 모든 파드 (NAT 없이)</strong></td>
+      <td>같은 노드: veth pair + 브릿지로 L2 세그먼트 구성 / 다른 노드: 오버레이·BGP·클라우드 네이티브 중 하나로 도달 가능하게 함</td>
+    </tr>
+    <tr>
+      <td><strong>2. 노드 에이전트 ↔ 같은 노드 파드</strong></td>
+      <td>브릿지에 IP 부여 → 호스트도 파드 네트워크에 참여 (요구사항 1의 부산물)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 두 요구사항을 <strong>모두 충족하는 구현체가 CNI 플러그인</strong>이다. CNI라는 인터페이스가 어떻게 정의되어 있고, 솔루션 플러그인이 어떻게 두 레이어(바이너리 + 노드 에이전트)로 구성되는지는 <a href="/kubernetes/Kubernetes-Networking-02-CNI/">CNI 표준</a> 글에서 이어 본다. 그 표준 위에서 Flannel(VXLAN)이 Pod 생성부터 노드 간 패킷 전달까지 어떻게 동작하는지는 <a href="/kubernetes/Kubernetes-Networking-03-CNI-Flow/">CNI 동작 흐름</a> 글에서, AWS VPC CNI가 클라우드 네이티브 라우팅을 어떻게 구현하는지는 <a href="/kubernetes/Kubernetes-EKS-02-01-01-EKS-VPC-CNI/">EKS VPC CNI</a> 글에서 확인할 수 있다.</p>
+
+<p>이 글에서는 파드 ↔ 파드 직접 통신만 다뤘다. 그 위에 얹히는 Service 추상화 — 안정적인 가상 IP(ClusterIP)와 kube-proxy의 DNAT — 는 <a href="/kubernetes/Kubernetes-Networking-04-Service/">Service와 kube-proxy</a> 글에서 다룬다.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#bgp" class="page__taxonomy-item" rel="tag">BGP</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#bridge" class="page__taxonomy-item" rel="tag">bridge</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#cni" class="page__taxonomy-item" rel="tag">CNI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nat" class="page__taxonomy-item" rel="tag">NAT</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#networking" class="page__taxonomy-item" rel="tag">Networking</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#overlay" class="page__taxonomy-item" rel="tag">overlay</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#veth" class="page__taxonomy-item" rel="tag">veth</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-05-04T00:00:00+09:00">May 4, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+%ED%8C%8C%EB%93%9C+%EA%B0%84+%ED%86%B5%EC%8B%A0%3A+%EA%B0%99%EC%9D%80+%EB%85%B8%EB%93%9C+%2F+%EB%8B%A4%EB%A5%B8+%EB%85%B8%EB%93%9C%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Networking-01-Pod-to-Pod%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Networking-01-Pod-to-Pod%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Networking-01-Pod-to-Pod%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-Networking-01-Pod-to-Pod?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-Networking-00-Model/" class="pagination--pager" title="[Kubernetes] 네트워킹 모델: 4가지 문제와 ‘NAT 없이’ 원칙
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-Networking-04-Service/" class="pagination--pager" title="[Kubernetes] Service와 kube-proxy
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-Networking-01-Pod-to-Pod/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-Networking-01-Pod-to-Pod"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

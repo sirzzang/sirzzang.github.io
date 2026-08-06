@@ -1,0 +1,1145 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.1. Provisioning a CA and Generating TLS Certificates - Eraser’s StudyLog</title>
+<meta name="description" content="Kubernetes 클러스터 구성에 필요한 TLS, mTLS, X.509, PKI 개념을 이해해보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.1. Provisioning a CA and Generating TLS Certificates">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-Cluster-The-Hard-Way-04-1/">
+
+
+  <meta property="og:description" content="Kubernetes 클러스터 구성에 필요한 TLS, mTLS, X.509, PKI 개념을 이해해보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-01-05T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-Cluster-The-Hard-Way-04-1/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.1. Provisioning a CA and Generating TLS Certificates">
+    <meta itemprop="description" content="Kubernetes 클러스터 구성에 필요한 TLS, mTLS, X.509, PKI 개념을 이해해보자.">
+    <meta itemprop="datePublished" content="2026-01-05T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.1. Provisioning a CA and Generating TLS Certificates
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-01-05T00:00:00+09:00">2026년 01월 05일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  3 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#tls">TLS</a></li>
+  <li><a href="#mtls">mTLS</a>
+    <ul>
+      <li><a href="#쿠버네티스에서-mtls가-필요한-이유">쿠버네티스에서 mTLS가 필요한 이유</a></li>
+    </ul>
+  </li>
+  <li><a href="#x509">X.509</a>
+    <ul>
+      <li><a href="#쿠버네티스에서-중요한-필드">쿠버네티스에서 중요한 필드</a>
+        <ul>
+          <li><a href="#subject">Subject</a></li>
+          <li><a href="#sansubject-alternative-name">SAN(Subject Alternative Name)</a></li>
+          <li><a href="#key-usage--extended-key-usage">Key Usage / Extended Key Usage</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#pki">PKI</a>
+    <ul>
+      <li><a href="#개요">개요</a></li>
+      <li><a href="#쿠버네티스에서의-pki">쿠버네티스에서의 PKI</a></li>
+    </ul>
+  </li>
+  <li><a href="#결과">결과</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 On-Premise K8s Hands-on Study 1주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<p>이번 글의 목표는 <strong>CA 구성 및 TLS 인증서 생성 실습에 필요한 배경지식 이해</strong>다. <a href="https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/04-certificate-authority.md">Kubernetes the Hard Way 튜토리얼의 Provisioning a CA and Generating TLS Certificates 단계</a>를 수행하기 전에, TLS/mTLS/X.509/PKI 개념이 쿠버네티스에서 왜 중요한지 먼저 정리한다.</p>
+
+<ul>
+  <li>TLS: 네트워크 통신 암호화 및 서버 인증 프로토콜</li>
+  <li>mTLS: 클라이언트와 서버가 서로의 인증서를 검증하는 상호 인증 방식</li>
+  <li>X.509: 공개키 인증서의 국제 표준 형식</li>
+  <li>PKI: 공개키를 안전하게 배포하고 관리하기 위한 체계</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="tls">TLS</h1>
+
+<p>TLS(Transport Layer Security)는 네트워크 통신을 암호화하고, 통신 상대방의 신원을 검증하는 프로토콜이다.</p>
+
+<ul>
+  <li><strong>암호화</strong>: 통신 내용을 제3자가 볼 수 없도록 암호화</li>
+  <li><strong>인증</strong>: 통신 상대방이 실제로 그 서버가 맞는지 검증</li>
+  <li><strong>무결성</strong>: 전송 중 데이터가 변조되지 않았음을 보장</li>
+</ul>
+
+<p>TLS Handshake, 인증서 검증 과정, Cipher Suite 등 자세한 내용은 <a href="/cs/CS-Security-TLS-SSL/">TLS/SSL 프로토콜 글</a>을 참고하자.</p>
+
+<blockquote>
+  <p>실습에서 쿠버네티스 컴포넌트들이 TLS로 통신할 때, 핸드셰이크 과정에서 인증서를 교환하고 세션 키를 생성하는 원리가 적용된다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="mtls">mTLS</h1>
+
+<p>mTLS(mutual TLS)는 TLS의 확장으로, <strong>클라이언트와 서버가 서로의 인증서를 검증</strong>하는 방식이다.</p>
+
+<ul>
+  <li><strong>TLS</strong>: 클라이언트가 서버의 인증서만 검증 (서버 인증)</li>
+  <li><strong>mTLS</strong>: 서버도 클라이언트의 인증서를 검증 (상호 인증)</li>
+</ul>
+
+<p>mTLS Handshake 과정 등 자세한 내용은 <a href="/cs/CS-Security-TLS-SSL/#mtls">TLS/SSL 프로토콜 글의 mTLS</a>를 참고하자.</p>
+
+<p><br /></p>
+
+<h2 id="쿠버네티스에서-mtls가-필요한-이유">쿠버네티스에서 mTLS가 필요한 이유</h2>
+
+<p>쿠버네티스는 분산 시스템으로, 수많은 컴포넌트가 네트워크를 통해 통신한다. mTLS를 사용하는 이유는 다음과 같다.</p>
+<ul>
+  <li>
+    <p><strong>인증(Authentication)</strong>: 요청을 보낸 컴포넌트가 누구인지 식별해야 한다. 인증서의 Subject 필드(CN, O 등)를 통해 <code class="highlighter-rouge">system:kube-scheduler</code>, <code class="highlighter-rouge">system:node:node-0</code> 등의 신원을 확인할 수 있다.</p>
+  </li>
+  <li>
+    <p><strong>권한 부여(Authorization)와의 연동</strong>: 인증서로 신원이 확인되면, RBAC(Role-Based Access Control)을 적용하여 해당 컴포넌트가 수행할 수 있는 작업을 제한한다.</p>
+  </li>
+  <li>
+    <p><strong>내부망 침입 방어</strong>: 공격자가 클러스터 내부 노드 하나를 장악하더라도, 유효한 인증서 없이는 다른 컴포넌트와 통신할 수 없다.</p>
+  </li>
+</ul>
+
+<p><br /></p>
+
+<p>예를 들어, kubelet이 kube-apiserver와 통신할 때 아래와 같은 과정을 거친다.</p>
+<ol>
+  <li>kube-apiserver가 자신의 인증서를 kubelet에 전송</li>
+  <li>kubelet이 kube-apiserver 인증서를 CA 공개키로 검증</li>
+  <li>kubelet이 자신의 인증서를 kube-apiserver에 전송</li>
+  <li>kube-apiserver가 kubelet 인증서를 CA 공개키로 검증</li>
+  <li>상호 신뢰가 성립된 후 암호화 통신 시작</li>
+</ol>
+
+<p>이 과정이 없다면, 공격자가 kubelet이나 API 서버를 위장하여 클러스터를 조작할 수 있다.</p>
+
+<p><br /></p>
+
+<h1 id="x509">X.509</h1>
+
+<p>X.509는 ITU-T에서 정의한 <strong>공개키 인증서의 국제 표준 형식</strong>이다. TLS에서 사용되는 인증서는 사실상 모두 X.509 형식을 따르며, 쿠버네티스도 인증서 처리 로직이 Go의 <code class="highlighter-rouge">crypto/x509</code> 패키지에 의존한다.</p>
+
+<ul>
+  <li>인증서 구조와 검증 과정에 대한 자세한 내용은 <a href="/cs/CS-Security-X509-Certificate/#인증서-구조">X.509 인증서 글의 인증서 구조</a>를 참고하자.</li>
+  <li>DN 체계(CN, O 등)에 대한 자세한 내용은 <a href="/cs/CS-Security-X509-Certificate/#distinguished-name-dn과-x500-표준">X.509 인증서 글의 Distinguished Name</a>을 참고하자.</li>
+</ul>
+
+<blockquote>
+  <p>실습에서 <code class="highlighter-rouge">openssl</code>로 인증서를 생성하고 <code class="highlighter-rouge">openssl x509 -text</code>로 내용을 확인할 때 다음 필드를 직접 볼 수 있다:</p>
+  <ul>
+    <li><strong>Issuer</strong>: <code class="highlighter-rouge">ca.conf</code>의 <code class="highlighter-rouge">[ca]</code> 섹션에서 설정한 CA 정보</li>
+    <li><strong>Subject</strong>: 각 컴포넌트별 <code class="highlighter-rouge">[req_distinguished_name]</code> 섹션에서 설정한 CN, O 값</li>
+    <li><strong>SAN</strong>: <code class="highlighter-rouge">kube-apiserver</code> 등 <code class="highlighter-rouge">[alt_names]</code> 섹션에서 설정한 DNS, IP 값</li>
+  </ul>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="쿠버네티스에서-중요한-필드">쿠버네티스에서 중요한 필드</h2>
+
+<p>쿠버네티스 인증서에서 특히 중요한 필드가 있다. 이후 실습에서 <code class="highlighter-rouge">ca.conf</code> 파일을 작성할 때 이 필드들을 직접 만나보게 될 것이다.</p>
+
+<h3 id="subject">Subject</h3>
+
+<p>인증서 소유자를 식별하는 필드이다. CN(Common Name)과 O(Organization)가 쿠버네티스의 사용자 이름과 그룹 이름으로 매핑된다.</p>
+<blockquote>
+  <p>실습에서 admin, kube-scheduler, kube-controller-manager 등의 인증서를 생성할 때 각각 다른 Subject를 지정한다.</p>
+</blockquote>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Subject: CN=admin, O=system:masters
+         │         └─ 그룹: system:masters
+         └─ 사용자: admin
+</code></pre></div></div>
+
+<h3 id="sansubject-alternative-name">SAN(Subject Alternative Name)</h3>
+
+<p>하나의 인증서로 여러 호스트명이나 IP에서 유효하도록 한다. kube-apiserver 인증서의 경우 클러스터 내부 IP, 로드밸런서 IP, kubernetes.default 등 여러 값을 포함해야 한다.</p>
+
+<blockquote>
+  <p>실습에서 kube-api-server 인증서 생성 시 <code class="highlighter-rouge">subjectAltName</code> 확장 필드를 설정한다.</p>
+</blockquote>
+
+<h3 id="key-usage--extended-key-usage">Key Usage / Extended Key Usage</h3>
+<p>인증서의 용도를 명시한다.</p>
+<ul>
+  <li>서버 인증용(<code class="highlighter-rouge">serverAuth</code>)</li>
+  <li>클라이언트 인증용(<code class="highlighter-rouge">clientAuth</code>)</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="pki">PKI</h1>
+
+<h2 id="개요">개요</h2>
+
+<p>PKI(Public Key Infrastructure)는 공개키를 안전하게 배포하고 관리하기 위한 체계다. PKI의 핵심은 중간자 공격을 방지하는 것으로, 신뢰할 수 있는 CA(Certificate Authority)가 “이 공개키는 이 주체의 것이 맞다”고 보증하는 인증서를 발급함으로써 이 문제를 해결한다.</p>
+
+<p>인증서 발급은 CSR(Certificate Signing Request) 방식을 따르며, Root CA는 Self-Signed 인증서로 생성된다.</p>
+
+<ul>
+  <li>PKI의 개념, 구성 요소, 실제 사용 사례에 대한 자세한 내용은 <a href="/cs/CS-PKI/">PKI 글</a>을 참고하자.</li>
+  <li>CA와 CSR 발급 과정에 대한 자세한 내용은 <a href="/cs/CS-PKI/#인증서-발급-프로세스">PKI 글의 인증서 발급 프로세스</a>를 참고하자.</li>
+  <li>Self-Signed 인증서에 대한 자세한 내용은 <a href="/cs/CS-Security-Certificate/#루트-인증서">인증서 글의 루트 인증서</a>를 참고하자.</li>
+</ul>
+
+<blockquote>
+  <p>추후 실습에서 Root CA가 아닌 컴포넌트들의 인증서를 생성할 때 CSR 방식을 따른다. <code class="highlighter-rouge">ca.crt</code>(Root CA 인증서)는 Self-Signed 방식으로 생성하고, 이 CA로 다른 컴포넌트의 인증서에 서명한다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="쿠버네티스에서의-pki">쿠버네티스에서의 PKI</h2>
+
+<p>일반적인 웹 환경에서는 DigiCert, Let’s Encrypt 같은 외부 CA를 사용하지만, 쿠버네티스에서는 <strong>클러스터 관리자가 직접 CA를 운영</strong>한다. 자체 PKI를 구축하는 이유와 전체 인증서 구조에 대한 자세한 내용은 <a href="/kubernetes/Kubernetes-PKI/">Kubernetes PKI 글</a>을 참고하자.</p>
+
+<p>쿠버네티스 설치 시 수많은 <code class="highlighter-rouge">.crt</code>, <code class="highlighter-rouge">.key</code> 파일을 생성해야 하는데, kubeadm 같은 도구는 이 과정을 자동화해주는 것이고, 지금 실습에서는 이를 직접 수행하는 것이다.</p>
+
+<ul>
+  <li>클러스터 관리자가 Root CA를 생성하고, 모든 컴포넌트에 인증서를 발급 ← <em>실습에서 <code class="highlighter-rouge">openssl</code>로 직접 수행</em></li>
+  <li>CA의 개인키(<code class="highlighter-rouge">ca.key</code>)는 컨트롤 플레인 노드의 <code class="highlighter-rouge">/etc/kubernetes/pki/</code> 디렉토리에 보관</li>
+  <li>CA의 공개키(루트 인증서, <code class="highlighter-rouge">ca.crt</code>)는 클러스터 내 모든 노드에 배포 ← <em>실습에서 <code class="highlighter-rouge">scp</code>로 배포</em></li>
+  <li>각 컴포넌트는 <code class="highlighter-rouge">--client-ca-file</code> 옵션으로 CA 인증서 경로를 지정받아, 상대방 인증서를 검증</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="결과">결과</h1>
+
+<p>이 단계를 완료하면 다음과 같은 개념을 이해할 수 있다:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>개념</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>TLS</strong></td>
+      <td>통신 암호화 및 서버 인증 프로토콜</td>
+    </tr>
+    <tr>
+      <td><strong>mTLS</strong></td>
+      <td>클라이언트와 서버가 서로의 인증서를 검증하는 상호 인증 방식</td>
+    </tr>
+    <tr>
+      <td><strong>X.509</strong></td>
+      <td>공개키 인증서의 국제 표준 형식</td>
+    </tr>
+    <tr>
+      <td><strong>PKI</strong></td>
+      <td>공개키를 안전하게 배포하고 관리하기 위한 체계</td>
+    </tr>
+    <tr>
+      <td><strong>CA</strong></td>
+      <td>인증서에 서명하여 공개키 소유자를 보증하는 기관</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<p>쿠버네티스는 클러스터 내 모든 통신에 mTLS를 적용하여 보안을 강화한다. <br /></p>
+
+<p>다음 단계에서는 인증서 생성에 사용할 OpenSSL 설정 파일(ca.conf)의 구조를 분석한다.</p>
+
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-Kubeadm-00/">[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 0. Overview</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Kubeadm-01-1/">[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.1. kubeadm init</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Kubeadm-01-4/">[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.4. kubeadm init 실행</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Kubeadm-01-6/">[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.6. 노드 정보, 인증서 및 kubeconfig 확인</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Kubespray-01/">[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 1. Kubespray 개요</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-05-2/">[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 5.2. Generating Kubernetes Configuration Files</a></li>
+    
+    <li><a href="/dev/Dev-Kubernetes-Certificate-Trouble-Shooting/">[Kubernetes] Kubernetes 클러스터 API 액세스 에러 해결</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#on-premise-k8s-hands-on-study-week-1" class="page__taxonomy-item" rel="tag">On-Premise-K8s-Hands-On-Study-Week-1</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#on-premise-k8s-hands-on-study" class="page__taxonomy-item" rel="tag">On-Premise-K8s-Hands-On-Study</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-01-05T00:00:00+09:00">January 5, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+Cluster%3A+%EB%82%B4+%EC%86%90%EC%9C%BC%EB%A1%9C+%ED%81%B4%EB%9F%AC%EC%8A%A4%ED%84%B0+%EA%B5%AC%EC%84%B1%ED%95%98%EA%B8%B0+-+4.1.+Provisioning+a+CA+and+Generating+TLS+Certificates%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Cluster-The-Hard-Way-04-1%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Cluster-The-Hard-Way-04-1%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Cluster-The-Hard-Way-04-1%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-Cluster-The-Hard-Way-04-1?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-03/" class="pagination--pager" title="[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 3. Provisioning Compute Resoures
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-04-2/" class="pagination--pager" title="[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.2. Provisioning a CA and Generating TLS Certificates
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-Cluster-The-Hard-Way-04-1/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-Cluster-The-Hard-Way-04-1"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,1478 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] GPU Sharing: Time Slicing - 2. 설정 - Eraser’s StudyLog</title>
+<meta name="description" content="NVIDIA GPU Time Slicing의 동작 원리와 ConfigMap 설정 방법을 알아보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] GPU Sharing: Time Slicing - 2. 설정">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-GPU-Time-Slicing-2/">
+
+
+  <meta property="og:description" content="NVIDIA GPU Time Slicing의 동작 원리와 ConfigMap 설정 방법을 알아보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2025-11-22T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-GPU-Time-Slicing-2/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] GPU Sharing: Time Slicing - 2. 설정">
+    <meta itemprop="description" content="NVIDIA GPU Time Slicing의 동작 원리와 ConfigMap 설정 방법을 알아보자.">
+    <meta itemprop="datePublished" content="2025-11-22T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] GPU Sharing: Time Slicing - 2. 설정
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2025-11-22T00:00:00+09:00">2025년 11월 22일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  8 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#동작-원리">동작 원리</a>
+    <ul>
+      <li><a href="#전체-흐름">전체 흐름</a>
+        <ul>
+          <li><a href="#1단계-보고-listandwatch">1단계: 보고 (ListAndWatch)</a></li>
+          <li><a href="#2단계-할당-및-실행-allocate">2단계: 할당 및 실행 (Allocate)</a></li>
+        </ul>
+      </li>
+      <li><a href="#보고-단계">보고 단계</a></li>
+      <li><a href="#할당-단계">할당 단계</a></li>
+      <li><a href="#마운트-단계">마운트 단계</a></li>
+      <li><a href="#gpu-driver의-시간-분할">GPU Driver의 시간 분할</a></li>
+    </ul>
+  </li>
+  <li><a href="#time-slicing-configmap">Time Slicing ConfigMap</a>
+    <ul>
+      <li><a href="#기본-구조">기본 구조</a></li>
+      <li><a href="#설정-항목">설정 항목</a>
+        <ul>
+          <li><a href="#datakey">data.&lt;key&gt;</a></li>
+          <li><a href="#version">version</a></li>
+          <li><a href="#flagsmigstrategy">flags.migStrategy</a></li>
+          <li><a href="#sharingtimeslicingrenamebydefault">sharing.timeSlicing.renameByDefault</a></li>
+          <li><a href="#sharingtimeslicingresources">sharing.timeSlicing.resources</a></li>
+          <li><a href="#sharingtimeslicingfailrequestsgreaterthanone">sharing.timeSlicing.failRequestsGreaterThanOne</a></li>
+        </ul>
+      </li>
+      <li><a href="#설정-예시">설정 예시</a>
+        <ul>
+          <li><a href="#클러스터-전체에-동일-설정-적용">클러스터 전체에 동일 설정 적용</a></li>
+          <li><a href="#노드별로-다른-설정-적용">노드별로 다른 설정 적용</a></li>
+          <li><a href="#mig와-time-slicing-조합">MIG와 Time Slicing 조합</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>쿠버네티스에서 GPU Time Slicing은 <strong>NVIDIA Device Plugin이 GPU 개수를 실제보다 많게 보고(overcommit)</strong>하는 방식으로 동작한다</li>
+  <li>동작 흐름은 2단계로 나뉜다: (1) Device Plugin이 ConfigMap의 replicas 수만큼 논리적 GPU를 Kubelet에 보고 (ListAndWatch), (2) 파드 스케줄링 시 동일한 물리 GPU 정보를 반환 (Allocate)</li>
+  <li><strong>커널 드라이버(nvidia.ko)는 ConfigMap의 존재를 모른다</strong>. 단지 여러 GPU Context가 감지되면 자동으로 Time Slicing을 수행한다</li>
+  <li>ConfigMap의 핵심 설정: <code class="highlighter-rouge">replicas</code>(GPU당 논리적 분할 수), <code class="highlighter-rouge">renameByDefault</code>(리소스명 변경), <code class="highlighter-rouge">failRequestsGreaterThanOne</code>(다중 GPU 요청 차단)</li>
+</ul>
+
+<p><br /></p>
+
+<p><a href="/kubernetes/Kubernetes-GPU-Time-Slicing-1/">지난 글</a>에서 GPU Time Slicing의 일반적인 개념에 대해 알아보았다. Context Switching, Preemptive Switching, 그리고 <del>간략한</del> 하드웨어 수준에서의 동작 원리까지 살펴보았는데, 이번 글에서는 이러한 개념이 쿠버네티스 환경에서 <strong>어떻게 동작하는지</strong>, 그리고 <strong>Time Slicing ConfigMap을 어떻게 구성하는지</strong> 알아본다.</p>
+
+<p>GPU Time Slicing을 적용하는 방법은 GPU 벤더마다 다르다. 이 글에서는 가장 널리 사용되는 <strong>NVIDIA GPU</strong>를 기준으로 설명한다. NVIDIA는 쿠버네티스 환경에서 GPU를 사용할 수 있게 해주는 <a href="/dev/Dev-Kubernetes-GPU-Setting/">NVIDIA Device Plugin</a>과 <a href="https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/overview.html">GPU Operator</a>를 제공하며, 이를 통해 Time Slicing 설정을 적용할 수 있다.</p>
+
+<blockquote>
+  <p>나중에 다른 GPU 벤더(AMD, Intel 등)를 사용하게 된다면, 해당 벤더의 공식 문서를 참고하자. Time Slicing의 핵심 개념은 동일하므로, 이 글에서 다루는 NVIDIA 사례를 참고하면 설정 방향을 잡는 데 도움이 될 것이다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="동작-원리">동작 원리</h1>
+
+<p>쿠버네티스 환경에서 GPU Time Slicing이 어떻게 동작하는지 알아보자. <a href="/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/">NVIDIA Device Plugin 동작 원리</a>에서 Device Plugin이 Kubelet에게 GPU 개수를 보고하고, 스케줄링 시 GPU를 할당하는 메커니즘을 소개한 바 있다. Time Slicing은 이 메커니즘을 활용하되, 핵심은 <strong>NVIDIA Device Plugin이 GPU 개수를 속여서 보고</strong>한다는 것이다.</p>
+
+<p><br /></p>
+
+<h2 id="전체-흐름">전체 흐름</h2>
+
+<p>Time Slicing 동작은 크게 두 단계로 나눌 수 있다.</p>
+
+<h3 id="1단계-보고-listandwatch">1단계: 보고 (ListAndWatch)</h3>
+
+<p>Device Plugin이 시작되면, ConfigMap을 읽고 Kubelet에게 GPU 개수를 보고한다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>┌───────────────────────────────────────┐
+│   Time-slicing ConfigMap              │
+│   - replicas: 4                       │
+└──────────────┬────────────────────────┘
+               │ [1]
+┌──────────────▼────────────────────────┐
+│   NVIDIA Device Plugin                │
+│   - parse ConfigMap                   │
+│   - create logical GPUs (replicas)    │
+└──────────────┬────────────────────────┘
+               │ [2] ListAndWatch
+┌──────────────▼────────────────────────┐
+│   Kubelet                             │
+│   - nvidia.com/gpu: 4                 │
+└───────────────────────────────────────┘
+
+[1] ConfigMap을 읽어 replicas 수만큼 논리적 GPU 생성
+[2] Kubelet에 GPU 개수 보고 (ListAndWatch)
+</code></pre></div></div>
+
+<h3 id="2단계-할당-및-실행-allocate">2단계: 할당 및 실행 (Allocate)</h3>
+
+<p>파드가 스케줄링되면, Device Plugin이 GPU를 할당하고 Container Runtime이 컨테이너를 실행한다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>┌───────────────────────────────────────┐
+│   Pod (nvidia.com/gpu: 1)             │
+└──────────────┬────────────────────────┘
+               │ [1]
+┌──────────────▼────────────────────────┐
+│   Kubelet                             │
+└──────────────┬────────────────────────┘
+               │ [2] Allocate
+┌──────────────▼────────────────────────┐
+│   NVIDIA Device Plugin                │
+│   - return same physical GPU info     │
+└──────────────┬────────────────────────┘
+               │ [3]
+┌──────────────▼────────────────────────┐
+│   Container Runtime                   │
+│   - mount same GPU to containers      │
+└──────────────┬────────────────────────┘
+               │ [4] CUDA init
+┌──────────────▼────────────────────────┐
+│   nvidia.ko (kernel driver)           │
+│   - unaware of ConfigMap              │
+│   - detect multiple contexts          │
+│   - auto time-slicing                 │
+└───────────────────────────────────────┘
+
+[1] Kubelet이 Device Plugin에 GPU 할당 요청
+[2] Device Plugin이 동일한 물리 GPU 정보를 반환 (Allocate)
+[3] Container Runtime이 같은 GPU를 여러 컨테이너에 마운트
+[4] 커널 드라이버는 ConfigMap의 존재를 모른다. 단지 여러 GPU Context가 감지되면 자동으로 Time Slicing을 수행
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="보고-단계">보고 단계</h2>
+
+<p><a href="/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/#보고">NVIDIA Device Plugin이 GPU 개수를 보고</a>할 때, Time Slicing 설정의 replica 수에 따라 <strong>논리 슬롯 개수를 여러 개로 보고</strong>한다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// ListAndWatch 의사코드</span><span class="x">
+</span><span class="k">func</span><span class="x"> </span><span class="n">ListAndWatch</span><span class="p">()</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">physicalGPUs</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="p">[]</span><span class="n">GPU</span><span class="p">{</span><span class="x">
+        </span><span class="p">{</span><span class="n">UUID</span><span class="o">:</span><span class="x"> </span><span class="s">"GPU-abc123"</span><span class="p">,</span><span class="x"> </span><span class="n">Index</span><span class="o">:</span><span class="x"> </span><span class="m">0</span><span class="p">},</span><span class="x">  </span><span class="c">// 물리 GPU 1개</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+    
+    </span><span class="c">// replicas: 4 설정 → 4개로 복제</span><span class="x">
+    </span><span class="n">virtualDevices</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="p">[]</span><span class="n">Device</span><span class="p">{</span><span class="x">
+        </span><span class="p">{</span><span class="n">Name</span><span class="o">:</span><span class="x"> </span><span class="s">"nvidia0-0"</span><span class="p">,</span><span class="x"> </span><span class="n">UUID</span><span class="o">:</span><span class="x"> </span><span class="s">"GPU-abc123"</span><span class="p">},</span><span class="x">  </span><span class="c">// 가상 슬롯 0</span><span class="x">
+        </span><span class="p">{</span><span class="n">Name</span><span class="o">:</span><span class="x"> </span><span class="s">"nvidia0-1"</span><span class="p">,</span><span class="x"> </span><span class="n">UUID</span><span class="o">:</span><span class="x"> </span><span class="s">"GPU-abc123"</span><span class="p">},</span><span class="x">  </span><span class="c">// 가상 슬롯 1</span><span class="x">
+        </span><span class="p">{</span><span class="n">Name</span><span class="o">:</span><span class="x"> </span><span class="s">"nvidia0-2"</span><span class="p">,</span><span class="x"> </span><span class="n">UUID</span><span class="o">:</span><span class="x"> </span><span class="s">"GPU-abc123"</span><span class="p">},</span><span class="x">  </span><span class="c">// 가상 슬롯 2</span><span class="x">
+        </span><span class="p">{</span><span class="n">Name</span><span class="o">:</span><span class="x"> </span><span class="s">"nvidia0-3"</span><span class="p">,</span><span class="x"> </span><span class="n">UUID</span><span class="o">:</span><span class="x"> </span><span class="s">"GPU-abc123"</span><span class="p">},</span><span class="x">  </span><span class="c">// 가상 슬롯 3</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+    
+    </span><span class="c">// Kubernetes에 등록</span><span class="x">
+    </span><span class="n">kubelet</span><span class="o">.</span><span class="n">RegisterDevices</span><span class="p">(</span><span class="s">"nvidia.com/gpu"</span><span class="p">,</span><span class="x"> </span><span class="m">4</span><span class="p">)</span><span class="x">  </span><span class="c">// "GPU 4개 있어요!"</span><span class="x">
+</span><span class="p">}</span><span class="x">
+</span></code></pre></div></div>
+
+<p>결과적으로, 클러스터 내에서는 해당 노드에 replica 수만큼의 GPU가 있다고 인식하게 된다.</p>
+
+<p><br /></p>
+
+<h2 id="할당-단계">할당 단계</h2>
+
+<p><a href="/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/#스케줄링">NVIDIA Device Plugin이 GPU 할당 결과를 반환</a>할 때, <strong>전부 같은 물리 GPU를 반환</strong>한다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// Allocate 의사 코드</span><span class="x">
+</span><span class="k">func</span><span class="x"> </span><span class="n">Allocate</span><span class="p">(</span><span class="n">deviceID</span><span class="x"> </span><span class="kt">string</span><span class="p">)</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="c">// deviceID = "nvidia0-0", "nvidia0-1", "nvidia0-2"</span><span class="x">
+    </span><span class="c">// 하지만 전부 같은 물리 GPU UUID 반환</span><span class="x">
+    
+    </span><span class="k">return</span><span class="x"> </span><span class="o">&amp;</span><span class="n">AllocateResponse</span><span class="p">{</span><span class="x">
+        </span><span class="n">Devices</span><span class="o">:</span><span class="x"> </span><span class="p">[]</span><span class="n">Device</span><span class="p">{</span><span class="x">
+            </span><span class="p">{</span><span class="n">ID</span><span class="o">:</span><span class="x"> </span><span class="s">"/dev/nvidia0"</span><span class="p">},</span><span class="x">        </span><span class="c">// 같은 디바이스</span><span class="x">
+            </span><span class="p">{</span><span class="n">ID</span><span class="o">:</span><span class="x"> </span><span class="s">"/dev/nvidiactl"</span><span class="p">},</span><span class="x">
+            </span><span class="p">{</span><span class="n">ID</span><span class="o">:</span><span class="x"> </span><span class="s">"/dev/nvidia-uvm"</span><span class="p">},</span><span class="x">
+        </span><span class="p">},</span><span class="x">
+        </span><span class="n">Envs</span><span class="o">:</span><span class="x"> </span><span class="k">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">string</span><span class="p">{</span><span class="x">
+            </span><span class="s">"CUDA_VISIBLE_DEVICES"</span><span class="o">:</span><span class="x"> </span><span class="s">"GPU-abc123"</span><span class="p">,</span><span class="x">  </span><span class="c">// 같은 UUID</span><span class="x">
+        </span><span class="p">},</span><span class="x">
+    </span><span class="p">}</span><span class="x">
+</span><span class="p">}</span><span class="x">
+</span></code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="마운트-단계">마운트 단계</h2>
+
+<p>컨테이너 런타임은 Kubelet이 Device Plugin으로부터 받은 응답대로 마운트하여 컨테이너를 실행한다. 컨테이너 런타임은 Time Slicing에 대해 전혀 모른다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Pod A 컨테이너</span>
+<span class="na">Mounts</span><span class="pi">:</span>
+  <span class="s">/dev/nvidia0 → /dev/nvidia0</span>
+  <span class="s">/dev/nvidiactl → /dev/nvidiactl</span>
+<span class="na">Env</span><span class="pi">:</span>
+  <span class="s">CUDA_VISIBLE_DEVICES=GPU-abc123</span>
+
+<span class="c1"># Pod B 컨테이너  </span>
+<span class="na">Mounts</span><span class="pi">:</span>
+  <span class="s">/dev/nvidia0 → /dev/nvidia0</span>      <span class="c1"># 똑같은 디바이스</span>
+  <span class="s">/dev/nvidiactl → /dev/nvidiactl</span>
+<span class="na">Env</span><span class="pi">:</span>
+  <span class="s">CUDA_VISIBLE_DEVICES=GPU-abc123</span>  <span class="c1"># 똑같은 UUID</span>
+
+<span class="c1"># Pod C 컨테이너</span>
+<span class="na">Mounts</span><span class="pi">:</span>
+  <span class="s">/dev/nvidia0 → /dev/nvidia0</span>      <span class="c1"># 또 똑같은 디바이스</span>
+  <span class="s">/dev/nvidiactl → /dev/nvidiactl</span>
+<span class="na">Env</span><span class="pi">:</span>
+  <span class="s">CUDA_VISIBLE_DEVICES=GPU-abc123</span>  <span class="c1"># 똑같은 UUID</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="gpu-driver의-시간-분할">GPU Driver의 시간 분할</h2>
+
+<p>실제 GPU 사용 시점에 NVIDIA GPU Driver가 Context Switching을 수행하며 시간을 분할한다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Time ──────────────────────────────────────────────────────────────────────→
+
+         ┌─────┐       ┌─────┐       ┌─────┐       ┌─────┐       ┌─────┐
+Pod A    │█████│       │█████│       │█████│       │█████│       │█████│
+         └─────┘       └─────┘       └─────┘       └─────┘       └─────┘
+
+               ┌─────┐       ┌─────┐       ┌─────┐       ┌─────┐       ┌───
+Pod B          │█████│       │█████│       │█████│       │█████│       │███
+               └─────┘       └─────┘       └─────┘       └─────┘       └───
+
+                     ┌─────┐       ┌─────┐       ┌─────┐       ┌─────┐
+Pod C                │█████│       │█████│       │█████│       │█████│
+                     └─────┘       └─────┘       └─────┘       └─────┘
+
+GPU      ──A────B────C────A────B────C────A────B────C────A────B────C────→
+
+* 하나의 물리 GPU를 시간 단위로 분할하여 Pod A, B, C가 번갈아 사용한다.
+</code></pre></div></div>
+
+<p>각 파드는 자신이 전용 GPU를 받았다고 생각하지만, 실제로는 동일한 GPU를 보고 있으며, NVIDIA GPU Driver의 <a href="/kubernetes/Kubernetes-GPU-Time-Slicing-1/#preemptive-context-switching">Compute Preemption</a>이 시간을 나눠 할당해 준다.</p>
+
+<p>결과적으로, 여러 파드가 동시에 하나의 GPU ID를 보게 되고, NVIDIA GPU Driver의 Compute Preemption이 자동으로 시간을 분할해 준다. 마치 <strong>OS에서 프로세스 스케줄링하듯, NVIDIA GPU Driver가 각 프로세스마다 시간을 분할해서 할당</strong>해 주는 것이다.</p>
+
+<p><br /></p>
+
+<h1 id="time-slicing-configmap">Time Slicing ConfigMap</h1>
+
+<p>GPU Time Slicing을 적용하기 위한 설정 파일이다. NVIDIA Device Plugin이 이 ConfigMap을 읽어서, Kubelet에게 GPU 리소스를 보고할 때 적용한다.</p>
+
+<p><br /></p>
+
+<h2 id="기본-구조">기본 구조</h2>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">ConfigMap</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">time-slicing-config</span>
+<span class="na">data</span><span class="pi">:</span>
+  <span class="na">any</span><span class="pi">:</span> <span class="pi">|-</span>
+    <span class="no">version: v1</span>
+    <span class="no">flags:</span>
+      <span class="no">migStrategy: none</span>
+    <span class="no">sharing:</span>
+      <span class="no">timeSlicing:</span>
+        <span class="no">renameByDefault: false</span>
+        <span class="no">failRequestsGreaterThanOne: false</span>
+        <span class="no">resources:</span>
+          <span class="no">- name: nvidia.com/gpu</span>
+            <span class="no">replicas: 4</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="설정-항목">설정 항목</h2>
+
+<h3 id="datakey"><code class="highlighter-rouge">data.&lt;key&gt;</code></h3>
+
+<p>Time Slicing 설정 이름이다. NVIDIA Device Plugin에 마운트될 때 키로 사용된다.</p>
+<ul>
+  <li>키 이름은 자유롭게 지정할 수 있다. 위 예시에서는 <code class="highlighter-rouge">any</code>를 사용했다.</li>
+  <li>노드별로 다른 설정을 적용하고 싶다면, 키를 여러 개 작성하면 된다.</li>
+</ul>
+
+<p><br /></p>
+
+<h3 id="version"><code class="highlighter-rouge">version</code></h3>
+
+<p>설정 파일 버전이다.</p>
+
+<p><br /></p>
+
+<h3 id="flagsmigstrategy"><code class="highlighter-rouge">flags.migStrategy</code></h3>
+
+<p>Time Slicing 설정이 적용되는 노드의 MIG 장치에 레이블을 지정하는 방식이다.</p>
+<ul>
+  <li><code class="highlighter-rouge">none</code>: MIG 사용 안 함 (기본값)</li>
+  <li><code class="highlighter-rouge">single</code>: 노드의 모든 MIG 인스턴스가 같은 GPU 프로파일
+    <ul>
+      <li>예: 리소스 전부가 <code class="highlighter-rouge">nvidia.com/mig-1g.5gb</code> 형태로 등록됨</li>
+    </ul>
+  </li>
+  <li><code class="highlighter-rouge">mixed</code>: 한 노드에 다양한 MIG 프로파일이 혼재할 수 있는 경우
+    <ul>
+      <li>예: <code class="highlighter-rouge">1g.5gb</code> 2개 + <code class="highlighter-rouge">3g.20gb</code> 1개</li>
+    </ul>
+  </li>
+</ul>
+
+<p><br /></p>
+
+<h3 id="sharingtimeslicingrenamebydefault"><code class="highlighter-rouge">sharing.timeSlicing.renameByDefault</code></h3>
+
+<p>GPU 리소스 리네임 여부이다. 기본값은 <code class="highlighter-rouge">false</code>이다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">true</code>: <code class="highlighter-rouge">&lt;resource-name&gt;</code> 대신 <code class="highlighter-rouge">&lt;resource-name&gt;.shared</code> 이름으로 리소스를 등록함
+    <ul>
+      <li>예: <code class="highlighter-rouge">nvidia.com/gpu</code> → <code class="highlighter-rouge">nvidia.com/gpu.shared</code></li>
+      <li>리소스 요청에 <code class="highlighter-rouge">&lt;resource-name&gt;.shared</code>를 지정하여 공유 액세스가 있는 GPU에 파드를 스케줄링하려는 경우 유용</li>
+    </ul>
+  </li>
+  <li><code class="highlighter-rouge">false</code>: 리소스 이름은 그대로이나, 제품 이름 레이블 값에 <code class="highlighter-rouge">-SHARED</code> 접미사가 붙음
+    <ul>
+      <li>예: <code class="highlighter-rouge">nvidia.com/gpu.product=Tesla-T4</code> → <code class="highlighter-rouge">nvidia.com/gpu.product=Tesla-T4-SHARED</code></li>
+      <li>리소스 요청 시 <code class="highlighter-rouge">-SHARED</code> 접미사가 포함된 노드 셀렉터를 지정하여 스케줄링할 수 있음</li>
+    </ul>
+  </li>
+</ul>
+
+<blockquote>
+  <p>참고: renameByDefault 기본값</p>
+
+  <p>해당 설정 항목의 기본값이 <code class="highlighter-rouge">false</code>인 이유는 <strong>하위 호환성</strong> 때문이다. 
+만약 <code class="highlighter-rouge">true</code>라면, 기존에 <code class="highlighter-rouge">nvidia.com/gpu: 1</code>로 리소스를 요청하던 파드의 경우, 스케줄링에 실패할 수 있다. <code class="highlighter-rouge">false</code>로 두면, 리소스 이름은 그대로 유지하면서 GPU product 레이블 값만 변경되기 때문에, 노드 리소스명이 변경되어 나타나는 문제를 예방할 수 있다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h3 id="sharingtimeslicingresources"><code class="highlighter-rouge">sharing.timeSlicing.resources</code></h3>
+
+<p>Time Slicing을 적용할 리소스 목록이다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">name</code>: 리소스명
+    <ul>
+      <li><code class="highlighter-rouge">nvidia.com/gpu</code>: 일반 GPU</li>
+      <li><code class="highlighter-rouge">nvidia.com/mig-1g.5gb</code>: MIG 인스턴스 등</li>
+    </ul>
+  </li>
+  <li><code class="highlighter-rouge">replicas</code>: 논리적 슬롯 개수
+    <ul>
+      <li>타임 슬라이싱이 적용된 GPU에 몇 개까지의 shared access를 허용할 것인지 지정</li>
+      <li>반드시 <strong>2 이상</strong>이어야 함</li>
+    </ul>
+  </li>
+</ul>
+
+<p><br /></p>
+
+<h3 id="sharingtimeslicingfailrequestsgreaterthanone"><code class="highlighter-rouge">sharing.timeSlicing.failRequestsGreaterThanOne</code></h3>
+
+<p>1개를 초과하는 리소스 요청이 실패하는지 여부이다. 기본값은 <code class="highlighter-rouge">false</code>이다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">false</code>: 2개 이상 요청해도 허용하지만, 실제로는 1개 요청한 것과 같은 성능</li>
+  <li><code class="highlighter-rouge">true</code>: 2개 이상 요청하면 아예 파드 생성 실패 (UnexpectedAdmissionError)</li>
+</ul>
+
+<p><br /></p>
+
+<p>예를 들어, 물리 GPU 1개를 4개 replica로 분할한 상황에서 파드 A가 GPU 1개, B가 GPU 1개, C가 GPU 2개를 요청한 경우를 보자.</p>
+
+<p><code class="highlighter-rouge">false</code>인 경우, 여러 개 요청은 가능하지만, 성능을 더 받지는 않는다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Time-slicing config</span>
+<span class="na">sharing</span><span class="pi">:</span>
+  <span class="na">timeSlicing</span><span class="pi">:</span>
+    <span class="na">replicas</span><span class="pi">:</span> <span class="s">4</span>
+    <span class="na">failRequestsGreaterThanOne</span><span class="pi">:</span> <span class="no">false</span>
+<span class="nn">---</span>
+<span class="c1"># Pod A</span>
+<span class="na">resources</span><span class="pi">:</span>
+  <span class="na">limits</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">1</span>  <span class="c1"># 성공</span>
+
+<span class="c1"># Pod B  </span>
+<span class="na">resources</span><span class="pi">:</span>
+  <span class="na">limits</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">1</span>  <span class="c1"># 성공</span>
+
+<span class="c1"># Pod C</span>
+<span class="na">resources</span><span class="pi">:</span>
+  <span class="na">limits</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">2</span>  <span class="c1"># 성공 (하지만 의미 없음)</span>
+</code></pre></div></div>
+
+<p>Pod C가 GPU 2개를 요청해도 배포는 성공하지만, 실제로는 Pod A, B와 동일하게 시간을 1/3씩 나눠 쓰게 된다.</p>
+
+<p><br /></p>
+
+<p><code class="highlighter-rouge">true</code>인 경우, 여러 개 요청 자체가 불가능하다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Time-slicing config</span>
+<span class="na">sharing</span><span class="pi">:</span>
+  <span class="na">timeSlicing</span><span class="pi">:</span>
+    <span class="na">replicas</span><span class="pi">:</span> <span class="s">4</span>
+    <span class="na">failRequestsGreaterThanOne</span><span class="pi">:</span> <span class="no">true</span>
+<span class="nn">---</span>
+<span class="c1"># Pod A</span>
+<span class="na">resources</span><span class="pi">:</span>
+  <span class="na">limits</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">1</span>  <span class="c1"># 성공</span>
+
+<span class="c1"># Pod B  </span>
+<span class="na">resources</span><span class="pi">:</span>
+  <span class="na">limits</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">1</span>  <span class="c1"># 성공</span>
+
+<span class="c1"># Pod C</span>
+<span class="na">resources</span><span class="pi">:</span>
+  <span class="na">limits</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">2</span>  <span class="c1"># UnexpectedAdmissionError</span>
+</code></pre></div></div>
+
+<p>Pod C는 UnexpectedAdmissionError를 받게 되어, GPU 요청을 1로 수정해서 재배포해야 한다.</p>
+
+<p><br /></p>
+
+<blockquote>
+  <p><strong>참고: 이 설정 항목의 의의</strong></p>
+
+  <p>NVIDIA 공식 문서에는 이 설정에 대해 다음과 같이 설명되어 있다.</p>
+
+  <p><em>“The purpose of this field is to enforce awareness that requesting more than one GPU replica does not result in receiving more proportional access to the GPU.”</em></p>
+
+  <p>처음 읽으면 무슨 말인지 헷갈릴 수 있는데, 풀어서 설명하면 다음과 같다.</p>
+
+  <p>Time Slicing 원리상, GPU 슬롯을 2개 요청하더라도 더 많은 GPU 시간을 받는 것이 아니다. 슬롯을 2개 차지하기만 할 뿐, 실제로는 같은 GPU가 마운트되기 때문이다. GPU Driver 입장에서는 그냥 “파드 A, B, C가 GPU를 쓰네?” 정도로 인식할 뿐, 어느 파드에 더 많은 시간을 분배해야겠다는 개념이 없다.</p>
+
+  <p>따라서 이 설정은, replica를 여러 개 요청해도 그에 비례한 GPU 액세스를 얻지 못한다는 사실을 <strong>사용자에게 인지시키기 위한</strong> 것이다. <code class="highlighter-rouge">true</code>로 설정하면, 아예 배포 자체를 막아서 “GPU 2개 요청하면 2배 빠르겠지?”라는 잘못된 기대를 원천 차단하는 효과가 있다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="설정-예시">설정 예시</h2>
+
+<h3 id="클러스터-전체에-동일-설정-적용">클러스터 전체에 동일 설정 적용</h3>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">ConfigMap</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">time-slicing-config-all</span>
+<span class="na">data</span><span class="pi">:</span>
+  <span class="na">any</span><span class="pi">:</span> <span class="pi">|-</span>
+    <span class="no">version: v1</span>
+    <span class="no">flags:</span>
+      <span class="no">migStrategy: none</span>
+    <span class="no">sharing:</span>
+      <span class="no">timeSlicing:</span>
+        <span class="no">resources:</span>
+        <span class="no">- name: nvidia.com/gpu</span>
+          <span class="no">replicas: 4</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h3 id="노드별로-다른-설정-적용">노드별로 다른 설정 적용</h3>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">ConfigMap</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">time-slicing-config-fine</span>
+<span class="na">data</span><span class="pi">:</span>
+  <span class="na">a100-40gb</span><span class="pi">:</span> <span class="pi">|-</span>
+    <span class="no">version: v1</span>
+    <span class="no">flags:</span>
+      <span class="no">migStrategy: mixed</span>
+    <span class="no">sharing:</span>
+      <span class="no">timeSlicing:</span>
+        <span class="no">resources:</span>
+        <span class="no">- name: nvidia.com/gpu</span>
+          <span class="no">replicas: 8</span>
+        <span class="no">- name: nvidia.com/mig-1g.5gb</span>
+          <span class="no">replicas: 2</span>
+        <span class="no">- name: nvidia.com/mig-3g.20gb</span>
+          <span class="no">replicas: 3</span>
+  <span class="no">tesla-t4: |-</span>
+    <span class="no">version: v1</span>
+    <span class="no">flags:</span>
+      <span class="no">migStrategy: none</span>
+    <span class="no">sharing:</span>
+      <span class="no">timeSlicing:</span>
+        <span class="no">resources:</span>
+        <span class="no">- name: nvidia.com/gpu</span>
+          <span class="no">replicas: 4</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h3 id="mig와-time-slicing-조합">MIG와 Time Slicing 조합</h3>
+
+<p>MIG 인스턴스에도 Time Slicing을 적용할 수 있다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">ConfigMap</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">time-slicing-config</span>
+<span class="na">data</span><span class="pi">:</span>
+  <span class="na">any</span><span class="pi">:</span> <span class="pi">|-</span>
+    <span class="no">version: v1</span>
+    <span class="no">flags:</span>
+      <span class="no">migStrategy: mixed</span>
+    <span class="no">sharing:</span>
+      <span class="no">timeSlicing:</span>
+        <span class="no">renameByDefault: false</span>
+        <span class="no">resources:</span>
+        <span class="no">- name: nvidia.com/mig-1g.5gb</span>
+          <span class="no">replicas: 4  # 1g.5gb 하나를 4개 pod가 공유</span>
+        <span class="no">- name: nvidia.com/mig-3g.20gb</span>
+          <span class="no">replicas: 2  # 3g.20gb 하나를 2개 pod가 공유</span>
+</code></pre></div></div>
+
+<p>위 설정에서, <code class="highlighter-rouge">nvidia.com/mig-1g.5gb</code>가 2개, <code class="highlighter-rouge">nvidia.com/mig-3g.20gb</code>가 1개 있다면, 논리적으로는 다음과 같이 인식된다.</p>
+<ul>
+  <li><code class="highlighter-rouge">nvidia.com/mig-1g.5gb</code>: 2 × 4 = 8 (논리적으로 8개 파드 스케줄링 가능)</li>
+  <li><code class="highlighter-rouge">nvidia.com/mig-3g.20gb</code>: 1 × 2 = 2 (논리적으로 2개 파드 스케줄링 가능)</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>이 글에서는 쿠버네티스 환경에서 GPU Time Slicing이 어떻게 동작하고, ConfigMap을 어떻게 구성하는지 살펴보았다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>동작 핵심</strong></td>
+      <td>Device Plugin이 replicas 수만큼 논리적 GPU를 보고하여 overcommit</td>
+    </tr>
+    <tr>
+      <td><strong>1단계 (ListAndWatch)</strong></td>
+      <td>ConfigMap → Device Plugin → Kubelet에 GPU 개수 보고</td>
+    </tr>
+    <tr>
+      <td><strong>2단계 (Allocate)</strong></td>
+      <td>파드 스케줄링 시 동일한 물리 GPU를 여러 컨테이너에 할당</td>
+    </tr>
+    <tr>
+      <td><strong>Time Slicing 실행 주체</strong></td>
+      <td>커널 드라이버(nvidia.ko)가 여러 Context 감지 시 자동 수행</td>
+    </tr>
+    <tr>
+      <td><strong>주요 ConfigMap 필드</strong></td>
+      <td><code class="highlighter-rouge">replicas</code>, <code class="highlighter-rouge">renameByDefault</code>, <code class="highlighter-rouge">failRequestsGreaterThanOne</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><a href="/kubernetes/Kubernetes-GPU-Time-Slicing-3/">다음 글</a>에서는 실제로 Time Slicing을 적용하는 방법과 적용 사례, 그리고 운영 시 주의해야 할 한계점들을 살펴본다.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-GPU-Time-Slicing-1/">[Kubernetes] GPU Sharing: Time Slicing - 1. 개념</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-GPU-Time-Slicing-3/">[Kubernetes] GPU Sharing: Time Slicing - 3. 적용</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#gpu-sharing" class="page__taxonomy-item" rel="tag">GPU Sharing</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nvidia" class="page__taxonomy-item" rel="tag">NVIDIA</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#time-slicing" class="page__taxonomy-item" rel="tag">Time Slicing</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2025-11-22T00:00:00+09:00">November 22, 2025</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+GPU+Sharing%3A+Time+Slicing+-+2.+%EC%84%A4%EC%A0%95%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GPU-Time-Slicing-2%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GPU-Time-Slicing-2%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GPU-Time-Slicing-2%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-GPU-Time-Slicing-2?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-GPU-Time-Slicing-1/" class="pagination--pager" title="[Kubernetes] GPU Sharing: Time Slicing - 1. 개념
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-GPU-Time-Slicing-3/" class="pagination--pager" title="[Kubernetes] GPU Sharing: Time Slicing - 3. 적용
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-GPU-Time-Slicing-2/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-GPU-Time-Slicing-2"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

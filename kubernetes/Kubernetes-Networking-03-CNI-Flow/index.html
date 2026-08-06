@@ -1,0 +1,1439 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] CNI 동작 흐름: Pod 생성부터 노드 간 통신까지 - Eraser’s StudyLog</title>
+<meta name="description" content="CNI 솔루션 설치, Pod 생성, 같은/다른 노드 통신, 외부 통신까지 — Flannel(VXLAN) 시나리오로 따라가는 패킷 흐름과 VTEP/onlink/FDB의 역할. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] CNI 동작 흐름: Pod 생성부터 노드 간 통신까지">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-Networking-03-CNI-Flow/">
+
+
+  <meta property="og:description" content="CNI 솔루션 설치, Pod 생성, 같은/다른 노드 통신, 외부 통신까지 — Flannel(VXLAN) 시나리오로 따라가는 패킷 흐름과 VTEP/onlink/FDB의 역할. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-03-19T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-Networking-03-CNI-Flow/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] CNI 동작 흐름: Pod 생성부터 노드 간 통신까지">
+    <meta itemprop="description" content="CNI 솔루션 설치, Pod 생성, 같은/다른 노드 통신, 외부 통신까지 — Flannel(VXLAN) 시나리오로 따라가는 패킷 흐름과 VTEP/onlink/FDB의 역할.">
+    <meta itemprop="datePublished" content="2026-03-19T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] CNI 동작 흐름: Pod 생성부터 노드 간 통신까지
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-03-19T00:00:00+09:00">2026년 03월 19일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  9 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#phase-0-cni-솔루션-설치">Phase 0. CNI 솔루션 설치</a>
+    <ul>
+      <li><a href="#단계별-상세">단계별 상세</a></li>
+      <li><a href="#phase-0-완료-후-노드-상태">Phase 0 완료 후 노드 상태</a></li>
+    </ul>
+  </li>
+  <li><a href="#phase-1-pod-생성">Phase 1. Pod 생성</a>
+    <ul>
+      <li><a href="#단계별-상세-1">단계별 상세</a></li>
+      <li><a href="#phase-1-완료-후-노드-상태">Phase 1 완료 후 노드 상태</a></li>
+    </ul>
+  </li>
+  <li><a href="#phase-2-같은-노드-내-pod-간-통신">Phase 2. 같은 노드 내 Pod 간 통신</a>
+    <ul>
+      <li><a href="#단계별-상세-2">단계별 상세</a></li>
+    </ul>
+  </li>
+  <li><a href="#phase-3-다른-노드의-pod과-통신">Phase 3. 다른 노드의 Pod과 통신</a>
+    <ul>
+      <li><a href="#단계별-상세-3">단계별 상세</a>
+        <ul>
+          <li><a href="#출발-node-1">출발: Node 1</a></li>
+          <li><a href="#캡슐화">캡슐화</a></li>
+          <li><a href="#물리-네트워크-전달">물리 네트워크 전달</a></li>
+          <li><a href="#도착-node-2">도착: Node 2</a></li>
+          <li><a href="#응답-패킷">응답 패킷</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#phase-4-pod--클러스터-외부-통신">Phase 4. Pod → 클러스터 외부 통신</a>
+    <ul>
+      <li><a href="#단계별-상세-4">단계별 상세</a></li>
+    </ul>
+  </li>
+  <li><a href="#단면도-노드의-네트워크-스택">단면도: 노드의 네트워크 스택</a></li>
+  <li><a href="#정리">정리</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p>앞선 <a href="/kubernetes/Kubernetes-Networking-00-Model/">네트워킹 모델</a>·<a href="/kubernetes/Kubernetes-Networking-01-Pod-to-Pod/">파드 간 통신</a>·<a href="/kubernetes/Kubernetes-Networking-02-CNI/">CNI 표준</a>에서 다룬 개념들이 실제로 어떤 순서로 동작하는지, 어떤 네임스페이스에서 무슨 인터페이스가 만들어지고, 어떤 라우팅 규칙이 설정되는지를 <strong>Flannel(VXLAN) 클러스터에서 Pod이 만들어지고 노드 간에 패킷이 오가는 한 시나리오</strong>로 따라간다. 노드 간 도달 메커니즘이 왜 세 가지(오버레이/BGP/클라우드 네이티브)로 나뉘는지는 <a href="/kubernetes/Kubernetes-Networking-01-Pod-to-Pod/">파드 간 통신</a> 글의 분류·검증을 먼저 보면 도움이 된다. 이 토대 위에 Service 라우팅 계층이 얹히는 과정은 <a href="/kubernetes/Kubernetes-Networking-04-Service/">Service와 kube-proxy</a>에서 이어진다.</p>
+
+<p>시나리오 기준:</p>
+<ul>
+  <li>CNI 솔루션: <strong>Flannel (VXLAN 모드)</strong> — 오버레이 분류의 가장 보편적인 구현</li>
+  <li>Node 1: <code class="highlighter-rouge">192.168.1.10</code>, Pod CIDR <code class="highlighter-rouge">10.244.0.0/24</code></li>
+  <li>Node 2: <code class="highlighter-rouge">192.168.1.20</code>, Pod CIDR <code class="highlighter-rouge">10.244.1.0/24</code></li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="phase-0-cni-솔루션-설치">Phase 0. CNI 솔루션 설치</h1>
+
+<p>클러스터에 CNI 솔루션을 설치하면, 각 노드에 DaemonSet Pod이 배포되고 네트워크 인프라가 준비된다. Pod이 생성되기 전에 일어나는 단계다.</p>
+
+<p><img src="/assets/images/flannel-flow-overview.png" alt="flannel-flow-overview" /></p>
+
+<h2 id="단계별-상세">단계별 상세</h2>
+
+<p><strong>1. DaemonSet 배포</strong></p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl apply <span class="nt">-f</span> flannel.yaml
+</code></pre></div></div>
+
+<p>각 노드에 Flannel DaemonSet Pod이 생성된다.</p>
+
+<p><strong>2-3. init container: 바이너리 및 설정 파일 배포</strong></p>
+
+<p>init container가 실행되면서 두 가지를 노드에 복사한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>/opt/cni/bin/
+├── flannel       <span class="c"># Flannel CNI 바이너리</span>
+├── bridge        <span class="c"># bridge 플러그인 (Flannel이 delegate)</span>
+└── host-local    <span class="c"># IPAM 플러그인</span>
+
+/etc/cni/net.d/
+└── 10-flannel.conflist   <span class="c"># CNI 설정 파일</span>
+</code></pre></div></div>
+
+<p><strong>4. 메인 컨테이너(에이전트) 시작</strong></p>
+
+<p>init container가 끝나면 메인 컨테이너가 시작된다. Flannel 에이전트로서 상시 실행된다.</p>
+
+<p><strong>5. VTEP 인터페이스 생성</strong></p>
+
+<p>에이전트가 <code class="highlighter-rouge">flannel.1</code> 가상 인터페이스를 생성한다. 이 인터페이스가 VXLAN 캡슐화/역캡슐화를 수행하는 VTEP이다.</p>
+
+<p><strong>6. 토폴로지 공유</strong></p>
+
+<p>에이전트들이 서로 직접 통신하는 것이 아니다. 각 에이전트가 <strong>kube-apiserver를 통해</strong> 간접적으로 클러스터 네트워크 토폴로지를 공유한다:</p>
+
+<ol>
+  <li>각 에이전트가 자기 노드의 정보를 <strong>Kubernetes Node 오브젝트의 annotation</strong>에 기록</li>
+  <li>kube-apiserver를 <strong>watch</strong>하면서 다른 노드들의 annotation을 읽어옴</li>
+</ol>
+
+<p>결과적으로 각 에이전트는 다음과 같은 매핑을 알게 된다:</p>
+
+<ul>
+  <li>Node 1 → Pod CIDR: <code class="highlighter-rouge">10.244.0.0/24</code>, Node IP: <code class="highlighter-rouge">192.168.1.10</code></li>
+  <li>Node 2 → Pod CIDR: <code class="highlighter-rouge">10.244.1.0/24</code>, Node IP: <code class="highlighter-rouge">192.168.1.20</code></li>
+</ul>
+
+<p><strong>7. 라우팅 규칙 설정</strong></p>
+
+<p>에이전트가 토폴로지 정보를 바탕으로 노드에 세 가지 테이블을 설정한다. 이 세 테이블이 함께 동작해야 VXLAN 캡슐화가 가능하다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Node 1 기준</span>
+
+<span class="c"># (1) 라우팅 테이블: "이 대역은 어느 인터페이스, 어느 next-hop으로 보낼지"</span>
+10.244.0.0/24 dev cni0                                    <span class="c"># 자기 노드 대역 → bridge (cni0 생성 후)</span>
+10.244.1.0/24 via 10.244.1.0 dev flannel.1 onlink         <span class="c"># Node 2 대역 → VTEP</span>
+
+<span class="c"># (2) ARP/neighbor 테이블: "next-hop IP의 MAC 주소"</span>
+<span class="c"># ip neigh add 10.244.1.0 lladdr aa:bb:cc:dd:ee:f2 dev flannel.1 nud permanent</span>
+
+<span class="c"># (3) FDB(forwarding database): "이 MAC을 가진 VTEP의 물리 노드 IP"</span>
+<span class="c"># bridge fdb add aa:bb:cc:dd:ee:f2 dev flannel.1 dst 192.168.1.20</span>
+</code></pre></div></div>
+
+<p>패킷 전송 시 커널은 이 세 테이블을 순서대로 참조한다:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>순서</th>
+      <th>테이블</th>
+      <th>질문</th>
+      <th>답 (예시)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>라우팅 테이블</td>
+      <td><code class="highlighter-rouge">10.244.1.2</code>는 어디로?</td>
+      <td>next-hop <code class="highlighter-rouge">10.244.1.0</code>, dev <code class="highlighter-rouge">flannel.1</code></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>ARP/neighbor</td>
+      <td><code class="highlighter-rouge">10.244.1.0</code>의 MAC은?</td>
+      <td><code class="highlighter-rouge">aa:bb:cc:dd:ee:f2</code></td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>FDB</td>
+      <td>이 MAC은 물리적으로 어디?</td>
+      <td><code class="highlighter-rouge">192.168.1.20</code> (Node 2)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>최종적으로 커널은 <code class="highlighter-rouge">192.168.1.20</code>을 외부 목적지로 하는 VXLAN 캡슐화 패킷을 만든다.</p>
+
+<p><strong><code class="highlighter-rouge">onlink</code> 플래그</strong>: 커널은 라우팅 엔트리를 추가할 때 “next-hop IP가 이 인터페이스의 직접 연결된 서브넷 안에 있는가?”를 확인한다. Node 1의 <code class="highlighter-rouge">flannel.1</code> IP는 <code class="highlighter-rouge">10.244.0.0/32</code>인데, next-hop <code class="highlighter-rouge">10.244.1.0</code>은 이 <code class="highlighter-rouge">/32</code> 범위에 포함되지 않으므로 커널이 라우트 추가를 거부한다. <code class="highlighter-rouge">onlink</code>는 이 서브넷 체크를 건너뛰라는 지시다.</p>
+
+<p>새 노드가 추가되면 kube-apiserver에 새 Node 오브젝트가 생기고, 각 에이전트가 이를 watch로 감지하여 해당 노드의 엔트리를 세 테이블 모두에 자동으로 추가한다.</p>
+
+<h2 id="phase-0-완료-후-노드-상태">Phase 0 완료 후 노드 상태</h2>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Node 1 (192.168.1.10)
+┌─────────────────────────────────────────────────┐
+│                User Space                       │
+│  ┌───────────────────────────────────────────┐  │
+│  │ flannel agent (DaemonSet Pod)             │  │
+│  │  - watches kube-apiserver for Node info   │  │
+│  │  - topology: Node2=10.244.1.0/24          │  │
+│  │  - manages routing rules                  │  │
+│  └───────────────────────────────────────────┘  │
+│                                                 │
+│                Kernel                           │
+│  ┌───────────────────────────────────────────┐  │
+│  │ Routing table:                            │  │
+│  │  10.244.1.0/24 via flannel.1              │  │
+│  ├───────────────────────────────────────────┤  │
+│  │ flannel.1 (VTEP)     eth0 (192.168.1.10)  │  │
+│  └───────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────┘
+
+아직 cni0 bridge는 없다 (첫 번째 Pod이 생성될 때 만들어진다)
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="phase-1-pod-생성">Phase 1. Pod 생성</h1>
+
+<p>Node 1에 Pod이 스케줄링되면, kubelet → containerd → CNI 바이너리 순서로 네트워크가 설정된다.</p>
+
+<p><img src="/assets/images/flannel-phase-1.png" alt="flannel-phase-1" /></p>
+
+<h2 id="단계별-상세-1">단계별 상세</h2>
+
+<p><strong>8. 스케줄링</strong></p>
+
+<p>kube-apiserver가 Pod을 Node 1에 스케줄링한다.</p>
+
+<p><strong>9. kubelet → containerd</strong></p>
+
+<p>Node 1의 kubelet이 이를 감지하고, containerd에 컨테이너 생성을 요청한다.</p>
+
+<p><strong>10. 네트워크 네임스페이스 생성</strong></p>
+
+<p>containerd가 새로운 네트워크 네임스페이스를 생성한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>/var/run/netns/cni-xxxx-yyyy
+</code></pre></div></div>
+
+<p>이 시점에서 네임스페이스 안에는 <code class="highlighter-rouge">lo</code> (loopback) 인터페이스만 있다.</p>
+
+<p><strong>11. CNI 바이너리 호출</strong></p>
+
+<p>containerd가 <code class="highlighter-rouge">/etc/cni/net.d/10-flannel.conflist</code>를 읽고, <code class="highlighter-rouge">/opt/cni/bin/flannel</code>을 fork/exec한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">CNI_COMMAND</span><span class="o">=</span>ADD <span class="se">\</span>
+<span class="nv">CNI_CONTAINERID</span><span class="o">=</span>abc123 <span class="se">\</span>
+<span class="nv">CNI_NETNS</span><span class="o">=</span>/var/run/netns/cni-xxxx-yyyy <span class="se">\</span>
+<span class="nv">CNI_IFNAME</span><span class="o">=</span>eth0 <span class="se">\</span>
+<span class="nv">CNI_PATH</span><span class="o">=</span>/opt/cni/bin <span class="se">\</span>
+/opt/cni/bin/flannel &lt; /etc/cni/net.d/10-flannel.conflist
+</code></pre></div></div>
+
+<p><strong>12. flannel → bridge delegate</strong></p>
+
+<p>flannel 바이너리는 실제 네트워크 구성을 bridge 플러그인에 위임(delegate)한다.</p>
+
+<p><strong>13. cni0 bridge 생성 (최초 1회)</strong></p>
+
+<p>bridge 플러그인이 <code class="highlighter-rouge">cni0</code> bridge가 없으면 생성하고, 게이트웨이 IP를 할당한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip link add cni0 <span class="nb">type </span>bridge
+ip addr add 10.244.0.1/24 dev cni0
+ip link <span class="nb">set </span>cni0 up
+</code></pre></div></div>
+
+<p>두 번째 Pod부터는 이미 존재하므로 건너뛴다.</p>
+
+<p><strong>14. veth pair 생성 + 연결</strong></p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># veth pair 생성</span>
+ip link add vethXXX <span class="nb">type </span>veth peer name eth0
+
+<span class="c"># 한쪽을 Pod 네임스페이스로 이동</span>
+ip link <span class="nb">set </span>eth0 netns /var/run/netns/cni-xxxx-yyyy
+
+<span class="c"># 다른 쪽을 cni0 bridge에 연결</span>
+ip link <span class="nb">set </span>vethXXX master cni0
+ip link <span class="nb">set </span>vethXXX up
+</code></pre></div></div>
+
+<p><strong>15. IPAM 플러그인 호출</strong></p>
+
+<p>bridge 플러그인이 host-local IPAM 플러그인을 호출한다. host-local은 <code class="highlighter-rouge">10.244.0.0/24</code> 서브넷에서 사용 가능한 IP를 선택하여 반환한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># host-local이 로컬 파일로 IP 할당 기록</span>
+/var/lib/cni/networks/cbr0/10.244.0.2
+</code></pre></div></div>
+
+<p><strong>16. Pod 네임스페이스 내 설정</strong></p>
+
+<p>bridge 플러그인이 반환받은 IP로 Pod 네임스페이스 안을 설정한다:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip netns <span class="nb">exec </span>cni-xxxx-yyyy ip addr add 10.244.0.2/24 dev eth0
+ip netns <span class="nb">exec </span>cni-xxxx-yyyy ip link <span class="nb">set </span>eth0 up
+ip netns <span class="nb">exec </span>cni-xxxx-yyyy ip route add default via 10.244.0.1
+</code></pre></div></div>
+
+<p><strong>17. 결과 반환</strong></p>
+
+<p>바이너리가 JSON 결과를 stdout으로 반환한다. containerd가 이를 수신한다.</p>
+
+<p><strong>18. 컨테이너 프로세스 시작</strong></p>
+
+<p>containerd가 runc를 통해 컨테이너 프로세스를 시작한다. 네트워크와 프로세스가 모두 준비되면 Pod이 Running 상태가 된다.</p>
+
+<h2 id="phase-1-완료-후-노드-상태">Phase 1 완료 후 노드 상태</h2>
+
+<p>Pod A(<code class="highlighter-rouge">10.244.0.2</code>)와 Pod B(<code class="highlighter-rouge">10.244.0.3</code>)가 생성된 후의 상태:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Node 1 (192.168.1.10)
+┌─────────────────────────────────────────────────────────────────────┐
+│                         User Space                                  │
+│  ┌─────────────────────────┐                                        │
+│  │ flannel agent(DaemonSet)│                                        │
+│  └─────────────────────────┘                                        │
+│  ┌─────────────────┐  ┌─────────────────┐                           │
+│  │ Pod A           │  │ Pod B           │                           │
+│  │ (container proc)│  │ (container proc)│                           │
+│  └─────────────────┘  └─────────────────┘                           │
+│─────────────────────────────────────────────────────────────────────│
+│                         Kernel                                      │
+│                                                                     │
+│  Pod A netns:              Pod B netns:                             │
+│  ┌──────────────────┐     ┌──────────────────┐                      │
+│  │ lo               │     │ lo               │                      │
+│  │ eth0 (10.244.0.2)│     │ eth0 (10.244.0.3)│                      │
+│  │  route: default  │     │  route: default  │                      │
+│  │  via 10.244.0.1  │     │  via 10.244.0.1  │                      │
+│  └────────┬─────────┘     └────────┬─────────┘                      │
+│           │ veth pair              │ veth pair                      │
+│  Host netns:                                                        │
+│  ┌──────────────────────────────────────────────────────────┐       │
+│  │ vethXXX ──┐                                              │       │
+│  │ vethYYY ──┤── cni0 (bridge, 10.244.0.1)                  │       │
+│  │           │                                              │       │
+│  │ flannel.1 (VTEP)                                         │       │
+│  │ eth0 (192.168.1.10)                                      │       │
+│  ├──────────────────────────────────────────────────────────┤       │
+│  │ Routing table:                                           │       │
+│  │  10.244.0.0/24 dev cni0                                  │       │
+│  │  10.244.1.0/24 via 10.244.1.0 dev flannel.1              │       │
+│  ├──────────────────────────────────────────────────────────┤       │
+│  │ iptables (MASQUERADE):                                   │       │
+│  │  -s 10.244.0.0/16 ! -d 10.244.0.0/16 -j MASQUERADE       │       │
+│  │  (Pod → 클러스터 외부 시 SNAT)                               │       │
+│  └──────────────────────────────────────────────────────────┘       │
+└─────────────────────────────────────────────────────────────────────┘
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="phase-2-같은-노드-내-pod-간-통신">Phase 2. 같은 노드 내 Pod 간 통신</h1>
+
+<p>Pod A(<code class="highlighter-rouge">10.244.0.2</code>) → Pod B(<code class="highlighter-rouge">10.244.0.3</code>)</p>
+
+<p><img src="/assets/images/flannel-phase-2.png" alt="flannel-phase-2" /></p>
+
+<h2 id="단계별-상세-2">단계별 상세</h2>
+
+<p><strong>19.</strong> Pod A의 프로세스가 <code class="highlighter-rouge">10.244.0.3</code>으로 패킷 전송</p>
+
+<p><strong>20.</strong> Pod A 네임스페이스의 라우팅 테이블 확인:</p>
+<ul>
+  <li><code class="highlighter-rouge">10.244.0.0/24 dev eth0</code> → 같은 서브넷이므로 eth0으로 직접 전송</li>
+</ul>
+
+<p><strong>21.</strong> 패킷이 eth0 → veth pair → 호스트의 <code class="highlighter-rouge">vethXXX</code> → <code class="highlighter-rouge">cni0</code> bridge 도착</p>
+
+<p><strong>22.</strong> <code class="highlighter-rouge">cni0</code> bridge가 L2 스위치로서 MAC 주소 테이블을 확인하고, <code class="highlighter-rouge">10.244.0.3</code>의 MAC이 <code class="highlighter-rouge">vethYYY</code>에 연결되어 있음을 알고 해당 포트로 전달</p>
+
+<p><strong>23.</strong> <code class="highlighter-rouge">vethYYY</code> → veth pair → Pod B의 <code class="highlighter-rouge">eth0</code>에 도착</p>
+
+<p>오버레이나 VTEP은 관여하지 않는다. 같은 bridge에 연결된 Pod끼리는 L2 스위칭만으로 통신한다.</p>
+
+<p><br /></p>
+
+<h1 id="phase-3-다른-노드의-pod과-통신">Phase 3. 다른 노드의 Pod과 통신</h1>
+
+<p>Pod A(<code class="highlighter-rouge">10.244.0.2</code>, Node 1) → Pod C(<code class="highlighter-rouge">10.244.1.2</code>, Node 2)</p>
+
+<p><img src="/assets/images/flannel-phase-3.png" alt="flannel-phase-3" /></p>
+
+<h2 id="단계별-상세-3">단계별 상세</h2>
+
+<h3 id="출발-node-1">출발: Node 1</h3>
+
+<p><strong>24.</strong> Pod A의 프로세스가 <code class="highlighter-rouge">10.244.1.2</code>로 패킷 전송</p>
+
+<p><strong>25.</strong> Pod A 네임스페이스의 라우팅 테이블 확인:</p>
+<ul>
+  <li><code class="highlighter-rouge">10.244.1.2</code>는 <code class="highlighter-rouge">10.244.0.0/24</code> (같은 서브넷)에 해당하지 않음</li>
+  <li><code class="highlighter-rouge">default via 10.244.0.1</code> → 기본 게이트웨이(cni0 bridge)로 전송</li>
+</ul>
+
+<p><strong>26.</strong> 패킷이 eth0 → veth pair → <code class="highlighter-rouge">cni0</code> bridge → 호스트 네임스페이스</p>
+
+<p><strong>27.</strong> 호스트 커널이 라우팅 테이블 확인:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>10.244.1.0/24 via 10.244.1.0 dev flannel.1
+</code></pre></div></div>
+
+<p>→ <code class="highlighter-rouge">flannel.1</code> (VTEP)으로 전달</p>
+
+<h3 id="캡슐화">캡슐화</h3>
+
+<p><strong>28.</strong> VTEP(<code class="highlighter-rouge">flannel.1</code>)이 원본 L2 프레임을 캡슐화:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Original:
+  [src MAC | dst MAC | src: 10.244.0.2 | dst: 10.244.1.2 | data]
+
+Encapsulated:
+  [outer src: 192.168.1.10 | outer dst: 192.168.1.20 | UDP:4789 | VXLAN hdr | original L2 frame]
+</code></pre></div></div>
+
+<p>에이전트의 토폴로지 정보로 <code class="highlighter-rouge">10.244.1.0/24</code> → <code class="highlighter-rouge">Node 2 (192.168.1.20)</code>임을 알고 있다.</p>
+
+<h3 id="물리-네트워크-전달">물리 네트워크 전달</h3>
+
+<p><strong>29.</strong> 캡슐화된 패킷이 노드의 <code class="highlighter-rouge">eth0</code> (<code class="highlighter-rouge">192.168.1.10</code>)을 통해 전송</p>
+
+<p><strong>30.</strong> 물리 네트워크(스위치, 라우터)가 <code class="highlighter-rouge">192.168.1.10 → 192.168.1.20</code>으로 라우팅. 물리 네트워크는 Pod IP(<code class="highlighter-rouge">10.244.x.x</code>)를 전혀 모른다. 언더레이 대역(<code class="highlighter-rouge">192.168.1.x</code>)의 일반 트래픽으로만 보인다.</p>
+
+<h3 id="도착-node-2">도착: Node 2</h3>
+
+<p><strong>31.</strong> Node 2의 커널이 <code class="highlighter-rouge">UDP:4789</code> 패킷 수신 → VXLAN으로 식별</p>
+
+<p><strong>32.</strong> Node 2의 VTEP(<code class="highlighter-rouge">flannel.1</code>)이 역캡슐화 → 원본 L2 프레임 복원</p>
+
+<p><strong>33.</strong> 커널이 라우팅 테이블 확인:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>10.244.1.0/24 dev cni0
+</code></pre></div></div>
+
+<p>→ <code class="highlighter-rouge">cni0</code> bridge로 전달</p>
+
+<p><strong>34.</strong> <code class="highlighter-rouge">cni0</code> → MAC 테이블 lookup → <code class="highlighter-rouge">vethZZZ</code> → Pod C의 <code class="highlighter-rouge">eth0</code> 도착</p>
+
+<h3 id="응답-패킷">응답 패킷</h3>
+
+<p>Pod C → Pod A 응답은 정확히 역방향으로 동일한 과정을 거친다. Node 2의 VTEP이 캡슐화하고, Node 1의 VTEP이 역캡슐화한다.</p>
+
+<p><br /></p>
+
+<h1 id="phase-4-pod--클러스터-외부-통신">Phase 4. Pod → 클러스터 외부 통신</h1>
+
+<p>Pod A(<code class="highlighter-rouge">10.244.0.2</code>) → 외부 서버(<code class="highlighter-rouge">8.8.8.8</code>)</p>
+
+<p><img src="/assets/images/flannel-phase-4.png" alt="flannel-phase-4" /></p>
+
+<h2 id="단계별-상세-4">단계별 상세</h2>
+
+<p><strong>35.</strong> Pod A가 <code class="highlighter-rouge">8.8.8.8</code>로 패킷 전송</p>
+
+<p><strong>36.</strong> Pod 네임스페이스: <code class="highlighter-rouge">default via 10.244.0.1</code> → cni0 bridge로</p>
+
+<p><strong>37.</strong> 호스트 커널 라우팅 테이블: <code class="highlighter-rouge">8.8.8.8</code>은 Pod CIDR(<code class="highlighter-rouge">10.244.x.x</code>)에 해당하지 않음 → 호스트의 default gateway로</p>
+
+<p><strong>38.</strong> iptables MASQUERADE 규칙 적용:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">-s</span> 10.244.0.0/16 <span class="o">!</span> <span class="nt">-d</span> 10.244.0.0/16 <span class="nt">-j</span> MASQUERADE
+</code></pre></div></div>
+
+<p>출발지가 Pod CIDR이고 목적지가 Pod CIDR이 <strong>아닌</strong> 경우 → SNAT 적용. 출발지 IP가 <code class="highlighter-rouge">10.244.0.2</code> → <code class="highlighter-rouge">192.168.1.10</code> (노드 IP)으로 변환된다.</p>
+
+<p><strong>39.</strong> 패킷이 <code class="highlighter-rouge">eth0</code>을 통해 외부로 전송. 외부 네트워크는 노드 IP(<code class="highlighter-rouge">192.168.1.10</code>)만 본다.</p>
+
+<p><strong>40.</strong> 응답 패킷이 <code class="highlighter-rouge">192.168.1.10</code>으로 돌아오면, conntrack이 역변환하여 <code class="highlighter-rouge">10.244.0.2</code>로 전달한다.</p>
+
+<blockquote>
+  <p>이 MASQUERADE 규칙은 CNI 플러그인 또는 에이전트가 설정한다. Pod 간 통신(10.244.x.x → 10.244.x.x)은 MASQUERADE 대상이 아니므로 NAT 없이 직접 통신한다는 Kubernetes 네트워킹 모델의 원칙이 지켜진다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="단면도-노드의-네트워크-스택">단면도: 노드의 네트워크 스택</h1>
+
+<p>두 노드에 각각 Pod이 있는 상태의 전체 구조:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Node 1 (192.168.1.10)                                  Node 2 (192.168.1.20)
+Pod CIDR: 10.244.0.0/24                                Pod CIDR: 10.244.1.0/24
+
+┌────────────────────────────────────────┐     ┌────────────────────────────────────────┐
+│              User Space                │     │              User Space                │
+│  ┌──────────┐  ┌──────────┐            │     │            ┌──────────┐  ┌──────────┐  │
+│  │  Pod A   │  │  Pod B   │            │     │            │  Pod C   │  │  Pod D   │  │
+│  │  .0.2    │  │  .0.3    │            │     │            │  .1.2    │  │  .1.3    │  │
+│  └────┬─────┘  └────┬─────┘            │     │            └────┬─────┘  └────┬─────┘  │
+│═══════╪══════════════╪═════════════════│     │═════════════════╪═════════════╪════════│
+│       │    Kernel     │                │     │                 │    Kernel   │        │
+│  Pod netns:          Pod netns:        │     │          Pod netns:         Pod netns: │
+│  ┌─────────┐    ┌─────────┐            │     │            ┌─────────┐    ┌─────────┐  │
+│  │eth0     │    │eth0     │            │     │            │eth0     │    │eth0     │  │
+│  │10.244.  │    │10.244.  │            │     │            │10.244.  │    │10.244.  │  │
+│  │0.2      │    │0.3      │            │     │            │1.2      │    │1.3      │  │
+│  └────┬────┘    └────┬────┘            │     │            └────┬────┘    └────┬────┘  │
+│       │veth          │veth             │     │                 │veth          │veth   │
+│  Host netns:                           │     │           Host netns:                  │
+│  ┌────────────────────────────────┐    │     │    ┌────────────────────────────────┐  │
+│  │  vethXXX─┐                     │    │     │    │                     ┌─vethZZZ  │  │
+│  │  vethYYY─┤  cni0 (10.244.0.1)  │    │     │    │ (10.244.1.1) cni0   ├─vethWWW  │  │
+│  │          └────────┬────────────│    │     │    │────────────┬────────┘          │  │
+│  │                   │            │    │     │    │            │                   │  │
+│  │  flannel.1 (VTEP) │            │    │     │    │            │ flannel.1 (VTEP)  │  │
+│  │          └────────┤            │    │     │    │            ├────────┘          │  │
+│  │                   │            │    │     │    │            │                   │  │
+│  │          eth0 (192.168.1.10)   │    │     │    │   eth0 (192.168.1.20)          │  │
+│  ├────────────────────────────────┤    │     │    ├────────────────────────────────┤  │
+│  │ Routing:                       │    │     │    │ Routing:                       │  │
+│  │  10.244.0.0/24 dev cni0        │    │     │    │  10.244.1.0/24 dev cni0        │  │
+│  │  10.244.1.0/24 dev flannel.1   │    │     │    │  10.244.0.0/24 dev flannel.1   │  │
+│  ├────────────────────────────────┤    │     │    ├────────────────────────────────┤  │
+│  │ iptables:                      │    │     │    │ iptables:                      │  │
+│  │  MASQUERADE (Pod→external)     │    │     │    │  MASQUERADE (Pod→external)     │  │
+│  └───────────┬────────────────────┘    │     │    └────────────────────┬───────────┘  │
+└──────────────┼─────────────────────────┘     └─────────────────────────┼──────────────┘
+               │       Physical Network (192.168.1.0/24)                 │
+               └─────────────────────────────────────────────────────────┘
+                     overlay: UDP:4789 (VXLAN)
+                     underlay: 192.168.1.x routing
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>Phase</th>
+      <th>일어나는 일</th>
+      <th>주체</th>
+      <th>시점</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>0. CNI 설치</strong></td>
+      <td>바이너리 배포, VTEP 생성, 라우팅 규칙 설정</td>
+      <td>DaemonSet 에이전트</td>
+      <td>클러스터 1회</td>
+    </tr>
+    <tr>
+      <td><strong>1. Pod 생성</strong></td>
+      <td>namespace 생성, veth pair, cni0 bridge, IP 할당</td>
+      <td>containerd → CNI 바이너리</td>
+      <td>Pod마다</td>
+    </tr>
+    <tr>
+      <td><strong>2. 같은 노드 통신</strong></td>
+      <td>cni0 bridge가 L2 스위칭</td>
+      <td>커널 (bridge)</td>
+      <td>패킷마다</td>
+    </tr>
+    <tr>
+      <td><strong>3. 다른 노드 통신</strong></td>
+      <td>라우팅 → VTEP → 캡슐화 → 물리 네트워크 → 역캡슐화</td>
+      <td>커널 (routing + VTEP)</td>
+      <td>패킷마다</td>
+    </tr>
+    <tr>
+      <td><strong>4. 외부 통신</strong></td>
+      <td>iptables MASQUERADE (SNAT)</td>
+      <td>커널 (netfilter)</td>
+      <td>패킷마다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#cni" class="page__taxonomy-item" rel="tag">CNI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#flannel" class="page__taxonomy-item" rel="tag">Flannel</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#networking" class="page__taxonomy-item" rel="tag">Networking</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#overlay" class="page__taxonomy-item" rel="tag">overlay</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#vxlan" class="page__taxonomy-item" rel="tag">VXLAN</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-03-19T00:00:00+09:00">March 19, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+CNI+%EB%8F%99%EC%9E%91+%ED%9D%90%EB%A6%84%3A+Pod+%EC%83%9D%EC%84%B1%EB%B6%80%ED%84%B0+%EB%85%B8%EB%93%9C+%EA%B0%84+%ED%86%B5%EC%8B%A0%EA%B9%8C%EC%A7%80%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Networking-03-CNI-Flow%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Networking-03-CNI-Flow%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Networking-03-CNI-Flow%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-Networking-03-CNI-Flow?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-EKS-02-02-03-Pod-to-External-Network/" class="pagination--pager" title="[EKS] EKS: Networking - 4. 파드와 외부 간 통신
+">이전</a>
+    
+    
+      <a href="/articles/Articles-NCCL-Troubleshooting-Collaboration-Retrospective/" class="pagination--pager" title="NCCL 트러블슈팅 회고: MLOps 엔지니어가 바톤을 넘겨받기까지
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-Networking-03-CNI-Flow/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-Networking-03-CNI-Flow"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

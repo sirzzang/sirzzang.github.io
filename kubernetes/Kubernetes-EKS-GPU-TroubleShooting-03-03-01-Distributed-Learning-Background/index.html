@@ -1,0 +1,1524 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 3. 분산학습과 NCCL 통신 - 1. 배경 및 재현 실험 설계 - Eraser’s StudyLog</title>
+<meta name="description" content="분산학습의 원리, NCCL 통신 계층, EKS에서의 실험 설계까지 분산학습 장애 실험 설계의 배경에 대해 정리해보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 3. 분산학습과 NCCL 통신 - 1. 배경 및 재현 실험 설계">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background/">
+
+
+  <meta property="og:description" content="분산학습의 원리, NCCL 통신 계층, EKS에서의 실험 설계까지 분산학습 장애 실험 설계의 배경에 대해 정리해보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-09T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 3. 분산학습과 NCCL 통신 - 1. 배경 및 재현 실험 설계">
+    <meta itemprop="description" content="분산학습의 원리, NCCL 통신 계층, EKS에서의 실험 설계까지 분산학습 장애 실험 설계의 배경에 대해 정리해보자.">
+    <meta itemprop="datePublished" content="2026-04-09T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 3. 분산학습과 NCCL 통신 - 1. 배경 및 재현 실험 설계
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-09T00:00:00+09:00">2026년 04월 09일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  9 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#분산학습-개요">분산학습 개요</a>
+    <ul>
+      <li><a href="#분산학습의-필요성">분산학습의 필요성</a></li>
+      <li><a href="#분산-방식-3가지">분산 방식 3가지</a></li>
+      <li><a href="#분산-프로세스-초기화--4가지-필수-요소">분산 프로세스 초기화 — 4가지 필수 요소</a></li>
+      <li><a href="#초기화-시퀀스">초기화 시퀀스</a></li>
+    </ul>
+  </li>
+  <li><a href="#nccl-통신-계층">NCCL 통신 계층</a>
+    <ul>
+      <li><a href="#pytorch-distributed-backend">PyTorch distributed backend</a></li>
+      <li><a href="#nccl-transport-우선순위">NCCL transport 우선순위</a></li>
+      <li><a href="#nccl-환경변수">NCCL 환경변수</a></li>
+    </ul>
+  </li>
+  <li><a href="#torchrun">torchrun</a></li>
+  <li><a href="#실무-분산학습-도구">실무 분산학습 도구</a>
+    <ul>
+      <li><a href="#kubeflow-training-operator-pytorchjob">Kubeflow Training Operator (PyTorchJob)</a></li>
+      <li><a href="#ray--kuberay">Ray / KubeRay</a></li>
+      <li><a href="#mpi-operator--horovod">MPI Operator / Horovod</a></li>
+      <li><a href="#도구-비교">도구 비교</a></li>
+    </ul>
+  </li>
+  <li><a href="#실험-설계-pod--headless-service">실험 설계: Pod + headless Service</a>
+    <ul>
+      <li><a href="#실험-목적">실험 목적</a></li>
+      <li><a href="#operator를-쓰지-않은-이유">Operator를 쓰지 않은 이유</a></li>
+      <li><a href="#pod--headless-service-구조">Pod + headless Service 구조</a></li>
+      <li><a href="#트레이드오프-요약">트레이드오프 요약</a></li>
+      <li><a href="#실무-전환-시점">실무 전환 시점</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em>정영준님의 AWS EKS Workshop Study(AEWS) <a href="https://devfloor9.github.io/engineering-playbook/slides/eks-debugging/">5주차 학습 내용</a>을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-02-vLLM-TroubleShooting/">이전 글</a>까지 인프라 층(Device Plugin)과 앱 층(vLLM) 장애를 각각 재현했다. 이번에는 <strong>노드 간 네트워크 층</strong> 장애를 다루기 위해, 먼저 분산학습과 NCCL 통신의 배경을 정리한다.</p>
+
+<ul>
+  <li><strong>분산학습 3방식</strong>: Data Parallel(DP), Tensor Parallel(TP), Pipeline Parallel(PP). 실무에서는 이들을 조합(3D parallelism)하고, DeepSpeed/Megatron-LM/FSDP가 추상화한다</li>
+  <li><strong>init_process_group 초기화 4요소</strong>: <code class="highlighter-rouge">RANK</code>, <code class="highlighter-rouge">WORLD_SIZE</code>, <code class="highlighter-rouge">MASTER_ADDR</code>, <code class="highlighter-rouge">MASTER_PORT</code>. 이 네 값이 환경변수로 주입되어야 프로세스 간 rendezvous가 이루어진다</li>
+  <li><strong>초기화 시퀀스</strong>: c10d TCPStore rendezvous → NCCL bootstrap → NCCL communicator. SG 차단은 <strong>첫 번째 단계</strong>(c10d)에서 먼저 막힐 수 있다</li>
+  <li><strong>NCCL transport 우선순위</strong>: NVLink → RDMA/EFA → TCP Socket. EKS 일반 인스턴스에서는 TCP Socket이 유일한 경로이고, 이것이 node SG의 ephemeral self-ref(1025-65535/tcp)를 타고 흐른다</li>
+  <li><strong>실험 설계</strong>: Training Operator나 Ray 대신 <strong>Pod 2개 + headless Service</strong>를 선택한다. webhook 간섭 없이 SG 차단의 효과만 격리해서 관찰하기 위함이다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="분산학습-개요">분산학습 개요</h1>
+
+<h2 id="분산학습의-필요성">분산학습의 필요성</h2>
+
+<p>단일 GPU 메모리에 담기지 않는 모델이 늘고 있다. LLaMA 65B weights가 약 130 GiB, GPT-3 175B weights가 약 350 GiB에 달하는데, 현존하는 단일 GPU 메모리(H100 80 GiB 기준)로는 이 규모의 모델을 그대로 올리기 어렵다. 분산학습(Distributed Training)은 <strong>여러 GPU와 여러 노드에 모델이나 데이터를 나눠 담고, 매 step마다 gradient를 모아 다시 뿌리는</strong> 반복 과정이다.</p>
+
+<h2 id="분산-방식-3가지">분산 방식 3가지</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>방식</th>
+      <th>원리</th>
+      <th>NCCL 사용 패턴</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Data Parallel (DP)</strong></td>
+      <td>같은 모델을 모든 GPU에 복제, 데이터 배치만 쪼개 분산. gradient를 <code class="highlighter-rouge">all_reduce</code>로 평균 내어 동기화</td>
+      <td>step 종료 시 <code class="highlighter-rouge">all_reduce</code> 1회</td>
+    </tr>
+    <tr>
+      <td><strong>Tensor Parallel (TP)</strong></td>
+      <td>한 레이어 내부 행렬곱을 GPU 차원으로 쪼갬</td>
+      <td>layer 내부 forward/backward 중에도 <code class="highlighter-rouge">all_reduce</code>/<code class="highlighter-rouge">all_gather</code> 발생</td>
+    </tr>
+    <tr>
+      <td><strong>Pipeline Parallel (PP)</strong></td>
+      <td>레이어 단위로 GPU를 나눔. 앞뒤 GPU 사이에 activation/gradient 전달</td>
+      <td>point-to-point <code class="highlighter-rouge">send</code>/<code class="highlighter-rouge">recv</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>실무에서는 셋을 조합(3D parallelism)하고, DeepSpeed/Megatron-LM/FSDP 같은 프레임워크가 이를 추상화한다. 이 프레임워크들은 아래와 같이 PyTorch distributed 위에 올라가는 계층이고, 실제 GPU 간 통신은 결국 NCCL을 통해 이루어진다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>DeepSpeed / Megatron-LM        ← 학습 최적화 프레임워크 (ZeRO, 3D parallelism)
+FSDP / DDP                     ← PyTorch 내장 분산 전략
+torch.distributed              ← PyTorch distributed API (init_process_group, c10d)
+NCCL                           ← GPU 집합 통신 라이브러리 (all_reduce, all_gather)
+</code></pre></div></div>
+
+<p>따라서 이번 실험에서 재현하는 SG 차단(c10d/NCCL 층 장애)은 어떤 프레임워크를 쓰든 동일하게 발생한다. DP가 가장 흔하고, 본 실험에서도 DP(all_reduce) 기반 통신을 사용한다.</p>
+
+<h2 id="분산-프로세스-초기화--4가지-필수-요소">분산 프로세스 초기화 — 4가지 필수 요소</h2>
+
+<p><code class="highlighter-rouge">torch.distributed.init_process_group(backend="nccl")</code> 한 줄이 실제로는 <strong>프로세스들끼리 TCP로 만나 NCCL communicator를 구성하는</strong> 과정이다. 이를 위해 아래 4가지(+1) 환경변수가 필요하다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>변수</th>
+      <th>의미</th>
+      <th>누가 주입하는가</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">RANK</code></td>
+      <td>이 프로세스의 전역 번호 (0, 1, 2, …)</td>
+      <td>실행 환경 (torchrun, operator, 직접 env)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">WORLD_SIZE</code></td>
+      <td>전체 프로세스 수</td>
+      <td>위와 동일</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">LOCAL_RANK</code></td>
+      <td>한 노드 내의 번호 (0..nproc_per_node-1)</td>
+      <td>torchrun 자동 주입</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">MASTER_ADDR</code></td>
+      <td>rank 0 프로세스가 떠있는 주소</td>
+      <td>실행 환경</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">MASTER_PORT</code></td>
+      <td>rank 0 프로세스가 listen 중인 포트</td>
+      <td>실행 환경</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="초기화-시퀀스">초기화 시퀀스</h2>
+
+<p><code class="highlighter-rouge">init_process_group</code> 호출 시 내부에서 진행되는 단계를 정리하면 다음과 같다.</p>
+
+<ol>
+  <li><strong>c10d TCPStore rendezvous</strong>: rank 0이 <code class="highlighter-rouge">MASTER_PORT</code>(29500)에 TCPStore 서버(TCP listen)를 열고, 나머지 rank가 TCPStore 클라이언트로 connect한다. store-based barrier가 <code class="highlighter-rouge">WORLD_SIZE</code>개 프로세스의 접속을 대기하며, 각 rank는 자신의 네트워크 주소를 store에 등록한다. SG 차단 시 이 단계에서 timeout이 발생할 수 있다</li>
+  <li><strong>NCCL bootstrap</strong>: <code class="highlighter-rouge">WORLD_SIZE</code>개 프로세스가 모두 store에 접속하여 barrier가 풀리면, 각 rank가 store에서 읽어온 peer 주소를 바탕으로 NCCL이 자체 peer-to-peer 연결(TCP 소켓 또는 RDMA)을 수립한다. 이때 별도의 ephemeral 포트를 사용한다</li>
+  <li><strong>NCCL communicator 구성 완료</strong>: 이후 실제 <code class="highlighter-rouge">all_reduce</code>/<code class="highlighter-rouge">all_gather</code>는 NCCL 경로로 흐른다</li>
+</ol>
+
+<p>이 시퀀스에서 중요한 점은, <strong>1단계(c10d TCPStore)가 2단계(NCCL bootstrap)보다 먼저</strong> 실행된다는 것이다. SG에서 ephemeral 포트(1025-65535) self-ref를 제거하면, NCCL bootstrap 이전에 c10d TCPStore connect가 먼저 막힐 수 있다. 이 경우 <code class="highlighter-rouge">NCCL_DEBUG=INFO</code>를 켜도 NCCL 로그는 한 줄도 출력되지 않는다. <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-02-Distributed-Learning-Network-Failure/">다음 글</a>에서 이 현상을 실측으로 확인한다.</p>
+
+<p><br /></p>
+
+<h1 id="nccl-통신-계층">NCCL 통신 계층</h1>
+
+<h2 id="pytorch-distributed-backend">PyTorch distributed backend</h2>
+
+<p>PyTorch distributed는 <strong>backend 추상</strong>을 둔다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>backend</th>
+      <th>대상</th>
+      <th>비고</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">gloo</code></td>
+      <td>CPU</td>
+      <td>저성능, 테스트용</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">mpi</code></td>
+      <td>HPC</td>
+      <td>MPI 런타임 필요</td>
+    </tr>
+    <tr>
+      <td><strong><code class="highlighter-rouge">nccl</code></strong></td>
+      <td><strong>GPU</strong></td>
+      <td><strong>NVIDIA 공식, GPU 학습이라면 사실상 유일한 선택</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>NCCL(NVIDIA Collective Communications Library)은 GPU 간 집합 통신(<code class="highlighter-rouge">all_reduce</code>, <code class="highlighter-rouge">all_gather</code>, <code class="highlighter-rouge">broadcast</code> 등)을 수행하는 라이브러리다. 실무 트러블슈팅 경험은 <a href="/articles/Articles-NCCL-Troubleshooting-Collaboration-Retrospective/">NCCL 트러블슈팅 협업 회고</a> 글을 참고한다.</p>
+
+<h2 id="nccl-transport-우선순위">NCCL transport 우선순위</h2>
+
+<p>NCCL은 통신 경로(transport)를 자동으로 선택한다. 우선순위가 높은 순서대로 시도하며, 사용 가능한 첫 번째 transport를 사용한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>우선순위</th>
+      <th>transport</th>
+      <th>조건</th>
+      <th>SG 영향</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><strong>NVLink</strong></td>
+      <td>같은 서버 내 GPU 간</td>
+      <td>무관 (호스트 내부)</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>GPUDirect RDMA / InfiniBand</strong></td>
+      <td>EFA(AWS) 또는 IB NIC 필요</td>
+      <td>EFA SG rule 필요</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>TCP Socket</strong></td>
+      <td>위 둘이 없을 때 fallback</td>
+      <td><strong>node SG ephemeral self-ref 필요</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>EFA(Elastic Fabric Adapter)는 p4d.24xlarge(A100 × 8), p5.48xlarge(H100 × 8) 등 HPC/ML 전용 대형 인스턴스에만 장착된다. 본 실험의 g5.xlarge(A10G × 1)에는 NVLink도 EFA도 없다. 따라서 <strong>TCP Socket이 유일한 노드 간 NCCL 경로</strong>이고, 이 경로가 node SG의 <code class="highlighter-rouge">ingress_nodes_ephemeral</code>(1025-65535/tcp self-ref) rule을 통해 허용된다.</p>
+
+<h2 id="nccl-환경변수">NCCL 환경변수</h2>
+
+<p>본 실험에서 사용하는 NCCL 관련 환경변수의 의미를 정리한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>변수</th>
+      <th>값</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">NCCL_SOCKET_IFNAME</code></td>
+      <td><code class="highlighter-rouge">eth0</code></td>
+      <td>NCCL이 TCP Socket transport에 사용할 네트워크 인터페이스 지정. EKS VPC CNI 기본 인터페이스가 <code class="highlighter-rouge">eth0</code>이다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">NCCL_IB_DISABLE</code></td>
+      <td><code class="highlighter-rouge">1</code></td>
+      <td>IB/RDMA 시도 없이 곧바로 Socket으로 진행. EKS 일반 인스턴스에는 IB가 없으므로, 이 값을 주면 불필요한 IB probe 로그를 줄일 수 있다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">NCCL_DEBUG</code></td>
+      <td><code class="highlighter-rouge">INFO</code></td>
+      <td>NCCL 내부 로그 출력. 트러블슈팅 시 필수. <code class="highlighter-rouge">WARN</code>이 기본이라 transport 선택, 채널 구성 등의 정보가 보이지 않는다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="torchrun">torchrun</h1>
+
+<p><code class="highlighter-rouge">torchrun</code>은 PyTorch 2.x에 내장된 분산 실행 래퍼다. Python 스크립트 하나를 여러 프로세스로 띄우면서 <code class="highlighter-rouge">RANK</code>/<code class="highlighter-rouge">WORLD_SIZE</code>/<code class="highlighter-rouge">LOCAL_RANK</code>/<code class="highlighter-rouge">MASTER_ADDR</code>/<code class="highlighter-rouge">MASTER_PORT</code>를 환경변수로 주입한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>torchrun <span class="nt">--nnodes</span><span class="o">=</span>2 <span class="nt">--nproc-per-node</span><span class="o">=</span>1 <span class="se">\</span>
+         <span class="nt">--node-rank</span><span class="o">=</span>0 <span class="nt">--master-addr</span><span class="o">=</span>nccl-master <span class="nt">--master-port</span><span class="o">=</span>29500 <span class="se">\</span>
+         script.py
+</code></pre></div></div>
+
+<p>내부적으로 elastic agent(<code class="highlighter-rouge">torch.distributed.elastic</code>)를 사용하며, rendezvous backend로 c10d(기본) 또는 etcd를 선택할 수 있다.</p>
+
+<p><strong>장점</strong>:</p>
+<ul>
+  <li>의존성 없음 (PyTorch에 내장)</li>
+  <li>단일 노드 multi-GPU, 멀티 노드 각 1 GPU 모두 동일 API</li>
+  <li>rendezvous backend로 c10d를 쓰면 <code class="highlighter-rouge">MASTER_ADDR</code>이 rank 0 IP 역할</li>
+</ul>
+
+<p><strong>한계</strong>:</p>
+<ul>
+  <li>노드 간 Pod 스케줄링, 재시작, 장애 복구는 해주지 않는다. Kubernetes가 Pod를 올려주고, torchrun은 “이미 올라온 Pod 안에서 Python 프로세스 띄우기”까지만 담당</li>
+  <li><code class="highlighter-rouge">WORLD_SIZE</code>나 <code class="highlighter-rouge">RANK</code>를 외부에서 동적으로 주입해야 한다. Kubernetes YAML에서 env로 전달 필요</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="실무-분산학습-도구">실무 분산학습 도구</h1>
+
+<p>실무에서는 torchrun 위에 Kubernetes-native한 오케스트레이션 도구를 얹어 분산학습을 관리한다. 본 실험에서는 이 도구들을 <strong>쓰지 않는</strong> 선택을 했는데, 그 이유를 이해하려면 각 도구가 무엇을 하는지 알아야 한다.</p>
+
+<p>아래 세 도구는 <strong>같은 레이어의 대안(peer alternatives)</strong>이다. 모두 “Kubernetes 위에서 분산학습 Pod를 오케스트레이션하는 Operator” 위치에 있고, A가 B를 감싸거나 B 위에서 도는 상하 관계가 아니다. 차이는 오케스트레이션 모델과 포괄 범위에 있다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>사용자 학습 스크립트
+  │
+  ├─ Training Operator (CRD: Master/Worker)  ─┐
+  ├─ KubeRay (Actor: Head/Worker)             ├─ 같은 레이어 — 택 1
+  └─ MPI Operator (mpirun + SSH)             ─┘
+  │
+torchrun / elastic agent
+  │
+torch.distributed (init_process_group, c10d)
+  │
+NCCL (all_reduce, all_gather, ...)
+</code></pre></div></div>
+
+<p>GPU collective 통신은 어떤 도구를 쓰든 결국 NCCL을 타므로, SG 차단에 의한 네트워크 장애는 도구 선택과 무관하게 동일하게 발생한다.</p>
+
+<h2 id="kubeflow-training-operator-pytorchjob">Kubeflow Training Operator (PyTorchJob)</h2>
+
+<p>Kubernetes CRD로 “분산 학습 잡”을 선언하면, Operator가 Pod를 생성하고 <code class="highlighter-rouge">RANK</code>/<code class="highlighter-rouge">WORLD_SIZE</code>/<code class="highlighter-rouge">MASTER_ADDR</code>을 자동 주입한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kubeflow.org/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">PyTorchJob</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">pytorchReplicaSpecs</span><span class="pi">:</span>
+    <span class="na">Master</span><span class="pi">:</span> <span class="pi">{</span> <span class="nv">replicas</span><span class="pi">:</span> <span class="nv">1</span><span class="pi">,</span> <span class="nv">template</span><span class="pi">:</span> <span class="nv">...</span> <span class="pi">}</span>
+    <span class="na">Worker</span><span class="pi">:</span> <span class="pi">{</span> <span class="nv">replicas</span><span class="pi">:</span> <span class="nv">3</span><span class="pi">,</span> <span class="nv">template</span><span class="pi">:</span> <span class="nv">...</span> <span class="pi">}</span>
+</code></pre></div></div>
+
+<p>Operator가 하는 일:</p>
+<ol>
+  <li>Master Pod를 먼저 띄워 headless Service 자동 생성 (rank 0 <code class="highlighter-rouge">MASTER_ADDR</code> 확정)</li>
+  <li>Worker Pod에 <code class="highlighter-rouge">MASTER_ADDR</code>/<code class="highlighter-rouge">MASTER_PORT</code>/<code class="highlighter-rouge">RANK</code>/<code class="highlighter-rouge">WORLD_SIZE</code> env 자동 주입</li>
+  <li>Pod 실패 시 정책에 따라 전체 재시작 (<code class="highlighter-rouge">restartPolicy: OnFailure</code> / <code class="highlighter-rouge">ExitCode</code>)</li>
+  <li><code class="highlighter-rouge">succeeded</code> / <code class="highlighter-rouge">failed</code> 상태를 CRD status로 집계</li>
+  <li>Gang scheduling (Volcano/Kueue 연동) 지원</li>
+</ol>
+
+<p><strong>포괄 범위</strong>: 학습 전용. <strong>적합한 경우</strong>: 실제 학습 잡. 시간이 오래 걸리고(hours~days), 실패 복구가 중요하고, 여러 팀/잡이 공유하는 클러스터.</p>
+
+<p><strong>오버헤드</strong>: CRD 설치 + training-operator Pod(cluster-wide) + ValidatingAdmissionWebhook + RBAC.</p>
+
+<h2 id="ray--kuberay">Ray / KubeRay</h2>
+
+<p>범용 분산 프레임워크. 학습(Ray Train), 튜닝(Ray Tune), 서빙(Ray Serve), 데이터(Ray Data)까지 포괄한다. Actor 모델 기반이라 동적 워크로드에 강하다.</p>
+
+<p>KubeRay operator가 <code class="highlighter-rouge">RayCluster</code> CRD를 관리하며, 내부적으로 GCS(Global Control Store), dashboard, object store, scheduler를 띄운다.</p>
+
+<p>NCCL과의 관계: Ray 자체는 Ray RPC로 통신하지만, <strong>GPU collective 만큼은 NCCL backend를 빌려 쓴다</strong>(<code class="highlighter-rouge">ray.util.collective</code>). 결국 NCCL 레이어 이슈는 Ray에서도 동일하게 발생한다.</p>
+
+<p><strong>포괄 범위</strong>: 학습 + 튜닝 + 서빙 + 데이터(셋 중 가장 넓음). <strong>적합한 경우</strong>: 동적 워크로드(RL, hyperparam tuning, 추론+학습 혼합), Python 중심 팀.</p>
+
+<p><strong>오버헤드</strong>: head Pod + GCS + dashboard Pod + worker Pod 다수 + object spilling용 로컬 스토리지.</p>
+
+<h2 id="mpi-operator--horovod">MPI Operator / Horovod</h2>
+
+<p>Horovod 기반 학습을 위한 operator. <code class="highlighter-rouge">mpirun</code> + SSH로 Pod 간 프로세스를 포크한다. PyTorch 쪽은 native DDP/FSDP가 자리잡으면서 Horovod 비중이 줄었지만, TensorFlow 레거시와 전통 HPC 배경 팀에서는 여전히 사용한다.</p>
+
+<p><strong>포괄 범위</strong>: 학습 전용(allreduce 중심).</p>
+
+<h2 id="도구-비교">도구 비교</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>torchrun (단독)</th>
+      <th>Training Operator</th>
+      <th>Ray/KubeRay</th>
+      <th>MPI Operator</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>오케스트레이션 모델</td>
+      <td>없음 (Pod 안 프로세스만)</td>
+      <td>CRD (Master/Worker)</td>
+      <td>Actor (Head/Worker)</td>
+      <td>mpirun + SSH</td>
+    </tr>
+    <tr>
+      <td>포괄 범위</td>
+      <td>프로세스 실행만</td>
+      <td>학습 전용</td>
+      <td>학습+튜닝+서빙+데이터</td>
+      <td>학습 전용(allreduce)</td>
+    </tr>
+    <tr>
+      <td>RANK/WORLD_SIZE 주입</td>
+      <td>수동 (env)</td>
+      <td>자동</td>
+      <td>자동</td>
+      <td>자동</td>
+    </tr>
+    <tr>
+      <td>실패 재시작</td>
+      <td>없음</td>
+      <td>정책 기반</td>
+      <td>정책 기반</td>
+      <td>정책 기반</td>
+    </tr>
+    <tr>
+      <td>설치 오버헤드</td>
+      <td>0</td>
+      <td>CRD + operator + webhook</td>
+      <td>CRD + head/worker + GCS</td>
+      <td>CRD + launcher Pod + SSH</td>
+    </tr>
+    <tr>
+      <td>Gang scheduling</td>
+      <td>없음</td>
+      <td>Volcano/Kueue 연동</td>
+      <td>내장</td>
+      <td>Volcano 연동</td>
+    </tr>
+    <tr>
+      <td>GPU collective</td>
+      <td>NCCL</td>
+      <td>NCCL</td>
+      <td>NCCL</td>
+      <td>NCCL 또는 MPI</td>
+    </tr>
+    <tr>
+      <td>적합 케이스</td>
+      <td>단발 테스트, smoke test</td>
+      <td>실무 학습 잡</td>
+      <td>동적/혼합 워크로드</td>
+      <td>TF 레거시, HPC 팀</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="실험-설계-pod--headless-service">실험 설계: Pod + headless Service</h1>
+
+<h2 id="실험-목적">실험 목적</h2>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-02-vLLM-TroubleShooting/">이전 글</a>까지는 단일 노드 내 장애였다. 이번 실험의 목적은 <strong>“EKS node SG의 ephemeral self-ref가 제거되면 노드 간 분산학습 통신이 어떻게 실패하는가”</strong>를 재현해 보는 것이다.</p>
+
+<p>재현에 필요한 최소 요소:</p>
+<ul>
+  <li>GPU 노드 2개에 분산된 Pod 2개</li>
+  <li>rank 0/1이 서로의 <code class="highlighter-rouge">MASTER_ADDR</code>을 알고 <code class="highlighter-rouge">init_process_group</code>을 시도</li>
+  <li><code class="highlighter-rouge">NCCL_DEBUG=INFO</code> 로그가 stdout으로 나옴</li>
+  <li>한 번 실행 후 종료 (<code class="highlighter-rouge">restartPolicy: Never</code>)</li>
+</ul>
+
+<h2 id="operator를-쓰지-않은-이유">Operator를 쓰지 않은 이유</h2>
+
+<p>Training Operator든 KubeRay든, 이 실험에서는 Operator를 얹을 이유가 없다.</p>
+
+<ol>
+  <li><strong>자동화 이점이 없다</strong>: Pod 2개, 한 번 실행 후 종료(<code class="highlighter-rouge">restartPolicy: Never</code>)가 전부다. RANK/WORLD_SIZE를 YAML에 하드코딩하면 충분하고, 자동 재시작은 오히려 “한 번 실패해서 로그 남기면 끝”이라는 실험 목적에 방해가 된다</li>
+  <li><strong>SG 차단 구간에 변인이 추가된다</strong>: Operator는 자체 네트워크 통신 경로를 갖는다. Training Operator는 ValidatingAdmissionWebhook(API Server → webhook Pod, 9443 포트)이 있고, Ray는 GCS·dashboard·object store 간 통신이 있다. 이 실험에서 node SG의 ephemeral self-ref(1025-65535/tcp)를 의도적으로 제거하면, 이 경로들도 함께 막힐 수 있다. 그러면 분산학습이 실패했을 때 “NCCL 통신이 SG에 막힌 것인지” “operator 인프라가 SG에 막힌 것인지” 원인을 분리할 수 없다</li>
+</ol>
+
+<h2 id="pod--headless-service-구조">Pod + headless Service 구조</h2>
+
+<p>Pod 두 개에 각각 고정된 이름을 주고, headless Service(<code class="highlighter-rouge">clusterIP: None</code>)로 DNS A 레코드를 Pod IP로 직접 해석시키면 <code class="highlighter-rouge">MASTER_ADDR</code> 문제가 해결된다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># headless Service — rank 0 Pod에 고정 DNS 이름 부여</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Service</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">nccl-master</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">clusterIP</span><span class="pi">:</span> <span class="s">None</span>
+  <span class="na">selector</span><span class="pi">:</span>
+    <span class="na">app</span><span class="pi">:</span> <span class="s">nccl-master</span>
+  <span class="na">ports</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">port</span><span class="pi">:</span> <span class="s">29500</span>
+<span class="nn">---</span>
+<span class="c1"># Master Pod (rank 0) — 핵심 env만 발췌</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">nccl-master-0</span>
+  <span class="na">labels</span><span class="pi">:</span>
+    <span class="na">app</span><span class="pi">:</span> <span class="s">nccl-master</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">containers</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">pytorch</span>
+      <span class="na">image</span><span class="pi">:</span> <span class="s">nvcr.io/nvidia/pytorch:24.10-py3</span>
+      <span class="na">env</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="pi">{</span> <span class="nv">name</span><span class="pi">:</span> <span class="nv">RANK</span><span class="pi">,</span> <span class="nv">value</span><span class="pi">:</span> <span class="s2">"</span><span class="s">0"</span> <span class="pi">}</span>
+        <span class="pi">-</span> <span class="pi">{</span> <span class="nv">name</span><span class="pi">:</span> <span class="nv">WORLD_SIZE</span><span class="pi">,</span> <span class="nv">value</span><span class="pi">:</span> <span class="s2">"</span><span class="s">2"</span> <span class="pi">}</span>
+        <span class="pi">-</span> <span class="pi">{</span> <span class="nv">name</span><span class="pi">:</span> <span class="nv">MASTER_ADDR</span><span class="pi">,</span> <span class="nv">value</span><span class="pi">:</span> <span class="s2">"</span><span class="s">nccl-master"</span> <span class="pi">}</span>
+        <span class="pi">-</span> <span class="pi">{</span> <span class="nv">name</span><span class="pi">:</span> <span class="nv">MASTER_PORT</span><span class="pi">,</span> <span class="nv">value</span><span class="pi">:</span> <span class="s2">"</span><span class="s">29500"</span> <span class="pi">}</span>
+        <span class="pi">-</span> <span class="pi">{</span> <span class="nv">name</span><span class="pi">:</span> <span class="nv">NCCL_SOCKET_IFNAME</span><span class="pi">,</span> <span class="nv">value</span><span class="pi">:</span> <span class="s2">"</span><span class="s">eth0"</span> <span class="pi">}</span>
+        <span class="pi">-</span> <span class="pi">{</span> <span class="nv">name</span><span class="pi">:</span> <span class="nv">NCCL_IB_DISABLE</span><span class="pi">,</span> <span class="nv">value</span><span class="pi">:</span> <span class="s2">"</span><span class="s">1"</span> <span class="pi">}</span>
+        <span class="pi">-</span> <span class="pi">{</span> <span class="nv">name</span><span class="pi">:</span> <span class="nv">NCCL_DEBUG</span><span class="pi">,</span> <span class="nv">value</span><span class="pi">:</span> <span class="s2">"</span><span class="s">INFO"</span> <span class="pi">}</span>
+      <span class="na">resources</span><span class="pi">:</span>
+        <span class="na">limits</span><span class="pi">:</span>
+          <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">1</span>
+</code></pre></div></div>
+
+<ul>
+  <li><code class="highlighter-rouge">MASTER_ADDR</code>은 cluster DNS가 <code class="highlighter-rouge">nccl-master.default.svc.cluster.local</code>을 Master Pod IP로 직접 해석</li>
+  <li>Worker Pod는 동일한 <code class="highlighter-rouge">MASTER_ADDR</code> 환경변수만 들고 있으면 된다</li>
+  <li><code class="highlighter-rouge">podAntiAffinity</code>로 두 Pod이 <strong>다른 GPU 노드</strong>에 떨어지도록 강제하여 cross-node NCCL 경로를 확보</li>
+</ul>
+
+<p>이 구조는 <strong>Operator 0개, CRD 0개, 추가 cluster-wide 리소스 0개</strong>. 실험 본질(SG 차단이 분산학습 통신을 어떻게 끊는가)에 집중할 수 있다.</p>
+
+<h2 id="트레이드오프-요약">트레이드오프 요약</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>Pod+Service</th>
+      <th>Training Operator</th>
+      <th>Ray</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>설치 비용</td>
+      <td>0 (매니페스트 1장)</td>
+      <td>CRD + operator Pod + webhook</td>
+      <td>CRD + head/worker Pod + GCS</td>
+    </tr>
+    <tr>
+      <td>RANK/WORLD_SIZE 주입</td>
+      <td>YAML 하드코딩</td>
+      <td>자동</td>
+      <td>자동</td>
+    </tr>
+    <tr>
+      <td>실패 재시작</td>
+      <td>없음 (원하던 바)</td>
+      <td>정책 기반</td>
+      <td>정책 기반</td>
+    </tr>
+    <tr>
+      <td>실험 원인 귀속의 명료함</td>
+      <td>높음 (다른 부품 없음)</td>
+      <td>보통 (operator webhook 영향)</td>
+      <td>낮음 (GCS 등 부품 다수)</td>
+    </tr>
+    <tr>
+      <td>실무 분산학습</td>
+      <td>부적합 (확장성 없음)</td>
+      <td>적합</td>
+      <td>적합 (동적 워크로드)</td>
+    </tr>
+    <tr>
+      <td><strong>SG 차단 실험</strong></td>
+      <td><strong>적합</strong></td>
+      <td>보통</td>
+      <td>부적합</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="실무-전환-시점">실무 전환 시점</h2>
+
+<p>이번 실험에서는 Pod+Service 방식이 적합하지만, 실제 모델 학습 단계로 넘어가면 PyTorchJob 또는 Ray Train으로 옮기는 것이 맞다. 해당 시점에서의 전환 기준은 아래와 같이 고려한다:</p>
+
+<ul>
+  <li>학습 시간이 30분을 넘는가 (실패 재시작 가치 상승)</li>
+  <li>Pod가 3개 이상인가 (수동 YAML 유지 부담 상승)</li>
+  <li>여러 팀이 같은 클러스터를 공유하는가 (gang scheduling 필요)</li>
+  <li>관측/알림이 필요한가 (CRD status → Alertmanager)</li>
+</ul>
+
+<p>EKS에서 PyTorchJob을 쓰려면 <a href="https://github.com/kubeflow/training-operator">Kubeflow training-operator helm chart</a>를 설치하고, Kueue 또는 Volcano를 gang scheduler로 얹으면 시작점으로 충분하다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>이번 글에서는 분산학습의 원리, NCCL 통신 계층 구조, EKS 환경에서의 실험 설계까지 정리했다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>핵심</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>분산학습</td>
+      <td>DP/TP/PP 3방식. 본 실험은 DP 기반 <code class="highlighter-rouge">all_reduce</code> 사용</td>
+    </tr>
+    <tr>
+      <td>초기화 4요소</td>
+      <td><code class="highlighter-rouge">RANK</code>, <code class="highlighter-rouge">WORLD_SIZE</code>, <code class="highlighter-rouge">MASTER_ADDR</code>, <code class="highlighter-rouge">MASTER_PORT</code></td>
+    </tr>
+    <tr>
+      <td>초기화 시퀀스</td>
+      <td><strong>c10d TCPStore</strong> → NCCL bootstrap → communicator. SG 차단 시 c10d에서 먼저 막힐 수 있다</td>
+    </tr>
+    <tr>
+      <td>NCCL transport</td>
+      <td>EKS 일반 인스턴스에서는 TCP Socket이 유일한 경로. node SG ephemeral self-ref(1025-65535/tcp) 필요</td>
+    </tr>
+    <tr>
+      <td>실험 구조</td>
+      <td>Pod 2개 + headless Service. Operator/Ray의 부수 효과 없이 SG 차단 효과만 격리</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-02-Distributed-Learning-Network-Failure/">다음 글</a>에서는 이 설계를 바탕으로 실제 SG rule을 제거하고, 분산학습 네트워크 장애를 재현한다. 예상은 NCCL timeout이었지만, 실측은 그보다 앞단인 c10d TCPStore에서 먼저 실패했다.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study-week-5" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study-Week-5</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws" class="page__taxonomy-item" rel="tag">AWS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#distributed-training" class="page__taxonomy-item" rel="tag">Distributed-Training</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nccl" class="page__taxonomy-item" rel="tag">NCCL</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#pytorch" class="page__taxonomy-item" rel="tag">PyTorch</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#torchrun" class="page__taxonomy-item" rel="tag">torchrun</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#troubleshooting" class="page__taxonomy-item" rel="tag">Troubleshooting</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-09T00:00:00+09:00">April 9, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEKS%5D+EKS+GPU+%ED%8A%B8%EB%9F%AC%EB%B8%94%EC%8A%88%ED%8C%85%3A+3.+%EC%9E%A5%EC%95%A0+%EC%9E%AC%ED%98%84+-+3.+%EB%B6%84%EC%82%B0%ED%95%99%EC%8A%B5%EA%B3%BC+NCCL+%ED%86%B5%EC%8B%A0+-+1.+%EB%B0%B0%EA%B2%BD+%EB%B0%8F+%EC%9E%AC%ED%98%84+%EC%8B%A4%ED%97%98+%EC%84%A4%EA%B3%84%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-02-vLLM-TroubleShooting/" class="pagination--pager" title="[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 2. vLLM 기동 실패
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-02-Distributed-Learning-Network-Failure/" class="pagination--pager" title="[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 3. 분산학습과 NCCL 통신 - 2. SG 차단 네트워크 장애 재현
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

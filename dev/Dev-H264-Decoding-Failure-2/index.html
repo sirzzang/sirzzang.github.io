@@ -1,0 +1,1263 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Dev] 영상 업로드 실패 사태 분석 - 2. YUV 색공간과 영상 압축 - Eraser’s StudyLog</title>
+<meta name="description" content="YUV 색공간, 영상 인코딩/디코딩, 그리고 카메라가 RGB를 쓸 수밖에 없는 이유까지. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Dev] 영상 업로드 실패 사태 분석 - 2. YUV 색공간과 영상 압축">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-H264-Decoding-Failure-2/">
+
+
+  <meta property="og:description" content="YUV 색공간, 영상 인코딩/디코딩, 그리고 카메라가 RGB를 쓸 수밖에 없는 이유까지. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2025-11-08T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-H264-Decoding-Failure-2/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Dev] 영상 업로드 실패 사태 분석 - 2. YUV 색공간과 영상 압축">
+    <meta itemprop="description" content="YUV 색공간, 영상 인코딩/디코딩, 그리고 카메라가 RGB를 쓸 수밖에 없는 이유까지.">
+    <meta itemprop="datePublished" content="2025-11-08T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Dev] 영상 업로드 실패 사태 분석 - 2. YUV 색공간과 영상 압축
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2025-11-08T00:00:00+09:00">2025년 11월 08일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  7 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#색공간">색공간</a>
+    <ul>
+      <li><a href="#yuv-색공간">YUV 색공간</a></li>
+      <li><a href="#h264와-yuv-색공간">H.264와 YUV 색공간</a></li>
+    </ul>
+  </li>
+  <li><a href="#영상의-인코딩과-디코딩">영상의 인코딩과 디코딩</a>
+    <ul>
+      <li><a href="#색공간-변환">색공간 변환</a></li>
+      <li><a href="#변환-오버헤드">변환 오버헤드</a></li>
+      <li><a href="#코덱의-필요성">코덱의 필요성</a></li>
+    </ul>
+  </li>
+  <li><a href="#카메라의-물리적-한계">카메라의 물리적 한계</a></li>
+  <li><a href="#역사적-배경">역사적 배경</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p>앞선 반성(<a href="/dev/Dev-H264-Decoding-Failure-1/">[Dev] 영상 업로드 실패 사태 분석 - 1. 홀수 해상도 문제와 트러블슈팅</a>)과 함께, 도대체 왜 그럼 YUV 공간이 홀수 해상도를 지원하지 않는가에 대해 더 파보다가 알게 된 사실들. 사실 3년 전 현재 회사로 이직해 오면서 영상 다룰 일이 많아, 예전부터 자주 들었던 개념이 많았는데(<em>특히나 이전 팀에 있을 때는 더더욱</em>), 그 때는 잘 이해가 되지 않다가 이번 사태를 계기로 조금씩 이해가 되어 정리해 보고자 한다.</p>
+
+<p><br /></p>
+
+<h1 id="색공간">색공간</h1>
+
+<p>색을 표현하는 방식이다. 시스템마다 같은 색을 표현하더라도 어떤 정보를 조합해서 표현할 것인가가 달라지는데, 그 때 사용되는 개념이다. 대표적인 색공간으로 RGB, YUV가 있다.</p>
+<ul>
+  <li><strong>RGB</strong>: Red, Green, Blue
+    <ul>
+      <li><strong>빨강, 초록, 파랑</strong> 세 가지 빛을 섞어서 색을 만듦
+        <ul>
+          <li><code class="highlighter-rouge">(255, 0, 0)</code>: 빨간색</li>
+        </ul>
+      </li>
+      <li>모니터, 카메라, 이미지 파일에서 주로 사용
+        <ul>
+          <li>특히 모니터, 디스플레이 등 인간 눈이 바로 보는 하드웨어의 표준 색공간은 RGB</li>
+        </ul>
+      </li>
+      <li><strong>장점</strong>: 직관적이고 하드웨어에서 바로 사용 가능</li>
+      <li><strong>단점</strong>: 세 채널 모두 원본 픽셀 크기이기 때문에, 파일 크기가 큼</li>
+    </ul>
+  </li>
+  <li><strong>YUV</strong> (또는 YCbCr)
+    <ul>
+      <li><strong>Y</strong>: 밝기 (Luminance)
+        <ul>
+          <li>원본 해상도 그대로 사용</li>
+        </ul>
+      </li>
+      <li><strong>U/V</strong> (또는 Cb/Cr): 색상 정보 (Chrominance)
+        <ul>
+          <li>색상을 원본 픽셀 크기에서 압축</li>
+        </ul>
+      </li>
+      <li>혹시 이렇게 색상 정보를 압축하면, 원본의 정보가 손실되는 것 아닐까 생각할 수 있는데, 사실이긴 하나, 큰 문제가 되지 않는다고 함
+        <ul>
+          <li>과학적으로 인간의 눈은 밝기 변화에 민감하나, 색상 변화에는 둔감함</li>
+          <li>따라서, 색상 정보를 줄여도 화질 차이를 거의 느끼지 못함</li>
+        </ul>
+      </li>
+      <li>(상술한 특징으로부터 비롯되어) 영상 압축, 방송 표준에서 자주 사용</li>
+      <li><strong>장점</strong>: 색상 정보를 압축하기 때문에, RGB 색공간으로 표현할 때에 비해 <strong>파일 크기 대폭 감소</strong></li>
+      <li><strong>단점</strong>: RGB로 변환하는 과정 필요</li>
+    </ul>
+  </li>
+  <li>기타 색공간: CMYK, HSV/HSL, …</li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="yuv-색공간">YUV 색공간</h2>
+<p>YUV 색공간에서도, 압축 과정에서 픽셀을 어떻게 샘플링하느냐에 따라, 방식이 나뉜다.</p>
+<ul>
+  <li><strong>4:4:4</strong>: Y, U, V 모두 원본 크기 (압축 안 함, 고품질)</li>
+  <li><strong>4:2:2</strong>: U, V를 가로만 절반 (방송용)</li>
+  <li><strong>4:2:0</strong>: U, V를 가로/세로 모두 절반 (유튜브, 넷플릭스 등 일반 영상)</li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="h264와-yuv-색공간">H.264와 YUV 색공간</h2>
+<p>H.264 코덱에서는 정확히는 YUV 색공간 중에서도 YUV 4:2:0 방식을 택하고 있다. 당연히, 픽셀 크기를 가로 세로 모두 절반으로 압축하기 때문에, <strong>압축 효율</strong>이 월등히 좋다. 1920x1080 영상 한 프레임을 기준으로 살펴 보자.</p>
+<ul>
+  <li>RGB: 약 6,220,800 개의 픽셀을 저장해야 함
+    <ul>
+      <li>R: 1920x1080 = 2,073,600 픽셀</li>
+      <li>G: 1920x1080 = 2,073,600 픽셀</li>
+      <li>B: 1920x1080 = 2,073,600 픽셀</li>
+    </ul>
+  </li>
+  <li>YUV 4:2:0: U, V의 색상 정보를 압축할 수 있어, RGB 방식보다 약 절반 정도 되는 3,110,400 개의 픽셀만 저장하면 됨
+    <ul>
+      <li>Y: 1920x1080 = 2,073,600 픽셀</li>
+      <li>U: 960x540 = 518,400 픽셀 (절반)</li>
+      <li>V: 960x540 = 518,400 픽셀 (절반)</li>
+    </ul>
+  </li>
+</ul>
+
+<p>이렇게 압축 효율이 좋은데, 과학적으로 인간이 색상 정보를 줄여도 화질 차이를 거의 느끼지 못한다고 하니, 당연히 YUV를 쓰는 게 이득이다.</p>
+
+<p><br /></p>
+
+<h1 id="영상의-인코딩과-디코딩">영상의 인코딩과 디코딩</h1>
+
+<p>우리가 영상을 보기 위해서는, 아래와 같은 인코딩, 디코딩 과정이 필요하다. 즉, 우리가 일반적으로 카메라에서 받은 영상을 저장할 때는 압축을 위해 인코딩하고, 영상을 열어서 직접 볼 때는 압축된 영상을 디코딩해서 봐야 하는 것이다.
+<img src="https://sirzzang.github.io//assets/images/video-encoding-decoding.png" alt="video-encoding-decoding" class="align-center" width="500" /></p>
+<ul>
+  <li>인코딩 = 영상의 압축
+    <ul>
+      <li><strong>카메라/캡처</strong>: 센서가 빛을 받아 RGB로 변환</li>
+      <li><strong>RGB → YUV</strong>: 색공간 변환 (FFmpeg/libx264 인코더가 자동 처리)</li>
+      <li><strong>YUV 4:2:0</strong>: 색상 정보를 절반으로 줄임 (500GB → 250GB 상당)</li>
+      <li><strong>압축</strong>: libx264가 중복 정보 제거 (250GB → 2-4GB)</li>
+      <li><strong>저장</strong>: MP4 파일로 저장</li>
+    </ul>
+  </li>
+  <li>디코딩 = 영상 재생
+    <ul>
+      <li>파일 읽기: 하드디스크, SSD에서 로드</li>
+      <li>압축 해제: H.264 디코더가 YUV 데이터 복원</li>
+      <li>YUV → RGB: 하드웨어 단에서 변환. 특히 요즘에는 GPU를 이용한 하드웨어 단에서의 초고속 변환이 가능함
+        <blockquote>
+          <p>실제로 이전 팀에서 영상 미디어 플레이를 위해 Intel CPU QSV 기능을 이용하자 디코딩 성능이 매우 향상되었고, NVIDIA GPU 하드웨어에서는 nvdec을 이용했더니 더 향상되었다는 말을 들었는데, 그게 이 과정에서 적용되는 말이었다. 이제야 이해해 버렸다.</p>
+        </blockquote>
+      </li>
+      <li>출력: 모니터가 RGB 신호를 받아 픽셀 표시</li>
+    </ul>
+  </li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="색공간-변환">색공간 변환</h2>
+
+<p>카메라나 우리가 사용하는 TV, 모니터 등 디스플레이는 RGB 색공간을 사용한다고 했다. 그러니까, 당연히 인코딩과 디코딩 과정 모두에서 색공간 변환이 일어날 것임을 추측할 수 있다. 그러나, 사용자 입장에서 우리는 이걸 몰라도 된다. 하드웨어와 소프트웨어 단에서 알아서 자동으로 처리되기 때문이다.</p>
+<ul>
+  <li>인코딩
+    <ul>
+      <li>카메라, 화면 캡처: RGB로 촬영</li>
+      <li>ffmpeg, 인코더 등: RGB → YUV 변환 (자동)</li>
+      <li>libx264: YUV 데이터 압축해서 파일에 저장</li>
+    </ul>
+  </li>
+  <li>디코딩
+    <ul>
+      <li>영상 플레이어, 브라우저: 파일 읽어서 YUV 데이터 복원</li>
+      <li>GPU, 비디오 디코더: YUV → RGB 변환 (자동)</li>
+      <li>모니터: RGB 신호 받아서 화면에 표시</li>
+    </ul>
+  </li>
+  <li>이 과정에서 영상을 처리하는 주체들은 다음과 같다.
+    <ul>
+      <li>영상 플레이어: VLC, YouTube, Windows Media Player, 곰플레이어, 팟플레이어, …</li>
+      <li>영상 처리 도구: ffmpeg</li>
+      <li>GPU: 하드웨어 가속으로 초고속 변환, 요즘은 전용 칩이 있음</li>
+      <li>카메라: 센서 raw 데이터 → RGB → YUV</li>
+    </ul>
+  </li>
+</ul>
+
+<blockquote>
+  <p>이 모든 과정이 알아서 처리되어 우리가 지금 이렇게 유튜브도 보고, TV 영상도 본다니. 정말 알고 보면 놀라운 기술의 세계다.</p>
+</blockquote>
+
+<p><br /></p>
+<h2 id="변환-오버헤드">변환 오버헤드</h2>
+<p>그리고 누누이 말하듯, 이렇게 변환하는 과정에서 오버헤드가 있음에도 불구하고 색 공간을 변환하는 건, 크기 절약으로 얻는 이점이 변환 오버헤드에 비해 압도적으로 크기 때문이다. 위에서 1920x1080 한 프레임을 기준으로 픽셀 양을 계산해 봤는데, 이제는 1시간 짜리 24FPS 영상을 예로 들어 계산해 보자.</p>
+<ul>
+  <li>RGB 사용 시, 1920 x 1080 x 3채널 x 24fps x 3600초 = <strong>약 500GB</strong> (무압축)
+    <ul>
+      <li>한 프레임의 픽셀 수 = 1920 × 1080 = 2,073,600 픽셀</li>
+      <li>R, G, B 각 3채널 적용: 2,073,600 픽셀 × 3채널 (R, G, B) = 6,220,800 픽셀</li>
+      <li>각 픽셀을 1바이트로 저장:  6,220,800 값 × 1바이트 = 6,220,800 바이트
+        <ul>
+          <li>각 색상 값은 0~255의 범위를 가지기 때문에, 1바이트를 사용해야 함</li>
+        </ul>
+      </li>
+      <li>따라서 한 프레임의 용량은 약 5.93MB
+  6,220,800 바이트 ÷ 1024 = 6,075 KB
+  6,075 KB ÷ 1024 = 5.93 MB</li>
+      <li>24FPS 1초 분량 영상의 용량: 5.93 MB × 24프레임 = 142.32 MB</li>
+      <li>1시간 분량 영상의 용량은 약 500.34GB
+        <ul>
+          <li>142.32 MB × 3,600초 = 512,352 MB</li>
+          <li>512,352 MB ÷ 1024 = 500.34 GB</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>YUV 사용 시, RGB 영상 대비 절반 크기
+    <ul>
+      <li>한 프레임의 데이터 양은 약 3.11MB
+        <ul>
+          <li>Y (밝기):  1920 × 1080 = 2,073,600 바이트</li>
+          <li>U (색상):  960 × 540 = 518,400 바이트  (가로/세로 각각 절반)</li>
+          <li>V (색상):  960 × 540 = 518,400 바이트  (가로/세로 각각 절반)</li>
+        </ul>
+      </li>
+      <li>1시간 분량의 영상은 약 262GB
+        <ul>
+          <li>3,110,400 바이트 × 24fps × 3600초 = 268,738,560,000 바이트 = 268,738 MB = 262 GB</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<p><br />
+그냥 단순 산술 계산으로 500GB가 나온다고 했는데, 이게 얼마나 미친 크기냐면. 압축 안 한 2시간 짜리 HD 영화 한 편을 보려면, 1TB의 하드 디스크가 있어야 하는 크기다. 영화 한 편 저장해서 보겠다고 회사에서나 지원해 줄 법한(?) 하드디스크를 장착하고 있어야 하는 것(…). 그럼 넷플릭스 같은 스트리밍 서비스로 받아서 보면 되지 않느냐고 한데, 이건 더 충격적이다. 100Mbps 인터넷으로는 11시간(…)이 걸리는 속도고, 1Gbps 인터넷을 쓰더라도 1시간이 넘게 걸린다.</p>
+
+<p><br />
+그러니 오버헤드 따위야, 무시할 수 있음이 체감된다. 색공간의 변환은 한 번만 발생하고, 게다가 요즘 같이 하드웨어가 빵빵한 때는 GPU가 알아서 빠르게 다 해주니 그냥 무시되는 수준이라고 봐도 무방하다. 그에 비해, 이걸 변환하지 않고 저장한다면, 저장 공간만 10~100배가 더 필요해 질 것이며, 이걸 네트워크로 전송한다고 가정해 보면? 대역폭도 그만큼 잡아 먹어야 되는데, 아주 끔찍하다.</p>
+
+<p><br /></p>
+
+<h2 id="코덱의-필요성">코덱의 필요성</h2>
+<p>색공간 변환 뿐 아니라, 코덱 적용해서 압축 시 엄청난 일이 벌어진다. H.264는 공간 압축, 시간 압축, 모션 예측, 엔트로피 코딩 등 다양한 기법을 도입해서 영상을 압축해 버리는데, 그 결과가 가히 놀랄만한 수준이다.</p>
+<ul>
+  <li>일반적인 H.264 압축률
+    <ul>
+      <li>저품질: 100:1 압축</li>
+      <li>중품질: 80:1 압축</li>
+      <li>고품질: 60:1 압축</li>
+    </ul>
+  </li>
+  <li>최종 파일 크기
+    <ul>
+      <li>YUV 4:2:0 무압축: 262GB</li>
+      <li>저품질: 262/100 = 2.62GB</li>
+      <li>중품질: 262/80 = 3.28GB</li>
+      <li>고품질: 262/60 = 4.37GB</li>
+    </ul>
+  </li>
+</ul>
+
+<p><br />
+결과적으로, 아래와 같은 흐름으로 인코딩과 디코딩이 이루어진다.</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>인코딩 과정:
+RGB <span class="o">(</span>원본<span class="o">)</span>          YUV 변환           압축             최종 파일
+500 GB    ────►    250 GB   ────►   2-4 GB   ────►   저장
+         <span class="o">(</span>50% 절감<span class="o">)</span>        <span class="o">(</span>99% 압축<span class="o">)</span>
+
+디코딩 과정:
+파일 읽기            압축 해제         YUV→RGB         화면 출력
+2-4 GB    ────►    250 GB   ────►   500 GB   ────►   디스플레이
+                           <span class="o">(</span>메모리상에서만 일시적 존재<span class="o">)</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="카메라의-물리적-한계">카메라의 물리적 한계</h1>
+
+<p>사실 이 과정에서 근본적으로 궁금한 게 있다. 애초에 카메라에서 그럼 YUV 색공간을 사용하면 되지, 왜 RGB를 사용하는가? 그것은 카메라의 물리적 한계 때문이라고 한다.</p>
+<ul>
+  <li>카메라에서 영상을 저장할 때, 이미지 센서를 사용하는데, 그 이미지센서가 물리적으로 R, G, B 중 하나의 색만 측정할 수 있음
+    <ul>
+      <li>이미지 센서는 빛의 강도만 감지할 수 있을 뿐 색을 구분하지 못하기 때문에,</li>
+      <li>센서 위에 색깔을 구분하기 위한 물리적 필터를 부착하는데,</li>
+      <li>그것이 R, G, B 중 하나만 부착되어 있어, 각 픽셀 당 R, G, B 중 하나의 색만 측정이 가능한데,</li>
+      <li>주변 픽셀 정보를 이용해서 나머지 색을 추정한다(즉, 빨강 픽셀 위치에서 주변의 초록, 파랑 값을 보간해서 추정하는 방식)고 하는데,</li>
+      <li>어쨌거나 저쨌거나, <strong>물리적으로</strong> RGB 색공간을 이용할 수 밖에 없는 구조이다.</li>
+    </ul>
+  </li>
+  <li>그러면 왜 YUV 센서를 만들지 않을까?
+    <ul>
+      <li>애초에 빛의 파장 자체를 YUV 색공간이 사용하는 Y, U, V로 분리하는 것 자체가 기술적으로 불가능함
+        <ul>
+          <li>RGB를 이용해 Y를  계산하고, 그 이후에 U, V를 계산해야 함</li>
+          <li>Y 필터: RGB를 혼합해야 계산할 수 있음</li>
+          <li>U 필터: B-Y를 계산해야 함</li>
+          <li>V 필터: R-Y를 계산해야 함</li>
+        </ul>
+      </li>
+      <li>그런데, 가능하다고 하더라도, 굳이 그렇게 할 이유가 없기도 함
+        <ul>
+          <li>모니터, 디스플레이 기본 색공간이 다 RGB고,</li>
+          <li>사진 편집, 이미지 처리 등도 다 RGB로 진행하고,</li>
+          <li>YUV는 압축, 전송 효율성을 위해 고안된 것이니,</li>
+          <li>기술적으로 가능하더라도 효용성이 크지 않은데?</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<p><br />
+더 깊은 것은, 더 이상 파보지 않아도 될 것 같다(…). 결론적으로, 아래와 같은 흐름이라고만 기억해 두자.</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>물리 세계의 빛
+    ↓
+RGB 필터 <span class="o">(</span>물리적 한계로 RGB만 가능<span class="o">)</span>
+    ↓
+RGB 센서 데이터
+    ↓
+소프트웨어 변환 → YUV <span class="o">(</span>압축 효율<span class="o">)</span>
+    ↓
+저장/전송
+    ↓
+소프트웨어 변환 → RGB <span class="o">(</span>디스플레이 출력<span class="o">)</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="역사적-배경">역사적 배경</h1>
+<p>그렇다면 이제 진짜로 마지막으로 궁금한 게 있다. 애초에 그럼 YUV가 나왔다는 건, GPU 하드웨어 가속이 되니까 가능했던 걸까? 변환 과정 오버헤드가 GPU 가속으로 인해, 더 빨라졌고, CPU로 변환하면 문제가 될 것 같은데.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>YUV의 역사:
+1950년대 ─────► 2003년 ─────► 2006-2008년 ─────►     현재
+   │              │                │                │
+  TV 방송        H.264           GPU 가속          필수 기능
+<span class="o">(</span>GPU 없음<span class="o">)</span>    <span class="o">(</span>CPU 디코딩<span class="o">)</span>        <span class="o">(</span>선택 사항<span class="o">)</span>        <span class="o">(</span>거의 표준<span class="o">)</span>
+</code></pre></div></div>
+
+<p>결론적으로, 역사는 정반대라고 한다. YUV는 GPU보다 훨씬 더 먼저 나왔고, H.264가 제정된 초기에는 CPU로 디코딩했다고 한다. 다만, 문제가 된 것은 HD 영상이 등장하면서부터라고. SD 영상까지만 해도, CPU로 디코딩하는 데에 크게 문제가 없었다고 한다.</p>
+
+<ul>
+  <li>1950년대: YUV 등장, <strong>흑백 TV → 컬러 TV 전환 시대</strong>
+    <ul>
+      <li>기존 흑백 TV와 호환되어야 했음</li>
+      <li>Y(밝기)만 쓰면 흑백, Y+UV 쓰면 컬러</li>
+      <li>GPU는 존재조차 하지 않던 시절</li>
+    </ul>
+  </li>
+  <li>1990년대: 디지털 비디오 시대
+    <ul>
+      <li>MPEG-1 (1993): VCD, 352x240</li>
+      <li>MPEG-2 (1995): DVD, 720x480/576</li>
+      <li>영상 해상도 자체가 낮기 때문에, <strong>CPU로 충분히 디코딩 가능</strong></li>
+    </ul>
+  </li>
+  <li>2003년: H.264 표준 제정
+    <ul>
+      <li>초기에는 CPU 디코딩만 가능</li>
+      <li>주류 해상도: SD(480p/576p)</li>
+    </ul>
+  </li>
+</ul>
+
+<p><br /></p>
+
+<p>위와 같은 흐름이었는데, <strong>HD 화질의 영상</strong>이 등장하며 CPU 디코딩만으로 부하가 감당되지 않기 시작했다고 한다.</p>
+<ul>
+  <li>프레임 드랍</li>
+  <li>과다 발열</li>
+  <li>영상 디코딩 시 다른 작업 자체가 불가
+그렇게, 전용 하드웨어의 필요성이 대두되고, GPU가 등장하며 GPU 하드웨어 가속이란 것도 더 활발하게 발전하기 시작했다는 것!</li>
+</ul>
+
+<p><br /></p>
+
+<p>뭐라고 끝을 맺어야 할지 모르겠는데. 뭐, 반성으로부터 시작된 알고 보면 놀라고도 신비한 영상 세계 기술 탐방 이야기였다.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/dev/Dev-H264-Decoding-Failure-1/">[Dev] 영상 업로드 실패 사태 분석 - 1. 홀수 해상도 문제와 트러블슈팅</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#ffmpeg" class="page__taxonomy-item" rel="tag">ffmpeg</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#h-264" class="page__taxonomy-item" rel="tag">H.264</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#libx264" class="page__taxonomy-item" rel="tag">libx264</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#rgb" class="page__taxonomy-item" rel="tag">RGB</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#transcoding" class="page__taxonomy-item" rel="tag">transcoding</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#yuv" class="page__taxonomy-item" rel="tag">YUV</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2025-11-08T00:00:00+09:00">November 8, 2025</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BDev%5D+%EC%98%81%EC%83%81+%EC%97%85%EB%A1%9C%EB%93%9C+%EC%8B%A4%ED%8C%A8+%EC%82%AC%ED%83%9C+%EB%B6%84%EC%84%9D+-+2.+YUV+%EC%83%89%EA%B3%B5%EA%B0%84%EA%B3%BC+%EC%98%81%EC%83%81+%EC%95%95%EC%B6%95%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-H264-Decoding-Failure-2%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-H264-Decoding-Failure-2%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-H264-Decoding-Failure-2%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-H264-Decoding-Failure-2?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-H264-Decoding-Failure-1/" class="pagination--pager" title="[Dev] 영상 업로드 실패 사태 분석 - 1. 홀수 해상도 문제와 트러블슈팅
+">이전</a>
+    
+    
+      <a href="/language/Language-go-closure-capture-1/" class="pagination--pager" title="[Go] Closure Capture - 1. Closure
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-H264-Decoding-Failure-2/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-H264-Decoding-Failure-2"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

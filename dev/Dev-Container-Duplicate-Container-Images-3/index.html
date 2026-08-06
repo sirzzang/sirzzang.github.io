@@ -1,0 +1,1377 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Container] Docker와 containerd 이미지 관리 비교 - 3. 같은 이미지이지만 중복 저장이 아닌 경우 - Eraser’s StudyLog</title>
+<meta name="description" content="docker와 crictl에서 같은 이미지가 보이는 현상이 실제 중복 저장인지 확인해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Container] Docker와 containerd 이미지 관리 비교 - 3. 같은 이미지이지만 중복 저장이 아닌 경우">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-Container-Duplicate-Container-Images-3/">
+
+
+  <meta property="og:description" content="docker와 crictl에서 같은 이미지가 보이는 현상이 실제 중복 저장인지 확인해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2025-12-12T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-Container-Duplicate-Container-Images-3/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Container] Docker와 containerd 이미지 관리 비교 - 3. 같은 이미지이지만 중복 저장이 아닌 경우">
+    <meta itemprop="description" content="docker와 crictl에서 같은 이미지가 보이는 현상이 실제 중복 저장인지 확인해 보자.">
+    <meta itemprop="datePublished" content="2025-12-12T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Container] Docker와 containerd 이미지 관리 비교 - 3. 같은 이미지이지만 중복 저장이 아닌 경우
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2025-12-12T00:00:00+09:00">2025년 12월 12일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  6 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#문제">문제</a></li>
+  <li><a href="#분석">분석</a>
+    <ul>
+      <li><a href="#서버-환경-확인">서버 환경 확인</a></li>
+      <li><a href="#crictl-설정-확인">crictl 설정 확인</a></li>
+      <li><a href="#실제-검증">실제 검증</a>
+        <ul>
+          <li><a href="#1-이미지-저장-위치-확인">1. 이미지 저장 위치 확인</a></li>
+          <li><a href="#2-이미지-삭제-테스트">2. 이미지 삭제 테스트</a></li>
+          <li><a href="#3-containerd-소켓-확인">3. containerd 소켓 확인</a></li>
+        </ul>
+      </li>
+      <li><a href="#왜-같은-이미지가-보였는가">왜 같은 이미지가 보였는가?</a></li>
+    </ul>
+  </li>
+  <li><a href="#실제-중복-저장이-발생하는-경우">실제 중복 저장이 발생하는 경우</a>
+    <ul>
+      <li><a href="#케이스-1-런타임-전환-과정">케이스 1: 런타임 전환 과정</a></li>
+      <li><a href="#케이스-2-두-런타임이-동시에-실행-중">케이스 2: 두 런타임이 동시에 실행 중</a></li>
+    </ul>
+  </li>
+  <li><a href="#중복-저장-여부-확인-방법">중복 저장 여부 확인 방법</a>
+    <ul>
+      <li><a href="#1-런타임-설정-확인">1. 런타임 설정 확인</a></li>
+      <li><a href="#2-crictl-엔드포인트-확인">2. crictl 엔드포인트 확인</a></li>
+      <li><a href="#3-이미지-저장-위치-확인">3. 이미지 저장 위치 확인</a></li>
+      <li><a href="#4-이미지-삭제-테스트">4. 이미지 삭제 테스트</a></li>
+      <li><a href="#5-containerd-인스턴스-확인">5. containerd 인스턴스 확인</a></li>
+    </ul>
+  </li>
+  <li><a href="#결론">결론</a>
+    <ul>
+      <li><a href="#배운-점">배운 점</a>
+        <ul>
+          <li><a href="#cli와-런타임을-구분할-것">CLI와 런타임을 구분할 것</a></li>
+          <li><a href="#k3s-런타임-설정을-이해할-것">k3s 런타임 설정을 이해할 것</a></li>
+          <li><a href="#실제-검증을-통해-확인할-것">실제 검증을 통해 확인할 것</a></li>
+          <li><a href="#cri-dockerd의-역할을-이해할-것">cri-dockerd의 역할을 이해할 것</a></li>
+        </ul>
+      </li>
+      <li><a href="#k3s-런타임-선택-가이드">k3s 런타임 선택 가이드</a></li>
+    </ul>
+  </li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<p>k3s agent 노드에서 <code class="highlighter-rouge">docker images</code>와 <code class="highlighter-rouge">crictl images</code>로 같은 이미지 ID를 가진 이미지가 보여서, <a href="/dev/Dev-Container-Duplicate-Container-Images-2/">이전 글</a>에서 다룬 것처럼 <strong>중복 저장</strong> 문제인지 의심했다. 하지만 실제로는 중복 저장이 아니었다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">sudo </span>crictl images | <span class="nb">grep </span>56371aef8cc2
+example/my-app    1.0-prod    56371aef8cc26    1.81GB
+<span class="nv">$ </span>docker images | <span class="nb">grep </span>56371aef8cc2
+example/my-app    1.0-prod    56371aef8cc2    1.81GB
+</code></pre></div></div>
+
+<p>분석 결과는 다음과 같다.</p>
+
+<ol>
+  <li><strong>중복 저장 아님</strong>: <code class="highlighter-rouge">docker</code> CLI와 <code class="highlighter-rouge">crictl</code> CLI가 <strong>같은 런타임(Docker runtime)</strong>을 보고 있었음</li>
+  <li><strong>런타임 설정</strong>: k3s가 <code class="highlighter-rouge">--docker</code> 플래그로 실행되어 Docker runtime을 사용하도록 설정됨</li>
+  <li><strong>crictl 설정</strong>: crictl이 cri-dockerd를 통해 Docker runtime을 바라보도록 설정되어 있음</li>
+  <li><strong>실제 중복 저장</strong>: 서로 다른 런타임(Docker runtime과 k3s 내장 containerd)이 각각 이미지를 pull할 때만 발생</li>
+</ol>
+
+<p>이전 글에서 다룬 <a href="/dev/Dev-Container-Duplicate-Container-Images-2/">컨테이너 이미지 중복 저장 문제</a>와 비슷해 보였지만, 실제로는 다른 상황이었다. 이 글에서는 <strong>같은 이미지가 중복 저장된 것처럼 보였지만 실제로는 그렇지 않았던 경우</strong>를 다룬다.</p>
+
+<p><br /></p>
+
+<h1 id="문제">문제</h1>
+
+<p>k3s agent 노드에서 이미지 목록을 확인하다가, 같은 이미지 ID를 가진 이미지가 <code class="highlighter-rouge">docker</code> CLI와 <code class="highlighter-rouge">crictl</code> CLI에서 모두 보였다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">sudo </span>crictl images | <span class="nb">grep </span>56371aef8cc2
+example/my-app    1.0-prod    56371aef8cc26    1.81GB
+<span class="nv">$ </span>docker images | <span class="nb">grep </span>56371aef8cc2
+example/my-app    1.0-prod    56371aef8cc2    1.81GB
+</code></pre></div></div>
+
+<p>이전 글에서 다룬 것처럼, 같은 이미지가 두 벌 저장되어 디스크가 낭비되는 문제를 겪었던 경험이 있어서, 이번에도 같은 문제인지 확인해야 했다.</p>
+
+<p>하지만 이전 사례와 다른 점이 있었다.</p>
+
+<ol>
+  <li><strong>크기가 동일</strong>: 이전 사례에서는 <code class="highlighter-rouge">docker</code>로 보면 20.3GB, <code class="highlighter-rouge">crictl</code>로 보면 10.4GB로 다르게 나타났지만, 이번에는 둘 다 1.81GB로 동일했다.</li>
+  <li><strong>이미지 삭제 테스트</strong>: <code class="highlighter-rouge">docker rmi</code>로 이미지를 삭제하면 <code class="highlighter-rouge">crictl images</code>에서도 사라졌다.</li>
+</ol>
+
+<p>이것은 실제로 중복 저장이 아니라, <strong>같은 런타임을 다른 CLI로 보고 있는 상황</strong>일 가능성을 시사했다.</p>
+
+<p><br /></p>
+
+<h1 id="분석">분석</h1>
+
+<h2 id="서버-환경-확인">서버 환경 확인</h2>
+
+<p>먼저 k3s가 어떤 런타임을 사용하도록 설정되어 있는지 확인했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>systemctl <span class="nb">cat </span>k3s-agent
+<span class="c"># /etc/systemd/system/k3s-agent.service</span>
+<span class="o">[</span>Service]
+<span class="nv">ExecStart</span><span class="o">=</span>/usr/local/bin/k3s <span class="se">\</span>
+    agent <span class="se">\</span>
+        <span class="s1">'--docker'</span> <span class="se">\</span>
+        ...
+</code></pre></div></div>
+
+<p>k3s가 <strong><code class="highlighter-rouge">--docker</code> 플래그</strong>로 실행되고 있었다. 이는 k3s가 내장 containerd 대신 Docker runtime을 사용하도록 설정되어 있다는 의미다.</p>
+
+<p><br /></p>
+
+<h2 id="crictl-설정-확인">crictl 설정 확인</h2>
+
+<p>crictl이 어떤 런타임 엔드포인트를 바라보고 있는지 확인했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">sudo </span>crictl config <span class="nt">--get</span> runtime-endpoint
+unix:///run/k3s/cri-dockerd/cri-dockerd.sock
+</code></pre></div></div>
+
+<p><br /></p>
+
+<p>crictl이 <code class="highlighter-rouge">cri-dockerd.sock</code>을 바라보고 있었다. 이것은 중요한 단서였다.</p>
+
+<p><strong>cri-dockerd</strong>는 Docker를 CRI 호환 런타임으로 만들어주는 어댑터로, k3s가 <code class="highlighter-rouge">--docker</code> 플래그로 실행될 때 사용된다. cri-dockerd에 대한 자세한 설명은 <a href="/dev/Dev-Container-Duplicate-Container-Images-2/#서버-환경-설명">이전 글</a>에서 확인할 수 있다.</p>
+
+<p>k3s가 <code class="highlighter-rouge">--docker</code> 플래그로 실행되면 crictl → cri-dockerd → Docker → containerd 경로로 연결되어, <code class="highlighter-rouge">crictl</code> CLI를 통해 Docker runtime의 이미지를 확인할 수 있게 된다.</p>
+
+<p><br /></p>
+
+<h2 id="실제-검증">실제 검증</h2>
+
+<h3 id="1-이미지-저장-위치-확인">1. 이미지 저장 위치 확인</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Docker 이미지 저장 위치</span>
+<span class="nv">$ </span><span class="nb">sudo </span>du <span class="nt">-sh</span> /var/lib/docker/overlay2
+115G    /var/lib/docker/overlay2
+
+<span class="c"># k3s 내장 containerd 이미지 저장 위치 (존재하지 않음)</span>
+<span class="nv">$ </span><span class="nb">sudo ls</span> <span class="nt">-al</span> /var/lib/rancher/k3s/agent/containerd/
+<span class="nb">ls</span>: cannot access <span class="s1">'/var/lib/rancher/k3s/agent/containerd/'</span>: No such file or directory
+
+<span class="c"># k3s agent 디렉토리 확인</span>
+<span class="nv">$ </span><span class="nb">sudo ls</span> <span class="nt">-al</span> /var/lib/rancher/k3s/agent/
+drwxr-xr-x 3 root root 4096 cri-dockerd
+drwx------ 5 root root 4096 etc
+...
+</code></pre></div></div>
+
+<p>k3s 내장 containerd 디렉토리가 존재하지 않았다. 대신 <code class="highlighter-rouge">cri-dockerd</code> 디렉토리만 있었다. 이는 k3s가 내장 containerd를 사용하지 않고 Docker runtime을 사용하고 있음을 의미한다.</p>
+
+<blockquote>
+  <p><strong>참고: k3s 내장 containerd를 사용하는 경우</strong></p>
+
+  <p>k3s가 내장 containerd를 사용하도록 설정되어 있다면(<code class="highlighter-rouge">--docker</code> 플래그 없이 실행), <code class="highlighter-rouge">/var/lib/rancher/k3s/agent/containerd/</code> 디렉토리가 생성되고 이미지가 여기에 저장된다. 이 디렉토리 구조와 이미지 저장 방식에 대한 자세한 내용은 <a href="/dev/Dev-Container-Duplicate-Container-Images-2/#서버-환경-설명">이전 글</a>에서 확인할 수 있다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># cri-dockerd 디렉토리 구조 확인</span>
+<span class="nv">$ </span><span class="nb">sudo ls</span> <span class="nt">-al</span> /var/lib/rancher/k3s/agent/cri-dockerd/
+drwxr-xr-x 2 root root 4096 sandbox
+</code></pre></div></div>
+
+<p>cri-dockerd 디렉토리 구조를 확인해 보니 <code class="highlighter-rouge">sandbox</code> 디렉토리만 존재했다. 이 디렉토리는 쿠버네티스 Pod의 샌드박스(sandbox) 정보를 저장하는 곳으로, cri-dockerd가 각 Pod의 네트워크 네임스페이스와 관련된 메타데이터를 관리하기 위해 사용한다.</p>
+
+<p><strong>cri-dockerd는 이미지를 직접 저장하지 않고</strong>, Docker runtime이 관리하는 이미지를 참조한다. 따라서 실제 이미지는 Docker runtime이 관리하고, <code class="highlighter-rouge">/var/lib/docker/overlay2</code>에 저장된다.</p>
+
+<p><br /></p>
+
+<h3 id="2-이미지-삭제-테스트">2. 이미지 삭제 테스트</h3>
+
+<p>같은 이미지를 <code class="highlighter-rouge">docker rmi</code>로 삭제했을 때 <code class="highlighter-rouge">crictl images</code>에서도 사라지는지 확인했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>docker images | <span class="nb">grep </span>9ca93f9d4556
+example/my-app    &lt;none&gt;    9ca93f9d4556    5 weeks ago    1.8GB
+<span class="nv">$ </span><span class="nb">sudo </span>crictl images | <span class="nb">grep </span>9ca93f9d4556
+example/my-app    &lt;none&gt;    9ca93f9d4556a    1.8GB
+
+<span class="nv">$ </span>docker rmi 9ca93f9d4556
+Untagged: example/my-app@sha256:5585ad9f290dad6358feb27bf5a4793411e96635cfafc65151afcc1271b39257
+Deleted: sha256:9ca93f9d4556acf7a313c5a0188d5a7f56d88be2bad84dd50732486f6c43c379
+...
+
+<span class="nv">$ </span><span class="nb">sudo </span>crictl images | <span class="nb">grep </span>9ca93f9d4556
+<span class="o">(</span>결과 없음<span class="o">)</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">docker rmi</code>로 삭제한 이미지가 <code class="highlighter-rouge">crictl images</code>에서도 사라졌다. 이것은 <strong>두 CLI가 같은 이미지 저장소를 보고 있다</strong>는 강력한 증거다.</p>
+
+<p><br /></p>
+
+<h3 id="3-containerd-소켓-확인">3. containerd 소켓 확인</h3>
+
+<p>실행 중인 containerd 인스턴스를 확인했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ps aux | <span class="nb">grep </span>containerd | <span class="nb">grep </span>sock
+root  770  /usr/bin/dockerd <span class="nt">-H</span> fd:// <span class="nt">--containerd</span><span class="o">=</span>/run/containerd/containerd.sock
+root  ...  /usr/bin/containerd-shim-runc-v2 <span class="nt">-namespace</span> moby <span class="nt">-address</span> /run/containerd/containerd.sock
+</code></pre></div></div>
+
+<p>Docker가 사용하는 containerd만 실행 중이었고, k3s 내장 containerd는 실행되지 않았다.</p>
+
+<p><br /></p>
+
+<h2 id="왜-같은-이미지가-보였는가">왜 같은 이미지가 보였는가?</h2>
+
+<p><code class="highlighter-rouge">docker</code> CLI와 <code class="highlighter-rouge">crictl</code> CLI가 <strong>같은 Docker runtime</strong>을 보고 있었기 때문에, 같은 이미지가 보였던 것이다. 실제로는 중복 저장이 아니었다.</p>
+
+<p>정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>k3s 런타임 설정</td>
+      <td><code class="highlighter-rouge">--docker</code> 플래그로 Docker runtime 사용</td>
+    </tr>
+    <tr>
+      <td>crictl 엔드포인트</td>
+      <td><code class="highlighter-rouge">unix:///run/k3s/cri-dockerd/cri-dockerd.sock</code></td>
+    </tr>
+    <tr>
+      <td>cri-dockerd 역할</td>
+      <td>Docker를 CRI 호환 런타임으로 변환하는 어댑터</td>
+    </tr>
+    <tr>
+      <td>이미지 저장 위치</td>
+      <td><code class="highlighter-rouge">/var/lib/docker/overlay2</code> (하나만 존재)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="실제-중복-저장이-발생하는-경우">실제 중복 저장이 발생하는 경우</h1>
+
+<p>실제로 중복 저장이 발생하는 경우는 다음과 같다.</p>
+
+<h2 id="케이스-1-런타임-전환-과정">케이스 1: 런타임 전환 과정</h2>
+
+<p><a href="/dev/Dev-Container-Duplicate-Container-Images-2/">이전 글</a>에서 다룬 것처럼, k3s의 런타임을 Docker runtime에서 containerd로 변경하는 과정에서:</p>
+
+<ul>
+  <li>기존: Docker runtime(dockerd)이 <code class="highlighter-rouge">/var/lib/docker/overlay2</code>에 이미지 저장</li>
+  <li>변경 후: k3s 내장 containerd가 <code class="highlighter-rouge">/var/lib/rancher/k3s/agent/containerd</code>에 이미지 저장</li>
+  <li>결과: 같은 이미지가 두 경로에 각각 저장됨</li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="케이스-2-두-런타임이-동시에-실행-중">케이스 2: 두 런타임이 동시에 실행 중</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 두 개의 containerd 인스턴스가 실행 중</span>
+<span class="nv">$ </span>ps aux | <span class="nb">grep </span>containerd | <span class="nb">grep </span>sock
+root  /usr/bin/dockerd <span class="nt">--containerd</span><span class="o">=</span>/run/containerd/containerd.sock
+root  /var/lib/rancher/k3s/.../containerd-shim-runc-v2 <span class="nt">-namespace</span> k8s.io <span class="nt">-address</span> /run/k3s/containerd/containerd.sock
+</code></pre></div></div>
+
+<p>두 런타임이 동시에 실행 중일 때:</p>
+<ul>
+  <li>Docker의 containerd: <code class="highlighter-rouge">/run/containerd/containerd.sock</code> (namespace: <code class="highlighter-rouge">moby</code>)</li>
+  <li>k3s 내장 containerd: <code class="highlighter-rouge">/run/k3s/containerd/containerd.sock</code> (namespace: <code class="highlighter-rouge">k8s.io</code>)</li>
+</ul>
+
+<p>아래와 같은 경우에 중복 저장이 발생할 수 있다:</p>
+<ul>
+  <li>로컬에서 <code class="highlighter-rouge">docker build</code>를 통해 이미지를 빌드한 후, k3s로 같은 이미지를 사용하는 파드 배포</li>
+  <li>로컬에서 테스트용으로 <code class="highlighter-rouge">docker pull</code>을 통해 이미지를 pull한 후, k3s로 같은 이미지를 사용하는 파드 배포</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="중복-저장-여부-확인-방법">중복 저장 여부 확인 방법</h1>
+
+<p>같은 이미지가 여러 CLI에서 보일 때, 실제 중복 저장인지 확인하는 방법을 정리하면 다음과 같다.</p>
+
+<h2 id="1-런타임-설정-확인">1. 런타임 설정 확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># k3s 런타임 설정 확인</span>
+<span class="nv">$ </span>systemctl <span class="nb">cat </span>k3s-agent | <span class="nb">grep </span>docker
+<span class="nv">ExecStart</span><span class="o">=</span>/usr/local/bin/k3s agent <span class="s1">'--docker'</span>
+
+<span class="c"># 또는</span>
+<span class="nv">$ </span>ps aux | <span class="nb">grep </span>k3s | <span class="nb">grep </span>docker
+</code></pre></div></div>
+
+<ul>
+  <li><code class="highlighter-rouge">--docker</code> 플래그가 있으면: Docker runtime 사용 → 중복 저장 가능성 낮음</li>
+  <li><code class="highlighter-rouge">--docker</code> 플래그가 없으면: k3s 내장 containerd 사용 → 중복 저장 가능성 확인 필요</li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="2-crictl-엔드포인트-확인">2. crictl 엔드포인트 확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">sudo </span>crictl config <span class="nt">--get</span> runtime-endpoint
+</code></pre></div></div>
+
+<ul>
+  <li><code class="highlighter-rouge">unix:///run/k3s/cri-dockerd/cri-dockerd.sock</code>: Docker runtime → 중복 저장 아님</li>
+  <li><code class="highlighter-rouge">unix:///run/k3s/containerd/containerd.sock</code>: k3s 내장 containerd → 중복 저장 가능성 확인 필요</li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="3-이미지-저장-위치-확인">3. 이미지 저장 위치 확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Docker 이미지 저장 위치</span>
+<span class="nv">$ </span><span class="nb">sudo </span>du <span class="nt">-sh</span> /var/lib/docker/overlay2
+
+<span class="c"># k3s 내장 containerd 이미지 저장 위치</span>
+<span class="nv">$ </span><span class="nb">sudo </span>du <span class="nt">-sh</span> /var/lib/rancher/k3s/agent/containerd/
+</code></pre></div></div>
+
+<p>두 디렉토리가 모두 존재하고 용량이 크면, 중복 저장 가능성이 높다.</p>
+
+<p><br /></p>
+
+<h2 id="4-이미지-삭제-테스트">4. 이미지 삭제 테스트</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># docker로 이미지 삭제</span>
+<span class="nv">$ </span>docker rmi &lt;IMAGE_ID&gt;
+
+<span class="c"># crictl에서도 사라지는지 확인</span>
+<span class="nv">$ </span><span class="nb">sudo </span>crictl images | <span class="nb">grep</span> &lt;IMAGE_ID&gt;
+</code></pre></div></div>
+
+<ul>
+  <li><code class="highlighter-rouge">crictl</code>에서도 사라지면: 같은 런타임을 보고 있음 → 중복 저장 아님</li>
+  <li><code class="highlighter-rouge">crictl</code>에서 여전히 보이면: 다른 런타임을 보고 있음 → 중복 저장 가능성 높음</li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="5-containerd-인스턴스-확인">5. containerd 인스턴스 확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ps aux | <span class="nb">grep </span>containerd | <span class="nb">grep </span>sock
+</code></pre></div></div>
+
+<ul>
+  <li>하나의 containerd만 실행 중이면: 중복 저장 아님</li>
+  <li>두 개의 containerd가 실행 중이면: 중복 저장 가능성 확인 필요</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="결론">결론</h1>
+
+<p>처음에 제시한 의문에 대한 답을 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>의문</th>
+      <th>답변</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>같은 이미지가 중복 저장된 것인가?</td>
+      <td>아니다. <code class="highlighter-rouge">docker</code> CLI와 <code class="highlighter-rouge">crictl</code> CLI가 같은 런타임을 보고 있었다.</td>
+    </tr>
+    <tr>
+      <td>왜 같은 이미지가 보였는가?</td>
+      <td>k3s가 <code class="highlighter-rouge">--docker</code> 플래그로 실행되어 Docker runtime을 사용하고, crictl이 cri-dockerd를 통해 같은 Docker runtime을 바라보고 있었기 때문이다.</td>
+    </tr>
+    <tr>
+      <td>실제 중복 저장은 언제 발생하는가?</td>
+      <td>서로 다른 런타임(Docker runtime과 k3s 내장 containerd)이 각각 이미지를 pull할 때 발생한다.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h2 id="배운-점">배운 점</h2>
+
+<h3 id="cli와-런타임을-구분할-것">CLI와 런타임을 구분할 것</h3>
+
+<p><code class="highlighter-rouge">docker</code> CLI와 <code class="highlighter-rouge">crictl</code> CLI가 같은 이미지를 보여준다고 해서 반드시 중복 저장인 것은 아니다. 각 CLI가 어떤 런타임을 바라보고 있는지 확인해야 한다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">docker</code> CLI: 항상 Docker runtime (<code class="highlighter-rouge">/var/run/docker.sock</code>)</li>
+  <li><code class="highlighter-rouge">crictl</code> CLI: 설정에 따라 다름 (cri-dockerd 또는 k3s 내장 containerd)</li>
+</ul>
+
+<h3 id="k3s-런타임-설정을-이해할-것">k3s 런타임 설정을 이해할 것</h3>
+
+<p>k3s는 다양한 런타임을 사용할 수 있다:</p>
+
+<ul>
+  <li><strong>내장 containerd</strong> (기본값): <code class="highlighter-rouge">k3s agent</code> (플래그 없음)</li>
+  <li><strong>Docker runtime</strong>: <code class="highlighter-rouge">k3s agent --docker</code></li>
+  <li><strong>외부 CRI 런타임</strong>: <code class="highlighter-rouge">k3s agent --container-runtime-endpoint &lt;ENDPOINT&gt;</code></li>
+</ul>
+
+<p>런타임 설정에 따라 crictl이 바라보는 엔드포인트가 달라진다.</p>
+
+<h3 id="실제-검증을-통해-확인할-것">실제 검증을 통해 확인할 것</h3>
+
+<p>의심만으로는 부족하다. 다음을 통해 실제로 확인해야 한다:</p>
+
+<ol>
+  <li>런타임 설정 확인</li>
+  <li>crictl 엔드포인트 확인</li>
+  <li>이미지 저장 위치 확인</li>
+  <li>이미지 삭제 테스트</li>
+</ol>
+
+<h3 id="cri-dockerd의-역할을-이해할-것">cri-dockerd의 역할을 이해할 것</h3>
+
+<p>Docker 자체는 CRI 인터페이스를 따르지 않지만, <strong>cri-dockerd</strong>라는 어댑터를 통해 CRI 호환 런타임으로 동작할 수 있다. k3s가 <code class="highlighter-rouge">--docker</code> 플래그로 실행되면 k3s → cri-dockerd → Docker → containerd 경로로 연결되어, crictl을 통해 Docker runtime의 이미지를 확인할 수 있게 된다. cri-dockerd에 대한 자세한 설명은 <a href="/dev/Dev-Container-Duplicate-Container-Images-2/#서버-환경-설명">이전 글</a>에서 확인할 수 있다.</p>
+
+<p><br /></p>
+
+<h2 id="k3s-런타임-선택-가이드">k3s 런타임 선택 가이드</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>런타임</th>
+      <th>설정 방법</th>
+      <th>장점</th>
+      <th>단점</th>
+      <th>권장 상황</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>내장 containerd</td>
+      <td><code class="highlighter-rouge">k3s agent</code> (기본값)</td>
+      <td>k3s에 최적화, 가벼움, 빠름</td>
+      <td>k3s에 종속적</td>
+      <td><strong>대부분의 경우 권장</strong></td>
+    </tr>
+    <tr>
+      <td>Docker</td>
+      <td><code class="highlighter-rouge">k3s agent --docker</code></td>
+      <td>익숙한 <code class="highlighter-rouge">docker</code> CLI 사용 가능</td>
+      <td>cri-dockerd 레이어 추가, 오버헤드</td>
+      <td>로컬 개발, 레거시 워크플로우</td>
+    </tr>
+    <tr>
+      <td>CRI-O</td>
+      <td><code class="highlighter-rouge">k3s agent --container-runtime-endpoint</code></td>
+      <td>Kubernetes 전용, OCI 표준</td>
+      <td>별도 설치/관리 필요</td>
+      <td>OpenShift, Red Hat 환경</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>권장 사항</strong>: 특별한 이유가 없다면 k3s 내장 containerd를 사용하는 것이 좋다.</p>
+
+<p><br /></p>
+
+<p><em>처음에는 중복 저장 문제인 줄 알았지만, 실제로는 같은 런타임을 다른 CLI로 보고 있던 것이었다. 때로는 비슷해 보이는 현상도 자세히 살펴보면 다른 원인일 수 있다.</em></p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/dev/Dev-Container-Duplicate-Container-Images-4/">[Container] Docker와 containerd 이미지 관리 비교 - 4. DooD 환경에서의 이미지 분리 저장</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#containerd" class="page__taxonomy-item" rel="tag">containerd</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#container" class="page__taxonomy-item" rel="tag">container</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#disk-management" class="page__taxonomy-item" rel="tag">disk-management</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#docker" class="page__taxonomy-item" rel="tag">docker</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#k3s" class="page__taxonomy-item" rel="tag">k3s</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#troubleshooting" class="page__taxonomy-item" rel="tag">troubleshooting</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2025-12-12T00:00:00+09:00">December 12, 2025</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BContainer%5D+Docker%EC%99%80+containerd+%EC%9D%B4%EB%AF%B8%EC%A7%80+%EA%B4%80%EB%A6%AC+%EB%B9%84%EA%B5%90+-+3.+%EA%B0%99%EC%9D%80+%EC%9D%B4%EB%AF%B8%EC%A7%80%EC%9D%B4%EC%A7%80%EB%A7%8C+%EC%A4%91%EB%B3%B5+%EC%A0%80%EC%9E%A5%EC%9D%B4+%EC%95%84%EB%8B%8C+%EA%B2%BD%EC%9A%B0%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Container-Duplicate-Container-Images-3%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Container-Duplicate-Container-Images-3%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Container-Duplicate-Container-Images-3%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-Container-Duplicate-Container-Images-3?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-Container-Duplicate-Container-Images-2/" class="pagination--pager" title="[Container] Docker와 containerd 이미지 관리 비교 - 2. 같은 이미지가 중복 저장된 이유
+">이전</a>
+    
+    
+      <a href="/dev/Dev-Container-Duplicate-Container-Images-4/" class="pagination--pager" title="[Container] Docker와 containerd 이미지 관리 비교 - 4. DooD 환경에서의 이미지 분리 저장
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-Container-Duplicate-Container-Images-3/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-Container-Duplicate-Container-Images-3"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,1985 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[GPU] Phantom GPU Utilization 사례 분석: CUDA Context 잔류 가설과 그 한계 - Eraser’s StudyLog</title>
+<meta name="description" content="NCCL 분산학습 종료 후 14/32 GPU가 Util 100%·메모리 0·프로세스 없음 상태에 빠졌다. CUDA context 잔류를 유력 가설로 두되, 직접 증거를 확보하지 못한 한계까지 함께 살펴보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[GPU] Phantom GPU Utilization 사례 분석: CUDA Context 잔류 가설과 그 한계">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-GPU-Phantom-Utilization/">
+
+
+  <meta property="og:description" content="NCCL 분산학습 종료 후 14/32 GPU가 Util 100%·메모리 0·프로세스 없음 상태에 빠졌다. CUDA context 잔류를 유력 가설로 두되, 직접 증거를 확보하지 못한 한계까지 함께 살펴보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-05-11T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-GPU-Phantom-Utilization/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[GPU] Phantom GPU Utilization 사례 분석: CUDA Context 잔류 가설과 그 한계">
+    <meta itemprop="description" content="NCCL 분산학습 종료 후 14/32 GPU가 Util 100%·메모리 0·프로세스 없음 상태에 빠졌다. CUDA context 잔류를 유력 가설로 두되, 직접 증거를 확보하지 못한 한계까지 함께 살펴보자.">
+    <meta itemprop="datePublished" content="2026-05-11T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[GPU] Phantom GPU Utilization 사례 분석: CUDA Context 잔류 가설과 그 한계
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-05-11T00:00:00+09:00">2026년 05월 11일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  33 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#배경">배경</a></li>
+  <li><a href="#현상-phantom-gpu-utilization">현상: Phantom GPU Utilization</a>
+    <ul>
+      <li><a href="#nvidia-smi-출력-패턴">nvidia-smi 출력 패턴</a></li>
+      <li><a href="#현황-요약">현황 요약</a></li>
+      <li><a href="#워크로드-종료-확인">워크로드 종료 확인</a></li>
+      <li><a href="#정상-gpu-vs-phantom-gpu">정상 GPU vs Phantom GPU</a></li>
+    </ul>
+  </li>
+  <li><a href="#배경-지식">배경 지식</a>
+    <ul>
+      <li><a href="#gpu-utilization의-정의-nvidia-smi와-nvml">GPU Utilization의 정의: nvidia-smi와 NVML</a>
+        <ul>
+          <li><a href="#nvidia-smi-dmon으로-더-정밀하게-보기">nvidia-smi dmon으로 더 정밀하게 보기</a></li>
+        </ul>
+      </li>
+      <li><a href="#cuda-context-lifecycle">CUDA Context Lifecycle</a></li>
+    </ul>
+  </li>
+  <li><a href="#원인-분석">원인 분석</a>
+    <ul>
+      <li><a href="#발생-메커니즘">발생 메커니즘</a>
+        <ul>
+          <li><a href="#예외가-발생한-worker">예외가 발생한 worker</a></li>
+          <li><a href="#nccl-blocking-상태의-나머지-worker">NCCL blocking 상태의 나머지 worker</a></li>
+          <li><a href="#14개-gpu의-누적">14개 GPU의 누적</a></li>
+        </ul>
+      </li>
+      <li><a href="#xid와의-관계-이번에는-xid가-없다">Xid와의 관계: 이번에는 Xid가 없다</a></li>
+      <li><a href="#팀원-선례와의-비교">팀원 선례와의 비교</a>
+        <ul>
+          <li><a href="#xid-1343에-의한-유령-util">Xid 13/43에 의한 유령 util</a></li>
+          <li><a href="#완료된-rayjob에-의한-gpu-점유-누수">완료된 RayJob에 의한 GPU 점유 누수</a></li>
+        </ul>
+      </li>
+      <li><a href="#배제되지-않는-다른-가설들">배제되지 않는 다른 가설들</a></li>
+    </ul>
+  </li>
+  <li><a href="#즉시-대응">즉시 대응</a>
+    <ul>
+      <li><a href="#nvidia-smi--r-시도--실패">nvidia-smi -r 시도 → 실패</a></li>
+      <li><a href="#persistence-mode-활성화--이미-stuck된-건-미해소">Persistence Mode 활성화 → 이미 stuck된 건 미해소</a></li>
+      <li><a href="#노드-재부팅--시도하지-않음">노드 재부팅 → 시도하지 않음</a></li>
+      <li><a href="#새-워크로드-배치-현상적-해소">새 워크로드 배치: 현상적 해소</a></li>
+    </ul>
+  </li>
+  <li><a href="#어플리케이션-코드-단-재발-방지-시도와-재검토">어플리케이션 코드 단 재발 방지 시도와 재검토</a>
+    <ul>
+      <li><a href="#1차-시도-tryfinally-cuda-cleanup--한계">1차 시도: try/finally CUDA cleanup — 한계</a></li>
+      <li><a href="#더-적합해-보이는-방향미검증-nccl-collective를-abort-가능한-상태로-만들기">더 적합해 보이는 방향(미검증): NCCL collective를 abort 가능한 상태로 만들기</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a>
+    <ul>
+      <li><a href="#근본-원인은-미해결-더-파야-한다">근본 원인은 미해결: 더 파야 한다</a></li>
+      <li><a href="#재발-방지-계층">재발 방지 계층</a></li>
+      <li><a href="#모니터링-phantom-탐지-규칙-미검증-초안">모니터링: Phantom 탐지 규칙 (미검증 초안)</a></li>
+      <li><a href="#진단-휴리스틱">진단 휴리스틱</a></li>
+      <li><a href="#재현-시-수집-계획">재현 시 수집 계획</a></li>
+      <li><a href="#추가-관찰-새-워크로드에-의한-해소">추가 관찰: 새 워크로드에 의한 해소</a></li>
+    </ul>
+  </li>
+  <li><a href="#참고-자료">참고 자료</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li><strong>관찰된 사실</strong>: NCCL backend 학습 검증 실험 종료 후, 4개 GPU 노드 32개 GPU 중 14개가 <strong>“Util 100%, Memory 0 MiB, Process 없음, Xid 없음”</strong> 상태에 빠졌다. 이른바 phantom GPU utilization — GPU가 바쁜 척하지만 실제로는 아무것도 하지 않는 상태 — 이다</li>
+  <li><strong>결과</strong>: 이후 새 워크로드가 phantom GPU 위에 배치되자 정상 동작하면서 현상은 해소되었다. 의도한 해결이 아니라 결과론적으로 알게 된 사실이다</li>
+  <li><strong>유력 가설</strong>: Pod가 비정상 종료된 실험 회차 이후 phantom 상태가 관측되었고, 새 CUDA context가 생성되자 해소된 점을 종합하면 “orphaned CUDA context로 인해 driver가 compute engine을 busy로 유지했다”는 가설이 가장 그럴듯하다. 다만 <strong>leaked context를 직접 가리키는 driver 측 증거(Xid, NVML context list, kernel trace)는 확보하지 못했다</strong>. Blackwell/580 드라이버 버그, 펌웨어 이슈, NCCL 종료 시점의 GPU 상태 등 다른 원인은 배제되지 않는다</li>
+  <li><strong>제약</strong>: <code class="highlighter-rouge">nvidia-smi -r</code>(GPU reset)은 nvidia-persistenced가 모든 device handle을 보유하고 있어 K8s GPU 노드에서 실행 불가</li>
+  <li><strong>미해결</strong>: 가설이 맞다 하더라도, “왜 driver가 orphaned context를 자동 회수하지 못했는가”는 답이 없다. 본 글은 이 사건을 사례 보고와 가설 정리로 다루며, 단정적 결론이 아님을 명시한다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="배경">배경</h1>
+
+<p>이 글에서 다루는 사례는 <strong>실험 환경</strong>(전용 GPU 노드, 다른 팀 워크로드 없음)에서 발생한 것이다. 원인 분석에 시간을 들일 수 있었던 것도 이 때문이며, 운영 환경에서는 대응 우선순위가 달라진다는 점을 먼저 밝혀 둔다.</p>
+
+<p><a href="/articles/Articles-NCCL-Troubleshooting-Collaboration-Retrospective/">NCCL 트러블슈팅</a> 과정에서 베이스 이미지를 리빌드(NCCL 2.29.7, sm_120 포함)한 뒤, NCCL backend로 분산학습 검증 실험을 진행했다. 실험 자체는 통과했지만, validation 단계에서 에러가 발생하면서 RayJob이 FAILED로 종료되는 일이 반복되었다.</p>
+
+<p>실험이 끝난 뒤 Grafana 대시보드를 확인하니, 일부 GPU가 utilization 100%를 찍고 있었다. 처음에는 아직 뭔가 돌고 있는 줄 알았지만, 학습 namespace에 Pod도 RayJob도 없었다. <code class="highlighter-rouge">nvidia-smi</code>를 직접 확인한 결과, <strong>GPU-Util 100%인데 프로세스는 없고 메모리도 0인</strong> 기이한 상태를 확인했다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>값</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>GPU</td>
+      <td>NVIDIA GeForce RTX 5090 (Blackwell, sm_120)</td>
+    </tr>
+    <tr>
+      <td>Driver</td>
+      <td>580.126.09 (NVIDIA Open Kernel Module)</td>
+    </tr>
+    <tr>
+      <td>CUDA</td>
+      <td>13.0</td>
+    </tr>
+    <tr>
+      <td>노드</td>
+      <td>gpu-node-1 ~ gpu-node-4 (각 8 GPU)</td>
+    </tr>
+    <tr>
+      <td>실험</td>
+      <td>RayJob, 8 GPU worker, NCCL backend, 4회 반복 실행</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>본 환경의 580 + Open Kernel Module + Blackwell(sm_120) + CUDA 13.0 조합은 비교적 최근에 일반 사용자가 운영하기 시작한 조합이다. <a href="https://github.com/NVIDIA/open-gpu-kernel-modules">NVIDIA Open GPU Kernel Modules GitHub</a> 이슈에는 580-open / Blackwell 계열의 GSP timeout 및 안정성 관련 보고가 다수 있어, 본 사건의 driver-side root cause가 이 조합에 특수한 이슈일 가능성을 배제하기 어렵다. 원인 분석에서 SIGKILL/orphaned context를 1순위 가설로 두되 단정하지 않는 이유 중 하나다.</p>
+
+<p><br /></p>
+
+<h1 id="현상-phantom-gpu-utilization">현상: Phantom GPU Utilization</h1>
+
+<h2 id="nvidia-smi-출력-패턴">nvidia-smi 출력 패턴</h2>
+
+<p>실험 종료 후 각 노드에서 GPU 상태를 확인했다. gpu-node-1의 출력을 보면 패턴이 명확하다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># gpu-node-1 GPU 상태</span>
+<span class="nv">$ </span>nvidia-smi <span class="nt">--query-gpu</span><span class="o">=</span>index,pstate,utilization.gpu,memory.used,power.draw <span class="nt">--format</span><span class="o">=</span>csv,noheader
+0, P8, 0 %, 0 MiB, 22.69 W
+1, P0, 100 %, 0 MiB, 117.40 W    <span class="c"># ← phantom</span>
+2, P8, 0 %, 0 MiB, 15.94 W
+3, P0, 100 %, 0 MiB, 123.02 W    <span class="c"># ← phantom</span>
+4, P0, 100 %, 0 MiB, 111.55 W    <span class="c"># ← phantom</span>
+5, P0, 100 %, 0 MiB, 114.22 W    <span class="c"># ← phantom</span>
+6, P8, 0 %, 0 MiB, 15.90 W
+7, P0, 100 %, 0 MiB, 114.13 W    <span class="c"># ← phantom</span>
+</code></pre></div></div>
+
+<p>정상 GPU(0, 2, 6번)는 P8(idle) 상태에서 0%, 15~23W를 소비한다. Phantom GPU(1, 3, 4, 5, 7번)는 <strong>P0(최고 성능) 상태에 고정</strong>되어 100%, 111~123W를 소비하면서도, <strong>메모리 사용량은 0 MiB이고 실행 중인 프로세스도 없다</strong>.</p>
+
+<details>
+  <summary><b>나머지 3개 노드 출력</b></summary>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># gpu-node-2</span>
+<span class="nv">$ </span>nvidia-smi <span class="nt">--query-gpu</span><span class="o">=</span>index,pstate,utilization.gpu,memory.used,power.draw <span class="nt">--format</span><span class="o">=</span>csv,noheader
+0, P8, 0 %, 0 MiB, 13.10 W
+1, P8, 0 %, 0 MiB, 3.23 W
+2, P8, 0 %, 0 MiB, 10.08 W
+3, P8, 0 %, 0 MiB, 14.09 W
+4, P8, 0 %, 0 MiB, 10.07 W
+5, P0, 100 %, 0 MiB, 120.01 W    <span class="c"># ← phantom</span>
+6, P0, 100 %, 0 MiB, 123.06 W    <span class="c"># ← phantom</span>
+7, P8, 0 %, 0 MiB, 8.24 W
+</code></pre></div>  </div>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># gpu-node-3</span>
+<span class="nv">$ </span>nvidia-smi <span class="nt">--query-gpu</span><span class="o">=</span>index,pstate,utilization.gpu,memory.used,power.draw <span class="nt">--format</span><span class="o">=</span>csv,noheader
+0, P8, 0 %, 0 MiB, 3.41 W
+1, P8, 0 %, 0 MiB, 3.64 W
+2, P8, 0 %, 0 MiB, 9.38 W
+3, P0, 100 %, 0 MiB, 123.11 W    <span class="c"># ← phantom</span>
+4, P8, 0 %, 0 MiB, 14.94 W
+5, P0, 100 %, 0 MiB, 108.37 W    <span class="c"># ← phantom</span>
+6, P0, 100 %, 0 MiB, 127.46 W    <span class="c"># ← phantom</span>
+7, P0, 100 %, 0 MiB, 115.17 W    <span class="c"># ← phantom</span>
+</code></pre></div>  </div>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># gpu-node-4</span>
+<span class="nv">$ </span>nvidia-smi <span class="nt">--query-gpu</span><span class="o">=</span>index,pstate,utilization.gpu,memory.used,power.draw <span class="nt">--format</span><span class="o">=</span>csv,noheader
+0, P8, 0 %, 0 MiB, 4.72 W
+1, P0, 100 %, 0 MiB, 114.34 W    <span class="c"># ← phantom</span>
+2, P0, 100 %, 0 MiB, 114.44 W    <span class="c"># ← phantom</span>
+3, P8, 0 %, 0 MiB, 8.90 W
+4, P0, 100 %, 0 MiB, 124.43 W    <span class="c"># ← phantom</span>
+5, P8, 0 %, 0 MiB, 3.28 W
+6, P8, 0 %, 0 MiB, 7.75 W
+7, P8, 0 %, 0 MiB, 13.41 W
+</code></pre></div>  </div>
+
+</details>
+
+<h2 id="현황-요약">현황 요약</h2>
+
+<p>4개 노드 전체를 점검하여 phantom GPU의 분포를 정리했다. 하드웨어 손상 여부를 확인하기 위해 온도와 전력도 함께 살펴봤는데, 온도는 27~48°C로 정상 범위였고, 하드웨어 손상은 없었다. 다만 phantom GPU가 idle 대비 훨씬 높은 전력을 소비하고 있어서 전력 낭비 규모도 추정해 보았다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>노드</th>
+      <th>Phantom GPU (100%, 0 MiB, P0)</th>
+      <th>Phantom 수</th>
+      <th>추정 전력 낭비</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>gpu-node-1</td>
+      <td>1, 3, 4, 5, 7</td>
+      <td>5</td>
+      <td>~580W</td>
+    </tr>
+    <tr>
+      <td>gpu-node-2</td>
+      <td>5, 6</td>
+      <td>2</td>
+      <td>~243W</td>
+    </tr>
+    <tr>
+      <td>gpu-node-3</td>
+      <td>3, 5, 6, 7</td>
+      <td>4</td>
+      <td>~474W</td>
+    </tr>
+    <tr>
+      <td>gpu-node-4</td>
+      <td>1, 2, 4</td>
+      <td>3</td>
+      <td>~353W</td>
+    </tr>
+    <tr>
+      <td><strong>합계</strong></td>
+      <td> </td>
+      <td><strong>14/32</strong></td>
+      <td><strong>~1,650W</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>32개 GPU 중 14개가 phantom 상태였다. nvidia-smi 출력에서 볼 수 있듯이 phantom GPU는 idle GPU(~15W) 대비 약 7배(~114W)의 전력을 소비하고 있었는데, 이유는 <a href="#gpu-performance-state와-전력-소비">배경 지식</a> 섹션에서 다룬다.</p>
+
+<h2 id="워크로드-종료-확인">워크로드 종료 확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 학습 namespace에 리소스 없음</span>
+<span class="nv">$ </span>kubectl get pods <span class="nt">-n</span> ml-training
+No resources found <span class="k">in </span>ml-training namespace.
+
+<span class="nv">$ </span>kubectl get rayjob <span class="nt">-n</span> ml-training
+No resources found <span class="k">in </span>ml-training namespace.
+</code></pre></div></div>
+
+<p>실험에 사용한 RayJob과 Pod가 전부 정리된 상태다. GPU를 점유하는 워크로드가 없는데 utilization만 100%인 상태가 확인되었다.</p>
+
+<h2 id="정상-gpu-vs-phantom-gpu">정상 GPU vs Phantom GPU</h2>
+
+<p>후에 새 학습 워크로드가 phantom 상태이던 GPU 위에 배치되어 정상 동작하는 것을 관측했다. 이를 통해 세 가지 상태를 비교할 수 있었다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>정상 idle</th>
+      <th>정상 사용 중</th>
+      <th>Phantom</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>GPU-Util</td>
+      <td>0%</td>
+      <td>부하에 비례</td>
+      <td><strong>100%</strong> (stuck)</td>
+    </tr>
+    <tr>
+      <td>Memory</td>
+      <td>0~1 MiB</td>
+      <td>수천~수만 MiB</td>
+      <td><strong>0~1 MiB</strong></td>
+    </tr>
+    <tr>
+      <td>Process</td>
+      <td>없음</td>
+      <td>CUDA 프로세스 표시</td>
+      <td><strong>없음</strong></td>
+    </tr>
+    <tr>
+      <td>Perf State</td>
+      <td>P8</td>
+      <td>P0~P2</td>
+      <td><strong>P0</strong> (stuck)</td>
+    </tr>
+    <tr>
+      <td>Power</td>
+      <td>~15W</td>
+      <td>~170W</td>
+      <td><strong>~114W</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Phantom GPU는 utilization과 perf state만 보면 “풀 로드”처럼 보이지만, 메모리와 프로세스는 “idle”이다. 일종의 유령 상태 — GPU가 바쁜 척하지만 실제로는 아무것도 하지 않는다 — 이다.</p>
+
+<p><br /></p>
+
+<h1 id="배경-지식">배경 지식</h1>
+
+<p>Phantom GPU utilization을 이해하려면 두 가지를 알아야 한다. nvidia-smi가 보고하는 “GPU-Util”이 실제로 무엇을 측정하는지, 그리고 CUDA context가 어떻게 생성되고 해제되는지.</p>
+
+<h2 id="gpu-utilization의-정의-nvidia-smi와-nvml">GPU Utilization의 정의: nvidia-smi와 NVML</h2>
+
+<p>nvidia-smi는 내부적으로 NVML(NVIDIA Management Library) API를 호출하는 CLI wrapper다. GPU-Util 값은 <code class="highlighter-rouge">nvmlDeviceGetUtilizationRates()</code> 함수에서 가져오는데, NVIDIA 공식 문서의 정의는 다음과 같다.</p>
+
+<blockquote>
+  <p>Percent of time over the past sample period during which one or more kernels was executing on the GPU.</p>
+
+  <p>— <a href="https://docs.nvidia.com/deploy/nvml-api/structnvmlUtilization__t.html">NVML API Reference, <code class="highlighter-rouge">nvmlUtilization_t</code></a></p>
+</blockquote>
+
+<p>핵심은 이것이 <strong>시간 기반 측정</strong>이라는 점이다. “샘플 구간 중 커널이 하나라도 실행 중이던 시간의 비율”이지, GPU의 SM(Streaming Multiprocessor)이 몇 개나 활용되었는지는 반영하지 않는다. 1개 SM만 쓰는 가벼운 커널이라도 샘플 구간 내내 돌고 있었으면 GPU-Util은 100%가 된다. <a href="https://modal.com/gpu-glossary/streaming-multiprocessor-utilization">Modal GPU Glossary</a>가 이를 명확하게 짚는다.</p>
+
+<blockquote>
+  <p>If a kernel uses only one SM, e.g. because it only has one thread block, then it will achieve 100% GPU utilization while it is active, but the SM utilization will be at most one over the number of SMs — under 1% in an H100 GPU.</p>
+</blockquote>
+
+<p>이 정의가 phantom GPU utilization과 어떻게 연결되는가. NVML이 공식 문서로 보장하는 것은 어디까지나 “샘플 구간 중 커널이 실행 중이던 시간의 비율”이지, driver 내부 엔진 상태와의 직접 대응이 아니다. 별도로 DCGM은 graphics/compute 엔진 활동을 <code class="highlighter-rouge">DCGM_FI_PROF_GR_ENGINE_ACTIVE</code>로, SM 활동을 <code class="highlighter-rouge">DCGM_FI_PROF_SM_ACTIVE</code>로 따로 정의한다 — 즉 NVIDIA의 metric taxonomy에서 “kernel 실행 시간”과 “엔진/SM이 active인지”는 별개 metric이다.</p>
+
+<p>본 글에서 phantom 상태를 풀 때 등장하는 “driver가 compute engine을 active로 유지한다”는 표현은, 두 metric을 잇는 documented relation이 아니라 <strong>본 사건을 설명하기 위해 잠정적으로 채택한 가설</strong>이다. 증명된 결론이 아니라, “이 모델로 보면 관찰된 현상이 잘 설명된다”는 수준의 설명 틀이며 본 글은 이 가설을 전제로 현상을 풀어간다. 구체적으로는, “프로세스가 사라졌는데도 회수되지 않은 orphaned context가 남아, NVML이 보고하는 ‘kernel 실행 시간 비율’이 100%로 고정된 것처럼 보이는” 상태를 가정한다. 다른 메커니즘(예: 엔진/펌웨어 측 stuck, telemetry/accounting 자체의 stuck, 전력 상태 전이 실패 등)으로 동일 현상이 발생할 가능성은 배제하지 않는다.</p>
+
+<h3 id="nvidia-smi-dmon으로-더-정밀하게-보기">nvidia-smi dmon으로 더 정밀하게 보기</h3>
+
+<p><code class="highlighter-rouge">nvidia-smi dmon</code>은 nvidia-smi의 <strong>device monitoring</strong> 모드다. 기본 <code class="highlighter-rouge">nvidia-smi</code>가 스냅샷(한 시점의 상태)을 보여주는 반면, <code class="highlighter-rouge">dmon</code>은 매 초(기본값) GPU별 메트릭을 연속으로 출력한다. GPU당 전력, 온도, SM activity, memory activity, 인코더/디코더 활동, 클럭 주파수를 한 줄로 보여주므로 시계열 변화를 관찰하기 좋다. 비슷한 모드로 <code class="highlighter-rouge">nvidia-smi pmon</code>(process monitoring — 프로세스별 GPU/메모리 사용량 추적)이 있다.</p>
+
+<blockquote>
+  <p><strong>참고: GR 엔진과 dmon 컬럼</strong></p>
+
+  <p>GPU에는 여러 하드웨어 엔진이 있다. <strong>GR(Graphics) 엔진</strong>은 이름과 달리 그래픽 전용이 아니라, CUDA compute 커널도 실행하는 GPU의 핵심 연산 엔진이다. 이 밖에 Copy Engine(CE, 메모리 전송), NVENC/NVDEC(영상 인코딩/디코딩) 등 별도 엔진이 있다.</p>
+
+  <p><code class="highlighter-rouge">nvidia-smi dmon</code>의 각 컬럼은 이 엔진들의 활동률에 대응한다. <code class="highlighter-rouge">sm</code> 컬럼은 <strong>SM(Streaming Multiprocessor) activity</strong> — SM 코어가 active한 시간 비율 — 이고, <code class="highlighter-rouge">enc</code>, <code class="highlighter-rouge">dec</code>, <code class="highlighter-rouge">jpg</code>, <code class="highlighter-rouge">ofa</code>가 인코더/디코더 등 나머지 엔진의 활동률이다.</p>
+
+  <p>NVIDIA DCGM의 metric taxonomy에서는 GR 엔진 활동(<code class="highlighter-rouge">DCGM_FI_PROF_GR_ENGINE_ACTIVE</code>)과 SM 활동(<code class="highlighter-rouge">DCGM_FI_PROF_SM_ACTIVE</code>)을 별개 metric으로 정의한다. <code class="highlighter-rouge">dmon</code>의 <code class="highlighter-rouge">sm</code> 컬럼은 SM 활동을 보여주는 것이지 GR 엔진 활동 자체와 동일하지는 않다. 본 사건에서 phantom GPU의 <code class="highlighter-rouge">sm</code>이 100%로 고정된 것은 “SM이 active로 보고된 상태”이며, 이를 “GR 엔진 stuck”으로 단정하려면 별도 GR 엔진 metric(<code class="highlighter-rouge">dcgmi dmon -e 1001</code>) 수집이 필요하다(본 사건에선 수집하지 않았다).</p>
+</blockquote>
+
+<p>Phantom GPU가 남아 있던 노드에서 dmon을 실행한 결과다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># gpu-node-1 nvidia-smi dmon: GPU 5번만 phantom 상태로 남아 있는 시점</span>
+<span class="nv">$ </span>nvidia-smi dmon
+<span class="c"># gpu    pwr  gtemp  mtemp     sm    mem    enc    dec    jpg    ofa   mclk   pclk</span>
+<span class="c"># Idx      W      C      C      %      %      %      %      %      %    MHz    MHz</span>
+    0     24     29      -      0      0      0      0      0      0    405    210
+    1     11     29      -      0      0      0      0      0      0    405    210
+    2     15     29      -      0      0      0      0      0      0    405    210
+    3     16     29      -      0      0      0      0      0      0    405    210
+    4     13     27      -      0      0      0      0      0      0    405    210
+    5    113     37      -    100      0      0      0      0      0  14001   2940
+    6     19     31      -      0      0      0      0      0      0    405    210
+    7     14     27      -      0      0      0      0      0      0    405    210
+</code></pre></div></div>
+
+<p>GPU 5번(phantom)의 상태가 두드러진다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>정상 idle GPU</th>
+      <th>Phantom GPU (5번)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>SM activity (<code class="highlighter-rouge">sm</code>)</td>
+      <td>0%</td>
+      <td><strong>100%</strong></td>
+    </tr>
+    <tr>
+      <td>Memory activity (<code class="highlighter-rouge">mem</code>)</td>
+      <td>0%</td>
+      <td><strong>0%</strong></td>
+    </tr>
+    <tr>
+      <td>Memory clock (<code class="highlighter-rouge">mclk</code>)</td>
+      <td>405 MHz</td>
+      <td><strong>14,001 MHz</strong> (최대)</td>
+    </tr>
+    <tr>
+      <td>Core clock (<code class="highlighter-rouge">pclk</code>)</td>
+      <td>210 MHz</td>
+      <td><strong>2,940 MHz</strong> (최대)</td>
+    </tr>
+    <tr>
+      <td>Power</td>
+      <td>10~24W</td>
+      <td><strong>113W</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>SM activity 100%인데 memory activity 0% — GPU 코어는 “바쁘다”고 보고하지만 메모리 I/O는 전혀 없다. 클럭도 최대치에 고정되어 있다. 이것이 phantom GPU의 하드웨어 레벨 시그니처다.</p>
+
+<details>
+  <summary><b>참고: GPU 클럭과 전력의 관계</b></summary>
+
+  <p>GPU에는 두 종류의 클럭이 있다. <strong>코어 클럭(pclk)</strong>은 연산을 수행하는 SM(Streaming Multiprocessor)의 동작 속도, <strong>메모리 클럭(mclk)</strong>은 VRAM의 데이터 전송 속도를 결정한다. 클럭이 높을수록 처리 성능이 올라가지만, 전력 소비도 함께 증가한다.</p>
+
+  <p>GPU의 전력 소비는 두 가지로 나뉜다. <strong>동적 전력(dynamic power)</strong>은 실제 연산(SM 활동, 메모리 R/W)에 의해 소비되고, <strong>정적 전력(static power)</strong>은 연산 없이도 소비된다. Phantom GPU는 실제 연산이 없으므로 동적 전력은 거의 0이지만, P0 상태에서 클럭이 최대치(pclk 2,940MHz, mclk 14,001MHz)로 고정되면 이를 안정적으로 구동하기 위한 코어 voltage도 함께 최대로 유지된다(DVFS — Dynamic Voltage and Frequency Scaling). 높아진 voltage는 트랜지스터의 누설 전류(leakage current)를 증가시키고, 이 정적 전력만으로 ~114W를 소비한다. Idle GPU(클럭 최저: pclk 210MHz, mclk 405MHz)가 ~15W인 것과 비교하면 7배에 달한다.</p>
+
+</details>
+
+<details>
+  <summary><b>참고: GPU Performance State (P-state)</b></summary>
+
+  <p>NVIDIA GPU의 Performance State(P-state)는 P0(최고 성능)부터 P12(최저 전력)까지 있다. P-state는 클럭 주파수를 결정한다 — P8(idle)에서는 클럭이 최저로 내려가고, P0에서는 최대로 올라간다. Phantom GPU는 P0에 고정되어 클럭과 voltage가 최대치를 유지하고, 앞서 본 것처럼 높은 voltage가 정적 전력 소비를 유발한다.</p>
+
+  <p>비유하면 자동차 공회전에 가깝다. 기어는 최고단(P0)에, 엔진 RPM은 최대(클럭 최대)인데, 바퀴는 굴러가지 않는(연산 없음) 상태다.</p>
+
+</details>
+
+<h2 id="cuda-context-lifecycle">CUDA Context Lifecycle</h2>
+
+<p>NVIDIA GPU에서 CUDA 연산을 수행하려면 먼저 <strong>CUDA context</strong>를 생성해야 한다. CUDA context는 GPU의 메모리 할당, 모듈(커널 코드), 스트림 등을 캡슐화하는 객체다. 프로세스가 context를 생성하면 driver가 해당 GPU 자원을 점유하기 시작하고, context가 해제(destroy)되어야 자원이 풀린다.</p>
+
+<p>NVML이 보고하는 utilization과 context 수명을 직접 묶는 공식 문서는 찾지 못했다 — 인용한 NVML 문서는 client attachment와 kernel 실행 시간 비율만 정의한다. 다만 “context 점유 상태가 풀리지 않으면 driver/엔진 측 active 상태가 유지되어 NVML이 100% utilization을 보고할 수 있다”는 가설은, <a href="#gpu-utilization의-정의-nvidia-smi와-nvml">GPU Utilization의 정의</a>에서 잠정 채택한 가설을 같은 맥락에서 확장한 것이다.</p>
+
+<p>Context의 생성과 해제는 두 가지 API 수준에서 관리된다.</p>
+
+<ul>
+  <li><strong>CUDA Runtime API</strong>: 대부분의 사용자(PyTorch, TensorFlow 등)가 사용하는 고수준 API다. 프로세스가 처음 GPU를 사용할 때 내부적으로 context를 생성하고, 정상 종료 시 Python의 <code class="highlighter-rouge">atexit</code> hook이나 C++ destructor를 통해 context를 해제한다</li>
+  <li><strong>CUDA Driver API</strong>: 저수준 API로, <code class="highlighter-rouge">cuCtxCreate()</code> / <code class="highlighter-rouge">cuCtxDestroy()</code>를 명시적으로 호출한다</li>
+</ul>
+
+<p>어떤 수준을 쓰든, <strong>정상 종료 시에는 cleanup이 보장</strong>된다. 문제는 비정상 종료일 때다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>종료 방식</th>
+      <th>cleanup 실행 여부</th>
+      <th>결과</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>정상 종료 (<code class="highlighter-rouge">exit(0)</code>)</td>
+      <td><code class="highlighter-rouge">atexit</code>, destructor 실행</td>
+      <td>context 정상 해제</td>
+    </tr>
+    <tr>
+      <td>예외/segfault</td>
+      <td>stack unwinding 시도</td>
+      <td>대부분 해제, 일부 실패 가능</td>
+    </tr>
+    <tr>
+      <td><strong>SIGKILL</strong></td>
+      <td><strong>일체 미실행</strong></td>
+      <td><strong>context 잔류 (orphaned)</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>SIGKILL을 받으면 프로세스는 즉시 종료된다. <code class="highlighter-rouge">atexit</code>도, <code class="highlighter-rouge">try/finally</code>도, <code class="highlighter-rouge">torch.cuda.empty_cache()</code>도 실행되지 않는다. GPU driver 입장에서는 “방금까지 context를 가지고 있던 프로세스가 갑자기 사라진” 상태다.</p>
+
+<p>정상적이라면 driver가 프로세스 종료를 감지하고 orphaned context를 자동 회수해야 한다. 회수되면 점유가 풀리고 utilization은 0%로 내려간다. CUDA 커뮤니티 가이드(NVIDIA 공식 문서는 아니다)도 이 기대를 전제한다.</p>
+
+<blockquote>
+  <p>When an application exits, regardless of how, the context (and any associated allocations that are encapsulated within) <em>should</em> be destroyed.</p>
+
+  <p>— <a href="https://stackoverflow.com/questions/19184865/cuda-context-destruction-at-host-process-termination">Stack Overflow, CUDA context destruction at host process termination</a> (community discussion, not official documentation)</p>
+</blockquote>
+
+<p>그러나 “should”가 항상 “does”는 아니다. 본 사건에서 잠정 채택한 가설은 “특정 드라이버 버전이나 GPU 아키텍처 조합에서 driver가 orphaned context를 회수하지 못하면, NVML이 보고하는 utilization 100%가 고정될 수 있다”이다. 다른 가능 가설 — 엔진/펌웨어 측 stuck, telemetry/accounting 버그, 전력 상태 전이 실패 — 도 동일 시그니처를 만들 수 있으며, 이번 사건만으로 그중 하나로 좁히기는 어렵다.</p>
+
+<p><br /></p>
+
+<h1 id="원인-분석">원인 분석</h1>
+
+<p>이 섹션은 <a href="#tldr">글 도입부</a>에서 밝힌 유력 가설의 메커니즘을 풀어쓴다. 직접 증거(Xid, NVML context list, kernel trace) 없이 정황 증거만으로 구성한 모델이며, 다른 원인이 배제된 것은 아니다.</p>
+
+<h2 id="발생-메커니즘">발생 메커니즘</h2>
+
+<p><img src="https://sirzzang.github.io//assets/images/phantom-gpu-utiliazation-mechanism.png" alt="phantom GPU utilization 발생 메커니즘 추정" class="align-center" /></p>
+
+<p>RayJob이 FAILED로 종료되면 kubelet이 Pod를 terminate한다. 이때 Pod 안의 GPU worker 프로세스에 일어나는 일은 두 가지 경로로 나뉘는 것으로 추정된다.</p>
+
+<ul>
+  <li><strong>경로 1 — 예외가 발생한 worker</strong>: Python 예외로 stack unwinding(호출 스택을 역순으로 되감으며 각 프레임의 리소스를 정리하는 과정)이 시작되지만, CUDA cleanup 로직이 없어 context가 정리되지 않는다. SIGTERM을 받아도 정리할 코드가 없으므로 grace period 초과 후 SIGKILL이 들어왔을 것으로 추정</li>
+  <li><strong>경로 2 — NCCL blocking 중인 나머지 worker</strong>: C++ 레벨의 collective op 안에서 대기 중이라 SIGTERM 자체를 처리하지 못한다. grace period 초과 후 SIGKILL이 들어왔을 것으로 추정</li>
+</ul>
+
+<p>두 경로 모두 grace period 초과 → SIGKILL 경로로 들어갔을 것으로 추정되고, 결과도 동일한 것으로 보인다 — CUDA context cleanup이 실행되지 않고 orphaned context가 GPU에 남는다. cleanup이 안 되는 이유만 다르다(cleanup 코드 부재 vs signal 처리 불가).</p>
+
+<p>다만 <strong>본 사건에서는 SIGKILL의 직접 증거 — kubelet event, container exit code 137, Pod termination timeline 등 — 를 별도로 수집해 두지 않았다.</strong> 따라서 위 경로는 NCCL blocking과 grace period 도달 가능성에서 추정한 정황 시나리오이며, “SIGKILL 경로가 가장 유력하다”는 수준의 가설로 읽어야 한다.</p>
+
+<h3 id="예외가-발생한-worker">예외가 발생한 worker</h3>
+
+<p>Python 예외가 발생하면 stack unwinding이 시작되지만, 학습 코드에 <strong>CUDA cleanup 로직이 없었다</strong>. <code class="highlighter-rouge">runner.train()</code> 호출 후 아무 cleanup 없이 함수가 종료되는 구조였다. SIGTERM을 받더라도 CUDA context를 정리할 로직 자체가 구현되어 있지 않았다.</p>
+
+<h3 id="nccl-blocking-상태의-나머지-worker">NCCL blocking 상태의 나머지 worker</h3>
+
+<p>분산학습에서 한 worker가 실패하면, 나머지 worker들은 collective op(예: <code class="highlighter-rouge">all_reduce</code>) 안에서 <strong>blocking</strong> 상태로 대기 중이다. Collective op은 “모든 rank가 참여해야 완료되는” 연산이므로, 한 rank가 빠지면 나머지는 그 rank를 무한히 기다린다.</p>
+
+<p>이때 NCCL collective op은 Python이 아니라 <strong>C++ 네이티브 코드 레벨에서 실행</strong>된다. 이것이 왜 문제가 되는지는 CPython의 signal 처리 구조를 보면 드러난다.</p>
+
+<p>CPython은 Python 소스를 바이트코드(bytecode)로 컴파일하고, 바이트코드 명령어를 하나씩 실행한다. OS가 signal을 전달하면 즉시 handler가 실행되는 게 아니라, 인터프리터가 “pending signal이 있는가?”를 체크하는 시점까지 대기한다. 이 체크는 <strong>바이트코드 명령어 실행 사이사이</strong>에 일어난다(CPython의 <code class="highlighter-rouge">eval_breaker</code> 메커니즘).</p>
+
+<p>문제는 PyTorch가 NCCL collective을 호출하면 실행 흐름이 C++ 확장 모듈(libtorch → libnccl) 안으로 넘어간다는 점이다. C++ 코드가 실행 중인 동안에는 Python 바이트코드 실행 루프가 정지해 있으므로, 바이트코드 간 체크 포인트에 영원히 도달하지 못한다. 결과적으로 <strong>signal handler가 호출될 기회 자체가 없다</strong>.</p>
+
+<p>SIGTERM은 프로세스가 자기 코드(signal handler)를 실행해야 처리할 수 있는 signal이다. C++ blocking 상태에서는 Python signal handler가 실행되지 않으므로, SIGTERM을 받아도 아무 일이 일어나지 않는다. Grace period가 지나면 kubelet이 SIGKILL을 보낸다. SIGKILL은 프로세스가 “처리”하는 것이 아니라 <strong>커널이 직접 프로세스를 제거</strong>하므로, 프로세스의 blocking 상태와 무관하게 즉시 효력이 발생한다. 그리고 <a href="#cuda-context-lifecycle">앞서 본 것처럼</a>, SIGKILL 경로에서는 <code class="highlighter-rouge">atexit</code>도, <code class="highlighter-rouge">try/finally</code>도, destructor도 — 어떤 cleanup 코드도 실행되지 않는다.</p>
+
+<h3 id="14개-gpu의-누적">14개 GPU의 누적</h3>
+
+<p>실험을 4회 반복 실행했고, 매회 8개 GPU worker가 4개 노드에 분산 배치되었다. 각 run에서 비정상 종료가 발생할 때마다 phantom GPU 수가 누적되면서, 결과적으로 14개 GPU가 phantom 상태에 빠졌다.</p>
+
+<p>14는 어디까지나 <strong>현상 규모</strong>(phantom 시그니처를 보이는 GPU 개수)이며, NVML/driver 측에서 회수되지 않은 context를 하나하나 세어 확인한 수치가 아니다. 본 사건에서는 context 측 직접 측정이 없었기에, “14 phantom GPU = 14 leaked context”로 곧장 치환할 수는 없다. 개별 run의 GPU 배치 분포(어느 run에서 어떤 GPU가 phantom 됐는지)도 별도로 정리하지 않았다.</p>
+
+<h2 id="xid와의-관계-이번에는-xid가-없다">Xid와의 관계: 이번에는 Xid가 없다</h2>
+
+<p><a href="/dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/">NCCL Communicator Lazy Init 디버깅</a> 포스트에서 다뤘듯이, NCCL 통신 실패 시 드라이버 레벨에서는 Xid 에러가 남는다. Xid 13(SM Warp Exception)과 Xid 43(channel reset)이 대표적이다. Xid 43 리셋 후 GR(Graphics) 엔진 카운터가 100%에 고정되면서 phantom utilization이 발생하는 것이, 기존에 알려진 경로다.</p>
+
+<p>그런데 이번에는 <strong>Xid가 없었다</strong>.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># gpu-node-1: 실험 이후 Xid 기록 없음</span>
+<span class="nv">$ </span>journalctl <span class="nt">-k</span> <span class="nt">--no-pager</span> <span class="nt">--since</span> <span class="s1">'2026-04-21'</span> | <span class="nb">grep</span> <span class="nt">-iE</span> <span class="s1">'NVRM|Xid'</span>
+<span class="c"># (출력 없음)</span>
+</code></pre></div></div>
+
+<p>과거 Xid 기록은 3월에 존재했지만(이전 NCCL 버전 시절의 잔재), 이번 실험 시점에서는 새로운 Xid가 발생하지 않았다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># gpu-node-1: 과거 Xid는 3월에 존재 (이전 NCCL 버전 시절)</span>
+<span class="nv">$ </span>journalctl <span class="nt">-k</span> <span class="nt">--no-pager</span> | <span class="nb">grep</span> <span class="nt">-iE</span> <span class="s1">'NVRM|Xid'</span> | tail <span class="nt">-3</span>
+Mar 29 12:05:05 gpu-node-1 kernel: NVRM: Xid <span class="o">(</span>PCI:0000:2a:00<span class="o">)</span>: 13, Graphics SM Warp Exception ...
+Mar 29 12:05:05 gpu-node-1 kernel: NVRM: Xid <span class="o">(</span>PCI:0000:2a:00<span class="o">)</span>: 13, Graphics SM Global Exception ...
+Mar 29 12:05:05 gpu-node-1 kernel: NVRM: Xid <span class="o">(</span>PCI:0000:2a:00<span class="o">)</span>: 43, <span class="nv">pid</span><span class="o">=</span>XXXXXX, <span class="nv">name</span><span class="o">=</span>ray::&lt;train-worker&gt; ...
+</code></pre></div></div>
+
+<p>본 사건의 journalctl 범위에서는 Xid가 관측되지 않았다. 이는 <strong>Xid 없이도 phantom GPU utilization이 발생할 수 있다</strong>는 가능성을 시사하지만, Xid가 다른 채널(ring buffer 오버플로, 캡처 윈도우 밖 등)로 기록되었을 가능성을 완전히 배제하지는 못한다.</p>
+
+<p>기존에 팀 내에서 알려진 phantom 경로는 “Xid 43(channel reset) → GR 엔진 복귀 실패”로, hardware fault가 선행 조건이었다. 그러나 이번 현상을 통해 확인한 결과, hardware fault 증거(Xid) 없이 <strong>software 경로(SIGKILL에 의한 orphaned context)만으로도</strong> driver가 compute engine을 busy로 유지할 수 있는 것으로 보인다.</p>
+
+<p>즉 “phantom = hardware 에러의 후유증”이라는 기존 전제가 항상 성립하지는 않을 수 있다는 것이다.</p>
+
+<h2 id="팀원-선례와의-비교">팀원 선례와의 비교</h2>
+
+<p>이전에 팀원이 동일한 증상을 겪고 내부 문서로 정리해 둔 사례가 두 건 있었다.</p>
+
+<h3 id="xid-1343에-의한-유령-util">Xid 13/43에 의한 유령 util</h3>
+
+<p>첫 번째는 NCCL 빌드 시 sm_120(Blackwell) 커널이 포함되지 않은 상태에서 해당 GPU를 사용하면서 발생한 <code class="highlighter-rouge">illegal memory access</code>가 트리거한 사례다(NCCL cuda12.2 빌드에 sm_120 미포함 → Blackwell GPU에서 커널 미스매치). 이 문제의 원인과 해결 과정은 <a href="/dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/">NCCL Communicator Lazy Init 디버깅</a>과 <a href="/dev/Dev-NCCL-GPU-Compat-CI-Runtime-Gate/">GPU 호환성 게이트</a>에서 다뤘다. dmesg에 Xid 13/43이 기록되었고, <a href="#nvidia-smi-dmon으로-더-정밀하게-보기">GR(Graphics) 엔진</a>이 Xid 43 리셋 이후 idle 상태로 복귀하지 못하면서 GPU-Util이 100%에 고정되었다. 노드 재부팅으로 해결했다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>팀원 Xid 사례</th>
+      <th>이번 사례</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>트리거</td>
+      <td>NCCL 버전 불일치 → illegal memory access</td>
+      <td>validation 에러 → Pod 비정상 종료</td>
+    </tr>
+    <tr>
+      <td>dmesg Xid</td>
+      <td>Xid 13 + Xid 43 <strong>있음</strong></td>
+      <td>Xid <strong>없음</strong></td>
+    </tr>
+    <tr>
+      <td>추정 원인</td>
+      <td>GR 엔진 stuck (Xid 43 리셋 후 복귀 실패) — <strong>dmesg Xid로 뒷받침</strong></td>
+      <td>orphaned CUDA context (SIGKILL) — <strong>유력 가설, driver 측 직접 증거 없음</strong></td>
+    </tr>
+    <tr>
+      <td>증상</td>
+      <td>100%, 0 MiB, P0, ~104W</td>
+      <td>100%, 0 MiB, P0, ~114W — <strong>동일</strong></td>
+    </tr>
+    <tr>
+      <td>규모</td>
+      <td>1개 GPU</td>
+      <td>14개 GPU</td>
+    </tr>
+    <tr>
+      <td>해결</td>
+      <td>노드 재부팅</td>
+      <td>새 워크로드 배치로 현상적 해소</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>증상은 완전히 동일하지만, 원인 경로가 다르다. 팀원 사례는 “Xid → GR 엔진 stuck”이 명확한 반면, 이번에는 <strong>Xid 없이 orphaned context만으로 동일 현상이 발생</strong>한 변종 시나리오다.</p>
+
+<h3 id="완료된-rayjob에-의한-gpu-점유-누수">완료된 RayJob에 의한 GPU 점유 누수</h3>
+
+<p>두 번째는 별개의 이슈다. RayJob CR에 <code class="highlighter-rouge">shutdownAfterJobFinishes: true</code>가 설정되지 않아, Job이 끝났는데도 RayCluster가 GPU를 계속 점유하고 있던 경우다. 이것은 K8s 스케줄러 레벨의 GPU 할당 누수로, 드라이버 레벨의 phantom utilization과는 다른 문제다. 다만, 이 사건에서 파드를 삭제한 직후 phantom utilization이 함께 관측되면서 두 이슈가 같은 시점에 동시 발생했다. 원인은 각각 독립적(K8s 스케줄러 레벨 할당 누수 vs driver 레벨 stuck)이지만 타이밍이 겹쳐 하나의 문제처럼 보였다.</p>
+
+<h2 id="배제되지-않는-다른-가설들">배제되지 않는 다른 가설들</h2>
+
+<p>본 사건은 “SIGKILL + orphaned CUDA context”를 유력 가설로 두고 풀었지만, 동일 시그니처(<code class="highlighter-rouge">100%, 0 MiB, P0 stuck, process 없음</code>)를 만들 수 있는 다른 메커니즘이 더 있다. 본 사건에서 이들을 직접 검증·배제한 것은 아니므로, 가설 후보로만 정리해 둔다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>가설</th>
+      <th>핵심 메커니즘</th>
+      <th>phantom을 만드는 경로</th>
+      <th>본 사건에서의 상태</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>GSP firmware stuck</td>
+      <td>GPU 내부 마이크로프로세서(GSP)가 hang</td>
+      <td>GSP가 멈추면 호스트가 GPU 상태를 바꿀 수 없어 P0/active 상태에 고정</td>
+      <td>미검증 — GSP 측 진단 미수행</td>
+    </tr>
+    <tr>
+      <td>PCIe power-state 전이 실패</td>
+      <td>GPU의 전력 상태 변경이 실패</td>
+      <td>워크로드 종료 후 P0→P8 전이가 실패해 고클럭/고전력에 stuck</td>
+      <td>미검증 — PCIe 이벤트 미수집</td>
+    </tr>
+    <tr>
+      <td>Telemetry/accounting stuck</td>
+      <td>실제로는 idle인데 보고만 잘못됨</td>
+      <td>드라이버/펌웨어의 카운터 버그로 NVML이 100%를 반환</td>
+      <td>미검증 — 실제 SM 활동 교차검증 불가</td>
+    </tr>
+    <tr>
+      <td>SIGKILL 없이도 발생 (외부 사례)</td>
+      <td>부팅 직후 idle에서도 관측</td>
+      <td>원인 불명 — job termination과 무관한 경로 존재</td>
+      <td>본 사건 가정의 반례</td>
+    </tr>
+  </tbody>
+</table>
+
+<details>
+  <summary><b>각 가설 상세 설명</b></summary>
+
+  <p><strong>GSP(GPU System Processor) firmware stuck</strong></p>
+
+  <p>GSP는 NVIDIA GPU 내부에 탑재된 별도의 마이크로프로세서(RISC-V 기반)다. Open Kernel Module 아키텍처에서는 드라이버 로직의 상당 부분 — GPU 초기화, 전력 관리, 에러 처리, 보안 등 — 이 호스트 CPU의 커널 모듈이 아니라 이 GSP firmware 위에서 실행된다. 호스트 드라이버와 GSP 사이는 메시지 기반으로 통신하는데, GSP가 hang/timeout되면 호스트가 GPU 상태를 변경하는 명령 자체가 처리되지 않는다. 본 환경은 <code class="highlighter-rouge">580.126.09 + NVIDIA Open Kernel Module + Blackwell(sm_120)</code> 조합이고, <a href="https://github.com/NVIDIA/open-gpu-kernel-modules">NVIDIA Open GPU Kernel Modules</a> GitHub 이슈에는 이 조합에서 GSP timeout이 보고된 사례가 있다. 본 사건에서는 <code class="highlighter-rouge">nvidia-smi -q -d FIRMWARE</code>, <code class="highlighter-rouge">dmesg | grep -i gsp</code> 같은 GSP 측 진단을 수행하지 못했다.</p>
+
+  <p><strong>PCIe power-state 전이 실패</strong></p>
+
+  <p>GPU는 PCIe 버스를 통해 호스트와 연결되며, 전력 절약을 위해 D0(active) ↔ D3cold(sleep) 등 전력 상태를 오간다. 워크로드가 끝나면 GPU가 D0에서 저전력 상태로 전이해야 하는데, 이 전이가 실패하면 P0(최고 성능)/고클럭에 stuck된다. Open-driver 이슈에 “프로세스 없음 + idle 전력 비정상 + clock stuck” 시그니처가 본 사건과 유사하게 보고되어 있다.</p>
+
+  <p><strong>Telemetry/accounting 자체의 stuck</strong></p>
+
+  <p>GPU 엔진은 실제로 idle인데, NVML이 읽어 오는 utilization 카운터 자체가 잘못된 값을 반환하는 경우다. 드라이버/펌웨어 측 telemetry 모듈의 버그로, 실제 SM 활동과 무관하게 카운터가 높은 값에 고정될 수 있다. dmon의 <code class="highlighter-rouge">sm</code> 100% / <code class="highlighter-rouge">mem</code> 0% 패턴은 실제 연산이 없는데 보고만 100%인 telemetry stuck으로도 나타날 수 있는 시그니처다.</p>
+
+  <p><strong>외부 유사 사례 — SIGKILL 없이도 발생</strong></p>
+
+  <p>본 글 <a href="#참고-자료">참고 자료</a>에 인용한 <a href="https://forums.developer.nvidia.com/t/nvidia-smi-reports-phantom-utilization-reported-on-one-gpu/62516">NVIDIA Developer Forum thread</a>는 부팅 직후 idle 상태에서도 phantom util이 관측된 사례를 다룬다. “job termination이 트리거다”라는 본 사건의 가정 자체에 대한 반례이므로, “SIGKILL 경로만이 유일한 원인 경로”라는 단정은 피하는 편이 안전하다.</p>
+
+</details>
+
+<p>본 사건에서 “SIGKILL + orphaned context” 가설을 1순위로 둔 이유는 (1) Pod 비정상 종료 실험 회차와 phantom 발생의 시간적 근접, (2) 새 CUDA context 생성으로 해소된 정황이며, 위에서 나열한 다른 가설들이 직접 부정된 것이 아니라는 점을 다시 밝혀 둔다.</p>
+
+<p><br /></p>
+
+<h1 id="즉시-대응">즉시 대응</h1>
+
+<h2 id="nvidia-smi--r-시도--실패">nvidia-smi -r 시도 → 실패</h2>
+
+<p>가장 먼저 시도한 것은 GPU reset(<code class="highlighter-rouge">nvidia-smi --gpu-reset</code>)이다. 이것은 드라이버 재시작이 아니라, 커널 모듈은 유지한 채 <strong>개별 GPU 디바이스의 하드웨어 상태를 초기화</strong>하는 명령이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># gpu-node-1 GPU reset 시도 → 실패</span>
+<span class="nv">$ </span><span class="nb">sudo </span>nvidia-smi <span class="nt">-r</span>
+The following GPUs could not be reset:
+  GPU 00000000:17:00.0: In use by another client
+  GPU 00000000:2A:00.0: In use by another client
+  ... <span class="c"># 8개 GPU 전부</span>
+8 devices are currently being used by one or more other processes
+</code></pre></div></div>
+
+<p>4개 노드 전부 동일한 결과. nvidia-smi에서 프로세스가 안 보이는데 “In use by another client”라고 한다.</p>
+
+<p><code class="highlighter-rouge">lsof</code>로 device 파일을 점유하고 있는 프로세스를 확인했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># nvidia-persistenced가 모든 GPU device를 점유</span>
+<span class="nv">$ </span><span class="nb">sudo </span>lsof /dev/nvidia0 /dev/nvidia1 /dev/nvidiactl 2&gt;/dev/null
+COMMAND    PID                USER   FD   TYPE  DEVICE SIZE/OFF NODE NAME
+nvidia-pe 1639 nvidia-persistenced    4u   CHR 195,255      0t0  749 /dev/nvidiactl
+nvidia-pe 1639 nvidia-persistenced    5u   CHR   195,0      0t0  750 /dev/nvidia0
+nvidia-pe 1639 nvidia-persistenced    6u   CHR   195,0      0t0  750 /dev/nvidia0
+... <span class="c"># GPU 0~7 전부 nvidia-persistenced가 점유</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">nvidia-smi -r</code>의 공식 조건은 “해당 GPU를 사용 중인 application이 없을 것”으로, 본 사건에서 관측된 blocker는 <code class="highlighter-rouge">nvidia-persistenced</code>였다. 본 데몬이 모든 device handle을 보유하고 있어 reset이 실패한다. NVLink topology 같은 다른 reset 제약도 존재할 수 있지만, 본 사건에서 직접 부딪힌 blocker는 이 데몬이다. K8s GPU Operator 환경에서는 이 데몬이 항상 실행되므로, <strong>단순 GPU reset으로는 phantom utilization을 해소할 수 없다</strong>.</p>
+
+<details>
+  <summary><b>nvidia-persistenced가 GPU reset을 막는 이유</b></summary>
+
+  <p><code class="highlighter-rouge">nvidia-persistenced</code>는 GPU driver 커널 모듈을 항상 로드 상태로 유지하는 데몬이다.</p>
+
+  <p>Linux 커널 모듈은 reference count로 관리된다. <code class="highlighter-rouge">/dev/nvidia*</code> 디바이스 파일을 열고 있는 프로세스가 없으면 reference count가 0이 되고, 이 상태에서 <code class="highlighter-rouge">rmmod</code> 등으로 모듈을 제거할 수 있게 된다(자동으로 내려가지는 않지만, 제거 가능한 상태가 된다). 문제는 NVIDIA 드라이버 초기화가 비싸다는 것이다 — GPU 펌웨어 로드, 메모리 설정 등으로 수 초가 걸린다. 모듈이 내려갔다가 다시 올라가면 다음 CUDA 호출에서 이 초기화 비용을 다시 치러야 한다.</p>
+
+  <p>nvidia-persistenced는 <code class="highlighter-rouge">/dev/nvidia*</code>를 항상 열어 두어 reference count가 0이 되지 않게 막음으로써, 드라이버 모듈이 제거 가능한 상태에 빠지는 것 자체를 방지한다. K8s GPU 노드에서는 nvidia-device-plugin, dcgm-exporter와 함께 GPU Operator가 관리하는 필수 데몬이다.</p>
+
+  <p>문제는, 이 데몬이 <strong>항상 모든 GPU의 device handle을 보유</strong>하고 있다는 점이다. <code class="highlighter-rouge">nvidia-smi -r</code>은 <strong>해당 GPU의 device handle이 0개일 때만</strong> 실행 가능하므로, nvidia-persistenced가 살아 있는 한 GPU reset은 실패한다.</p>
+
+</details>
+
+<h2 id="persistence-mode-활성화--이미-stuck된-건-미해소">Persistence Mode 활성화 → 이미 stuck된 건 미해소</h2>
+
+<p>Persistence Mode를 켜면 cleanup이 개선될 가능성이 있다는 비공식 조언을 보고 시도했다. 다만 NVIDIA 공식 문서는 Persistence Mode를 “no clients일 때 GPU를 initialized 상태로 유지”로만 정의하며, context lifecycle 관리/orphan 자동 회수 개선을 공식 효과로 보장하지는 않는다 — 즉 이 시도는 메커니즘이 검증된 처방이라기보다 “켜 두면 손해는 없는 옵션”에 가깝다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Persistence Mode 활성화</span>
+<span class="nv">$ </span><span class="nb">sudo </span>nvidia-smi <span class="nt">-pm</span> 1
+Enabled persistence mode via daemon <span class="k">for </span>GPU 00000000:17:00.0.
+... <span class="c"># 8개 전부 Enabled</span>
+All <span class="k">done</span><span class="nb">.</span>
+</code></pre></div></div>
+
+<p>활성화 자체는 성공했지만, <strong>본 사건에서 이미 stuck된 GPU의 phantom utilization은 해소되지 않았다</strong>. Persistence Mode가 “향후” 프로세스 종료 시 orphaned context를 더 잘 정리하는 역할인지는 본 사건만으로는 단언하기 어렵다(공식 문서에 그렇게 명시되어 있지 않다). 분명한 것은 <strong>이미 stuck된 상태를 풀어 주지는 못한다</strong>는 점이다.</p>
+
+<blockquote>
+  <p><strong>참고: nvidia-persistenced 데몬 vs Persistence Mode</strong></p>
+
+  <p>이 노드에는 이미 <code class="highlighter-rouge">nvidia-persistenced</code> 데몬이 실행 중이다(앞서 <code class="highlighter-rouge">lsof</code>에서 확인). 그런데 왜 별도로 Persistence Mode를 켜는가? 둘은 “persistence”라는 목표는 같지만 메커니즘이 다르다.</p>
+
+  <ul>
+    <li><strong><code class="highlighter-rouge">nvidia-persistenced</code> 데몬</strong>: <code class="highlighter-rouge">/dev/nvidia*</code> 파일 디스크립터를 항상 열어 두어 <strong>커널 모듈의 reference count가 0이 되지 않게</strong> 막는다. 목적은 드라이버 모듈이 unload되는 것을 방지하는 것이다(모듈 레벨).</li>
+    <li><strong>Persistence Mode (<code class="highlighter-rouge">nvidia-smi -pm 1</code>)</strong>: <strong>GPU 디바이스 자체를 항상 initialized 상태로 유지</strong>하는 per-GPU 설정이다. 클라이언트가 없어도 GPU가 uninitialized 상태로 내려가지 않는다(디바이스 레벨).</li>
+  </ul>
+
+  <p>데몬이 돌고 있어도 Persistence Mode를 명시적으로 켜는 것은 중복이 아니라, “모듈 유지” 위에 “디바이스 레벨 초기화 상태 유지”를 추가로 보장하는 조치다. 다만 두 방식 모두 context lifecycle/orphan 자동 회수에 대한 영향을 공식 문서에서 명확히 보장하지 않는다.</p>
+</blockquote>
+
+<h2 id="노드-재부팅--시도하지-않음">노드 재부팅 → 시도하지 않음</h2>
+
+<p>팀원의 Xid 13/43 선례에서는 노드 재부팅으로 해결했고, 이번에도 확실한 해소 방법이었다. 그러나 재부팅하면 원인을 파악할 증거가 사라지기 때문에 요청하지 않았다.</p>
+
+<p>다시 한 번 강조하지만, 이 판단이 가능했던 것은 <strong>실험 환경</strong>이었기 때문이다. 해당 노드들이 실험 전용이었고, phantom GPU가 다른 팀의 학습을 blocking하고 있지 않았다. 운영 환경이라면 원인 분석보다 서비스 복구가 우선이므로, 비즈니스 임팩트를 최소화하는 방향 — drain 후 재부팅, 또는 nvidia-persistenced 재시작(본 사건에서 직접 검증하지는 않았다) — 을 먼저 선택해야 한다.</p>
+
+<h2 id="새-워크로드-배치-현상적-해소">새 워크로드 배치: 현상적 해소</h2>
+
+<p>재부팅 대신, phantom이 실제 운영에 어떤 악영향을 미치는지 — GPU utilization이 전부 100%가 되면 스케줄링에 영향을 주는지, 스케줄링은 되더라도 워크로드 실행에 문제가 생기는지 — 를 확인하기 위해 학습을 계속 돌렸다.</p>
+
+<p>K8s 스케줄러는 phantom utilization을 인식하지 못했다 — GPU resource request/limit만 보고 배치하기 때문이다. Phantom 상태이던 GPU 위에도 새 워크로드가 정상적으로 배치되었고, 놀랍게도 <strong>정상 동작</strong>했다. 이전에 phantom이었던 GPU가 P0(stuck) → P1(정상 compute)으로 전환되고, 메모리도 정상 할당되었다.</p>
+
+<p>그런데 엉뚱하게도, 학습을 돌리고 나니 phantom이 해소되어 있었다. 의도한 것이 아니라 결과론적으로 알게 된 사실이다.</p>
+
+<p>왜 해소되었는지에 대해서는 추측만 가능하다. 두 가지 가설이 있다.</p>
+
+<ul>
+  <li><strong>가설 A — 새 context 요청이 reset trigger 역할</strong>: 새 프로세스가 같은 GPU에 CUDA context를 요청하면 driver가 compute engine 상태를 재초기화해야 하는데, 이 과정에서 orphaned context의 stuck 상태가 덮어쓰여졌을 수 있다. 즉 driver에 cleanup 코드 자체는 있지만, 프로세스 종료 시점에 자발적으로(proactive) 실행하지 않고 <strong>새 context 요청이라는 외부 트리거가 있어야만 동작</strong>하는 구조일 가능성이다.
+    <ul>
+      <li>정상적인 경우라면 driver가 프로세스 종료를 감지하고 orphaned context를 자동 회수해야 한다(<a href="#cuda-context-lifecycle">배경 지식 섹션</a>에서 “should be destroyed”로 인용한 기대). 대부분의 CUDA 프로그램은 명시적으로 <code class="highlighter-rouge">cuCtxDestroy()</code>를 호출하지 않아도 되는데, 정상 종료 시에는 런타임의 <code class="highlighter-rouge">atexit</code> hook/destructor가 알아서 처리해 주기 때문이다. 문제는 SIGKILL처럼 아무 cleanup도 실행되지 않는 경로뿐이며, 이 경로에서 driver가 회수에 실패한 것이 본 사건이다.</li>
+      <li>이것을 “driver bug”가 아니라 “설계 한계”로 표현한 이유: “cleanup 코드가 깨졌다”는 것이 아니라 “cleanup을 발동시키는 trigger 조건이 빠져 있다”는 뉘앙스다. 사용자 입장에서는 bug나 다름없지만, 원인 파악의 관점이 다르다 — bug라면 “코드를 고쳐 달라”이고, 설계 한계라면 “외부에서 trigger를 만들어 주는 workaround를 써야 한다”이다</li>
+    </ul>
+  </li>
+  <li><strong>가설 B — 시간 경과에 의한 자체 회수</strong>: phantom 관측 시점부터 새 워크로드 배치까지의 wall-clock gap이 길었다면, driver/firmware 측 timeout이 그 사이 발동해 이미 회수되었고 우연히 그 직후 워크로드를 배치한 것일 수 있다</li>
+</ul>
+
+<p>아쉽게도 phantom 해소 시점의 wall-clock을 기록해 두지 않아, “새 context가 trigger였는지”(A)와 “이미 자체 회수된 뒤였는지”(B)를 구분할 수 없다.</p>
+
+<p><br /></p>
+
+<h1 id="어플리케이션-코드-단-재발-방지-시도와-재검토">어플리케이션 코드 단 재발 방지 시도와 재검토</h1>
+
+<h2 id="1차-시도-tryfinally-cuda-cleanup--한계">1차 시도: try/finally CUDA cleanup — 한계</h2>
+
+<p>현상적 해소 이후, 재발 방지를 위해 가장 먼저 시도한 것은 학습 코드에 <code class="highlighter-rouge">try/finally</code> 블록을 추가해 CUDA cleanup을 보장하는 것이었다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 1차 시도 — SIGKILL 경로에서는 실행되지 않는다</span>
+<span class="k">def</span> <span class="nf">train_func</span><span class="p">(</span><span class="n">config</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">runner</span> <span class="o">=</span> <span class="n">build_runner</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+        <span class="n">runner</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">destroy_process_group</span><span class="p">()</span>
+</code></pre></div></div>
+
+<p>이 변경 이후 단기적으로 새로운 phantom이 재현되지 않아 처음에는 효과가 있는 것처럼 보였다. 그러나 다시 따져 보면 이 접근은 <strong>본 사건의 발생 경로를 직접 막을 수 없다</strong>.</p>
+
+<ul>
+  <li>본문에서 분석한 트리거 경로는 “NCCL collective blocking → SIGTERM 무시 → grace period 초과 → SIGKILL”이다.</li>
+  <li><code class="highlighter-rouge">try/finally</code>가 동작하려면 (a) try 블록 안에서 예외가 발생하거나, (b) try 블록이 정상 완료되거나, (c) signal handler가 예외를 raise하는 — 세 가지 중 하나가 일어나야 한다. 그래야 Python 인터프리터가 finally 블록으로 진입한다.</li>
+  <li>NCCL collective blocking 중에 SIGKILL이 오면: <strong>C++ 안에서 대기 중이므로 예외가 Python으로 올라오지 않고</strong>, SIGKILL은 커널이 프로세스를 즉시 제거하는 것이므로 어떤 Python 코드도 실행되지 않는다. 결과적으로 <strong>finally 블록 진입 자체가 불가능</strong>하다.</li>
+  <li><a href="#cuda-context-lifecycle">앞서 정리한 대로</a> SIGKILL 경로에서는 <code class="highlighter-rouge">atexit</code>도, <code class="highlighter-rouge">try/finally</code>도, destructor도 실행되지 않는다.</li>
+  <li>따라서 cleanup 코드가 실행되려면 그 전에 프로세스가 정상 종료 경로(graceful exit)로 들어와야 하는데, NCCL blocking 상태에서는 그 진입 자체가 막힌다.</li>
+</ul>
+
+<p>즉 try/finally는 정상 종료/일반 예외 경로의 기본 방어일 뿐, phantom 방지의 본선이 될 수 없다. 변경 이후 phantom이 재현되지 않은 것도 try/finally의 효과라기보다는, validation 에러가 사라져 SIGKILL 경로 자체를 타지 않았기 때문으로 보는 편이 정합적이다.</p>
+
+<h2 id="더-적합해-보이는-방향미검증-nccl-collective를-abort-가능한-상태로-만들기">더 적합해 보이는 방향(미검증): NCCL collective를 abort 가능한 상태로 만들기</h2>
+
+<p>이 한계를 인지한 후 자료를 찾아본 결과, 진짜로 막아야 할 것은 cleanup 코드 부재가 아니라 <strong>NCCL collective가 무한 대기에 빠져 SIGTERM이 무시되는 상태</strong>라는 결론에 도달했다. 이를 해소하려면 cleanup 코드를 늘리는 게 아니라, <strong>collective 자체에 timeout과 async error handling을 걸어</strong> Python 레이어로 예외가 올라오도록 만드는 방향이 더 그럴듯해 보였다. 다만 본 사건 이후 실제로 이 옵션을 적용해 검증한 것은 아니므로, 아래는 “조사 결과 제안 가능한 방향(미검증)” 정도로 두는 것이 적절하다.</p>
+
+<p>대략의 코드 형태는 다음과 같다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 미검증안 — collective에 timeout/async error handling 부여</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">timedelta</span>
+<span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="n">dist</span>
+
+<span class="c"># NCCL collective가 hang에 빠지면 communicator를 abort. 동작은 PyTorch 버전에 따라</span>
+<span class="c"># "예외로 승격" 또는 "프로세스 teardown"으로 달라진다 (아래 주의 참고).</span>
+<span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s">"TORCH_NCCL_ASYNC_ERROR_HANDLING"</span><span class="p">,</span> <span class="s">"1"</span><span class="p">)</span>
+<span class="c"># PyTorch 최신 권장 이름은 TORCH_NCCL_BLOCKING_WAIT, legacy는 NCCL_BLOCKING_WAIT.</span>
+<span class="c"># 사용 중인 버전 문서를 반드시 확인.</span>
+
+<span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span>
+    <span class="n">backend</span><span class="o">=</span><span class="s">"nccl"</span><span class="p">,</span>
+    <span class="n">timeout</span><span class="o">=</span><span class="n">timedelta</span><span class="p">(</span><span class="n">hours</span><span class="o">=&lt;</span><span class="n">TBD</span><span class="o">&gt;</span><span class="p">),</span>  <span class="c"># 워크로드별로 산정 필요. 아래 주의사항 참고</span>
+<span class="p">)</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">init_process_group(timeout=...)</code>이 NCCL collective의 wall-clock 상한을 정의한다. 이 시간을 넘기면 PyTorch가 NCCL communicator를 abort한다. <strong>단, abort 이후의 동작은 PyTorch 버전에 따라 다르다</strong> — 최신 공식 문서(PyTorch 2.x 계열)는 <code class="highlighter-rouge">TORCH_NCCL_ASYNC_ERROR_HANDLING=1</code>을 “abort communicator and tear down process”로, NCCL timeout을 “collectives aborted asynchronously and the process will crash”로 설명한다. 즉 <strong>Python 예외로 깔끔히 복귀해 <code class="highlighter-rouge">try/finally</code>를 실행시켜 주는 보장은 없으며</strong>, 버전/모드 조합에 따라 프로세스가 그대로 종료(crash)되는 경로가 더 자연스러울 수 있다.</p>
+
+<p>따라서 이 방향이 의도하는 효과 — “collective abort → Python 예외 → cleanup 코드 실행 기회” — 가 사용 중인 PyTorch/NCCL 버전에서 실제로 보장되는지는 별도 검증이 필요한 영역이다. 본 글은 이 옵션을 적용/검증한 단계까지는 가지 못했으므로, 권장 가이드라기보다 <strong>후속 검토가 필요한 방향</strong> 정도로 두는 것이 적절하다. 검증 시에는 의도적으로 NCCL collective hang을 재현(예: 한 worker를 의도적으로 kill)한 뒤, (a) 나머지 worker에서 timeout 이후 Python 스택으로 예외/종료가 올라오는지, (b) 종료 후 <code class="highlighter-rouge">nvidia-smi</code> 상에 phantom utilization이 남는지 두 가지로 판단한다. (b)가 깨끗하면 검증된 fix로 승격하고, (a)가 일어났는데 (b)에서 phantom이 또 발생한다면 SIGKILL 경로 외의 다른 메커니즘이 있다는 신호다.</p>
+
+<p>다만 <strong>timeout 값은 환경/워크로드마다 다르며, 단순히 짧게 잡을수록 좋은 것이 아니다</strong>. 본 사건 워크로드의 학습 로그를 보면 step당 약 8초, 50 step에 약 7분, 한 에폭이 대략 3.6시간 수준이고, 그 사이에 validation/checkpoint upload(S3) 같은 구간이 끼면 일부 rank가 collective 안에서 수 분~수십 분 머무는 것은 정상 동작이다.</p>
+
+<details>
+  <summary><b>참고: 본 워크로드 학습 로그 발췌</b></summary>
+
+  <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>(RayTrainWorker pid=XXX, ip=10.x.x.x) [S3] Uploaded /app/work_dirs/&lt;model&gt;/epoch_16.pth -&gt; s3://&lt;bucket&gt;/ray-checkpoints/&lt;run-id&gt;/&lt;model&gt;/epoch_16.pth
+(RayTrainWorker pid=XXX, ip=10.x.x.x) [S3] Deleted old checkpoint: s3://&lt;bucket&gt;/ray-checkpoints/&lt;run-id&gt;/&lt;model&gt;/epoch_13.pth
+(RayTrainWorker pid=XXX, ip=10.x.x.x) 05/10 19:51:31 - mmengine - INFO - Epoch(train) [17][  50/1563]  ...  time: 8.5176  data_time: 0.2987  ...
+(RayTrainWorker pid=XXX, ip=10.x.x.x) 05/10 19:58:21 - mmengine - INFO - Epoch(train) [17][ 100/1563]  ...  time: 8.2140  data_time: 0.0635  ...
+(RayTrainWorker pid=XXX, ip=10.x.x.x) 05/10 20:05:15 - mmengine - INFO - Epoch(train) [17][ 150/1563]  ...  time: 8.2670  data_time: 0.0578  ...
+(RayTrainWorker pid=XXX, ip=10.x.x.x) 05/10 20:12:07 - mmengine - INFO - Epoch(train) [17][ 200/1563]  ...  time: 8.2546  data_time: 0.0614  ...
+(RayTrainWorker pid=XXX, ip=10.x.x.x) 05/10 20:19:05 - mmengine - INFO - Epoch(train) [17][ 250/1563]  ...  time: 8.3535  data_time: 0.0644  ...
+</code></pre></div>  </div>
+
+  <p>50 step 간격이 약 6분 50초~7분, step당 평균 약 8.3초 → 1 epoch(1,563 step) ≈ <strong>3.6시간</strong>. 에폭 경계에서는 checkpoint S3 업로드와 validation이 끼므로 rank별 collective 대기가 추가로 길어질 수 있다. 즉 “10분”은 본 워크로드 기준으로는 너무 짧다.</p>
+
+</details>
+
+<p>이런 환경에서 timeout을 무턱대고 짧게 잡으면 정상 collective까지 abort되어 학습이 죽는다. 따라서 다음 조건을 모두 만족하도록 운영 SLO에 맞춰 산정해야 한다.</p>
+
+<ul>
+  <li><strong>정상 collective의 최대 지속 시간보다 충분히 길 것</strong> — validation/checkpoint write/eval rollout 등 GPU가 잠시 멈춰 보일 수 있는 구간을 모두 포함</li>
+  <li><strong>단, 무한대로 두지는 말 것</strong> — hang을 abort로 끊을 수 없으면 결국 SIGTERM 무시 → SIGKILL 경로로 회귀</li>
+  <li><strong>rank 간 데이터 편차가 큰 워크로드(예: variable batch, dynamic shape)에서는 더 보수적으로 산정</strong></li>
+</ul>
+
+<p>또한 <code class="highlighter-rouge">TORCH_NCCL_ASYNC_ERROR_HANDLING</code> / <code class="highlighter-rouge">NCCL_BLOCKING_WAIT</code> 류 환경변수는 PyTorch/NCCL 버전에 따라 이름과 동작이 모두 달라지는 영역이다. 최신 PyTorch 문서는 <code class="highlighter-rouge">TORCH_NCCL_BLOCKING_WAIT</code>를 권장 이름으로 두고 <code class="highlighter-rouge">NCCL_BLOCKING_WAIT</code>은 legacy alias로 받는 경향이 있으며, <code class="highlighter-rouge">TORCH_NCCL_ASYNC_ERROR_HANDLING</code>의 mode 값별 의미도 마이너 버전 단위로 바뀐 사례가 있다. 사용 중인 버전의 공식 문서를 직접 확인하는 것이 안전한 영역이다 — 이 역시 본 사건에서 검증한 범위 밖이다.</p>
+
+<p>정리하면, 1차 시도와 이 방향은 서로 대안이 아니라 <strong>선행 조건(collective abort 가능 상태) → 후행 기본 방어(cleanup)</strong> 의 관계로 묶어야 한다. 1차 시도만 단독으로 적용하면 실제 phantom을 일으키는 SIGKILL 경로에는 손이 닿지 않는다는 점이, 이 사건에서 얻은 가장 분명한 교훈이다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<h2 id="근본-원인은-미해결-더-파야-한다">근본 원인은 미해결: 더 파야 한다</h2>
+
+<p>이 사례의 핵심 질문은 “<strong>왜 driver가 orphaned CUDA context를 자동 회수하지 못했는가?</strong>“이다. <a href="#새-워크로드-배치-현상적-해소">앞서 본 것처럼</a> 새 워크로드를 돌리면서 현상은 해소되었지만, 현상 해소가 곧 원인 해소는 아니다.</p>
+
+<p>본문에서 도출한 유력 가설은 “SIGKILL에 의해 CUDA context cleanup이 실행되지 않았고, orphaned context가 driver의 compute engine을 busy로 유지했다”이다. <a href="#원인-분석">원인 분석</a>에서 정리한 정황 증거(시간적 근접, Xid 부재, 새 context에 의한 해소)가 이 가설을 뒷받침하지만, leaked context를 직접 가리키는 driver 측 증거는 확보하지 못했다. 본 관찰은 580.126.09 + sm_120 + CUDA 13.0 조합에 한정되며, 동일 조건에서의 재현 시도도 아직 수행하지 않았다.</p>
+
+<p>이 질문은 열어 둔다. 드라이버 업데이트 시 동일 시나리오를 재현해 볼 것이고, NVIDIA Open Kernel Module 소스에서 context 회수 경로를 추적하는 것도 검토하고 있다.</p>
+
+<p>그럼에도 이번 사례를 통해 얻은 진단 휴리스틱과 방어선은 정리할 가치가 있다.</p>
+
+<h2 id="재발-방지-계층">재발 방지 계층</h2>
+
+<p>Phantom GPU utilization의 발생 자체를 줄이기 위한 방어선을 세 계층으로 정리한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>계층</th>
+      <th>조치</th>
+      <th>효과</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>애플리케이션</strong></td>
+      <td>비정상 종료 원인 제거 (학습 코드 에러 핸들링 보강)</td>
+      <td>비정상 종료 자체를 방지 → orphaned context 미발생</td>
+    </tr>
+    <tr>
+      <td><strong>워크로드 (1) — 기본 방어</strong></td>
+      <td><code class="highlighter-rouge">train_func</code> try/finally CUDA cleanup, Pod <code class="highlighter-rouge">terminationGracePeriodSeconds</code> 확보, RayJob <code class="highlighter-rouge">shutdownAfterJobFinishes: true</code></td>
+      <td><strong>정상 종료/예외 경로 한정</strong> cleanup 기회. SIGKILL 경로는 막지 못함</td>
+    </tr>
+    <tr>
+      <td><strong>워크로드 (2) — collective abort (미검증)</strong></td>
+      <td>NCCL timeout + async error handling으로 collective blocking 해소 → SIGTERM 처리 가능 상태 확보</td>
+      <td>SIGKILL 경로 진입 자체를 줄임. 워크로드 (1)과 결합해야 cleanup까지 완결</td>
+    </tr>
+    <tr>
+      <td><strong>플랫폼</strong></td>
+      <td>Persistence Mode 상시 활성화</td>
+      <td>orphaned context 발생 빈도 감소 (공식 보장은 아님)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>워크로드 (1)의 try/finally는 NCCL timeout(워크로드 (2))과 결합되어야 SIGKILL 경로의 phantom 방지에 닿을 수 있다. 단독 적용 시 한계는 <a href="#1차-시도-tryfinally-cuda-cleanup--한계">1차 시도 절</a>에서 상세히 다룬다.</p>
+
+<p>애플리케이션 계층 해결이 가장 효과적이다. 비정상 종료가 일어나지 않으면 orphaned context도 발생하지 않는다. 워크로드와 플랫폼 계층은 “비정상 종료가 일어나더라도 피해를 줄이는” 방어선이다.</p>
+
+<h2 id="모니터링-phantom-탐지-규칙-미검증-초안">모니터링: Phantom 탐지 규칙 (미검증 초안)</h2>
+
+<p>재발 방지와 별개로, phantom이 발생했을 때 빠르게 감지하기 위한 모니터링 규칙을 검토할 수 있다. 다만 <strong>이 글 시점에서는 실제 알람으로 검증한 것이 아니라 초안 수준</strong>임을 먼저 밝혀 둔다.</p>
+
+<p>가장 단순한 형태는 다음과 같다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># 단순안 — false positive가 많아 그대로 쓰면 안 된다</span>
+<span class="na">alert</span><span class="pi">:</span> <span class="s">PhantomGPUUtilization</span>
+<span class="na">expr</span><span class="pi">:</span> <span class="s">DCGM_FI_DEV_GPU_UTIL &gt; 95 and DCGM_FI_DEV_FB_USED &lt; 100</span>
+<span class="na">for</span><span class="pi">:</span> <span class="s">5m</span>
+</code></pre></div></div>
+
+<p>문제는 <a href="#gpu-utilization의-정의-nvidia-smi와-nvml">GPU Utilization의 정의</a> 섹션에서 짚었듯 <strong>GPU-Util은 시간 기반 측정이라 메모리 사용량과 직접적인 상관이 없다</strong>는 점이다. 다음과 같은 정상 워크로드도 이 조건을 그대로 만족한다.</p>
+
+<ul>
+  <li>메모리 풋프린트가 작은 compute-bound 커널(작은 batch, 작은 모델, kernel-only 마이크로벤치마크, small CNN inference 등): SM을 지속적으로 점유하면서도 framebuffer는 거의 쓰지 않아 두 조건 모두 만족</li>
+  <li>quantized/sparse 모델이나 sparse matrix operation 등 연산 밀도는 높지만 working set이 작은 워크로드</li>
+</ul>
+
+<p>즉 단순안은 phantom과 “메모리 적게 쓰는 정상 워크로드”를 구분하지 못한다. 알람으로 운영하면 false positive가 잦아져 룰 자체가 신뢰를 잃기 쉽다. 본 사건의 dmon 시그니처를 룰로 옮긴다면, 다음 특징을 조합하는 편이 더 적은 false positive를 낼 것으로 보이지만, 실제 알람 운영으로 검증한 것은 아니다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>시그널</th>
+      <th>정상 워크로드</th>
+      <th>Phantom</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>GR 엔진 activity (<code class="highlighter-rouge">DCGM_FI_PROF_GR_ENGINE_ACTIVE</code>)</td>
+      <td>부하에 비례</td>
+      <td><strong>100% 고정</strong>(가설상) — 수집 시 1차 식별자</td>
+    </tr>
+    <tr>
+      <td>SM activity (<code class="highlighter-rouge">DCGM_FI_PROF_SM_ACTIVE</code>)</td>
+      <td>부하에 비례</td>
+      <td><strong>100% 고정</strong></td>
+    </tr>
+    <tr>
+      <td>DRAM/메모리 activity (<code class="highlighter-rouge">DCGM_FI_PROF_DRAM_ACTIVE</code>)</td>
+      <td>0보다 큼</td>
+      <td><strong>0% 고정</strong></td>
+    </tr>
+    <tr>
+      <td>코어/메모리 클럭 (<code class="highlighter-rouge">DCGM_FI_DEV_SM_CLOCK</code>, <code class="highlighter-rouge">DCGM_FI_DEV_MEM_CLOCK</code>)</td>
+      <td>부하에 따라 변동</td>
+      <td><strong>최대값 stuck</strong></td>
+    </tr>
+    <tr>
+      <td>Performance state (<code class="highlighter-rouge">DCGM_FI_DEV_PSTATE</code>)</td>
+      <td>P0~P8 변동</td>
+      <td><strong>P0 stuck</strong></td>
+    </tr>
+    <tr>
+      <td>GPU device 위의 실행 프로세스/Pod</td>
+      <td>존재</td>
+      <td><strong>부재 (지속적)</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>참고: 이 시그니처를 그대로 룰로 쓰기 전에</strong></p>
+
+  <p>위 표에서 가장 직접적인 phantom 식별자는 사실 따로 있다. DCGM에는 <code class="highlighter-rouge">DCGM_FI_PROF_GR_ENGINE_ACTIVE</code>라는 별도 metric이 있고, “GR(graphics/compute) 엔진이 active로 보고된 시간 비율”을 의미한다. 본 글에서 잠정 채택한 가설인 “엔진이 active 상태로 stuck”을 가장 가깝게 보여주는 값이다. 본 사건에서는 이 metric을 따로 수집하지 못해 <code class="highlighter-rouge">SM_ACTIVE</code>를 대신 썼다. 룰을 옮길 때 GR engine metric을 함께 보는 편이 가설과 더 정합적이다.</p>
+
+  <p>또한 <code class="highlighter-rouge">SM_ACTIVE = 100%</code>가 항상 “GPU가 실제 연산을 풀로 한다”는 뜻은 아니다. DCGM 정의상 SM에 active warp이 하나라도 있으면 active로 카운트되며, 메모리 응답을 기다리며 대기 중인 warp까지 포함된다. 마찬가지로 <code class="highlighter-rouge">DRAM_ACTIVE</code>가 0에 가까운 상태도, 작은 working set으로 도는 정상 compute-bound 커널에서 나타날 수 있다. 즉 <code class="highlighter-rouge">SM_ACTIVE</code> 높음 + <code class="highlighter-rouge">DRAM_ACTIVE</code> 낮음 조합만 보고 phantom으로 단정하기는 어렵다.</p>
+
+  <p>따라서 아래 시그니처는 본 사건 dmon 패턴을 잡으려는 <strong>heuristic</strong>으로 두는 편이 안전하다. “이 조건이면 phantom이다”는 일반 정의로 쓰면 정상 워크로드에서도 알람이 울리는 false positive가 잦아질 수 있다.</p>
+</blockquote>
+
+<p>본 사건의 시그니처를 기준으로 이 시그널들을 함께 보면, phantom은 “<strong>SM은 100%인데 DRAM은 0%이고, P0/최대 클럭에 고정되어 있으며, 해당 GPU 위에 어떤 Pod도 스케줄되어 있지 않은 상태가 충분히 오래 지속</strong>“되는 경우로 좁힐 수 있을 것으로 보인다. 예시 룰은 아래와 같다 (역시 미검증 초안).</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># 보강안 (미검증 초안)</span>
+<span class="na">alert</span><span class="pi">:</span> <span class="s">PhantomGPUUtilization</span>
+<span class="na">expr</span><span class="pi">:</span> <span class="pi">|</span>
+  <span class="no">DCGM_FI_PROF_SM_ACTIVE &gt; 0.95</span>
+  <span class="no">and DCGM_FI_PROF_DRAM_ACTIVE &lt; 0.02</span>
+  <span class="no">and DCGM_FI_DEV_FB_USED &lt; 100</span>
+  <span class="no">and DCGM_FI_DEV_PSTATE == 0</span>
+  <span class="no"># 해당 GPU(uuid/pci)에 매핑된 Pod가 없는 상태와 join 필요</span>
+<span class="na">for</span><span class="pi">:</span> <span class="s">15m</span>
+</code></pre></div></div>
+
+<p>핵심 디자인은 다음과 같다.</p>
+
+<ul>
+  <li><strong>SM은 높지만 DRAM은 0</strong>: 본 사건 dmon에서 관측된 phantom 시그니처. 정상 compute-bound 커널 중에도 동일 패턴을 보이는 경우가 있으므로(앞 박스 참고) 이 조합만으로 단정하지 말고, 아래 조건들과 함께 본다</li>
+  <li><strong>FB 메모리(framebuffer memory — GPU의 VRAM, <code class="highlighter-rouge">nvidia-smi</code>의 <code class="highlighter-rouge">Memory-Used</code>에 해당) 거의 0 + P0 stuck</strong>: orphaned context의 부수 시그널. 임계값(<code class="highlighter-rouge">FB_USED &lt; 100</code>)은 본 사건의 phantom GPU가 모두 <code class="highlighter-rouge">Memory: 0~1 MiB</code> 였던 관측치를 기준으로 잡은 예시이며, 클러스터마다 정상 워크로드의 framebuffer 분포가 달라 baseline 측정 후 조정 필요</li>
+  <li><strong>해당 GPU 위에 Pod 없음</strong>: 가장 강한 식별자. 정상 워크로드와 phantom을 결정적으로 가르는 신호이며, K8s 사이드의 GPU 할당 정보와 join해서 확인해야 한다</li>
+  <li><strong><code class="highlighter-rouge">for: 15m</code></strong> 또는 그 이상: 짧은 spike(짧게 메모리를 비우는 정상 케이스)와 구분하기 위해 지속 시간 윈도우를 충분히 길게 잡음. 본 사건의 phantom은 수 시간 단위로 stuck되어 있었으므로 15분도 보수적인 값이지만, alert latency 목표와 정상 워크로드의 일시적 idle 구간(예: validation/checkpoint upload)에 맞춰 조정하는 것이 안전하다</li>
+</ul>
+
+<p>운영 환경마다 사용 가능한 DCGM 메트릭과 PromQL join 방식이 다르므로, <strong>본 사건의 시그니처를 룰로 옮길 때는 자신의 클러스터에서 정상/phantom 두 케이스의 메트릭을 수집해 임계값을 조정하는 단계가 반드시 필요</strong>하다. 그 과정 없이 위 식을 그대로 붙이면 룰이 silent하거나 노이즈가 될 위험이 있다.</p>
+
+<h2 id="진단-휴리스틱">진단 휴리스틱</h2>
+
+<p>다음에 비슷한 증상을 만났을 때 무엇을 확인할 것인가 — 이번 사건에서 배운 진단 기준을 정리한다. 이 글이 실험 환경에서 작성되었다는 점을 다시 밝혀 둔다. 운영 환경에서 phantom GPU가 발견되면 먼저 해당 노드가 서비스에 미치는 영향을 파악하고, drain → 재부팅(또는 nvidia-persistenced 재시작(미검증))으로 복구한 뒤 원인 분석은 사후에 진행해야 한다.</p>
+
+<ul>
+  <li><strong>nvidia-smi GPU-Util만으로 GPU 상태를 판단하지 말 것.</strong> Phantom utilization처럼 util 100%가 항상 실제 사용을 의미하지는 않는다. <code class="highlighter-rouge">nvidia-smi dmon</code>으로 SM activity, memory activity, clock frequency를 함께 확인해야 한다</li>
+  <li><strong>K8s GPU 노드에서는 <code class="highlighter-rouge">nvidia-smi -r</code>이 안 된다.</strong> nvidia-persistenced가 device handle을 잡고 있으므로, phantom utilization 해소에는 서비스 재시작이나 노드 재부팅이 필요하다</li>
+  <li><strong>본 사건에서는 Xid 없이 phantom utilization이 관측되었다.</strong> 기존 문서가 Xid 13/43을 전제로 했지만, SIGKILL에 의한 orphaned context만으로도 동일 현상이 나타날 수 있는 것으로 보인다. 진단 시 Xid 부재만으로 “문제 없음”을 결론짓지 않는 편이 안전하다</li>
+</ul>
+
+<h2 id="재현-시-수집-계획">재현 시 수집 계획</h2>
+
+<p>본 사건에서 직접 증거를 확보하지 못한 반성을 바탕으로, 다음에 같은 증상이 발생하면 아래 증거를 우선 수집한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>수집 대상</th>
+      <th>명령어</th>
+      <th>확인할 수 있는 것</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Container exit code</td>
+      <td><code class="highlighter-rouge">kubectl get pod -o jsonpath='{.status.containerStatuses[*].lastState.terminated.exitCode}'</code></td>
+      <td>137이면 SIGKILL 경로 직접 증거</td>
+    </tr>
+    <tr>
+      <td>Kubelet termination timeline</td>
+      <td><code class="highlighter-rouge">kubectl get events --field-selector involvedObject.name=&lt;pod&gt;</code></td>
+      <td>SIGTERM → grace period → SIGKILL 타임라인</td>
+    </tr>
+    <tr>
+      <td>Compute app accounting</td>
+      <td><code class="highlighter-rouge">nvidia-smi -q -d ACCOUNTING</code></td>
+      <td>종료된 프로세스의 잔여 record 유무</td>
+    </tr>
+    <tr>
+      <td>GPU별 client process list</td>
+      <td><code class="highlighter-rouge">nvidia-smi -q -d PIDS</code></td>
+      <td>NVML이 보고하는 client attachment 상태</td>
+    </tr>
+    <tr>
+      <td>GSP firmware 상태</td>
+      <td><code class="highlighter-rouge">nvidia-smi -q -d FIRMWARE</code> 및 <code class="highlighter-rouge">dmesg \| grep -iE 'gsp\|nvrm'</code></td>
+      <td>GSP path stuck 가설 검증</td>
+    </tr>
+    <tr>
+      <td>GR engine 활동</td>
+      <td><code class="highlighter-rouge">dcgmi dmon -e 1001</code> (<code class="highlighter-rouge">DCGM_FI_PROF_GR_ENGINE_ACTIVE</code>)</td>
+      <td>“엔진 stuck” 가설의 1차 식별자</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="추가-관찰-새-워크로드에-의한-해소">추가 관찰: 새 워크로드에 의한 해소</h2>
+
+<p>본 사건에서는 phantom GPU 위에 새 워크로드를 배치하자 현상이 해소되었다. 새 CUDA context 생성이 orphaned context의 stuck 상태를 덮어쓴 것으로 추측되지만, 이것은 <strong>몇 차례 관찰에 기반한 우연한 발견</strong>이며 메커니즘이 규명된 것이 아니다. 다른 환경/드라이버 조합에서 동일하게 동작할 보장이 없으므로, 운영 환경에서 일반적 처방으로 적용하는 것은 권장하지 않는다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-자료">참고 자료</h1>
+
+<ul>
+  <li><a href="https://forums.developer.nvidia.com/t/nvidia-smi-reports-phantom-utilization-reported-on-one-gpu/62516">NVIDIA Developer Forum — nvidia-smi reports phantom utilization reported on one GPU</a> — 유사 증상이 보고되어 있으나, 드라이버/아키텍처 조건이 본 사건과 달라 직접 비교는 보류</li>
+  <li><a href="https://docs.nvidia.com/deploy/nvml-api/group__nvmlDeviceQueries.html">NVML API Reference — nvmlDeviceGetUtilizationRates</a></li>
+  <li><a href="https://docs.nvidia.com/deploy/nvml-api/structnvmlUtilization__t.html">NVML API Reference — nvmlUtilization_t</a></li>
+  <li><a href="https://leimao.github.io/blog/NVIDIA-NVML-GPU-Statistics/">Lei Mao — NVIDIA NVML GPU Statistics</a></li>
+  <li><a href="https://modal.com/gpu-glossary/streaming-multiprocessor-utilization">Modal GPU Glossary — Streaming Multiprocessor Utilization</a></li>
+  <li><a href="https://stackoverflow.com/questions/19184865/cuda-context-destruction-at-host-process-termination">Stack Overflow — CUDA context destruction at host process termination</a></li>
+  <li><a href="/articles/Articles-NCCL-Troubleshooting-Collaboration-Retrospective/">NCCL 트러블슈팅 회고</a></li>
+  <li><a href="/dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/">NCCL Communicator Lazy Init 디버깅</a></li>
+  <li><a href="/dev/Dev-NCCL-GPU-Compat-CI-Runtime-Gate/">GPU 호환성 게이트: 빌드 타임과 배포 타임에서 NCCL 커널 미스매치 차단하기</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#cuda" class="page__taxonomy-item" rel="tag">CUDA</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nccl" class="page__taxonomy-item" rel="tag">NCCL</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nvidia-smi" class="page__taxonomy-item" rel="tag">nvidia-smi</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nvidia" class="page__taxonomy-item" rel="tag">NVIDIA</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nvml" class="page__taxonomy-item" rel="tag">NVML</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#phantom-utilization" class="page__taxonomy-item" rel="tag">Phantom-Utilization</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#troubleshooting" class="page__taxonomy-item" rel="tag">Troubleshooting</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-05-11T00:00:00+09:00">May 11, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BGPU%5D+Phantom+GPU+Utilization+%EC%82%AC%EB%A1%80+%EB%B6%84%EC%84%9D%3A+CUDA+Context+%EC%9E%94%EB%A5%98+%EA%B0%80%EC%84%A4%EA%B3%BC+%EA%B7%B8+%ED%95%9C%EA%B3%84%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-GPU-Phantom-Utilization%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-GPU-Phantom-Utilization%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-GPU-Phantom-Utilization%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-GPU-Phantom-Utilization?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/articles/Articles-AWS-Refund-Challenge/" class="pagination--pager" title="AWS: CloudFormation 삭제 실패와 비용 환불기
+">이전</a>
+    
+    
+      <a href="/cs/CS-Linux-Shared-Library/" class="pagination--pager" title="[Linux] 공유 라이브러리(.so): soname 계약부터 동적 링커 탐색까지
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-GPU-Phantom-Utilization/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-GPU-Phantom-Utilization"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,1325 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] NVIDIA Device Plugin 동작 원리 - Eraser’s StudyLog</title>
+<meta name="description" content="쿠버네티스 환경에서 실행되는 컨테이너가 GPU를 사용할 수 있게 되기까지 ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] NVIDIA Device Plugin 동작 원리">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/">
+
+
+  <meta property="og:description" content="쿠버네티스 환경에서 실행되는 컨테이너가 GPU를 사용할 수 있게 되기까지 ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2024-07-23T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] NVIDIA Device Plugin 동작 원리">
+    <meta itemprop="description" content="쿠버네티스 환경에서 실행되는 컨테이너가 GPU를 사용할 수 있게 되기까지">
+    <meta itemprop="datePublished" content="2024-07-23T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] NVIDIA Device Plugin 동작 원리
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2024-07-23T00:00:00+09:00">2024년 07월 23일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  7 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#개요">개요</a></li>
+  <li><a href="#보고">보고</a></li>
+  <li><a href="#스케줄링">스케줄링</a>
+    <ul>
+      <li><a href="#container-runtime의-gpu-처리">Container Runtime의 GPU 처리</a></li>
+    </ul>
+  </li>
+  <li><a href="#extended-resource로서의-gpu">Extended Resource로서의 GPU</a>
+    <ul>
+      <li><a href="#코어-리소스와의-차이">코어 리소스와의 차이</a></li>
+      <li><a href="#규칙-1-정수만-허용">규칙 1: 정수만 허용</a></li>
+      <li><a href="#규칙-2-request--limit-강제-overcommit-불가">규칙 2: request == limit 강제 (overcommit 불가)</a></li>
+      <li><a href="#규칙-3-limits-필수">규칙 3: limits 필수</a></li>
+      <li><a href="#세-규칙의-배경">세 규칙의 배경</a></li>
+    </ul>
+  </li>
+  <li><a href="#결론">결론</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><a href="/dev/Dev-Kubernetes-GPU-Setting/">Kubernetes 환경에서 GPU를 사용하는 방법</a>을 알아본 뒤, 그렇다면 NVIDIA Device Plugin이 어떻게 동작하여 컨테이너에서 GPU를 사용할 수 있는 것인지 공부한 내용을 작성한다.</p>
+
+<p><br /></p>
+
+<h1 id="개요">개요</h1>
+
+<p>크게 두 가지의 관점에서 이해하면 좋다. NVIDIA Device Plugin이 쿠버네티스 환경에서 GPU를 인식할 수 있게 해 준다고 했기 때문에, 어떻게 인식할 수 있는 건지(이하 <strong>보고</strong>라고 하겠다), 인식한 GPU 노드에 어떻게 파드가 스케줄링되어 실행되는지(이하 <strong>스케줄링</strong>이라고 하겠다)이다.</p>
+
+<p><br /></p>
+
+<p>큰 구조는 아래와 같다. GPU를 사용하기 위해, 아래와 같이 계층 별로 책임이 잘 분리되어 있다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>┌──────────────┐
+│  Scheduler   │  "어느 노드에 배치할까?" (정책 결정)
+└──────┬───────┘
+       │ Pod.spec.nodeName = "worker-1"
+       ↓
+┌──────────────┐
+│   Kubelet    │  "이 노드에서 어떻게 실행할까?" (실행 조율)
+│  (worker-1)  │  - Device Plugin에게 물어보기
+└──────┬───────┘  - Container Runtime에게 전달하기
+       │
+       ├─────→ ┌─────────────────┐
+       │       │ Device Plugin   │  "어떤 GPU를 줄까?" (리소스 할당)
+       │       └─────────────────┘
+       │
+       └─────→ ┌─────────────────┐
+               │Container Runtime│  "어떻게 격리할까?" (실행)
+               └─────────────────┘
+</code></pre></div></div>
+
+<ul>
+  <li><strong>Scheduler (kube-scheduler)</strong>: 어느 노드에 배치할지 결정
+    <ul>
+      <li>모든 리소스를 동일하게 취급</li>
+      <li>각각의 리소스를 고려했을 때, 파드를 어느 노드에 배치할지가 관심사</li>
+    </ul>
+  </li>
+  <li><strong>Kubelet</strong>: 파드 실행 관리
+    <ul>
+      <li>노드별 에이전트</li>
+      <li>Device Plugin과 Container Runtime 사이 중개자 역할</li>
+      <li>Device Plugin에 물어봐서, Container Runtime에 실행 요청</li>
+    </ul>
+  </li>
+  <li><strong>NVIDIA Device Plugin</strong>: 어떤 장치를 할당할지 결정
+    <ul>
+      <li>노드 GPU 세부사항 관리</li>
+      <li>Kubelet에게 파드 실행 시 어떤 GPU를 사용하라고 알려 줌</li>
+    </ul>
+  </li>
+  <li><strong>Container Runtime</strong>: 실제 컨테이너 실행</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="보고">보고</h1>
+
+<p>NVIDIA Device Plugin DaemonSet(모든 노드 혹은 특정 노드에 파드를 하나씩 배포하는 컨트롤러)이 배포되어 있는 클러스터라면, GPU 노드에 라벨링했을 때, 각 노드에 NVIDIA Device Plugin이 배포된다고 했다. 이후, 노드의 GPU 상태가 아래와 같이 관리된다.</p>
+
+<p><br /></p>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-gpu-report.png" alt="kubernetes-gpu-report" /></p>
+
+<ol>
+  <li>NVIDIA Device Plugin Pod 시작
+    <ul>
+      <li>노드에 배포된 DaemonSet Pod가 자동 시작</li>
+      <li><code class="highlighter-rouge">/var/lib/kubelet/device-plugins/</code> 디렉토리에 자신의 Unix domain socket 파일(예: <code class="highlighter-rouge">nvidia-gpu.sock</code>)을 생성한다. 이 소켓이 이후 kubelet ↔ Device Plugin 간 모든 gRPC(Google Remote Procedure Call) 통신의 채널이 된다.</li>
+    </ul>
+  </li>
+  <li>Device Plugin → Kubelet 등록 (Register)
+    <ul>
+      <li>같은 디렉토리의 <code class="highlighter-rouge">kubelet.sock</code>에 연결하여 <code class="highlighter-rouge">Register</code> RPC를 호출한다</li>
+      <li><code class="highlighter-rouge">nvidia.com/gpu 리소스를 관리하겠습니다</code> 선언하는 셈이다</li>
+      <li>등록이 완료되면 kubelet이 역으로 Device Plugin의 소켓(<code class="highlighter-rouge">nvidia-gpu.sock</code>)에 연결한다</li>
+    </ul>
+  </li>
+  <li>Device Plugin → Kubelet GPU 개수 보고 (ListAndWatch, 지속적)
+    <ul>
+      <li>kubelet이 Device Plugin 소켓을 통해 <a href="https://github.com/NVIDIA/k8s-device-plugin/blob/main/internal/plugin/server.go#L267">ListAndWatch</a> RPC를 호출한다</li>
+      <li>Device Plugin은 NVML(NVIDIA Management Library)로 GPU를 스캔하고, 발견한 GPU 개수를 gRPC stream으로 지속 보고한다</li>
+      <li>Device Plugin Pod가 삭제되면 gRPC 연결이 끊기고, kubelet은 소켓 감시 메커니즘(<code class="highlighter-rouge">fsnotify</code>)을 통해 이를 감지하여 해당 리소스의 광고를 중단한다</li>
+    </ul>
+  </li>
+  <li>Kubelet은 노드 상태에 GPU 자원을 지속적으로 반영하여 업데이트함
+    <ul>
+      <li>GPU 상태 변경 시 즉시 업데이트</li>
+    </ul>
+  </li>
+</ol>
+
+<p><br /></p>
+
+<p>이렇게 보고된 GPU 자원을 노드 상태를 통해 확인할 수 있게 되는 것이다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Node</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">worker-1</span>
+<span class="na">status</span><span class="pi">:</span>
+  <span class="na">capacity</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s2">"</span><span class="s">8"</span>      <span class="c1"># Device Plugin이 보고한 값</span>
+    <span class="na">cpu</span><span class="pi">:</span> <span class="s2">"</span><span class="s">16"</span>
+    <span class="na">memory</span><span class="pi">:</span> <span class="s2">"</span><span class="s">64Gi"</span>
+  <span class="na">allocatable</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s2">"</span><span class="s">8"</span>      
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="스케줄링">스케줄링</h1>
+
+<p>그렇다면 사용자가 GPU 파드 생성을 요청했을 때는 어떤 일이 발생할까.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-gpu-scheduling-1.png" alt="kubernetes-gpu-scheduling-1" /></p>
+
+<ol>
+  <li>사용자: <code class="highlighter-rouge">nvidia.com/gpu: 1</code> 파드 생성 요청</li>
+  <li>Scheduler: 노드 스케줄링
+    <ul>
+      <li>위 보고 단계에서 노드 상태가 계속해서 보고되고 있음</li>
+      <li>이렇게 보고된 노드 상태를 바탕으로, 가용 <code class="highlighter-rouge">nvidia.com/gpu</code> 자원을 확인해 적절한 노드에 배치</li>
+    </ul>
+  </li>
+  <li>Kubelet: 파드 배치 감지
+    <ul>
+      <li><code class="highlighter-rouge">아, 내 노드에 파드가 배치되었구나. 컨테이너 생성을 시작해야지!</code></li>
+    </ul>
+  </li>
+  <li>Kubelet: NVIDIA GPU Device Plugin에게 GPU 할당 요청
+    <ul>
+      <li><code class="highlighter-rouge">이 pod에 nvidia.com/gpu 자원이 1개 필요해. 어떤 GPU를 사용하면 돼?</code></li>
+    </ul>
+  </li>
+  <li>NVIDIA Device Plugin: GPU 할당 결과 응답 반환
+    <ul>
+      <li><code class="highlighter-rouge">GPU-&lt;uuid&gt;를 할당해줄게. /dev/nvidia0 경로에 있어. 환경 변수는 이렇게 설정해</code></li>
+      <li>GPU ID: GPU-abc123…</li>
+      <li>Device Path: /dev/nvidia0, /dev/nvidiactl, /dev/nvidia-uvm</li>
+      <li>환경변수: NVIDIA_VISIBLE_DEVICES=GPU-abc123</li>
+      <li>마운트: CUDA 라이브러리 경로들</li>
+    </ul>
+  </li>
+  <li>Kubelet: Container Runtime에 <code class="highlighter-rouge">4</code>에서 받은 응답과 함께 컨테이너 실행 요청
+    <ul>
+      <li>Kubelet은 NVIDIA Device Plugin의 응답을 신뢰. 받은 것을 그대로 전달</li>
+      <li>Container Runtime에, 예컨대 아래와 같은 정보를 주입
+        <div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+  </span><span class="s2">"Devices"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w">
+    </span><span class="p">{</span><span class="w">
+      </span><span class="s2">"Path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/dev/nvidia0"</span><span class="p">,</span><span class="w"> 
+      </span><span class="s2">"Type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"c"</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"Major"</span><span class="p">:</span><span class="w"> </span><span class="mi">195</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"Minor"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="w">
+    </span><span class="p">}</span><span class="w">
+  </span><span class="p">],</span><span class="w">
+  </span><span class="s2">"Mounts"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w">
+    </span><span class="s2">"/usr/local/nvidia/lib64"</span><span class="w">
+  </span><span class="p">],</span><span class="w">
+  </span><span class="s2">"Env"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w">
+    </span><span class="s2">"NVIDIA_VISIBLE_DEVICES=GPU-abc123..."</span><span class="w">
+  </span><span class="p">]</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div>        </div>
+      </li>
+    </ul>
+  </li>
+  <li>Container Runtime: 컨테이너 실행</li>
+</ol>
+
+<blockquote>
+  <p><strong>참고: <code class="highlighter-rouge">NVIDIA_VISIBLE_DEVICES</code>와 <code class="highlighter-rouge">CUDA_VISIBLE_DEVICES</code> (OCI Hook 방식)</strong></p>
+
+  <p>OCI Runtime Hook 방식에서 이 두 환경 변수는 설정 주체와 동작 레벨이 다르다.</p>
+  <ul>
+    <li><code class="highlighter-rouge">NVIDIA_VISIBLE_DEVICES</code>: <strong>NVIDIA Device Plugin</strong>이 <code class="highlighter-rouge">Allocate</code> RPC 응답에서 GPU UUID로 설정한다. <strong>컨테이너 런타임 레벨</strong>에서 어떤 GPU를 컨테이너에 노출할지 결정하는 변수로, NVIDIA Container Runtime Hook(<code class="highlighter-rouge">nvidia-container-runtime-hook</code>)이 이 값을 읽고 실제 GPU 장치를 컨테이너에 마운트한다.</li>
+    <li><code class="highlighter-rouge">CUDA_VISIBLE_DEVICES</code>: Device Plugin이 아니라 <strong>NVIDIA Container Runtime Hook</strong>이 컨테이너 시작 시점에 설정한다. <strong>CUDA 런타임 레벨</strong>에서 애플리케이션이 볼 수 있는 GPU를 제어하는 변수다.</li>
+  </ul>
+
+  <p>즉, Device Plugin의 <code class="highlighter-rouge">Allocate</code> 응답에는 <code class="highlighter-rouge">NVIDIA_VISIBLE_DEVICES</code>만 포함되며, <code class="highlighter-rouge">CUDA_VISIBLE_DEVICES</code>는 컨테이너 실행 과정에서 NVIDIA Container Runtime이 자동으로 설정한다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="container-runtime의-gpu-처리">Container Runtime의 GPU 처리</h2>
+
+<blockquote>
+  <p>이 섹션은 <strong>OCI Runtime Hook 방식</strong> 기준으로 설명한다. GPU Operator v25.10.0 이후부터는 <a href="/cs/CS-Container-Device-Injection/">CDI(Container Device Interface)</a>가 기본값으로 전환되어, containerd가 CDI 스펙을 직접 읽어 디바이스를 주입하는 방식으로 동작한다. CDI 방식에서는 아래의 <code class="highlighter-rouge">nvidia-container-runtime-hook</code> 흐름이 적용되지 않는다.</p>
+</blockquote>
+
+<p><a href="/dev/Dev-Nvidia-Container-Runtime/">NVIDIA Container Runtime</a>에 대해 알아본 결과를 바탕으로, OCI Hook 방식에서 위의 <code class="highlighter-rouge">5</code>와 <code class="highlighter-rouge">6</code> 사이에 어떤 일이 일어나는지 조금 더 자세히 살펴보자.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-gpu-scheduling-2.png" alt="kubernetes-gpu-scheduling-2" /></p>
+
+<ol>
+  <li>Kubelet: CRI를 통해 High-Level Container Runtime(containerd 등)에 컨테이너 생성 요청</li>
+  <li>High-Level Container Runtime: OCI Runtime으로 등록된 NVIDIA Container Runtime(<code class="highlighter-rouge">nvidia-container-runtime</code>) 호출</li>
+  <li>NVIDIA Container Runtime: OCI 스펙(<code class="highlighter-rouge">config.json</code>)에 GPU 관련 정보 주입
+    <ul>
+      <li><code class="highlighter-rouge">nvidia-container-runtime-hook</code>(prestart hook) 실행</li>
+      <li>Device Plugin이 설정한 <code class="highlighter-rouge">NVIDIA_VISIBLE_DEVICES</code> 값을 읽어 대상 GPU 결정</li>
+      <li>GPU 장치 파일(<code class="highlighter-rouge">/dev/nvidia0</code>, <code class="highlighter-rouge">/dev/nvidiactl</code> 등) 추가</li>
+      <li>CUDA 라이브러리, NVIDIA driver 파일 마운트 설정</li>
+      <li><code class="highlighter-rouge">CUDA_VISIBLE_DEVICES</code> 등 CUDA 런타임용 환경 변수 설정</li>
+    </ul>
+  </li>
+  <li>NVIDIA Container Runtime: 수정된 OCI 스펙으로 <code class="highlighter-rouge">runc</code>(Low-Level Container Runtime) 호출</li>
+  <li><code class="highlighter-rouge">runc</code>: OCI 스펙을 읽고 Linux namespace, cgroup 등을 설정하여 실제 컨테이너 프로세스 생성</li>
+</ol>
+
+<p>여기서 핵심은, NVIDIA Container Runtime과 <code class="highlighter-rouge">runc</code>의 <strong>역할이 명확히 분리</strong>되어 있다는 점이다.</p>
+
+<ul>
+  <li><strong>NVIDIA Container Runtime</strong>: runc의 wrapper로서, GPU를 컨테이너에서 사용할 수 있도록 OCI 스펙을 수정하는 역할. 컨테이너 자체를 생성하지는 않는다.</li>
+  <li><strong>runc</strong>: 수정된 OCI 스펙을 받아 Linux namespace, cgroup 등 저수준 격리 환경을 설정하고, 실제 컨테이너 프로세스를 생성하는 역할.</li>
+</ul>
+
+<p>NVIDIA Container Runtime의 내부 동작 구조에 대한 상세한 내용은 <a href="/dev/Dev-Nvidia-Container-Runtime/">NVIDIA Container Runtime</a> 글을 참고하자.</p>
+
+<p><br /></p>
+
+<h1 id="extended-resource로서의-gpu">Extended Resource로서의 GPU</h1>
+
+<p>지금까지 Device Plugin이 GPU를 보고하고, 스케줄러가 배치하고, kubelet이 할당하는 흐름을 살펴보았다. 이 흐름을 이해했다면, 한 가지 더 짚고 넘어갈 것이 있다. <strong><code class="highlighter-rouge">nvidia.com/gpu</code>는 쿠버네티스 코어 리소스(<code class="highlighter-rouge">cpu</code>, <code class="highlighter-rouge">memory</code>)가 아니라, Device Plugin이 광고하는 <a href="https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources">Extended Resource</a>다.</strong> Extended Resource에는 코어 리소스와 다른 강제 규칙이 있고, GPU를 다루려면 이 규칙을 알아야 한다.</p>
+
+<p><br /></p>
+
+<h2 id="코어-리소스와의-차이">코어 리소스와의 차이</h2>
+
+<p><code class="highlighter-rouge">cpu</code>와 <code class="highlighter-rouge">memory</code>는 쿠버네티스가 태생적으로 알고 있는 리소스다. kubelet이 직접 노드의 CPU 코어 수와 메모리 용량을 측정하여 보고한다. 반면 <code class="highlighter-rouge">nvidia.com/gpu</code> 같은 Extended Resource는 <code class="highlighter-rouge">kubernetes.io</code> 도메인 바깥의 이름을 쓰며, Device Plugin(또는 API 패치)을 통해 외부에서 광고된다. 쿠버네티스 입장에서는 “이 노드에 <code class="highlighter-rouge">nvidia.com/gpu</code>라는 것이 몇 개 있다”만 알 뿐, 그것이 물리적으로 무엇인지는 모른다.</p>
+
+<p>이 설계 차이 때문에 Extended Resource에는 코어 리소스에 없는 <strong>세 가지 강제 규칙</strong>이 적용된다.</p>
+
+<p><br /></p>
+
+<h2 id="규칙-1-정수만-허용">규칙 1: 정수만 허용</h2>
+
+<p>Extended Resource는 정수 단위로만 요청할 수 있다. <code class="highlighter-rouge">nvidia.com/gpu: 0.5</code> 같은 소수 요청은 API 서버가 거부한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># 유효</span>
+<span class="na">resources</span><span class="pi">:</span>
+  <span class="na">limits</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">1</span>
+
+<span class="c1"># 무효 — API 서버가 거부</span>
+<span class="na">resources</span><span class="pi">:</span>
+  <span class="na">limits</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">0.5</span>
+</code></pre></div></div>
+
+<p>코어 리소스인 <code class="highlighter-rouge">cpu</code>는 밀리코어 단위(<code class="highlighter-rouge">500m</code> = 0.5 코어)까지 쪼갤 수 있지만, Extended Resource는 “N개의 이산적인 장치”를 나타내는 설계이므로 정수만 허용된다.</p>
+
+<p><br /></p>
+
+<h2 id="규칙-2-request--limit-강제-overcommit-불가">규칙 2: request == limit 강제 (overcommit 불가)</h2>
+
+<p>Extended Resource는 overcommit이 불가능하다. <code class="highlighter-rouge">requests</code>와 <code class="highlighter-rouge">limits</code>를 둘 다 명시하면 <strong>반드시 같아야</strong> 한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># 유효 — 둘 다 같은 값</span>
+<span class="na">resources</span><span class="pi">:</span>
+  <span class="na">requests</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">1</span>
+  <span class="na">limits</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">1</span>
+
+<span class="c1"># 무효 — API 서버가 거부</span>
+<span class="na">resources</span><span class="pi">:</span>
+  <span class="na">requests</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">1</span>
+  <span class="na">limits</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">2</span>
+</code></pre></div></div>
+
+<p>CPU의 경우 <code class="highlighter-rouge">requests: 500m</code>, <code class="highlighter-rouge">limits: 2000m</code>처럼 설정하여 여유가 있으면 burst할 수 있지만, GPU에서는 “1개 여유면 1개, 2개 여유면 2개” 같은 동적 할당이 존재하지 않는다. 왜 이런 차이가 나는지 — compressible/incompressible 리소스의 본질적 차이 — 는 <a href="/kubernetes/Kubernetes-GPU-Time-Slicing-1/">GPU Sharing: Time Slicing - 1. 개념</a>에서 더 자세히 다룬다.</p>
+
+<p><br /></p>
+
+<h2 id="규칙-3-limits-필수">규칙 3: limits 필수</h2>
+
+<p>Extended Resource는 반드시 <code class="highlighter-rouge">limits</code>에 지정해야 한다. <code class="highlighter-rouge">requests</code>만 단독으로 지정하는 것은 허용되지 않는다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>지정 방식</th>
+      <th>유효 여부</th>
+      <th>동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">limits</code>만 지정</td>
+      <td>O</td>
+      <td><code class="highlighter-rouge">requests</code>가 <code class="highlighter-rouge">limits</code>와 동일값으로 자동 채워짐</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">limits</code> + <code class="highlighter-rouge">requests</code> (동일값)</td>
+      <td>O</td>
+      <td>명시적으로 같은 값</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">requests</code>만 지정</td>
+      <td><strong>X</strong></td>
+      <td>API 서버 거부</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>실무에서는 첫 번째 패턴이 가장 일반적이다. <code class="highlighter-rouge">limits</code>만 쓰면 <code class="highlighter-rouge">requests</code>는 자동으로 같은 값이 된다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">resources</span><span class="pi">:</span>
+  <span class="na">limits</span><span class="pi">:</span>
+    <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">1</span>   <span class="c1"># requests도 자동으로 1</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="세-규칙의-배경">세 규칙의 배경</h2>
+
+<p>세 규칙을 관통하는 설계 의도는 명확하다. GPU 디바이스는 커널 스케줄러가 매 순간 시간을 잘게 쪼개 나눠줄 수 있는 CPU와 달리, Device Plugin이 “N개의 이산적인 장치”로 광고하고, kubelet이 특정 디바이스 ID를 컨테이너에 핀(<code class="highlighter-rouge">NVIDIA_VISIBLE_DEVICES</code>)으로 박아넣어 Pod 수명 동안 독점시키는 구조다. 기본적으로 커널 레벨의 선점형 시분할이 없으므로, 소수 요청·overcommit·burst 같은 개념이 성립할 자리가 없다.</p>
+
+<p>그래서 “분수 GPU”가 필요하면, request/limit 의미론을 바꾸는 것이 아니라, <a href="/dev/Dev-GPU-Sharing-Mechanisms/">GPU 공유 메커니즘</a>(<a href="/kubernetes/Kubernetes-GPU-Time-Slicing-1/">Time Slicing</a>, MPS, MIG)을 통해 <strong>Device Plugin이 광고하는 단위 자체를 바꾸는</strong> 별개 메커니즘을 사용해야 한다.</p>
+
+<p><br /></p>
+
+<details>
+  <summary><b>API 서버의 검증 로직: non-overcommitable resource</b></summary>
+
+  <p>위 규칙들은 NVIDIA Device Plugin이 아니라 <strong>kube-apiserver의 Pod spec validation 코드 자체</strong>에 하드코딩되어 있다. <code class="highlighter-rouge">pkg/apis/core/validation/validation.go</code>의 <code class="highlighter-rouge">ValidateContainerResourceRequirements</code> 함수가 Pod 생성/수정 시 검증한다.</p>
+
+  <p>overcommit 가능 여부를 결정하는 것은 <code class="highlighter-rouge">helper.IsOvercommitAllowed</code> 함수다.</p>
+
+  <div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span><span class="x"> </span><span class="n">IsOvercommitAllowed</span><span class="p">(</span><span class="n">name</span><span class="x"> </span><span class="n">core</span><span class="o">.</span><span class="n">ResourceName</span><span class="p">)</span><span class="x"> </span><span class="kt">bool</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="k">return</span><span class="x"> </span><span class="n">IsNativeResource</span><span class="p">(</span><span class="n">name</span><span class="p">)</span><span class="x"> </span><span class="o">&amp;&amp;</span><span class="x"> </span><span class="o">!</span><span class="n">IsHugePageResourceName</span><span class="p">(</span><span class="n">name</span><span class="p">)</span><span class="x">
+</span><span class="p">}</span><span class="x">
+</span></code></pre></div>  </div>
+
+  <p>overcommit이 허용되는 건 <strong>native resource(<code class="highlighter-rouge">kubernetes.io</code> 도메인 또는 도메인 없는 리소스)이면서 hugepages가 아닌 것</strong>뿐이다. 즉 GPU만이 아니라, <code class="highlighter-rouge">kubernetes.io</code> 도메인 바깥의 <strong>모든 extended resource</strong>와 <strong>hugepages</strong>가 non-overcommitable이다. 목록이 미리 정의된 것이 아니라, “native이면서 hugepages가 아닌 것만 허용”이라는 배제 로직이다.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>분류</th>
+        <th>예시</th>
+        <th>overcommit</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>native, hugepages 아님</td>
+        <td><code class="highlighter-rouge">cpu</code>, <code class="highlighter-rouge">memory</code>, <code class="highlighter-rouge">ephemeral-storage</code></td>
+        <td>허용</td>
+      </tr>
+      <tr>
+        <td>native, hugepages</td>
+        <td><code class="highlighter-rouge">hugepages-2Mi</code>, <code class="highlighter-rouge">hugepages-1Gi</code></td>
+        <td><strong>불가</strong></td>
+      </tr>
+      <tr>
+        <td>extended resource (전부)</td>
+        <td><code class="highlighter-rouge">nvidia.com/gpu</code>, <code class="highlighter-rouge">amd.com/gpu</code>, FPGA, 커스텀 NIC 등</td>
+        <td><strong>불가</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>이 함수를 호출하는 검증 로직은 두 곳이다.</p>
+
+  <div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// request != limit이면 거부</span><span class="x">
+</span><span class="k">if</span><span class="x"> </span><span class="n">quantity</span><span class="o">.</span><span class="n">Cmp</span><span class="p">(</span><span class="n">limitQuantity</span><span class="p">)</span><span class="x"> </span><span class="o">!=</span><span class="x"> </span><span class="m">0</span><span class="x"> </span><span class="o">&amp;&amp;</span><span class="x"> </span><span class="o">!</span><span class="n">helper</span><span class="o">.</span><span class="n">IsOvercommitAllowed</span><span class="p">(</span><span class="n">resourceName</span><span class="p">)</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">allErrs</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="nb">append</span><span class="p">(</span><span class="n">allErrs</span><span class="p">,</span><span class="x"> </span><span class="n">field</span><span class="o">.</span><span class="n">Invalid</span><span class="p">(</span><span class="n">reqPath</span><span class="p">,</span><span class="x"> </span><span class="n">quantity</span><span class="o">.</span><span class="n">String</span><span class="p">(),</span><span class="x">
+        </span><span class="n">fmt</span><span class="o">.</span><span class="n">Sprintf</span><span class="p">(</span><span class="s">"must be equal to %s limit of %s"</span><span class="p">,</span><span class="x"> </span><span class="n">resourceName</span><span class="p">,</span><span class="x"> </span><span class="n">limitQuantity</span><span class="o">.</span><span class="n">String</span><span class="p">())))</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="c">// requests만 있고 limits가 없으면 거부</span><span class="x">
+</span><span class="p">}</span><span class="x"> </span><span class="k">else</span><span class="x"> </span><span class="k">if</span><span class="x"> </span><span class="o">!</span><span class="n">helper</span><span class="o">.</span><span class="n">IsOvercommitAllowed</span><span class="p">(</span><span class="n">resourceName</span><span class="p">)</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">allErrs</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="nb">append</span><span class="p">(</span><span class="n">allErrs</span><span class="p">,</span><span class="x"> </span><span class="n">field</span><span class="o">.</span><span class="n">Required</span><span class="p">(</span><span class="n">limPath</span><span class="p">,</span><span class="x">
+        </span><span class="s">"Limit must be set for non overcommitable resources"</span><span class="p">))</span><span class="x">
+</span><span class="p">}</span><span class="x">
+</span></code></pre></div>  </div>
+
+  <p>NVIDIA든 AMD든 커스텀 FPGA든, <code class="highlighter-rouge">kubernetes.io</code> 도메인 바깥의 리소스 이름을 쓰는 순간 이 검증에 걸린다. Device Plugin이나 벤더와 무관한, K8s 코어의 extended resource 공통 규칙이다.</p>
+
+</details>
+
+<p><br /></p>
+
+<h1 id="결론">결론</h1>
+
+<p>위와 같은 단계를 거쳐, 최종적으로 쿠버네티스 환경에서 컨테이너가 GPU를 사용할 수 있게 된다. 알고 보면, 그 속에 숨어 있는 추상화 레벨과 책임 분리가, 놀라운 수준이다.</p>
+
+<p>또한, 이 글에서 다룬 Device Plugin의 <code class="highlighter-rouge">Allocate</code> 방식 외에도, <a href="/cs/CS-Container-Device-Injection/">CDI(Container Device Interface)</a>라는 표준화된 장치 주입 방식이 등장하고 있다. 최신 NVIDIA Device Plugin(v0.14+)은 CDI를 지원하며, 컨테이너 런타임이 CDI 스펙을 직접 읽어 디바이스를 주입하는 방식으로 기존 OCI Runtime Hook 방식을 대체할 수 있다.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-GPU-Time-Slicing-2/">[Kubernetes] GPU Sharing: Time Slicing - 2. 설정</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#container" class="page__taxonomy-item" rel="tag">container</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">gpu</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#k8s" class="page__taxonomy-item" rel="tag">k8s</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nvidia" class="page__taxonomy-item" rel="tag">nvidia</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2024-07-23T00:00:00+09:00">July 23, 2024</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+NVIDIA+Device+Plugin+%EB%8F%99%EC%9E%91+%EC%9B%90%EB%A6%AC%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-NVIDIA-GPU-Mechanism%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-NVIDIA-GPU-Mechanism%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-NVIDIA-GPU-Mechanism%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-Kubernetes-NVIDIA-GPU-Mechanism?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-Kubernetes-Shared-Memory/" class="pagination--pager" title="[Dev] Kubernetes 공유 메모리: PyTorch DataLoader shm 부족 트러블슈팅
+">이전</a>
+    
+    
+      <a href="/dev/Dev-Kubernetes-Argo-Workflow-Artifact/" class="pagination--pager" title="[Kubernetes] Argo Workflow Artifact 기능 사용하기
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

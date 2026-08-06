@@ -1,0 +1,2197 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[EKS] GitOps 기반 SaaS: 클러스터 환경 확인 - 2. Flux 아키텍처 분석 - Eraser’s StudyLog</title>
+<meta name="description" content="Flux의 3-Layer 모델과 진입점 체계를 분석하고, Git 저장소의 어떤 파일이 클러스터의 어디에 영향을 미치는지 지도를 그려 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[EKS] GitOps 기반 SaaS: 클러스터 환경 확인 - 2. Flux 아키텍처 분석">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GitOps-Saas-02-00-02-Cluster-Flux-Architecture/">
+
+
+  <meta property="og:description" content="Flux의 3-Layer 모델과 진입점 체계를 분석하고, Git 저장소의 어떤 파일이 클러스터의 어디에 영향을 미치는지 지도를 그려 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-16T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GitOps-Saas-02-00-02-Cluster-Flux-Architecture/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[EKS] GitOps 기반 SaaS: 클러스터 환경 확인 - 2. Flux 아키텍처 분석">
+    <meta itemprop="description" content="Flux의 3-Layer 모델과 진입점 체계를 분석하고, Git 저장소의 어떤 파일이 클러스터의 어디에 영향을 미치는지 지도를 그려 보자.">
+    <meta itemprop="datePublished" content="2026-04-16T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[EKS] GitOps 기반 SaaS: 클러스터 환경 확인 - 2. Flux 아키텍처 분석
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-16T00:00:00+09:00">2026년 04월 16일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  15 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#flux-cli-탐색-명령어">Flux CLI 탐색 명령어</a>
+    <ul>
+      <li><a href="#큰-그림을-보는-5가지-명령어">큰 그림을 보는 5가지 명령어</a></li>
+      <li><a href="#flux-tree-계층-구조-확인">flux tree: 계층 구조 확인</a></li>
+      <li><a href="#flux-trace-리소스-역추적">flux trace: 리소스 역추적</a></li>
+    </ul>
+  </li>
+  <li><a href="#flux-3-layer-모델">Flux 3-Layer 모델</a>
+    <ul>
+      <li><a href="#루트-kustomization-flux-system">루트 Kustomization: flux-system</a></li>
+    </ul>
+  </li>
+  <li><a href="#진입점entry-point-구조-분석">진입점(Entry Point) 구조 분석</a>
+    <ul>
+      <li><a href="#clustersproduction-폴더-구조">clusters/production 폴더 구조</a></li>
+      <li><a href="#진입점-매핑">진입점 매핑</a></li>
+      <li><a href="#kustomizationyaml의-역할">kustomization.yaml의 역할</a></li>
+      <li><a href="#dependson-의존성-체인">dependsOn 의존성 체인</a></li>
+    </ul>
+  </li>
+  <li><a href="#진입점별-리소스-매핑">진입점별 리소스 매핑</a>
+    <ul>
+      <li><a href="#sources-소스-등록">sources: 소스 등록</a></li>
+      <li><a href="#dependencies-선행-의존성">dependencies: 선행 의존성</a></li>
+      <li><a href="#infrastructure-클러스터-애드온">infrastructure: 클러스터 애드온</a></li>
+      <li><a href="#controlplane-saas-운영-도구">controlplane: SaaS 운영 도구</a></li>
+      <li><a href="#dataplane-pooled-envs-공유-풀">dataplane-pooled-envs: 공유 풀</a></li>
+      <li><a href="#dataplane-tenants-테넌트별-환경">dataplane-tenants: 테넌트별 환경</a></li>
+      <li><a href="#helmrelease-분포-요약">HelmRelease 분포 요약</a></li>
+      <li><a href="#진입점-분리의-설계-원리">진입점 분리의 설계 원리</a></li>
+    </ul>
+  </li>
+  <li><a href="#핵심-포인트">핵심 포인트</a>
+    <ul>
+      <li><a href="#flux-get-all-vs-flux-tree">flux get all vs. flux tree</a></li>
+      <li><a href="#dataplane-tenants는-왜-비어-있는가">dataplane-tenants는 왜 비어 있는가</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/ianychoi/">최영락</a>님의 AWS EKS Workshop Study(AEWS) 6주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>Flux는 <strong>3-Layer 모델</strong>(Entry Points → What to Deploy → Building Blocks)로 GitOps 파이프라인을 구성한다</li>
+  <li><code class="highlighter-rouge">clusters/production/</code>의 6개 진입점(Entry Point) YAML이 전체 클러스터 배포의 시작점이며, 각 진입점은 <code class="highlighter-rouge">dependsOn</code>으로 실행 순서를 제어한다</li>
+  <li><code class="highlighter-rouge">flux tree</code>로 “어떤 Kustomization이 무엇을 만들었는지”, <code class="highlighter-rouge">flux trace</code>로 “이 리소스가 어디서 왔는지” 역추적할 수 있다</li>
+  <li><code class="highlighter-rouge">dataplane-tenants</code>는 현재 ConfigMap 3개뿐인 placeholder 상태로, 이후 실습에서 Terraform CRD가 추가될 자리다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="flux-cli-탐색-명령어">Flux CLI 탐색 명령어</h1>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GitOps-Saas-02-00-01-Cluster-Environment/">이전 포스트</a>에서 <code class="highlighter-rouge">flux get all</code>로 “무엇이 있는지”를 확인했다. 이번에는 구조를 파악하는 데 유용한 Flux CLI 명령어 5가지를 먼저 정리하고, 그 결과를 바탕으로 Flux 아키텍처를 분석해 보자.</p>
+
+<h2 id="큰-그림을-보는-5가지-명령어">큰 그림을 보는 5가지 명령어</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>명령어</th>
+      <th>용도</th>
+      <th>보여주는 것</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">flux get all -A</code></td>
+      <td>카탈로그</td>
+      <td>Flux가 sync하는 입력 선언(CRD) 전체</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">flux tree kustomization &lt;name&gt;</code></td>
+      <td>트리</td>
+      <td>해당 Kustomization이 만들어낸 리소스 계층</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">flux trace &lt;resource&gt;</code></td>
+      <td>역추적</td>
+      <td>특정 리소스가 어떤 경로로 생성되었는지</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">flux stats -A</code></td>
+      <td>통계</td>
+      <td>종류별 개수와 reconcile 상태</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">flux events -A</code></td>
+      <td>이벤트</td>
+      <td>최근 reconcile 이벤트 로그</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>여기서 핵심적인 구분이 하나 있다. <code class="highlighter-rouge">flux get all</code>이 보여주는 것은 <strong>입력 선언</strong>(HelmRelease, Kustomization 등)이지, Flux가 만들어낸 <strong>결과물</strong>(Deployment, Service 등)이 아니다. 결과물까지 보려면 <code class="highlighter-rouge">flux tree</code>를 사용해야 한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>입력 (<code class="highlighter-rouge">flux get all</code>에 나옴)</th>
+      <th style="text-align: center"> </th>
+      <th>결과물 (<code class="highlighter-rouge">flux tree</code>로 봐야 함)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">HelmRelease/kubecost</code></td>
+      <td style="text-align: center">생성 →</td>
+      <td><code class="highlighter-rouge">Deployment/kubecost-cost-analyzer</code>, <code class="highlighter-rouge">Service/kubecost-cost-analyzer</code>, <code class="highlighter-rouge">Pod/kubecost-cost-analyzer-xxx</code> 등</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">Kustomization/dataplane-tenants</code></td>
+      <td style="text-align: center">생성 →</td>
+      <td><code class="highlighter-rouge">Terraform/example-tenant</code> (CRD) → tf-controller가 처리 → SQS, DynamoDB, IAM Role (AWS)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">HelmRelease/karpenter</code></td>
+      <td style="text-align: center">생성 →</td>
+      <td><code class="highlighter-rouge">Deployment/karpenter/karpenter</code>, <code class="highlighter-rouge">ServiceAccount</code>, <code class="highlighter-rouge">ClusterRole</code> 등</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="flux-tree-계층-구조-확인">flux tree: 계층 구조 확인</h2>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GitOps-Saas-02-00-01-Cluster-Environment/">이전 포스트</a>에서 <code class="highlighter-rouge">flux get all</code>은 입력 선언, <code class="highlighter-rouge">flux tree</code>는 그 결과물을 보여 준다고 정리했다. <code class="highlighter-rouge">flux tree kustomization flux-system</code>을 실행하면, 루트 Kustomization(flux-system)이 만들어낸 전체 리소스를 트리 형태로 볼 수 있다. 최상위 가지만 발췌하면 다음과 같다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 루트 Kustomization의 자식 Kustomization별 핵심 리소스 발췌</span>
+<span class="nv">$ </span>flux tree kustomization flux-system
+Kustomization/flux-system/flux-system
+├── Kustomization/flux-system/controlplane
+│   └── HelmRelease/flux-system/onboarding-service <span class="o">(</span>+ EventSource, Sensor, WorkflowTemplate<span class="o">)</span>
+├── Kustomization/flux-system/dataplane-pooled-envs
+│   └── HelmRelease/flux-system/pool-1 <span class="o">(</span>+ Terraform CRD<span class="o">)</span>
+├── Kustomization/flux-system/dataplane-tenants
+│   ├── ConfigMap/default/dummy-configmap-advanced
+│   ├── ConfigMap/default/dummy-configmap-basic
+│   └── ConfigMap/default/dummy-configmap-premium
+├── Kustomization/flux-system/dependencies
+│   ├── EC2NodeClass/default
+│   ├── NodePool/application
+│   └── NodePool/default
+├── Kustomization/flux-system/infrastructure
+│   ├── HelmRelease/flux-system/argo-events
+│   ├── HelmRelease/flux-system/argo-workflows
+│   ├── HelmRelease/flux-system/aws-load-balancer-controller
+│   ├── HelmRelease/flux-system/karpenter
+│   ├── HelmRelease/flux-system/kubecost
+│   ├── HelmRelease/flux-system/metrics-server
+│   └── HelmRelease/flux-system/tf-controller
+└── Kustomization/flux-system/sources
+    ├── HelmRepository/flux-system/<span class="k">*</span> <span class="o">(</span>8개<span class="o">)</span>
+    ├── ImageRepository/flux-system/<span class="k">*</span> <span class="o">(</span>3개<span class="o">)</span>
+    └── Kustomization/flux-system/capacitor
+</code></pre></div></div>
+
+<details>
+  <summary><b>flux tree kustomization flux-system 전체 출력</b></summary>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>flux tree kustomization flux-system
+Kustomization/flux-system/flux-system
+├── Kustomization/flux-system/controlplane
+│   ├── Namespace/onboarding-service
+│   ├── EventBus/argo-events/default
+│   ├── EventSource/argo-events/aws-sqs-deployment
+│   ├── EventSource/argo-events/aws-sqs-offboarding
+│   ├── EventSource/argo-events/aws-sqs-onboarding
+│   ├── Sensor/argo-events/aws-sqs-deployment
+│   ├── Sensor/argo-events/aws-sqs-offboarding
+│   ├── Sensor/argo-events/aws-sqs-onboarding
+│   ├── WorkflowTemplate/argo-workflows/tenant-deployment-template
+│   ├── WorkflowTemplate/argo-workflows/tenant-offboarding-template
+│   ├── WorkflowTemplate/argo-workflows/tenant-onboarding-template
+│   └── HelmRelease/flux-system/onboarding-service
+│       ├── ServiceAccount/onboarding-service/onboarding-service-application-chart
+│       ├── Service/onboarding-service/onboarding-service-application-chart
+│       └── Deployment/onboarding-service/onboarding-service-application-chart
+├── Kustomization/flux-system/dataplane-pooled-envs
+│   ├── Namespace/pool-1
+│   └── HelmRelease/flux-system/pool-1
+│       ├── ServiceAccount/pool-1/pool-1-consumer
+│       ├── ServiceAccount/pool-1/pool-1-producer
+│       ├── Deployment/pool-1/pool-1-consumer
+│       ├── Deployment/pool-1/pool-1-producer
+│       └── Terraform/flux-system/pool-1
+├── Kustomization/flux-system/dataplane-tenants
+│   ├── ConfigMap/default/dummy-configmap-advanced
+│   ├── ConfigMap/default/dummy-configmap-basic
+│   └── ConfigMap/default/dummy-configmap-premium
+├── Kustomization/flux-system/dependencies
+│   ├── EC2NodeClass/default
+│   ├── ConfigMap/default/dummy-configmap-dependencies
+│   ├── NodePool/application
+│   └── NodePool/default
+├── Kustomization/flux-system/infrastructure
+│   ├── Namespace/argo-events
+│   ├── Namespace/argo-workflows
+│   ├── Namespace/aws-system
+│   ├── Namespace/karpenter
+│   ├── Namespace/kubecost
+│   ├── ClusterRole/argo-events-cluster-role
+│   ├── ClusterRole/full-permissions-cluster-role
+│   ├── ClusterRoleBinding/argo-events-role-binding
+│   ├── ClusterRoleBinding/full-permissions-cluster-role-binding
+│   ├── ServiceAccount/argo-events/argo-events-sa
+│   ├── ServiceAccount/argo-workflows/argoworkflows-sa
+│   ├── HelmRelease/flux-system/argo-events
+│   │   ├── ServiceAccount/argo-events/argo-events-controller-manager
+│   │   ├── ServiceAccount/argo-events/argo-events-events-webhook
+│   │   ├── ConfigMap/argo-events/argo-events-controller-manager
+│   │   ├── CustomResourceDefinition/eventbus.argoproj.io
+│   │   ├── CustomResourceDefinition/eventsources.argoproj.io
+│   │   ├── CustomResourceDefinition/sensors.argoproj.io
+│   │   ├── ClusterRole/argo-events-controller-manager
+│   │   ├── ClusterRoleBinding/argo-events-controller-manager
+│   │   └── Deployment/argo-events/argo-events-controller-manager
+│   ├── HelmRelease/flux-system/argo-workflows
+│   │   ├── ServiceAccount/argo-workflows/argo-workflows-workflow-controller
+│   │   ├── ServiceAccount/argo-workflows/argo-workflow
+│   │   ├── ServiceAccount/argo-workflows/argo-workflows-server
+│   │   ├── ConfigMap/argo-workflows/argo-workflows-workflow-controller-configmap
+│   │   ├── CustomResourceDefinition/clusterworkflowtemplates.argoproj.io
+│   │   ├── CustomResourceDefinition/cronworkflows.argoproj.io
+│   │   ├── CustomResourceDefinition/workflowartifactgctasks.argoproj.io
+│   │   ├── CustomResourceDefinition/workfloweventbindings.argoproj.io
+│   │   ├── CustomResourceDefinition/workflows.argoproj.io
+│   │   ├── CustomResourceDefinition/workflowtaskresults.argoproj.io
+│   │   ├── CustomResourceDefinition/workflowtasksets.argoproj.io
+│   │   ├── CustomResourceDefinition/workflowtemplates.argoproj.io
+│   │   ├── ClusterRole/argo-workflows-view
+│   │   ├── ClusterRole/argo-workflows-edit
+│   │   ├── ClusterRole/argo-workflows-admin
+│   │   ├── ClusterRole/argo-workflows-workflow-controller
+│   │   ├── ClusterRole/argo-workflows-workflow-controller-cluster-template
+│   │   ├── ClusterRole/argo-workflows-server
+│   │   ├── ClusterRole/argo-workflows-server-cluster-template
+│   │   ├── ClusterRoleBinding/argo-workflows-workflow-controller
+│   │   ├── ClusterRoleBinding/argo-workflows-workflow-controller-cluster-template
+│   │   ├── ClusterRoleBinding/argo-workflows-server
+│   │   ├── ClusterRoleBinding/argo-workflows-server-cluster-template
+│   │   ├── Role/argo-workflows/argo-workflows-workflow
+│   │   ├── RoleBinding/argo-workflows/argo-workflows-workflow
+│   │   ├── Service/argo-workflows/argo-workflows-server
+│   │   ├── Deployment/argo-workflows/argo-workflows-workflow-controller
+│   │   └── Deployment/argo-workflows/argo-workflows-server
+│   ├── HelmRelease/flux-system/aws-load-balancer-controller
+│   │   ├── ServiceAccount/aws-system/aws-load-balancer-controller
+│   │   ├── Secret/aws-system/aws-load-balancer-tls
+│   │   ├── ClusterRole/aws-load-balancer-controller-role
+│   │   ├── ClusterRoleBinding/aws-load-balancer-controller-rolebinding
+│   │   ├── Role/aws-system/aws-load-balancer-controller-leader-election-role
+│   │   ├── RoleBinding/aws-system/aws-load-balancer-controller-leader-election-rolebinding
+│   │   ├── Service/aws-system/aws-load-balancer-webhook-service
+│   │   ├── Deployment/aws-system/aws-load-balancer-controller
+│   │   ├── MutatingWebhookConfiguration/aws-load-balancer-webhook
+│   │   ├── ValidatingWebhookConfiguration/aws-load-balancer-webhook
+│   │   ├── IngressClassParams/alb
+│   │   └── IngressClass/alb
+│   ├── HelmRelease/flux-system/karpenter
+│   │   ├── PodDisruptionBudget/karpenter/karpenter
+│   │   ├── ServiceAccount/karpenter/karpenter
+│   │   ├── ClusterRole/karpenter-admin
+│   │   ├── ClusterRole/karpenter-core
+│   │   ├── ClusterRole/karpenter
+│   │   ├── ClusterRoleBinding/karpenter-core
+│   │   ├── ClusterRoleBinding/karpenter
+│   │   ├── Role/karpenter/karpenter
+│   │   ├── Role/kube-system/karpenter-dns
+│   │   ├── RoleBinding/karpenter/karpenter
+│   │   ├── RoleBinding/kube-system/karpenter-dns
+│   │   ├── Service/karpenter/karpenter
+│   │   └── Deployment/karpenter/karpenter
+│   ├── HelmRelease/flux-system/kubecost
+│   │   ├── ServiceAccount/kubecost/kubecost-cost-analyzer
+│   │   ├── ServiceAccount/kubecost/kubecost-prometheus-node-exporter
+│   │   ├── ServiceAccount/kubecost/kubecost-prometheus-server
+│   │   ├── ConfigMap/kubecost/kubecost-cost-analyzer
+│   │   ├── ConfigMap/kubecost/nginx-conf
+│   │   ├── ConfigMap/kubecost/network-costs-config
+│   │   ├── ConfigMap/kubecost/external-grafana-config-map
+│   │   ├── ConfigMap/kubecost/cluster-controller-continuous-cluster-sizing
+│   │   ├── ConfigMap/kubecost/cluster-controller-nsturndown-config
+│   │   ├── ConfigMap/kubecost/cluster-controller-container-rightsizing-config
+│   │   ├── ConfigMap/kubecost/kubecost-prometheus-server
+│   │   ├── PersistentVolumeClaim/kubecost/kubecost-cost-analyzer
+│   │   ├── PersistentVolumeClaim/kubecost/kubecost-prometheus-server
+│   │   ├── ClusterRole/kubecost-cost-analyzer
+│   │   ├── ClusterRole/kubecost-prometheus-server
+│   │   ├── ClusterRoleBinding/kubecost-cost-analyzer
+│   │   ├── ClusterRoleBinding/kubecost-prometheus-server
+│   │   ├── Role/kubecost/kubecost-cost-analyzer
+│   │   ├── RoleBinding/kubecost/kubecost-cost-analyzer
+│   │   ├── Service/kubecost/kubecost-cloud-cost
+│   │   ├── Service/kubecost/kubecost-aggregator
+│   │   ├── Service/kubecost/kubecost-network-costs
+│   │   ├── Service/kubecost/kubecost-cost-analyzer
+│   │   ├── Service/kubecost/kubecost-forecasting
+│   │   ├── Service/kubecost/kubecost-prometheus-node-exporter
+│   │   ├── Service/kubecost/kubecost-prometheus-server
+│   │   ├── DaemonSet/kubecost/kubecost-network-costs
+│   │   ├── DaemonSet/kubecost/kubecost-prometheus-node-exporter
+│   │   ├── Deployment/kubecost/kubecost-cost-analyzer
+│   │   ├── Deployment/kubecost/kubecost-forecasting
+│   │   └── Deployment/kubecost/kubecost-prometheus-server
+│   ├── HelmRelease/flux-system/metrics-server
+│   │   ├── ServiceAccount/kube-system/metrics-server
+│   │   ├── ClusterRole/system:metrics-server-aggregated-reader
+│   │   ├── ClusterRole/system:metrics-server
+│   │   ├── ClusterRoleBinding/metrics-server:system:auth-delegator
+│   │   ├── ClusterRoleBinding/system:metrics-server
+│   │   ├── RoleBinding/kube-system/metrics-server-auth-reader
+│   │   ├── Service/kube-system/metrics-server
+│   │   ├── Deployment/kube-system/metrics-server
+│   │   └── APIService/v1beta1.metrics.k8s.io
+│   └── HelmRelease/flux-system/tf-controller
+│       ├── ServiceAccount/flux-system/tf-controller
+│       ├── ServiceAccount/flux-system/tf-runner
+│       ├── Secret/flux-system/tf-runner.cache-encryption
+│       ├── ClusterRole/tf-cluster-reconciler-role
+│       ├── ClusterRole/tf-manager-role
+│       ├── ClusterRole/tf-runner-role
+│       ├── ClusterRoleBinding/tf-cluster-reconciler
+│       ├── ClusterRoleBinding/tf-manager-rolebinding
+│       ├── ClusterRoleBinding/tf-runner-rolebinding
+│       ├── Role/flux-system/tf-leader-election-role
+│       ├── RoleBinding/flux-system/tf-leader-election-rolebinding
+│       └── Deployment/flux-system/tf-controller
+└── Kustomization/flux-system/sources
+    ├── ServiceAccount/flux-system/ecr-credentials-sync
+    ├── Role/flux-system/ecr-credentials-sync
+    ├── RoleBinding/flux-system/ecr-credentials-sync
+    ├── Service/flux-system/capacitor-lb
+    ├── CronJob/flux-system/ecr-credentials-sync
+    ├── ImagePolicy/flux-system/consumer-image-policy
+    ├── ImagePolicy/flux-system/payments-image-policy
+    ├── ImagePolicy/flux-system/producer-image-policy
+    ├── ImageRepository/flux-system/consumer-image-repository
+    ├── ImageRepository/flux-system/payments-image-repository
+    ├── ImageRepository/flux-system/producer-image-repository
+    ├── ImageUpdateAutomation/flux-system/consumer-update-automation-pooled-envs
+    ├── ImageUpdateAutomation/flux-system/consumer-update-automation-tenants
+    ├── ImageUpdateAutomation/flux-system/payments-update-automation-pooled-envs
+    ├── ImageUpdateAutomation/flux-system/payments-update-automation-tenants
+    ├── ImageUpdateAutomation/flux-system/producer-update-automation-pooled-envs
+    ├── ImageUpdateAutomation/flux-system/producer-update-automation-tenants
+    ├── Kustomization/flux-system/capacitor
+    │   ├── ClusterRole/capacitor
+    │   ├── ClusterRoleBinding/capacitor
+    │   ├── ServiceAccount/flux-system/capacitor
+    │   ├── Service/flux-system/capacitor
+    │   └── Deployment/flux-system/capacitor
+    ├── GitRepository/flux-system/terraform-v0-0-1
+    ├── HelmRepository/flux-system/argo
+    ├── HelmRepository/flux-system/eks-charts
+    ├── HelmRepository/flux-system/helm-application-chart
+    ├── HelmRepository/flux-system/helm-tenant-chart
+    ├── HelmRepository/flux-system/karpenter
+    ├── HelmRepository/flux-system/kubecost
+    ├── HelmRepository/flux-system/metrics-server
+    ├── HelmRepository/flux-system/tf-controller
+    └── OCIRepository/flux-system/capacitor
+</code></pre></div>  </div>
+
+</details>
+
+<h2 id="flux-trace-리소스-역추적">flux trace: 리소스 역추적</h2>
+
+<p>특정 리소스가 어디서 왔는지 역추적하려면 <code class="highlighter-rouge">flux trace</code>를 사용한다. 예를 들어, kubecost의 Deployment가 어디서 만들어졌는지 확인하면 다음과 같다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># kubecost Deployment의 출처를 역추적</span>
+<span class="nv">$ </span>flux trace deployment/kubecost-cost-analyzer <span class="nt">-n</span> kubecost
+
+Object:         Deployment/kubecost-cost-analyzer
+Namespace:      kubecost
+Status:         Managed by Flux
+<span class="nt">---</span>
+HelmRelease:    kubecost
+Namespace:      flux-system
+Revision:       2.1.0
+Message:        Helm install succeeded <span class="k">for </span>release kubecost/kubecost.v1 with chart cost-analyzer@2.1.0
+<span class="nt">---</span>
+HelmChart:      flux-system-kubecost
+Namespace:      flux-system
+Chart:          cost-analyzer
+Version:        2.1.0
+<span class="nt">---</span>
+HelmRepository: kubecost
+URL:            oci://public.ecr.aws/kubecost/
+</code></pre></div></div>
+
+<p>Deployment → HelmRelease → HelmChart → HelmRepository라는 풀 체인을 한 화면에 볼 수 있다. 문제가 생겼을 때 “이 리소스는 Git 저장소 어디에 정의되어 있는가?”를 빠르게 파악하는 데 유용하다.</p>
+
+<p><br /></p>
+
+<h1 id="flux-3-layer-모델">Flux 3-Layer 모델</h1>
+
+<p>Flux가 Git 저장소를 어디서부터 읽기 시작하는지 이해하면, 전체 배포 구조를 파악할 수 있다. 이 워크숍의 GitOps 저장소는 3개 계층(Layer)으로 구성되어 있다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-w6-flux-3-layer-model.png" alt="Flux 3-Layer 모델" class="align-center" width="600" /></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Layer</th>
+      <th>경로</th>
+      <th>역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Entry Points</strong></td>
+      <td><code class="highlighter-rouge">clusters/production/*.yaml</code></td>
+      <td>“이 클러스터에 뭘 배포할지” 최상위 선언</td>
+    </tr>
+    <tr>
+      <td><strong>What to Deploy</strong></td>
+      <td><code class="highlighter-rouge">infrastructure/</code>, <code class="highlighter-rouge">control-plane/</code>, <code class="highlighter-rouge">application-plane/</code></td>
+      <td>선언된 내용물 (HelmRelease, CRD 등)</td>
+    </tr>
+    <tr>
+      <td><strong>Building Blocks</strong></td>
+      <td><code class="highlighter-rouge">helm-charts/</code>, <code class="highlighter-rouge">terraform/</code></td>
+      <td>재사용 가능한 부품 (Helm 차트, Terraform 모듈)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="루트-kustomization-flux-system">루트 Kustomization: flux-system</h2>
+
+<p>모든 것의 시작점은 <code class="highlighter-rouge">flux bootstrap</code> 시 생성되는 루트 Kustomization인 <code class="highlighter-rouge">flux-system</code>이다. 이 리소스의 <code class="highlighter-rouge">spec.path</code>가 Flux가 가장 먼저 읽는 디렉토리를 결정한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># 루트 Kustomization 정의 — spec.path가 진입점 디렉토리를 가리킨다</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kustomize.toolkit.fluxcd.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Kustomization</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">flux-system</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">flux-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">interval</span><span class="pi">:</span> <span class="s">10m0s</span>
+  <span class="na">path</span><span class="pi">:</span> <span class="s">clusters/production</span>  <span class="c1"># Layer 1 진입점</span>
+  <span class="na">prune</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">sourceRef</span><span class="pi">:</span>
+    <span class="na">kind</span><span class="pi">:</span> <span class="s">GitRepository</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">flux-system</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">clusters/production</code> 디렉토리 안의 YAML 파일들이 다른 모든 Kustomization을 정의하며, 여기서부터 나머지 계층이 파생된다.</p>
+
+<blockquote>
+  <p><code class="highlighter-rouge">clusters/&lt;env&gt;/</code> 구조는 <a href="https://github.com/fluxcd/flux2-kustomize-helm-example">Flux 공식 monorepo 예제</a>의 표준 패턴이다. <code class="highlighter-rouge">clusters/staging/</code>을 추가하면 staging 클러스터만의 진입점 세트를 만들 수 있고, 각 진입점의 <code class="highlighter-rouge">spec.path</code>를 환경별로 다르게 지정하면 된다. Layer 3의 Helm 차트나 Terraform 모듈은 환경 간에 그대로 재사용할 수 있다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="진입점entry-point-구조-분석">진입점(Entry Point) 구조 분석</h1>
+
+<h2 id="clustersproduction-폴더-구조">clusters/production 폴더 구조</h2>
+
+<p><code class="highlighter-rouge">clusters/production/</code> 디렉토리에는 6개의 YAML 파일이 있다. 각 파일이 하나의 Kustomization을 정의하고, 그 Kustomization이 특정 디렉토리를 감시(watch)한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 진입점 디렉토리 구조</span>
+<span class="nv">$ </span>tree clusters/production/
+clusters/production/
+├── control-plane.yaml
+├── dependencies.yaml
+├── infrastructure.yaml
+├── pooled-envs.yaml
+├── sources.yaml
+└── tenants.yaml
+</code></pre></div></div>
+
+<h2 id="진입점-매핑">진입점 매핑</h2>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-w6-flux-entrypoint-mapping.png" alt="진입점 매핑" class="align-center" /></p>
+
+<p>각 진입점 파일의 <code class="highlighter-rouge">spec.path</code>가 어떤 디렉토리를 가리키고, 무엇을 책임지는지 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>진입점 파일</th>
+      <th>Kustomization 이름</th>
+      <th><code class="highlighter-rouge">spec.path</code></th>
+      <th>책임</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">sources.yaml</code></td>
+      <td>sources</td>
+      <td><code class="highlighter-rouge">infrastructure/base/sources/</code></td>
+      <td>소스 등록 (HelmRepo, GitRepo, ImageRepo)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">dependencies.yaml</code></td>
+      <td>dependencies</td>
+      <td><code class="highlighter-rouge">infrastructure/production/dependencies/</code></td>
+      <td>선행 의존성 (Karpenter NodePool)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">infrastructure.yaml</code></td>
+      <td>infrastructure</td>
+      <td><code class="highlighter-rouge">infrastructure/production/</code></td>
+      <td>클러스터 애드온 7개</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">control-plane.yaml</code></td>
+      <td>controlplane</td>
+      <td><code class="highlighter-rouge">control-plane/production/</code></td>
+      <td>Onboarding 서비스 + Argo Workflows</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">pooled-envs.yaml</code></td>
+      <td>dataplane-pooled-envs</td>
+      <td><code class="highlighter-rouge">application-plane/production/pooled-envs/</code></td>
+      <td>공유 풀 (pool-1)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">tenants.yaml</code></td>
+      <td>dataplane-tenants</td>
+      <td><code class="highlighter-rouge">application-plane/production/tenants/</code></td>
+      <td>테넌트별 환경</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>여기에 루트(<code class="highlighter-rouge">flux-system</code>)와 sources가 생성하는 자식 Kustomization(<code class="highlighter-rouge">capacitor</code>)까지 더하면, <code class="highlighter-rouge">flux get kustomizations</code>에서 보이는 총 8개가 된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Kustomization 이름</th>
+      <th>출처</th>
+      <th>정체</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">flux-system</code></td>
+      <td>부트스트랩 시 자동 생성</td>
+      <td><strong>루트</strong> — <code class="highlighter-rouge">clusters/production</code> 감시</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">sources</code></td>
+      <td><code class="highlighter-rouge">clusters/production/sources.yaml</code></td>
+      <td>진입점 1</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">dependencies</code></td>
+      <td><code class="highlighter-rouge">clusters/production/dependencies.yaml</code></td>
+      <td>진입점 2</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">infrastructure</code></td>
+      <td><code class="highlighter-rouge">clusters/production/infrastructure.yaml</code></td>
+      <td>진입점 3</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">controlplane</code></td>
+      <td><code class="highlighter-rouge">clusters/production/control-plane.yaml</code></td>
+      <td>진입점 4</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">dataplane-pooled-envs</code></td>
+      <td><code class="highlighter-rouge">clusters/production/pooled-envs.yaml</code></td>
+      <td>진입점 5</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">dataplane-tenants</code></td>
+      <td><code class="highlighter-rouge">clusters/production/tenants.yaml</code></td>
+      <td>진입점 6</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">capacitor</code></td>
+      <td>sources Kustomization이 생성</td>
+      <td><strong>자식</strong> (Flux UI 대시보드)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="kustomizationyaml의-역할">kustomization.yaml의 역할</h2>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-w6-flux-kustomization.png" alt="kustomization.yaml" class="align-center" /></p>
+
+<p>진입점의 <code class="highlighter-rouge">spec.path</code>가 가리키는 폴더에 <code class="highlighter-rouge">kustomization.yaml</code>이 있으면, 그 파일이 “목차” 역할을 한다. <code class="highlighter-rouge">resources:</code> 목록에 명시된 파일만 클러스터에 적용된다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># infrastructure/production/kustomization.yaml — 적용할 리소스 목록을 명시</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kustomize.config.k8s.io/v1beta1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Kustomization</span>
+<span class="na">resources</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="s">01-metric-server.yaml</span>
+  <span class="pi">-</span> <span class="s">02-karpenter.yaml</span>
+  <span class="pi">-</span> <span class="s">03-argo-workflows.yaml</span>
+  <span class="pi">-</span> <span class="s">04-lb-controller.yaml</span>
+  <span class="pi">-</span> <span class="s">05-kubecost.yaml</span>
+  <span class="pi">-</span> <span class="s">06-argo-events.yaml</span>
+  <span class="pi">-</span> <span class="s">07-tf-controller.yaml</span>
+</code></pre></div></div>
+
+<p>폴더에 파일을 추가해도 <code class="highlighter-rouge">kustomization.yaml</code>의 <code class="highlighter-rouge">resources:</code>에 등록하지 않으면 Flux가 무시한다. 진입점에서 실제 리소스까지의 확인 순서를 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>단계</th>
+      <th>어디서 보나</th>
+      <th>무엇을 확인</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><code class="highlighter-rouge">clusters/production/&lt;X&gt;.yaml</code>의 <code class="highlighter-rouge">spec.path</code></td>
+      <td>어느 폴더로 갈지</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>그 폴더의 <code class="highlighter-rouge">kustomization.yaml</code></td>
+      <td>어떤 파일을 적용할지</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>각 <code class="highlighter-rouge">0N-*.yaml</code></td>
+      <td>실제 HelmRelease/리소스 정의</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="dependson-의존성-체인">dependsOn 의존성 체인</h2>
+
+<p>진입점들은 <code class="highlighter-rouge">dependsOn</code> 필드로 실행 순서를 제어한다. 예를 들어, <code class="highlighter-rouge">infrastructure.yaml</code>의 핵심 spec을 보면 다음과 같다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># clusters/production/infrastructure.yaml — dependsOn으로 sources 선행 보장</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">dependsOn</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">sources</span>
+  <span class="na">interval</span><span class="pi">:</span> <span class="s">1m0s</span>
+  <span class="na">path</span><span class="pi">:</span> <span class="s">infrastructure/production</span>
+  <span class="na">prune</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">sourceRef</span><span class="pi">:</span>
+    <span class="na">kind</span><span class="pi">:</span> <span class="s">GitRepository</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">flux-system</span>
+</code></pre></div></div>
+
+<p>전체 의존성 체인을 다이어그램으로 그리면 다음과 같다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-w6-dependency-chain.png" alt="dependsOn 의존성 체인" class="align-center" width="550" /></p>
+
+<ul>
+  <li><code class="highlighter-rouge">sources</code> → <code class="highlighter-rouge">infrastructure</code>: 소스(HelmRepository 등)가 먼저 등록되어야 HelmRelease를 설치할 수 있다</li>
+  <li><code class="highlighter-rouge">infrastructure</code> → <code class="highlighter-rouge">dependencies</code>: Karpenter 컨트롤러가 먼저 설치되어야 NodePool을 생성할 수 있다</li>
+  <li><code class="highlighter-rouge">infrastructure</code> → <code class="highlighter-rouge">controlplane</code>: 인프라 애드온(Argo Events 등)이 먼저 있어야 Onboarding 서비스가 동작한다</li>
+  <li><code class="highlighter-rouge">dataplane-pooled-envs</code>, <code class="highlighter-rouge">dataplane-tenants</code>: <code class="highlighter-rouge">dependsOn</code>이 없으므로 독립적으로 reconcile된다</li>
+</ul>
+
+<details>
+  <summary><b>진입점 YAML 전문 (6개)</b></summary>
+
+  <p><strong>sources.yaml</strong></p>
+
+  <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kustomize.toolkit.fluxcd.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Kustomization</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">sources</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">flux-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">interval</span><span class="pi">:</span> <span class="s">1m0s</span>
+  <span class="na">sourceRef</span><span class="pi">:</span>
+    <span class="na">kind</span><span class="pi">:</span> <span class="s">GitRepository</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">flux-system</span>
+  <span class="na">path</span><span class="pi">:</span> <span class="s">infrastructure/base/sources</span>
+  <span class="na">prune</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">postBuild</span><span class="pi">:</span>
+    <span class="na">substituteFrom</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">kind</span><span class="pi">:</span> <span class="s">ConfigMap</span>
+        <span class="na">name</span><span class="pi">:</span> <span class="s">saas-infra-outputs</span>
+        <span class="na">optional</span><span class="pi">:</span> <span class="no">false</span>
+</code></pre></div>  </div>
+
+  <p><strong>dependencies.yaml</strong></p>
+
+  <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kustomize.toolkit.fluxcd.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Kustomization</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">dependencies</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">flux-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">dependsOn</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">infrastructure</span>
+  <span class="na">interval</span><span class="pi">:</span> <span class="s">1m0s</span>
+  <span class="na">sourceRef</span><span class="pi">:</span>
+    <span class="na">kind</span><span class="pi">:</span> <span class="s">GitRepository</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">flux-system</span>
+  <span class="na">path</span><span class="pi">:</span> <span class="s">infrastructure/production/dependencies</span>
+  <span class="na">prune</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">postBuild</span><span class="pi">:</span>
+    <span class="na">substituteFrom</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">kind</span><span class="pi">:</span> <span class="s">ConfigMap</span>
+        <span class="na">name</span><span class="pi">:</span> <span class="s">saas-infra-outputs</span>
+        <span class="na">optional</span><span class="pi">:</span> <span class="no">false</span>
+</code></pre></div>  </div>
+
+  <p><strong>infrastructure.yaml</strong></p>
+
+  <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kustomize.toolkit.fluxcd.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Kustomization</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">infrastructure</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">flux-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">dependsOn</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">sources</span>
+  <span class="na">interval</span><span class="pi">:</span> <span class="s">1m0s</span>
+  <span class="na">sourceRef</span><span class="pi">:</span>
+    <span class="na">kind</span><span class="pi">:</span> <span class="s">GitRepository</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">flux-system</span>
+  <span class="na">path</span><span class="pi">:</span> <span class="s">infrastructure/production</span>
+  <span class="na">prune</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">postBuild</span><span class="pi">:</span>
+    <span class="na">substituteFrom</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">kind</span><span class="pi">:</span> <span class="s">ConfigMap</span>
+        <span class="na">name</span><span class="pi">:</span> <span class="s">saas-infra-outputs</span>
+        <span class="na">optional</span><span class="pi">:</span> <span class="no">false</span>
+</code></pre></div>  </div>
+
+  <p><strong>control-plane.yaml</strong></p>
+
+  <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kustomize.toolkit.fluxcd.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Kustomization</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">controlplane</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">flux-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">interval</span><span class="pi">:</span> <span class="s">1m0s</span>
+  <span class="na">dependsOn</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">infrastructure</span>
+  <span class="na">sourceRef</span><span class="pi">:</span>
+    <span class="na">kind</span><span class="pi">:</span> <span class="s">GitRepository</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">flux-system</span>
+  <span class="na">path</span><span class="pi">:</span> <span class="s">control-plane/production</span>
+  <span class="na">prune</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">postBuild</span><span class="pi">:</span>
+    <span class="na">substituteFrom</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">kind</span><span class="pi">:</span> <span class="s">ConfigMap</span>
+        <span class="na">name</span><span class="pi">:</span> <span class="s">saas-infra-outputs</span>
+        <span class="na">optional</span><span class="pi">:</span> <span class="no">false</span>
+</code></pre></div>  </div>
+
+  <p><strong>pooled-envs.yaml</strong></p>
+
+  <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kustomize.toolkit.fluxcd.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Kustomization</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">dataplane-pooled-envs</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">flux-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">interval</span><span class="pi">:</span> <span class="s">1m0s</span>
+  <span class="na">sourceRef</span><span class="pi">:</span>
+    <span class="na">kind</span><span class="pi">:</span> <span class="s">GitRepository</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">flux-system</span>
+  <span class="na">path</span><span class="pi">:</span> <span class="s">application-plane/production/pooled-envs</span>
+  <span class="na">prune</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">postBuild</span><span class="pi">:</span>
+    <span class="na">substituteFrom</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">kind</span><span class="pi">:</span> <span class="s">ConfigMap</span>
+        <span class="na">name</span><span class="pi">:</span> <span class="s">saas-infra-outputs</span>
+        <span class="na">optional</span><span class="pi">:</span> <span class="no">false</span>
+</code></pre></div>  </div>
+
+  <p><strong>tenants.yaml</strong></p>
+
+  <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kustomize.toolkit.fluxcd.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Kustomization</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">dataplane-tenants</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">flux-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">interval</span><span class="pi">:</span> <span class="s">1m0s</span>
+  <span class="na">sourceRef</span><span class="pi">:</span>
+    <span class="na">kind</span><span class="pi">:</span> <span class="s">GitRepository</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">flux-system</span>
+  <span class="na">path</span><span class="pi">:</span> <span class="s">application-plane/production/tenants</span>
+  <span class="na">prune</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">postBuild</span><span class="pi">:</span>
+    <span class="na">substituteFrom</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">kind</span><span class="pi">:</span> <span class="s">ConfigMap</span>
+        <span class="na">name</span><span class="pi">:</span> <span class="s">saas-infra-outputs</span>
+        <span class="na">optional</span><span class="pi">:</span> <span class="no">false</span>
+</code></pre></div>  </div>
+
+</details>
+
+<p><br /></p>
+
+<h1 id="진입점별-리소스-매핑">진입점별 리소스 매핑</h1>
+
+<p>각 진입점이 실제로 어떤 리소스를 생성하는지 <code class="highlighter-rouge">flux tree kustomization &lt;name&gt;</code>으로 확인해 보자. 9개 HelmRelease가 어느 진입점에 속하는지가 핵심이다.</p>
+
+<h2 id="sources-소스-등록">sources: 소스 등록</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 핵심 리소스만 발췌</span>
+<span class="nv">$ </span>flux tree kustomization sources
+Kustomization/flux-system/sources
+├── HelmRepository/flux-system/<span class="k">*</span> <span class="o">(</span>8개<span class="o">)</span>    <span class="c"># 차트 저장소 주소 등록</span>
+├── GitRepository/flux-system/terraform-v0-0-1   <span class="c"># Terraform 모듈 소스</span>
+├── OCIRepository/flux-system/capacitor   <span class="c"># Flux UI</span>
+├── ImageRepository/flux-system/<span class="k">*</span> <span class="o">(</span>3개<span class="o">)</span>   <span class="c"># ECR 이미지 감시</span>
+├── ImagePolicy/flux-system/<span class="k">*</span> <span class="o">(</span>3개<span class="o">)</span>       <span class="c"># 이미지 태그 정책</span>
+├── ImageUpdateAutomation/flux-system/<span class="k">*</span> <span class="o">(</span>6개<span class="o">)</span> <span class="c"># 자동 업데이트</span>
+├── CronJob/flux-system/ecr-credentials-sync  <span class="c"># ECR 인증</span>
+└── Kustomization/flux-system/capacitor   <span class="c"># Flux UI 대시보드 (자식 Kustomization)</span>
+</code></pre></div></div>
+
+<p><strong>HelmRelease를 만들지 않는다.</strong> “어디서 가져올지”만 등록하는 단계다. HelmRepository는 차트 카탈로그 서버 주소이고, 실제 차트를 설치하는 HelmRelease는 다른 진입점에서 정의한다. 카탈로그 등록과 설치를 분리하면, sources가 reconcile에 실패하더라도 이미 설치된 HelmRelease는 영향을 받지 않는다.</p>
+
+<details>
+  <summary><b>flux tree kustomization sources 전체 출력</b></summary>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>flux tree kustomization sources
+Kustomization/flux-system/sources
+├── ServiceAccount/flux-system/ecr-credentials-sync
+├── Role/flux-system/ecr-credentials-sync
+├── RoleBinding/flux-system/ecr-credentials-sync
+├── Service/flux-system/capacitor-lb
+├── CronJob/flux-system/ecr-credentials-sync
+├── ImagePolicy/flux-system/consumer-image-policy
+├── ImagePolicy/flux-system/payments-image-policy
+├── ImagePolicy/flux-system/producer-image-policy
+├── ImageRepository/flux-system/consumer-image-repository
+├── ImageRepository/flux-system/payments-image-repository
+├── ImageRepository/flux-system/producer-image-repository
+├── ImageUpdateAutomation/flux-system/consumer-update-automation-pooled-envs
+├── ImageUpdateAutomation/flux-system/consumer-update-automation-tenants
+├── ImageUpdateAutomation/flux-system/payments-update-automation-pooled-envs
+├── ImageUpdateAutomation/flux-system/payments-update-automation-tenants
+├── ImageUpdateAutomation/flux-system/producer-update-automation-pooled-envs
+├── ImageUpdateAutomation/flux-system/producer-update-automation-tenants
+├── Kustomization/flux-system/capacitor
+│   ├── ClusterRole/capacitor
+│   ├── ClusterRoleBinding/capacitor
+│   ├── ServiceAccount/flux-system/capacitor
+│   ├── Service/flux-system/capacitor
+│   └── Deployment/flux-system/capacitor
+├── GitRepository/flux-system/terraform-v0-0-1
+├── HelmRepository/flux-system/argo
+├── HelmRepository/flux-system/eks-charts
+├── HelmRepository/flux-system/helm-application-chart
+├── HelmRepository/flux-system/helm-tenant-chart
+├── HelmRepository/flux-system/karpenter
+├── HelmRepository/flux-system/kubecost
+├── HelmRepository/flux-system/metrics-server
+├── HelmRepository/flux-system/tf-controller
+└── OCIRepository/flux-system/capacitor
+</code></pre></div>  </div>
+
+</details>
+
+<h2 id="dependencies-선행-의존성">dependencies: 선행 의존성</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 출력이 짧아 전체를 그대로 표시</span>
+<span class="nv">$ </span>flux tree kustomization dependencies
+Kustomization/flux-system/dependencies
+├── EC2NodeClass/default            <span class="c"># Karpenter가 사용할 EC2 설정</span>
+├── ConfigMap/default/dummy-configmap-dependencies
+├── NodePool/application            <span class="c"># 애플리케이션용 노드 풀</span>
+└── NodePool/default                <span class="c"># 기본 노드 풀</span>
+</code></pre></div></div>
+
+<p><strong>HelmRelease를 만들지 않는다.</strong> Karpenter 컨트롤러 자체는 infrastructure에서 Helm 차트로 설치하지만, 그 컨트롤러가 “어떤 노드를 띄울지” 정의하는 NodePool은 별도 단계로 분리한다. 순서가 중요하다: infrastructure가 먼저 Karpenter Helm 차트를 설치한 뒤, dependencies가 그 위에 NodePool을 생성한다.</p>
+
+<h2 id="infrastructure-클러스터-애드온">infrastructure: 클러스터 애드온</h2>
+
+<p>가장 큰 진입점으로, <strong>7개 HelmRelease</strong>를 생성한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>HelmRelease</th>
+      <th>차트</th>
+      <th>설치 네임스페이스</th>
+      <th>정의 파일</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>metrics-server</td>
+      <td>metrics-server@3.11.0</td>
+      <td>kube-system</td>
+      <td><code class="highlighter-rouge">01-metric-server.yaml</code></td>
+    </tr>
+    <tr>
+      <td>karpenter</td>
+      <td>karpenter@1.4.0</td>
+      <td>karpenter</td>
+      <td><code class="highlighter-rouge">02-karpenter.yaml</code></td>
+    </tr>
+    <tr>
+      <td>argo-workflows</td>
+      <td>argo-workflows@0.40.11</td>
+      <td>argo-workflows</td>
+      <td><code class="highlighter-rouge">03-argo-workflows.yaml</code></td>
+    </tr>
+    <tr>
+      <td>aws-load-balancer-controller</td>
+      <td>aws-load-balancer-controller@1.6.2</td>
+      <td>aws-system</td>
+      <td><code class="highlighter-rouge">04-lb-controller.yaml</code></td>
+    </tr>
+    <tr>
+      <td>kubecost</td>
+      <td>cost-analyzer@2.1.0</td>
+      <td>kubecost</td>
+      <td><code class="highlighter-rouge">05-kubecost.yaml</code></td>
+    </tr>
+    <tr>
+      <td>argo-events</td>
+      <td>argo-events@2.4.3</td>
+      <td>argo-events</td>
+      <td><code class="highlighter-rouge">06-argo-events.yaml</code></td>
+    </tr>
+    <tr>
+      <td>tf-controller</td>
+      <td>tf-controller@0.16.0-rc.4</td>
+      <td>flux-system</td>
+      <td><code class="highlighter-rouge">07-tf-controller.yaml</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>9개 HelmRelease 중 7개가 이 진입점에 집중되어 있다. 만약 infrastructure가 깨지면 클러스터 애드온 전체가 영향을 받으므로, <code class="highlighter-rouge">dependsOn: sources</code>로 소스 등록이 먼저 완료되도록 보장한다.</p>
+
+<details>
+  <summary><b>flux tree kustomization infrastructure 전체 출력</b></summary>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>flux tree kustomization infrastructure
+Kustomization/flux-system/infrastructure
+├── Namespace/argo-events
+├── Namespace/argo-workflows
+├── Namespace/aws-system
+├── Namespace/karpenter
+├── Namespace/kubecost
+├── ClusterRole/argo-events-cluster-role
+├── ClusterRole/full-permissions-cluster-role
+├── ClusterRoleBinding/argo-events-role-binding
+├── ClusterRoleBinding/full-permissions-cluster-role-binding
+├── ServiceAccount/argo-events/argo-events-sa
+├── ServiceAccount/argo-workflows/argoworkflows-sa
+├── HelmRelease/flux-system/argo-events
+│   ├── ServiceAccount/argo-events/argo-events-controller-manager
+│   ├── ServiceAccount/argo-events/argo-events-events-webhook
+│   ├── ConfigMap/argo-events/argo-events-controller-manager
+│   ├── CustomResourceDefinition/eventbus.argoproj.io
+│   ├── CustomResourceDefinition/eventsources.argoproj.io
+│   ├── CustomResourceDefinition/sensors.argoproj.io
+│   ├── ClusterRole/argo-events-controller-manager
+│   ├── ClusterRoleBinding/argo-events-controller-manager
+│   └── Deployment/argo-events/argo-events-controller-manager
+├── HelmRelease/flux-system/argo-workflows
+│   ├── ServiceAccount/argo-workflows/argo-workflows-workflow-controller
+│   ├── ServiceAccount/argo-workflows/argo-workflow
+│   ├── ServiceAccount/argo-workflows/argo-workflows-server
+│   ├── ConfigMap/argo-workflows/argo-workflows-workflow-controller-configmap
+│   ├── CustomResourceDefinition/clusterworkflowtemplates.argoproj.io
+│   ├── CustomResourceDefinition/cronworkflows.argoproj.io
+│   ├── CustomResourceDefinition/workflowartifactgctasks.argoproj.io
+│   ├── CustomResourceDefinition/workfloweventbindings.argoproj.io
+│   ├── CustomResourceDefinition/workflows.argoproj.io
+│   ├── CustomResourceDefinition/workflowtaskresults.argoproj.io
+│   ├── CustomResourceDefinition/workflowtasksets.argoproj.io
+│   ├── CustomResourceDefinition/workflowtemplates.argoproj.io
+│   ├── ClusterRole/argo-workflows-view
+│   ├── ClusterRole/argo-workflows-edit
+│   ├── ClusterRole/argo-workflows-admin
+│   ├── ClusterRole/argo-workflows-workflow-controller
+│   ├── ClusterRole/argo-workflows-workflow-controller-cluster-template
+│   ├── ClusterRole/argo-workflows-server
+│   ├── ClusterRole/argo-workflows-server-cluster-template
+│   ├── ClusterRoleBinding/argo-workflows-workflow-controller
+│   ├── ClusterRoleBinding/argo-workflows-workflow-controller-cluster-template
+│   ├── ClusterRoleBinding/argo-workflows-server
+│   ├── ClusterRoleBinding/argo-workflows-server-cluster-template
+│   ├── Role/argo-workflows/argo-workflows-workflow
+│   ├── RoleBinding/argo-workflows/argo-workflows-workflow
+│   ├── Service/argo-workflows/argo-workflows-server
+│   ├── Deployment/argo-workflows/argo-workflows-workflow-controller
+│   └── Deployment/argo-workflows/argo-workflows-server
+├── HelmRelease/flux-system/aws-load-balancer-controller
+│   ├── ServiceAccount/aws-system/aws-load-balancer-controller
+│   ├── Secret/aws-system/aws-load-balancer-tls
+│   ├── ClusterRole/aws-load-balancer-controller-role
+│   ├── ClusterRoleBinding/aws-load-balancer-controller-rolebinding
+│   ├── Role/aws-system/aws-load-balancer-controller-leader-election-role
+│   ├── RoleBinding/aws-system/aws-load-balancer-controller-leader-election-rolebinding
+│   ├── Service/aws-system/aws-load-balancer-webhook-service
+│   ├── Deployment/aws-system/aws-load-balancer-controller
+│   ├── MutatingWebhookConfiguration/aws-load-balancer-webhook
+│   ├── ValidatingWebhookConfiguration/aws-load-balancer-webhook
+│   ├── IngressClassParams/alb
+│   └── IngressClass/alb
+├── HelmRelease/flux-system/karpenter
+│   ├── PodDisruptionBudget/karpenter/karpenter
+│   ├── ServiceAccount/karpenter/karpenter
+│   ├── ClusterRole/karpenter-admin
+│   ├── ClusterRole/karpenter-core
+│   ├── ClusterRole/karpenter
+│   ├── ClusterRoleBinding/karpenter-core
+│   ├── ClusterRoleBinding/karpenter
+│   ├── Role/karpenter/karpenter
+│   ├── Role/kube-system/karpenter-dns
+│   ├── RoleBinding/karpenter/karpenter
+│   ├── RoleBinding/kube-system/karpenter-dns
+│   ├── Service/karpenter/karpenter
+│   └── Deployment/karpenter/karpenter
+├── HelmRelease/flux-system/kubecost
+│   ├── ServiceAccount/kubecost/kubecost-cost-analyzer
+│   ├── ServiceAccount/kubecost/kubecost-prometheus-node-exporter
+│   ├── ServiceAccount/kubecost/kubecost-prometheus-server
+│   ├── ConfigMap/kubecost/kubecost-cost-analyzer
+│   ├── ConfigMap/kubecost/nginx-conf
+│   ├── ConfigMap/kubecost/network-costs-config
+│   ├── ConfigMap/kubecost/external-grafana-config-map
+│   ├── ConfigMap/kubecost/cluster-controller-continuous-cluster-sizing
+│   ├── ConfigMap/kubecost/cluster-controller-nsturndown-config
+│   ├── ConfigMap/kubecost/cluster-controller-container-rightsizing-config
+│   ├── ConfigMap/kubecost/kubecost-prometheus-server
+│   ├── PersistentVolumeClaim/kubecost/kubecost-cost-analyzer
+│   ├── PersistentVolumeClaim/kubecost/kubecost-prometheus-server
+│   ├── ClusterRole/kubecost-cost-analyzer
+│   ├── ClusterRole/kubecost-prometheus-server
+│   ├── ClusterRoleBinding/kubecost-cost-analyzer
+│   ├── ClusterRoleBinding/kubecost-prometheus-server
+│   ├── Role/kubecost/kubecost-cost-analyzer
+│   ├── RoleBinding/kubecost/kubecost-cost-analyzer
+│   ├── Service/kubecost/kubecost-cloud-cost
+│   ├── Service/kubecost/kubecost-aggregator
+│   ├── Service/kubecost/kubecost-network-costs
+│   ├── Service/kubecost/kubecost-cost-analyzer
+│   ├── Service/kubecost/kubecost-forecasting
+│   ├── Service/kubecost/kubecost-prometheus-node-exporter
+│   ├── Service/kubecost/kubecost-prometheus-server
+│   ├── DaemonSet/kubecost/kubecost-network-costs
+│   ├── DaemonSet/kubecost/kubecost-prometheus-node-exporter
+│   ├── Deployment/kubecost/kubecost-cost-analyzer
+│   ├── Deployment/kubecost/kubecost-forecasting
+│   └── Deployment/kubecost/kubecost-prometheus-server
+├── HelmRelease/flux-system/metrics-server
+│   ├── ServiceAccount/kube-system/metrics-server
+│   ├── ClusterRole/system:metrics-server-aggregated-reader
+│   ├── ClusterRole/system:metrics-server
+│   ├── ClusterRoleBinding/metrics-server:system:auth-delegator
+│   ├── ClusterRoleBinding/system:metrics-server
+│   ├── RoleBinding/kube-system/metrics-server-auth-reader
+│   ├── Service/kube-system/metrics-server
+│   ├── Deployment/kube-system/metrics-server
+│   └── APIService/v1beta1.metrics.k8s.io
+└── HelmRelease/flux-system/tf-controller
+    ├── ServiceAccount/flux-system/tf-controller
+    ├── ServiceAccount/flux-system/tf-runner
+    ├── Secret/flux-system/tf-runner.cache-encryption
+    ├── ClusterRole/tf-cluster-reconciler-role
+    ├── ClusterRole/tf-manager-role
+    ├── ClusterRole/tf-runner-role
+    ├── ClusterRoleBinding/tf-cluster-reconciler
+    ├── ClusterRoleBinding/tf-manager-rolebinding
+    ├── ClusterRoleBinding/tf-runner-rolebinding
+    ├── Role/flux-system/tf-leader-election-role
+    ├── RoleBinding/flux-system/tf-leader-election-rolebinding
+    └── Deployment/flux-system/tf-controller
+</code></pre></div>  </div>
+
+</details>
+
+<h2 id="controlplane-saas-운영-도구">controlplane: SaaS 운영 도구</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 출력 전체를 그대로 표시</span>
+<span class="nv">$ </span>flux tree kustomization controlplane
+Kustomization/flux-system/controlplane
+├── Namespace/onboarding-service
+├── EventBus/argo-events/default
+├── EventSource/argo-events/aws-sqs-deployment
+├── EventSource/argo-events/aws-sqs-offboarding
+├── EventSource/argo-events/aws-sqs-onboarding
+├── Sensor/argo-events/aws-sqs-deployment
+├── Sensor/argo-events/aws-sqs-offboarding
+├── Sensor/argo-events/aws-sqs-onboarding
+├── WorkflowTemplate/argo-workflows/tenant-deployment-template
+├── WorkflowTemplate/argo-workflows/tenant-offboarding-template
+├── WorkflowTemplate/argo-workflows/tenant-onboarding-template
+└── HelmRelease/flux-system/onboarding-service
+    ├── ServiceAccount/onboarding-service/onboarding-service-application-chart
+    ├── Service/onboarding-service/onboarding-service-application-chart
+    └── Deployment/onboarding-service/onboarding-service-application-chart
+</code></pre></div></div>
+
+<p><strong>HelmRelease 1개</strong>(onboarding-service)와 함께, Argo Events의 EventSource/Sensor 3쌍(onboarding, offboarding, deployment)과 Argo Workflows의 WorkflowTemplate 3개를 생성한다. SQS 메시지를 받아 테넌트 관련 워크플로우를 실행하는 이벤트 기반(event-driven) 구조다.</p>
+
+<h2 id="dataplane-pooled-envs-공유-풀">dataplane-pooled-envs: 공유 풀</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 출력 전체를 그대로 표시</span>
+<span class="nv">$ </span>flux tree kustomization dataplane-pooled-envs
+Kustomization/flux-system/dataplane-pooled-envs
+├── Namespace/pool-1
+└── HelmRelease/flux-system/pool-1
+    ├── ServiceAccount/pool-1/pool-1-consumer
+    ├── ServiceAccount/pool-1/pool-1-producer
+    ├── Deployment/pool-1/pool-1-consumer
+    ├── Deployment/pool-1/pool-1-producer
+    └── Terraform/flux-system/pool-1    <span class="c"># tf-controller가 처리하는 Terraform CRD</span>
+</code></pre></div></div>
+
+<p><strong>HelmRelease 1개</strong>(pool-1)를 생성한다. Producer/Consumer Deployment와 함께, <code class="highlighter-rouge">Terraform/flux-system/pool-1</code> CRD가 포함되어 있다. 이 Terraform CRD는 tf-controller가 처리하여 AWS 리소스(SQS, DynamoDB 등)를 프로비저닝한다.</p>
+
+<h2 id="dataplane-tenants-테넌트별-환경">dataplane-tenants: 테넌트별 환경</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 출력 전체를 그대로 표시</span>
+<span class="nv">$ </span>flux tree kustomization dataplane-tenants
+Kustomization/flux-system/dataplane-tenants
+├── ConfigMap/default/dummy-configmap-advanced
+├── ConfigMap/default/dummy-configmap-basic
+└── ConfigMap/default/dummy-configmap-premium
+</code></pre></div></div>
+
+<p><strong>현재는 ConfigMap 3개뿐이다.</strong> basic, advanced, premium 세 티어의 더미(placeholder) ConfigMap만 있을 뿐, HelmRelease도 Terraform CRD도 없다.</p>
+
+<p>이 진입점이 비어 있는 것은 의도된 설계다. 새 테넌트 온보딩 시 Argo Workflows가 이 경로(<code class="highlighter-rouge">application-plane/production/tenants/</code>)에 Terraform CRD와 HelmRelease를 자동으로 추가하게 된다. <a href="/kubernetes/Kubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller/">Tofu Controller 실습</a>에서 이 빈 공간에 실제로 CRD를 추가하는 과정을 다룬다.</p>
+
+<h2 id="helmrelease-분포-요약">HelmRelease 분포 요약</h2>
+
+<p>9개 HelmRelease의 진입점별 분포를 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>진입점</th>
+      <th>HelmRelease 수</th>
+      <th>목록</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>infrastructure</td>
+      <td>7</td>
+      <td>metrics-server, karpenter, argo-workflows, aws-load-balancer-controller, kubecost, argo-events, tf-controller</td>
+    </tr>
+    <tr>
+      <td>controlplane</td>
+      <td>1</td>
+      <td>onboarding-service</td>
+    </tr>
+    <tr>
+      <td>dataplane-pooled-envs</td>
+      <td>1</td>
+      <td>pool-1</td>
+    </tr>
+    <tr>
+      <td>sources</td>
+      <td>0</td>
+      <td>(소스 등록만)</td>
+    </tr>
+    <tr>
+      <td>dependencies</td>
+      <td>0</td>
+      <td>(Karpenter NodePool/EC2NodeClass만)</td>
+    </tr>
+    <tr>
+      <td>dataplane-tenants</td>
+      <td>0</td>
+      <td>(더미 ConfigMap만, 추후 채워질 자리)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="진입점-분리의-설계-원리">진입점 분리의 설계 원리</h2>
+
+<p>6개 진입점을 분리하는 이유는 <a href="https://github.com/fluxcd/flux2-kustomize-helm-example">Flux 공식 monorepo 예제</a>에서도 권장하는 표준 구조로, 다음과 같은 이점이 있다.</p>
+
+<ul>
+  <li><strong>장애 격리</strong>: sources에 네트워크 문제가 생겨도, 이미 설치된 HelmRelease는 영향을 받지 않는다</li>
+  <li><strong>의존성 관리 단순화</strong>: infrastructure는 sources만 의존하면 된다. NodePool 같은 후행 설정은 dependencies로 분리하여 의존 사슬을 명확하게 만든다</li>
+  <li><strong>재사용성</strong>: 다른 클러스터(<code class="highlighter-rouge">clusters/staging/</code>)를 추가할 때 sources를 그대로 복사하고, NodePool만 다르게 하려면 dependencies만 바꾸면 된다</li>
+  <li><strong>Reconcile 빈도 분리</strong>: sources는 이미지 태그를 자주 감시해야 하지만, NodePool은 거의 변경되지 않는다. 분리되어 있으면 각자 적절한 interval로 운영할 수 있다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="핵심-포인트">핵심 포인트</h1>
+
+<h2 id="flux-get-all-vs-flux-tree">flux get all vs. flux tree</h2>
+
+<p>두 명령어가 보여주는 것의 차이를 명확히 구분해야 한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>명령어</th>
+      <th>보여주는 것</th>
+      <th>비유</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">flux get all</code></td>
+      <td>Flux에게 일을 시키는 <strong>입력 선언</strong> (HelmRelease, Kustomization 등)</td>
+      <td>설계도 목록</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">flux tree</code></td>
+      <td>입력 선언이 만들어낸 <strong>결과물</strong> (Deployment, Service 등)</td>
+      <td>완성된 건물</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>예를 들어, <code class="highlighter-rouge">flux get all</code>에는 <code class="highlighter-rouge">HelmRelease/kubecost</code>가 나오지만, 이것이 실제로 만든 <code class="highlighter-rouge">Deployment/kubecost-cost-analyzer</code>, <code class="highlighter-rouge">Service/kubecost-cost-analyzer</code> 등의 결과물은 나오지 않는다. 결과물까지 보려면 <code class="highlighter-rouge">flux tree</code>를 사용해야 한다.</p>
+
+<h2 id="dataplane-tenants는-왜-비어-있는가">dataplane-tenants는 왜 비어 있는가</h2>
+
+<p>현재 <code class="highlighter-rouge">dataplane-tenants</code>에는 더미 ConfigMap 3개뿐이다. 이 진입점은 테넌트 온보딩 자동화가 완성되면 다음과 같은 리소스가 추가될 자리다.</p>
+
+<ul>
+  <li><strong>Terraform CRD</strong>: AWS 리소스(SQS, DynamoDB, IAM Role 등)를 프로비저닝</li>
+  <li><strong>HelmRelease</strong>: 테넌트별 애플리케이션 배포</li>
+</ul>
+
+<p>비어 있는 <code class="highlighter-rouge">dataplane-tenants</code>는 의도된 설계이며, <a href="/kubernetes/Kubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller/">Tofu Controller 실습</a>에서 이 공간을 채워 나간다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>이 글에서 분석한 Flux 아키텍처의 핵심은 <strong>“어떤 파일을 건드리면 클러스터의 어디가 바뀌는가”</strong>를 파악하는 것이다. 최종 매핑을 표로 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>수정 대상</th>
+      <th>영향 범위</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">infrastructure/base/sources/</code></td>
+      <td>HelmRepository, GitRepository, ImageRepository 등록 변경</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">infrastructure/production/dependencies/</code></td>
+      <td>Karpenter NodePool, EC2NodeClass 변경</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">infrastructure/production/0N-*.yaml</code></td>
+      <td>클러스터 애드온 7개 (metrics-server, karpenter, kubecost 등)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">control-plane/production/</code></td>
+      <td>Onboarding 서비스, Argo WorkflowTemplate/EventSource/Sensor</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">application-plane/production/pooled-envs/</code></td>
+      <td>pool-1 HelmRelease (Producer/Consumer + Terraform CRD)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">application-plane/production/tenants/</code></td>
+      <td>테넌트별 환경 (<strong>현재 비어 있음</strong>, 추후 CRD 추가 예정)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">clusters/production/*.yaml</code></td>
+      <td>진입점 자체의 설정 (interval, dependsOn 등)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>전체 흐름은 다음 3단계로 요약된다.</p>
+
+<ol>
+  <li><code class="highlighter-rouge">clusters/production/*.yaml</code>의 <code class="highlighter-rouge">spec.path</code>에서 대상 디렉토리 확인</li>
+  <li>해당 디렉토리의 <code class="highlighter-rouge">kustomization.yaml</code>에서 적용할 파일 목록 확인</li>
+  <li>각 파일의 HelmRelease/CRD 정의를 확인</li>
+</ol>
+
+<p>이 구조를 머릿속에 그릴 수 있다면, 이후 Terraform 모듈 테스트나 테넌트 온보딩 실습에서 “어떤 파일을 어디에 추가해야 하는가”를 바로 판단할 수 있다.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study-week-6" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study-Week-6</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws" class="page__taxonomy-item" rel="tag">AWS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#flux" class="page__taxonomy-item" rel="tag">Flux</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gitops" class="page__taxonomy-item" rel="tag">GitOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kustomization" class="page__taxonomy-item" rel="tag">Kustomization</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-16T00:00:00+09:00">April 16, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEKS%5D+GitOps+%EA%B8%B0%EB%B0%98+SaaS%3A+%ED%81%B4%EB%9F%AC%EC%8A%A4%ED%84%B0+%ED%99%98%EA%B2%BD+%ED%99%95%EC%9D%B8+-+2.+Flux+%EC%95%84%ED%82%A4%ED%85%8D%EC%B2%98+%EB%B6%84%EC%84%9D%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GitOps-Saas-02-00-02-Cluster-Flux-Architecture%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GitOps-Saas-02-00-02-Cluster-Flux-Architecture%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GitOps-Saas-02-00-02-Cluster-Flux-Architecture%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-EKS-GitOps-Saas-02-00-02-Cluster-Flux-Architecture?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-EKS-GitOps-Saas-02-00-01-Cluster-Environment/" class="pagination--pager" title="[EKS] GitOps 기반 SaaS: 클러스터 환경 확인 - 1. Flux 리소스 개요
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-EKS-GitOps-Saas-02-01-Terraform-Module/" class="pagination--pager" title="[EKS] GitOps 기반 SaaS: 테넌트 인프라 배포 - 1. Terraform 모듈 테스트
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GitOps-Saas-02-00-02-Cluster-Flux-Architecture/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-EKS-GitOps-Saas-02-00-02-Cluster-Flux-Architecture"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

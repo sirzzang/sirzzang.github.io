@@ -1,0 +1,1792 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[GenAI] GenAI on K8s: 10.3 - GPU 파티셔닝: MIG - Eraser’s StudyLog</title>
+<meta name="description" content="GPU 다이 구조(GPC/SM/메모리 계층)에서 시작해 MIG의 compute/memory slice 설계, 프로파일 해석, placement 규칙, K8s 연동까지 깊이 있게 파고들어 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[GenAI] GenAI on K8s: 10.3 - GPU 파티셔닝: MIG">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG/">
+
+
+  <meta property="og:description" content="GPU 다이 구조(GPC/SM/메모리 계층)에서 시작해 MIG의 compute/memory slice 설계, 프로파일 해석, placement 규칙, K8s 연동까지 깊이 있게 파고들어 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-06-07T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[GenAI] GenAI on K8s: 10.3 - GPU 파티셔닝: MIG">
+    <meta itemprop="description" content="GPU 다이 구조(GPC/SM/메모리 계층)에서 시작해 MIG의 compute/memory slice 설계, 프로파일 해석, placement 규칙, K8s 연동까지 깊이 있게 파고들어 보자.">
+    <meta itemprop="datePublished" content="2026-06-07T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[GenAI] GenAI on K8s: 10.3 - GPU 파티셔닝: MIG
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-06-07T00:00:00+09:00">2026년 06월 07일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  16 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#gpu-다이-구조-기초">GPU 다이 구조 기초</a>
+    <ul>
+      <li><a href="#매크로--다이-전체-계층">매크로 — 다이 전체 계층</a></li>
+      <li><a href="#마이크로--sm-내부와-메모리-계층">마이크로 — SM 내부와 메모리 계층</a></li>
+    </ul>
+  </li>
+  <li><a href="#nvidia-mig">NVIDIA MIG</a>
+    <ul>
+      <li><a href="#개념">개념</a></li>
+      <li><a href="#mig-프로파일-이름-해석">MIG 프로파일 이름 해석</a></li>
+      <li><a href="#mig-아키텍처-설계-원칙">MIG 아키텍처 설계 원칙</a>
+        <ul>
+          <li><a href="#compute-slice-vs-memory-slice--독립적으로-쪼갠다">compute slice vs memory slice — 독립적으로 쪼갠다</a></li>
+          <li><a href="#gpu-instancegi-vs-compute-instanceci">GPU Instance(GI) vs Compute Instance(CI)</a></li>
+          <li><a href="#slice-개수-78-표준">slice 개수: 7/8 표준</a></li>
+        </ul>
+      </li>
+      <li><a href="#h200-프로파일-표-해석">H200 프로파일 표 해석</a>
+        <ul>
+          <li><a href="#7g141gb-vs-mig-off">7g.141gb vs MIG OFF</a></li>
+        </ul>
+      </li>
+      <li><a href="#mig-placement-규칙">MIG placement 규칙</a>
+        <ul>
+          <li><a href="#혼합-배치-예시-4g70gb--3g70gb">혼합 배치 예시: 4g.70gb + 3g.70gb</a></li>
+          <li><a href="#단편화fragmentation-문제">단편화(fragmentation) 문제</a></li>
+          <li><a href="#균일-배치가-흔한-이유">균일 배치가 흔한 이유</a></li>
+        </ul>
+      </li>
+      <li><a href="#k8s-연동">K8s 연동</a>
+        <ul>
+          <li><a href="#single-vs-mixed-mig-strategy">single vs mixed MIG strategy</a></li>
+          <li><a href="#mig-활성화-계층--strategy는-보고-방식일-뿐">MIG 활성화 계층 — strategy는 보고 방식일 뿐</a></li>
+          <li><a href="#gpu-operator-자동화">GPU Operator 자동화</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions">Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)</a> 10장의 학습 내용을 바탕으로 합니다</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>MIG는 물리 GPU 하나를 여러 독립 GPU instance로 하드웨어 레벨에서 분할하는 기술이다 (Ampere 이후)</li>
+  <li>GPU 다이는 GPC → TPC → SM → SP 계층 구조이고, MIG는 GPC 단위(compute)와 L2+메모리 컨트롤러 단위(memory)를 독립적으로 쪼갠다</li>
+  <li>프로파일 <code class="highlighter-rouge">&lt;compute&gt;g.&lt;memory&gt;gb</code>의 최대 인스턴스 수는 <code class="highlighter-rouge">min(7÷c, 8÷m)</code>으로 결정되며, placement 규칙(연속성·정렬·무중첩)이 추가 제약을 건다</li>
+  <li>K8s에서는 GPU Operator + MIG manager로 라벨/ConfigMap만 바꿔 자동 재구성하며, single/mixed strategy로 리소스를 노출한다</li>
+</ul>
+
+<p><a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-02-GPU-Utilization-and-DCGM/">이전 글</a>에서 GPU utilization 문제와 파티셔닝 기법의 필요성을 다뤘다. 이번 글에서는 NVIDIA MIG(Multi-Instance GPU)를 GPU 다이 구조부터 K8s 연동까지 깊이 있게 다룬다.</p>
+
+<p><br /></p>
+
+<h1 id="gpu-다이-구조-기초">GPU 다이 구조 기초</h1>
+
+<p>MIG가 “무엇을 어떻게 쪼개는지” 이해하려면 GPU 다이의 계층 구조를 먼저 알아야 한다. GPU는 단순히 “코어가 많은 프로세서”가 아니라, 여러 겹의 계층으로 묶인 정교한 구조체다. MIG는 이 계층 중 특정 레벨에서만 분할이 가능하므로, 각 레벨이 무엇인지 알아야 MIG의 설계 결정이 자연스럽게 이해된다.</p>
+
+<p><br /></p>
+
+<h2 id="매크로--다이-전체-계층">매크로 — 다이 전체 계층</h2>
+
+<p>MIG 관점에서 먼저 보면, GPU 다이는 <strong>컴퓨트(GPC)</strong> 와 <strong>메모리(L2 + MC)</strong> 가 각각 파티션 단위로 나뉘고, 메모리 컨트롤러가 다이 밖 VRAM(GDDR/HBM)에 연결된다. 아래 도식이 compute slice / memory slice가 하드웨어 어디에 대응하는지 한눈에 보여준다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/Week04-ch10-gpu-structure-overview.png" alt="GPU 다이 — 컴퓨트 계층과 메모리 파티션 구조" class="align-center" /></p>
+
+<p>물리적 배치는 다이 평면도로 보면 더 직관적이다. GA104(소비자용 Ampere) 예시로 GPC → TPC → SM 계층을 확인하자.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/Week04-ch10-gpu-die-macro.webp" alt="GPU 아키텍처 — NVIDIA Ampere GA104 다이" class="align-center" /></p>
+
+<blockquote>
+  <p>GA104는 소비자용(RTX 3070/3080 등)으로 MIG 대상이 아니다. 구조 이해용으로 참고하자. 데이터센터용 GPU(A100, H100 등)도 동일한 GPC → TPC → SM 계층을 따르되, GPC/SM 수가 훨씬 많다.</p>
+</blockquote>
+
+<table>
+  <thead>
+    <tr>
+      <th>구성 요소</th>
+      <th>역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>GigaThread Engine</strong></td>
+      <td>GPU 전체의 작업 분배 엔진. 커널 실행 요청을 받아 GPC/SM에 thread block을 분배한다</td>
+    </tr>
+    <tr>
+      <td><strong>GPC</strong> (GPU Processing Cluster)</td>
+      <td>SM들을 묶는 중간 계층. MIG에서 <strong>compute 분할의 최소 단위</strong>다</td>
+    </tr>
+    <tr>
+      <td><strong>TPC</strong> (Texture Processing Cluster)</td>
+      <td>GPC 안의 하위 묶음. 보통 TPC 1개 = SM 2개. MIG 관점에서는 GPC가 단위이므로 TPC를 따로 신경 쓸 필요는 없다</td>
+    </tr>
+    <tr>
+      <td><strong>SM</strong> (Streaming Multiprocessor)</td>
+      <td>실제 연산이 일어나는 핵심 유닛. CUDA Core(SP), Tensor Core, Warp Scheduler 등을 포함한다</td>
+    </tr>
+    <tr>
+      <td><strong>L2 Cache</strong></td>
+      <td>모든 SM이 공유하는 캐시. MIG에서 <strong>memory slice 분할 대상</strong>이다</td>
+    </tr>
+    <tr>
+      <td><strong>Memory Controller</strong></td>
+      <td>HBM(또는 GDDR) 메모리와의 인터페이스. L2 Cache와 함께 memory slice에 포함된다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h2 id="마이크로--sm-내부와-메모리-계층">마이크로 — SM 내부와 메모리 계층</h2>
+
+<p><img src="https://sirzzang.github.io//assets/images/Week04-ch10-gpu-die-sm-memory.png" alt="SM 내부 구조와 메모리 계층" class="align-center" /></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구성 요소</th>
+      <th>위치</th>
+      <th>역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>SP</strong> (Streaming Processor, = CUDA Core)</td>
+      <td>SM 내부</td>
+      <td>최소 연산 유닛. FP32/INT32 연산 수행</td>
+    </tr>
+    <tr>
+      <td><strong>Register</strong></td>
+      <td>SM 내부, 스레드별</td>
+      <td>스레드의 지역 변수를 저장하는 가장 빠른 메모리</td>
+    </tr>
+    <tr>
+      <td><strong>LD/ST Unit</strong></td>
+      <td>SM 내부</td>
+      <td>Load/Store 유닛. 메모리 읽기/쓰기를 담당한다</td>
+    </tr>
+    <tr>
+      <td><strong>SFU</strong> (Special Function Unit)</td>
+      <td>SM 내부</td>
+      <td>sin, cos, exp 같은 초월함수(transcendental function) 전용 연산기</td>
+    </tr>
+    <tr>
+      <td><strong>Warp Scheduler</strong></td>
+      <td>SM 내부</td>
+      <td>32개 스레드 묶음(warp)을 SM의 실행 파이프라인에 디스패치한다</td>
+    </tr>
+    <tr>
+      <td><strong>L1 / Shared Memory</strong></td>
+      <td>SM 내부</td>
+      <td>SM 로컬 캐시. L1(하드웨어 관리)과 Shared Memory(프로그래머 관리)가 같은 SRAM을 공유한다</td>
+    </tr>
+    <tr>
+      <td><strong>L2 Cache</strong></td>
+      <td>다이 전체 공유</td>
+      <td>모든 SM이 접근하는 공유 캐시. 글로벌 메모리 접근 전 마지막 캐시 계층</td>
+    </tr>
+    <tr>
+      <td><strong>Global Memory</strong> (HBM)</td>
+      <td>GPU 보드</td>
+      <td>대용량 고대역폭 메모리. 모든 스레드에서 접근 가능하지만 가장 느리다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>메모리 접근 속도 계층은 다음과 같다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Register → L1/Shared Memory → L2 Cache → Global Memory(HBM)
+ (가장 빠름)                                    (가장 느림)
+</code></pre></div></div>
+
+<p>MIG 관점에서 중요한 두 가지 포인트가 있다.</p>
+
+<ul>
+  <li><strong>compute는 GPC → TPC → SM → SP로 계층적으로 묶인다</strong> → MIG는 이 중 GPC 단위로만 쪼갤 수 있다. SM이나 SP 단위의 분할은 하드웨어 설계상 불가능하다</li>
+  <li><strong>메모리는 L2 Cache + Memory Controller가 공유 서브시스템을 형성한다</strong> → MIG는 이 레벨에서 격리한다. L2 캐시를 물리적으로 파티셔닝하고, 각 파티션에 전용 메모리 컨트롤러를 할당한다</li>
+</ul>
+
+<blockquote>
+  <p>compute(연산)과 memory(메모리)가 독립적인 두 축이라는 점이 핵심이다. MIG 프로파일의 <code class="highlighter-rouge">&lt;compute&gt;g.&lt;memory&gt;gb</code> 표기도 이 두 축을 반영한 것이다. 뒤에서 프로파일을 해석할 때 이 구조를 계속 참조하게 된다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="nvidia-mig">NVIDIA MIG</h1>
+
+<p><br /></p>
+
+<h2 id="개념">개념</h2>
+
+<p>MIG(Multi-Instance GPU)는 물리 GPU 하나를 여러 독립된 GPU instance로 <strong>하드웨어 레벨에서</strong> 분할하는 기술이다. Ampere 아키텍처(A100) 이후에 도입되었다.</p>
+
+<p>각 MIG instance는 다음을 전용으로 갖는다.</p>
+
+<ul>
+  <li>연산 코어(SM) — GPC 단위로 할당</li>
+  <li>메모리(HBM) — 메모리 컨트롤러 + L2 캐시 파티션 단위로 할당</li>
+  <li>기타 GPU 엔진 — copy engine(DMA)은 instance마다 할당된다. NVDEC/NVENC/NVJPG 같은 <strong>media engine</strong>은 <code class="highlighter-rouge">+me</code> 프로파일에서만 전용 할당되며, GPU당 물리적으로 1세트뿐이다</li>
+</ul>
+
+<p>이렇게 분할된 각 instance는 독립된 mini-GPU처럼 동작하며, <strong>엄격한 하드웨어 격리</strong>를 제공한다. 한 instance의 오류가 다른 instance에 영향을 주지 않고(fault isolation), 메모리 대역폭 경합도 발생하지 않는다.</p>
+
+<p>예를 들어, A100 40GB GPU 하나를 최대 7개의 MIG instance로 나누면 각각 약 5GB 메모리와 해당 비율의 연산 자원을 전용으로 갖게 된다. 각 instance 사이에는 <strong>어떤 자원도 공유되지 않으며</strong>, 한 instance가 크래시해도 다른 instance에 전혀 영향이 없다. 이것이 time-slicing이나 MPS와 근본적으로 다른 점이다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/Week04-ch10-nvidia-mig.png" alt="NVIDIA MIG 개요" class="align-center" /></p>
+
+<p><br /></p>
+
+<h2 id="mig-프로파일-이름-해석">MIG 프로파일 이름 해석</h2>
+
+<p>MIG 프로파일은 <code class="highlighter-rouge">&lt;compute&gt;g.&lt;memory&gt;gb</code> 형식으로 표기한다. 이 이름 자체가 해당 instance가 확보하는 자원을 직관적으로 알려준다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구성 요소</th>
+      <th>의미</th>
+      <th>예시</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">&lt;compute&gt;g</code></td>
+      <td>compute slice 개수 (SM 묶음 = GPC 단위)</td>
+      <td><code class="highlighter-rouge">1g</code> = GPC 1개, <code class="highlighter-rouge">2g</code> = GPC 2개</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">&lt;memory&gt;gb</code></td>
+      <td>메모리 용량(GB)</td>
+      <td><code class="highlighter-rouge">18gb</code> = HBM 18GB</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">+me</code> (선택)</td>
+      <td>media engine 포함</td>
+      <td><code class="highlighter-rouge">1g.18gb+me</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">+me</code> 접미사는 NVDEC(비디오 디코더), NVJPG(JPEG 디코더), OFA(Optical Flow Accelerator) 같은 미디어 엔진을 instance에 포함시킨다는 뜻이다. NVDEC는 GPU 하나에 여러 개라 어느 정도 나뉘지만, NVJPG·OFA는 GPU당 1개뿐이라 이 단일 엔진이 병목이 된다. 그래서 미디어 엔진을 한 슬라이스에 통째로 몰아 주고, <strong>+me가 붙은 프로파일은 GPU당 최대 1개</strong>만 생성할 수 있다. 영상 전처리(디코딩·리사이즈)를 GPU에서 직접 처리하는 워크로드에 사용한다. LLM 추론·학습처럼 텍스트/텐서 연산만 하는 GenAI 워크로드는 media engine이 필요 없으므로 <code class="highlighter-rouge">+me</code> 없는 프로파일을 쓰면 된다.</p>
+
+<p>핵심은 <strong>이름 = compute.memory</strong>라는 것이다. instance의 최대 개수는 compute와 memory 중 더 빡빡한(적은) 자원이 결정한다.</p>
+
+<p>예를 들어 <code class="highlighter-rouge">3g.70gb</code> 프로파일은:</p>
+<ul>
+  <li>compute slice 3개 (GPC 3개 분량의 SM 할당)</li>
+  <li>memory 70GB (memory slice 약 4개 분량의 HBM + L2 + 메모리 컨트롤러)</li>
+</ul>
+
+<p>를 하나의 MIG instance에 묶는다.</p>
+
+<p><br /></p>
+
+<h2 id="mig-아키텍처-설계-원칙">MIG 아키텍처 설계 원칙</h2>
+
+<p><img src="https://sirzzang.github.io//assets/images/Week04-ch10-gpu-mig-architecture.webp" alt="NVIDIA MIG 슬라이싱 구조" class="align-center" /></p>
+
+<h3 id="compute-slice-vs-memory-slice--독립적으로-쪼갠다">compute slice vs memory slice — 독립적으로 쪼갠다</h3>
+
+<p>MIG의 핵심 설계 원칙은 compute와 memory를 <strong>독립된 두 축</strong>으로 나눈다는 것이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>slice</th>
+      <th>나누는 대상</th>
+      <th>단위 기준</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>compute slice</strong></td>
+      <td>코어(SM)</td>
+      <td>GPC 기반. GPC 1개 = compute slice 1개</td>
+    </tr>
+    <tr>
+      <td><strong>memory slice</strong></td>
+      <td>HBM / L2 Cache</td>
+      <td>L2 캐시 파티션 + 메모리 컨트롤러 기반</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>memory slice가 단순한 “메모리 용량 분배”가 아니라는 점이 중요하다. HBM 용량뿐 아니라 <strong>L2 캐시 파티션과 메모리 컨트롤러(메모리 경로)</strong>를 한 묶음으로 떼어내야 진짜 하드웨어 격리가 성립한다. 단순히 “너는 20GB, 나는 20GB”로 주소 공간만 나누면 L2 캐시와 메모리 대역폭은 여전히 공유되어 상호 간섭이 발생한다.</p>
+
+<blockquote>
+  <p><strong>noisy neighbor 문제</strong>: MIG 없이 GPU를 공유하면 한 워크로드가 L2 캐시를 오염(cache thrashing)시키거나 메모리 대역폭을 독점하여 같은 GPU의 다른 워크로드 성능이 저하된다. MIG는 L2 캐시·메모리 컨트롤러·HBM을 물리적으로 파티셔닝하여 이 문제를 원천 차단한다. time-slicing이나 MPS로는 해결할 수 없는 격리 수준이다.</p>
+</blockquote>
+
+<h3 id="gpu-instancegi-vs-compute-instanceci">GPU Instance(GI) vs Compute Instance(CI)</h3>
+
+<p>MIG에는 두 계층의 instance가 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>계층</th>
+      <th>무엇을 묶나</th>
+      <th>격리 수준</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>GPU Instance (GI)</strong></td>
+      <td>memory slice + compute slice + media engine</td>
+      <td>메모리까지 완전 격리. 각 GI는 독립된 메모리 주소 공간을 갖는다</td>
+    </tr>
+    <tr>
+      <td><strong>Compute Instance (CI)</strong></td>
+      <td>GI 안에서 compute(SM)만 추가 분할</td>
+      <td>메모리는 같은 GI 내에서 공유하고, 연산만 분리한다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>GI가 메모리 격리의 경계이고, CI는 그 안에서 compute를 더 잘게 나누는 선택적 계층이다. 대부분의 사용 사례에서는 GI 하나에 CI 하나(기본값)로 운영한다. CI를 여러 개 만드는 건 같은 메모리를 공유하면서 연산만 분리하고 싶을 때(예: 같은 모델의 여러 추론 스레드)에 사용하는 고급 패턴이다.</p>
+
+<h3 id="slice-개수-78-표준">slice 개수: 7/8 표준</h3>
+
+<p>모든 풀사이즈 데이터센터 GPU는 <strong>compute slice = 7, memory slice = 8</strong>이라는 표준을 따른다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>GPU</th>
+      <th>compute slices</th>
+      <th>memory slices</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>A30</td>
+      <td>4</td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <td>A100 40GB</td>
+      <td>7</td>
+      <td>8</td>
+    </tr>
+    <tr>
+      <td>A100 80GB</td>
+      <td>7</td>
+      <td>8</td>
+    </tr>
+    <tr>
+      <td>H100</td>
+      <td>7</td>
+      <td>8</td>
+    </tr>
+    <tr>
+      <td>H200</td>
+      <td>7</td>
+      <td>8</td>
+    </tr>
+    <tr>
+      <td>B200</td>
+      <td>7</td>
+      <td>8</td>
+    </tr>
+  </tbody>
+</table>
+
+<ul>
+  <li>
+    <p><strong>compute = 7인 이유</strong>: GPC가 MIG에서 compute 격리의 최소 단위인데, 반도체 제조의 수율(yield)과 비닝(binning) 때문에 모든 칩이 7개 GPC를 보장한다. 실제 다이에는 8개 이상의 GPC가 있을 수 있지만, 불량 유닛을 비활성화하고도 7개는 항상 동작하도록 설계한다.</p>
+  </li>
+  <li>
+    <p><strong>memory = 8인 이유</strong>: HBM 메모리 서브시스템이 8개 파티션으로 깔끔하게 나뉘도록 설계되어 있다. HBM 스택의 채널과 메모리 컨트롤러가 8등분에 맞춰 배치된다.</p>
+  </li>
+</ul>
+
+<p>이 두 숫자에서 핵심 공식이 도출된다. 두 공식은 역할이 다르다 — 위는 <strong>하드웨어 파티션 1칸의 용량</strong>, 아래는 <strong>같은 프로파일만 꽉 채울 때의 이론적 상한</strong>이다.</p>
+
+<p><strong>slice당 GB = 총 GPU 메모리 ÷ 8</strong></p>
+
+<p>memory slice 1개가 담당하는 HBM 용량이다. 프로파일 이름의 GB가 항상 이 값의 정수배인 이유가 여기 있다.</p>
+
+<p>예를 들어 H200의 총 메모리가 141GB면, memory slice 1개 = 141 ÷ 8 ≈ 17.6GB(반올림하여 ~18GB)가 된다.</p>
+
+<p><strong>최대 인스턴스 수 = min(7 ÷ c, 8 ÷ m)</strong></p>
+
+<p><strong>동일 프로파일</strong>을 GPU 하나에 최대한 많이 생성할 때의 이론적 상한이다. <code class="highlighter-rouge">c</code>는 instance당 compute slice 수, <code class="highlighter-rouge">m</code>은 instance당 memory slice 수(= 프로파일 memory GB ÷ slice당 GB)이다. compute와 memory 중 먼저 소진되는 쪽이 병목이 된다.</p>
+
+<p>이 공식이 말해 주지 않는 것도 있다.</p>
+
+<ul>
+  <li><strong>프로파일 혼합</strong>:<code class="highlighter-rouge">2g.35gb</code> 3개 + <code class="highlighter-rouge">1g.18gb</code> 1개처럼 여러 프로파일을 섞으면 bin packing 문제가 되어, 이 공식만으로는 답을 구할 수 없다</li>
+  <li><strong>placement 규칙</strong>: memory slice는 연속·정렬 배치가 필요하므로, 이론 상한보다 실제 최대 개수가 적을 수 있다(아래 MIG placement 절)</li>
+  <li><strong><code class="highlighter-rouge">+me</code> (media engine)</strong>: NVDEC/NVENC 등은 compute/memory slice와 별도 자원이라, <code class="highlighter-rouge">+me</code> 프로파일은 GPU당 <strong>최대 1개</strong>라는 추가 제약이 걸린다</li>
+</ul>
+
+<blockquote>
+  <p><strong>왜 소비자용 GPU(RTX 4090 등)는 MIG를 지원하지 않는가?</strong> 흔한 오해는 “GDDR이라서 구조적으로 못 한다”는 것이지만, 사실이 아니다. 분할의 토대가 되는 구조(GPC·L2·메모리 컨트롤러)는 라인업 전반에 깔려 있다. MIG는 그 위에 <strong>인스턴스 간 메모리·fault 격리, L2/대역폭 QoS 분할 같은 하드 격리 실리콘</strong>을 추가로 얹느냐의 문제이고, 이 하드웨어가 소비자/Ada 칩엔 실제로 탑재돼 있지 않아 지금 그 칩으론 못 켜는 것이다.</p>
+
+  <p>이것이 “기술적 불가”가 아니라 NVIDIA의 <strong>비용·검증·시장세분화 결정</strong>이라는 근거가 둘 있다.</p>
+
+  <ul>
+    <li><strong>Ada Lovelace 반례</strong>: AD102는 A100(GPC 8개)보다 신세대 데이터센터 아키텍처이고 GPC가 오히려 12개로 더 많은데도, L4/L40/L40S는 MIG를 지원하지 않는다(time-sliced vGPU만). 구조가 더 충분한 신세대인데 빠졌다는 건 “구조상 불가”가 아님을 못박는다</li>
+    <li><strong>Blackwell RTX PRO 반례</strong>: RTX PRO 6000/5000 Blackwell은 <strong>GDDR 기반 워크스테이션 GPU</strong>인데도 MIG를 다시 탑재했다(6000은 최대 4 instance, 5000은 2 instance). “HBM 데이터센터 GPU만 MIG”라는 단정을 직접 반증한다</li>
+  </ul>
+
+  <p>그래서 HBM↔MIG의 상관은 “MIG를 데이터센터 라인에 넣기로 한 결정의 결과적 상관”이지 인과가 아니다. 소비자 GPU도 공유 자체가 막힌 건 아니다 — <strong>time-slicing·MPS(소프트 공유)는 되고, MIG(하드 격리)만 안 된다</strong>(차이는 격리의 강도). 본 실습의 L4가 <code class="highlighter-rouge">migStrategy: none</code>인 이유가 정확히 이것이다.</p>
+
+  <p>참고로 DRAM 계통은 다음과 같이 나뉜다. 단 아래는 “어느 라인에 주로 쓰이나”일 뿐, MIG 가부를 정하는 기준이 아니다.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>유형</th>
+        <th>특성</th>
+        <th>주 사용처</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>DDR</strong> (DDR4/5)</td>
+        <td>CPU용 범용 메모리</td>
+        <td>메인보드 시스템 RAM</td>
+      </tr>
+      <tr>
+        <td><strong>GDDR</strong> (GDDR6/6X/7)</td>
+        <td>핀 기반 넓은 버스</td>
+        <td>소비자 GPU + 일부 워크스테이션(RTX PRO Blackwell 등)</td>
+      </tr>
+      <tr>
+        <td><strong>HBM</strong> (HBM2e/3e)</td>
+        <td>스택-채널 구조, 초고대역폭</td>
+        <td>데이터센터 GPU(A100/H100/H200/B200)</td>
+      </tr>
+    </tbody>
+  </table>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="h200-프로파일-표-해석">H200 프로파일 표 해석</h2>
+
+<p><img src="https://sirzzang.github.io//assets/images/Week04-ch10-nvidia-mig-h200.png" alt="H200 MIG 프로파일" class="align-center" /></p>
+
+<blockquote>
+  <p><strong>H200 스펙 참고</strong>: 141GB HBM3e, ~4.8 TB/s 대역폭, Hopper 아키텍처(H100과 동일 컴퓨트 다이), 132 SM(풀 다이 GH100은 144 SM이지만 수율 binning으로 132개). 물리 GPC는 8개이고, MIG compute slice는 7개라 slice당 ≈ 132 ÷ 7 ≈ 18 SM이다(GPC 8개 ≠ compute slice 7개 — slice 7은 결함 칩까지 보장 가능한 수로 8 중 하나를 마진으로 뺀 것). H200은 H100에 더 큰 메모리(80GB → 141GB)와 더 빠른 HBM3e를 결합한 제품이다. Compute slice 7개, memory slice 8개(slice당 ≈18GB)로 동일한 MIG 프레임워크가 적용된다.</p>
+</blockquote>
+
+<p>H200의 MIG 프로파일별 최대 인스턴스 수를 유도해 보자. slice당 메모리는 141 ÷ 8 ≈ 18GB이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>프로파일</th>
+      <th>compute 한계 (7÷c)</th>
+      <th>memory 한계 (8÷m)</th>
+      <th>최대 인스턴스</th>
+      <th>병목</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>1g.18gb</strong></td>
+      <td>7÷1 = 7</td>
+      <td>8÷1 = 8</td>
+      <td><strong>7</strong></td>
+      <td>compute</td>
+    </tr>
+    <tr>
+      <td><strong>1g.18gb+me</strong></td>
+      <td>7÷1 = 7</td>
+      <td>8÷1 = 8</td>
+      <td><strong>1</strong></td>
+      <td>media engine</td>
+    </tr>
+    <tr>
+      <td><strong>1g.35gb</strong></td>
+      <td>7÷1 = 7</td>
+      <td>8÷2 = 4</td>
+      <td><strong>4</strong></td>
+      <td>memory</td>
+    </tr>
+    <tr>
+      <td><strong>2g.35gb</strong></td>
+      <td>7÷2 = 3</td>
+      <td>8÷2 = 4</td>
+      <td><strong>3</strong></td>
+      <td>compute</td>
+    </tr>
+    <tr>
+      <td><strong>3g.70gb</strong></td>
+      <td>7÷3 = 2</td>
+      <td>8÷4 = 2</td>
+      <td><strong>2</strong></td>
+      <td>compute·memory 동시</td>
+    </tr>
+    <tr>
+      <td><strong>4g.70gb</strong></td>
+      <td>7÷4 = 1</td>
+      <td>8÷4 = 2</td>
+      <td><strong>1</strong></td>
+      <td>compute</td>
+    </tr>
+    <tr>
+      <td><strong>7g.141gb</strong></td>
+      <td>7÷7 = 1</td>
+      <td>8÷8 = 1</td>
+      <td><strong>1</strong></td>
+      <td>전체 사용</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>각 행의 유도 과정을 하나씩 살펴보자.</p>
+
+<ul>
+  <li><strong>1g.18gb</strong>: compute 1개씩 7개 가능, memory 1개씩 8개 가능 → min(7, 8) = 7. compute가 먼저 소진된다. memory slice 1개(18GB)가 남지만 배정할 compute가 없다</li>
+  <li><strong>1g.18gb+me</strong>: 산술상으로는 7개 가능하지만, media engine(NVDEC/NVJPG/OFA)은 GPU당 물리적으로 한 세트뿐이다 → 최대 1개</li>
+  <li><strong>1g.35gb</strong>: compute 1개, memory 2개(35GB ≈ 18×2)를 쓰는 프로파일이다. compute 한계 7, memory 한계 4 → min(7, 4) = 4. memory가 병목이다</li>
+  <li><strong>2g.35gb</strong>: compute 2개, memory 2개. compute 한계 3, memory 한계 4 → min(3, 4) = 3. compute가 병목이다</li>
+  <li><strong>3g.70gb</strong>: compute 3개, memory 4개(70GB ≈ 18×4). compute 한계 2, memory 한계 2 → 양쪽 동시에 병목. GPU 자원이 정확히 절반씩 나뉜다</li>
+  <li><strong>4g.70gb</strong>: compute 4개, memory 4개. compute 한계 1, memory 한계 2 → compute가 병목. memory는 절반이 남는다</li>
+  <li><strong>7g.141gb</strong>: compute slice 7 + memory slice 8 = GPU 전체를 하나의 MIG instance로 점유한다</li>
+</ul>
+
+<blockquote>
+  <p><strong>왜 1g.25gb 같은 프로파일은 없는가?</strong> memory slice는 하드웨어 파티셔닝 단위(18GB)의 <strong>정수배</strong>로만 할당할 수 있다. 1.5개(≈25GB)처럼 중간 크기는 물리적으로 불가능하다. 따라서 프로파일의 memory는 항상 18GB의 배수(18, 35≈36, 70≈72, 141≈144)에 근사한다. 약간의 오차는 시스템 예약 메모리와 반올림 때문이다.</p>
+</blockquote>
+
+<blockquote>
+  <p><strong>멀티 GPU 시스템에서의 MIG</strong>: 각 물리 GPU는 독립적으로 MIG 프로파일을 구성한다. 예를 들어 p5.48xlarge(H100 × 8)에서 모든 GPU를 <code class="highlighter-rouge">1g.10gb</code>로 구성하면 7 × 8 = <strong>56개</strong> MIG instance가 생긴다. 각 instance가 독립된 GPU처럼 K8s에 리소스로 노출되므로, 소규모 추론 워크로드 56개를 하나의 노드에서 격리된 상태로 돌릴 수 있다.</p>
+</blockquote>
+
+<h3 id="7g141gb-vs-mig-off">7g.141gb vs MIG OFF</h3>
+
+<p><strong>7g.141gb</strong>는 MIG 모드가 켜진 상태에서 compute·memory slice를 모두 하나의 GPU Instance에 할당한 프로파일이다. MIG 프레임워크 안에서 “전체 GPU를 한 instance가 독점”하는 설정이라, H200 프로파일 표에서 slice를 다 쓰는 유일한 형태다.</p>
+
+<p><strong>MIG OFF</strong>는 MIG 분할 자체를 비활성화하고, 물리 GPU를 통째로 하나의 디바이스로 노출하는 상태다. <code class="highlighter-rouge">nvidia-smi</code>에는 일반 GPU로 보이고, time-slicing이나 MPS로 다른 프로세스와 공유하는 전통적인 사용 방식이다.</p>
+
+<p>둘 다 GPU 전체를 사용하지만 차이가 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>MIG OFF</th>
+      <th>7g.141gb</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>사용 가능 자원</td>
+      <td>GPU 전체 (모든 SM + 전체 메모리)</td>
+      <td>GPU 전체 (동일)</td>
+    </tr>
+    <tr>
+      <td>MIG 격리</td>
+      <td>없음</td>
+      <td>MIG 프레임워크 내에서 동작</td>
+    </tr>
+    <tr>
+      <td>다른 instance와 공존</td>
+      <td>가능 (time-slicing/MPS로 공유)</td>
+      <td>불가 (이미 전체 점유)</td>
+    </tr>
+    <tr>
+      <td>nvidia-smi 표시</td>
+      <td>일반 GPU</td>
+      <td>MIG instance로 표시</td>
+    </tr>
+    <tr>
+      <td>용도</td>
+      <td>단일 워크로드 전용</td>
+      <td>MIG 체계 안에서 전체 GPU를 하나에 할당하고 싶을 때</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>단일 워크로드에 GPU 전체를 주고 MIG 격리가 필요 없다면 MIG OFF가 낫다. MIG 오버헤드(소량이지만 있다)를 피할 수 있다. 반대로 클러스터 전체가 MIG 기반으로 운영 중이라면, 같은 노드의 다른 GPU들과 설정을 맞추기 위해 <code class="highlighter-rouge">7g.141gb</code>를 쓰는 경우도 있다.</p>
+
+<p><br /></p>
+
+<h2 id="mig-placement-규칙">MIG placement 규칙</h2>
+
+<p><code class="highlighter-rouge">min(7÷c, 8÷m)</code>은 <strong>이론적 최대값</strong>이다. 실제로는 placement 규칙이 추가 제약을 건다.</p>
+
+<p>MIG의 memory slice 배치를 슬롯 모델로 시각화하면 다음과 같다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>위치:  [0][1][2][3][4][5][6][7]   ← memory slice 8칸
+</code></pre></div></div>
+
+<p>세 가지 규칙이 적용된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>규칙</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>연속성</strong> (contiguous)</td>
+      <td>프로파일이 차지하는 memory slice들은 연속된 칸에 배치되어야 한다. 떨어진 칸에 분산 배치 불가</td>
+    </tr>
+    <tr>
+      <td><strong>정렬</strong> (aligned start)</td>
+      <td>시작 위치가 프로파일 크기의 배수여야 한다. 예: 2-slot 프로파일은 0, 2, 4, 6에서만 시작 가능</td>
+    </tr>
+    <tr>
+      <td><strong>무중첩</strong> (no overlap)</td>
+      <td>이미 배치된 instance와 겹칠 수 없다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>프로파일별 유효 시작 위치와 최대 개수를 표로 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>프로파일</th>
+      <th>slot 수</th>
+      <th>유효 시작 위치</th>
+      <th>이론 최대 (min 공식)</th>
+      <th>placement 최대</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1g.18gb</td>
+      <td>1</td>
+      <td>0, 1, 2, 3, 4, 5, 6</td>
+      <td>7 (compute 한계)</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <td>1g.35gb</td>
+      <td>2</td>
+      <td>0, 2, 4, 6</td>
+      <td>4 (memory 한계)</td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <td>2g.35gb</td>
+      <td>2</td>
+      <td>0, 2, 4, 6</td>
+      <td>3 (compute 한계)</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>3g.70gb</td>
+      <td>4</td>
+      <td>0, 4</td>
+      <td>2</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <td>4g.70gb</td>
+      <td>4</td>
+      <td>0, 4</td>
+      <td>1 (compute 한계)</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td>7g.141gb</td>
+      <td>8</td>
+      <td>0</td>
+      <td>1</td>
+      <td>1</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="혼합-배치-예시-4g70gb--3g70gb">혼합 배치 예시: 4g.70gb + 3g.70gb</h3>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>위치:   [0][1][2][3][4][5][6][7]
+       ├──4g.70gb─┤├──3g.70gb─┤ (slot 7은 빈다)
+        slot 0~3     slot 4~6
+</code></pre></div></div>
+
+<p>4g.70gb는 slot 4개(0~3), 3g.70gb는 slot 4개(4~7) 중 compute 3개분만 사용하고 memory slot 7은 비게 된다. 이렇게 깔끔하게 들어맞지만, 반대 순서(3g를 먼저 0~3에, 4g를 4~7에)도 가능하다. 핵심은 정렬·연속성·무중첩이 모두 만족되어야 한다는 것이다.</p>
+
+<h3 id="단편화fragmentation-문제">단편화(fragmentation) 문제</h3>
+
+<p>placement 규칙 때문에, 이론적으로 자원이 남아 있어도 배치가 불가능한 경우가 생긴다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>위치:  [0][1][2][3][4][5][6][7]
+       ├1g┤    ├1g┤    ├1g┤
+       0    빈  2    빈  4    5  6  7
+
+여기서 2g.35gb를 추가하려면 연속 2칸이 필요하지만,
+빈 칸이 1, 3, 5, 6, 7에 흩어져 있어 정렬 규칙을 만족하는
+연속 2칸 시작점(0, 2, 4, 6)에 빈 공간이 없을 수 있다.
+</code></pre></div></div>
+
+<p>이런 단편화 문제는 MIG instance를 삭제하고 재배치하지 않으면 해결할 수 없다. 그리고 MIG 재구성은 GPU가 idle 상태여야 가능하므로, 운영 중 재배치는 비용이 크다.</p>
+
+<p>구체적으로 정렬 규칙 때문에 발생하는 제약의 예를 하나 더 보자. memory slice 8칸 중 slot 0과 slot 2에 <code class="highlighter-rouge">1g</code> instance가 각각 하나씩 올라가 있다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>현재 상태:
+위치:  [0][1][2][3][4][5][6][7]
+       ├─1g─┤    ├─1g─┤
+       slot 0     slot 2
+</code></pre></div></div>
+
+<p>여기에 <code class="highlighter-rouge">2g.35gb</code>(memory slice 2칸)를 추가하려면 연속 2칸이 필요하고, 2-slot 프로파일의 유효 시작 위치는 0, 2, 4, 6뿐이다. slot 0과 slot 2는 이미 <code class="highlighter-rouge">1g</code>가 차지하고 있어 무중첩 규칙에 걸린다. 남는 후보는 slot 4와 slot 6이다 — slot 4에서 시작하면 [4][5]에, slot 6에서 시작하면 [6][7]에 배치할 수 있다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>결과 (둘 중 하나):
+위치:  [0][1][2][3][4][5][6][7]
+       ├1g┤빈├1g┤빈├2g.35gb┤빈 빈
+       또는
+       ├1g┤빈├1g┤빈 빈 빈├2g.35gb┤
+</code></pre></div></div>
+
+<p>빈칸이 흩어져 있어도 <strong>정렬된 시작 위치(0, 2, 4, 6) 중 하나에 연속 2칸이 비어 있으면</strong> 배치는 가능하다. 반대로 유효 시작 위치마다 이미 instance가 있거나 연속 칸이 부족하면, slice가 남아 있어도 추가 생성은 불가능하다.</p>
+
+<p>slot 1, 3이 비어 있어도 정렬 조건(2의 배수 시작)을 만족하지 못해 1g 이외의 프로파일은 들어갈 수 없다. 이것이 단편화다.</p>
+
+<h3 id="균일-배치가-흔한-이유">균일 배치가 흔한 이유</h3>
+
+<p>실무에서는 같은 프로파일로 균일하게 배치하는 경우가 대부분이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>이유</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>단편화 회피</strong></td>
+      <td>같은 크기로 채우면 빈 틈이 발생하지 않는다</td>
+    </tr>
+    <tr>
+      <td><strong>재구성 비용</strong></td>
+      <td>MIG 변경 시 GPU idle 필요 → 균일 배치면 재구성 빈도가 낮다</td>
+    </tr>
+    <tr>
+      <td><strong>스케줄링 단순화</strong></td>
+      <td>K8s 리소스 타입이 하나로 통일되어 스케줄링이 단순해진다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h2 id="k8s-연동">K8s 연동</h2>
+
+<p>K8s에서 MIG instance는 <strong>(GI ID, CI ID) 쌍</strong>으로 식별된다. NVIDIA Device Plugin은 각 MIG instance를 별도의 extended resource로 노출한다(예: <code class="highlighter-rouge">nvidia.com/mig-1g.18gb</code>).</p>
+
+<p>Pod이 MIG instance를 사용하려면 해당 리소스를 요청하면 된다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">mig-inference-pod</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">containers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">inference</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">nvcr.io/nvidia/tritonserver:24.01-py3</span>
+    <span class="na">resources</span><span class="pi">:</span>
+      <span class="na">limits</span><span class="pi">:</span>
+        <span class="s">nvidia.com/mig-1g.18gb</span><span class="pi">:</span> <span class="s">1</span>
+</code></pre></div></div>
+
+<blockquote>
+  <p>Pod 매니페스트에 프로파일 이름(<code class="highlighter-rouge">mig-1g.18gb</code>)을 직접 써야 하므로, 사용자(또는 플랫폼 엔지니어)가 노드에 어떤 MIG 프로파일이 구성되어 있는지 알아야 한다. 이는 migStrategy 설정에 따라 달라진다.</p>
+</blockquote>
+
+<h3 id="single-vs-mixed-mig-strategy">single vs mixed MIG strategy</h3>
+
+<p>Device Plugin의 <code class="highlighter-rouge">migStrategy</code> 설정은 MIG instance를 K8s에 <strong>어떻게 보고할지</strong>를 결정한다. MIG 자체를 켜거나 끄는 것이 아니라, 이미 생성된 MIG instance를 K8s extended resource로 어떤 이름으로 광고할지를 정하는 설정이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>strategy</th>
+      <th>리소스 이름</th>
+      <th>제약</th>
+      <th>적합한 경우</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>single</strong></td>
+      <td><code class="highlighter-rouge">nvidia.com/gpu</code></td>
+      <td>노드의 모든 MIG instance가 <strong>같은 프로파일</strong>이어야 한다</td>
+      <td>균일 배치 (예: 전부 1g.18gb)</td>
+    </tr>
+    <tr>
+      <td><strong>mixed</strong></td>
+      <td><code class="highlighter-rouge">nvidia.com/mig-&lt;profile&gt;</code> (예: <code class="highlighter-rouge">nvidia.com/mig-1g.18gb</code>)</td>
+      <td>서로 다른 프로파일 공존 가능</td>
+      <td>혼합 배치 (예: 3g.70gb + 1g.18gb 3개)</td>
+    </tr>
+    <tr>
+      <td><strong>none</strong></td>
+      <td><code class="highlighter-rouge">nvidia.com/gpu</code></td>
+      <td>MIG를 인식하지 않음. 물리 GPU를 그대로 보고</td>
+      <td>MIG 미사용 GPU (L4, T4 등)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">single</code> 전략에서는 기존 <code class="highlighter-rouge">nvidia.com/gpu: 1</code> 요청으로 MIG instance가 할당되므로, 기존 워크로드 매니페스트를 수정할 필요가 없다. <code class="highlighter-rouge">mixed</code> 전략에서는 프로파일별 리소스 이름을 명시해야 한다.</p>
+
+<h3 id="mig-활성화-계층--strategy는-보고-방식일-뿐">MIG 활성화 계층 — strategy는 보고 방식일 뿐</h3>
+
+<p>MIG를 실제로 사용하려면 아래 계층이 <strong>모두</strong> 갖춰져야 한다. migStrategy만 바꿔선 MIG가 켜지지 않는다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>단계</th>
+      <th>무엇</th>
+      <th>누가</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>① 하드웨어</td>
+      <td>MIG 지원 GPU (A100, H100, H200 등)</td>
+      <td>NVIDIA 하드웨어</td>
+    </tr>
+    <tr>
+      <td>② 드라이버 MIG 모드 ON</td>
+      <td><code class="highlighter-rouge">nvidia-smi -mig 1</code></td>
+      <td>드라이버</td>
+    </tr>
+    <tr>
+      <td>③ MIG instance 생성</td>
+      <td><code class="highlighter-rouge">nvidia-smi mig -cgi &lt;profile&gt; -C</code></td>
+      <td>드라이버</td>
+    </tr>
+    <tr>
+      <td>④ K8s 보고</td>
+      <td>migStrategy (single/mixed)</td>
+      <td>Device Plugin</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>L4 같은 MIG 미지원 GPU에서는 <code class="highlighter-rouge">migStrategy: none</code>이 정답이다. single이나 mixed로 설정하면 Device Plugin이 MIG instance를 찾으려다 실패하고 GPU 리소스를 제대로 보고하지 못한다.</p>
+
+<h3 id="gpu-operator-자동화">GPU Operator 자동화</h3>
+
+<p>수동으로 <code class="highlighter-rouge">nvidia-smi</code> 명령을 실행해 MIG 모드를 켜고 instance를 만드는 것은 노드가 많아지면 현실적이지 않다. <strong>GPU Operator</strong>의 <code class="highlighter-rouge">nvidia-mig-manager</code>가 이를 자동화한다.</p>
+
+<p>동작 흐름은 다음과 같다.</p>
+
+<ol>
+  <li>관리자가 노드의 MIG 프로파일 라벨을 변경한다</li>
+  <li><code class="highlighter-rouge">nvidia-mig-manager</code> DaemonSet이 라벨 변경을 감지한다</li>
+  <li>해당 노드를 <strong>drain</strong>(워크로드 퇴거)한다</li>
+  <li>GPU를 idle로 만든 후 MIG 모드를 활성화하고 프로파일에 맞는 instance를 생성한다</li>
+  <li>완료되면 노드를 <strong>uncordon</strong>(스케줄링 재개)한다</li>
+</ol>
+
+<p>GPU Operator Helm 설치 시 MIG 관련 설정 예시:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">migManager</span><span class="pi">:</span>
+  <span class="na">enabled</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">config</span><span class="pi">:</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">mig-config</span>         <span class="c1"># ConfigMap 이름</span>
+<span class="na">devicePlugin</span><span class="pi">:</span>
+  <span class="na">config</span><span class="pi">:</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">device-plugin-config</span>
+<span class="na">mig</span><span class="pi">:</span>
+  <span class="na">strategy</span><span class="pi">:</span> <span class="s">mixed</span>            <span class="c1"># single 또는 mixed</span>
+</code></pre></div></div>
+
+<p>MIG 프로파일을 정의하는 ConfigMap 예시:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">ConfigMap</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">mig-config</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">gpu-operator</span>
+<span class="na">data</span><span class="pi">:</span>
+  <span class="s">config.yaml</span><span class="pi">:</span> <span class="pi">|</span>
+    <span class="no">version: v1</span>
+    <span class="no">mig-configs:</span>
+      <span class="no">all-1g.18gb:</span>
+        <span class="no">- devices: all</span>
+          <span class="no">mig-enabled: true</span>
+          <span class="no">mig-devices:</span>
+            <span class="no">1g.18gb: 7</span>
+      <span class="no">all-3g.70gb:</span>
+        <span class="no">- devices: all</span>
+          <span class="no">mig-enabled: true</span>
+          <span class="no">mig-devices:</span>
+            <span class="no">3g.70gb: 2</span>
+      <span class="no">mixed-config:</span>
+        <span class="no">- devices: all</span>
+          <span class="no">mig-enabled: true</span>
+          <span class="no">mig-devices:</span>
+            <span class="no">3g.70gb: 1</span>
+            <span class="no">1g.18gb: 3</span>
+</code></pre></div></div>
+
+<p>노드에 MIG 프로파일을 적용하려면 라벨을 변경한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl label node &lt;node-name&gt; nvidia.com/mig.config<span class="o">=</span>all-1g.18gb <span class="nt">--overwrite</span>
+</code></pre></div></div>
+
+<p>적용 확인 명령:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># MIG device 확인</span>
+kubectl <span class="nb">exec</span> <span class="nt">-it</span> &lt;gpu-pod&gt; <span class="nt">--</span> nvidia-smi mig <span class="nt">-lgi</span>
+
+<span class="c"># K8s 리소스로 노출 확인</span>
+kubectl describe node &lt;node-name&gt; | <span class="nb">grep </span>nvidia.com/mig
+
+<span class="c"># MIG 모드 상태 확인</span>
+kubectl <span class="nb">exec</span> <span class="nt">-it</span> &lt;gpu-pod&gt; <span class="nt">--</span> nvidia-smi <span class="nt">--query-gpu</span><span class="o">=</span>mig.mode.current <span class="nt">--format</span><span class="o">=</span>csv
+
+<span class="c"># 전체 MIG 구성 확인</span>
+kubectl <span class="nb">exec</span> <span class="nt">-it</span> &lt;gpu-pod&gt; <span class="nt">--</span> nvidia-smi mig <span class="nt">-lgip</span>
+</code></pre></div></div>
+
+<p>MIG 프로파일 변경 시 발생하는 이벤트 순서를 보면 GPU Operator의 자동화가 어떻게 동작하는지 이해할 수 있다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>1. 관리자: kubectl label node gpu-node nvidia.com/mig.config=all-1g.18gb
+2. nvidia-mig-manager: 라벨 변경 감지
+3. nvidia-mig-manager: kubectl drain gpu-node (워크로드 퇴거)
+4. nvidia-mig-manager: nvidia-smi -mig 1 (MIG 모드 ON, 필요 시)
+5. nvidia-mig-manager: nvidia-smi mig -dci &amp;&amp; nvidia-smi mig -dgi (기존 instance 제거)
+6. nvidia-mig-manager: nvidia-smi mig -cgi 19,19,19,19,19,19,19 -C (1g.18gb × 7 생성)
+7. nvidia-mig-manager: kubectl uncordon gpu-node (스케줄링 재개)
+8. device-plugin: 새로운 MIG instance를 K8s 리소스로 광고
+</code></pre></div></div>
+
+<blockquote>
+  <p>GPU Operator의 MIG 설정에 대한 상세 가이드는 <a href="https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/gpu-operator-mig.html">GPU Operator MIG 설정 문서</a>를 참고하자.</p>
+</blockquote>
+
+<p>전체 흐름을 정리하면, MIG를 K8s에서 운영하는 것은 결국 <strong>세 가지 레이어의 조합</strong>이다.</p>
+
+<ol>
+  <li><strong>하드웨어 레이어</strong>: MIG 지원 GPU가 물리적으로 파티셔닝을 가능하게 한다</li>
+  <li><strong>드라이버 레이어</strong>: <code class="highlighter-rouge">nvidia-smi</code>(또는 GPU Operator의 MIG Manager)가 MIG 모드를 켜고 GI/CI를 생성한다</li>
+  <li><strong>K8s 레이어</strong>: Device Plugin이 migStrategy에 따라 MIG instance를 extended resource로 노출하고, Pod이 이를 요청한다</li>
+</ol>
+
+<p>플랫폼 엔지니어는 ConfigMap과 노드 라벨로 원하는 프로파일을 선언하고, GPU Operator가 drain → 재구성 → uncordon 사이클을 자동으로 처리한다. 워크로드 개발자는 Pod spec에 리소스 이름만 쓰면 된다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>영역</th>
+      <th>핵심 포인트</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>다이 구조</strong></td>
+      <td>GPC → TPC → SM. MIG는 GPC 단위로만 compute 분할 가능</td>
+    </tr>
+    <tr>
+      <td><strong>격리 수준</strong></td>
+      <td>compute(SM) + memory(HBM + L2 + MC) 하드웨어 분할 → noisy neighbor 제거</td>
+    </tr>
+    <tr>
+      <td><strong>프로파일</strong></td>
+      <td><code class="highlighter-rouge">&lt;c&gt;g.&lt;m&gt;gb</code>, 최대 = min(7÷c, 8÷m) + placement 규칙</td>
+    </tr>
+    <tr>
+      <td><strong>K8s 연동</strong></td>
+      <td>single(<code class="highlighter-rouge">nvidia.com/gpu</code>) vs mixed(<code class="highlighter-rouge">nvidia.com/mig-*</code>), GPU Operator로 자동화</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>MIG는 GPU 공유 메커니즘 중 유일하게 <strong>하드웨어 레벨의 완전 격리</strong>를 제공하는 기술이다. 다만 MIG 격리 하드웨어를 탑재한 GPU(주로 Ampere 이후 데이터센터 라인, 그리고 Blackwell RTX PRO 등 일부 워크스테이션)에서만 지원되고, 프로파일 변경 시 GPU idle이 필요하다는 운영 제약이 있다. time-slicing이나 MPS와 달리 격리가 강력한 만큼, 멀티테넌트 추론 서빙이나 SLA가 중요한 프로덕션 환경에 적합하다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions">Kubernetes for Generative AI Solutions — GitHub</a></li>
+  <li><a href="https://docs.nvidia.com/datacenter/tesla/mig-user-guide/">NVIDIA MIG User Guide</a></li>
+  <li><a href="https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/gpu-operator-mig.html">GPU Operator — MIG 설정</a></li>
+  <li><a href="https://www.nvidia.com/en-us/data-center/h200/">NVIDIA H200 Datasheet</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#genai" class="page__taxonomy-item" rel="tag">GenAI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu-architecture" class="page__taxonomy-item" rel="tag">GPU-Architecture</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu-operator" class="page__taxonomy-item" rel="tag">GPU-Operator</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#h100" class="page__taxonomy-item" rel="tag">H100</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#h200" class="page__taxonomy-item" rel="tag">H200</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions-chapter-10" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions-Chapter-10</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mig" class="page__taxonomy-item" rel="tag">MIG</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nvidia" class="page__taxonomy-item" rel="tag">NVIDIA</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-06-07T00:00:00+09:00">June 7, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BGenAI%5D+GenAI+on+K8s%3A+10.3+-+GPU+%ED%8C%8C%ED%8B%B0%EC%85%94%EB%8B%9D%3A+MIG%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-02-GPU-Utilization-and-DCGM/" class="pagination--pager" title="[GenAI] GenAI on K8s: 10.2 - GPU Utilization 이해와 DCGM
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-04-GPU-Sharing-MPS-and-Time-Slicing/" class="pagination--pager" title="[GenAI] GenAI on K8s: 10.4 - GPU 공유: MPS와 Time-slicing
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

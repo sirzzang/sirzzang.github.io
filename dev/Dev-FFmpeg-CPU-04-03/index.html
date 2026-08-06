@@ -1,0 +1,1540 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.3. 튜닝 실험: CPU Limit 관찰 - Eraser’s StudyLog</title>
+<meta name="description" content="CPU limit을 단계적으로 상향하며, throttling 감소와 처리 성능 변화의 추이를 관찰해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.3. 튜닝 실험: CPU Limit 관찰">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-FFmpeg-CPU-04-03/">
+
+
+  <meta property="og:description" content="CPU limit을 단계적으로 상향하며, throttling 감소와 처리 성능 변화의 추이를 관찰해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-02-06T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-FFmpeg-CPU-04-03/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.3. 튜닝 실험: CPU Limit 관찰">
+    <meta itemprop="description" content="CPU limit을 단계적으로 상향하며, throttling 감소와 처리 성능 변화의 추이를 관찰해 보자.">
+    <meta itemprop="datePublished" content="2026-02-06T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.3. 튜닝 실험: CPU Limit 관찰
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-02-06T00:00:00+09:00">2026년 02월 06일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  9 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#실험-방법">실험 방법</a>
+    <ul>
+      <li><a href="#모니터링-스크립트">모니터링 스크립트</a></li>
+      <li><a href="#요청">요청</a></li>
+    </ul>
+  </li>
+  <li><a href="#실험-1-cpu-limit-전체-구간-탐색">실험 1: CPU limit 전체 구간 탐색</a>
+    <ul>
+      <li><a href="#목적">목적</a></li>
+      <li><a href="#참고-baseline-변화">참고: baseline 변화</a></li>
+      <li><a href="#결과">결과</a></li>
+      <li><a href="#grafana-대시보드">Grafana 대시보드</a></li>
+      <li><a href="#분석">분석</a>
+        <ul>
+          <li><a href="#구간별-패턴">구간별 패턴</a></li>
+          <li><a href="#ffmpeg--threads-auto-동작-추정">ffmpeg -threads auto 동작 추정</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#실험-2-dead-zone-재현">실험 2: Dead Zone 재현</a>
+    <ul>
+      <li><a href="#배경">배경</a></li>
+      <li><a href="#결과-1">결과</a></li>
+      <li><a href="#grafana-대시보드-1">Grafana 대시보드</a></li>
+      <li><a href="#limit을-늘려도-throttling이-발생하는-이유">limit을 늘려도 throttling이 발생하는 이유</a></li>
+      <li><a href="#분석-1">분석</a>
+        <ul>
+          <li><a href="#핵심--threads-auto가-만드는-비효율">핵심: -threads auto가 만드는 비효율</a></li>
+          <li><a href="#dead-zone의-의미">Dead Zone의 의미</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<p><a href="/dev/Dev-FFmpeg-CPU-04-02/">이전 글</a>에서 튜닝 실험의 방향과 환경을 설계했다. 이 글에서는 첫 번째 변수인 <strong>CPU limit</strong>을 변화시키며 처리 성능과 throttling 양상이 어떻게 달라지는지 관찰한다.</p>
+
+<p><br /></p>
+
+<h1 id="실험-방법">실험 방법</h1>
+
+<p>매 실험마다 세 가지를 동시에 실행한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>터미널 1: 모니터링 스크립트 (kubectl top + cpu.stat 실시간 기록)
+터미널 2: 요청 실행 (time curl)
+브라우저: Grafana 대시보드 실시간 관찰 + 스크린샷
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="모니터링-스크립트">모니터링 스크립트</h2>
+
+<p>1초 간격으로 <code class="highlighter-rouge">kubectl top</code>, <code class="highlighter-rouge">cpu.stat</code>, <code class="highlighter-rouge">cpu.max</code>를 수집하여 로그 파일에 기록한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">#!/bin/bash</span>
+<span class="c"># monitor_cpu.sh</span>
+
+<span class="nv">LABEL</span><span class="o">=</span><span class="s2">"</span><span class="k">${</span><span class="nv">1</span><span class="k">:-</span><span class="nv">app</span><span class="p">=&lt;app-label&gt;</span><span class="k">}</span><span class="s2">"</span>
+<span class="nv">NAMESPACE</span><span class="o">=</span><span class="s2">"</span><span class="k">${</span><span class="nv">2</span><span class="k">:-</span><span class="p">&lt;namespace&gt;</span><span class="k">}</span><span class="s2">"</span>
+<span class="nv">INTERVAL</span><span class="o">=</span><span class="s2">"</span><span class="k">${</span><span class="nv">3</span><span class="k">:-</span><span class="nv">1</span><span class="k">}</span><span class="s2">"</span>
+<span class="nv">OUTPUT_DIR</span><span class="o">=</span><span class="s2">"</span><span class="k">${</span><span class="nv">4</span><span class="k">:-</span><span class="p">.</span><span class="k">}</span><span class="s2">"</span>
+
+<span class="nv">POD_NAME</span><span class="o">=</span><span class="k">$(</span>kubectl get pod <span class="nt">-n</span> <span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span> <span class="nt">-l</span> <span class="s2">"</span><span class="nv">$LABEL</span><span class="s2">"</span> <span class="se">\</span>
+  <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.items[0].metadata.name}'</span> 2&gt;/dev/null<span class="k">)</span>
+
+<span class="k">if</span> <span class="o">[</span> <span class="nt">-z</span> <span class="s2">"</span><span class="nv">$POD_NAME</span><span class="s2">"</span> <span class="o">]</span><span class="p">;</span> <span class="k">then
+    </span><span class="nb">echo</span> <span class="s2">"Error: No pod found with label '</span><span class="nv">$LABEL</span><span class="s2">' in namespace '</span><span class="nv">$NAMESPACE</span><span class="s2">'"</span>
+    <span class="nb">exit </span>1
+<span class="k">fi
+
+</span>mkdir <span class="nt">-p</span> <span class="s2">"</span><span class="nv">$OUTPUT_DIR</span><span class="s2">"</span>
+<span class="nv">LOG_FILE</span><span class="o">=</span><span class="s2">"</span><span class="k">${</span><span class="nv">OUTPUT_DIR</span><span class="k">}</span><span class="s2">/cpu_monitor_</span><span class="k">$(</span>date +%Y%m%d_%H%M%S<span class="k">)</span><span class="s2">.log"</span>
+
+<span class="nb">echo</span> <span class="s2">"=== CPU Monitoring Started ==="</span> | tee <span class="s2">"</span><span class="nv">$LOG_FILE</span><span class="s2">"</span>
+<span class="nb">echo</span> <span class="s2">"Pod: </span><span class="nv">$POD_NAME</span><span class="s2">"</span> | tee <span class="nt">-a</span> <span class="s2">"</span><span class="nv">$LOG_FILE</span><span class="s2">"</span>
+<span class="nb">echo</span> <span class="s2">"Namespace: </span><span class="nv">$NAMESPACE</span><span class="s2">"</span> | tee <span class="nt">-a</span> <span class="s2">"</span><span class="nv">$LOG_FILE</span><span class="s2">"</span>
+<span class="nb">echo</span> <span class="s2">"Interval: </span><span class="k">${</span><span class="nv">INTERVAL</span><span class="k">}</span><span class="s2">s"</span> | tee <span class="nt">-a</span> <span class="s2">"</span><span class="nv">$LOG_FILE</span><span class="s2">"</span>
+<span class="nb">echo</span> <span class="s2">"Log file: </span><span class="nv">$LOG_FILE</span><span class="s2">"</span> | tee <span class="nt">-a</span> <span class="s2">"</span><span class="nv">$LOG_FILE</span><span class="s2">"</span>
+<span class="nb">echo</span> <span class="s2">"==============================="</span> | tee <span class="nt">-a</span> <span class="s2">"</span><span class="nv">$LOG_FILE</span><span class="s2">"</span>
+
+<span class="k">while </span><span class="nb">true</span><span class="p">;</span> <span class="k">do
+    </span><span class="nv">TIMESTAMP</span><span class="o">=</span><span class="k">$(</span>date <span class="s1">'+%Y-%m-%d %H:%M:%S.%3N'</span><span class="k">)</span>
+    <span class="nb">echo</span> <span class="s2">"--- </span><span class="nv">$TIMESTAMP</span><span class="s2"> ---"</span> | tee <span class="nt">-a</span> <span class="s2">"</span><span class="nv">$LOG_FILE</span><span class="s2">"</span>
+
+    <span class="nb">echo</span> <span class="s2">"[kubectl top]"</span> | tee <span class="nt">-a</span> <span class="s2">"</span><span class="nv">$LOG_FILE</span><span class="s2">"</span>
+    kubectl top pod <span class="s2">"</span><span class="nv">$POD_NAME</span><span class="s2">"</span> <span class="nt">-n</span> <span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span> <span class="nt">--containers</span> 2&gt;/dev/null <span class="se">\</span>
+      | tee <span class="nt">-a</span> <span class="s2">"</span><span class="nv">$LOG_FILE</span><span class="s2">"</span>
+
+    <span class="nb">echo</span> <span class="s2">"[cgroup cpu.stat]"</span> | tee <span class="nt">-a</span> <span class="s2">"</span><span class="nv">$LOG_FILE</span><span class="s2">"</span>
+    kubectl <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$POD_NAME</span><span class="s2">"</span> <span class="nt">-n</span> <span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span> <span class="se">\</span>
+      <span class="nt">--</span> <span class="nb">cat</span> /sys/fs/cgroup/cpu.stat 2&gt;/dev/null | tee <span class="nt">-a</span> <span class="s2">"</span><span class="nv">$LOG_FILE</span><span class="s2">"</span>
+
+    <span class="nb">echo</span> <span class="s2">"[cgroup cpu.max]"</span> | tee <span class="nt">-a</span> <span class="s2">"</span><span class="nv">$LOG_FILE</span><span class="s2">"</span>
+    kubectl <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$POD_NAME</span><span class="s2">"</span> <span class="nt">-n</span> <span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span> <span class="se">\</span>
+      <span class="nt">--</span> <span class="nb">cat</span> /sys/fs/cgroup/cpu.max 2&gt;/dev/null | tee <span class="nt">-a</span> <span class="s2">"</span><span class="nv">$LOG_FILE</span><span class="s2">"</span>
+
+    <span class="nb">echo</span> <span class="s2">""</span> | tee <span class="nt">-a</span> <span class="s2">"</span><span class="nv">$LOG_FILE</span><span class="s2">"</span>
+    sleep <span class="s2">"</span><span class="nv">$INTERVAL</span><span class="s2">"</span>
+<span class="k">done</span>
+</code></pre></div></div>
+
+<p>매 초마다 다음 세 가지를 기록한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>수단</th>
+      <th>확인하려는 것</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>CPU 사용량</td>
+      <td><code class="highlighter-rouge">kubectl top pod --containers</code></td>
+      <td>메트릭 서버 기준 사용량</td>
+    </tr>
+    <tr>
+      <td>throttling 상태</td>
+      <td><code class="highlighter-rouge">cpu.stat</code> (usage_usec, nr_throttled, throttled_usec)</td>
+      <td>실시간 throttling 누적값</td>
+    </tr>
+    <tr>
+      <td>limit 설정</td>
+      <td><code class="highlighter-rouge">cpu.max</code></td>
+      <td>현재 적용된 quota/period 확인</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h2 id="요청">요청</h2>
+
+<p>다른 터미널에서 동일한 영상으로 API 요청을 보낸다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">time </span>curl <span class="nt">-X</span> <span class="s1">'POST'</span> <span class="se">\</span>
+  <span class="s1">'http://&lt;node-ip&gt;:&lt;port&gt;/api/train/manual/init'</span> <span class="se">\</span>
+  <span class="nt">-H</span> <span class="s1">'accept: application/json'</span> <span class="se">\</span>
+  <span class="nt">-H</span> <span class="s1">'Content-Type: multipart/form-data'</span> <span class="se">\</span>
+  <span class="nt">-F</span> <span class="s1">'model_name=test'</span> <span class="se">\</span>
+  <span class="nt">-F</span> <span class="s1">'video=@video.mp4;type=video/mp4'</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">time</code>으로 감싸서 벽시계 시간(real), CPU 시간(user, sys)을 함께 측정한다.</p>
+
+<p><br /></p>
+
+<h1 id="실험-1-cpu-limit-전체-구간-탐색">실험 1: CPU limit 전체 구간 탐색</h1>
+
+<h2 id="목적">목적</h2>
+
+<p>CPU limit을 단계적으로 상향하면서, 처리 시간과 throttling이 어떤 추이로 변하는지 전체 구간을 탐색한다. 선형적으로 개선되는지, 어느 지점에서 수렴하는지, 예상과 다른 구간은 없는지를 확인한다.</p>
+
+<p><br /></p>
+
+<h2 id="참고-baseline-변화">참고: baseline 변화</h2>
+
+<p>실험 환경이 운영 환경과 다른 서버이기 때문에, baseline 자체가 달라졌다. 운영 환경에서 1000m일 때 148초였던 처리 시간이, 실험 서버에서는 70초로 측정되었다.</p>
+
+<ul>
+  <li>다른 워크로드의 간섭이 없음 (전용 실험 서버)</li>
+  <li>CPU 아키텍처, 캐시, 메모리 대역폭 등의 차이 (i9-7900X vs i7-12700F)</li>
+</ul>
+
+<p><a href="/dev/Dev-FFmpeg-CPU-04-02/">이전 글</a>에서 환경을 선정할 때부터 감안했던 부분이다. 중요한 것은 절대값이 아니라 <strong>CPU limit 변화에 따른 상대적 개선율과 추이</strong>이므로, 이 차이는 실험 목적에는 영향을 주지 않는다.</p>
+
+<p><br /></p>
+
+<h2 id="결과">결과</h2>
+
+<p>CPU limit을 1000m부터 unlimited까지 단계적으로 상향하며 측정했다. ffmpeg <code class="highlighter-rouge">-threads</code>는 모두 <code class="highlighter-rouge">auto</code>(미지정)다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>CPU Limit</th>
+      <th>실제 소요 시간</th>
+      <th>이전 대비</th>
+      <th>누적 개선율 (vs 1000m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1000m (1 core)</td>
+      <td>70.49초</td>
+      <td>-</td>
+      <td>baseline</td>
+    </tr>
+    <tr>
+      <td>1500m (1.5 core)</td>
+      <td>40.03초</td>
+      <td>43.2% ↓</td>
+      <td>43.2% ↓</td>
+    </tr>
+    <tr>
+      <td>2000m (2 core)</td>
+      <td>28.50초</td>
+      <td>28.8% ↓</td>
+      <td>59.6% ↓</td>
+    </tr>
+    <tr>
+      <td>3000m (3 core)</td>
+      <td>22.14초</td>
+      <td>22.3% ↓</td>
+      <td>68.6% ↓</td>
+    </tr>
+    <tr>
+      <td><strong>4000m (4 core)</strong></td>
+      <td><strong>22.07초</strong></td>
+      <td><strong>0.3% ↓</strong></td>
+      <td><strong>68.7% ↓</strong></td>
+    </tr>
+    <tr>
+      <td>5000m (5 core)</td>
+      <td>23.82초</td>
+      <td>7.9% <strong>↑</strong></td>
+      <td>66.2% ↓</td>
+    </tr>
+    <tr>
+      <td>6000m (6 core)</td>
+      <td>27.45초</td>
+      <td>15.2% <strong>↑</strong></td>
+      <td>61.1% ↓</td>
+    </tr>
+    <tr>
+      <td>8000m (8 core)</td>
+      <td>20.37초</td>
+      <td>25.8% ↓</td>
+      <td>71.1% ↓</td>
+    </tr>
+    <tr>
+      <td><strong>12000m (12 core)</strong></td>
+      <td><strong>3.85초</strong></td>
+      <td><strong>81.1% ↓</strong></td>
+      <td><strong>94.5% ↓</strong></td>
+    </tr>
+    <tr>
+      <td>16000m (16 core)</td>
+      <td>3.92초</td>
+      <td>1.8% ↑</td>
+      <td>94.4% ↓</td>
+    </tr>
+    <tr>
+      <td>unlimited</td>
+      <td>3.63초</td>
+      <td>7.4% ↓</td>
+      <td>94.8% ↓</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h2 id="grafana-대시보드">Grafana 대시보드</h2>
+
+<p>전체 실험 구간의 대시보드 스크린샷이다. CPU limit을 단계적으로 상향할 때마다 Pod을 재배포했으며, 각 실험마다 동일한 요청을 보냈다.</p>
+
+<p><img src="/assets/images/grafana-cpu-experiment-1.png" alt="Grafana CPU Experiment 1" /></p>
+
+<p>왼쪽에서 오른쪽으로 갈수록 CPU limit이 증가한다. 대시보드에서 읽을 수 있는 것을 자세히 확인해 보자:</p>
+
+<ul>
+  <li><strong>CPU Throttling Ratio (좌상)</strong>: 초반(1000m~2000m)에는 요청마다 거의 100%까지 치솟지만, limit을 올릴수록 스파이크가 줄어든다. 12000m 이후에는 throttling이 거의 관찰되지 않는다.</li>
+  <li><strong>CPU Request vs Limit vs Usage (우상)</strong>: limit 선(노란색)이 계단식으로 올라가는 것이 보인다. 초반에는 Usage가 limit에 막혀 있다가, limit이 충분해지면 Usage가 자유롭게 올라간다. unlimited 설정 시에는 limit 선 자체가 사라진다. 한 가지 의아할 수 있는 점은, limit을 올려도 Usage가 limit보다 한참 낮게 보인다는 것이다. 예를 들어 limit이 4 core인데 Usage가 2 core 수준에 머문다. <a href="/dev/Dev-FFmpeg-CPU-04-02/">이전 글</a>에서 다룬 1 core일 때의 역설과 같은 현상인데, 원인은 두 가지다.
+    <ul>
+      <li>첫째, <code class="highlighter-rouge">container_cpu_usage_seconds_total</code>은 실제로 CPU를 사용한 시간만 집계하고 throttling 대기 시간은 포함하지 않는다.</li>
+      <li>둘째, 이 실험에서 ffmpeg <code class="highlighter-rouge">-threads auto</code>는 호스트 코어 수(20)를 기준으로 스레드를 생성하기 때문에, limit을 올려도 20개 스레드가 늘어난 quota를 순식간에 소진하고 나머지 시간을 대기하는 burst-then-idle 패턴이 반복된다. 이 패턴이 Prometheus <code class="highlighter-rouge">rate()</code> 윈도우 안에서 평균화되면서 Usage가 낮게 뭉개져 보이는 것이다.</li>
+      <li>따라서 Usage만 보고 “여유가 있다”고 판단하면 안 되고, 실제 throttling 심각도는 좌상단의 Throttling Ratio 패널로 확인해야 한다.</li>
+    </ul>
+  </li>
+  <li><strong>Memory Usage vs Limit (우중)</strong>: 전체 구간에 걸쳐 안정적이다. 메모리는 이 실험의 변수가 아님을 확인할 수 있다.</li>
+  <li><strong>CPU Throttled Time (하단 1)</strong>: Throttling Ratio와 유사한 패턴이지만, 값의 절대 크기가 limit 구간에 따라 달라진다. 앞서 언급한 것처럼 상대 비교 용도로 참고한다.</li>
+  <li><strong>Throttling Events (하단 2)</strong>: 빨간 Annotation 마커가 초반 실험에 집중되어 있고, 후반으로 갈수록 사라진다.</li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="분석">분석</h2>
+
+<h3 id="구간별-패턴">구간별 패턴</h3>
+
+<p>결과를 보면 “코어를 늘리면 선형적으로 빨라진다”는 단순한 기대와는 다른, 계단식 패턴이 나타난다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Time
+70s |# 1000m
+    |
+40s |  # 1500m
+    |
+28s |    # 2000m
+22s |      ## 3000m, 4000m
+24s |        # 5000m  &lt;-- worse
+27s |          # 6000m  &lt;-- worse
+20s |            # 8000m
+    |
+ 4s |              ### 12000m, 16000m, unlimited
+    +---------------------------------------&gt; CPU Limit
+</code></pre></div></div>
+
+<p>이 패턴을 5개 구간으로 나눌 수 있다.</p>
+
+<p><br /></p>
+
+<p><strong>Phase 1: 1000m → 2000m — 선형 개선</strong></p>
+
+<p>CPU가 명확한 병목인 구간이다. 코어를 2배로 늘리면 처리 시간이 59.6% 감소한다. 이 구간에서는 코어를 추가할수록 throttling이 직접적으로 줄어들며, 그만큼 처리 시간이 단축된다.</p>
+
+<p><br /></p>
+
+<p><strong>Phase 2: 2000m → 4000m — throttling 제거, 미미한 개선</strong></p>
+
+<p>3000m부터 throttling이 급격히 감소하고, 4000m에서 거의 사라진다. 하지만 처리 시간은 22초 근방에서 정체된다. throttling은 해소되었지만, 이제는 <strong>ffmpeg 내부의 병렬화 효율</strong>이 병목으로 넘어간 것으로 보인다.</p>
+
+<p><br /></p>
+
+<p><strong>Phase 3: 4000m → 8000m — 정체와 역전 (Dead Zone)</strong></p>
+
+<p>가장 흥미로운 구간이다. 코어를 늘렸는데 오히려 성능이 악화된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>CPU Limit</th>
+      <th>처리 시간</th>
+      <th>변화</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>4000m</td>
+      <td>22.07초</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>5000m</td>
+      <td>23.82초</td>
+      <td>+1.75초 (악화)</td>
+    </tr>
+    <tr>
+      <td>6000m</td>
+      <td>27.45초</td>
+      <td>+5.38초 (더 악화)</td>
+    </tr>
+    <tr>
+      <td>8000m</td>
+      <td>20.37초</td>
+      <td>-7.08초 (회복)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>가능한 원인:</p>
+<ul>
+  <li><strong>ffmpeg <code class="highlighter-rouge">-threads auto</code>의 비효율적 스레드 수 선택</strong>: 이 구간에서 ffmpeg이 코어 수를 참조하여 스레드 수를 결정하는 과정에서 비효율적인 값을 선택했을 가능성</li>
+  <li><strong>context switching + 동기화 오버헤드</strong>: 스레드 수가 증가하면서 이득보다 손해가 커지는 구간</li>
+  <li><strong>실험 노이즈</strong>: 특정 실험 시점에 노드의 다른 부하가 있었을 가능성</li>
+</ul>
+
+<p>이 구간은 재현 가능한 현상인지 확인이 필요하다. 실험 2에서 다룬다.</p>
+
+<p><br /></p>
+
+<p><strong>Phase 4: 8000m → 12000m — 극적 개선</strong></p>
+
+<p>20초에서 4초로, 81.1% 감소하는 극적인 개선이 나타난다. 12코어가 제공되면서 ffmpeg의 frame-level parallelism이 본격적으로 작동하고, 디코딩/스케일링/인코딩/I/O가 완전히 파이프라인화된 것으로 추정된다.</p>
+
+<p><br /></p>
+
+<p><strong>Phase 5: 12000m → unlimited — Plateau</strong></p>
+
+<p>12코어 이후로는 코어를 더 추가해도 유의미한 개선이 없다. 3.85초 → 3.63초로, ffmpeg 병렬 처리의 상한선에 도달한 것이다.</p>
+
+<p><br /></p>
+
+<h3 id="ffmpeg--threads-auto-동작-추정">ffmpeg <code class="highlighter-rouge">-threads auto</code> 동작 추정</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>CPU Limit</th>
+      <th>추정 동작</th>
+      <th>병렬화 효율</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1000m ~ 2000m</td>
+      <td>CPU 부족, 소수 스레드도 throttling</td>
+      <td>낮음 (CPU 병목)</td>
+    </tr>
+    <tr>
+      <td>3000m ~ 4000m</td>
+      <td>throttling 해소, 내부 병렬화가 병목</td>
+      <td>중간</td>
+    </tr>
+    <tr>
+      <td>5000m ~ 6000m</td>
+      <td>스레드 수 증가로 오버헤드 &gt; 이득?</td>
+      <td><strong>비효율적</strong></td>
+    </tr>
+    <tr>
+      <td>8000m</td>
+      <td>오버헤드와 이득의 균형</td>
+      <td>중간</td>
+    </tr>
+    <tr>
+      <td>12000m+</td>
+      <td>충분한 코어로 완전 병렬화 달성</td>
+      <td>최적</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 추정을 검증하려면 <code class="highlighter-rouge">-threads</code> 수를 직접 지정하는 실험이 필요하다. 이는 이후 글에서 다룬다.</p>
+
+<p><br /></p>
+
+<h1 id="실험-2-dead-zone-재현">실험 2: Dead Zone 재현</h1>
+
+<h2 id="배경">배경</h2>
+
+<p>실험 1에서 4000m → 8000m 구간에서 성능이 오히려 악화되는 현상이 관찰되었다. 코어를 늘렸는데 느려진다는 것은 직관에 어긋난다. 이것이 재현 가능한 현상인지, 실험 도중의 노이즈(이전 요청의 잔여 효과, 노드 부하 등)였는지를 확인한다.</p>
+
+<p>실험 1과 달리, 자원 설정 변경과 요청 사이에 충분한 시간을 두고 진행했다. 7000m도 추가하여 더 세밀하게 관찰했다.</p>
+
+<p><br /></p>
+
+<h2 id="결과-1">결과</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>CPU Limit</th>
+      <th>실제 소요 시간</th>
+      <th>이전 대비</th>
+      <th>누적 (vs 4000m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>4000m</td>
+      <td>18.78초</td>
+      <td>-</td>
+      <td>baseline</td>
+    </tr>
+    <tr>
+      <td>5000m</td>
+      <td>22.09초</td>
+      <td>17.6% <strong>↑ (악화)</strong></td>
+      <td>17.6% ↑</td>
+    </tr>
+    <tr>
+      <td>6000m</td>
+      <td>27.21초</td>
+      <td>23.2% <strong>↑ (악화)</strong></td>
+      <td>44.9% ↑</td>
+    </tr>
+    <tr>
+      <td>7000m</td>
+      <td>29.22초</td>
+      <td>7.4% <strong>↑ (악화)</strong></td>
+      <td>55.6% ↑</td>
+    </tr>
+    <tr>
+      <td>8000m</td>
+      <td>20.46초</td>
+      <td>30.0% ↓ (개선)</td>
+      <td>9.0% ↑</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>4000m에서 7000m까지 코어를 늘릴수록 <strong>일관되게 느려지고</strong>, 8000m에서 회복되는 U자형 곡선이 나타났다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Time
+30s |                    * 7000m (worst)
+    |               * 6000m
+25s |          * 5000m
+    |
+20s |  *                     * 8000m
+    |  4000m
+    +-------------------------------&gt; CPU Limit
+    4k    5k    6k    7k    8k
+</code></pre></div></div>
+
+<p><strong>재현성 확인</strong>: 실험 1의 결과(4000m: 22.07초, 5000m: 23.82초, 6000m: 27.45초, 8000m: 20.37초)와 동일한 패턴이다. 실험 노이즈가 아님이 확인되었다.</p>
+
+<p><br /></p>
+
+<h2 id="grafana-대시보드-1">Grafana 대시보드</h2>
+
+<p><img src="/assets/images/grafana-cpu-experiment-2.png" alt="Grafana CPU Experiment 2 - Dead Zone" /></p>
+
+<p>왼쪽에서 오른쪽으로 4000m → 5000m → 6000m → 7000m → 8000m 순서다. 각 실험 사이에 충분한 간격을 두었다.</p>
+
+<ul>
+  <li><strong>CPU Throttling Ratio (좌상)</strong>: 모든 구간에서 80~100%의 높은 throttling이 발생한다. CPU limit을 늘렸는데도 throttling이 줄지 않는다는 것은, <strong>ffmpeg이 더 많은 스레드를 생성하여 늘어난 quota를 즉시 소진</strong>하고 있다는 의미다.</li>
+  <li><strong>CPU Request vs Limit vs Usage (우상)</strong>: limit 선(노란색)이 계단식으로 올라갈 때마다 Usage(초록색)도 따라 올라간다. 코어를 줘도 줘도 바로 채워 쓰고, 그래도 부족하여 throttling이 발생하는 상황이다.</li>
+  <li><strong>Memory Usage vs Limit (우중)</strong>: 5000m~7000m 구간에서 메모리 사용량이 소폭 증가하는 것이 관찰된다. 스레드 수 증가에 따른 버퍼/캐시 증가로 추정된다.</li>
+  <li><strong>CPU Throttled Time (하단 1)</strong>: 5000m(14:24 부근)에서 스파이크가 가장 높게 치솟는다. 이후 6000m, 7000m에서도 지속적으로 높다.</li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="limit을-늘려도-throttling이-발생하는-이유">limit을 늘려도 throttling이 발생하는 이유</h2>
+
+<p>대시보드를 보면 흥미로운 점이 있다. 4000m이든 8000m이든, <strong>limit을 늘려도 throttling ratio가 80~100%로 여전히 높다.</strong> limit을 충분히 주면 throttling이 사라질 것 같지만, 그렇지 않다.</p>
+
+<p>이유는 CFS bandwidth control의 <strong>period 단위 정산 방식</strong> 때문이다. 예를 들어 4000m(4 core)이면:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cpu.cfs_period_us = 100,000 (100ms)
+cpu.cfs_quota_us  = 400,000 (4 cores x 100ms)
+</code></pre></div></div>
+
+<p>매 100ms period마다 400ms의 CPU 시간을 사용할 수 있다. 평균적으로 4 core를 쓰는 것과 같다. 하지만 ffmpeg은 CPU를 <strong>균일하게</strong> 쓰지 않는다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[Decode burst]  → 순간적으로 4+ core 사용 시도 → quota 초과 → throttling
+[Scale/Encode]  → 다시 burst → throttling
+[I/O write]     → CPU 사용 감소 → quota 여유
+</code></pre></div></div>
+
+<p>실제로 <code class="highlighter-rouge">cpu.stat</code>을 확인하면, 4000m + 4 threads에서도 throttling ratio가 97%에 달한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 4000m, threads=4 실행 구간의 cpu.stat delta
+nr_periods:   239
+nr_throttled: 232
+ratio:        232 / 239 = 97.1%
+</code></pre></div></div>
+
+<p>period의 거의 매 번에서 quota를 초과한다. 이는 ffmpeg의 디코딩/인코딩 과정이 burst 패턴으로 CPU를 사용하기 때문이다. 100ms라는 period 안에서 순간적으로 limit 이상의 CPU를 사용하려 하면, 남은 시간은 강제 대기해야 한다.</p>
+
+<blockquote>
+  <p>처음에는 “limit = threads로 맞추면 throttling이 사라지겠지”라고 기대했는데, 실제로는 그렇지 않았다. throttling 자체는 CFS의 period 기반 정산 방식에서 발생하는 것이고, 중요한 것은 throttling의 <strong>유무</strong>가 아니라 <strong>처리 시간이 개선되었는가</strong>였다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="분석-1">분석</h2>
+
+<h3 id="핵심--threads-auto가-만드는-비효율">핵심: <code class="highlighter-rouge">-threads auto</code>가 만드는 비효율</h3>
+
+<p>이 구간의 핵심은 <strong>CPU limit을 늘릴수록 ffmpeg이 더 많은 스레드를 만들고, 그것이 오히려 역효과</strong>를 낸다는 것이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>CPU Limit</th>
+      <th>추정 스레드 수</th>
+      <th>결과</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>4000m (4 core)</td>
+      <td>적정 수준</td>
+      <td>18.78초 (최적)</td>
+    </tr>
+    <tr>
+      <td>5000m (5 core)</td>
+      <td>증가</td>
+      <td>22.09초 (악화 시작)</td>
+    </tr>
+    <tr>
+      <td>6000m (6 core)</td>
+      <td>더 증가</td>
+      <td>27.21초 (악화)</td>
+    </tr>
+    <tr>
+      <td>7000m (7 core)</td>
+      <td>더 증가</td>
+      <td>29.22초 (최악)</td>
+    </tr>
+    <tr>
+      <td>8000m (8 core)</td>
+      <td>임계치 돌파</td>
+      <td>20.46초 (회복)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>코어를 더 주면 ffmpeg <code class="highlighter-rouge">-threads auto</code>가 더 많은 스레드를 만든다. 스레드가 늘어나면:</p>
+
+<ul>
+  <li><strong>context switching 오버헤드 증가</strong>: 스레드 간 전환 비용이 커진다</li>
+  <li><strong>CPU cache 효율 저하</strong>: 스레드가 많아질수록 L1/L2 캐시 미스율이 증가한다</li>
+  <li><strong>동기화 오버헤드 증가</strong>: ffmpeg 내부의 frame-level parallelism에서 스레드 간 동기화 포인트의 대기 시간이 늘어난다</li>
+</ul>
+
+<p>5000m~7000m 구간에서는 이러한 오버헤드가 코어 추가로 얻는 이득을 초과한다. 8000m에서 회복되는 것은, 코어가 충분해져서 오버헤드를 상쇄하고도 남는 시점에 도달했기 때문으로 추정된다.</p>
+
+<h3 id="dead-zone의-의미">Dead Zone의 의미</h3>
+
+<p>이 결과는 실무적으로 중요한 시사점을 준다.</p>
+
+<ul>
+  <li><strong>“코어를 늘리면 빨라진다”는 가정은 틀릴 수 있다.</strong> 특히 <code class="highlighter-rouge">-threads auto</code>처럼 런타임이 스레드 수를 자동으로 결정하는 경우, 코어 증가가 오히려 독이 되는 구간이 존재한다.</li>
+  <li><strong>리소스 비용 관점에서도 손해다.</strong> 4000m(4코어)이 7000m(7코어)보다 빠르다면, 7코어를 할당하는 것은 비용만 늘리고 성능은 악화시키는 셈이다.</li>
+  <li><strong><code class="highlighter-rouge">-threads</code> 수를 직접 지정하면 이 Dead Zone을 회피할 수 있을 가능성</strong>이 있다. 이는 다음 실험에서 검증한다.</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>두 실험을 통해 확인한 것:</p>
+
+<ol>
+  <li><strong>CPU limit 증가는 비선형적 개선을 보인다.</strong> 선형 개선(1~2코어), 정체(3~4코어), 역전(5~7코어), 극적 개선(12코어), 수렴(12코어+)의 계단식 패턴이 나타난다.</li>
+  <li><strong>5000m~7000m 구간에 Dead Zone이 존재한다.</strong> 코어를 늘렸는데 오히려 느려지는 현상이 재현 가능하다. 원인은 <code class="highlighter-rouge">-threads auto</code>의 비효율적 스레드 수 선택으로 추정된다.</li>
+  <li><strong>12코어 이상에서 ffmpeg 병렬 처리의 상한선에 도달한다.</strong> 이후 코어를 추가해도 유의미한 개선이 없다.</li>
+</ol>
+
+<p>여기서 자연스러운 질문이 나온다. Dead Zone이 <code class="highlighter-rouge">-threads auto</code> 때문이라면, <strong>스레드 수를 직접 지정하면 어떻게 될까?</strong> 다음 글에서는 CPU limit과 <code class="highlighter-rouge">-threads</code> 수를 조합하여 실험한다.</p>
+
+<blockquote>
+  <p>CPU limit만 조절하면 될 줄 알았는데, 오히려 “코어를 줄수록 느려지는” 구간이 있다는 건 예상 밖이었다. <code class="highlighter-rouge">-threads auto</code>라는 편리한 기본값 뒤에 이런 함정이 숨어 있을 줄은 몰랐다.</p>
+</blockquote>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/dev/Dev-FFmpeg-CPU-00/">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 0. 목격한 상황</a></li>
+    
+    <li><a href="/dev/Dev-FFmpeg-CPU-04-04/">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.4. 튜닝 실험: FFmpeg Thread 수 관찰</a></li>
+    
+    <li><a href="/dev/Dev-FFmpeg-CPU-05/">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 5. 결론: CPU Limit을 설정하지 않기로 한 이유</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#cgroup" class="page__taxonomy-item" rel="tag">cgroup</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#cpu" class="page__taxonomy-item" rel="tag">CPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#ffmpeg" class="page__taxonomy-item" rel="tag">FFmpeg</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#throttling" class="page__taxonomy-item" rel="tag">throttling</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#%EC%84%B1%EB%8A%A5%EC%B8%A1%EC%A0%95" class="page__taxonomy-item" rel="tag">성능측정</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#%ED%8A%9C%EB%8B%9D" class="page__taxonomy-item" rel="tag">튜닝</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-02-06T00:00:00+09:00">February 6, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+Pod+CPU+Limit%EA%B3%BC+FFmpeg+Thread+%EC%B5%9C%EC%A0%81+%EC%A1%B0%EC%A0%95+-+4.3.+%ED%8A%9C%EB%8B%9D+%EC%8B%A4%ED%97%98%3A+CPU+Limit+%EA%B4%80%EC%B0%B0%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-FFmpeg-CPU-04-03%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-FFmpeg-CPU-04-03%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-FFmpeg-CPU-04-03%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-FFmpeg-CPU-04-03?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-FFmpeg-CPU-04-02/" class="pagination--pager" title="[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.2. 튜닝 실험 설계
+">이전</a>
+    
+    
+      <a href="/dev/Dev-FFmpeg-CPU-04-04/" class="pagination--pager" title="[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.4. 튜닝 실험: FFmpeg Thread 수 관찰
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-FFmpeg-CPU-04-03/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-FFmpeg-CPU-04-03"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

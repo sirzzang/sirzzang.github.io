@@ -1,0 +1,1419 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[GenAI] GenAI on K8s: 10.7 - Ch10 실습: time-slicing 배포·검증·트러블슈팅 - Eraser’s StudyLog</title>
+<meta name="description" content="EKS + L4에서 time-slicing을 apply하고 Llama-3.2-1B 5 Pod를 한 GPU에 올리는 전 과정과, HF 403·GPU 주입 실패를 추적·해결한 기록을 정리해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[GenAI] GenAI on K8s: 10.7 - Ch10 실습: time-slicing 배포·검증·트러블슈팅">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification/">
+
+
+  <meta property="og:description" content="EKS + L4에서 time-slicing을 apply하고 Llama-3.2-1B 5 Pod를 한 GPU에 올리는 전 과정과, HF 403·GPU 주입 실패를 추적·해결한 기록을 정리해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-06-07T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[GenAI] GenAI on K8s: 10.7 - Ch10 실습: time-slicing 배포·검증·트러블슈팅">
+    <meta itemprop="description" content="EKS + L4에서 time-slicing을 apply하고 Llama-3.2-1B 5 Pod를 한 GPU에 올리는 전 과정과, HF 403·GPU 주입 실패를 추적·해결한 기록을 정리해 보자.">
+    <meta itemprop="datePublished" content="2026-06-07T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[GenAI] GenAI on K8s: 10.7 - Ch10 실습: time-slicing 배포·검증·트러블슈팅
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-06-07T00:00:00+09:00">2026년 06월 07일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#클러스터-구성-및-time-slicing-on">클러스터 구성 및 time-slicing ON</a>
+    <ul>
+      <li><a href="#step-0-사전-준비">Step 0: 사전 준비</a></li>
+      <li><a href="#step-1-terraform-apply">Step 1: terraform apply</a></li>
+      <li><a href="#step-2-configmap-적용-전-off-기준선">Step 2: ConfigMap 적용 전 (OFF 기준선)</a></li>
+      <li><a href="#step-3-time-slicing-configmap--광고-110">Step 3: time-slicing ConfigMap → 광고 1→10</a></li>
+      <li><a href="#step-4-dcgm-메트릭-워크로드-전">Step 4: DCGM 메트릭 (워크로드 전)</a></li>
+      <li><a href="#step-45-secret-주입">Step 4.5: secret 주입</a></li>
+    </ul>
+  </li>
+  <li><a href="#llama-배포와-트러블슈팅">Llama 배포와 트러블슈팅</a>
+    <ul>
+      <li><a href="#step-5-llama-deployment--첫-번째-장애-hf-403">Step 5: Llama Deployment &amp; 첫 번째 장애 (HF 403)</a></li>
+      <li><a href="#step-55-gpu-주입-실패-진짜-트러블슈팅">Step 5.5: GPU 주입 실패 (진짜 트러블슈팅)</a>
+        <ul>
+          <li><a href="#증상">증상</a></li>
+          <li><a href="#진단">진단</a></li>
+          <li><a href="#해결-deviceliststrategy-volume-mounts">해결: deviceListStrategy: volume-mounts</a></li>
+          <li><a href="#수정-후-추론-성공">수정 후: 추론 성공</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#time-slicing-동작-검증">time-slicing 동작 검증</a>
+    <ul>
+      <li><a href="#step-6-time-slicing-off--pending-대조">Step 6: time-slicing OFF → Pending 대조</a></li>
+      <li><a href="#step-7-vram-공유-확인-nvidia-smi">Step 7: VRAM 공유 확인 (nvidia-smi)</a></li>
+      <li><a href="#step-75-gpu-utilization-부하--dcgm">Step 7.5: GPU utilization (부하 → DCGM)</a></li>
+      <li><a href="#step-8-hpa-개념만">Step 8: HPA (개념만)</a></li>
+    </ul>
+  </li>
+  <li><a href="#대조군-검증">대조군 검증</a></li>
+  <li><a href="#teardown--orphan-주의">Teardown &amp; orphan 주의</a></li>
+  <li><a href="#이-실습으로-확인한-것">이 실습으로 확인한 것</a></li>
+  <li><a href="#결론">결론</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions">Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)</a> 10장 hands-on 실습 기록입니다</em></p>
+
+<p><br /></p>
+
+<p><a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-06-Ch10-Lab-Code-Analysis-Time-Slicing-and-Llama/">10.6</a>에서 코드를 읽었다면, 이번 글은 <strong>실제로 돌려본 결과</strong>다. Step 0~7.5까지 전부 실행했고(2026-06-07), 핵심 트러블슈팅은 <strong>upstream 코드 그대로면 광고는 되는데 추론은 GPU를 못 본다</strong>는 Bottlerocket 주입 채널 문제였다.</p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>terraform apply → ConfigMap 없이 plugin Init 대기(광고 1) → <code class="highlighter-rouge">nvidia-ts.yaml</code> apply → <strong>광고 1→10</strong></li>
+  <li>Llama 5 Pod Running까지 <strong>두 겹 장애</strong>: HF gated 403(CrashLoopBackOff) + <code class="highlighter-rouge">cuda=False</code>(GPU 미주입)</li>
+  <li>GPU 미주입: <code class="highlighter-rouge">envvar</code> × Bottlerocket 비특권 ENV 차단(차단 확정) → CDI는 미검증, <strong><code class="highlighter-rouge">volume-mounts</code> smoke test 통과</strong>로 수정 후 추론 성공</li>
+  <li>time-slicing OFF는 <code class="highlighter-rouge">sharing</code> 블록 제거(광고 1) → <code class="highlighter-rouge">gpu:2</code> Pending 확인. <code class="highlighter-rouge">replicas: 1</code>은 plugin 크래시</li>
+  <li>nvidia-smi: 물리 L4 1장에 python 5프로세스, VRAM 합산 ~12.8GB/23GB — 메모리 격리 없음의 증거</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="클러스터-구성-및-time-slicing-on">클러스터 구성 및 time-slicing ON</h1>
+
+<h2 id="step-0-사전-준비">Step 0: 사전 준비</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">cd </span>week04/hands-on/ch10
+<span class="nb">set</span> <span class="nt">-a</span><span class="p">;</span> <span class="nb">source</span> ../../../.env<span class="p">;</span> <span class="nb">set</span> +a    <span class="c"># HF_TOKEN</span>
+terraform validate
+</code></pre></div></div>
+
+<p>Ch10은 ch9 teardown으로 secret 자산이 사라졌으므로 Step 4.5에서 다시 만든다 — (1) Secrets Manager <code class="highlighter-rouge">hugging-face-secret</code>, (2) SecretProviderClass, (3) <code class="highlighter-rouge">my-llama-sa</code> SA.</p>
+
+<p><strong>apply 전 체크</strong> — 아래 두 가지를 확인한다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">meta-llama/Llama-3.2-1B</code> HF gated 접근 <strong>사전 승인</strong> (미승인이면 403 CrashLoopBackOff)</li>
+  <li>g6.2xlarge On-Demand ~$1.20/h — 끝나면 즉시 teardown</li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="step-1-terraform-apply">Step 1: terraform apply</h2>
+
+<p><code class="highlighter-rouge">aiml-addons.tf</code>가 한 번의 apply로 (a) NVIDIA device plugin + GFD/NFD, (b) DCGM-Exporter를 올린다. <strong>ConfigMap 자체는 여기서 apply하지 않는다</strong> — 광고량 1→10 변화를 Step 2→3에서 직접 보기 위함.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>terraform init
+terraform plan    <span class="c"># Plan: 129 to add</span>
+terraform apply <span class="nt">-auto-approve</span>
+</code></pre></div></div>
+
+<p>1차 apply는 <code class="highlighter-rouge">addons.tf</code> kubecost에서 <code class="highlighter-rouge">clusterId is required</code>로 실패했다. kubecost는 거의 마지막 리소스라 그 직전까지(클러스터·GPU 노드·plugin·DCGM)는 이미 생성됐고, kubecost 블록 주석 후 재apply하니 <code class="highlighter-rouge">0 added, 0 changed, 0 destroyed</code>.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/Week04-ch10-eks-console-cluster-creating.png" alt="EKS 클러스터 생성 중" class="align-center" /></p>
+
+<p>apply가 끝나면 콘솔에서 클러스터가 Active 상태인 것을 확인할 수 있다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/Week04-ch10-eks-console-cluster-active.png" alt="EKS 클러스터 개요" class="align-center" /></p>
+
+<p><img src="https://sirzzang.github.io//assets/images/Week04-ch10-eks-console-nodes.png" alt="EKS 컴퓨팅 노드 — g6.2xlarge GPU 노드" class="align-center" /></p>
+
+<p><br /></p>
+
+<h2 id="step-2-configmap-적용-전-off-기준선">Step 2: ConfigMap 적용 전 (OFF 기준선)</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>aws eks update-kubeconfig <span class="nt">--name</span> eks-demo <span class="nt">--region</span> ap-northeast-2
+kubectl get nodes <span class="nt">-o</span> wide
+<span class="c"># GPU 노드: Bottlerocket OS 1.62.0 (aws-k8s-1.32-nvidia)</span>
+</code></pre></div></div>
+
+<p>device plugin은 <code class="highlighter-rouge">config.name = time-slicing-config</code>인데 ConfigMap이 없어 init이 막혀 있다. 상태는 다음과 같다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get pods <span class="nt">-n</span> nvidia-device-plugin
+<span class="c"># nvidia-device-plugin-xxx   0/2   Init:0/1</span>
+
+kubectl describe pod <span class="nt">-n</span> nvidia-device-plugin &lt;plugin-pod&gt; | <span class="nb">grep</span> <span class="nt">-A1</span> FailedMount
+<span class="c"># MountVolume.SetUp failed ... configmap "time-slicing-config" not found</span>
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl describe node &lt;gpu-node&gt; | <span class="nb">grep</span> <span class="nt">-A8</span> Allocatable
+<span class="c"># nvidia.com/gpu:     1          ← 아직 1</span>
+<span class="c"># ephemeral-storage:  95500736762   ← xvdb 100GB fix (Ch9 18GB 해결)</span>
+</code></pre></div></div>
+
+<blockquote>
+  <p><code class="highlighter-rouge">FailedMount</code>는 kubelet 이벤트다 — init 컨테이너 로그(<code class="highlighter-rouge">kubectl logs</code>)에는 안 나온다. <code class="highlighter-rouge">kubectl describe pod</code> 또는 <code class="highlighter-rouge">kubectl get events</code>로 본다.</p>
+</blockquote>
+
+<p>DCGM-Exporter는 ConfigMap과 무관하게 Running 상태다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get pods <span class="nt">-n</span> dcgm-exporter
+<span class="c"># dcgm-exporter-xxx   1/1   Running</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="step-3-time-slicing-configmap--광고-110">Step 3: time-slicing ConfigMap → 광고 1→10</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl apply <span class="nt">-f</span> nvidia-ts.yaml
+<span class="c"># configmap/time-slicing-config created</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">data.any</code>의 <code class="highlighter-rouge">any</code>는 예약어가 아니라 설정 프로파일 이름일 뿐이다. config-manager는 ① 노드 라벨 <code class="highlighter-rouge">nvidia.com/device-plugin.config=&lt;키&gt;</code>가 있으면 그 키를, ② helm <code class="highlighter-rouge">config.default=&lt;키&gt;</code>가 있으면 그 키를, ③ 둘 다 없고 ConfigMap에 <strong>키가 1개뿐이면 그 단일 키를 이름과 무관하게</strong> 자동 선택한다. 이 실습은 키가 <code class="highlighter-rouge">any</code> 하나뿐이라 ③으로 적용되는 것이고, 이름을 <code class="highlighter-rouge">l4-config</code>로 바꿔도 <strong>키가 1개면 그대로 광고 10</strong>이 된다. 라벨이나 <code class="highlighter-rouge">config.default</code>가 필요해지는 건 키를 2개 이상 둘 때이며, 그때 특별 취급되는 이름은 <code class="highlighter-rouge">any</code>가 아니라 <code class="highlighter-rouge">default</code>다. 자세히는 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-06-Ch10-Lab-Code-Analysis-Time-Slicing-and-Llama/">10.6 — <code class="highlighter-rouge">data.any</code> 키</a>.</p>
+
+<p>ConfigMap이 생기면 plugin init의 FailedMount가 풀리고, 보통 1분 안에 Ready가 된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get ds <span class="nt">-n</span> nvidia-device-plugin
+<span class="c"># nvidia-device-plugin   1/1   READY</span>
+
+kubectl get nodes <span class="nt">-o</span> custom-columns<span class="o">=</span><span class="se">\</span>
+NAME:.metadata.name,INSTANCE:.metadata.labels.<span class="s2">"node</span><span class="se">\.</span><span class="s2">kubernetes</span><span class="se">\.</span><span class="s2">io/instance-type"</span>,<span class="se">\</span>
+GPUs:.status.allocatable.<span class="s2">"nvidia</span><span class="se">\.</span><span class="s2">com/gpu"</span>
+<span class="c"># ip-10-0-11-244…   g6.2xlarge   10</span>
+</code></pre></div></div>
+
+<p><img src="https://sirzzang.github.io//assets/images/Week04-ch10-eks-console-daemonsets.png" alt="NVIDIA device plugin DaemonSet" class="align-center" /></p>
+
+<p><strong>가드레일</strong> — allocatable이 <code class="highlighter-rouge">10</code>이어야 Step 5로 진행한다. <code class="highlighter-rouge">1</code>이면 ConfigMap 미반영이니 <code class="highlighter-rouge">kubectl rollout restart ds -n nvidia-device-plugin</code> 후 재확인한다.</p>
+
+<p><br /></p>
+
+<h2 id="step-4-dcgm-메트릭-워크로드-전">Step 4: DCGM 메트릭 (워크로드 전)</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl port-forward svc/dcgm-exporter <span class="nt">-n</span> dcgm-exporter 9400:9400
+curl <span class="nt">-s</span> http://localhost:9400/metrics | <span class="nb">grep</span> <span class="nt">-E</span> <span class="s2">"GPU_UTIL|FB_FREE|FB_USED|modelName"</span>
+</code></pre></div></div>
+
+<p>워크로드 전 idle 상태에서 측정한 값은 다음과 같다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>DCGM_FI_DEV_GPU_UTIL{…modelName="NVIDIA L4"…} 0
+DCGM_FI_DEV_FB_FREE{…} 22563        # ~22.5GB 여유 (L4 24GB)
+DCGM_FI_DEV_FB_USED{…} 0
+</code></pre></div></div>
+
+<p>time-slicing으로 10 슬롯을 광고해도 <strong>framebuffer(VRAM)는 쪼개지지 않는다</strong> — 메모리 격리 없음의 첫 증거. <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-02-GPU-Utilization-and-DCGM/">10.2</a>의 DCGM 파이프라인 첫 hop.</p>
+
+<p><br /></p>
+
+<h2 id="step-45-secret-주입">Step 4.5: secret 주입</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>aws secretsmanager create-secret <span class="nt">--name</span> hugging-face-secret <span class="se">\</span>
+  <span class="nt">--secret-string</span> <span class="s2">"</span><span class="nv">$HF_TOKEN</span><span class="s2">"</span> <span class="nt">--region</span> ap-northeast-2
+<span class="c"># 이미 있으면 put-secret-value</span>
+
+kubectl apply <span class="nt">-f</span> llama32-inf/secret-provider-class.yaml
+kubectl create serviceaccount my-llama-sa <span class="nt">-n</span> default
+<span class="c"># Pod Identity association은 terraform iam.tf에서 생성됨</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="llama-배포와-트러블슈팅">Llama 배포와 트러블슈팅</h1>
+
+<h2 id="step-5-llama-deployment--첫-번째-장애-hf-403">Step 5: Llama Deployment &amp; 첫 번째 장애 (HF 403)</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl apply <span class="nt">-f</span> llama32-inf/llama32-deploy.yaml
+kubectl get pods <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>my-llama32 <span class="nt">-o</span> wide
+<span class="c"># 5개 ContainerCreating → 이미지 7.7GB pull ~1m52s → Running (스케줄링 성공)</span>
+</code></pre></div></div>
+
+<p><strong>배치는 성공</strong> — 5 Pod 전부 같은 GPU 노드, time-slicing 10 슬롯에 <code class="highlighter-rouge">gpu:2 × 5 = 10</code> 소진.</p>
+
+<p>그런데 로그에는 다음 오류가 보인다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl logs <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>my-llama32 <span class="nt">--tail</span><span class="o">=</span>20 | <span class="nb">grep</span> <span class="nt">-E</span> <span class="s2">"gated|403|Model"</span>
+<span class="c"># GatedRepoError: 403 Client Error.</span>
+<span class="c"># Access to model meta-llama/Llama-3.2-1B is restricted ...</span>
+</code></pre></div></div>
+
+<ul>
+  <li>토큰은 주입됨(describe에서 <code class="highlighter-rouge">HUGGING_FACE_HUB_TOKEN &lt;set&gt;</code>) → <strong>401 아님, 403</strong> = 토큰 유효하나 <strong>계정이 gated 접근 미승인</strong></li>
+  <li><code class="highlighter-rouge">main.py</code>가 import 시점에 모델 로드 → 403 → uvicorn 실패 → <strong>CrashLoopBackOff</strong></li>
+</ul>
+
+<p><img src="https://sirzzang.github.io//assets/images/Week04-ch10-llama-crashloopbackoff.png" alt="Llama Pod CrashLoopBackOff" class="align-center" /></p>
+
+<p><strong>해결</strong> — HF 모델 페이지에서 Meta 라이선스 동의 → 승인 → <code class="highlighter-rouge">kubectl rollout restart deployment my-llama32-deployment</code></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>gated 모델 카드</th>
+      <th>접근 신청</th>
+      <th>승인</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><img src="https://sirzzang.github.io//assets/images/Week04-ch10-hf-llama32-gated-modelcard.png" alt="모델 카드" width="280" /></td>
+      <td><img src="https://sirzzang.github.io//assets/images/Week04-ch10-hf-llama32-access-form.png" alt="신청 폼" width="280" /></td>
+      <td><img src="https://sirzzang.github.io//assets/images/Week04-ch10-hf-llama32-access-granted.png" alt="승인" width="280" /></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h2 id="step-55-gpu-주입-실패-진짜-트러블슈팅">Step 5.5: GPU 주입 실패 (진짜 트러블슈팅)</h2>
+
+<p>403을 풀어도 로그 상단에는 다음 메시지가 남는다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NVIDIA Driver was not detected ... torch.cuda.is_available() == False
+</code></pre></div></div>
+
+<p>광고량은 10인데 추론 파드는 GPU를 못 본다.</p>
+
+<h3 id="증상">증상</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>관측</th>
+      <th>값</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>노드 광고</td>
+      <td><code class="highlighter-rouge">nvidia.com/gpu: 10</code> (정상)</td>
+    </tr>
+    <tr>
+      <td>GFD 라벨</td>
+      <td><code class="highlighter-rouge">nvidia.com/gpu.product=NVIDIA-L4-SHARED</code> (정상)</td>
+    </tr>
+    <tr>
+      <td>llama 파드 내부</td>
+      <td><code class="highlighter-rouge">cuda=False</code>, <code class="highlighter-rouge">nvidia-smi</code> 없음, <code class="highlighter-rouge">/dev/nvidia*</code> 없음 (실패)</td>
+    </tr>
+    <tr>
+      <td>device plugin·DCGM</td>
+      <td>GPU 정상 인식 (정상)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="진단">진단</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># ① 비특권 cuda 파드 gpu:1 → /dev/nvidia* 없음</span>
+
+<span class="c"># ② device plugin 설정</span>
+kubectl logs <span class="nt">-n</span> nvidia-device-plugin &lt;plugin-pod&gt; <span class="nt">-c</span> nvidia-device-plugin-ctr <span class="se">\</span>
+  | <span class="nb">grep</span> <span class="nt">-A2</span> deviceListStrategy
+<span class="c"># "deviceListStrategy": ["envvar"]     ← ENV로만 전달</span>
+
+<span class="c"># ③ Bottlerocket nvidia-container-runtime (privileged 파드로 /host 마운트)</span>
+<span class="c"># accept-nvidia-visible-devices-envvar-when-unprivileged = false  ← 비특권 ENV 차단</span>
+
+<span class="c"># ④ device plugin 메인 컨테이너: capabilities.add=[SYS_ADMIN]</span>
+<span class="c">#    → libnvidia-container가 "privileged"로 간주 → ENV 차단 우회</span>
+<span class="c"># ⑤ 동일 cuda 이미지 + SYS_ADMIN만 추가 → nvidia-smi 즉시 동작 (진단용)</span>
+</code></pre></div></div>
+
+<p><strong>근본 원인</strong> — device plugin 기본값 <code class="highlighter-rouge">envvar</code> × Bottlerocket 보안 정책. SYS_ADMIN/privileged 인 인프라 파드만 GPU를 받고, 비특권 llama는 못 받는다.</p>
+
+<p>세 <code class="highlighter-rouge">deviceListStrategy</code>는 모두 kubelet Allocate()로 “이 GPU를 이 컨테이너에” 전달하는 건 같고, <strong>전달 형태와 주입 실행 주체</strong>가 다르다. OCI hook(envvar·volume-mounts) vs runtime-native(CDI) 구분은 <a href="/cs/CS-Container-Device-Injection/">컨테이너 장치 주입: OCI Runtime Hook과 CDI</a> 참조. 코드 분석은 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-06-Ch10-Lab-Code-Analysis-Time-Slicing-and-Llama/">10.6</a>.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>전략</th>
+      <th>device plugin이 넘기는 것</th>
+      <th>주입 실행</th>
+      <th>분류</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">envvar</code> (기본값)</td>
+      <td><code class="highlighter-rouge">NVIDIA_VISIBLE_DEVICES=&lt;uuid&gt;</code></td>
+      <td>nvidia-container-runtime OCI hook</td>
+      <td>hook</td>
+    </tr>
+    <tr>
+      <td><strong><code class="highlighter-rouge">volume-mounts</code></strong></td>
+      <td><code class="highlighter-rouge">/var/run/nvidia-container-devices/&lt;uuid&gt;</code> 마운트</td>
+      <td>같은 hook, mount basename 읽음</td>
+      <td>hook</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">cdi</code></td>
+      <td>CDI device 이름 / 어노테이션</td>
+      <td>containerd가 CDI spec을 OCI spec에 병합</td>
+      <td>runtime-native</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>envvar vs volume-mounts</strong> — 둘 다 같은 <code class="highlighter-rouge">nvidia-container-cli</code> hook이 주입한다. Bottlerocket <code class="highlighter-rouge">config.toml</code>은 <code class="highlighter-rouge">accept-...-envvar-when-unprivileged=false</code>로 env 채널만 비특권에서 차단하고, <code class="highlighter-rouge">accept-as-volume-mounts=true</code>로 mount 채널은 허용한다. env는 파드가 <code class="highlighter-rouge">NVIDIA_VISIBLE_DEVICES=all</code>을 자가 주장할 수 있는 채널이라 막고, mount는 device plugin Allocate가 세팅한 경로로 신뢰한다.</p>
+
+<p><strong><code class="highlighter-rouge">/var/run/nvidia-container-devices/&lt;uuid&gt;</code> vs <code class="highlighter-rouge">/dev/nvidia*</code></strong> — 전자는 plugin이 넣는 <strong>요청 신호용 빈 마운트</strong>(basename uuid가 “이 GPU” 신호), 후자는 hook 주입 <strong>후</strong> 컨테이너에 나타나는 <strong>진짜 장치 노드</strong>다. smoke test의 <code class="highlighter-rouge">ls /dev/nvidia0</code>가 주입 성공 증거. 이 volume-mounts 채널은 libnvidia-container 범용 기능이며 Bottlerocket 특유가 아니다 — <code class="highlighter-rouge">/dev</code>를 숨기는 게 아니라 env 대신 mount로 요청하라고 강제할 뿐이다.</p>
+
+<p><strong>CDI</strong> — hook 없이 <code class="highlighter-rouge">/etc/cdi/nvidia.json</code> 선언 + containerd <code class="highlighter-rouge">enable_cdi=true</code>로 런타임이 직접 병합하는 패러다임. 이번 노드에 CDI 인프라가 있어 <code class="highlighter-rouge">deviceListStrategy=cdi</code>도 됐을 가능성은 높지만, <strong>직접 검증하지 않았다.</strong></p>
+
+<p><strong>이번 실습 검증 결과</strong>는 다음과 같다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">envvar</code>: 비특권 cuda gpu:1 → <code class="highlighter-rouge">/dev/nvidia*</code> 없음 — <strong>차단 확정</strong></li>
+  <li><code class="highlighter-rouge">cdi</code>: 미검증</li>
+  <li><strong><code class="highlighter-rouge">volume-mounts</code></strong>: 비특권 cuda gpu:1 smoke test → <code class="highlighter-rouge">nvidia-smi</code>, <code class="highlighter-rouge">/dev/nvidia0</code> — <strong>실측 통과</strong>. 노드 <code class="highlighter-rouge">mode=legacy</code>와도 정합</li>
+</ul>
+
+<p>→ env는 막혔고, CDI는 파지 않았고, 확실한 volume-mounts로 확정.</p>
+
+<h3 id="해결-deviceliststrategy-volume-mounts">해결: <code class="highlighter-rouge">deviceListStrategy: volume-mounts</code></h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>helm upgrade nvidia-device-plugin nvdp/nvidia-device-plugin <span class="nt">--version</span> 0.17.1 <span class="se">\</span>
+  <span class="nt">-n</span> nvidia-device-plugin <span class="nt">--reuse-values</span> <span class="nt">--set</span> <span class="nv">deviceListStrategy</span><span class="o">=</span>volume-mounts
+kubectl <span class="nt">-n</span> nvidia-device-plugin rollout restart ds nvidia-device-plugin
+
+<span class="c"># 검증: 비특권 cuda 파드 gpu:1</span>
+kubectl run gpu-smoke1 <span class="nt">--restart</span><span class="o">=</span>Never <span class="se">\</span>
+  <span class="nt">--image</span><span class="o">=</span>nvcr.io/nvidia/cuda:12.4.1-base-ubuntu22.04 <span class="se">\</span>
+  <span class="nt">--overrides</span><span class="o">=</span><span class="s1">'{"spec":{"tolerations":[{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}],"containers":[{"name":"g","image":"nvcr.io/nvidia/cuda:12.4.1-base-ubuntu22.04","command":["sh","-c","nvidia-smi -L; ls /dev/nvidia0"],"resources":{"limits":{"nvidia.com/gpu":"1"}}}]}}'</span>
+kubectl logs gpu-smoke1
+<span class="c"># GPU 0: NVIDIA L4 (UUID: GPU-…)</span>
+<span class="c"># /dev/nvidia0</span>
+</code></pre></div></div>
+
+<p>코드 반영은 <code class="highlighter-rouge">aiml-addons.tf</code> device plugin values에 <code class="highlighter-rouge">deviceListStrategy: volume-mounts</code> + 주석을 추가한 것이다. <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-06-Ch10-Lab-Code-Analysis-Time-Slicing-and-Llama/">10.6</a> 참조.</p>
+
+<blockquote>
+  <p><strong>주의</strong> — llama에 SYS_ADMIN을 주는 건 해결책이 아니다. 진단 ⑤처럼 cap만 주면 동작하지만 보안 안티패턴이다.</p>
+</blockquote>
+
+<h3 id="수정-후-추론-성공">수정 후: 추론 성공</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get pods <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>my-llama32
+<span class="c"># 5/5 Running, RESTARTS 0</span>
+
+kubectl logs &lt;pod&gt; | <span class="nb">grep</span> <span class="nt">-iE</span> <span class="s2">"device|cuda"</span>
+<span class="c"># Device set to use cuda</span>
+<span class="c"># Uvicorn running on http://0.0.0.0:80</span>
+
+kubectl run curltest <span class="nt">--rm</span> <span class="nt">-i</span> <span class="nt">--restart</span><span class="o">=</span>Never <span class="nt">--image</span><span class="o">=</span>curlimages/curl:8.10.1 <span class="nt">--command</span> <span class="nt">--</span> <span class="se">\</span>
+  sh <span class="nt">-c</span> <span class="s1">'curl -s -X POST http://my-llama32-svc.default.svc.cluster.local/generate \
+    -H "Content-Type: application/json" \
+    -d "{\"prompt\":\"Explain GPU time-slicing in one sentence.\"}"'</span>
+<span class="c"># {"response":[{"generated_text":"…GPU time-slicing is the method by which…"}]}</span>
+</code></pre></div></div>
+
+<p>volume-mounts 수정 + HF 승인 → time-sliced 단일 L4 위 5 Pod에서 Llama-3.2-1B 추론이 실제 응답한다.</p>
+
+<p><br /></p>
+
+<h1 id="time-slicing-동작-검증">time-slicing 동작 검증</h1>
+
+<h2 id="step-6-time-slicing-off--pending-대조">Step 6: time-slicing OFF → Pending 대조</h2>
+
+<p>책에는 없지만, time-slicing이 placement 전제임을 확인한다.</p>
+
+<p><strong>방법 A (권장)</strong> — ConfigMap에서 <code class="highlighter-rouge">sharing</code> 블록을 제거한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl <span class="nt">-n</span> nvidia-device-plugin patch cm time-slicing-config <span class="nt">--type</span> merge <span class="se">\</span>
+  <span class="nt">-p</span> <span class="s1">'{"data":{"any":"version: v1\nflags:\n  migStrategy: none\n"}}'</span>
+kubectl <span class="nt">-n</span> nvidia-device-plugin rollout restart ds nvidia-device-plugin
+kubectl describe node &lt;gpu-node&gt; | <span class="nb">grep</span> <span class="s1">'nvidia.com/gpu:'</span>   <span class="c"># 10 → 1</span>
+
+kubectl scale deployment my-llama32-deployment <span class="nt">--replicas</span><span class="o">=</span>0
+kubectl rollout restart deployment my-llama32-deployment
+kubectl get pods <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>my-llama32
+<span class="c"># Pending + FailedScheduling: Insufficient nvidia.com/gpu</span>
+
+<span class="c"># 복구</span>
+kubectl apply <span class="nt">-f</span> nvidia-ts.yaml <span class="o">&amp;&amp;</span> kubectl rollout restart ds <span class="nt">-n</span> nvidia-device-plugin
+</code></pre></div></div>
+
+<blockquote>
+  <p><strong><code class="highlighter-rouge">replicas: 1</code>은 OFF가 아니다</strong> — plugin이 <code class="highlighter-rouge">replicas must be &gt;= 2</code>로 크래시, 광고 0. OFF는 sharing 블록 제거. 배경은 <a href="/kubernetes/Kubernetes-GPU-Time-Slicing-3/#replicas-값-제한">time-slicing 적용·검증 — replicas 값 제한</a> 참조.</p>
+</blockquote>
+
+<p><strong>방법 B (비권장)</strong> — <code class="highlighter-rouge">aiml-addons.tf</code>에서 <code class="highlighter-rouge">config.name</code>을 제거한 뒤 terraform apply한다.</p>
+
+<p>helm <code class="highlighter-rouge">wait=true, timeout=300s</code> 때문에 DaemonSet 롤아웃 실패 → <strong><code class="highlighter-rouge">Error: context deadline exceeded</code></strong>, plugin 0·광고 0. 복구는 <code class="highlighter-rouge">helm rollback</code> + 코드 원복. OFF 시연은 방법 A만.</p>
+
+<p><br /></p>
+
+<h2 id="step-7-vram-공유-확인-nvidia-smi">Step 7: VRAM 공유 확인 (nvidia-smi)</h2>
+
+<p>time-slicing은 VRAM을 격리하지 않는다. hostPID + SYS_ADMIN 파드로 호스트 전체 GPU 프로세스를 본 결과는 다음과 같다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>|   0  NVIDIA L4  |  12831MiB / 23034MiB |
+| Processes:                                              |
+|    0   151635   C   /usr/bin/python3    2546MiB         |
+|    0   151653   C   /usr/bin/python3    2546MiB         |
+|    0   151801   C   /usr/bin/python3    2618MiB         |
+|    0   151855   C   /usr/bin/python3    2546MiB         |
+|    0   151972   C   /usr/bin/python3    2546MiB         |
+</code></pre></div></div>
+
+<p>물리 L4 <strong>1장</strong>에 서로 다른 Pod의 <code class="highlighter-rouge">python3</code> <strong>5개</strong> 공존, 합산 <strong>12831MiB / 23034MiB</strong>. <code class="highlighter-rouge">MIG M. N/A</code> = 파티션 없이 한 장 공유. 3B 모델이었다면 5×6GB=30GB &gt; 24GB로 깨졌을 것.</p>
+
+<p><br /></p>
+
+<h2 id="step-75-gpu-utilization-부하--dcgm">Step 7.5: GPU utilization (부하 → DCGM)</h2>
+
+<p>5 Pod Running 상태에서 <code class="highlighter-rouge">/generate</code>에 동시 부하를 걸면 DCGM 측정값은 다음과 같다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># baseline (idle)
+DCGM_FI_DEV_GPU_UTIL              0
+DCGM_FI_DEV_POWER_USAGE          35.4W
+DCGM_FI_DEV_FB_USED              12830
+
+# 부하 ~18초 후
+DCGM_FI_DEV_GPU_UTIL            100
+DCGM_FI_DEV_POWER_USAGE          71.9W    # L4 캡
+DCGM_FI_PROF_PIPE_TENSOR_ACTIVE   0.0026  # ~0.3% — tensor-core 포화 아님
+</code></pre></div></div>
+
+<p>부하를 주면 <code class="highlighter-rouge">GPU_UTIL 0→100</code>, <code class="highlighter-rouge">POWER 35→72W</code>로 명확히 반응 — <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-05-GPU-Scaling-Optimization-and-NIM/">10.5</a> HPA가 이 지표를 쓰는 근거. 단 <strong><code class="highlighter-rouge">GPU_UTIL=100%</code> ≠ GPU를 알차게 쓴다</strong> — 1B generation은 latency/메모리 바운드. time-slicing 환경에서 <code class="highlighter-rouge">GPU_UTIL</code>은 물리 1장(공유) 기준이라 임계치만 보고 스케일하면 over-scaling 위험.</p>
+
+<p><br /></p>
+
+<h2 id="step-8-hpa-개념만">Step 8: HPA (개념만)</h2>
+
+<p>DCGM <code class="highlighter-rouge">DCGM_FI_DEV_GPU_UTIL</code> → HPA 연동은 prometheus-adapter 파이프라인이 필요하다(Ch12). 이번 실습에서는 Step 7.5로 지표 반응만 확인.</p>
+
+<p><br /></p>
+
+<h1 id="대조군-검증">대조군 검증</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>대조</th>
+      <th>기대</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>비특권 cuda gpu:1 (volume-mounts 후)</td>
+      <td>nvidia-smi 출력 = 주입 정상</td>
+    </tr>
+    <tr>
+      <td>gpu:11 요청</td>
+      <td>Pending — 광고 10이 하드 상한</td>
+    </tr>
+    <tr>
+      <td>time-slicing OFF + gpu:2</td>
+      <td>Pending — placement 불가</td>
+    </tr>
+    <tr>
+      <td>replicas 6</td>
+      <td>6번째 Pending — 5×2=10 소진</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p>volume-mounts 수정 <strong>전</strong>에는 비특권 파드 gpu:1도 <code class="highlighter-rouge">nvidia-smi: not found</code> — 이미지 문제가 아니라 GPU 주입 실패.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="teardown--orphan-주의">Teardown &amp; orphan 주의</h1>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl delete <span class="nt">-f</span> llama32-inf/llama32-deploy.yaml
+kubectl delete <span class="nt">-f</span> llama32-inf/secret-provider-class.yaml
+terraform destroy <span class="nt">-auto-approve</span>
+aws secretsmanager delete-secret <span class="nt">--secret-id</span> hugging-face-secret <span class="se">\</span>
+  <span class="nt">--force-delete-without-recovery</span> <span class="nt">--region</span> ap-northeast-2
+</code></pre></div></div>
+
+<p><strong>terraform state 밖 orphan 3종</strong>은 아래와 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>잔존 리소스</th>
+      <th>정체</th>
+      <th>처리</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>EBS 50GB (available)</td>
+      <td>JupyterHub hub-db-dir PVC 동적 볼륨</td>
+      <td><code class="highlighter-rouge">aws ec2 delete-volume</code></td>
+    </tr>
+    <tr>
+      <td>ENI (available)</td>
+      <td>VPC-CNI 파드용 ENI</td>
+      <td><code class="highlighter-rouge">aws ec2 delete-network-interface</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">eks-cluster-sg-*</code></td>
+      <td>EKS 자동 생성 cluster SG</td>
+      <td><code class="highlighter-rouge">aws ec2 delete-security-group</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>destroy 후 <code class="highlighter-rouge">available</code> EBS / 잔존 ENI / cluster SG / VPC audit 필수.</p>
+
+<p><br /></p>
+
+<h1 id="이-실습으로-확인한-것">이 실습으로 확인한 것</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>확인</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>terraform apply — kubecost 주석 후 클러스터·GPU 노드·plugin·DCGM 생성</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>ConfigMap 전: plugin Init 대기, <strong>광고 1</strong>, ephemeral 95.5GB</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>ConfigMap apply → <strong>광고 1→10</strong></td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>DCGM idle: util 0, FB_FREE ~22.5GB (VRAM 미분할)</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>5 Pod 한 GPU Running — <strong>403 + cuda=False</strong> 두 겹 장애</td>
+    </tr>
+    <tr>
+      <td>5.5</td>
+      <td><strong>volume-mounts</strong> → 비특권 GPU 주입 + <strong>Llama 추론 성공</strong></td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>sharing 제거 → 광고 10→1 → gpu:2 <strong>Pending</strong></td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>nvidia-smi: 5 python 프로세스, VRAM 합산 ~12.8GB</td>
+    </tr>
+    <tr>
+      <td>7.5</td>
+      <td>부하 → GPU_UTIL 100%, TENSOR_ACTIVE ~0.3%</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="결론">결론</h1>
+
+<p>Ch10은 GenAI 워크로드를 K8s에서 돌릴 때 <strong>GPU 자원을 어떻게 할당·분할·공유·관측·스케일링할지</strong>를 다룬 장이다. GPU는 비싸고 대부분 저활용 상태로 놓인다는 전제에서, “더 많이 산다”보다 “가진 것을 더 잘 쓴다”가 핵심이다.</p>
+
+<p><strong>할당의 출발점</strong>은 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/">10.1</a>에서 정리했다. NVIDIA GPU뿐 아니라 AWS Inferentia·Trainium, Google TPU 같은 <strong>커스텀 AI/ML 가속기</strong>도 device plugin을 통해 K8s extended resource로 광고·스케줄링할 수 있다. LLM 학습·저지연 추론처럼 워크로드 특성에 맞는 칩을 고르고, NFD/GFD와 device plugin이 노드 특성을 라벨·allocatable로 올려 주는 흐름이 전제다.</p>
+
+<p><strong>활용률을 보려면 측정이 먼저</strong>다. <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-02-GPU-Utilization-and-DCGM/">10.2</a>에서 DCGM이 GPU utilization·memory·power 같은 텔레메트리를 수집하고, DCGM-Exporter가 Prometheus 포맷으로 노출하는 파이프라인을 봤다. “GPU가 바쁘다”와 “워크로드가 잘 돌아간다”는 같지 않다 — 이후 스케일링에서 다시 마주친다.</p>
+
+<p><strong>한 장을 나눠 쓰는 기법</strong>은 격리 수준과 실행 방식이 다르다.</p>
+
+<ul>
+  <li><a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG/">10.3 MIG</a> — SM·메모리를 <strong>하드웨어로 분할</strong>. 멀티테넌트·SLA에 가장 강한 격리</li>
+  <li><a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-04-GPU-Sharing-MPS-and-Time-Slicing/">10.4 MPS</a> — 여러 프로세스가 SM을 <strong>동시에</strong> 공유. 빈 SM을 채워 활용률을 올림</li>
+  <li><a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-04-GPU-Sharing-MPS-and-Time-Slicing/">10.4 time-slicing</a> — context를 <strong>번갈아</strong> 실행. MIG 미지원 GPU에서도 슬롯을 늘려 placement 가능. 메모리 격리는 없어 VRAM 합산은 사용자 책임</li>
+</ul>
+
+<p>셋은 배타적이지 않다. MIG로 큰 칸을 가른 뒤 그 안을 MPS·time-slicing으로 다시 공유하는 스택도 가능하다.</p>
+
+<p><strong>스케일링과 서빙</strong>은 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-05-GPU-Scaling-Optimization-and-NIM/">10.5</a>에서 마무리했다. DCGM 메트릭 → Prometheus → prometheus-adapter → HPA 체인으로 GPU 사용률 기반 오토스케일링이 가능하지만, <code class="highlighter-rouge">GPU_UTIL</code> 단독은 phantom utilization·공유 GPU 왜곡에 취약하다. throughput·latency 같은 application 지표 병행이 필요하다. <strong>NVIDIA NIM</strong>은 모델 + 최적화 엔진 + 서빙 런타임 + 표준 API를 한 컨테이너에 포장한 추론 마이크로서비스로, “인프라에서 GPU를 나눠 쓰기”와 “애플리케이션에서 모델을 서빙하기”를 연결한다.</p>
+
+<p><strong>실습(<a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-06-Ch10-Lab-Code-Analysis-Time-Slicing-and-Llama/">10.6</a> · <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification/">10.7</a>)</strong>은 time-slicing 한 축을 EKS + L4에서 끝까지 검증했다. 물리 GPU 1장을 10 슬롯으로 광고하고 Llama-3.2-1B 5 Pod를 한 노드에 올리는 placement, OFF 시 <code class="highlighter-rouge">gpu:2</code> Pending, nvidia-smi로 VRAM 공유 확인까지 — <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-04-GPU-Sharing-MPS-and-Time-Slicing/">10.4</a>의 개념이 코드·클러스터에서 어떻게 드러나는지를 붙였다. 동시에 upstream 그대로면 <strong>스케줄링은 되는데 추론은 GPU를 못 보는</strong> 함정(<code class="highlighter-rouge">deviceListStrategy=envvar</code> × Bottlerocket env 차단)과 HF gated 403처럼, 이론만으로는 안 보이는 운영 이슈도 확인했다.</p>
+
+<p>클라우드 GPU는 수요가 공급을 앞서는 경우가 많아, Ch10에서 다룬 분할·공유·관측·스케일링은 “있는 GPU를 더 잘 쓰는” 쪽에 무게가 실린다. 다음 장(Ch11)에서는 K8s <strong>observability</strong> best practice로 더 깊이 들어간다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://github.com/NVIDIA/k8s-device-plugin#device-list-strategy">NVIDIA k8s-device-plugin — device list strategy</a></li>
+  <li><a href="/cs/CS-Container-Device-Injection/">컨테이너 장치 주입: OCI Runtime Hook과 CDI</a></li>
+  <li><a href="/kubernetes/Kubernetes-GPU-Time-Slicing-3/#replicas-값-제한">time-slicing 적용·검증 — replicas 값 제한</a></li>
+  <li><a href="https://github.com/bottlerocket-os/bottlerocket">Bottlerocket — NVIDIA variant</a></li>
+  <li><a href="https://huggingface.co/meta-llama/Llama-3.2-1B">meta-llama/Llama-3.2-1B (gated)</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#bottlerocket" class="page__taxonomy-item" rel="tag">Bottlerocket</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#dcgm" class="page__taxonomy-item" rel="tag">DCGM</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#genai" class="page__taxonomy-item" rel="tag">GenAI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions-chapter-10" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions-Chapter-10</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#llama" class="page__taxonomy-item" rel="tag">Llama</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nvidia" class="page__taxonomy-item" rel="tag">NVIDIA</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#time-slicing" class="page__taxonomy-item" rel="tag">Time-Slicing</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#troubleshooting" class="page__taxonomy-item" rel="tag">Troubleshooting</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-06-07T00:00:00+09:00">June 7, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BGenAI%5D+GenAI+on+K8s%3A+10.7+-+Ch10+%EC%8B%A4%EC%8A%B5%3A+time-slicing+%EB%B0%B0%ED%8F%AC%C2%B7%EA%B2%80%EC%A6%9D%C2%B7%ED%8A%B8%EB%9F%AC%EB%B8%94%EC%8A%88%ED%8C%85%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-06-Ch10-Lab-Code-Analysis-Time-Slicing-and-Llama/" class="pagination--pager" title="[GenAI] GenAI on K8s: 10.6 - Ch10 실습 코드 분석: time-slicing과 Llama 워크로드
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-11-01-GenAIOps-Pipeline-and-Monitoring/" class="pagination--pager" title="[GenAI] GenAI on K8s: 11.1 - GenAIOps 개요와 GenAI 파이프라인 5단계
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

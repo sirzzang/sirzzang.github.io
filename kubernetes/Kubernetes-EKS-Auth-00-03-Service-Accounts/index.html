@@ -1,0 +1,1332 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 2. Service Account - Eraser’s StudyLog</title>
+<meta name="description" content="K8s가 직접 관리하는 non-human identity인 Service Account의 개념과 토큰 생명주기를 정리해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 2. Service Account">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-Auth-00-03-Service-Accounts/">
+
+
+  <meta property="og:description" content="K8s가 직접 관리하는 non-human identity인 Service Account의 개념과 토큰 생명주기를 정리해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-02T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-Auth-00-03-Service-Accounts/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 2. Service Account">
+    <meta itemprop="description" content="K8s가 직접 관리하는 non-human identity인 Service Account의 개념과 토큰 생명주기를 정리해 보자.">
+    <meta itemprop="datePublished" content="2026-04-02T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 2. Service Account
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-02T00:00:00+09:00">2026년 04월 02일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  8 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#들어가며">들어가며</a></li>
+  <li><a href="#sa-개념">SA 개념</a>
+    <ul>
+      <li><a href="#sa-vs-human-user">SA vs Human User</a></li>
+    </ul>
+  </li>
+  <li><a href="#sa-토큰의-구조">SA 토큰의 구조</a>
+    <ul>
+      <li><a href="#jwt-기초">JWT 기초</a></li>
+      <li><a href="#sa-jwt의-payload">SA JWT의 Payload</a></li>
+    </ul>
+  </li>
+  <li><a href="#토큰-생명주기">토큰 생명주기</a>
+    <ul>
+      <li><a href="#tokenrequest-토큰-발급">TokenRequest: 토큰 발급</a></li>
+      <li><a href="#projected-volume-토큰-전달">Projected Volume: 토큰 전달</a></li>
+      <li><a href="#tokenreview-토큰-검증">TokenReview: 토큰 검증</a></li>
+      <li><a href="#현행-vs-레거시">현행 vs 레거시</a></li>
+    </ul>
+  </li>
+  <li><a href="#default-sa와-pod-할당">Default SA와 Pod 할당</a>
+    <ul>
+      <li><a href="#default-sa의-권한">default SA의 권한</a></li>
+      <li><a href="#pod당-sa-하나">Pod당 SA 하나</a></li>
+      <li><a href="#automountserviceaccounttoken">automountServiceAccountToken</a></li>
+    </ul>
+  </li>
+  <li><a href="#use-cases">Use Cases</a></li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 AWS EKS Workshop Study(AEWS) 4주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>ServiceAccount(SA)는 K8s가 직접 관리하는 <strong>non-human identity</strong>다. Human User와 달리 K8s API 오브젝트로 존재한다</li>
+  <li>SA 토큰의 생명주기: <strong>TokenRequest(발급)</strong> → <strong>Projected Volume(전달)</strong> → <strong>TokenReview(검증)</strong></li>
+  <li>1.22+ 이후 projected volume 기반 <strong>short-lived 토큰</strong>이 기본이다. 레거시 Secret 기반 영구 토큰은 비권장</li>
+  <li>모든 Pod은 반드시 하나의 SA identity를 가져야 하지만, <strong>토큰 마운트는 비활성화</strong>할 수 있다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="들어가며">들어가며</h1>
+
+<p>이전 포스트에서 K8s에는 <code class="highlighter-rouge">User</code> 오브젝트가 없고, 사용자 관리는 외부에 위임한다고 정리했다. 그렇다면 K8s가 <strong>직접 관리하는 identity</strong>는 뭘까? 바로 ServiceAccount다.</p>
+
+<p><a href="/kubernetes/Kubernetes-EKS-Auth-00-00-Overview/">개요 포스트</a>에서 정리한 세 가지 인증 흐름을 다시 보자.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>1. 사람  ──IAM 토큰──▶ K8S API     (외부 인증 — OIDC, webhook, X.509)
+2. Pod  ──SA 토큰──▶  K8S API     (내부 인증 — SA JWT)
+3. Pod  ──IAM 임시자격증명──▶ AWS API  (내부 → 외부 — SA + IAM Role)
+</code></pre></div></div>
+
+<p>흐름 2와 3에서 SA가 등장한다. 특히 흐름 3(IRSA/Pod Identity)은 <strong>SA 토큰을 AWS IAM이 신뢰할 수 있게 만드는 것</strong>이 핵심인데, 그러려면 SA 토큰이 어떻게 발급·검증되는지를 알아야 한다.</p>
+
+<p><br /></p>
+
+<h1 id="sa-개념">SA 개념</h1>
+
+<p>ServiceAccount는 K8s 클러스터에서 <strong>고유한 identity를 제공하는 non-human account</strong>다. Pod, 시스템 컴포넌트, 클러스터 내외부의 엔티티가 특정 SA의 credential을 사용하여 해당 SA로 식별될 수 있다.</p>
+
+<h2 id="sa-vs-human-user">SA vs Human User</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>구분</th>
+      <th>ServiceAccount</th>
+      <th>Human User</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>위치</strong></td>
+      <td>K8s API 오브젝트 (<code class="highlighter-rouge">v1/ServiceAccount</code>)</td>
+      <td>외부 시스템</td>
+    </tr>
+    <tr>
+      <td><strong>K8s가 관리하나?</strong></td>
+      <td>O (etcd에 저장, <code class="highlighter-rouge">kubectl get sa</code>로 조회)</td>
+      <td>X (외부에 위임)</td>
+    </tr>
+    <tr>
+      <td><strong>K8s가 토큰 발급하나?</strong></td>
+      <td>O (TokenRequest API)</td>
+      <td>X</td>
+    </tr>
+    <tr>
+      <td><strong>인증 방식</strong></td>
+      <td>SA JWT (K8s가 서명)</td>
+      <td>X.509, OIDC, webhook 등 (외부 발급)</td>
+    </tr>
+    <tr>
+      <td><strong>용도</strong></td>
+      <td>워크로드, 자동화</td>
+      <td>사람</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>K8s가 User 오브젝트를 두지 않았기 때문에, <strong>K8s가 직접 발급·관리하는 토큰은 오직 SA용</strong>이다.</p>
+
+<ul>
+  <li><strong>SA</strong>: K8s가 SA 생성 → K8s가 JWT 발급(TokenRequest) → K8s가 JWT 검증. <strong>K8s가 전체 생명주기를 관리</strong>한다.</li>
+  <li><strong>User</strong>: 외부 IdP가 사용자 관리 → 외부가 credential 발급 → K8s는 검증만. <strong>K8s는 “이 사람 누구?”만 판단</strong>한다.</li>
+</ul>
+
+<p>SA의 특징은 다음 세 가지로 요약된다.</p>
+
+<ul>
+  <li><strong>Namespaced</strong>: 특정 namespace에 종속된다. 같은 이름의 SA라도 namespace가 다르면 별개의 identity이며, 권한 범위도 namespace 단위로 격리된다.</li>
+  <li><strong>Lightweight</strong>: API 호출 한 번으로 즉시 생성할 수 있다. 외부 IdP 연동이나 인증서 발급 같은 무거운 절차가 필요 없다.</li>
+  <li><strong>Portable</strong>: Pod spec의 <code class="highlighter-rouge">serviceAccountName</code> 필드 하나로 워크로드에 바인딩할 수 있다. Helm chart나 매니페스트에 포함시켜 환경 간 이동이 쉽다.</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="sa-토큰의-구조">SA 토큰의 구조</h1>
+
+<p>SA 토큰은 <strong>JWT(JSON Web Token)</strong> 형식이다. JWT가 뭔지 간단히 짚고 가자.</p>
+
+<h2 id="jwt-기초">JWT 기초</h2>
+
+<p>JWT는 <code class="highlighter-rouge">.</code>(dot)으로 구분된 세 파트로 이루어진다: <strong>헤더(Header)</strong> . <strong>페이로드(Payload)</strong> . <strong>서명(Signature)</strong>.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJrdWJlcm5ldGVzLmRlZmF1bHQuc3ZjIi....SIGNATURE
+─── Header ──────────  ─── Payload ──────────────────────────────  ── Sig ──
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>부분</th>
+      <th>내용</th>
+      <th>인코딩</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Header</strong></td>
+      <td>서명 알고리즘(<code class="highlighter-rouge">alg</code>), 토큰 타입(<code class="highlighter-rouge">typ</code>)</td>
+      <td>Base64URL</td>
+    </tr>
+    <tr>
+      <td><strong>Payload</strong></td>
+      <td>claim 데이터 (누구인지, 만료 시간 등)</td>
+      <td>Base64URL</td>
+    </tr>
+    <tr>
+      <td><strong>Signature</strong></td>
+      <td>Header + Payload를 private key로 서명한 값</td>
+      <td>바이너리 → Base64URL</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Header와 Payload는 <strong>암호화가 아니라 인코딩</strong>이다. 누구나 디코딩해서 내용을 읽을 수 있다. JWT의 보안은 <strong>서명(Signature)</strong>에 있다. API 서버가 private key로 서명하고, 검증자는 public key로 서명이 변조되지 않았음을 확인한다.</p>
+
+<blockquote>
+  <p>JWT 자체는 “이 토큰의 내용이 발급자에 의해 서명되었다”는 것만 보장한다. 만료(<code class="highlighter-rouge">exp</code>), audience(<code class="highlighter-rouge">aud</code>) 등의 제한은 claim에 넣을 수 있지만 <strong>선택적</strong>이다. 레거시 SA 토큰에 <code class="highlighter-rouge">exp</code>가 없어서 영구 유효했던 것도 이 때문이다.</p>
+</blockquote>
+
+<h2 id="sa-jwt의-payload">SA JWT의 Payload</h2>
+
+<p>K8s가 SA에 발급하는 JWT의 payload에는 SA identity 정보가 담겨 있다.</p>
+
+<div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+  </span><span class="s2">"iss"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://kubernetes.default.svc"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"sub"</span><span class="p">:</span><span class="w"> </span><span class="s2">"system:serviceaccount:default:my-sa"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"aud"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"api"</span><span class="p">],</span><span class="w">
+  </span><span class="s2">"exp"</span><span class="p">:</span><span class="w"> </span><span class="mi">1712617200</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"kubernetes.io"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+    </span><span class="s2">"namespace"</span><span class="p">:</span><span class="w"> </span><span class="s2">"default"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"serviceaccount"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s2">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"my-sa"</span><span class="p">,</span><span class="w"> </span><span class="s2">"uid"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">},</span><span class="w">
+    </span><span class="s2">"pod"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s2">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"my-pod"</span><span class="p">,</span><span class="w"> </span><span class="s2">"uid"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">}</span><span class="w">
+  </span><span class="p">}</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Claim</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">iss</code></td>
+      <td>발급자(issuer). K8s API 서버</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">sub</code></td>
+      <td>SA identity. <code class="highlighter-rouge">system:serviceaccount:&lt;namespace&gt;:&lt;name&gt;</code> 형식</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">aud</code></td>
+      <td>이 토큰의 의도된 수신자(audience). JWT 자체가 수신을 차단하는 것이 아니라, <strong>검증자가 자신의 identity와 <code class="highlighter-rouge">aud</code>를 대조하여 불일치하면 거부</strong>하는 방식이다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">exp</code></td>
+      <td>만료 시간 (TokenRequest 기반이면 있고, 레거시면 없음)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">kubernetes.io</code></td>
+      <td>K8s 전용 claim. bound token이면 바인딩된 Pod 정보도 포함</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-service-account-token-jwt-debug-result.png" alt="SA 토큰 JWT 디버그 결과" class="align-center" /></p>
+
+<blockquote>
+  <p>흐름 3(IRSA)에서는 이 JWT를 AWS STS가 검증한다. EKS가 OIDC Provider 역할을 하면서 <code class="highlighter-rouge">/.well-known/openid-configuration</code> 엔드포인트와 public key를 노출하고, AWS IAM이 이 public key로 SA JWT의 서명을 직접 검증하는 구조다. JWT의 <code class="highlighter-rouge">aud</code>를 <code class="highlighter-rouge">sts.amazonaws.com</code>으로 설정하면, AWS STS가 자신에게 발급된 토큰인지 확인하여 일치할 때만 수락한다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="토큰-생명주기">토큰 생명주기</h1>
+
+<p>SA 토큰은 <strong>발급 → 전달 → 검증</strong>의 생명주기를 갖는다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>1. 발급 (TokenRequest)    "이 SA의 JWT를 만들어줘"
+         ↓
+2. 전달 (Projected Volume) "발급받은 JWT를 Pod에 전달"
+         ↓
+3. 검증 (TokenReview)      "이 JWT 진짜야? 누구거야?"
+</code></pre></div></div>
+
+<h2 id="tokenrequest-토큰-발급">TokenRequest: 토큰 발급</h2>
+
+<p>TokenRequest API(<code class="highlighter-rouge">authentication.k8s.io/v1</code>)는 특정 SA의 <strong>short-lived JWT를 동적으로 발급</strong>하는 역할을 한다. kubelet이 자동으로 호출하지만, 사용자가 <code class="highlighter-rouge">kubectl create token</code>으로 직접 호출하거나 애플리케이션 코드에서 호출할 수도 있다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubelet (또는 사용자)
+    │
+    │  POST /api/v1/namespaces/default/serviceaccounts/my-sa/token
+    │  body: { audience: ["api"], expirationSeconds: 3600 }
+    ▼
+API Server (controller-manager의 signing key로 JWT 생성)
+    │
+    │  Response: { token: "eyJhbG..." }  ← exp, audience 포함된 JWT
+    ▼
+kubelet이 projected volume에 쓰기
+    → /var/run/secrets/kubernetes.io/serviceaccount/token (tmpfs)
+</code></pre></div></div>
+
+<p>발급 시점에 <code class="highlighter-rouge">exp</code>(만료), <code class="highlighter-rouge">audience</code>, <code class="highlighter-rouge">boundObjectRef</code>(Pod에 바인딩) 등을 지정한다. K8s를 인식하지 못하는 레거시 앱의 경우, sidecar 컨테이너가 TokenRequest API를 대신 호출하여 토큰을 가져다 주는 패턴도 가능하다.</p>
+
+<h2 id="projected-volume-토큰-전달">Projected Volume: 토큰 전달</h2>
+
+<p>kubelet이 TokenRequest API로 발급받은 JWT를 Pod의 볼륨 마운트 경로(<code class="highlighter-rouge">/var/run/secrets/kubernetes.io/serviceaccount/token</code>)에 <strong>tmpfs(메모리 기반 파일시스템)</strong>로 마운트한다. <a href="/kubernetes/Kubernetes-Pod-Volume-04-ConfigMap-Secret-DownwardAPI-Projected/">Projected Volume</a> 메커니즘을 활용하는 것이다.</p>
+
+<p>kubelet은 토큰 수명의 <strong>80% 시점</strong> 또는 만료 24시간 전(둘 중 빠른 시점)에 자동으로 새 토큰을 요청하여 교체한다. tmpfs에 저장되므로 <strong>Pod 종료 시 사라지고</strong>, 클러스터 전체에서 조회할 수 없으며, etcd에도 남지 않아 etcd 탈취와도 무관하다.</p>
+
+<blockquote>
+  <p>레거시 Secret 방식과의 결정적 차이가 바로 여기다. Secret은 etcd에 오브젝트로 저장되어 <code class="highlighter-rouge">kubectl get secret</code>으로 조회 가능하고 etcd 백업에도 포함된다. projected volume 토큰은 해당 노드의 메모리에만 존재한다.</p>
+</blockquote>
+
+<p>자동 마운트되는 projected volume은 audience가 <code class="highlighter-rouge">api</code>이고 기본 경로에 마운트되지만, Pod spec에서 직접 설정하면 <strong>audience, 만료 시간, 마운트 경로를 커스텀</strong>할 수 있다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">volumes</span><span class="pi">:</span>
+<span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">custom-token</span>
+  <span class="na">projected</span><span class="pi">:</span>
+    <span class="na">sources</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">serviceAccountToken</span><span class="pi">:</span>
+        <span class="na">audience</span><span class="pi">:</span> <span class="s2">"</span><span class="s">vault.example.com"</span>  <span class="c1"># API server가 아닌 다른 audience</span>
+        <span class="na">expirationSeconds</span><span class="pi">:</span> <span class="s">3600</span>
+        <span class="na">path</span><span class="pi">:</span> <span class="s">token</span>
+</code></pre></div></div>
+
+<blockquote>
+  <p>IRSA에서 Pod에 주입되는 SA 토큰이 바로 이 방식이다. audience가 <code class="highlighter-rouge">sts.amazonaws.com</code>으로 설정되고, AWS STS가 자신에게 발급된 토큰인지 <code class="highlighter-rouge">aud</code>를 확인하여 일치할 때만 수락한다.</p>
+</blockquote>
+
+<h2 id="tokenreview-토큰-검증">TokenReview: 토큰 검증</h2>
+
+<p>TokenReview API(<code class="highlighter-rouge">POST /apis/authentication.k8s.io/v1/tokenreviews</code>)는 주어진 JWT가 <strong>유효한지 검증</strong>하고, 누구의 토큰인지 반환하는 역할을 한다. API server가 내부적으로 호출하지만, webhook authenticator나 외부 시스템에서도 호출할 수 있다.</p>
+
+<p>API 서버가 SA 토큰을 검증할 때 거치는 <strong>5단계</strong>:</p>
+
+<ol>
+  <li><strong>서명 검증</strong>: public key로 JWT 서명을 확인</li>
+  <li><strong>시간 만료 체크</strong>: JWT의 <code class="highlighter-rouge">exp</code> claim 기준 만료 여부</li>
+  <li><strong>참조 오브젝트 존재 확인</strong>: 토큰에 참조된 SA, Pod, Secret 등이 클러스터에 실제로 존재하는지 확인. 서명이 유효해도 참조 오브젝트가 삭제되었으면 인증 거부</li>
+  <li><strong>런타임 유효성 체크</strong>: 토큰이 폐기(revoke)되지 않았는지 확인. 2번(시간 기반)과 달리 <strong>상태 기반</strong> 유효성 검증이다. <code class="highlighter-rouge">exp</code>가 안 지났어도 Pod이 삭제되면 bound token은 즉시 무효화된다</li>
+  <li><strong>audience 일치 여부</strong>: 토큰의 audience가 요청 대상과 일치하는지 확인</li>
+</ol>
+
+<p>실제 인증 흐름에서 SA 클라이언트는 API 서버에 <code class="highlighter-rouge">Authorization: Bearer &lt;token&gt;</code> 헤더로 요청을 보내고, API 서버가 위 5단계를 거쳐 토큰을 검증한다.</p>
+
+<p>SA credential을 검증해야 하는 서비스는 두 가지 방식을 선택할 수 있다.</p>
+
+<ul>
+  <li><strong>TokenReview API (권장)</strong>: SA, Pod, Node 등 바인딩된 오브젝트가 삭제되면 <strong>즉시</strong> 토큰을 무효화한다</li>
+  <li><strong>OIDC Discovery</strong>: 외부 시스템이 public key로 직접 JWT 서명을 검증한다. 다만 토큰 만료 timestamp까지는 유효한 것으로 취급된다</li>
+</ul>
+
+<blockquote>
+  <p>TokenReview vs OIDC Discovery의 차이가 보안 관점에서 중요하다. TokenReview는 실시간으로 유효성을 확인하지만 API server 호출이 필요하다. OIDC Discovery는 API server 없이 검증 가능하지만 만료까지 기다려야 한다. IRSA가 OIDC Discovery를 쓰는 이유는 AWS STS가 K8s API server를 직접 호출하지 않아도 되게 하기 위해서다.</p>
+</blockquote>
+
+<p>애플리케이션은 항상 수락할 audience를 정의하고, 토큰의 audience가 기대하는 값과 일치하는지 확인해야 한다. 토큰의 scope를 최소화하여 다른 곳에서 사용되는 것을 방지하기 위해서다.</p>
+
+<h2 id="현행-vs-레거시">현행 vs 레거시</h2>
+
+<p>지금까지 다룬 발급 → 전달 → 검증 흐름을 현행 방식과 레거시 방식으로 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>단계</th>
+      <th>현행 (1.22+)</th>
+      <th>레거시</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>발급</strong></td>
+      <td>TokenRequest API: short-lived JWT, audience/expiration 지정, Pod 바인딩</td>
+      <td>Secret 자동생성: 영구 JWT(exp 없음), etcd 저장</td>
+    </tr>
+    <tr>
+      <td><strong>전달</strong></td>
+      <td>Projected Volume: tmpfs 마운트, 자동 rotation(만료 80% 시점)</td>
+      <td>Secret Volume: rotation 없음</td>
+    </tr>
+    <tr>
+      <td><strong>검증</strong></td>
+      <td>TokenReview API: 서명+만료+참조 오브젝트+상태+audience</td>
+      <td>동일</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>검증에는 <strong>외부 경로</strong>도 있다. K8s API server가 OIDC provider 역할을 하면서 <code class="highlighter-rouge">/.well-known/openid-configuration</code> 엔드포인트와 public key를 노출하는데, 외부 시스템(AWS IAM, Vault 등)이 이 public key로 SA JWT 서명을 직접 검증할 수 있다. TokenReview API를 호출할 필요 없이 외부에서 독립적으로 검증이 완결되는 구조다. EKS에서는 이것이 IRSA의 핵심 메커니즘이 된다.</p>
+
+<p>레거시 토큰도 JWT이지만 <code class="highlighter-rouge">exp</code> claim이 없다. JWT 스펙(RFC 7519)에서 <code class="highlighter-rouge">exp</code>는 선택적이기 때문이다. Secret을 삭제하지 않는 한 <strong>영원히 유효</strong>하며, 대규모 클러스터에서는 SA마다 Secret이 etcd 부담을 늘리고 유출 표면적을 확대한다. 영구 토큰 자동 생성은 다음과 같이 폐지되었다.</p>
+
+<ul>
+  <li>v1.24 이전: SA 생성 시 자동으로 영구 토큰 Secret 생성</li>
+  <li>v1.24~v1.26: <code class="highlighter-rouge">LegacyServiceAccountTokenNoAutoGeneration</code> feature gate로 자동 생성 중단</li>
+  <li>v1.27+: feature gate가 GA 승격. <strong>자동 생성 완전 폐지</strong></li>
+</ul>
+
+<p>수동으로 만들 수는 있지만, 위의 이유로 권장되지 않는다.</p>
+
+<p><br /></p>
+
+<h1 id="default-sa와-pod-할당">Default SA와 Pod 할당</h1>
+
+<p>K8s는 모든 namespace마다 <code class="highlighter-rouge">default</code>라는 SA를 자동으로 만든다. 삭제해도 control plane이 <strong>자동 재생성</strong>한다. “모든 Pod은 반드시 어떤 SA identity를 가져야 한다”는 설계를 보장하기 위해서다.</p>
+
+<h2 id="default-sa의-권한">default SA의 권한</h2>
+
+<p><code class="highlighter-rouge">default</code> SA는 RBAC에서 <strong>API Discovery 권한</strong> 외에는 별도 권한이 없다. API Discovery 권한은 <code class="highlighter-rouge">default</code> SA 고유가 아니라 <strong>모든 authenticated principal</strong>(인증된 주체 전체, Human User + SA 모두 포함)에게 자동 부여되는 것이다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">/api</code>, <code class="highlighter-rouge">/apis</code> 등의 엔드포인트를 GET하여 “이 클러스터에 어떤 리소스가 있는지” 조회하는 수준</li>
+  <li>실제 리소스(pods, deployments 등)를 읽거나 쓰는 권한은 <strong>전혀 없다</strong></li>
+  <li><code class="highlighter-rouge">system:discovery</code>, <code class="highlighter-rouge">system:public-info-viewer</code> ClusterRoleBinding이 <code class="highlighter-rouge">system:authenticated</code> 그룹에 자동 부여된다</li>
+</ul>
+
+<p><code class="highlighter-rouge">default</code> SA에 RoleBinding으로 추가 권한을 줄 수는 있지만, <strong>보안상 좋지 않다</strong>. 해당 namespace에서 SA를 지정하지 않은 모든 Pod이 그 권한을 갖게 되기 때문이다. 용도별로 별도 SA를 만드는 것이 원칙이다.</p>
+
+<h2 id="pod당-sa-하나">Pod당 SA 하나</h2>
+
+<p><strong>Pod에는 하나의 SA만 할당할 수 있다.</strong> 여러 SA를 동시에 마운트하는 것은 불가능하다. custom SA를 지정하면 <code class="highlighter-rouge">default</code> SA는 완전히 대체된다(합산이 아님). API Discovery 권한은 모든 authenticated principal에게 부여되므로, 어떤 SA를 쓰든 항상 있다.</p>
+
+<p>여러 권한이 필요한 경우, SA 여러 개를 합치는 게 아니라 <strong>하나의 SA에 여러 RoleBinding을 연결</strong>하면 된다.</p>
+
+<h2 id="automountserviceaccounttoken">automountServiceAccountToken</h2>
+
+<p>Pod에 SA identity는 할당되지만 <strong>토큰 마운트를 비활성화</strong>할 수 있다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">serviceAccountName</span><span class="pi">:</span> <span class="s">my-sa</span>
+  <span class="na">automountServiceAccountToken</span><span class="pi">:</span> <span class="no">false</span>
+</code></pre></div></div>
+
+<p>이렇게 하면 Pod에 credential이 없는 상태가 된다. API 서버에 접근할 필요 없는 Pod이라면 이렇게 설정하는 것이 보안상 좋다.</p>
+
+<p>SA 자체를 없애지 않고 credential만 제거하는 이유가 궁금할 수 있다. K8s 설계상 모든 Pod은 반드시 SA identity를 가져야 한다. <strong>Auditing</strong>(누가 이 요청을 했는가), <strong>Admission Control</strong>(이 Pod의 SA에 대한 정책), <strong>RBAC 평가</strong> 등에서 주체 식별이 필요하기 때문이다.</p>
+
+<p><br /></p>
+
+<h1 id="use-cases">Use Cases</h1>
+
+<p>SA는 다양한 맥락에서 워크로드의 identity로 활용된다.</p>
+
+<ul>
+  <li><strong>Pod → K8S API 서버</strong>: Secret 읽기 전용 접근, cross-namespace 리소스 접근 등 (흐름 2)</li>
+  <li><strong>Pod → 외부 서비스</strong>: trust relationship이 설정된 시스템(AWS IRSA, Vault, GCP Workload Identity 등)에서 SA JWT를 인증 수단으로 활용 (흐름 3)</li>
+  <li><strong>Private image registry 인증</strong>: SA의 <code class="highlighter-rouge">imagePullSecrets</code> 필드에 registry 인증 정보를 연결하면, 해당 SA를 사용하는 모든 Pod이 자동 인증</li>
+  <li><strong>외부 서비스 → K8S API 서버</strong>: CI/CD 파이프라인에서 클러스터에 인증. long-lived SA 토큰을 쓸 수도 있지만, 탈취 시 만료 없이 무기한 사용 가능하고 audience binding이 없어 <strong>권장되지 않는다</strong>. 대안으로 X.509 클라이언트 인증서, custom authentication webhook, 또는 TokenRequest API로 short-lived 토큰을 발급받는 방법이 있다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>이 포스트에서 정리한 SA 토큰의 구조와 생명주기는 EKS의 세 가지 인증 흐름 중 <strong>흐름 2(Pod → K8S API)</strong>와 <strong>흐름 3(Pod → AWS API)</strong>의 기초가 된다.</p>
+
+<ul>
+  <li><strong>흐름 2</strong>: SA JWT → K8S API server가 TokenReview로 검증 → RBAC으로 인가</li>
+  <li><strong>흐름 3</strong>: SA JWT → audience를 <code class="highlighter-rouge">sts.amazonaws.com</code>으로 설정 → AWS STS가 OIDC Discovery로 검증 → IAM Role 발급</li>
+</ul>
+
+<p>결국 흐름 3은 “K8S가 발급한 SA JWT를 AWS가 신뢰할 수 있게 만드는 것”이고, 이를 가능하게 하는 것이 EKS OIDC Provider와 TokenRequest의 audience binding이다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://kubernetes.io/docs/concepts/security/service-accounts/">Service Accounts</a></li>
+  <li><a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/">Configure Service Accounts for Pods</a></li>
+  <li><a href="https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/">Managing Service Accounts</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/storage/projected-volumes/">Projected Volumes</a></li>
+</ul>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study-week-4" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study-Week-4</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#jwt" class="page__taxonomy-item" rel="tag">JWT</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#serviceaccount" class="page__taxonomy-item" rel="tag">ServiceAccount</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#tokenrequest" class="page__taxonomy-item" rel="tag">TokenRequest</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#tokenreview" class="page__taxonomy-item" rel="tag">TokenReview</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-02T00:00:00+09:00">April 2, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEKS%5D+EKS%3A+%EC%9D%B8%EC%A6%9D%2F%EC%9D%B8%EA%B0%80+-+1.+K8S+%EC%9D%B8%EC%A6%9D%2F%EC%9D%B8%EA%B0%80+%EA%B8%B0%EC%B4%88+-+2.+Service+Account%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-Auth-00-03-Service-Accounts%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-Auth-00-03-Service-Accounts%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-Auth-00-03-Service-Accounts%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-EKS-Auth-00-03-Service-Accounts?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-EKS-Auth-00-02-API-Access-Control/" class="pagination--pager" title="[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 1. API 접근 통제
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-EKS-Auth-00-04-RBAC-Good-Practices/" class="pagination--pager" title="[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 3. RBAC 모범 사례
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-EKS-Auth-00-03-Service-Accounts/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-EKS-Auth-00-03-Service-Accounts"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

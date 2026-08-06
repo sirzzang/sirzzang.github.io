@@ -1,0 +1,1565 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] 네트워킹: Linux 네트워크 스택 이해하기 - iptables와 conntrack - Eraser’s StudyLog</title>
+<meta name="description" content="Kubernetes 네트워킹이 Linux 네트워크 스택(iptables, conntrack) 위에서 어떻게 동작하는지 살펴보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] 네트워킹: Linux 네트워크 스택 이해하기 - iptables와 conntrack">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-Networking-Linux-Stack/">
+
+
+  <meta property="og:description" content="Kubernetes 네트워킹이 Linux 네트워크 스택(iptables, conntrack) 위에서 어떻게 동작하는지 살펴보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-01-18T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-Networking-Linux-Stack/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] 네트워킹: Linux 네트워크 스택 이해하기 - iptables와 conntrack">
+    <meta itemprop="description" content="Kubernetes 네트워킹이 Linux 네트워크 스택(iptables, conntrack) 위에서 어떻게 동작하는지 살펴보자.">
+    <meta itemprop="datePublished" content="2026-01-18T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] 네트워킹: Linux 네트워크 스택 이해하기 - iptables와 conntrack
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-01-18T00:00:00+09:00">2026년 01월 18일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  10 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#들어가며">들어가며</a></li>
+  <li><a href="#kubernetes-네트워킹-개요">Kubernetes 네트워킹 개요</a></li>
+  <li><a href="#iptables-규칙">iptables 규칙</a>
+    <ul>
+      <li><a href="#iptables-개요">iptables 개요</a></li>
+      <li><a href="#nat-테이블">nat 테이블</a>
+        <ul>
+          <li><a href="#flannel이-추가한-규칙-flanneld-시작-시">Flannel이 추가한 규칙: flanneld 시작 시</a></li>
+          <li><a href="#kube-proxy가-추가한-규칙-service-생성-시">kube-proxy가 추가한 규칙: Service 생성 시</a></li>
+        </ul>
+      </li>
+      <li><a href="#filter-테이블">filter 테이블</a>
+        <ul>
+          <li><a href="#flannel이-추가한-규칙-flanneld-시작-시-1">Flannel이 추가한 규칙: flanneld 시작 시</a></li>
+          <li><a href="#kube-proxy가-추가한-규칙-service-생성-시-1">kube-proxy가 추가한 규칙: Service 생성 시</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#conntrack">conntrack</a>
+    <ul>
+      <li><a href="#conntrack-개요">conntrack 개요</a></li>
+      <li><a href="#전체-conntrack-엔트리-조회">전체 conntrack 엔트리 조회</a></li>
+      <li><a href="#conntrack-엔트리-형식">conntrack 엔트리 형식</a></li>
+      <li><a href="#tcp-연결만-조회">TCP 연결만 조회</a></li>
+      <li><a href="#established-상태만-조회">ESTABLISHED 상태만 조회</a>
+        <ul>
+          <li><a href="#주요-established-연결-분석">주요 ESTABLISHED 연결 분석</a></li>
+        </ul>
+      </li>
+      <li><a href="#특정-포트-관련-연결">특정 포트 관련 연결</a></li>
+      <li><a href="#실시간-이벤트-추적">실시간 이벤트 추적</a></li>
+      <li><a href="#conntrack-커널-파라미터">conntrack 커널 파라미터</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a>
+    <ul>
+      <li><a href="#iptables-패킷-경로-결정">iptables: 패킷 경로 결정</a></li>
+      <li><a href="#conntrack-연결-상태-추적">conntrack: 연결 상태 추적</a></li>
+      <li><a href="#핵심-흐름">핵심 흐름</a></li>
+    </ul>
+  </li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<p>이번 글의 목표는 <strong>Linux 네트워크 스택에서의 Kubernetes 네트워킹 이해</strong>이다.</p>
+
+<ul>
+  <li><strong>Kubernetes 네트워킹 개요</strong>: 컴포넌트별 Linux 네트워크 활용 방식</li>
+  <li><strong>iptables 규칙</strong>: kube-proxy와 Flannel이 추가하는 nat, filter 테이블 규칙</li>
+  <li><strong>conntrack</strong>: 연결 추적을 통한 Service DNAT 동작 확인</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="들어가며">들어가며</h1>
+
+<p>Kubernetes 네트워킹은 Linux 네트워크 스택 위에서 동작한다. <a href="/kubernetes/Kubernetes-Kubeadm-01-5/">kubeadm을 이용한 클러스터 구성 실습</a>에서 kube-proxy와 Flannel CNI가 배포된 시점을 기준으로, Linux 네트워크 스택을 살펴보며 Kubernetes 네트워킹이 어떻게 동작하는지 이해해 보자.</p>
+
+<p><br /></p>
+
+<h1 id="kubernetes-네트워킹-개요">Kubernetes 네트워킹 개요</h1>
+
+<p>Kubernetes 네트워킹의 핵심은 <strong>Linux 네트워크 스택(특히 iptables)을 동적으로 조작</strong>하는 것이다. Pod가 생성되거나 Service가 추가될 때마다 iptables 규칙이 자동으로 업데이트되어 트래픽이 올바른 목적지로 라우팅된다.</p>
+<ul>
+  <li><a href="https://kubernetes.io/ko/docs/concepts/cluster-administration/networking/">클러스터 네트워킹</a></li>
+  <li><a href="https://kubernetes.io/ko/docs/concepts/services-networking/service/">Service</a></li>
+</ul>
+
+<p><br /></p>
+
+<p>지금까지 설치한 컴포넌트들이 어떻게 Linux 네트워크를 활용하는지 정리해 보자.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>컴포넌트</th>
+      <th>설치 시점</th>
+      <th>Linux 네트워크 활용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>kube-proxy</strong></td>
+      <td><a href="/kubernetes/Kubernetes-Kubeadm-01-4/#static-pod-매니페스트">kubeadm init</a> 시 DaemonSet 배포</td>
+      <td>iptables로 Service → Pod 라우팅</td>
+    </tr>
+    <tr>
+      <td><strong>Flannel</strong></td>
+      <td><a href="/kubernetes/Kubernetes-Kubeadm-01-5/#flannel-설치">CNI 플러그인으로 설치</a></td>
+      <td>veth, bridge, VXLAN, iptables로 Pod 네트워크 구성</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>참고: kube-proxy 모드</strong></p>
+
+  <p>kube-proxy는 Service 라우팅 구현 방식에 따라 여러 모드를 지원한다:</p>
+  <ul>
+    <li><strong>iptables</strong> (기본값): iptables 규칙으로 DNAT 수행. 대부분의 환경에서 사용</li>
+    <li><strong>IPVS</strong>: Linux IPVS(IP Virtual Server)를 사용한 L4 로드밸런싱. 대규모 클러스터에서 더 나은 성능</li>
+    <li><strong>nftables</strong>: iptables의 후속 기술. Kubernetes 1.29+에서 지원</li>
+  </ul>
+
+  <p>IPVS나 nftables를 사용하려면 <a href="/kubernetes/Kubernetes-Kubeadm-01-4/#kubeadm-설정-파일">kubeadm 설정 파일</a>에서 <code class="highlighter-rouge">KubeProxyConfiguration</code>의 <code class="highlighter-rouge">mode</code> 필드를 명시해야 한다. 이전 글에서 별도 설정 없이 기본값을 사용했으므로 iptables 모드다.</p>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># kube-proxy ConfigMap에서 현재 모드 확인</span>
+kubectl get cm kube-proxy <span class="nt">-n</span> kube-system <span class="nt">-o</span> yaml | <span class="nb">grep </span>mode
+<span class="c">#     mode: ""   # 빈 문자열 = iptables (기본값)</span>
+</code></pre></div>  </div>
+</blockquote>
+
+<p><br /></p>
+
+<p>두 컴포넌트 모두 <strong>iptables</strong>를 사용하지만 목적이 다르다:</p>
+<ul>
+  <li><strong>kube-proxy</strong>: Service 추상화 (ClusterIP → Pod IP 변환)</li>
+  <li><strong>Flannel</strong>: Pod 네트워크 통신 (SNAT, 포워딩 허용)</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="iptables-규칙">iptables 규칙</h1>
+
+<p>iptables 규칙을 확인하여 Kubernetes 네트워킹이 Linux 수준에서 어떻게 구현되는지 이해해 보자.</p>
+
+<h2 id="iptables-개요">iptables 개요</h2>
+
+<p>iptables는 Linux 커널의 패킷 필터링 프레임워크다. 패킷이 들어오면 <strong>테이블</strong>(nat, filter 등) 내의 <strong>체인</strong>(PREROUTING, FORWARD 등)을 순서대로 거치며, 각 체인의 규칙에 따라 패킷이 처리된다.</p>
+
+<p>Kubernetes에서 iptables 규칙은 <strong>Flannel</strong>과 <strong>kube-proxy</strong>가 각각 다른 시점에 추가한다:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>컴포넌트</th>
+      <th>규칙 추가 시점</th>
+      <th>체인</th>
+      <th>역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Flannel</strong></td>
+      <td>flanneld 시작 시</td>
+      <td><code class="highlighter-rouge">FLANNEL-POSTRTG</code> (nat)</td>
+      <td>Pod → 외부 통신 시 SNAT</td>
+    </tr>
+    <tr>
+      <td><strong>Flannel</strong></td>
+      <td>flanneld 시작 시</td>
+      <td><code class="highlighter-rouge">FLANNEL-FWD</code> (filter)</td>
+      <td>Pod 네트워크 트래픽 포워딩 허용</td>
+    </tr>
+    <tr>
+      <td><strong>kube-proxy</strong></td>
+      <td>Service 생성 시</td>
+      <td><code class="highlighter-rouge">KUBE-SERVICES</code> (nat)</td>
+      <td>Service ClusterIP 매칭 진입점</td>
+    </tr>
+    <tr>
+      <td><strong>kube-proxy</strong></td>
+      <td>Service 생성 시</td>
+      <td><code class="highlighter-rouge">KUBE-SVC-*</code> (nat)</td>
+      <td>서비스별 로드밸런싱</td>
+    </tr>
+    <tr>
+      <td><strong>kube-proxy</strong></td>
+      <td>Service 생성 시</td>
+      <td><code class="highlighter-rouge">KUBE-SEP-*</code> (nat)</td>
+      <td>실제 Pod IP로 DNAT</td>
+    </tr>
+    <tr>
+      <td><strong>kube-proxy</strong></td>
+      <td>Service 생성 시</td>
+      <td><code class="highlighter-rouge">KUBE-FORWARD</code> (filter)</td>
+      <td>마킹된 패킷 포워딩 허용</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="nat-테이블">nat 테이블</h2>
+
+<p>nat 테이블은 주소 변환(NAT)을 담당한다. Service ClusterIP → Pod IP 변환(DNAT)과 Pod → 외부 통신 시 IP 변환(SNAT)이 여기서 처리된다.</p>
+
+<p><br /></p>
+
+<h3 id="flannel이-추가한-규칙-flanneld-시작-시">Flannel이 추가한 규칙: flanneld 시작 시</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Pod → 외부 통신 시 SNAT (--ip-masq 옵션)</span>
+iptables <span class="nt">-t</span> nat <span class="nt">-S</span> | <span class="nb">grep </span>FLANNEL
+<span class="c"># -A POSTROUTING -m comment --comment "flanneld masq" -j FLANNEL-POSTRTG</span>
+<span class="c"># -A FLANNEL-POSTRTG -s 10.244.0.0/16 ! -d 224.0.0.0/4 ... -j MASQUERADE</span>
+</code></pre></div></div>
+
+<p>Pod(<code class="highlighter-rouge">10.244.0.0/16</code>)에서 외부로 나가는 트래픽의 출발지 IP를 노드 IP로 변환(SNAT)한다. 이렇게 해야 외부 네트워크에서 응답을 노드로 돌려보낼 수 있고, 노드가 다시 Pod로 전달한다. <code class="highlighter-rouge">--ip-masq</code> 옵션이 이 규칙을 활성화한다.</p>
+
+<h3 id="kube-proxy가-추가한-규칙-service-생성-시">kube-proxy가 추가한 규칙: Service 생성 시</h3>
+
+<p>현재 시점에 이미 존재하는 Service들이 있어서 kube-proxy가 해당 규칙을 생성해 둔 상태다:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Service</th>
+      <th>ClusterIP</th>
+      <th>생성 시점</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">default/kubernetes</code></td>
+      <td>10.96.0.1:443</td>
+      <td><a href="/kubernetes/Kubernetes-Kubeadm-01-4/#kubeadm-init-실행">kubeadm init</a> 시 자동 생성 (API Server)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">kube-system/kube-dns</code></td>
+      <td>10.96.0.10:53</td>
+      <td><a href="/kubernetes/Kubernetes-Kubeadm-01-4/#coredns-kube-proxy">CoreDNS addon</a> 배포 시 생성</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># kube-dns Service (10.96.0.10:53) → CoreDNS Pod로 DNAT</span>
+iptables <span class="nt">-t</span> nat <span class="nt">-S</span> | <span class="nb">grep</span> <span class="s2">"kube-dns:dns -&gt;"</span>
+<span class="c"># -A KUBE-SVC-TCOU7JCQXEZGVUNU ... --probability 0.50000000000 -j KUBE-SEP-YIL6JZP7A3QYXJU2</span>
+<span class="c"># -A KUBE-SVC-TCOU7JCQXEZGVUNU ... -j KUBE-SEP-6E7XQMQ4RAYOWTTM</span>
+<span class="c"># (2개의 CoreDNS Pod에 50% 확률로 로드밸런싱)</span>
+</code></pre></div></div>
+
+<details>
+  <summary>nat 테이블 전체 규칙</summary>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>iptables <span class="nt">-t</span> nat <span class="nt">-S</span>
+<span class="c"># -P PREROUTING ACCEPT</span>
+<span class="c"># -P INPUT ACCEPT</span>
+<span class="c"># -P OUTPUT ACCEPT</span>
+<span class="c"># -P POSTROUTING ACCEPT</span>
+<span class="c"># -N FLANNEL-POSTRTG</span>
+<span class="c"># -N KUBE-MARK-MASQ</span>
+<span class="c"># -N KUBE-NODEPORTS</span>
+<span class="c"># -N KUBE-POSTROUTING</span>
+<span class="c"># -N KUBE-SEP-6E7XQMQ4RAYOWTTM</span>
+<span class="c"># -N KUBE-SEP-ETI7FUQQE3BS2IXE</span>
+<span class="c"># ... (생략)</span>
+<span class="c"># -N KUBE-SERVICES</span>
+<span class="c"># -N KUBE-SVC-ERIFXISQEP7F7OF4</span>
+<span class="c"># -N KUBE-SVC-NPX46M4PTMTKRN6Y</span>
+<span class="c"># -N KUBE-SVC-TCOU7JCQXEZGVUNU</span>
+<span class="c"># [kube-proxy] 모든 들어오는/나가는 패킷을 KUBE-SERVICES 체인으로 전달</span>
+<span class="c"># [kube-proxy] 들어오는/나가는 패킷을 KUBE-SERVICES 체인으로 전달</span>
+<span class="c"># -A PREROUTING -m comment --comment "kubernetes service portals" -j KUBE-SERVICES</span>
+<span class="c"># -A OUTPUT -m comment --comment "kubernetes service portals" -j KUBE-SERVICES</span>
+<span class="c"># -A POSTROUTING -m comment --comment "kubernetes postrouting rules" -j KUBE-POSTROUTING</span>
+<span class="c">#</span>
+<span class="c"># [Flannel] Pod → 외부 통신 시 SNAT 처리를 위해 FLANNEL-POSTRTG로 전달</span>
+<span class="c"># -A POSTROUTING -m comment --comment "flanneld masq" -j FLANNEL-POSTRTG</span>
+<span class="c">#</span>
+<span class="c"># [Flannel] Pod CIDR에서 출발하는 트래픽을 노드 IP로 MASQUERADE (SNAT)</span>
+<span class="c"># -A FLANNEL-POSTRTG -s 10.244.0.0/16 ! -d 224.0.0.0/4 ... -j MASQUERADE --random-fully</span>
+<span class="c">#</span>
+<span class="c"># [kube-proxy] kube-dns Service (10.96.0.10:53) → CoreDNS Pod로 DNAT</span>
+<span class="c"># -A KUBE-SERVICES -d 10.96.0.10/32 -p udp --dport 53 -j KUBE-SVC-TCOU7JCQXEZGVUNU</span>
+<span class="c"># -A KUBE-SVC-TCOU7JCQXEZGVUNU ... --probability 0.50 -j KUBE-SEP-YIL6JZP7A3QYXJU2</span>
+<span class="c"># -A KUBE-SVC-TCOU7JCQXEZGVUNU ... -j KUBE-SEP-6E7XQMQ4RAYOWTTM</span>
+<span class="c"># -A KUBE-SEP-YIL6JZP7A3QYXJU2 -p udp -j DNAT --to-destination 10.244.0.2:53</span>
+<span class="c"># -A KUBE-SEP-6E7XQMQ4RAYOWTTM -p udp -j DNAT --to-destination 10.244.0.3:53</span>
+<span class="c">#</span>
+<span class="c"># [kube-proxy] kubernetes Service (10.96.0.1:443) → API Server로 DNAT</span>
+<span class="c"># -A KUBE-SERVICES -d 10.96.0.1/32 -p tcp --dport 443 -j KUBE-SVC-NPX46M4PTMTKRN6Y</span>
+<span class="c"># -A KUBE-SVC-NPX46M4PTMTKRN6Y ... -j KUBE-SEP-ETI7FUQQE3BS2IXE</span>
+<span class="c"># -A KUBE-SEP-ETI7FUQQE3BS2IXE -p tcp -j DNAT --to-destination 192.168.10.100:6443</span>
+</code></pre></div>  </div>
+
+</details>
+
+<p><br /></p>
+
+<h2 id="filter-테이블">filter 테이블</h2>
+
+<p>filter 테이블은 패킷 필터링(허용/차단)을 담당한다. Pod 네트워크 트래픽의 포워딩 허용이 여기서 처리된다.</p>
+
+<h3 id="flannel이-추가한-규칙-flanneld-시작-시-1">Flannel이 추가한 규칙: flanneld 시작 시</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Pod 네트워크 트래픽 포워딩 허용</span>
+iptables <span class="nt">-t</span> filter <span class="nt">-S</span> | <span class="nb">grep </span>FLANNEL
+<span class="c"># -A FORWARD -m comment --comment "flanneld forward" -j FLANNEL-FWD</span>
+<span class="c"># -A FLANNEL-FWD -s 10.244.0.0/16 ... -j ACCEPT</span>
+<span class="c"># -A FLANNEL-FWD -d 10.244.0.0/16 ... -j ACCEPT</span>
+</code></pre></div></div>
+
+<p>Pod CIDR(<code class="highlighter-rouge">10.244.0.0/16</code>)에서 출발하거나 도착하는 트래픽의 포워딩을 허용한다.</p>
+
+<h3 id="kube-proxy가-추가한-규칙-service-생성-시-1">kube-proxy가 추가한 규칙: Service 생성 시</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 마킹된 패킷 포워딩 허용</span>
+iptables <span class="nt">-t</span> filter <span class="nt">-S</span> | <span class="nb">grep </span>KUBE-FORWARD
+<span class="c"># -A KUBE-FORWARD -m conntrack --ctstate INVALID -j DROP</span>
+<span class="c"># -A KUBE-FORWARD -m mark --mark 0x4000/0x4000 -j ACCEPT</span>
+<span class="c"># -A KUBE-FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT</span>
+</code></pre></div></div>
+
+<p>kube-proxy가 마킹한 패킷(<code class="highlighter-rouge">0x4000</code>)과 기존 연결의 응답 패킷(<code class="highlighter-rouge">RELATED,ESTABLISHED</code>)을 포워딩 허용한다. 잘못된 패킷(<code class="highlighter-rouge">INVALID</code>)은 드롭한다.</p>
+
+<details>
+  <summary>filter 테이블 전체 규칙</summary>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>iptables <span class="nt">-t</span> filter <span class="nt">-S</span>
+<span class="c"># -P INPUT ACCEPT</span>
+<span class="c"># -P FORWARD ACCEPT</span>
+<span class="c"># -P OUTPUT ACCEPT</span>
+<span class="c"># -N FLANNEL-FWD</span>
+<span class="c"># -N KUBE-EXTERNAL-SERVICES</span>
+<span class="c"># -N KUBE-FIREWALL</span>
+<span class="c"># -N KUBE-FORWARD</span>
+<span class="c"># -N KUBE-NODEPORTS</span>
+<span class="c"># -N KUBE-SERVICES</span>
+<span class="c">#</span>
+<span class="c"># [Flannel] Pod 네트워크 트래픽 포워딩 허용</span>
+<span class="c"># -A FORWARD -m comment --comment "flanneld forward" -j FLANNEL-FWD</span>
+<span class="c"># -A FLANNEL-FWD -s 10.244.0.0/16 -m comment --comment "flanneld forward" -j ACCEPT</span>
+<span class="c"># -A FLANNEL-FWD -d 10.244.0.0/16 -m comment --comment "flanneld forward" -j ACCEPT</span>
+<span class="c">#</span>
+<span class="c"># [kube-proxy] 마킹된 패킷 및 기존 연결 포워딩 허용</span>
+<span class="c"># -A KUBE-FORWARD -m conntrack --ctstate INVALID -j DROP</span>
+<span class="c"># -A KUBE-FORWARD -m mark --mark 0x4000/0x4000 -j ACCEPT</span>
+<span class="c"># -A KUBE-FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT</span>
+</code></pre></div>  </div>
+
+</details>
+
+<p><br /></p>
+
+<h1 id="conntrack">conntrack</h1>
+
+<p>conntrack 테이블을 확인하여 iptables NAT 규칙이 적용된 연결이 어떻게 추적되는지 이해해 보자.</p>
+
+<h2 id="conntrack-개요">conntrack 개요</h2>
+
+<p><strong>conntrack(Connection Tracking)</strong>은 Linux 커널의 네트워크 연결 상태 추적 시스템이다. kube-proxy가 Service의 ClusterIP를 Pod IP로 변환(DNAT)할 때 conntrack 테이블을 사용하여 응답 패킷을 올바른 출발지로 되돌린다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>역할</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>NAT 상태 추적</strong></td>
+      <td>DNAT 규칙이 적용된 연결의 원본 주소를 기억하여 응답 패킷을 올바르게 라우팅</td>
+    </tr>
+    <tr>
+      <td><strong>연결 상태 관리</strong></td>
+      <td>TCP 연결의 상태(ESTABLISHED, TIME_WAIT 등)를 추적하여 stateful 방화벽 기능 제공</td>
+    </tr>
+    <tr>
+      <td><strong>Service 로드밸런싱</strong></td>
+      <td>동일 클라이언트의 후속 패킷이 같은 Pod로 전달되도록 연결 유지</td>
+    </tr>
+    <tr>
+      <td><strong>성능 최적화</strong></td>
+      <td>이미 추적된 연결은 iptables 규칙을 다시 평가하지 않고 빠르게 처리</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># conntrack 도구 설치</span>
+dnf install <span class="nt">-y</span> conntrack-tools
+</code></pre></div></div>
+
+<h2 id="전체-conntrack-엔트리-조회">전체 conntrack 엔트리 조회</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 전체 conntrack 엔트리 조회</span>
+conntrack <span class="nt">-L</span>
+<span class="c"># conntrack v1.4.8 (conntrack-tools): 286 flow entries have been shown.</span>
+</code></pre></div></div>
+
+<details>
+  <summary>전체 출력 보기 (286 entries)</summary>
+
+  <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>tcp      6 65 TIME_WAIT src=127.0.0.1 dst=127.0.0.1 sport=56844 dport=2381 src=127.0.0.1 dst=127.0.0.1 sport=2381 dport=56844 [ASSURED] mark=0
+tcp      6 15 TIME_WAIT src=10.244.0.1 dst=10.244.0.2 sport=46574 dport=8080 src=10.244.0.2 dst=10.244.0.1 sport=8080 dport=46574 [ASSURED] mark=0
+tcp      6 86399 ESTABLISHED src=127.0.0.1 dst=127.0.0.1 sport=46870 dport=2379 src=127.0.0.1 dst=127.0.0.1 sport=2379 dport=46870 [ASSURED] mark=0
+tcp      6 86383 ESTABLISHED src=10.244.0.3 dst=10.96.0.1 sport=48242 dport=443 src=192.168.10.100 dst=10.244.0.3 sport=6443 dport=48242 [ASSURED] mark=0
+tcp      6 86399 ESTABLISHED src=192.168.10.100 dst=192.168.10.100 sport=54874 dport=6443 src=192.168.10.100 dst=192.168.10.100 sport=6443 dport=54874 [ASSURED] mark=0
+udp      17 27 src=10.0.2.15 dst=175.195.167.194 sport=56947 dport=123 src=175.195.167.194 dst=10.0.2.15 sport=123 dport=56947 mark=0
+udp      17 26 src=10.0.2.15 dst=168.126.63.1 sport=46942 dport=53 src=168.126.63.1 dst=10.0.2.15 sport=53 dport=46942 mark=0
+tcp      6 86400 ESTABLISHED src=10.0.2.2 dst=10.0.2.15 sport=61614 dport=22 src=10.0.2.15 dst=10.0.2.2 sport=22 dport=61614 [ASSURED] mark=0
+... (이하 생략)
+</code></pre></div>  </div>
+
+</details>
+
+<p><br /></p>
+
+<h2 id="conntrack-엔트리-형식">conntrack 엔트리 형식</h2>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>tcp 6 86399 ESTABLISHED src=10.244.0.3 dst=10.96.0.1 sport=48242 dport=443 src=192.168.10.100 dst=10.244.0.3 sport=6443 dport=48242 [ASSURED]
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>필드</th>
+      <th>예시 값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>프로토콜</td>
+      <td><code class="highlighter-rouge">tcp</code></td>
+      <td>프로토콜 이름</td>
+    </tr>
+    <tr>
+      <td>프로토콜 번호</td>
+      <td><code class="highlighter-rouge">6</code></td>
+      <td>6=TCP, 17=UDP</td>
+    </tr>
+    <tr>
+      <td>TTL</td>
+      <td><code class="highlighter-rouge">86399</code></td>
+      <td>연결 만료까지 남은 시간 (초)</td>
+    </tr>
+    <tr>
+      <td>연결 상태</td>
+      <td><code class="highlighter-rouge">ESTABLISHED</code></td>
+      <td>TCP 상태 (ESTABLISHED, TIME_WAIT, CLOSE 등)</td>
+    </tr>
+    <tr>
+      <td><strong>원본 패킷 (요청)</strong></td>
+      <td><code class="highlighter-rouge">src=10.244.0.3 dst=10.96.0.1 sport=48242 dport=443</code></td>
+      <td>CoreDNS Pod → kubernetes Service ClusterIP</td>
+    </tr>
+    <tr>
+      <td><strong>응답 패킷 (DNAT 역변환)</strong></td>
+      <td><code class="highlighter-rouge">src=192.168.10.100 dst=10.244.0.3 sport=6443 dport=48242</code></td>
+      <td>API Server → CoreDNS Pod</td>
+    </tr>
+    <tr>
+      <td>플래그</td>
+      <td><code class="highlighter-rouge">[ASSURED]</code></td>
+      <td>양방향 트래픽이 확인된 연결</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="tcp-연결만-조회">TCP 연결만 조회</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># TCP 연결만 보기</span>
+conntrack <span class="nt">-L</span> <span class="nt">-p</span> tcp
+<span class="c"># conntrack v1.4.8 (conntrack-tools): 279 flow entries have been shown.</span>
+</code></pre></div></div>
+
+<h2 id="established-상태만-조회">ESTABLISHED 상태만 조회</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># ESTABLISHED 상태만 보기 (활성 연결)</span>
+conntrack <span class="nt">-L</span> <span class="nt">-p</span> tcp <span class="nt">--state</span> ESTABLISHED
+<span class="c"># tcp  6 86376 ESTABLISHED src=127.0.0.1 dst=127.0.0.1 sport=47672 dport=2379 ... [ASSURED]        # etcd 연결</span>
+<span class="c"># tcp  6 86388 ESTABLISHED src=192.168.10.100 dst=192.168.10.100 sport=38154 dport=6443 ... [ASSURED]  # API Server 연결</span>
+<span class="c"># tcp  6 86375 ESTABLISHED src=10.244.0.3 dst=10.96.0.1 sport=48242 dport=443 src=192.168.10.100 dst=10.244.0.3 sport=6443 dport=48242 [ASSURED]  # Service DNAT</span>
+<span class="c"># tcp  6 86399 ESTABLISHED src=10.0.2.2 dst=10.0.2.15 sport=61614 dport=22 ... [ASSURED]           # SSH 연결</span>
+<span class="c"># ... (68 flow entries)</span>
+</code></pre></div></div>
+
+<h3 id="주요-established-연결-분석">주요 ESTABLISHED 연결 분석</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>연결 유형</th>
+      <th>예시</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>etcd 연결</td>
+      <td><code class="highlighter-rouge">127.0.0.1:* → 127.0.0.1:2379</code></td>
+      <td>API Server, Controller Manager 등이 etcd에 연결 (다수)</td>
+    </tr>
+    <tr>
+      <td>API Server 연결</td>
+      <td><code class="highlighter-rouge">192.168.10.100:* → 192.168.10.100:6443</code></td>
+      <td>컴포넌트들이 API Server에 연결</td>
+    </tr>
+    <tr>
+      <td><strong>Service DNAT</strong></td>
+      <td><code class="highlighter-rouge">10.244.0.3:48242 → 10.96.0.1:443</code> ↔ <code class="highlighter-rouge">192.168.10.100:6443 → 10.244.0.3</code></td>
+      <td>CoreDNS가 <code class="highlighter-rouge">kubernetes</code> Service를 통해 API Server에 연결</td>
+    </tr>
+    <tr>
+      <td>SSH 연결</td>
+      <td><code class="highlighter-rouge">10.0.2.2:61614 → 10.0.2.15:22</code></td>
+      <td>Vagrant SSH 연결</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>Service DNAT 추적 예시</strong>: <code class="highlighter-rouge">10.244.0.3</code>(CoreDNS Pod)이 <code class="highlighter-rouge">10.96.0.1:443</code>(kubernetes Service ClusterIP)에 접속하면, conntrack은 이 연결을 추적하고 응답 패킷이 <code class="highlighter-rouge">192.168.10.100:6443</code>(실제 API Server)에서 올 때 원래 목적지인 <code class="highlighter-rouge">10.244.0.3</code>으로 정확히 전달한다.</p>
+</blockquote>
+
+<h2 id="특정-포트-관련-연결">특정 포트 관련 연결</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Service(443) 관련 연결 확인</span>
+conntrack <span class="nt">-L</span> | <span class="nb">grep </span><span class="nv">dport</span><span class="o">=</span>443
+<span class="c"># tcp  6 86376 ESTABLISHED src=10.244.0.3 dst=10.96.0.1 sport=48242 dport=443 src=192.168.10.100 dst=10.244.0.3 sport=6443 dport=48242 [ASSURED]</span>
+<span class="c"># tcp  6 86389 ESTABLISHED src=10.0.2.15 dst=10.96.0.1 sport=39156 dport=443 src=192.168.10.100 dst=10.0.2.15 sport=6443 dport=6826 [ASSURED]</span>
+<span class="c"># tcp  6 86383 ESTABLISHED src=10.244.0.2 dst=10.96.0.1 sport=40304 dport=443 src=192.168.10.100 dst=10.244.0.2 sport=6443 dport=40304 [ASSURED]</span>
+</code></pre></div></div>
+
+<p>위 결과에서 <code class="highlighter-rouge">dst=10.96.0.1</code>(kubernetes Service ClusterIP)로 향하는 연결이 실제로는 <code class="highlighter-rouge">192.168.10.100:6443</code>(API Server)으로 DNAT되어 처리됨을 확인할 수 있다.</p>
+
+<h2 id="실시간-이벤트-추적">실시간 이벤트 추적</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실시간 conntrack 이벤트 추적 (Ctrl+C로 종료)</span>
+conntrack <span class="nt">-E</span>
+<span class="c">#     [NEW] tcp      6 120 SYN_SENT src=192.168.10.100 dst=192.168.10.100 sport=34518 dport=6443 [UNREPLIED]</span>
+<span class="c">#  [UPDATE] tcp      6 60 SYN_RECV src=192.168.10.100 dst=192.168.10.100 sport=34518 dport=6443</span>
+<span class="c">#  [UPDATE] tcp      6 86400 ESTABLISHED src=192.168.10.100 dst=192.168.10.100 sport=34518 dport=6443 [ASSURED]</span>
+<span class="c">#  [UPDATE] tcp      6 120 FIN_WAIT src=192.168.10.100 dst=192.168.10.100 sport=34518 dport=6443 [ASSURED]</span>
+<span class="c">#  [UPDATE] tcp      6 300 CLOSE_WAIT src=192.168.10.100 dst=192.168.10.100 sport=34518 dport=6443 [ASSURED]</span>
+<span class="c">#  [UPDATE] tcp      6 10 CLOSE src=192.168.10.100 dst=192.168.10.100 sport=34518 dport=6443 [ASSURED]</span>
+</code></pre></div></div>
+
+<p>TCP 연결의 전체 생명주기를 실시간으로 관찰할 수 있다: <code class="highlighter-rouge">SYN_SENT</code> → <code class="highlighter-rouge">SYN_RECV</code> → <code class="highlighter-rouge">ESTABLISHED</code> → <code class="highlighter-rouge">FIN_WAIT</code> → <code class="highlighter-rouge">CLOSE_WAIT</code> → <code class="highlighter-rouge">CLOSE</code>.</p>
+
+<h2 id="conntrack-커널-파라미터">conntrack 커널 파라미터</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># conntrack 관련 커널 파라미터 확인</span>
+sysctl <span class="nt">-a</span> | <span class="nb">grep </span>conntrack
+<span class="c"># net.netfilter.nf_conntrack_buckets = 65536</span>
+<span class="c"># net.netfilter.nf_conntrack_count = 420              # 현재 추적 중인 연결 수</span>
+<span class="c"># net.netfilter.nf_conntrack_max = 131072             # 최대 추적 가능 연결 수</span>
+<span class="c"># net.netfilter.nf_conntrack_tcp_timeout_close = 10</span>
+<span class="c"># net.netfilter.nf_conntrack_tcp_timeout_close_wait = 3600</span>
+<span class="c"># net.netfilter.nf_conntrack_tcp_timeout_established = 86400</span>
+<span class="c"># net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 120</span>
+<span class="c"># net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 60</span>
+<span class="c"># net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 120</span>
+<span class="c"># net.netfilter.nf_conntrack_tcp_timeout_time_wait = 120</span>
+<span class="c"># net.netfilter.nf_conntrack_udp_timeout = 30</span>
+<span class="c"># net.netfilter.nf_conntrack_udp_timeout_stream = 120</span>
+<span class="c"># ... (이하 생략)</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>파라미터</th>
+      <th>값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">nf_conntrack_max</code></td>
+      <td>131072</td>
+      <td>conntrack 테이블 최대 크기(최대 엔트리 수)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nf_conntrack_count</code></td>
+      <td>420</td>
+      <td>현재 추적 중인 연결 수(현재 사용 중)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nf_conntrack_buckets</code></td>
+      <td>65536</td>
+      <td>해시 테이블 버킷 수</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nf_conntrack_tcp_timeout_established</code></td>
+      <td>86400초 (24시간)</td>
+      <td>ESTABLISHED 연결 유지 시간</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nf_conntrack_tcp_timeout_close_wait</code></td>
+      <td>3600초 (1시간)</td>
+      <td>CLOSE_WAIT 상태 유지 시간</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nf_conntrack_tcp_timeout_time_wait</code></td>
+      <td>120초</td>
+      <td>TIME_WAIT 상태 유지 시간</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nf_conntrack_udp_timeout</code></td>
+      <td>30초</td>
+      <td>UDP 연결 타임아웃</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>트러블슈팅 팁</strong>: 대규모 클러스터에서 <code class="highlighter-rouge">nf_conntrack: table full, dropping packet</code> 에러가 발생하면 <code class="highlighter-rouge">nf_conntrack_max</code> 값을 증가시켜야 한다. 현재 사용률은 <code class="highlighter-rouge">count/max = 420/131072 ≈ 0.3%</code>로 여유롭다. <code class="highlighter-rouge">conntrack -S</code>로 통계를 확인하여 drop된 패킷 수를 모니터링할 수 있다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>Kubernetes 네트워킹은 iptables와 conntrack이라는 Linux 네트워크 스택의 두 축 위에서 동작한다.</p>
+
+<h2 id="iptables-패킷-경로-결정">iptables: 패킷 경로 결정</h2>
+
+<p>iptables의 nat 테이블과 filter 테이블은 <strong>kube-proxy</strong>와 <strong>Flannel</strong> 두 컴포넌트가 각자의 목적에 맞게 사용한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구분</th>
+      <th>kube-proxy</th>
+      <th>Flannel (VXLAN)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>목적</strong></td>
+      <td>Service → Pod 라우팅 (ClusterIP, NodePort)</td>
+      <td>Pod 간 <a href="/kubernetes/Kubernetes-Networking-03-CNI-Flow/">오버레이 네트워크</a> 통신</td>
+    </tr>
+    <tr>
+      <td><strong>nat 테이블</strong></td>
+      <td>KUBE-SERVICES, KUBE-SVC-<em>, KUBE-SEP-</em> 체인으로 Service IP를 Pod IP로 DNAT</td>
+      <td>FLANNEL-POSTRTG 체인으로 오버레이 트래픽 SNAT/MASQUERADE</td>
+    </tr>
+    <tr>
+      <td><strong>filter 테이블</strong></td>
+      <td>KUBE-FIREWALL, KUBE-FORWARD 체인으로 패킷 필터링 및 포워딩 허용</td>
+      <td>직접 filter 규칙을 추가하지 않음</td>
+    </tr>
+    <tr>
+      <td><strong>규칙 특징</strong></td>
+      <td>Service/Endpoint 변경 시 동적으로 갱신</td>
+      <td>노드 부팅 시 설정, 비교적 정적</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="conntrack-연결-상태-추적">conntrack: 연결 상태 추적</h2>
+
+<p>conntrack은 iptables의 DNAT/SNAT 규칙이 만든 <strong>주소 변환 상태를 기억</strong>하여, 응답 패킷이 원래 요청자에게 돌아갈 수 있도록 한다.</p>
+
+<ul>
+  <li><strong>역할</strong>: 요청 시 DNAT된 연결의 원본/변환 주소 쌍을 저장하고, 응답 시 자동으로 reverse NAT 수행</li>
+  <li><strong>엔트리 구조</strong>: 프로토콜, 상태, 타임아웃, 원본 tuple(src→dst), 변환 tuple(src→dst) 포함</li>
+  <li><strong>운영 포인트</strong>: <code class="highlighter-rouge">nf_conntrack_max</code>(테이블 크기)와 타임아웃 값이 대규모 클러스터에서 성능에 영향</li>
+</ul>
+
+<h2 id="핵심-흐름">핵심 흐름</h2>
+
+<p>클라이언트가 Service IP로 요청을 보내면:</p>
+
+<ol>
+  <li><strong>iptables nat</strong> → Service IP를 실제 Pod IP로 DNAT (kube-proxy 규칙)</li>
+  <li><strong>conntrack</strong> → 변환 전후 주소 쌍을 엔트리로 저장</li>
+  <li><strong>Pod 응답</strong> → conntrack 엔트리를 참조하여 reverse DNAT 수행, 원래 클라이언트에게 전달</li>
+</ol>
+
+<p>이 구조 덕분에 사용자는 Pod의 실제 IP를 몰라도 안정적인 Service IP로 통신할 수 있고, Pod이 재시작되어 IP가 바뀌어도 Service 접근에는 영향이 없다.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-EKS-02-00-02-Kubernetes-Networking-Service/">[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델 - 2. Service와 kube-proxy</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-EKS-02-02-01-Installation-Result/">[EKS] EKS: Networking - 2. 실습 환경 구성 - 2. 확인</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Kubeadm-01-5/">[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.5. Flannel CNI 설치</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-01-18T00:00:00+09:00">January 18, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+%EB%84%A4%ED%8A%B8%EC%9B%8C%ED%82%B9%3A+Linux+%EB%84%A4%ED%8A%B8%EC%9B%8C%ED%81%AC+%EC%8A%A4%ED%83%9D+%EC%9D%B4%ED%95%B4%ED%95%98%EA%B8%B0+-+iptables%EC%99%80+conntrack%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Networking-Linux-Stack%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Networking-Linux-Stack%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Networking-Linux-Stack%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-Networking-Linux-Stack?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-Kubeadm-02-2/" class="pagination--pager" title="[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 2.2. kubeadm join 실행
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-PKI/" class="pagination--pager" title="[Kubernetes] Kubernetes PKI
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-Networking-Linux-Stack/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-Networking-Linux-Stack"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

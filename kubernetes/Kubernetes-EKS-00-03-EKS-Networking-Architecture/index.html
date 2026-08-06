@@ -1,0 +1,1471 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[EKS] EKS: 네트워킹 아키텍처 개요 - Eraser’s StudyLog</title>
+<meta name="description" content="EKS에서 컨트롤 플레인과 데이터 플레인이 어떻게 통신하는지, AWS 네트워킹 기초와 EKS Owned ENI의 역할을 살펴보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[EKS] EKS: 네트워킹 아키텍처 개요">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-00-03-EKS-Networking-Architecture/">
+
+
+  <meta property="og:description" content="EKS에서 컨트롤 플레인과 데이터 플레인이 어떻게 통신하는지, AWS 네트워킹 기초와 EKS Owned ENI의 역할을 살펴보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-03-12T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-00-03-EKS-Networking-Architecture/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[EKS] EKS: 네트워킹 아키텍처 개요">
+    <meta itemprop="description" content="EKS에서 컨트롤 플레인과 데이터 플레인이 어떻게 통신하는지, AWS 네트워킹 기초와 EKS Owned ENI의 역할을 살펴보자.">
+    <meta itemprop="datePublished" content="2026-03-12T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[EKS] EKS: 네트워킹 아키텍처 개요
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-03-12T00:00:00+09:00">2026년 03월 12일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#들어가며">들어가며</a></li>
+  <li><a href="#aws-네트워킹-기초">AWS 네트워킹 기초</a>
+    <ul>
+      <li><a href="#vpc-virtual-private-cloud">VPC (Virtual Private Cloud)</a>
+        <ul>
+          <li><a href="#eks-아키텍처와의-연결">EKS 아키텍처와의 연결</a></li>
+        </ul>
+      </li>
+      <li><a href="#서브넷과-가용-영역">서브넷과 가용 영역</a></li>
+      <li><a href="#internet-gateway와-nat-gateway">Internet Gateway와 NAT Gateway</a></li>
+      <li><a href="#퍼블릭-서브넷-vs-프라이빗-서브넷">퍼블릭 서브넷 vs. 프라이빗 서브넷</a></li>
+      <li><a href="#eni-elastic-network-interface">ENI (Elastic Network Interface)</a></li>
+      <li><a href="#정리">정리</a></li>
+    </ul>
+  </li>
+  <li><a href="#쿠버네티스-네트워킹-컨트롤-플레인--노드-통신">쿠버네티스 네트워킹: 컨트롤 플레인 ↔ 노드 통신</a>
+    <ul>
+      <li><a href="#node--control-plane">Node → Control Plane</a></li>
+      <li><a href="#control-plane--node">Control Plane → Node</a></li>
+      <li><a href="#온프레미스에서는">온프레미스에서는?</a></li>
+    </ul>
+  </li>
+  <li><a href="#eks-네트워킹-아키텍처">EKS 네트워킹 아키텍처</a>
+    <ul>
+      <li><a href="#아키텍처-개요">아키텍처 개요</a></li>
+      <li><a href="#eks-owned-eni">EKS Owned ENI</a>
+        <ul>
+          <li><a href="#정의">정의</a></li>
+          <li><a href="#동작-원리-cross-account-eni-attachment">동작 원리: Cross-Account ENI Attachment</a></li>
+          <li><a href="#virtualbox-가상-nic와의-비교">VirtualBox 가상 NIC와의 비교</a></li>
+          <li><a href="#veth-pair와의-비교">veth pair와의 비교</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#결론">결론</a>
+    <ul>
+      <li><a href="#정리-1">정리</a></li>
+      <li><a href="#온프레미스와의-비교">온프레미스와의 비교</a></li>
+      <li><a href="#앞으로">앞으로</a></li>
+    </ul>
+  </li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 AWS EKS Workshop Study(AEWS) 1주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<p>이번 글에서는 <strong>EKS 네트워킹 아키텍처의 핵심 구조</strong>를 다룬다.</p>
+
+<ul>
+  <li><strong>AWS 네트워킹 기초</strong>: VPC, 서브넷, Internet Gateway, NAT Gateway, ENI</li>
+  <li><strong>쿠버네티스 네트워킹</strong>: 컨트롤 플레인 ↔ 노드 간 통신은 Hub-and-spoke 패턴으로, API 서버가 유일한 접점</li>
+  <li><strong>EKS의 문제</strong>: 컨트롤 플레인(AWS 관리 VPC)과 데이터 플레인(사용자 VPC)이 서로 다른 VPC, 심지어 다른 AWS 계정에 있음</li>
+  <li><strong>해답 — EKS Owned ENI</strong>: 사용자 VPC 서브넷에 존재하지만 AWS 컨트롤 플레인에 attach된 가상 네트워크 인터페이스. Cross-Account ENI Attachment와 AWS SDN으로 동작</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="들어가며">들어가며</h1>
+
+<p><a href="/kubernetes/Kubernetes-EKS-00-00-EKS-Overview/">EKS Overview</a>에서 EKS 아키텍처의 큰 그림을 그렸다. 컨트롤 플레인은 <strong>AWS Managed VPC</strong>에서 관리형으로 동작하고, 데이터 플레인은 <strong>사용자의 Custom VPC</strong>에서 동작하며, 둘은 <strong>EKS Owned ENI</strong>를 통해 연결된다.</p>
+
+<p>여기서 의문이 생긴다. 서로 다른 VPC에 있다는 건, 기본적으로 네트워크가 격리되어 있다는 뜻이다. 심지어 AWS 계정까지 다르다. 그런데 어떻게 컨트롤 플레인의 API 서버가 워커 노드의 kubelet과 통신하고, 워커 노드의 kubelet이 API 서버에 상태를 보고할 수 있을까?</p>
+
+<p>이 글에서는 그 메커니즘을 개요 수준에서 정리한다. 먼저 아키텍처 그림을 읽는 데 필요한 AWS 네트워킹 기초 개념을 짚고, 쿠버네티스의 컨트롤 플레인 ↔ 노드 통신 구조를 확인한 뒤, EKS가 이를 어떻게 구현하는지 살펴본다.</p>
+
+<p><br /></p>
+
+<h1 id="aws-네트워킹-기초">AWS 네트워킹 기초</h1>
+
+<p>EKS 네트워킹을 이해하려면, 먼저 아키텍처 그림에 등장하는 AWS 네트워킹 구성 요소들을 알아야 한다. AWS 네트워킹 전체를 다루는 것은 이 글의 범위를 벗어나므로, EKS 아키텍처를 읽는 데 필요한 최소한의 개념만 짚는다.</p>
+
+<h2 id="vpc-virtual-private-cloud">VPC (Virtual Private Cloud)</h2>
+
+<p>VPC는 AWS 클라우드 안에서 <strong>논리적으로 격리된 가상 네트워크</strong>다. 온프레미스의 데이터센터 네트워크에 대응하는 개념으로, VPC를 만들 때 <strong>CIDR 블록</strong>(예: <code class="highlighter-rouge">192.168.0.0/16</code>)을 지정하여 사용할 IP 범위를 정의한다.</p>
+
+<p><img src="/assets/images/aws-vpc-resource-map.png" alt="AWS VPC 리소스 맵" /></p>
+<center><sup>출처: <a href="https://docs.aws.amazon.com/vpc/latest/userguide/how-it-works.html">How Amazon VPC works — Amazon VPC User Guide</a></sup></center>
+
+<p>위 그림은 AWS 콘솔의 VPC 리소스 맵이다. 하나의 VPC 안에 서브넷, 라우팅 테이블, Internet Gateway 등의 구성 요소가 어떻게 연결되는지 보여준다. <a href="/kubernetes/Kubernetes-EKS-01-01-01-Installation/#네트워크-구성">Terraform 코드 분석</a>에서는 이 구조를 <code class="highlighter-rouge">vpc.tf</code>의 VPC 모듈로 정의했고, <a href="/kubernetes/Kubernetes-EKS-01-01-02-Installation-Result/#vpc">배포 결과</a>에서 실제 생성된 VPC를 콘솔에서 확인했다.</p>
+
+<p>핵심은 <strong>격리</strong>다. VPC는 기본적으로 다른 VPC와 통신할 수 없다. 같은 AWS 계정 안에 있더라도, 별도 설정(VPC Peering, Transit Gateway 등) 없이는 서로 독립된 네트워크로 동작한다. 다른 AWS 계정의 VPC라면 격리 수준은 더 강해진다.</p>
+
+<h3 id="eks-아키텍처와의-연결">EKS 아키텍처와의 연결</h3>
+
+<p><a href="/kubernetes/Kubernetes-EKS-00-00-EKS-Overview/">EKS Overview</a>에서 살펴본 것처럼, EKS 아키텍처에는 2개의 VPC가 등장한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>VPC</th>
+      <th>소유자</th>
+      <th>역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>AWS Managed VPC</strong></td>
+      <td>AWS 계정</td>
+      <td>컨트롤 플레인 (API Server, etcd 등)</td>
+    </tr>
+    <tr>
+      <td><strong>Custom VPC</strong></td>
+      <td>사용자 계정</td>
+      <td>데이터 플레인 (워커 노드, 파드 등)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>두 VPC는 서로 다른 AWS 계정에 속해 있으므로, 기본적으로 통신이 불가능하다. 이 격리를 넘어서 통신을 가능하게 하는 것이 후술할 EKS Owned ENI다.</p>
+
+<h2 id="서브넷과-가용-영역">서브넷과 가용 영역</h2>
+
+<p>VPC의 IP 범위를 더 작은 블록으로 나눈 것이 <strong>서브넷(Subnet)</strong>이다. 각 서브넷은 하나의 <strong>가용 영역(Availability Zone, AZ)</strong>에 속한다. AZ는 AWS 리전 내의 물리적으로 분리된 데이터센터 그룹이다.</p>
+
+<p>예를 들어 VPC CIDR이 <code class="highlighter-rouge">192.168.0.0/16</code>이면, 이를 AZ별로 나눌 수 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>서브넷</th>
+      <th>AZ</th>
+      <th>CIDR</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Public Subnet 1</td>
+      <td>ap-northeast-2a</td>
+      <td><code class="highlighter-rouge">192.168.1.0/24</code></td>
+    </tr>
+    <tr>
+      <td>Public Subnet 2</td>
+      <td>ap-northeast-2b</td>
+      <td><code class="highlighter-rouge">192.168.2.0/24</code></td>
+    </tr>
+    <tr>
+      <td>Public Subnet 3</td>
+      <td>ap-northeast-2c</td>
+      <td><code class="highlighter-rouge">192.168.3.0/24</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>서브넷을 여러 AZ에 분산 배치하는 것은 <strong>고가용성</strong>을 위한 기본 설계다. 하나의 AZ에 장애가 발생하더라도 다른 AZ의 서브넷이 서비스를 계속할 수 있다. EKS 아키텍처 그림에서 컨트롤 플레인과 워커 노드가 모두 여러 AZ에 걸쳐 배치되는 것이 이 때문이다.</p>
+
+<h2 id="internet-gateway와-nat-gateway">Internet Gateway와 NAT Gateway</h2>
+
+<p>VPC를 생성하면 인터넷과 <strong>완전히 격리된 상태</strong>다. 인터넷과 통신하려면 별도의 게이트웨이를 연결해야 한다.</p>
+
+<p><strong>Internet Gateway(IGW)</strong>는 VPC와 인터넷 사이의 <strong>양방향 관문</strong>이다. VPC에 IGW를 부착하고, 서브넷의 라우팅 테이블에 <code class="highlighter-rouge">0.0.0.0/0 → IGW</code> 경로를 추가하면, 해당 서브넷의 리소스가 인터넷과 직접 통신할 수 있게 된다. 인터넷에서 들어오는 트래픽도, 인터넷으로 나가는 트래픽도 모두 IGW를 경유한다.</p>
+
+<p><strong>NAT Gateway</strong>는 <strong>단방향 관문</strong>이다. 프라이빗 서브넷의 리소스가 인터넷에 나가야 할 때(예: 소프트웨어 업데이트, ECR 이미지 풀) 사용한다. NAT Gateway 자체는 퍼블릭 서브넷에 위치하며, 프라이빗 서브넷의 라우팅 테이블에 <code class="highlighter-rouge">0.0.0.0/0 → NAT Gateway</code> 경로를 추가한다. 프라이빗 서브넷 → 인터넷 방향의 아웃바운드만 허용하고, 인터넷 → 프라이빗 서브넷 방향의 인바운드는 차단된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>Internet Gateway</th>
+      <th>NAT Gateway</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>방향</strong></td>
+      <td>양방향 (인바운드 + 아웃바운드)</td>
+      <td>단방향 (아웃바운드만)</td>
+    </tr>
+    <tr>
+      <td><strong>위치</strong></td>
+      <td>VPC에 부착</td>
+      <td>퍼블릭 서브넷에 위치</td>
+    </tr>
+    <tr>
+      <td><strong>용도</strong></td>
+      <td>퍼블릭 서브넷의 리소스가 인터넷과 직접 통신</td>
+      <td>프라이빗 서브넷의 리소스가 인터넷에 나감</td>
+    </tr>
+    <tr>
+      <td><strong>비유</strong></td>
+      <td>데이터센터의 정문 (출입 모두 가능)</td>
+      <td>데이터센터의 후문 (나가기만 가능)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="퍼블릭-서브넷-vs-프라이빗-서브넷">퍼블릭 서브넷 vs. 프라이빗 서브넷</h2>
+
+<p>서브넷은 <strong>퍼블릭(Public)</strong>과 <strong>프라이빗(Private)</strong> 두 종류로 나뉜다. 구분 기준은 서브넷의 <strong>라우팅 테이블에 IGW로의 경로가 있는가</strong>이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>서브넷 유형</th>
+      <th>라우팅 테이블</th>
+      <th>인터넷 접근</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>퍼블릭 서브넷</strong></td>
+      <td><code class="highlighter-rouge">0.0.0.0/0 → IGW</code> 경로 있음</td>
+      <td>인터넷과 직접 양방향 통신 가능 (공인 IP 필요)</td>
+    </tr>
+    <tr>
+      <td><strong>프라이빗 서브넷</strong></td>
+      <td><code class="highlighter-rouge">0.0.0.0/0 → NAT Gateway</code> 경로 (또는 경로 없음)</td>
+      <td>아웃바운드만 가능 (NAT Gateway 경유) 또는 인터넷 접근 불가</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>정리하면, 퍼블릭/프라이빗의 구분은 서브넷 자체의 속성이 아니라 <strong>라우팅 테이블이 트래픽을 어디로 보내는가</strong>에 따라 결정된다.</p>
+
+<p><img src="/assets/images/aws-vpc-private-subnets-nat.png" alt="VPC with public/private subnets and NAT" /></p>
+<center><sup>출처: <a href="https://docs.aws.amazon.com/vpc/latest/userguide/vpc-example-private-subnets-nat.html">Example: VPC with servers in private subnets and NAT — Amazon VPC User Guide</a></sup></center>
+
+<p>위 그림은 퍼블릭/프라이빗 서브넷이 모두 있는 VPC 구조를 보여준다. 퍼블릭 서브넷에는 NAT Gateway와 Application Load Balancer가 있고, 프라이빗 서브넷에는 서버(EC2 인스턴스)가 Auto Scaling Group으로 배치되어 있다. 프라이빗 서브넷의 서버가 인터넷에 나가야 할 때는 NAT Gateway를 경유하고, 외부에서 서버에 접근할 때는 Load Balancer를 경유한다.</p>
+
+<h2 id="eni-elastic-network-interface">ENI (Elastic Network Interface)</h2>
+
+<p>ENI는 AWS에서 제공하는 <strong>가상 네트워크 카드(virtual NIC)</strong>다. 물리 서버의 네트워크 카드처럼, EC2 인스턴스 등 AWS 리소스에 부착되어 네트워크 연결을 제공한다. 다만 물리적 하드웨어가 아니라 <strong>소프트웨어로 정의된 가상 인터페이스</strong>다.</p>
+
+<p>ENI에는 다음이 연결된다.</p>
+
+<ul>
+  <li>사설 IP 주소 (VPC CIDR 범위 내에서 할당)</li>
+  <li>보안그룹</li>
+  <li>MAC 주소</li>
+  <li>선택적으로 공인 IP 주소</li>
+</ul>
+
+<p>하나의 EC2 인스턴스에 여러 ENI를 부착할 수 있으며, ENI를 다른 인스턴스로 옮겨 붙일 수도 있다. 보안그룹의 경우에도 인스턴스가 아닌 ENI 수준에서 연결되기 때문에, 하나의 인스턴스에 부착된 ENI마다 서로 다른 보안그룹을 적용할 수 있다. 즉, ENI가 가상 방화벽의 부착 지점이 되는 셈이다.</p>
+
+<h2 id="정리">정리</h2>
+
+<p>위 개념들을 하나의 그림으로 정리하면 다음과 같다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>                              Internet
+                                 |
+                              [  IGW  ]
+                                 |
++--------------------------------+---------------------------------+
+|                               VPC                                |
+|                          (192.168.0.0/16)                        |
+|                                                                  |
+|   +--- AZ-a -------------------+  +--- AZ-b -------------------+ |
+|   |                            |  |                            | |
+|   | Public Subnet              |  | Public Subnet              | |
+|   | (192.168.1.0/24)           |  | (192.168.2.0/24)           | |
+|   |                            |  |                            | |
+|   |   +--[EC2]--+   [NAT GW]   |  |   +--[EC2]--+   [NAT GW]   | |
+|   |   | ENI     |       |      |  |   | ENI     |       |      | |
+|   |   | - IP    |       |      |  |   | - IP    |       |      | |
+|   |   | - SG    |       |      |  |   | - SG    |       |      | |
+|   |   +---------+       |      |  |   +---------+       |      | |
+|   +---------------------|------+  +---------------------|------+ |
+|   +---------------------v------+  +---------------------v------+ |
+|   |                            |  |                            | |
+|   | Private Subnet             |  | Private Subnet             | |
+|   | (192.168.3.0/24)           |  | (192.168.4.0/24)           | |
+|   |                            |  |                            | |
+|   |   +--[EC2]--+              |  |   +--[EC2]--+              | |
+|   |   | ENI     |              |  |   | ENI     |              | |
+|   |   | - IP    |              |  |   | - IP    |              | |
+|   |   | - SG    |              |  |   | - SG    |              | |
+|   |   +---------+              |  |   +---------+              | |
+|   +----------------------------+  +----------------------------+ |
++-------------------------------------------------------------------+
+</code></pre></div></div>
+
+<p>VPC 안에 퍼블릭/프라이빗 서브넷이 AZ별로 존재한다. 퍼블릭 서브넷의 EC2 인스턴스는 IGW를 통해 인터넷과 양방향 통신하고, 같은 서브넷에 NAT Gateway가 위치한다. 프라이빗 서브넷의 EC2 인스턴스는 인터넷에 나갈 때 NAT Gateway를 경유한다. 모든 EC2 인스턴스는 ENI를 통해 네트워크에 연결된다. 이것이 EKS 아키텍처에서 사용자 VPC에 해당하는 기본 구조다.</p>
+
+<p><br /></p>
+
+<h1 id="쿠버네티스-네트워킹-컨트롤-플레인--노드-통신">쿠버네티스 네트워킹: 컨트롤 플레인 ↔ 노드 통신</h1>
+
+<p>AWS 네트워킹 기초를 짚었으니, 이제 쿠버네티스 자체의 통신 구조를 보자. <a href="https://kubernetes.io/docs/concepts/architecture/control-plane-node-communication/">쿠버네티스 공식 문서</a>에 따르면, 컨트롤 플레인과 노드 간 통신은 두 방향으로 나뉜다.</p>
+
+<h2 id="node--control-plane">Node → Control Plane</h2>
+
+<p>쿠버네티스는 <strong>Hub-and-spoke API 패턴</strong>을 사용한다. 노드(또는 노드 위의 파드)에서 나가는 모든 API 요청은 <strong>API 서버가 유일한 접점</strong>이다. 다른 컨트롤 플레인 컴포넌트(etcd, scheduler, controller manager)는 외부에 서비스를 노출하지 않는다.</p>
+
+<ul>
+  <li>kubelet이 API 서버에 노드 상태를 보고</li>
+  <li>파드가 API 서버에 접근 (ServiceAccount 토큰 사용)</li>
+  <li>kube-proxy가 Service/Endpoint 정보를 watch</li>
+</ul>
+
+<p>모두 <strong>HTTPS(443)</strong>를 통해 API 서버로만 향한다.</p>
+
+<h2 id="control-plane--node">Control Plane → Node</h2>
+
+<p>API 서버에서 노드로 향하는 통신 경로는 두 가지다.</p>
+
+<p><strong>API 서버 → kubelet</strong></p>
+
+<ul>
+  <li><code class="highlighter-rouge">kubectl logs</code>로 파드 로그 조회</li>
+  <li><code class="highlighter-rouge">kubectl exec</code>로 파드에 접속</li>
+  <li><code class="highlighter-rouge">kubectl port-forward</code>로 포트 포워딩</li>
+</ul>
+
+<p>이 기능들은 API 서버가 <strong>각 노드의 kubelet HTTPS 엔드포인트(포트 10250)</strong>에 직접 연결해야 동작한다.</p>
+
+<p><strong>API 서버 → 노드/파드/서비스 (프록시)</strong></p>
+
+<p>API 서버의 프록시 기능을 통해 노드, 파드, 서비스에 접근할 수 있다.</p>
+
+<h2 id="온프레미스에서는">온프레미스에서는?</h2>
+
+<p>온프레미스 환경에서는 컨트롤 플레인과 워커 노드가 <strong>같은 네트워크(또는 직접 라우팅 가능한 네트워크)</strong>에 있었으므로, 이 통신이 자연스러웠다. API 서버와 kubelet이 서로의 IP로 직접 통신할 수 있었다.</p>
+
+<p>하지만 EKS에서는 상황이 다르다. 컨트롤 플레인이 AWS의 별도 VPC에 있고, 워커 노드는 사용자 VPC에 있다. 앞서 살펴봤듯 <strong>VPC 간에는 기본적으로 통신이 불가능</strong>하다. 그러면 이 두 방향 통신을 EKS는 어떻게 구현할까?</p>
+
+<p><br /></p>
+
+<h1 id="eks-네트워킹-아키텍처">EKS 네트워킹 아키텍처</h1>
+
+<h2 id="아키텍처-개요">아키텍처 개요</h2>
+
+<p><img src="/assets/images/eks-networking-architecture-overview.png" alt="EKS 네트워킹 아키텍처 개요" /></p>
+<center><sup>출처: <a href="https://docs.aws.amazon.com/ko_kr/eks/latest/best-practices/control-plane.html">Amazon EKS Best Practices Guide — Control Plane</a></sup></center>
+
+<p>그림을 읽어 보자.</p>
+
+<ul>
+  <li><strong>위쪽 — AWS VPC</strong>: AWS가 관리하는 VPC다. API Server와 etcd가 2개 이상의 가용 영역에 걸쳐 고가용성으로 배치되어 있다.</li>
+  <li><strong>아래쪽 — Your VPC</strong>: 사용자가 소유한 VPC다. 워커 노드(kubelet, kube-proxy)가 가용 영역별로 분산 배치되어 있다.</li>
+  <li><strong>보라색 아이콘 — EKS Owned ENI</strong>: 각 가용 영역의 서브넷에 위치하며, 사용자 VPC와 AWS VPC를 연결하는 다리 역할을 한다. 워커 노드의 kubelet은 이 ENI를 통해 API 서버와 사설 통신을 한다.</li>
+  <li><strong>오른쪽 — EKS Public Endpoint</strong>: kubectl 같은 외부 클라이언트가 API 서버에 접근하는 공개 엔드포인트다. NLB(Network Load Balancer) 뒤에 API 서버가 위치한다.</li>
+</ul>
+
+<p>이 그림에서 가장 중요한 것은, 두 VPC 사이를 잇는 <strong>EKS Owned ENI</strong>의 존재다.</p>
+
+<h2 id="eks-owned-eni">EKS Owned ENI</h2>
+
+<h3 id="정의">정의</h3>
+
+<p>EKS Owned ENI는 <strong>사용자 VPC 서브넷에 존재하지만, AWS 컨트롤 플레인에 attach된 ENI</strong>다.</p>
+
+<p>앞서 ENI가 “소프트웨어로 정의된 가상 네트워크 카드”라고 했다. EKS Owned ENI도 일반 ENI와 물리적 형태는 같다. 다만, 일반적인 ENI가 같은 계정의 EC2 인스턴스에 붙는 것과 달리, EKS Owned ENI는 <strong>내 계정의 서브넷에 생성되면서 AWS 계정의 컨트롤 플레인 인스턴스에 연결</strong>된다는 점이 특별하다.</p>
+
+<p>AWS 콘솔에서 확인하면 Owner(소유자) ID는 <strong>사용자 자신의 AWS 계정 ID</strong>로 표시된다. ENI가 사용자 VPC 서브넷에 생성되기 때문이다. 단, 이 ENI는 <strong>requester-managed ENI</strong>로, EKS 서비스가 요청해서 만든 것이라 사용자가 임의로 삭제하거나 수정할 수 없다.</p>
+
+<h3 id="동작-원리-cross-account-eni-attachment">동작 원리: Cross-Account ENI Attachment</h3>
+
+<p>EKS Owned ENI의 동작 원리를 단계별로 보면 다음과 같다.</p>
+
+<p><strong>1. ENI 생성</strong></p>
+
+<p>EKS 클러스터를 생성하면, AWS가 사용자 VPC의 서브넷 안에 ENI를 생성한다. 이 ENI는 사용자 VPC의 CIDR 범위에서 <strong>사설 IP</strong>를 받는다. 예를 들어 VPC CIDR이 <code class="highlighter-rouge">192.168.0.0/16</code>이고 서브넷이 <code class="highlighter-rouge">192.168.2.0/24</code>이면, ENI는 <code class="highlighter-rouge">192.168.2.185</code> 같은 IP를 받는다.</p>
+
+<p><strong>2. Cross-Account Attachment</strong></p>
+
+<p>이 ENI의 <strong>소유자(Owner)는 사용자 AWS 계정</strong>이지만, <strong>연결 대상(Attachment)은 AWS 컨트롤 플레인 계정의 인스턴스</strong>다. AWS 내부 네트워크 패브릭(SDN)을 통해, 이 ENI가 컨트롤 플레인 VPC의 API 서버 인스턴스에 연결된다.</p>
+
+<p><strong>3. 사설 통신 경로 형성</strong></p>
+
+<p>워커 노드 입장에서는, EKS Owned ENI가 <strong>같은 VPC 안의 사설 IP</strong>를 가지고 있으므로, 일반적인 VPC 내부 통신처럼 사설 IP로 접근할 수 있다. 실제로는 그 ENI 뒤에 AWS 컨트롤 플레인이 연결되어 있지만, 네트워크 레벨에서는 같은 서브넷 안의 통신으로 보인다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>+--- AWS Managed VPC (AWS Account) ----------+
+|                                             |
+|   [API Server] [API Server]                 |
+|        |             |                      |
+|   (AWS internal SDN fabric)                 |
++--------|-------------|----------------------+
+         |             |
+         | Cross-Account ENI Attachment
+         |             |
++--------|-------------|----------------------+
+|   +----+----+   +----+----+                 |
+|   |EKS Owned|   |EKS Owned|                 |
+|   |  ENI    |   |  ENI    |                 |
+|   |192.168  |   |192.168  |                 |
+|   | .1.x    |   | .2.x    |                 |
+|   +----+----+   +----+----+                 |
+|        |             |                      |
+|   [Worker Node] [Worker Node]               |
+|                                             |
++--- Your VPC (Your Account) ----------------+
+</code></pre></div></div>
+
+<p>이 구조 덕분에, <a href="#쿠버네티스-네트워킹-컨트롤-플레인--노드-통신">쿠버네티스 네트워킹</a>에서 다룬 두 방향의 통신이 모두 가능해진다.</p>
+
+<ul>
+  <li><strong>Node → Control Plane</strong>: kubelet이 EKS Owned ENI의 사설 IP를 통해 API 서버에 HTTPS(443) 요청</li>
+  <li><strong>Control Plane → Node</strong>: API 서버가 EKS Owned ENI를 통해 kubelet의 HTTPS 엔드포인트(10250)에 접근</li>
+</ul>
+
+<blockquote>
+  <p><strong>참고: SDN (Software Defined Network)</strong></p>
+
+  <p>Cross-Account ENI Attachment가 가능한 이유는, AWS의 물리 서버들이 전부 <strong>SDN(Software Defined Network)</strong> 위에서 동작하기 때문이다. SDN은 하드웨어(스위치, 라우터)에 의존하지 않고 소프트웨어로 네트워크를 제어·구성하는 기술이다. AWS Nitro 시스템의 하이퍼바이저가 이를 처리하며, “내 계정의 ENI”를 “AWS 계정의 인스턴스”에 연결하는 것이 물리적 케이블 없이 가능하다. 지금 수준에서 자세한 내부 구현을 알 필요는 없고, <strong>소프트웨어로 네트워크를 제어하기 때문에 계정 간·VPC 간 연결이 가능하다</strong>는 점만 이해하면 된다.</p>
+</blockquote>
+
+<h3 id="virtualbox-가상-nic와의-비교">VirtualBox 가상 NIC와의 비교</h3>
+
+<p>EKS Owned ENI를 이해하기 어렵다면, VirtualBox의 가상 네트워크 카드를 떠올리면 도움이 된다.</p>
+
+<p>VirtualBox에서 <strong>Host-Only Adapter</strong>나 <strong>Bridge Adapter</strong>를 만들면, 호스트 OS와 게스트 VM이 같은 네트워크에 있는 것처럼 통신할 수 있다. 물리 NIC 없이, 소프트웨어로 가상 네트워크 인터페이스를 만들어서 격리된 두 영역(호스트 ↔ 게스트)을 연결하는 것이다.</p>
+
+<p>EKS Owned ENI도 본질은 같다. <strong>소프트웨어로 가상 네트워크 인터페이스를 만들어서, 격리된 두 영역(사용자 VPC ↔ AWS 관리 VPC)을 연결한다.</strong></p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>VirtualBox</th>
+      <th>EKS</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>가상 NIC</strong></td>
+      <td>호스트 OS 안에 소프트웨어로 생성</td>
+      <td>사용자 VPC 서브넷 안에 소프트웨어로 생성</td>
+    </tr>
+    <tr>
+      <td><strong>연결 대상</strong></td>
+      <td>호스트 ↔ 게스트 VM</td>
+      <td>사용자 VPC(워커 노드) ↔ AWS VPC(컨트롤 플레인)</td>
+    </tr>
+    <tr>
+      <td><strong>경계</strong></td>
+      <td>같은 머신 안에서 OS 간 경계</td>
+      <td>AWS 계정 간 경계 (Cross-Account)</td>
+    </tr>
+    <tr>
+      <td><strong>핵심</strong></td>
+      <td>물리 NIC 없이 통신 가능</td>
+      <td>물리 케이블 없이 계정 간 통신 가능</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>차이점이 있다면, VirtualBox는 같은 물리 머신 안에서의 격리인 반면, AWS는 <strong>완전히 별개의 계정·VPC 간 격리</strong>를 넘는다는 점이다. 규모와 복잡도는 다르지만 원리의 본질은 같다.</p>
+
+<h3 id="veth-pair와의-비교">veth pair와의 비교</h3>
+
+<p>리눅스 네트워크 네임스페이스에서의 veth pair가 떠오를 수 있다. veth pair는 리눅스 커널 내부에서 두 네트워크 네임스페이스를 연결하는 가상 디바이스 쌍이다.</p>
+
+<p>EKS Owned ENI는 veth pair가 아니라 실제 ENI(Elastic Network Interface)이며, 동작하는 레이어도 다르다. veth pair는 같은 호스트의 리눅스 커널 안에서 동작하고, EKS Owned ENI는 AWS SDN 위에서 계정·VPC 경계를 넘어 동작한다. 하지만 <strong>“격리된 두 네트워크 영역을 잇는 다리”라는 역할은 같다.</strong> veth pair가 두 네임스페이스를 이어 주듯, EKS Owned ENI는 사용자 VPC(데이터 플레인)와 AWS 관리 VPC(컨트롤 플레인)를 이어 준다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>veth pair</th>
+      <th>EKS Owned ENI</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>동작 레벨</strong></td>
+      <td>리눅스 커널 (같은 호스트 내)</td>
+      <td>AWS SDN (계정·VPC 간)</td>
+    </tr>
+    <tr>
+      <td><strong>연결 대상</strong></td>
+      <td>네트워크 네임스페이스 ↔ 네트워크 네임스페이스</td>
+      <td>사용자 VPC ↔ AWS 관리 VPC</td>
+    </tr>
+    <tr>
+      <td><strong>구현</strong></td>
+      <td>커널이 패킷을 한쪽에서 다른 쪽으로 전달</td>
+      <td>AWS SDN이 패킷을 올바른 목적지로 포워딩</td>
+    </tr>
+    <tr>
+      <td><strong>공통점</strong></td>
+      <td>격리된 두 네트워크 영역을 연결하는 가상 인터페이스</td>
+      <td>동일</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p>참고로, EKS의 VPC CNI에서도 파드의 네트워크 네임스페이스와 호스트를 연결할 때 veth pair가 사용된다. ENI가 확보한 IP를 파드에 할당하는 과정에서, 실제 네임스페이스 간 연결은 veth pair가 담당한다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="결론">결론</h1>
+
+<h2 id="정리-1">정리</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>문제</strong></td>
+      <td>컨트롤 플레인(AWS VPC)과 데이터 플레인(사용자 VPC)이 서로 다른 VPC·계정에 격리</td>
+    </tr>
+    <tr>
+      <td><strong>해답</strong></td>
+      <td>EKS Owned ENI — 사용자 VPC에 존재하면서 AWS 컨트롤 플레인에 attach된 가상 네트워크 인터페이스</td>
+    </tr>
+    <tr>
+      <td><strong>동작 원리</strong></td>
+      <td>Cross-Account ENI Attachment + AWS SDN</td>
+    </tr>
+    <tr>
+      <td><strong>결과</strong></td>
+      <td>워커 노드가 같은 VPC 안의 사설 IP로 통신하는 것처럼, 실제로는 컨트롤 플레인과 사설 통신</td>
+    </tr>
+    <tr>
+      <td><strong>엔드포인트</strong></td>
+      <td>Public/Private 조합으로 외부 접근 경로와 내부 통신 경로가 달라짐</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="온프레미스와의-비교">온프레미스와의 비교</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>관점</th>
+      <th>온프레미스</th>
+      <th>EKS</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>CP-DP 네트워크</strong></td>
+      <td>같은 네트워크(또는 직접 라우팅)</td>
+      <td>VPC 격리. EKS Owned ENI로 연결</td>
+    </tr>
+    <tr>
+      <td><strong>API 서버 접근</strong></td>
+      <td>직접 IP 또는 LB 경유</td>
+      <td>NLB(Public Endpoint) 또는 ENI(Private Endpoint)</td>
+    </tr>
+    <tr>
+      <td><strong>네트워크 격리</strong></td>
+      <td>물리 네트워크 세그먼트, VLAN</td>
+      <td>VPC 단위 격리 (AWS 계정 경계까지)</td>
+    </tr>
+    <tr>
+      <td><strong>통신 보안</strong></td>
+      <td>iptables, TLS 인증서</td>
+      <td>보안그룹(ENI 레벨) + TLS + 엔드포인트 모드</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>온프레미스에서는 컨트롤 플레인과 워커 노드가 같은 네트워크에 있어서 통신이 자연스러웠다. EKS에서는 관리형 서비스의 특성상 <strong>네트워크 격리가 전제</strong>이고, 이를 EKS Owned ENI라는 메커니즘으로 해결한다. “VPC가 다르면 기본적으로 통신 불가 → ENI로 다리를 놓는다”는 구조를 이해하면, 이후 보안그룹 아키텍처, 엔드포인트 모드별 네트워크 경로 분석 등을 더 깊이 있게 따라갈 수 있다.</p>
+
+<h2 id="앞으로">앞으로</h2>
+
+<p>이 글에서는 EKS Owned ENI의 존재와 역할을 개괄적 수준에서 정리했다. 실제로 EKS Owned ENI가 어떻게 식별되는지, 어떤 보안그룹이 붙는지, dig로 확인하면 어떤 IP가 나오는지 — 이런 구체적인 확인은 실습을 통해 추후 직접 확인해 보자.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study-week-1" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study-Week-1</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws" class="page__taxonomy-item" rel="tag">AWS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eni" class="page__taxonomy-item" rel="tag">ENI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#networking" class="page__taxonomy-item" rel="tag">Networking</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#vpc" class="page__taxonomy-item" rel="tag">VPC</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-03-12T00:00:00+09:00">March 12, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEKS%5D+EKS%3A+%EB%84%A4%ED%8A%B8%EC%9B%8C%ED%82%B9+%EC%95%84%ED%82%A4%ED%85%8D%EC%B2%98+%EA%B0%9C%EC%9A%94%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-00-03-EKS-Networking-Architecture%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-00-03-EKS-Networking-Architecture%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-00-03-EKS-Networking-Architecture%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-EKS-00-03-EKS-Networking-Architecture?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-EKS-00-01-EKS-Computing-Group/" class="pagination--pager" title="[EKS] EKS: 데이터 플레인 컴퓨팅
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-EKS-00-Prerequisites/" class="pagination--pager" title="[EKS] EKS: 실습 환경 구성하기
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-EKS-00-03-EKS-Networking-Architecture/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-EKS-00-03-EKS-Networking-Architecture"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

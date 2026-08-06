@@ -1,0 +1,1486 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Container] Docker와 containerd 이미지 관리 비교 - 1. 배경지식 - Eraser’s StudyLog</title>
+<meta name="description" content="컨테이너 런타임(dockerd, containerd)의 구조, 스토리지 드라이버 구현 비교, 런타임 CLI에 대해 알아보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Container] Docker와 containerd 이미지 관리 비교 - 1. 배경지식">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-Container-Duplicate-Container-Images-1/">
+
+
+  <meta property="og:description" content="컨테이너 런타임(dockerd, containerd)의 구조, 스토리지 드라이버 구현 비교, 런타임 CLI에 대해 알아보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2025-12-12T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-Container-Duplicate-Container-Images-1/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Container] Docker와 containerd 이미지 관리 비교 - 1. 배경지식">
+    <meta itemprop="description" content="컨테이너 런타임(dockerd, containerd)의 구조, 스토리지 드라이버 구현 비교, 런타임 CLI에 대해 알아보자.">
+    <meta itemprop="datePublished" content="2025-12-12T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Container] Docker와 containerd 이미지 관리 비교 - 1. 배경지식
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2025-12-12T00:00:00+09:00">2025년 12월 12일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  8 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#컨테이너-런타임">컨테이너 런타임</a>
+    <ul>
+      <li><a href="#dockerd">dockerd</a></li>
+      <li><a href="#containerd">containerd</a>
+        <ul>
+          <li><a href="#containerd의-네임스페이스">containerd의 네임스페이스</a></li>
+          <li><a href="#containerd의-저장-구조">containerd의 저장 구조</a></li>
+        </ul>
+      </li>
+      <li><a href="#docker-runtime-vs-containerd-비교">Docker runtime vs containerd 비교</a></li>
+    </ul>
+  </li>
+  <li><a href="#실제-디렉토리-구조-확인">실제 디렉토리 구조 확인</a>
+    <ul>
+      <li><a href="#docker-runtime-dockerd---overlay2">Docker runtime (dockerd) - overlay2</a>
+        <ul>
+          <li><a href="#1-이미지-레이어-확인">1. 이미지 레이어 확인</a></li>
+          <li><a href="#2-컨테이너-레이어-확인-실행-중인-컨테이너">2. 컨테이너 레이어 확인 (실행 중인 컨테이너)</a></li>
+          <li><a href="#3-overlayfs-마운트-정보-확인">3. OverlayFS 마운트 정보 확인</a></li>
+          <li><a href="#4-merged-디렉토리-확인">4. merged/ 디렉토리 확인</a></li>
+          <li><a href="#5-overlayfs의-lowerupper와-overlay2의-매핑">5. OverlayFS의 lower/upper와 overlay2의 매핑</a></li>
+        </ul>
+      </li>
+      <li><a href="#containerd-overlayfs-snapshotter">containerd (overlayfs snapshotter)</a>
+        <ul>
+          <li><a href="#1-content-store-이미지-blob-저장">1. Content Store (이미지 blob 저장)</a></li>
+          <li><a href="#2-snapshot-레이어-압축-해제">2. Snapshot (레이어 압축 해제)</a></li>
+          <li><a href="#3-snapshot-간-parent-관계">3. Snapshot 간 parent 관계</a></li>
+          <li><a href="#4-overlayfs-마운트-정보-확인">4. OverlayFS 마운트 정보 확인</a></li>
+          <li><a href="#5-docker-overlay2와의-비교-요약">5. Docker overlay2와의 비교 요약</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#컨테이너-런타임-cli">컨테이너 런타임 CLI</a>
+    <ul>
+      <li><a href="#docker">docker</a></li>
+      <li><a href="#ctr">ctr</a></li>
+      <li><a href="#crictl">crictl</a></li>
+      <li><a href="#k8sk3s-환경에서의-권장-cli">k8s/k3s 환경에서의 권장 CLI</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<p>k3s 클러스터에서 동일한 이미지를 <code class="highlighter-rouge">docker</code>와 <code class="highlighter-rouge">crictl</code>로 확인했을 때, 이미지 이름과 크기가 다르게 나타났다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>docker images | <span class="nb">grep </span>co-detr
+co-detr-coco-app                1.0    f05ffb0c16af   20.3GB
+<span class="nv">$ </span><span class="nb">sudo </span>crictl images | <span class="nb">grep </span>co-detr
+docker.io/co-detr-coco-app      1.0    f05ffb0c16af   10.4GB
+</code></pre></div></div>
+
+<p>이 현상을 분석하려면, 각 CLI가 어떤 런타임과 통신하고 이미지가 어떻게 저장되는지 알아야 한다. 이 글에서는 분석에 필요한 배경 지식을 정리한다.</p>
+
+<ol>
+  <li><strong>컨테이너 런타임</strong>: dockerd와 containerd는 독립적으로 이미지를 관리하며, 저장 경로가 다르다</li>
+  <li><strong>스토리지 드라이버</strong>: Docker의 overlay2와 containerd의 overlayfs snapshotter는 디렉토리 구조가 다르다</li>
+  <li><strong>CLI 도구</strong>: docker, ctr, crictl은 각각 다른 런타임 및 인터페이스와 통신한다</li>
+</ol>
+
+<blockquote>
+  <p>컨테이너 이미지의 기본 개념(정의, 레이어 구조, 이미지 ID, 레지스트리)은 <a href="/cs/CS-Container-Image/">컨테이너 이미지</a>를, 컨테이너 파일 시스템(OverlayFS, Copy-on-Write, 스토리지 드라이버)은 <a href="/cs/CS-Container-Filesystem/">컨테이너 파일 시스템</a>을 참고한다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="컨테이너-런타임">컨테이너 런타임</h1>
+
+<p>컨테이너 런타임이란, <strong>컨테이너를 생성·실행·관리하는 시스템</strong>을 말한다. 이미지를 기반으로 격리된 프로세스를 생성하고, 그 생명주기를 관리하는 역할을 한다. 넓은 의미에서는 컨테이너 관리뿐만 아니라, 이미지 pull/push, 네트워킹, 스토리지 관리까지 포함한다. 대표적으로 Docker runtime (dockerd)과 containerd가 있다.</p>
+
+<h2 id="dockerd">dockerd</h2>
+
+<p><code class="highlighter-rouge">dockerd</code>는 Docker 데몬으로, <strong>containerd를 사용</strong>한다. <strong>컨테이너 실행은 containerd에 위임</strong>하고, 빌드, 네트워킹, 볼륨 관리 등의 기능을 얹은 형태이다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>┌───────────────────────────────────────┐
+│              dockerd                  │
+│  ┌────────┬─────────┬──────────────┐  │
+│  │ Build  │ Network │ Volume Mgmt  │  │  &lt;- Docker 추가 기능
+│  └────────┴─────────┴──────────────┘  │
+│              ↓ (사용)                  │
+│  ┌──────────────────────────────────┐ │
+│  │      containerd (별도 프로세스)     │ │  &lt;- 컨테이너 런타임
+│  └──────────────────────────────────┘ │
+└───────────────────────────────────────┘
+</code></pre></div></div>
+
+<blockquote>
+  <p>참고: 왜 이런 구조가 되었는가?</p>
+
+  <p>역사적인 이유다.</p>
+  <ul>
+    <li><strong>초기 Docker</strong>: 모든 기능(이미지 관리, 컨테이너 실행, 빌드, 네트워킹 등)이 <code class="highlighter-rouge">dockerd</code> 하나의 프로세스에 통합되어 있었다.</li>
+    <li><strong>containerd 분리</strong>: 이후 컨테이너 런타임 부분만 분리되어 <code class="highlighter-rouge">containerd</code>가 별도 프로세스로 탄생했다.</li>
+    <li><strong>현재 구조</strong>: Docker는 하위 호환성을 위해 이미지 관리는 기존 방식(<code class="highlighter-rouge">/var/lib/docker</code>)을 유지하고, <code class="highlighter-rouge">containerd</code>에는 <strong>컨테이너 실행 부분만 위임</strong>하는 구조가 되었다. 따라서 <code class="highlighter-rouge">containerd</code>는 별도 프로세스이지만, <code class="highlighter-rouge">dockerd</code>가 <code class="highlighter-rouge">containerd</code>의 API를 호출하여 사용하는 관계이다.</li>
+  </ul>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="containerd">containerd</h2>
+
+<p><code class="highlighter-rouge">containerd</code>는 <strong>순수 컨테이너 런타임</strong>이다. 이미지 pull, 컨테이너 생성·실행 등 핵심 기능만 담당하며, 빌드 기능은 없다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Image storage: /var/lib/containerd
+    ↓
+containerd (default namespace)
+    ↓
+Container execution
+</code></pre></div></div>
+
+<h3 id="containerd의-네임스페이스">containerd의 네임스페이스</h3>
+
+<p>containerd는 내부적으로 <strong>네임스페이스</strong>를 사용하여 이미지와 컨테이너를 격리 관리한다. 누가 containerd를 사용하느냐에 따라 다른 네임스페이스에 저장된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>사용 주체</th>
+      <th>네임스페이스</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Docker (dockerd)</td>
+      <td><code class="highlighter-rouge">moby</code></td>
+    </tr>
+    <tr>
+      <td>Kubernetes</td>
+      <td><code class="highlighter-rouge">k8s.io</code></td>
+    </tr>
+    <tr>
+      <td>미지정 시 기본값</td>
+      <td><code class="highlighter-rouge">default</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p>참고: Kubernetes와 containerd</p>
+
+  <p>Kubernetes 환경에서는 네트워크, 볼륨 관리 등을 Kubernetes가 담당하므로, 순수 런타임인 containerd만으로 충분하다. 이것이 Kubernetes가 Docker 의존성을 제거하고 containerd를 직접 사용하게 된 배경이다.</p>
+</blockquote>
+
+<h3 id="containerd의-저장-구조">containerd의 저장 구조</h3>
+
+<p>containerd는 이미지를 두 단계로 관리한다:</p>
+<ol>
+  <li><strong>Content Store</strong>: 이미지 blob(레이어 tar.gz 등)을 압축 상태로 저장
+    <ul>
+      <li>경로: <code class="highlighter-rouge">io.containerd.content.v1.content/blobs/sha256/</code></li>
+    </ul>
+  </li>
+  <li><strong>Snapshotter</strong>: 컨테이너 실행 시 레이어를 압축 해제하여 파일시스템으로 제공
+    <ul>
+      <li>경로: <code class="highlighter-rouge">io.containerd.snapshotter.v1.overlayfs/snapshots/</code></li>
+    </ul>
+  </li>
+</ol>
+
+<p><br /></p>
+
+<h2 id="docker-runtime-vs-containerd-비교">Docker runtime vs containerd 비교</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>Docker runtime (dockerd)</th>
+      <th>containerd</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>역할</td>
+      <td>풀스택 컨테이너 플랫폼</td>
+      <td>순수 컨테이너 런타임</td>
+    </tr>
+    <tr>
+      <td>빌드 기능</td>
+      <td>O</td>
+      <td>X</td>
+    </tr>
+    <tr>
+      <td>이미지 저장 경로</td>
+      <td><code class="highlighter-rouge">/var/lib/docker</code></td>
+      <td><code class="highlighter-rouge">/var/lib/containerd</code></td>
+    </tr>
+    <tr>
+      <td>Kubernetes 연동</td>
+      <td>cri-dockerd(과거 dockershim, 현재 제거됨)</td>
+      <td>CRI로 직접 연동</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p>참고: dockerd의 네임스페이스</p>
+  <ul>
+    <li>dockerd는 자체적으로 네임스페이스 개념이 없지만, 내부적으로 containerd를 사용할 때 <code class="highlighter-rouge">moby</code> 네임스페이스를 사용함</li>
+    <li>다만 dockerd는 이미지를 containerd가 아닌 <code class="highlighter-rouge">/var/lib/docker</code>에서 자체 관리하므로, containerd의 <code class="highlighter-rouge">moby</code> 네임스페이스에서 Docker 이미지를 <strong>직접 볼 수는 없음</strong></li>
+  </ul>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="실제-디렉토리-구조-확인">실제 디렉토리 구조 확인</h1>
+
+<p>호스트에서 실제로 각 컨테이너 런타임의 스토리지 드라이버가 생성한 디렉토리 구조를 확인해 볼 수 있다. Docker의 overlay2와 containerd의 overlayfs snapshotter 모두 커널의 OverlayFS를 사용하므로, CoW 등 파일 시스템 동작은 동일하다. 차이는 레이어를 디스크에 어떤 구조로 저장하고 관리하느냐에 있다.</p>
+
+<h2 id="docker-runtime-dockerd---overlay2">Docker runtime (dockerd) - overlay2</h2>
+
+<p>Docker runtime(dockerd)은 overlay2를 통해 각 레이어를 관리한다. 각 레이어는 layer-id로 식별되며, <code class="highlighter-rouge">merged/</code> 디렉토리가 OverlayFS 마운트 포인트 역할을 한다.</p>
+<ul>
+  <li>호스트 마운트 경로: <code class="highlighter-rouge">/var/lib/docker/overlay2/{container-layer-id}/merged/</code></li>
+</ul>
+
+<h3 id="1-이미지-레이어-확인">1. 이미지 레이어 확인</h3>
+
+<p>이미지 레이어는 읽기 전용이므로 <code class="highlighter-rouge">diff/</code>, <code class="highlighter-rouge">link/</code>, <code class="highlighter-rouge">lower/</code>, <code class="highlighter-rouge">work/</code>만 존재한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">ls</span> <span class="nt">-al</span> /var/lib/docker/overlay2/<span class="o">{</span>layer-id<span class="o">}</span>/
+├── diff/      <span class="c"># 이 레이어의 파일 변경 사항</span>
+├── link       <span class="c"># 이 레이어의 심볼릭 링크 ID</span>
+├── lower      <span class="c"># 이 레이어의 하위 레이어 목록</span>
+└── work/      <span class="c"># OverlayFS 작업 디렉토리</span>
+
+<span class="c"># lower 파일: 하위 레이어들이 `:` 로 구분되어 나열됨</span>
+<span class="c"># l/ 디렉토리는 긴 layer-id를 짧게 표현한 심볼릭 링크</span>
+<span class="nv">$ </span><span class="nb">cat</span> /var/lib/docker/overlay2/<span class="o">{</span>layer-id<span class="o">}</span>/lower
+l/MRT27FB56...:l/W4RDG2UV...:l/XX4MFEJP...:...
+
+<span class="c"># diff/ 내부: 이 레이어에서 변경된 파일들만 존재</span>
+<span class="nv">$ </span><span class="nb">ls</span> <span class="nt">-al</span> /var/lib/docker/overlay2/<span class="o">{</span>layer-id<span class="o">}</span>/diff/usr/local/bin
+lrwxrwxrwx 1 root root 23 docker-enforce-initdb.sh -&gt; docker-ensure-initdb.sh
+</code></pre></div></div>
+
+<h3 id="2-컨테이너-레이어-확인-실행-중인-컨테이너">2. 컨테이너 레이어 확인 (실행 중인 컨테이너)</h3>
+
+<p>컨테이너 실행 시 쓰기 레이어가 생성되며, <code class="highlighter-rouge">merged/</code> 디렉토리가 추가된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">ls</span> <span class="nt">-al</span> /var/lib/docker/overlay2/<span class="o">{</span>container-layer-id<span class="o">}</span>/
+├── diff/      <span class="c"># 컨테이너에서 변경된 파일 (upper 역할)</span>
+├── link
+├── lower      <span class="c"># 모든 이미지 레이어 참조 (lower 역할)</span>
+├── merged/    <span class="c"># 통합된 파일시스템 뷰 (마운트 포인트)</span>
+└── work/
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">merged/</code> 디렉토리는 OverlayFS 마운트 포인트이므로, 컨테이너가 실행 중이 아니면 비어있거나 접근이 불가능할 수 있다. 호스트에서는 <code class="highlighter-rouge">diff/</code> 디렉토리를 통해 각 레이어의 내용을 확인할 수 있다.</p>
+
+<h3 id="3-overlayfs-마운트-정보-확인">3. OverlayFS 마운트 정보 확인</h3>
+
+<p><code class="highlighter-rouge">mount</code> 명령으로 lower, upper, merged가 어떻게 마운트되었는지 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실제 실행 결과</span>
+<span class="nv">$ </span>mount | <span class="nb">grep </span>9b6f469c
+overlay on /var/lib/docker/overlay2/9b6f469c.../merged <span class="nb">type </span>overlay <span class="o">(</span>
+  rw,relatime,
+  <span class="nv">lowerdir</span><span class="o">=</span>.../l/MRT27FB56...:...l/W4RDG2UV...:...<span class="o">(</span>15개 레이어<span class="o">)</span>,
+  <span class="nv">upperdir</span><span class="o">=</span>.../9b6f469c.../diff,
+  <span class="nv">workdir</span><span class="o">=</span>.../9b6f469c.../work,
+  nouserxattr
+<span class="o">)</span>
+
+<span class="c"># 요약</span>
+overlay on .../merged <span class="nb">type </span>overlay <span class="o">(</span>
+  <span class="nv">lowerdir</span><span class="o">=</span>레이어N:...:레이어1,   ← 읽기 전용 이미지 레이어들 <span class="o">(</span>lower<span class="o">)</span>
+  <span class="nv">upperdir</span><span class="o">=</span>.../diff,           ← 쓰기 가능 컨테이너 레이어 <span class="o">(</span>upper<span class="o">)</span>
+  <span class="nv">workdir</span><span class="o">=</span>.../work
+<span class="o">)</span>
+</code></pre></div></div>
+
+<h3 id="4-merged-디렉토리-확인">4. merged/ 디렉토리 확인</h3>
+
+<p><code class="highlighter-rouge">merged/</code>는 lower와 upper를 통합한 뷰를 제공하며, 컨테이너 내부에서 보이는 파일시스템 루트(<code class="highlighter-rouge">/</code>)가 된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">ls</span> <span class="nt">-al</span> /var/lib/docker/overlay2/<span class="o">{</span>container-layer-id<span class="o">}</span>/merged/
+bin -&gt; usr/bin
+boot/
+dev/
+etc/
+home/
+...
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h3 id="5-overlayfs의-lowerupper와-overlay2의-매핑">5. OverlayFS의 lower/upper와 overlay2의 매핑</h3>
+<ul>
+  <li><strong>이미지 레이어의 <code class="highlighter-rouge">diff/</code></strong>: 해당 레이어의 파일 변경 사항을 저장. OverlayFS 마운트 시 <strong>lower</strong> 역할을 수행</li>
+  <li><strong>컨테이너 쓰기 레이어의 <code class="highlighter-rouge">diff/</code></strong>: 컨테이너에서 발생한 변경 사항을 저장. OverlayFS 마운트 시 <strong>upper</strong> 역할을 수행</li>
+  <li><strong><code class="highlighter-rouge">merged/</code></strong>: OverlayFS 마운트 포인트로, lower와 upper를 통합한 뷰를 제공</li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="containerd-overlayfs-snapshotter">containerd (overlayfs snapshotter)</h2>
+
+<p>containerd는 overlayfs snapshotter를 통해 각 레이어를 snapshot으로 관리한다. Docker의 overlay2와 달리, 이미지 데이터를 <strong>Content Store</strong>와 <strong>Snapshotter</strong> 두 단계로 관리한다.</p>
+
+<h3 id="1-content-store-이미지-blob-저장">1. Content Store (이미지 blob 저장)</h3>
+
+<p>이미지 pull 시 레이어 <code class="highlighter-rouge">tar.gz</code>, manifest, config 등의 blob이 Content Store에 압축 상태로 저장된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">ls</span> /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/
+a1b2c3d4e5f6...   <span class="c"># 이미지 manifest</span>
+b2c3d4e5f6a1...   <span class="c"># 이미지 config</span>
+c3d4e5f6a1b2...   <span class="c"># 레이어 tar.gz (압축 상태)</span>
+d4e5f6a1b2c3...   <span class="c"># 레이어 tar.gz</span>
+...
+
+<span class="c"># blob은 sha256 해시로 식별되며, 압축된 원본 그대로 저장</span>
+<span class="nv">$ </span>file /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/c3d4e5f6a1b2...
+c3d4e5f6a1b2...: gzip compressed data
+</code></pre></div></div>
+
+<p>Docker의 overlay2는 Content Store 없이 레이어를 바로 <code class="highlighter-rouge">diff/</code> 디렉토리에 풀어서 저장하는 반면, containerd는 원본 blob을 별도로 보관한다.</p>
+
+<h3 id="2-snapshot-레이어-압축-해제">2. Snapshot (레이어 압축 해제)</h3>
+
+<p>Snapshotter가 Content Store의 레이어를 압축 해제하여 snapshot 디렉토리로 만든다. 각 snapshot은 숫자 ID로 식별된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">ls</span> /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/
+1/   2/   3/   4/   5/   ...
+</code></pre></div></div>
+
+<p>snapshot에는 두 종류가 있다.</p>
+
+<ul>
+  <li><strong>Committed snapshot</strong> (이미지 레이어): 읽기 전용. <code class="highlighter-rouge">fs/</code>에 해당 레이어의 파일이 직접 들어 있다. Docker의 <code class="highlighter-rouge">diff/</code>에 해당.</li>
+  <li><strong>Active snapshot</strong> (컨테이너 쓰기 레이어): 컨테이너 실행 시 생성. <code class="highlighter-rouge">fs/</code>가 OverlayFS 마운트 포인트(merged)로 사용된다.</li>
+</ul>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Committed snapshot (이미지 레이어) - fs/에 해당 레이어 파일이 직접 존재</span>
+<span class="nv">$ </span><span class="nb">ls</span> /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/1/
+├── fs/        <span class="c"># 이 레이어의 파일들 (Docker의 diff/에 해당)</span>
+│   ├── bin/
+│   ├── etc/
+│   ├── lib/
+│   └── ...
+└── work/
+
+<span class="c"># Active snapshot (컨테이너 쓰기 레이어) - fs/가 OverlayFS merged 뷰</span>
+<span class="nv">$ </span><span class="nb">ls</span> /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/5/
+├── fs/        <span class="c"># OverlayFS 마운트 포인트 (merged 뷰, 컨테이너 실행 중에만 마운트됨)</span>
+│   ├── bin/
+│   ├── dev/
+│   ├── etc/
+│   └── ...
+└── work/
+</code></pre></div></div>
+
+<blockquote>
+  <p><code class="highlighter-rouge">fs/</code>의 역할이 snapshot 종류에 따라 다르다는 점이 Docker와의 핵심 차이다. Docker는 <code class="highlighter-rouge">diff/</code>(레이어 내용)와 <code class="highlighter-rouge">merged/</code>(통합 뷰)가 명확히 분리되어 있지만, containerd는 <code class="highlighter-rouge">fs/</code> 하나가 committed에서는 레이어 내용, active에서는 merged 뷰 역할을 한다.</p>
+</blockquote>
+
+<h3 id="3-snapshot-간-parent-관계">3. Snapshot 간 parent 관계</h3>
+
+<p>Docker의 <code class="highlighter-rouge">lower</code> 파일처럼, containerd도 snapshot 간 부모-자식 관계를 관리한다. 다만 파일 시스템이 아닌 containerd의 메타데이터 DB(boltdb)에서 관리한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># ctr로 snapshot 목록과 parent 관계 확인</span>
+<span class="nv">$ </span>ctr <span class="nt">-n</span> k8s.io snapshots <span class="nb">ls
+</span>KEY                                      PARENT                                   KIND
+sha256:a1b2c3...                                                                  Committed
+sha256:b2c3d4...                         sha256:a1b2c3...                         Committed
+sha256:c3d4e5...                         sha256:b2c3d4...                         Committed
+container-abc123                         sha256:c3d4e5...                         Active
+
+<span class="c"># KIND: Committed = 이미지 레이어 (읽기 전용), Active = 컨테이너 쓰기 레이어</span>
+<span class="c"># PARENT: 이 snapshot이 기반으로 하는 하위 레이어</span>
+</code></pre></div></div>
+
+<h3 id="4-overlayfs-마운트-정보-확인">4. OverlayFS 마운트 정보 확인</h3>
+
+<p>Docker와 마찬가지로 <code class="highlighter-rouge">mount</code> 명령으로 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>mount | <span class="nb">grep</span> <span class="s1">'containerd.*overlay'</span>
+overlay on /run/containerd/io.containerd.runtime.v2.task/.../rootfs <span class="nb">type </span>overlay <span class="o">(</span>
+  rw,relatime,
+  <span class="nv">lowerdir</span><span class="o">=</span>.../snapshots/3/fs:.../snapshots/2/fs:.../snapshots/1/fs,
+  <span class="nv">upperdir</span><span class="o">=</span>.../snapshots/5/fs,
+  <span class="nv">workdir</span><span class="o">=</span>.../snapshots/5/work
+<span class="o">)</span>
+</code></pre></div></div>
+
+<p>Docker와 비교하면:</p>
+<ul>
+  <li><strong>lowerdir</strong>: <code class="highlighter-rouge">snapshots/{id}/fs</code> (committed snapshot들의 <code class="highlighter-rouge">fs/</code>)</li>
+  <li><strong>upperdir</strong>: active snapshot의 <code class="highlighter-rouge">fs/</code></li>
+  <li><strong>마운트 포인트</strong>: <code class="highlighter-rouge">/run/containerd/.../rootfs</code> (Docker는 <code class="highlighter-rouge">overlay2/{id}/merged</code>)</li>
+</ul>
+
+<h3 id="5-docker-overlay2와의-비교-요약">5. Docker overlay2와의 비교 요약</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>Docker overlay2</th>
+      <th>containerd overlayfs snapshotter</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>원본 blob 보관</td>
+      <td>없음 (바로 압축 해제)</td>
+      <td>Content Store에 별도 보관</td>
+    </tr>
+    <tr>
+      <td>레이어 식별</td>
+      <td>layer-id (해시)</td>
+      <td>숫자 ID</td>
+    </tr>
+    <tr>
+      <td>레이어 내용 디렉토리</td>
+      <td><code class="highlighter-rouge">diff/</code></td>
+      <td><code class="highlighter-rouge">fs/</code> (committed snapshot)</td>
+    </tr>
+    <tr>
+      <td>통합 뷰 디렉토리</td>
+      <td><code class="highlighter-rouge">merged/</code></td>
+      <td><code class="highlighter-rouge">fs/</code> (active snapshot)</td>
+    </tr>
+    <tr>
+      <td>레이어 관계 관리</td>
+      <td><code class="highlighter-rouge">lower</code> 파일 (텍스트)</td>
+      <td>메타데이터 DB (boltdb)</td>
+    </tr>
+    <tr>
+      <td>마운트 포인트</td>
+      <td><code class="highlighter-rouge">/var/lib/docker/overlay2/{id}/merged</code></td>
+      <td><code class="highlighter-rouge">/run/containerd/.../rootfs</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="컨테이너-런타임-cli">컨테이너 런타임 CLI</h1>
+
+<p>사용자 입장에서 각 컨테이너 런타임과 통신하기 위해 CLI 도구를 이용하게 된다. 대부분의 컨테이너 런타임은 Unix Socket을 통해 통신한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>CLI</th>
+      <th>통신 대상</th>
+      <th>통신 방식</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>docker</td>
+      <td>dockerd</td>
+      <td>Docker API</td>
+    </tr>
+    <tr>
+      <td>ctr</td>
+      <td>containerd</td>
+      <td>containerd 네이티브 API</td>
+    </tr>
+    <tr>
+      <td>crictl</td>
+      <td>CRI 호환 런타임</td>
+      <td>CRI 인터페이스</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>crictl  →  CRI 인터페이스     →  CRI 호환 런타임(containerd, CRI-O 등)
+ctr     →  containerd API  →  containerd
+docker  →  Docker API      →  dockerd     →  containerd
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="docker">docker</h2>
+
+<p>Docker 데몬(<code class="highlighter-rouge">dockerd</code>)과 통신하는 CLI이다. <code class="highlighter-rouge">dockerd</code>가 내부적으로 containerd를 사용하지만, 사용자는 Docker API를 통해 상호작용한다.</p>
+
+<h2 id="ctr">ctr</h2>
+
+<p>containerd 네이티브 API로 직접 통신하는 저수준 CLI이다. containerd 패키지에 포함되어 있으며, Docker 설치 시 containerd가 함께 설치되면서 ctr도 같이 설치된다. containerd의 모든 네임스페이스에 접근할 수 있다.</p>
+
+<blockquote>
+  <p><em>참고</em>: moby 네임스페이스의 이미지 조회</p>
+
+  <p><a href="#containerd의-네임스페이스">위에서 설명했듯이</a>, dockerd는 containerd를 사용할 때 <code class="highlighter-rouge">moby</code> 네임스페이스를 사용하지만, 이미지는 containerd가 아닌 <code class="highlighter-rouge">/var/lib/docker</code>에서 자체 관리한다. 따라서 <code class="highlighter-rouge">ctr</code>로 moby 네임스페이스를 조회해도 Docker 이미지를 볼 수 없다.</p>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># moby 네임스페이스의 이미지 조회 (dockerd의 containerd 소켓 사용)</span>
+<span class="nv">$ </span><span class="nb">sudo </span>ctr <span class="nt">-n</span> moby images <span class="nb">ls</span>
+<span class="c"># ctr 기본 소켓: /run/containerd/containerd.sock (dockerd가 실행한 containerd)</span>
+REF TYPE DIGEST SIZE PLATFORMS LABELS
+<span class="c"># (비어있음 - Docker는 이미지를 containerd가 아닌 /var/lib/docker에서 관리)</span>
+</code></pre></div>  </div>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="crictl">crictl</h2>
+
+<p>CRI(Container Runtime Interface) 인터페이스를 통해 통신하는 CLI이다. containerd 전용이 아니라, CRI를 구현한 모든 런타임(containerd, CRI-O 등)과 통신할 수 있는 범용 도구이다.</p>
+
+<p>쿠버네티스/CRI 생태계 도구로, k3s 설치 시 함께 설치된다.</p>
+
+<blockquote>
+  <p>참고: crictl에는 빌드 기능이 없다. pull, run, inspect 등 런타임 조작만 가능하다. containerd 환경에서 이미지를 빌드하려면 BuildKit, kaniko, nerdctl 등 별도 빌드 도구가 필요하다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="k8sk3s-환경에서의-권장-cli">k8s/k3s 환경에서의 권장 CLI</h2>
+
+<p>k8s/k3s 환경에서는 <strong>crictl</strong>을 사용하는 것이 적합하다.</p>
+
+<ul>
+  <li>쿠버네티스가 CRI를 통해 containerd와 통신하므로, crictl을 사용하면 <strong>쿠버네티스가 보는 것과 동일한 뷰</strong>를 볼 수 있다.</li>
+  <li>ctr을 사용할 경우, containerd의 모든 네임스페이스를 볼 수 있어 쿠버네티스에서 사용하지 않는 이미지까지 보일 수 있다.</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>이 글에서 다룬 배경 지식을 요약하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>핵심 내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>컨테이너 런타임</td>
+      <td>dockerd는 containerd를 내부적으로 사용하지만, 이미지는 독립적으로 관리. 저장 경로가 다르다</td>
+    </tr>
+    <tr>
+      <td>스토리지 드라이버</td>
+      <td>Docker overlay2는 레이어를 바로 압축 해제하여 <code class="highlighter-rouge">diff/</code>에 저장. containerd는 Content Store에 압축 보관 후 Snapshotter가 <code class="highlighter-rouge">fs/</code>로 해제</td>
+    </tr>
+    <tr>
+      <td>CLI 도구</td>
+      <td>docker(dockerd), ctr(containerd 네이티브), crictl(CRI 인터페이스). k8s 환경에서는 crictl 사용 권장</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>처음에 확인한 현상을 다시 살펴보면:</p>
+<ul>
+  <li><strong>이름 차이</strong>(<code class="highlighter-rouge">co-detr-coco-app</code> vs <code class="highlighter-rouge">docker.io/co-detr-coco-app</code>): 런타임마다 이미지 이름 표시 방식이 다르기 때문</li>
+  <li><strong>크기 차이</strong>(20.3GB vs 10.4GB): 런타임마다 크기 계산 기준(압축 해제 vs 압축 상태)이 다르기 때문</li>
+  <li><strong>중복 저장</strong>: 각 런타임이 독립적인 경로에 이미지를 저장하기 때문</li>
+</ul>
+
+<p><a href="/dev/Dev-Container-Duplicate-Container-Images-2/">다음 글</a>에서는 이 배경 지식을 바탕으로, 동일한 이미지가 왜 중복 저장되고 다른 크기로 보이는지 실제 분석 과정을 다룬다.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/dev/Dev-Container-Duplicate-Container-Images-2/">[Container] Docker와 containerd 이미지 관리 비교 - 2. 같은 이미지가 중복 저장된 이유</a></li>
+    
+    <li><a href="/cs/CS-Container-Image/">[Container] 컨테이너 이미지</a></li>
+    
+    <li><a href="/cs/CS-Container-Filesystem/">[Container] 컨테이너 파일 시스템</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-12/">[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 12. Smoke Test</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#container-runtime" class="page__taxonomy-item" rel="tag">container-runtime</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#containerd" class="page__taxonomy-item" rel="tag">containerd</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#container" class="page__taxonomy-item" rel="tag">container</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#cri" class="page__taxonomy-item" rel="tag">cri</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#docker" class="page__taxonomy-item" rel="tag">docker</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#overlayfs" class="page__taxonomy-item" rel="tag">overlayfs</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#storage-driver" class="page__taxonomy-item" rel="tag">storage-driver</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2025-12-12T00:00:00+09:00">December 12, 2025</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BContainer%5D+Docker%EC%99%80+containerd+%EC%9D%B4%EB%AF%B8%EC%A7%80+%EA%B4%80%EB%A6%AC+%EB%B9%84%EA%B5%90+-+1.+%EB%B0%B0%EA%B2%BD%EC%A7%80%EC%8B%9D%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Container-Duplicate-Container-Images-1%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Container-Duplicate-Container-Images-1%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Container-Duplicate-Container-Images-1%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-Container-Duplicate-Container-Images-1?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-Recursive-Query/" class="pagination--pager" title="[PostgreSQL] 재귀 쿼리
+">이전</a>
+    
+    
+      <a href="/dev/Dev-Container-Duplicate-Container-Images-2/" class="pagination--pager" title="[Container] Docker와 containerd 이미지 관리 비교 - 2. 같은 이미지가 중복 저장된 이유
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-Container-Duplicate-Container-Images-1/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-Container-Duplicate-Container-Images-1"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

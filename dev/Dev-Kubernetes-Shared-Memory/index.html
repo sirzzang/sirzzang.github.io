@@ -1,0 +1,1121 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Dev] Kubernetes 공유 메모리: PyTorch DataLoader shm 부족 트러블슈팅 - Eraser’s StudyLog</title>
+<meta name="description" content="Kubernetes에서 PyTorch DataLoader의 shared memory 부족 문제를 emptyDir 볼륨으로 해결한다. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Dev] Kubernetes 공유 메모리: PyTorch DataLoader shm 부족 트러블슈팅">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-Kubernetes-Shared-Memory/">
+
+
+  <meta property="og:description" content="Kubernetes에서 PyTorch DataLoader의 shared memory 부족 문제를 emptyDir 볼륨으로 해결한다. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2024-07-22T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-Kubernetes-Shared-Memory/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Dev] Kubernetes 공유 메모리: PyTorch DataLoader shm 부족 트러블슈팅">
+    <meta itemprop="description" content="Kubernetes에서 PyTorch DataLoader의 shared memory 부족 문제를 emptyDir 볼륨으로 해결한다.">
+    <meta itemprop="datePublished" content="2024-07-22T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Dev] Kubernetes 공유 메모리: PyTorch DataLoader shm 부족 트러블슈팅
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2024-07-22T00:00:00+09:00">2024년 07월 22일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  3 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#문제">문제</a></li>
+  <li><a href="#원인">원인</a>
+    <ul>
+      <li><a href="#pytorch-dataloader의-멀티-프로세스-데이터-로딩">PyTorch DataLoader의 멀티 프로세스 데이터 로딩</a></li>
+      <li><a href="#devshm과-컨테이너의-기본-제한">/dev/shm과 컨테이너의 기본 제한</a></li>
+    </ul>
+  </li>
+  <li><a href="#해결">해결</a>
+    <ul>
+      <li><a href="#선택지-비교">선택지 비교</a></li>
+      <li><a href="#emptydir로-devshm-확장">emptyDir로 /dev/shm 확장</a></li>
+      <li><a href="#주의사항">주의사항</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>Kubernetes 환경에서 PyTorch DataLoader를 멀티 프로세스(<code class="highlighter-rouge">num_workers &gt; 0</code>)로 실행하면, 공유 메모리(shared memory) 부족으로 <code class="highlighter-rouge">Bus error</code>가 발생할 수 있다</li>
+  <li>컨테이너의 <code class="highlighter-rouge">/dev/shm</code> 기본 크기가 64MiB로 제한되어 있기 때문이다</li>
+  <li><code class="highlighter-rouge">medium: Memory</code> 타입의 <code class="highlighter-rouge">emptyDir</code> 볼륨을 <code class="highlighter-rouge">/dev/shm</code>에 마운트하면 해결된다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="문제">문제</h1>
+
+<p>Kubernetes 환경에서 <a href="https://github.com/Megvii-BaseDetection/YOLOX">YOLOX</a>(객체 탐지 모델) 학습을 위한 컨테이너를 실행했다. <a href="https://argoproj.github.io/workflows/">Argo Workflow</a>(Kubernetes 네이티브 워크플로우 엔진)를 이용해 데이터 추출, 전처리 등의 파이프라인이 순차적으로 실행되고, 마지막 단계에서 모델 학습 컨테이너가 시작되는 구조다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-pytorch-dataloader-shm-error.png" alt="kubernetes-pytorch-dataloader-shm-error" class="align-center" /></p>
+
+<p>학습 컨테이너가 시작된 직후, 공유 메모리(shared memory) 부족으로 컨테이너가 종료되었다.</p>
+
+<blockquote>
+  <p>RuntimeError: DataLoader worker (pid 229) is killed by signal: Bus error. It is possible that dataloader’s workers are out of shared memory. Please try to raise your shared memory limit.</p>
+</blockquote>
+
+<p>에러 메시지를 분석하면 다음과 같다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">Bus error</code>: 프로세스가 접근 불가능한 메모리 영역에 쓰기를 시도했다는 신호</li>
+  <li><code class="highlighter-rouge">dataloader's workers are out of shared memory</code>: DataLoader 워커 프로세스들이 데이터를 공유하는 데 사용하는 공유 메모리 공간이 부족하다</li>
+  <li><code class="highlighter-rouge">raise your shared memory limit</code>: 공유 메모리 크기를 늘려야 한다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="원인">원인</h1>
+
+<h2 id="pytorch-dataloader의-멀티-프로세스-데이터-로딩">PyTorch DataLoader의 멀티 프로세스 데이터 로딩</h2>
+
+<p>PyTorch <a href="https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader">DataLoader</a>는 <code class="highlighter-rouge">num_workers</code> 파라미터가 1 이상이면 <a href="https://pytorch.org/docs/stable/data.html#multi-process-data-loading">멀티 프로세스 데이터 로딩</a>을 수행한다. 각 워커 프로세스가 별도의 프로세스로 데이터를 로드하고, 메인 프로세스와 공유 메모리(shared memory)를 통해 데이터를 전달한다.</p>
+
+<h2 id="devshm과-컨테이너의-기본-제한">/dev/shm과 컨테이너의 기본 제한</h2>
+
+<p><code class="highlighter-rouge">/dev/shm</code>은 Linux에서 POSIX 공유 메모리를 위해 제공되는 tmpfs(메모리 기반 파일시스템) 마운트 포인트다. 프로세스 간 데이터 공유를 위해 사용되며, PyTorch DataLoader의 워커 프로세스들도 이 영역을 통해 텐서 데이터를 주고받는다.</p>
+
+<p>Docker 컨테이너의 <code class="highlighter-rouge">/dev/shm</code> 기본 크기는 <strong>64MiB</strong>다. Kubernetes에서 실행되는 컨테이너도 컨테이너 런타임의 이 기본값을 그대로 사용하므로, 별도 설정이 없으면 <code class="highlighter-rouge">/dev/shm</code>이 64MiB로 제한된다. 대규모 데이터셋이나 배치 크기가 큰 학습의 경우, DataLoader 워커들이 이 제한을 쉽게 초과한다.</p>
+
+<p><br /></p>
+
+<h1 id="해결">해결</h1>
+
+<h2 id="선택지-비교">선택지 비교</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>방법</th>
+      <th>설명</th>
+      <th>적합 여부</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Dataset 크기/변환 최적화</td>
+      <td>데이터 파이프라인을 경량화하여 공유 메모리 사용량 자체를 줄인다</td>
+      <td>노드 자원이 충분한 상황에서 굳이 성능을 희생할 필요 없다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">num_workers</code> 값 축소</td>
+      <td>워커 수를 줄여 공유 메모리 사용량을 낮춘다</td>
+      <td>마찬가지로 노드 자원이 충분하므로 불필요한 트레이드오프다</td>
+    </tr>
+    <tr>
+      <td>Docker <code class="highlighter-rouge">--shm-size</code></td>
+      <td>컨테이너의 <code class="highlighter-rouge">/dev/shm</code> 크기를 직접 지정한다</td>
+      <td>Docker 실행 시 사용 가능하지만, Kubernetes Pod 스펙에서는 이 옵션을 직접 지정할 수 없다</td>
+    </tr>
+    <tr>
+      <td>Docker <code class="highlighter-rouge">--ipc=host</code></td>
+      <td>호스트의 IPC 네임스페이스를 컨테이너와 공유한다</td>
+      <td>보안 격리가 깨지므로 프로덕션 환경에서는 권장하지 않는다</td>
+    </tr>
+    <tr>
+      <td><strong>emptyDir(<code class="highlighter-rouge">medium: Memory</code>)</strong></td>
+      <td><strong>메모리 기반 emptyDir 볼륨을 <code class="highlighter-rouge">/dev/shm</code>에 마운트한다</strong></td>
+      <td><strong>Kubernetes 네이티브 방식으로, Pod 스펙만으로 설정 가능하다</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>노드 자원이 충분하고 Kubernetes 환경이므로, <code class="highlighter-rouge">emptyDir</code> 볼륨을 사용하는 것이 가장 적합하다.</p>
+
+<p><br /></p>
+
+<h2 id="emptydir로-devshm-확장">emptyDir로 /dev/shm 확장</h2>
+
+<p><code class="highlighter-rouge">emptyDir</code>은 Pod와 수명 주기를 같이 하는 임시 볼륨으로, 빈 디렉토리로 시작한다. <code class="highlighter-rouge">medium</code>을 <code class="highlighter-rouge">Memory</code>로 설정하면 디스크 대신 메모리(tmpfs)에 데이터를 저장한다. 이 볼륨을 컨테이너의 <code class="highlighter-rouge">/dev/shm</code>에 마운트하면 기본 64MiB 제한을 원하는 크기로 확장할 수 있다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># emptyDir(medium: Memory)을 /dev/shm에 마운트하는 기본 패턴</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">example-pod</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">containers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">example-container</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">your_docker_image</span>
+    <span class="na">volumeMounts</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/dev/shm</span>  <span class="c1"># 기본 64MiB /dev/shm을 대체</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">dshm</span>
+  <span class="na">volumes</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">dshm</span>
+    <span class="na">emptyDir</span><span class="pi">:</span>
+      <span class="na">medium</span><span class="pi">:</span> <span class="s">Memory</span>   <span class="c1"># tmpfs(메모리 기반) 사용</span>
+      <span class="na">sizeLimit</span><span class="pi">:</span> <span class="s">4Gi</span>   <span class="c1"># 공유 메모리 상한</span>
+</code></pre></div></div>
+
+<p>이 패턴을 실제 Argo Workflow 매니페스트에 적용한 결과는 다음과 같다.</p>
+
+<details>
+  <summary><b>Argo Workflow 매니페스트 전체</b></summary>
+
+  <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">argoproj.io/v1alpha1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Workflow</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">generateName</span><span class="pi">:</span> <span class="s">training-pipeline-eb042ap-d-231122-</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">argo-workflow</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">entrypoint</span><span class="pi">:</span> <span class="s">training-pipeline</span>
+  <span class="na">imagePullSecrets</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">docker-pull-secret</span>
+  <span class="na">serviceAccountName</span><span class="pi">:</span> <span class="s">argo-workflow-argo-workflows-workflow-controller</span>
+  <span class="na">templates</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">dag</span><span class="pi">:</span>
+      <span class="na">tasks</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">train-model</span>
+        <span class="na">template</span><span class="pi">:</span> <span class="s">model-trainer</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">training-pipeline</span>
+  <span class="pi">-</span> <span class="na">container</span><span class="pi">:</span>
+      <span class="na">args</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="s">main.py</span>
+      <span class="pi">-</span> <span class="s">--config</span>
+      <span class="pi">-</span> <span class="s">yolox_config.ini</span>
+      <span class="pi">-</span> <span class="s">--mode</span>
+      <span class="pi">-</span> <span class="s">train</span>
+      <span class="na">command</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="s">python3</span>
+      <span class="na">image</span><span class="pi">:</span> <span class="s">sir0123/neo-mlops:model-trainer-0.0.1</span>
+      <span class="na">imagePullPolicy</span><span class="pi">:</span> <span class="s">Always</span>
+      <span class="na">volumeMounts</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/app/datasets/COCO</span>  <span class="c1"># 학습 데이터 PVC</span>
+        <span class="na">name</span><span class="pi">:</span> <span class="s">train-data</span>
+        <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+      <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/dev/shm</span>  <span class="c1"># emptyDir을 /dev/shm에 마운트</span>
+        <span class="na">name</span><span class="pi">:</span> <span class="s">shm-empty-dir</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">model-trainer</span>
+  <span class="na">volumes</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">train-data</span>
+    <span class="na">persistentVolumeClaim</span><span class="pi">:</span>
+      <span class="na">claimName</span><span class="pi">:</span> <span class="s">train-data-pvc</span>
+  <span class="pi">-</span> <span class="na">emptyDir</span><span class="pi">:</span>
+      <span class="na">medium</span><span class="pi">:</span> <span class="s">Memory</span>   <span class="c1"># tmpfs 사용</span>
+      <span class="na">sizeLimit</span><span class="pi">:</span> <span class="s">2Gi</span>   <span class="c1"># 학습 데이터 규모에 맞게 설정</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">shm-empty-dir</span>
+</code></pre></div>  </div>
+
+</details>
+
+<h2 id="주의사항">주의사항</h2>
+
+<ul>
+  <li><strong><code class="highlighter-rouge">sizeLimit</code> 설정 필수</strong>: <code class="highlighter-rouge">sizeLimit</code>을 설정하지 않으면 노드 메모리를 무한정 소비할 수 있다. 학습 데이터 규모와 배치 크기를 고려해 적절한 값을 설정해야 한다</li>
+  <li><strong>Pod 메모리 limit과의 관계</strong>: <code class="highlighter-rouge">medium: Memory</code>로 생성한 emptyDir의 사용량은 Pod의 메모리 limit에 포함된다. <code class="highlighter-rouge">/dev/shm</code> 사용량이 커지면 컨테이너가 OOM Kill 당할 수 있으므로, <code class="highlighter-rouge">resources.limits.memory</code>를 충분히 잡아야 한다</li>
+  <li><strong>Pod 삭제 시 데이터 소멸</strong>: emptyDir은 Pod와 수명 주기를 같이 하므로, Pod가 삭제되면 볼륨도 함께 사라진다. <code class="highlighter-rouge">/dev/shm</code> 확장 용도에서는 문제가 되지 않는다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<ul>
+  <li>Kubernetes에서 PyTorch DataLoader를 멀티 프로세스로 실행할 때 <code class="highlighter-rouge">Bus error</code>가 발생하면, <code class="highlighter-rouge">/dev/shm</code> 크기 부족을 의심해야 한다</li>
+  <li><code class="highlighter-rouge">emptyDir</code>에 <code class="highlighter-rouge">medium: Memory</code>를 설정하고 <code class="highlighter-rouge">/dev/shm</code>에 마운트하면, Kubernetes 네이티브 방식으로 공유 메모리 크기를 확장할 수 있다</li>
+  <li><code class="highlighter-rouge">sizeLimit</code>과 Pod의 메모리 limit을 함께 고려하여 설정해야 한다</li>
+  <li>emptyDir 볼륨에 대한 자세한 내용은 <a href="/kubernetes/Kubernetes-Pod-Volume-02-emptyDir/">Pod 볼륨 - emptyDir</a> 포스트를 참고한다</li>
+</ul>
+
+<p><br /></p>
+
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-Pod-Volume-02-emptyDir/">[Kubernetes] Pod 볼륨 - 2. emptyDir</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#argo-workflow" class="page__taxonomy-item" rel="tag">Argo-Workflow</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#dataloader" class="page__taxonomy-item" rel="tag">DataLoader</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#emptydir" class="page__taxonomy-item" rel="tag">emptyDir</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#pytorch" class="page__taxonomy-item" rel="tag">PyTorch</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#shared-memory" class="page__taxonomy-item" rel="tag">shared-memory</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2024-07-22T00:00:00+09:00">July 22, 2024</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BDev%5D+Kubernetes+%EA%B3%B5%EC%9C%A0+%EB%A9%94%EB%AA%A8%EB%A6%AC%3A+PyTorch+DataLoader+shm+%EB%B6%80%EC%A1%B1+%ED%8A%B8%EB%9F%AC%EB%B8%94%EC%8A%88%ED%8C%85%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-Shared-Memory%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-Shared-Memory%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-Shared-Memory%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-Kubernetes-Shared-Memory?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-Nvidia-Container-Runtime/" class="pagination--pager" title="[Container] NVIDIA Container Runtime
+">이전</a>
+    
+    
+      <a href="/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/" class="pagination--pager" title="[Kubernetes] NVIDIA Device Plugin 동작 원리
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-Kubernetes-Shared-Memory/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-Kubernetes-Shared-Memory"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

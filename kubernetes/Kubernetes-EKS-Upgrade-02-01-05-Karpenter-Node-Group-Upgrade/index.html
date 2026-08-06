@@ -1,0 +1,1479 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[EKS] EKS 업그레이드: Karpenter 노드 업그레이드 - Eraser’s StudyLog</title>
+<meta name="description" content="Karpenter가 관리하는 노드를 Drift와 Disruption Budget을 활용해 제어된 방식으로 업그레이드하는 워크샵 내용을 정리해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[EKS] EKS 업그레이드: Karpenter 노드 업그레이드">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-Upgrade-02-01-05-Karpenter-Node-Group-Upgrade/">
+
+
+  <meta property="og:description" content="Karpenter가 관리하는 노드를 Drift와 Disruption Budget을 활용해 제어된 방식으로 업그레이드하는 워크샵 내용을 정리해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-23T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-Upgrade-02-01-05-Karpenter-Node-Group-Upgrade/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[EKS] EKS 업그레이드: Karpenter 노드 업그레이드">
+    <meta itemprop="description" content="Karpenter가 관리하는 노드를 Drift와 Disruption Budget을 활용해 제어된 방식으로 업그레이드하는 워크샵 내용을 정리해 보자.">
+    <meta itemprop="datePublished" content="2026-04-23T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[EKS] EKS 업그레이드: Karpenter 노드 업그레이드
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-23T00:00:00+09:00">2026년 04월 23일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  7 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#karpenter-노드-업그레이드-개요">Karpenter 노드 업그레이드 개요</a></li>
+  <li><a href="#drift">Drift</a>
+    <ul>
+      <li><a href="#ami를-직접-지정하는-경우">AMI를 직접 지정하는 경우</a></li>
+      <li><a href="#eks-최적화-ami를-사용하는-경우">EKS 최적화 AMI를 사용하는 경우</a></li>
+    </ul>
+  </li>
+  <li><a href="#ttl-expireafter">TTL (expireAfter)</a></li>
+  <li><a href="#disruption-budget">Disruption Budget</a>
+    <ul>
+      <li><a href="#기본-동작">기본 동작</a></li>
+      <li><a href="#budget-예시">Budget 예시</a>
+        <ul>
+          <li><a href="#drift-시-한-대씩-교체">Drift 시 한 대씩 교체</a></li>
+          <li><a href="#업무-시간-중-교체-금지">업무 시간 중 교체 금지</a></li>
+          <li><a href="#모든-자발적-disruption-차단">모든 자발적 disruption 차단</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#실습-환경-확인">실습 환경 확인</a>
+    <ul>
+      <li><a href="#nodepoolec2nodeclass-확인">NodePool/EC2NodeClass 확인</a></li>
+      <li><a href="#karpenter-노드-확인">Karpenter 노드 확인</a></li>
+      <li><a href="#taint-확인">Taint 확인</a></li>
+      <li><a href="#checkout-앱-확인">checkout 앱 확인</a></li>
+    </ul>
+  </li>
+  <li><a href="#워크샵-실습-흐름">워크샵 실습 흐름</a>
+    <ul>
+      <li><a href="#1단계-checkout-앱-스케일-아웃">1단계: checkout 앱 스케일 아웃</a></li>
+      <li><a href="#2단계-131용-ami-id-확인">2단계: 1.31용 AMI ID 확인</a></li>
+      <li><a href="#3단계-ec2nodeclass-ami-변경--disruption-budget-추가">3단계: EC2NodeClass AMI 변경 + Disruption Budget 추가</a></li>
+      <li><a href="#4단계-argocd-싱크-및-drift-확인">4단계: ArgoCD 싱크 및 Drift 확인</a></li>
+      <li><a href="#5단계-업그레이드-결과-확인">5단계: 업그레이드 결과 확인</a></li>
+    </ul>
+  </li>
+  <li><a href="#managed-node-group-업그레이드와의-비교">Managed Node Group 업그레이드와의 비교</a></li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 AWS EKS Workshop Study(AEWS) 7주차 학습 내용을 기반으로 합니다.</em></p>
+
+<blockquote>
+  <p>이 글의 실습 섹션은 워크샵에서 제공하는 의도된 흐름과 결과를 기반으로 작성했다. 실습 환경에서 ArgoCD 싱크가 정상 동작하지 않아 직접 재현하지 못했기 때문에, 워크샵 내용을 중심으로 Karpenter 노드 업그레이드의 개념과 절차를 정리한다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>Karpenter는 노드 그룹(MNG, ASG)이 아닌 <strong>NodePool/EC2NodeClass</strong> 리소스로 노드를 관리하므로, 업그레이드 방식이 Managed Node Group과 근본적으로 다르다</li>
+  <li><strong>Drift</strong>: EC2NodeClass의 AMI를 변경하면 Karpenter가 기존 노드와 desired 상태의 차이를 감지하고, 새 노드를 프로비저닝한 뒤 기존 노드를 교체한다</li>
+  <li><strong>Disruption Budget</strong>: NodePool의 <code class="highlighter-rouge">spec.disruption.budgets</code>로 한 번에 교체되는 노드 수를 제어할 수 있다</li>
+  <li>워크샵에서는 checkout 앱을 10개로 스케일 아웃하여 Karpenter 노드를 2대로 늘린 뒤, AMI를 1.31로 변경하고 Disruption Budget(<code class="highlighter-rouge">nodes: "1"</code>)을 적용하여 <strong>한 대씩 롤링 교체</strong>되는 것을 확인한다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="karpenter-노드-업그레이드-개요">Karpenter 노드 업그레이드 개요</h1>
+
+<p>Karpenter는 스케줄링되지 못한 파드(unschedulable Pod)의 리소스 요청을 분석하여 적절한 크기의 노드를 직접 프로비저닝하는 오픈소스 오토스케일러다. EC2 Auto Scaling Group이나 Managed Node Group 같은 외부 인프라를 거치지 않고 직접 EC2 인스턴스를 관리하므로, 노드 업그레이드 방식도 다르다.</p>
+
+<p>Karpenter에서 노드 업그레이드에 활용할 수 있는 메커니즘은 크게 세 가지다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>메커니즘</th>
+      <th>설명</th>
+      <th>용도</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Drift</strong></td>
+      <td>노드의 현재 상태와 desired 상태의 차이를 감지하여 자동 교체</td>
+      <td>AMI 변경, NodePool 설정 변경 시</td>
+    </tr>
+    <tr>
+      <td><strong>expireAfter</strong></td>
+      <td>노드가 지정된 시간 이상 실행되면 자동 만료</td>
+      <td>주기적 노드 교체, 보안 패치</td>
+    </tr>
+    <tr>
+      <td><strong>Disruption Budget</strong></td>
+      <td>한 번에 교체 가능한 노드 수/비율을 제한</td>
+      <td>대규모 클러스터에서 점진적 업그레이드</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="drift">Drift</h1>
+
+<p>Drift는 Karpenter의 핵심 업그레이드 메커니즘이다. EC2NodeClass나 NodePool의 설정이 변경되면, Karpenter가 기존 노드와 새 설정 사이의 차이(drift)를 감지하고 롤링 방식으로 노드를 교체한다.</p>
+
+<p>교체 과정은 다음과 같다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>AMI 변경 감지 (Drift 발생)
+    ↓
+새 노드 프로비저닝 (새 AMI로)
+    ↓
+기존 노드 Cordon (새 파드 스케줄링 차단)
+    ↓
+기존 노드의 파드 축출 (Kubernetes Eviction API)
+    ↓
+기존 노드 Terminate
+</code></pre></div></div>
+
+<p>AMI 지정 방식에 따라 Drift 동작이 다르다.</p>
+
+<h2 id="ami를-직접-지정하는-경우">AMI를 직접 지정하는 경우</h2>
+
+<p><code class="highlighter-rouge">EC2NodeClass</code>의 <code class="highlighter-rouge">amiSelectorTerms</code>에 AMI ID, 이름, 태그 등으로 직접 지정하는 방식이다. AMI를 변경하면 Karpenter가 기존 노드의 AMI와 새 설정의 AMI가 다른 것을 감지하고 Drift를 발생시킨다. 환경별로 검증된 AMI를 순차적으로 승격(promote)시키고 싶을 때 적합하다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">karpenter.k8s.aws/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">EC2NodeClass</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">default</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">amiSelectorTerms</span><span class="pi">:</span>
+    <span class="c1"># AMI ID를 직접 지정</span>
+    <span class="pi">-</span> <span class="na">id</span><span class="pi">:</span> <span class="s">ami-0f676a166352f02ab</span>
+</code></pre></div></div>
+
+<h2 id="eks-최적화-ami를-사용하는-경우">EKS 최적화 AMI를 사용하는 경우</h2>
+
+<p><code class="highlighter-rouge">alias</code> 필드를 사용하면 EKS 최적화 AMI를 자동으로 선택한다. <code class="highlighter-rouge">alias</code>는 <code class="highlighter-rouge">family@version</code> 형식이며, <code class="highlighter-rouge">version</code>을 <code class="highlighter-rouge">latest</code>로 설정하면 Karpenter가 SSM 파라미터를 모니터링하다가 새 AMI가 릴리스되면 자동으로 Drift를 발생시킨다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">karpenter.k8s.aws/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">EC2NodeClass</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">default</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">amiSelectorTerms</span><span class="pi">:</span>
+    <span class="c1"># latest: 새 AMI 릴리스 시 자동 Drift</span>
+    <span class="pi">-</span> <span class="na">alias</span><span class="pi">:</span> <span class="s">al2023@latest</span>
+</code></pre></div></div>
+
+<blockquote>
+  <p><code class="highlighter-rouge">latest</code>는 사전 프로덕션 환경에서 자동 업그레이드를 받기에 편리하지만, 프로덕션에서는 특정 버전을 고정(pin)하여 하위 환경에서 먼저 검증한 뒤 승격하는 것을 권장한다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="ttl-expireafter">TTL (expireAfter)</h1>
+
+<p><code class="highlighter-rouge">NodePool</code>의 <code class="highlighter-rouge">spec.disruption.expireAfter</code>를 설정하면, 노드가 지정된 시간만큼 실행된 뒤 자동으로 만료(expire) 처리된다. 만료된 노드는 Karpenter가 교체 노드를 프로비저닝한 뒤 삭제한다.</p>
+
+<p>주기적으로 노드를 교체하여 보안 패치를 적용하거나, 장기 실행 노드의 리소스 단편화를 해소하는 데 유용하다.</p>
+
+<p><br /></p>
+
+<h1 id="disruption-budget">Disruption Budget</h1>
+
+<p>대규모 클러스터에서 Drift가 수백 개 노드에 동시에 발생하면, 모든 노드가 한꺼번에 교체되어 서비스에 영향을 줄 수 있다. <code class="highlighter-rouge">NodePool</code>의 <code class="highlighter-rouge">spec.disruption.budgets</code>로 이를 제어할 수 있다.</p>
+
+<h2 id="기본-동작">기본 동작</h2>
+
+<p>Disruption Budget이 정의되지 않으면, Karpenter는 기본적으로 전체 노드의 <strong>10%</strong>만 동시에 교체한다. Budget은 Drift, Empty, Underutilized 등 자발적(voluntary) disruption에만 적용되며, 노드 장애 같은 비자발적 disruption에는 적용되지 않는다.</p>
+
+<h2 id="budget-예시">Budget 예시</h2>
+
+<h3 id="drift-시-한-대씩-교체">Drift 시 한 대씩 교체</h3>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">karpenter.sh/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">NodePool</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">default</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">disruption</span><span class="pi">:</span>
+    <span class="na">budgets</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">nodes</span><span class="pi">:</span> <span class="s2">"</span><span class="s">1"</span>
+        <span class="na">reasons</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="s">Drifted</span>
+      <span class="pi">-</span> <span class="na">nodes</span><span class="pi">:</span> <span class="s2">"</span><span class="s">100%"</span>
+        <span class="na">reasons</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="s">Empty</span>
+          <span class="pi">-</span> <span class="s">Underutilized</span>
+</code></pre></div></div>
+
+<p>Drift로 인한 교체는 한 대씩만, Empty/Underutilized는 제한 없이 진행된다.</p>
+
+<h3 id="업무-시간-중-교체-금지">업무 시간 중 교체 금지</h3>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">karpenter.sh/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">NodePool</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">default</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">disruption</span><span class="pi">:</span>
+    <span class="na">budgets</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">schedule</span><span class="pi">:</span> <span class="s2">"</span><span class="s">0</span><span class="nv"> </span><span class="s">9</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">mon-fri"</span>
+        <span class="na">duration</span><span class="pi">:</span> <span class="s">8h</span>
+        <span class="na">nodes</span><span class="pi">:</span> <span class="s">0</span>
+      <span class="pi">-</span> <span class="na">nodes</span><span class="pi">:</span> <span class="s">10</span>
+</code></pre></div></div>
+
+<p>평일 09:00~17:00에는 자발적 disruption을 완전히 차단하고, 그 외 시간에는 최대 10대까지만 동시 교체한다.</p>
+
+<h3 id="모든-자발적-disruption-차단">모든 자발적 disruption 차단</h3>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">karpenter.sh/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">NodePool</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">default</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">disruption</span><span class="pi">:</span>
+    <span class="na">budgets</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">nodes</span><span class="pi">:</span> <span class="s">0</span>
+</code></pre></div></div>
+
+<p>미션 크리티컬 워크로드가 실행 중인 NodePool에서, 자발적 disruption을 완전히 막고 싶을 때 사용한다.</p>
+
+<p><br /></p>
+
+<h1 id="실습-환경-확인">실습 환경 확인</h1>
+
+<p>워크샵 실습 환경에는 이미 Karpenter가 설치되어 있고, <code class="highlighter-rouge">default</code> NodePool과 <code class="highlighter-rouge">default</code> EC2NodeClass가 적용되어 있다.</p>
+
+<h2 id="nodepoolec2nodeclass-확인">NodePool/EC2NodeClass 확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>kubectl describe nodepool
+~<span class="nv">$ </span>kubectl describe ec2nodeclass
+</code></pre></div></div>
+
+<p>확인할 수 있는 주요 설정은 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>설정</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Disruption Budget</td>
+      <td><code class="highlighter-rouge">nodes: 10%</code> (기본값)</td>
+    </tr>
+    <tr>
+      <td>노드 레이블</td>
+      <td><code class="highlighter-rouge">Team: checkout</code></td>
+    </tr>
+    <tr>
+      <td>Taint</td>
+      <td><code class="highlighter-rouge">dedicated=CheckoutApp:NoSchedule</code></td>
+    </tr>
+    <tr>
+      <td>NodeClassRef</td>
+      <td><code class="highlighter-rouge">default</code> EC2NodeClass</td>
+    </tr>
+    <tr>
+      <td>AMI ID</td>
+      <td><code class="highlighter-rouge">ami-0f676a166352f02ab</code> (1.30용)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="karpenter-노드-확인">Karpenter 노드 확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>kubectl get nodes <span class="nt">-l</span> <span class="nv">team</span><span class="o">=</span>checkout
+
+<span class="c"># 실행 결과</span>
+NAME                                       STATUS   ROLES    AGE     VERSION
+ip-10-0-12-111.us-west-2.compute.internal   Ready    &lt;none&gt;   3h57m   v1.30.14-eks-f69f56f
+</code></pre></div></div>
+
+<p>Karpenter가 프로비저닝한 노드가 1대 있고, <strong>v1.30</strong> 버전이다.</p>
+
+<h2 id="taint-확인">Taint 확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>kubectl get nodes <span class="nt">-l</span> <span class="nv">team</span><span class="o">=</span>checkout <span class="se">\</span>
+    <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s2">"{range .items[*]}{.metadata.name} {.spec.taints[?(@.effect=='NoSchedule')]}{</span><span class="se">\"\n\"</span><span class="s2">}{end}"</span>
+
+<span class="c"># 실행 결과</span>
+ip-10-0-12-111.us-west-2.compute.internal <span class="o">{</span><span class="s2">"effect"</span>:<span class="s2">"NoSchedule"</span>,<span class="s2">"key"</span>:<span class="s2">"dedicated"</span>,<span class="s2">"value"</span>:<span class="s2">"CheckoutApp"</span><span class="o">}</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">dedicated=CheckoutApp:NoSchedule</code> taint이 적용되어 있어, toleration이 있는 checkout 파드만 이 노드에 스케줄링된다.</p>
+
+<h2 id="checkout-앱-확인">checkout 앱 확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>kubectl get pods <span class="nt">-n</span> checkout <span class="nt">-o</span> wide
+
+<span class="c"># 실행 결과</span>
+NAME                             READY   STATUS    RESTARTS   AGE     IP           NODE
+checkout-5fdd57d475-xxxxx        1/1     Running   0          3h59m   10.0.14.167   ip-10-0-12-111.us-west-2.compute.internal
+checkout-redis-75bcf8cd59-xxxxx  1/1     Running   0          3h59m   10.0.4.32     ip-10-0-12-111.us-west-2.compute.internal
+</code></pre></div></div>
+
+<p>checkout 앱과 checkout-redis가 Karpenter 노드에서 실행 중이다. checkout은 PersistentVolume이 연결된 Stateful 워크로드다.</p>
+
+<p><br /></p>
+
+<h1 id="워크샵-실습-흐름">워크샵 실습 흐름</h1>
+
+<p>워크샵의 의도된 흐름은 다음과 같다.</p>
+
+<ol>
+  <li>checkout 앱을 스케일 아웃하여 Karpenter 노드를 <strong>2대로 늘린다</strong> (Disruption Budget 시연을 위해)</li>
+  <li>1.31용 AMI ID를 확인한다</li>
+  <li>EC2NodeClass의 AMI를 1.31로 변경하고, NodePool에 Disruption Budget을 추가한다</li>
+  <li>ArgoCD 싱크 후 Karpenter가 Drift를 감지하여 <strong>한 대씩</strong> 노드를 교체한다</li>
+</ol>
+
+<h2 id="1단계-checkout-앱-스케일-아웃">1단계: checkout 앱 스케일 아웃</h2>
+
+<p>GitOps 저장소(<code class="highlighter-rouge">eks-gitops-repo/apps/checkout/deployment.yaml</code>)에서 checkout 앱의 레플리카를 1에서 10으로 변경한다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-upgrade-karpenter-scale-checkout.png" alt="deployment.yaml에서 replicas 변경" class="align-center" /></p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span><span class="nb">cd</span> ~/environment/eks-gitops-repo
+~<span class="nv">$ </span>git add apps/checkout/deployment.yaml
+~<span class="nv">$ </span>git commit <span class="nt">-m</span> <span class="s2">"scale checkout app"</span>
+~<span class="nv">$ </span>git push <span class="nt">--set-upstream</span> origin main
+</code></pre></div></div>
+
+<p>ArgoCD가 변경을 감지하여 싱크하면(또는 수동으로 <code class="highlighter-rouge">argocd app sync checkout</code> 실행), 기존 노드 1대로는 10개 파드의 리소스 요청을 감당할 수 없으므로, Karpenter가 <strong>추가 노드를 프로비저닝</strong>한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>kubectl get nodes <span class="nt">-l</span> <span class="nv">team</span><span class="o">=</span>checkout
+
+<span class="c"># 실행 결과 (노드 2대)</span>
+NAME                                        STATUS   ROLES    AGE     VERSION
+ip-10-0-12-111.us-west-2.compute.internal   Ready    &lt;none&gt;   4h13m   v1.30.14-eks-f69f56f
+ip-10-0-41-46.us-west-2.compute.internal    Ready    &lt;none&gt;   21s     v1.30.14-eks-f69f56f
+</code></pre></div></div>
+
+<p>둘 다 <strong>v1.30</strong>이다. Karpenter가 EC2NodeClass에 설정된 현재 AMI(1.30용)로 노드를 프로비저닝했기 때문이다.</p>
+
+<h2 id="2단계-131용-ami-id-확인">2단계: 1.31용 AMI ID 확인</h2>
+
+<p>SSM 파라미터에서 1.31 EKS 최적화 AMI ID를 조회한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>aws ssm get-parameter <span class="se">\</span>
+    <span class="nt">--name</span> /aws/service/eks/optimized-ami/1.31/amazon-linux-2023/x86_64/standard/recommended/image_id <span class="se">\</span>
+    <span class="nt">--region</span> <span class="k">${</span><span class="nv">AWS_REGION</span><span class="k">}</span> <span class="se">\</span>
+    <span class="nt">--query</span> <span class="s2">"Parameter.Value"</span> <span class="nt">--output</span> text
+
+<span class="c"># 실행 결과</span>
+ami-0c4dea04571b1b508
+</code></pre></div></div>
+
+<h2 id="3단계-ec2nodeclass-ami-변경--disruption-budget-추가">3단계: EC2NodeClass AMI 변경 + Disruption Budget 추가</h2>
+
+<p>두 가지 변경을 진행한다.</p>
+
+<p><strong>EC2NodeClass(<code class="highlighter-rouge">default-ec2nc.yaml</code>):</strong> <code class="highlighter-rouge">amiSelectorTerms</code>의 AMI ID를 1.31용으로 교체한다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-upgrade-karpenter-ec2nodeclass-ami.png" alt="EC2NodeClass AMI 변경" class="align-center" /></p>
+
+<p><strong>NodePool(<code class="highlighter-rouge">default-np.yaml</code>):</strong> <code class="highlighter-rouge">spec.disruption.budgets</code>에 Drift 시 한 대씩만 교체하는 budget을 추가한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">budgets</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">nodes</span><span class="pi">:</span> <span class="s2">"</span><span class="s">1"</span>
+    <span class="na">reasons</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="s">Drifted</span>
+</code></pre></div></div>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-upgrade-karpenter-nodepool-budget.png" alt="NodePool Disruption Budget 추가" class="align-center" /></p>
+
+<p>변경 사항을 커밋하고 푸시한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>git add apps/karpenter/default-ec2nc.yaml apps/karpenter/default-np.yaml
+~<span class="nv">$ </span>git commit <span class="nt">-m</span> <span class="s2">"disruption changes"</span>
+~<span class="nv">$ </span>git push <span class="nt">--set-upstream</span> origin main
+</code></pre></div></div>
+
+<h2 id="4단계-argocd-싱크-및-drift-확인">4단계: ArgoCD 싱크 및 Drift 확인</h2>
+
+<p>ArgoCD로 karpenter 앱을 싱크한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>argocd app sync karpenter
+</code></pre></div></div>
+
+<p>싱크가 완료되면, Karpenter 컨트롤러가 EC2NodeClass의 AMI 변경을 감지하고 기존 노드에 Drift를 발생시킨다. Disruption Budget(<code class="highlighter-rouge">nodes: "1"</code>)에 따라 <strong>한 대씩</strong> 교체가 진행된다.</p>
+
+<p>Karpenter 컨트롤러 로그로 과정을 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>kubectl <span class="nt">-n</span> karpenter logs deployment/karpenter <span class="nt">-c</span> controller <span class="nt">--tail</span><span class="o">=</span>33
+</code></pre></div></div>
+
+<details>
+  <summary><b>Karpenter 컨트롤러 로그 (워크샵 결과)</b></summary>
+
+  <div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"disrupting nodeclaim(s) via replace, terminating 1 nodes (2 pods) ip-10-0-41-46.us-west-2.compute.internal/c4.large/spot and replacing with node from types c5.large, c4.large, m6a.large, r4.large, m5.large and 40 other(s)"</span><span class="p">,</span><span class="s2">"reason"</span><span class="p">:</span><span class="s2">"drifted"</span><span class="p">}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"created nodeclaim"</span><span class="p">,</span><span class="s2">"NodePool"</span><span class="p">:{</span><span class="s2">"name"</span><span class="p">:</span><span class="s2">"default"</span><span class="p">},</span><span class="s2">"NodeClaim"</span><span class="p">:{</span><span class="s2">"name"</span><span class="p">:</span><span class="s2">"default-j882g"</span><span class="p">}}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"launched nodeclaim"</span><span class="p">,</span><span class="s2">"instance-type"</span><span class="p">:</span><span class="s2">"c4.large"</span><span class="p">,</span><span class="s2">"zone"</span><span class="p">:</span><span class="s2">"us-west-2c"</span><span class="p">,</span><span class="s2">"capacity-type"</span><span class="p">:</span><span class="s2">"spot"</span><span class="p">}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"registered nodeclaim"</span><span class="p">,</span><span class="s2">"Node"</span><span class="p">:{</span><span class="s2">"name"</span><span class="p">:</span><span class="s2">"ip-10-0-38-70.us-west-2.compute.internal"</span><span class="p">}}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"initialized nodeclaim"</span><span class="p">,</span><span class="s2">"Node"</span><span class="p">:{</span><span class="s2">"name"</span><span class="p">:</span><span class="s2">"ip-10-0-38-70.us-west-2.compute.internal"</span><span class="p">}}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"tainted node"</span><span class="p">,</span><span class="s2">"Node"</span><span class="p">:{</span><span class="s2">"name"</span><span class="p">:</span><span class="s2">"ip-10-0-41-46.us-west-2.compute.internal"</span><span class="p">},</span><span class="s2">"taint.Key"</span><span class="p">:</span><span class="s2">"karpenter.sh/disrupted"</span><span class="p">}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"deleted node"</span><span class="p">,</span><span class="s2">"Node"</span><span class="p">:{</span><span class="s2">"name"</span><span class="p">:</span><span class="s2">"ip-10-0-41-46.us-west-2.compute.internal"</span><span class="p">}}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"deleted nodeclaim"</span><span class="p">,</span><span class="s2">"NodeClaim"</span><span class="p">:{</span><span class="s2">"name"</span><span class="p">:</span><span class="s2">"default-6swc4"</span><span class="p">}}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"disrupting nodeclaim(s) via replace, terminating 1 nodes (8 pods) ip-10-0-12-111.us-west-2.compute.internal/m6i.large/spot and replacing with node from types c5.large, c4.large, m6a.large, r4.large, m5.large and 40 other(s)"</span><span class="p">,</span><span class="s2">"reason"</span><span class="p">:</span><span class="s2">"drifted"</span><span class="p">}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"created nodeclaim"</span><span class="p">,</span><span class="s2">"NodePool"</span><span class="p">:{</span><span class="s2">"name"</span><span class="p">:</span><span class="s2">"default"</span><span class="p">},</span><span class="s2">"NodeClaim"</span><span class="p">:{</span><span class="s2">"name"</span><span class="p">:</span><span class="s2">"default-ct7nn"</span><span class="p">}}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"launched nodeclaim"</span><span class="p">,</span><span class="s2">"instance-type"</span><span class="p">:</span><span class="s2">"c4.large"</span><span class="p">,</span><span class="s2">"zone"</span><span class="p">:</span><span class="s2">"us-west-2a"</span><span class="p">,</span><span class="s2">"capacity-type"</span><span class="p">:</span><span class="s2">"spot"</span><span class="p">}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"registered nodeclaim"</span><span class="p">,</span><span class="s2">"Node"</span><span class="p">:{</span><span class="s2">"name"</span><span class="p">:</span><span class="s2">"ip-10-0-12-207.us-west-2.compute.internal"</span><span class="p">}}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"initialized nodeclaim"</span><span class="p">,</span><span class="s2">"Node"</span><span class="p">:{</span><span class="s2">"name"</span><span class="p">:</span><span class="s2">"ip-10-0-12-207.us-west-2.compute.internal"</span><span class="p">}}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"tainted node"</span><span class="p">,</span><span class="s2">"Node"</span><span class="p">:{</span><span class="s2">"name"</span><span class="p">:</span><span class="s2">"ip-10-0-12-111.us-west-2.compute.internal"</span><span class="p">},</span><span class="s2">"taint.Key"</span><span class="p">:</span><span class="s2">"karpenter.sh/disrupted"</span><span class="p">}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"deleted node"</span><span class="p">,</span><span class="s2">"Node"</span><span class="p">:{</span><span class="s2">"name"</span><span class="p">:</span><span class="s2">"ip-10-0-12-111.us-west-2.compute.internal"</span><span class="p">}}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"INFO"</span><span class="p">,</span><span class="s2">"message"</span><span class="p">:</span><span class="s2">"deleted nodeclaim"</span><span class="p">,</span><span class="s2">"NodeClaim"</span><span class="p">:{</span><span class="s2">"name"</span><span class="p">:</span><span class="s2">"default-q9tgw"</span><span class="p">}}</span><span class="w">
+</span></code></pre></div>  </div>
+
+</details>
+
+<p>로그를 보면, Karpenter가 두 노드를 <strong>순차적으로</strong> 교체하는 것을 확인할 수 있다.</p>
+
+<ol>
+  <li>먼저 <code class="highlighter-rouge">ip-10-0-41-46</code> 노드를 교체: 새 NodeClaim 생성 → 새 노드 프로비저닝 → 기존 노드 taint → 파드 축출 → 기존 노드 삭제</li>
+  <li>첫 번째 교체가 완료된 뒤, <code class="highlighter-rouge">ip-10-0-12-111</code> 노드를 동일한 과정으로 교체</li>
+</ol>
+
+<p><code class="highlighter-rouge">nodes: "1"</code> budget 덕분에 한 대씩만 교체되어, 서비스 가용성이 유지된다.</p>
+
+<h2 id="5단계-업그레이드-결과-확인">5단계: 업그레이드 결과 확인</h2>
+
+<p>모든 교체가 완료되면, Karpenter 노드가 <strong>v1.31</strong>로 업그레이드된 것을 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>kubectl get nodes <span class="nt">-l</span> <span class="nv">team</span><span class="o">=</span>checkout
+
+<span class="c"># 실행 결과</span>
+NAME                                        STATUS   ROLES    AGE     VERSION
+ip-10-0-12-207.us-west-2.compute.internal   Ready    &lt;none&gt;   4m5s    v1.31.14-eks-ecaa3a6
+ip-10-0-38-70.us-west-2.compute.internal    Ready    &lt;none&gt;   5m48s   v1.31.14-eks-ecaa3a6
+</code></pre></div></div>
+
+<p>checkout 파드도 새 노드에서 정상 실행 중이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>kubectl get pods <span class="nt">-n</span> checkout <span class="nt">-o</span> wide
+</code></pre></div></div>
+
+<details>
+  <summary><b>checkout 파드 상세 출력</b></summary>
+
+  <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NAME                              READY   STATUS    RESTARTS   AGE     IP            NODE
+checkout-5fdd57d475-xxxxx         1/1     Running   0          4m18s   10.0.3.90     ip-10-0-12-207.us-west-2.compute.internal
+checkout-5fdd57d475-xxxxx         1/1     Running   0          4m18s   10.0.3.56     ip-10-0-12-207.us-west-2.compute.internal
+checkout-5fdd57d475-xxxxx         1/1     Running   0          6m3s    10.0.34.117   ip-10-0-38-70.us-west-2.compute.internal
+checkout-5fdd57d475-xxxxx         1/1     Running   0          4m18s   10.0.46.239   ip-10-0-38-70.us-west-2.compute.internal
+checkout-5fdd57d475-xxxxx         1/1     Running   0          6m3s    10.0.35.57    ip-10-0-38-70.us-west-2.compute.internal
+checkout-5fdd57d475-xxxxx         1/1     Running   0          4m18s   10.0.3.179    ip-10-0-12-207.us-west-2.compute.internal
+checkout-5fdd57d475-xxxxx         1/1     Running   0          4m18s   10.0.45.116   ip-10-0-38-70.us-west-2.compute.internal
+checkout-5fdd57d475-xxxxx         1/1     Running   0          4m18s   10.0.13.42    ip-10-0-12-207.us-west-2.compute.internal
+checkout-5fdd57d475-xxxxx         1/1     Running   0          4m18s   10.0.3.17     ip-10-0-12-207.us-west-2.compute.internal
+checkout-5fdd57d475-xxxxx         1/1     Running   0          4m18s   10.0.40.78    ip-10-0-38-70.us-west-2.compute.internal
+checkout-redis-75bcf8cd59-xxxxx   1/1     Running   0          4m18s   10.0.12.140   ip-10-0-12-207.us-west-2.compute.internal
+</code></pre></div>  </div>
+
+</details>
+
+<p>10개의 checkout 파드와 checkout-redis 파드가 두 개의 새 노드에 고르게 분산되어 실행 중이다.</p>
+
+<p><br /></p>
+
+<h1 id="managed-node-group-업그레이드와의-비교">Managed Node Group 업그레이드와의 비교</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>Managed Node Group</th>
+      <th>Karpenter</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>노드 관리 주체</td>
+      <td>EKS (ASG 기반)</td>
+      <td>Karpenter 컨트롤러</td>
+    </tr>
+    <tr>
+      <td>업그레이드 트리거</td>
+      <td>MNG 버전 변경 (Terraform/콘솔/CLI)</td>
+      <td>EC2NodeClass AMI 변경 → Drift 감지</td>
+    </tr>
+    <tr>
+      <td>롤링 제어</td>
+      <td><code class="highlighter-rouge">max_unavailable_percentage</code></td>
+      <td><strong>Disruption Budget</strong> (<code class="highlighter-rouge">nodes</code>, <code class="highlighter-rouge">schedule</code>)</td>
+    </tr>
+    <tr>
+      <td>AMI 선택</td>
+      <td>Launch Template 또는 EKS 기본 AMI</td>
+      <td><code class="highlighter-rouge">amiSelectorTerms</code> (ID/alias)</td>
+    </tr>
+    <tr>
+      <td>프로비저닝 방식</td>
+      <td>ASG capacity 조정</td>
+      <td>Karpenter가 직접 EC2 인스턴스 프로비저닝</td>
+    </tr>
+    <tr>
+      <td>Stateful 워크로드</td>
+      <td>PDB 존중 (cordon → drain)</td>
+      <td>PDB 존중 (Eviction API)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>핵심 차이는 <strong>제어 평면</strong>이다. MNG는 AWS가 ASG를 통해 노드 라이프사이클을 관리하고, Karpenter는 자체 컨트롤러가 직접 EC2 인스턴스를 프로비저닝/삭제한다. 따라서 업그레이드도 MNG는 노드 그룹 설정 변경으로, Karpenter는 EC2NodeClass의 AMI 변경 + Drift로 이루어진다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>이 글에서는 Karpenter가 관리하는 노드를 업그레이드하는 방법을 정리했다. EC2NodeClass에서 AMI를 변경하면 Karpenter가 Drift를 감지하여 자동으로 노드를 교체하고, Disruption Budget으로 교체 속도를 제어할 수 있다.</p>
+
+<p>현재까지의 노드 업그레이드 상황을 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>노드 유형</th>
+      <th>노드 그룹</th>
+      <th>전략</th>
+      <th>상태</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Managed Node Group</td>
+      <td><code class="highlighter-rouge">initial</code></td>
+      <td>In-Place</td>
+      <td>1.31 완료</td>
+    </tr>
+    <tr>
+      <td>Managed Node Group</td>
+      <td><code class="highlighter-rouge">blue-mng</code> → <code class="highlighter-rouge">green-mng</code></td>
+      <td>Blue-Green</td>
+      <td>1.31 완료</td>
+    </tr>
+    <tr>
+      <td>Karpenter</td>
+      <td><code class="highlighter-rouge">default</code> NodePool</td>
+      <td><strong>Drift + Disruption Budget</strong></td>
+      <td><strong>1.31 완료 (이 글)</strong></td>
+    </tr>
+    <tr>
+      <td>Self-managed / Fargate</td>
+      <td>default-selfmng, fp-profile</td>
+      <td>AMI 교체 / Deployment 재시작</td>
+      <td>다음 글</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://karpenter.sh/docs/concepts/disruption/">Karpenter Disruption</a></li>
+  <li><a href="https://karpenter.sh/docs/concepts/nodepools/">Karpenter NodePool</a></li>
+  <li><a href="https://karpenter.sh/docs/concepts/nodeclasses/">Karpenter EC2NodeClass</a></li>
+  <li><a href="https://docs.aws.amazon.com/eks/latest/userguide/eks-optimized-ami.html">Amazon EKS Optimized AMIs</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#argocd" class="page__taxonomy-item" rel="tag">ArgoCD</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study-week-7" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study-Week-7</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws" class="page__taxonomy-item" rel="tag">AWS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#disruption-budget" class="page__taxonomy-item" rel="tag">Disruption-Budget</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#drift" class="page__taxonomy-item" rel="tag">Drift</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks-upgrade" class="page__taxonomy-item" rel="tag">EKS-Upgrade</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#karpenter" class="page__taxonomy-item" rel="tag">Karpenter</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-23T00:00:00+09:00">April 23, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEKS%5D+EKS+%EC%97%85%EA%B7%B8%EB%A0%88%EC%9D%B4%EB%93%9C%3A+Karpenter+%EB%85%B8%EB%93%9C+%EC%97%85%EA%B7%B8%EB%A0%88%EC%9D%B4%EB%93%9C%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-Upgrade-02-01-05-Karpenter-Node-Group-Upgrade%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-Upgrade-02-01-05-Karpenter-Node-Group-Upgrade%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-Upgrade-02-01-05-Karpenter-Node-Group-Upgrade%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-EKS-Upgrade-02-01-05-Karpenter-Node-Group-Upgrade?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-EKS-Upgrade-02-01-04-Blue-Green-Managed-Node-Group-Upgrade/" class="pagination--pager" title="[EKS] EKS 업그레이드: Blue-Green Managed Node Group 마이그레이션
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-EKS-Upgrade-02-01-06-Self-Managed-Fargate-Upgrade/" class="pagination--pager" title="[EKS] EKS 업그레이드: Self-managed 노드 및 Fargate 업그레이드
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-EKS-Upgrade-02-01-05-Karpenter-Node-Group-Upgrade/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-EKS-Upgrade-02-01-05-Karpenter-Node-Group-Upgrade"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

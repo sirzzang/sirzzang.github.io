@@ -1,0 +1,1514 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] kubelet의 노드 상태 보고 구조 - Eraser’s StudyLog</title>
+<meta name="description" content="kubelet이 노드 상태를 API server에 보고하는 원리에 대해 알아보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] kubelet의 노드 상태 보고 구조">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-Kubelet-Node-Status/">
+
+
+  <meta property="og:description" content="kubelet이 노드 상태를 API server에 보고하는 원리에 대해 알아보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-22T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-Kubelet-Node-Status/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] kubelet의 노드 상태 보고 구조">
+    <meta itemprop="description" content="kubelet이 노드 상태를 API server에 보고하는 원리에 대해 알아보자.">
+    <meta itemprop="datePublished" content="2026-04-22T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] kubelet의 노드 상태 보고 구조
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-22T00:00:00+09:00">2026년 04월 22일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  8 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#개요">개요</a></li>
+  <li><a href="#node-status-구조">Node .status 구조</a>
+    <ul>
+      <li><a href="#spec-vs-status-패턴">spec vs status 패턴</a></li>
+      <li><a href="#node에서의-적용">Node에서의 적용</a></li>
+      <li><a href="#nodestatus-스키마">NodeStatus 스키마</a></li>
+      <li><a href="#주요-필드-요약">주요 필드 요약</a></li>
+    </ul>
+  </li>
+  <li><a href="#상태-수집과-보고-흐름">상태 수집과 보고 흐름</a>
+    <ul>
+      <li><a href="#kubelet은-stateless에-가깝다">kubelet은 stateless에 가깝다</a></li>
+      <li><a href="#한-주기-안에서의-흐름">한 주기 안에서의 흐름</a></li>
+    </ul>
+  </li>
+  <li><a href="#node-controller와의-관계">Node Controller와의 관계</a></li>
+  <li><a href="#보고-관련-설정">보고 관련 설정</a>
+    <ul>
+      <li><a href="#보고-주기">보고 주기</a></li>
+      <li><a href="#이미지-보고">이미지 보고</a></li>
+      <li><a href="#설정-확인-방법">설정 확인 방법</a></li>
+    </ul>
+  </li>
+  <li><a href="#lease-기반-최적화">Lease 기반 최적화</a>
+    <ul>
+      <li><a href="#기존-방식의-문제">기존 방식의 문제</a></li>
+      <li><a href="#lease란">Lease란</a></li>
+      <li><a href="#핵심-빈도가-아니라-크기-분리">핵심: 빈도가 아니라 크기 분리</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<h1 id="개요">개요</h1>
+
+<p><code class="highlighter-rouge">kubectl get nodes</code>를 실행하면 각 노드의 <code class="highlighter-rouge">STATUS</code>가 <code class="highlighter-rouge">Ready</code>인지, CPU와 메모리는 얼마나 있는지, 어떤 컨테이너 이미지가 캐시되어 있는지 등을 확인할 수 있다. 이 정보는 어디에서 오는 걸까?</p>
+
+<p>답은 <strong>kubelet</strong>이다. 각 노드에서 실행되는 kubelet은 자신의 노드 상태를 수집하여 <strong>API server에 직접 PATCH</strong>한다. kubelet이 API server에 접근할 때는 <a href="/kubernetes/Kubernetes-Kubeconfig-01/">kubeconfig</a>를 사용한다. Node Controller나 Scheduler는 이 데이터를 <strong>읽기만</strong> 할 뿐, 보고를 받는 주체가 아니다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubelet  →  API server (Node .status PATCH)  →  etcd 저장
+                                                    ↑ (읽기)
+                                    Node Controller (health 판단)
+                                    Scheduler (스케줄링 결정)
+</code></pre></div></div>
+
+<p>이 글에서는 kubelet이 노드 상태를 보고하는 구조를 살펴본다. Node <code class="highlighter-rouge">.status</code>의 구조, 상태 수집과 보고 흐름, Node Controller와의 관계, 보고 관련 설정, 그리고 Lease 기반 최적화까지 다룬다.</p>
+
+<p><br /></p>
+
+<h1 id="node-status-구조">Node <code class="highlighter-rouge">.status</code> 구조</h1>
+
+<h2 id="spec-vs-status-패턴"><code class="highlighter-rouge">spec</code> vs <code class="highlighter-rouge">status</code> 패턴</h2>
+
+<p>Kubernetes 리소스의 <code class="highlighter-rouge">.spec</code>과 <code class="highlighter-rouge">.status</code>는 각각 다른 역할을 한다.</p>
+
+<ul>
+  <li><strong><code class="highlighter-rouge">.spec</code></strong>: <strong>desired state</strong>. 사용자나 상위 컨트롤러가 “이렇게 되길 원한다”고 선언하는 부분이다.</li>
+  <li><strong><code class="highlighter-rouge">.status</code></strong>: <strong>observed state</strong>. 에이전트나 컨트롤러가 “지금 실제로 이렇게 보인다”고 보고하는 부분이다.</li>
+</ul>
+
+<p>이 <strong>spec / status 분리</strong>는 Pod, Deployment, Service 등 대부분의 Kubernetes 리소스에 동일하게 적용된다.</p>
+
+<h2 id="node에서의-적용">Node에서의 적용</h2>
+
+<p>Node 리소스에도 같은 패턴이 적용된다. Node는 <code class="highlighter-rouge">core/v1</code> API(<code class="highlighter-rouge">apiVersion: v1</code>, <code class="highlighter-rouge">kind: Node</code>)에 속하고, <code class="highlighter-rouge">.spec</code>과 <code class="highlighter-rouge">.status</code>는 각각 다른 Go 타입으로 정의된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>부분</th>
+      <th>누가 작성</th>
+      <th>정의 타입</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">.spec</code></td>
+      <td>사용자, 컨트롤러 (taints, <code class="highlighter-rouge">podCIDR</code>, <code class="highlighter-rouge">unschedulable</code> 등)</td>
+      <td><code class="highlighter-rouge">NodeSpec</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">.status</code></td>
+      <td><strong>kubelet</strong> (이 필드의 유일한 writer)</td>
+      <td><code class="highlighter-rouge">NodeStatus</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Node가 다른 리소스와 다른 점은 <strong><code class="highlighter-rouge">.status</code>의 writer가 클러스터 안의 컨트롤러가 아니라, 해당 노드에서 돌아가는 kubelet</strong>이라는 것이다.</p>
+
+<h2 id="nodestatus-스키마"><code class="highlighter-rouge">NodeStatus</code> 스키마</h2>
+
+<p><code class="highlighter-rouge">.status</code>는 Kubernetes가 정의한 <code class="highlighter-rouge">NodeStatus</code> 타입을 따른다. 핵심 필드를 발췌하면 다음과 같다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// k8s.io/api/core/v1/types.go (발췌)</span><span class="x">
+</span><span class="k">type</span><span class="x"> </span><span class="n">NodeStatus</span><span class="x"> </span><span class="k">struct</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">Capacity</span><span class="x">        </span><span class="n">ResourceList</span><span class="x">
+    </span><span class="n">Allocatable</span><span class="x">     </span><span class="n">ResourceList</span><span class="x">
+    </span><span class="n">Conditions</span><span class="x">      </span><span class="p">[]</span><span class="n">NodeCondition</span><span class="x">
+    </span><span class="n">Addresses</span><span class="x">       </span><span class="p">[]</span><span class="n">NodeAddress</span><span class="x">
+    </span><span class="n">DaemonEndpoints</span><span class="x"> </span><span class="n">NodeDaemonEndpoints</span><span class="x">
+    </span><span class="n">NodeInfo</span><span class="x">        </span><span class="n">NodeSystemInfo</span><span class="x">
+    </span><span class="n">Images</span><span class="x">          </span><span class="p">[]</span><span class="n">ContainerImage</span><span class="x">
+    </span><span class="c">// ...</span><span class="x">
+</span><span class="p">}</span><span class="x">
+
+</span><span class="k">type</span><span class="x"> </span><span class="n">ContainerImage</span><span class="x"> </span><span class="k">struct</span><span class="x"> </span><span class="p">{</span><span class="x">
+    </span><span class="n">Names</span><span class="x">     </span><span class="p">[]</span><span class="kt">string</span><span class="x">
+    </span><span class="n">SizeBytes</span><span class="x"> </span><span class="kt">int64</span><span class="x">
+</span><span class="p">}</span><span class="x">
+</span></code></pre></div></div>
+
+<p><code class="highlighter-rouge">kubectl get node &lt;이름&gt; -o json</code>으로 보이는 <code class="highlighter-rouge">.status</code> 트리가 곧 이 스키마의 직렬화(serialization) 결과이고, kubelet은 이 형태에 맞춰 채운 뒤 API server에 PATCH한다.</p>
+
+<h2 id="주요-필드-요약">주요 필드 요약</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>필드</th>
+      <th>내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">.status.conditions</code></td>
+      <td>Ready, MemoryPressure, DiskPressure, PIDPressure 등 <a href="https://kubernetes.io/docs/reference/node/node-status/#condition">노드 상태 조건</a></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">.status.capacity</code> / <code class="highlighter-rouge">.allocatable</code></td>
+      <td>CPU, 메모리, GPU 등 스케줄링에 쓰이는 리소스</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">.status.images[]</code></td>
+      <td>노드에 캐시된 컨테이너 이미지 목록</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">.status.nodeInfo</code></td>
+      <td>OS, 커널 버전, kubelet 버전, container runtime 버전</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">.status.addresses</code></td>
+      <td>InternalIP, Hostname 등</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">.status.daemonEndpoints</code></td>
+      <td>kubelet이 노출하는 포트 등</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">.status.conditions</code>의 JSON 예시를 보면 다음과 같다.</p>
+
+<div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+  </span><span class="s2">"conditions"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w">
+    </span><span class="p">{</span><span class="w">
+      </span><span class="s2">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Ready"</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"True"</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"lastHeartbeatTime"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-04-21T00:00:00Z"</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"lastTransitionTime"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-04-20T12:00:00Z"</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"reason"</span><span class="p">:</span><span class="w"> </span><span class="s2">"KubeletReady"</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"message"</span><span class="p">:</span><span class="w"> </span><span class="s2">"kubelet is posting ready status."</span><span class="w">
+    </span><span class="p">},</span><span class="w">
+    </span><span class="p">{</span><span class="w">
+      </span><span class="s2">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"MemoryPressure"</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"False"</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"reason"</span><span class="p">:</span><span class="w"> </span><span class="s2">"KubeletHasSufficientMemory"</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"message"</span><span class="p">:</span><span class="w"> </span><span class="s2">"kubelet has sufficient memory available."</span><span class="w">
+    </span><span class="p">}</span><span class="w">
+  </span><span class="p">]</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div></div>
+
+<p>각 condition에는 <code class="highlighter-rouge">lastHeartbeatTime</code>(마지막으로 해당 조건이 갱신된 시각)과 <code class="highlighter-rouge">lastTransitionTime</code>(상태가 마지막으로 변경된 시각)이 기록된다. Node Controller는 이 시각 정보를 보고 노드의 health를 판단한다.</p>
+
+<p><br /></p>
+
+<h1 id="상태-수집과-보고-흐름">상태 수집과 보고 흐름</h1>
+
+<h2 id="kubelet은-stateless에-가깝다">kubelet은 stateless에 가깝다</h2>
+
+<p>kubelet은 <code class="highlighter-rouge">.status</code>를 <strong>로컬 디스크에 별도로 영속화하지 않는다</strong>. 설정된 주기마다(기본 10초) 그때그때 수집하여 메모리에 조립한 뒤, API server에 PATCH로 반영한다. 장기 저장은 etcd(API server 경유)가 담당하고, kubelet 쪽은 stateless에 가깝다.</p>
+
+<h2 id="한-주기-안에서의-흐름">한 주기 안에서의 흐름</h2>
+
+<p>kubelet의 상태 보고는 한 주기 안에서 다음 세 단계로 이루어진다.</p>
+
+<p><strong>1단계: 각 setter/gatherer가 정보를 수집한다.</strong></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>수집 대상</th>
+      <th>정보 소스</th>
+      <th>수집 방식</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>images</td>
+      <td>CRI(Container Runtime Interface) 런타임 (containerd 등)</td>
+      <td><code class="highlighter-rouge">ListImages</code> 등 CRI RPC로 캐시된 이미지 메타데이터 수집</td>
+    </tr>
+    <tr>
+      <td>conditions</td>
+      <td>시스템 메트릭</td>
+      <td>cgroup, <code class="highlighter-rouge">/proc</code> 등에서 메모리/디스크/PID 압박(pressure) 여부 판단</td>
+    </tr>
+    <tr>
+      <td>capacity / allocatable</td>
+      <td>하드웨어 정보</td>
+      <td>cgroup, sysfs 등에서 CPU, 메모리, 확장 리소스(GPU 등) 읽기</td>
+    </tr>
+    <tr>
+      <td>nodeInfo</td>
+      <td>OS 정보</td>
+      <td><code class="highlighter-rouge">/etc/os-release</code>, <code class="highlighter-rouge">uname</code> 등으로 OS, 커널, kubelet, 런타임 버전 수집</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>2단계: <code class="highlighter-rouge">.status</code> 구조체를 메모리에 조립한다.</strong></p>
+
+<p>수집된 정보를 Node 오브젝트의 <code class="highlighter-rouge">.status</code>에 대응하는 <code class="highlighter-rouge">NodeStatus</code> 구조체로 조립한다.</p>
+
+<p><strong>3단계: 변경이 있으면 API server에 PATCH한다.</strong></p>
+
+<p>직전에 API server에 보고한 값(또는 직전 주기의 스냅샷)과 비교하여, 의미 있는 변경이 있을 때만 PATCH를 보낸다. 변경이 없으면 PATCH를 생략할 수 있다(Lease 기반 최적화, 강제 보고 주기는 뒤에서 다룬다).</p>
+
+<p>정리하면 <strong>매번 fresh 수집 → in-memory 조립 → (필요 시) PATCH</strong>다.</p>
+
+<p><br /></p>
+
+<h1 id="node-controller와의-관계">Node Controller와의 관계</h1>
+
+<p>kubelet과 Node Controller는 <strong>보고하는 쪽</strong>과 <strong>감시하는 쪽</strong>으로 역할이 분리되어 있다. 이 구도를 먼저 이해해야 이후의 설정과 Lease 최적화를 잘 이해할 수 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>역할</th>
+      <th>주체</th>
+      <th>동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>상태 보고</td>
+      <td>kubelet</td>
+      <td>자기 노드의 <code class="highlighter-rouge">.status</code>를 API server에 직접 PATCH</td>
+    </tr>
+    <tr>
+      <td>상태 감시</td>
+      <td>Node Controller</td>
+      <td>모든 노드의 <code class="highlighter-rouge">.status</code>(또는 Lease)를 읽어서 health 판단</td>
+    </tr>
+    <tr>
+      <td>NotReady 판정</td>
+      <td>Node Controller</td>
+      <td>grace period(기본 40초) 초과 시 condition 변경</td>
+    </tr>
+    <tr>
+      <td>Taint 추가</td>
+      <td>Node Controller</td>
+      <td>NotReady → <code class="highlighter-rouge">node.kubernetes.io/not-ready</code> taint (NoSchedule/NoExecute)</td>
+    </tr>
+    <tr>
+      <td>Pod eviction(축출)</td>
+      <td>Node Controller</td>
+      <td>NoExecute taint로 인한 Pod 축출</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>kubelet은 <strong>자기 자신만 보고</strong>하고, Node Controller는 <strong>전체 노드를 감시</strong>한다. 이 분리 덕분에 kubelet이 죽더라도 Node Controller가 heartbeat 갱신이 멈춘 것을 감지하여 NotReady를 판정할 수 있다. kubelet이 스스로 “나 죽었다”고 보고하지 않아도 되는 구조다.</p>
+
+<p><br /></p>
+
+<h1 id="보고-관련-설정">보고 관련 설정</h1>
+
+<h2 id="보고-주기">보고 주기</h2>
+
+<p>kubelet과 kube-controller-manager에는 노드 상태 보고와 관련된 네 가지 핵심 설정이 있다. 설정 파일에서는 <code class="highlighter-rouge">KubeletConfiguration</code> / <code class="highlighter-rouge">KubeControllerManagerConfiguration</code>의 <strong>camelCase 필드명</strong>으로, 커맨드라인에서는 대응하는 <strong><code class="highlighter-rouge">--kebab-case</code> 플래그</strong>로 지정한다.</p>
+
+<p>위 두 개는 <strong>보고하는 쪽(kubelet)</strong>의 설정이고, 아래 두 개는 <strong>감시하는 쪽(Node Controller)</strong>의 설정이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>설정 파일 필드</th>
+      <th>대응 플래그</th>
+      <th>적용 위치</th>
+      <th>기본값</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">nodeStatusUpdateFrequency</code></td>
+      <td><code class="highlighter-rouge">--node-status-update-frequency</code></td>
+      <td>kubelet</td>
+      <td><strong>10초</strong></td>
+      <td>kubelet이 <code class="highlighter-rouge">.status</code>를 API server에 PATCH하는 주기</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nodeStatusReportFrequency</code></td>
+      <td><code class="highlighter-rouge">--node-status-report-frequency</code></td>
+      <td>kubelet</td>
+      <td><strong>5분</strong></td>
+      <td>변경이 없어도 강제 보고하는 주기</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nodeMonitorPeriod</code></td>
+      <td><code class="highlighter-rouge">--node-monitor-period</code></td>
+      <td>kube-controller-manager</td>
+      <td><strong>5초</strong></td>
+      <td>Node Controller가 노드 상태를 확인(polling)하는 주기</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nodeMonitorGracePeriod</code></td>
+      <td><code class="highlighter-rouge">--node-monitor-grace-period</code></td>
+      <td>kube-controller-manager</td>
+      <td><strong>40초</strong></td>
+      <td>이 시간 동안 보고가 없으면 NotReady 판정</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 설정들이 어떻게 맞물려 동작하는지 보면 다음과 같다.</p>
+
+<ol>
+  <li>kubelet은 <strong>10초마다</strong> 노드 상태를 수집하고, 변경이 있으면 API server에 PATCH</li>
+  <li>변경이 없으면 PATCH를 스킵하되, <strong>5분마다</strong> 강제로 한 번 보고 (stale 방지)</li>
+  <li>Node Controller는 <strong>5초마다</strong> 각 노드의 마지막 보고 시각을 확인</li>
+  <li><strong>40초</strong> 동안 보고가 없으면 → NotReady condition 설정</li>
+</ol>
+
+<p>크기 순으로 보면 <code class="highlighter-rouge">nodeMonitorPeriod</code>(5s) &lt; <code class="highlighter-rouge">nodeStatusUpdateFrequency</code>(10s) &lt; <code class="highlighter-rouge">nodeMonitorGracePeriod</code>(40s) &lt; <code class="highlighter-rouge">nodeStatusReportFrequency</code>(5m)이다. Node Controller가 가장 자주 체크하고(5초), kubelet이 그 다음으로 자주 보고하며(10초), 40초 무응답이면 NotReady가 되는 구조다.</p>
+
+<p>동일한 설정을 파일과 플래그에 동시에 지정하면, 일반적으로 <strong>플래그가 파일 값을 덮어쓴다</strong>. 실제 유효값을 확인하려면 둘 다 확인해야 한다.</p>
+
+<h2 id="이미지-보고">이미지 보고</h2>
+
+<p>kubelet이 <code class="highlighter-rouge">.status.images[]</code>에 보고하는 이미지 목록과 관련된 설정도 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>설정 파일 필드</th>
+      <th>대응 플래그</th>
+      <th>기본값</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">nodeStatusMaxImages</code></td>
+      <td><code class="highlighter-rouge">--node-status-max-images</code></td>
+      <td><strong>50</strong></td>
+      <td>보고할 최대 이미지 수. 초과 시 크기가 큰 순으로 우선. <strong>-1</strong>이면 무제한</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">imageGCHighThresholdPercent</code></td>
+      <td><code class="highlighter-rouge">--image-gc-high-threshold</code></td>
+      <td>85</td>
+      <td>디스크 사용률이 이 값 이상이면 이미지 GC 시작</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">imageGCLowThresholdPercent</code></td>
+      <td><code class="highlighter-rouge">--image-gc-low-threshold</code></td>
+      <td>80</td>
+      <td>GC 후 이 수준까지 정리</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">imageMinimumGCAge</code></td>
+      <td><code class="highlighter-rouge">--image-minimum-gc-age</code></td>
+      <td>2분</td>
+      <td>이 시간 이상 미사용된 이미지만 GC 대상</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">nodeStatusMaxImages</code>의 기본값이 50이므로, 노드에 50개가 넘는 이미지가 있으면 <code class="highlighter-rouge">kubectl</code>로 조회할 때 일부가 누락된다. 이미지가 많은 환경에서는 50을 쉽게 초과할 수 있다. 정확한 전수 조회가 필요하면 이 값을 <code class="highlighter-rouge">-1</code>(무제한) 또는 충분히 큰 값으로 변경해야 한다.</p>
+
+<h2 id="설정-확인-방법">설정 확인 방법</h2>
+
+<p>kubelet의 보고 주기나 이미지 설정이 실제로 어떤 값으로 동작하는지 확인하는 방법은 여러 가지가 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>방법</th>
+      <th>명령어</th>
+      <th>특징</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>프로세스 인자 확인</td>
+      <td><code class="highlighter-rouge">ps aux \| grep kubelet</code></td>
+      <td>노드 SSH 필요. 플래그 값만 보임, config 파일 값은 따로 확인</td>
+    </tr>
+    <tr>
+      <td>config 파일 직접 확인</td>
+      <td><code class="highlighter-rouge">cat /var/lib/kubelet/config.yaml</code></td>
+      <td>노드 SSH 필요. 배포 도구마다 경로가 다름</td>
+    </tr>
+    <tr>
+      <td>ConfigMap 확인</td>
+      <td><code class="highlighter-rouge">kubectl get cm kubelet-config -n kube-system</code></td>
+      <td>kubeadm 기반에서만 존재. RKE2, k3s 등에서는 없을 수 있음</td>
+    </tr>
+    <tr>
+      <td>configz API</td>
+      <td><code class="highlighter-rouge">curl .../nodes/&lt;노드&gt;/proxy/configz</code></td>
+      <td><strong>가장 확실</strong>. 현재 유효값을 반환. <code class="highlighter-rouge">kubectl proxy</code> 필요</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>kubelet config 파일의 위치는 배포 도구에 따라 다르다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>배포 도구</th>
+      <th>config 경로</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>kubeadm</td>
+      <td><code class="highlighter-rouge">/var/lib/kubelet/config.yaml</code></td>
+    </tr>
+    <tr>
+      <td>RKE2</td>
+      <td><code class="highlighter-rouge">--config-dir</code> 디렉토리 아래 조각 파일 (예: <code class="highlighter-rouge">/var/lib/rancher/rke2/agent/etc/kubelet.conf.d/</code>)</td>
+    </tr>
+    <tr>
+      <td>k3s</td>
+      <td><code class="highlighter-rouge">/var/lib/rancher/k3s/agent/etc/kubelet.conf</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">ps</code>에서 kubelet의 <code class="highlighter-rouge">--config</code> 또는 <code class="highlighter-rouge">--config-dir</code> 플래그를 확인한 뒤 해당 경로를 따라가면 된다.</p>
+
+<p>이 중 <strong>configz API가 가장 확실</strong>하다. configz는 kubelet이 API server의 node proxy로 노출하는 <strong>현재 유효 설정(effective configuration)</strong>이다. config 파일과 플래그가 동시에 존재할 때, 플래그가 파일 값을 덮어쓰는 경우가 있는데, configz는 이런 우선순위가 모두 적용된 최종 결과를 보여준다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># configz API 호출 (kubectl proxy 필요)</span>
+kubectl proxy <span class="nt">--port</span><span class="o">=</span>18001 &amp;
+curl http://127.0.0.1:18001/api/v1/nodes/&lt;노드명&gt;/proxy/configz | jq <span class="nb">.</span>
+</code></pre></div></div>
+
+<details>
+  <summary><b>configz 출력 예시 (보고 관련 필드 발췌)</b></summary>
+
+  <div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+  </span><span class="s2">"kubeletconfig"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+    </span><span class="s2">"nodeStatusUpdateFrequency"</span><span class="p">:</span><span class="w"> </span><span class="s2">"10s"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"nodeStatusReportFrequency"</span><span class="p">:</span><span class="w"> </span><span class="s2">"5m0s"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"nodeLeaseDurationSeconds"</span><span class="p">:</span><span class="w"> </span><span class="mi">40</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"nodeStatusMaxImages"</span><span class="p">:</span><span class="w"> </span><span class="mi">50</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"imageGCHighThresholdPercent"</span><span class="p">:</span><span class="w"> </span><span class="mi">85</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"imageGCLowThresholdPercent"</span><span class="p">:</span><span class="w"> </span><span class="mi">80</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"imageMinimumGCAge"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2m0s"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"syncFrequency"</span><span class="p">:</span><span class="w"> </span><span class="s2">"30s"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"fileCheckFrequency"</span><span class="p">:</span><span class="w"> </span><span class="s2">"5s"</span><span class="w">
+  </span><span class="p">}</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div>  </div>
+
+</details>
+
+<p>예를 들어, config 파일에 <code class="highlighter-rouge">syncFrequency: 1m0s</code>라고 적혀 있더라도 프로세스 인자로 <code class="highlighter-rouge">--sync-frequency=30s</code>가 지정되어 있으면, configz에는 <code class="highlighter-rouge">30s</code>가 나온다. 이처럼 <strong>configz가 “실제 유효값”을 보여주므로</strong>, 배포 도구와 관계없이 가장 확실한 확인 방법이다.</p>
+
+<p><br /></p>
+
+<h1 id="lease-기반-최적화">Lease 기반 최적화</h1>
+
+<h2 id="기존-방식의-문제">기존 방식의 문제</h2>
+
+<p>Kubernetes 1.14 이전에는 kubelet이 <strong>10초마다 Node <code class="highlighter-rouge">.status</code> 전체를 PATCH</strong>했다. <code class="highlighter-rouge">.status</code>에는 conditions, images 배열(이미지 50개 x names + sizeBytes), capacity, allocatable, nodeInfo, addresses 등이 모두 포함되어 있어 <strong>한 번의 PATCH가 수 KB에서 이미지가 많으면 수십 KB</strong>에 달한다. 노드 수가 수백~수천 대인 클러스터에서는 이 PATCH가 <strong>etcd write throughput과 API server 처리량에 직접적인 부담</strong>이 된다.</p>
+
+<h2 id="lease란">Lease란</h2>
+
+<p>Lease는 Kubernetes의 <code class="highlighter-rouge">coordination.k8s.io/v1</code> API 그룹에 속하는 리소스로, 본래 분산 시스템의 <strong>리스(lease) / 잠금(lock)</strong> 메커니즘을 위해 설계되었다. 노드 heartbeat 용도에서는 각 노드마다 <code class="highlighter-rouge">kube-node-lease</code> 네임스페이스에 Lease 오브젝트가 하나씩 존재하며, kubelet이 이 오브젝트의 <code class="highlighter-rouge">renewTime</code> 필드를 주기적으로 갱신한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># kubectl get lease -n kube-node-lease &lt;노드명&gt; -o yaml</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">coordination.k8s.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Lease</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">worker-node-01</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">kube-node-lease</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">holderIdentity</span><span class="pi">:</span> <span class="s">worker-node-01</span>
+  <span class="na">leaseDurationSeconds</span><span class="pi">:</span> <span class="s">40</span>
+  <span class="na">renewTime</span><span class="pi">:</span> <span class="s2">"</span><span class="s">2026-04-22T10:00:00.000000Z"</span>  <span class="c1"># kubelet이 갱신하는 유일한 필드</span>
+</code></pre></div></div>
+
+<p>Lease 오브젝트 전체가 <strong>수백 바이트</strong>에 불과하다. 갱신할 때도 <code class="highlighter-rouge">renewTime</code> 타임스탬프 하나만 바뀌므로, etcd에 쓰는 데이터양이 Node <code class="highlighter-rouge">.status</code> PATCH와 비교하면 극히 작다.</p>
+
+<h2 id="핵심-빈도가-아니라-크기-분리">핵심: 빈도가 아니라 크기 분리</h2>
+
+<p>Lease 최적화는 heartbeat <strong>빈도를 줄이는 것이 아니다</strong>. 10초마다 한 번이라는 빈도는 동일하다. 핵심은 <strong>“자주 쓰는 것은 가볍게, 무거운 것은 드물게”</strong> 분리한 것이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>무엇을</th>
+      <th>어떻게</th>
+      <th>주기</th>
+      <th>관련 설정</th>
+      <th>크기</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>liveness (살아 있는가)</td>
+      <td>Lease <code class="highlighter-rouge">renewTime</code> 갱신</td>
+      <td>10초</td>
+      <td><code class="highlighter-rouge">nodeStatusUpdateFrequency</code></td>
+      <td><strong>수백 바이트</strong></td>
+    </tr>
+    <tr>
+      <td>status (상태가 변했는가)</td>
+      <td>Node <code class="highlighter-rouge">.status</code> 전체 PATCH</td>
+      <td>변경 시, 또는 5분마다 강제</td>
+      <td><code class="highlighter-rouge">nodeStatusReportFrequency</code></td>
+      <td><strong>수 KB ~ 수십 KB</strong></td>
+    </tr>
+    <tr>
+      <td>health 판단</td>
+      <td>Node Controller가 Lease 갱신 시각 확인</td>
+      <td>5초</td>
+      <td><code class="highlighter-rouge">nodeMonitorPeriod</code></td>
+      <td>(읽기)</td>
+    </tr>
+    <tr>
+      <td>NotReady 판정</td>
+      <td>Lease 갱신이 멈춘 지 40초 경과</td>
+      <td>-</td>
+      <td><code class="highlighter-rouge">nodeMonitorGracePeriod</code></td>
+      <td>-</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>1.14 이전과 비교하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구분</th>
+      <th>1.14 이전</th>
+      <th>1.14 이후 (Lease)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>10초마다 하는 일</td>
+      <td>Node <code class="highlighter-rouge">.status</code> 전체 PATCH (수 KB~수십 KB)</td>
+      <td>Lease <code class="highlighter-rouge">renewTime</code> 갱신 (수백 바이트)</td>
+    </tr>
+    <tr>
+      <td>Node <code class="highlighter-rouge">.status</code> PATCH</td>
+      <td>10초마다 매번</td>
+      <td>변경 시 + 5분마다 강제만</td>
+    </tr>
+    <tr>
+      <td>Node Controller의 liveness 판단 기준</td>
+      <td><code class="highlighter-rouge">.status.conditions[].lastHeartbeatTime</code></td>
+      <td>Lease <code class="highlighter-rouge">renewTime</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>노드 1,000대 클러스터를 기준으로 단순 계산하면, 10초마다 etcd에 쓰는 양이 <strong>~10KB x 1,000 = ~10MB</strong> (이전)에서 <strong>~0.3KB x 1,000 = ~300KB</strong> (Lease)로 줄어든다. 무거운 <code class="highlighter-rouge">.status</code> PATCH는 5분에 한 번으로 빈도가 낮아지므로, 전체적인 etcd/API server 부하가 크게 감소한다.</p>
+
+<p>이 최적화의 설계 배경은 KEP(Kubernetes Enhancement Proposal) <a href="https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/589-efficient-node-heartbeats">KEP-589: Efficient Node Heartbeats</a>에서 확인할 수 있다. 이전 자료에서는 <strong>KEP-0009</strong>로 인용되기도 한다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>kubelet의 노드 상태 보고 구조를 요약하면 다음과 같다.</p>
+
+<ol>
+  <li>kubelet은 자기 노드의 <code class="highlighter-rouge">.status</code>를 <strong>API server에 직접 PATCH</strong>한다(보고). Node Controller는 이 데이터를 읽어서 health를 판단한다(감시).</li>
+  <li>Node <code class="highlighter-rouge">.status</code>는 <code class="highlighter-rouge">NodeStatus</code> 스키마를 따르며, conditions, capacity/allocatable, images, nodeInfo 등을 포함한다.</li>
+  <li>kubelet은 매 주기(기본 10초) <strong>fresh 수집 → in-memory 조립 → 변경 시 PATCH</strong>하는 stateless 구조다.</li>
+  <li>보고 관련 설정은 보고 주기(4개), 이미지 보고(<code class="highlighter-rouge">nodeStatusMaxImages</code> 등)로 나뉘며, configz API로 실제 유효값을 확인할 수 있다.</li>
+  <li>Kubernetes 1.14+부터 <strong>Lease 기반 최적화</strong>로, 자주 쓰는 heartbeat는 경량 Lease로, 무거운 <code class="highlighter-rouge">.status</code> PATCH는 변경 시 + 5분 강제로 분리했다.</li>
+  <li>kubelet이 죽으면 Lease 갱신이 멈추고, Node Controller가 grace period(40초) 후 <strong>NotReady</strong>를 판정한다.</li>
+</ol>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://kubernetes.io/docs/reference/node/node-status/">Node Status - Kubernetes 공식 문서</a></li>
+  <li><a href="https://kubernetes.io/docs/reference/node/node-status/#heartbeats">Node Heartbeats - Kubernetes 공식 문서</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/architecture/nodes/#node-controller">Node Controller - Kubernetes 공식 문서</a></li>
+  <li><a href="https://kubernetes.io/docs/reference/config-api/kubelet-config.v1beta1/">Kubelet Configuration (v1beta1) - Kubernetes API Reference</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/architecture/garbage-collection/#container-image-garbage-collection">Container Image Garbage Collection - Kubernetes 공식 문서</a></li>
+  <li><a href="https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/589-efficient-node-heartbeats">KEP-589: Efficient Node Heartbeats</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#kubelet" class="page__taxonomy-item" rel="tag">kubelet</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#lease" class="page__taxonomy-item" rel="tag">Lease</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#node-controller" class="page__taxonomy-item" rel="tag">Node Controller</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nodestatus" class="page__taxonomy-item" rel="tag">NodeStatus</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#node" class="page__taxonomy-item" rel="tag">Node</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-22T00:00:00+09:00">April 22, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+kubelet%EC%9D%98+%EB%85%B8%EB%93%9C+%EC%83%81%ED%83%9C+%EB%B3%B4%EA%B3%A0+%EA%B5%AC%EC%A1%B0%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Kubelet-Node-Status%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Kubelet-Node-Status%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Kubelet-Node-Status%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-Kubelet-Node-Status?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-Container-Runtime-CLI-Missing-Node-Image-Query/" class="pagination--pager" title="[Kubernetes] Container Runtime CLI 없는 노드에서 이미지 조회하기
+">이전</a>
+    
+    
+      <a href="/dev/Dev-Kubectl-VPN-SSL-Inspection/" class="pagination--pager" title="[Kubernetes] VPN SSL Inspection으로 인한 클러스터 API 접근 실패
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-Kubelet-Node-Status/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-Kubelet-Node-Status"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

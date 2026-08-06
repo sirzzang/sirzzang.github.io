@@ -1,0 +1,1173 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[GenAI] GenAI on K8s: 10.5 - GPU 스케일링·최적화와 NVIDIA NIM - Eraser’s StudyLog</title>
+<meta name="description" content="DCGM 메트릭 기반 GPU 오토스케일링, GPU_UTIL을 맹신하면 안 되는 이유, 그리고 NVIDIA NIM까지 정리해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[GenAI] GenAI on K8s: 10.5 - GPU 스케일링·최적화와 NVIDIA NIM">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-10-05-GPU-Scaling-Optimization-and-NIM/">
+
+
+  <meta property="og:description" content="DCGM 메트릭 기반 GPU 오토스케일링, GPU_UTIL을 맹신하면 안 되는 이유, 그리고 NVIDIA NIM까지 정리해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-06-07T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-10-05-GPU-Scaling-Optimization-and-NIM/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[GenAI] GenAI on K8s: 10.5 - GPU 스케일링·최적화와 NVIDIA NIM">
+    <meta itemprop="description" content="DCGM 메트릭 기반 GPU 오토스케일링, GPU_UTIL을 맹신하면 안 되는 이유, 그리고 NVIDIA NIM까지 정리해 보자.">
+    <meta itemprop="datePublished" content="2026-06-07T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[GenAI] GenAI on K8s: 10.5 - GPU 스케일링·최적화와 NVIDIA NIM
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-06-07T00:00:00+09:00">2026년 06월 07일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  5 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#gpu-메트릭-기반-스케일링">GPU 메트릭 기반 스케일링</a>
+    <ul>
+      <li><a href="#gpu-사용률-기반-hpa">GPU 사용률 기반 HPA</a>
+        <ul>
+          <li><a href="#전체-체인-dcgm--hpa">전체 체인: DCGM → HPA</a></li>
+        </ul>
+      </li>
+      <li><a href="#dcgm-주요-메트릭">DCGM 주요 메트릭</a></li>
+      <li><a href="#gpu-health-기반-리스케줄드레인">GPU health 기반 리스케줄·드레인</a></li>
+      <li><a href="#gpu-기반-스케일링의-어려움">GPU 기반 스케일링의 어려움</a></li>
+      <li><a href="#베스트-프랙티스">베스트 프랙티스</a></li>
+    </ul>
+  </li>
+  <li><a href="#nvidia-nim">NVIDIA NIM</a>
+    <ul>
+      <li><a href="#컨테이너-구성">컨테이너 구성</a></li>
+      <li><a href="#용도">용도</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions">Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)</a> 10장의 학습 내용을 바탕으로 합니다</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>DCGM 메트릭은 prometheus-adapter를 거쳐야 HPA가 읽을 수 있다: DCGM-Exporter → Prometheus → adapter → HPA</li>
+  <li>GPU_UTIL 단일 지표만으로 스케일링하면 phantom utilization(허수)에 속거나, 실제로는 느린데 바쁜 상태를 놓친다 — throughput·latency custom metric 병행이 필수다</li>
+  <li>NVIDIA NIM은 모델 + 런타임 + 최적화 엔진 + 표준 API를 한 컨테이너에 포장한 추론 마이크로서비스다</li>
+</ul>
+
+<p><br /></p>
+
+<p><a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-04-GPU-Sharing-MPS-and-Time-Slicing/">이전 글</a>에서 MPS와 time-slicing을 통한 GPU 공유 기법을 다뤘다. 이번 글에서는 DCGM 메트릭을 활용한 GPU 워크로드 오토스케일링과 NVIDIA NIM을 정리하며 Ch10 이론 파트를 마무리한다. time-slicing 실습에서 DCGM 지표가 부하에 어떻게 반응하는지는 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification/">10.7 Step 7.5</a>에서 실측한다.</p>
+
+<p><br /></p>
+
+<h1 id="gpu-메트릭-기반-스케일링">GPU 메트릭 기반 스케일링</h1>
+
+<p>DCGM이 수집하는 GPU 메트릭(health·utilization·performance)을 기반으로 K8s 워크로드를 동적으로 스케일링할 수 있다.</p>
+
+<p>파이프라인은 다음과 같다. 앞단은 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-02-GPU-Utilization-and-DCGM/">10.2 — GPU Utilization과 DCGM</a>에서 다룬 대로다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>DCGM (telemetry 수집) → dcgm-exporter (Prometheus 포맷 노출)
+  → Prometheus (scrape) → prometheus-adapter (K8s metrics API 변환)
+  → HPA / VPA (워크로드 스케일링)
+</code></pre></div></div>
+
+<blockquote>
+  <p>telemetry = 시스템·하드웨어가 자동으로 수집·전송하는 측정 데이터. <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-02-GPU-Utilization-and-DCGM/">10.2</a>에서도 말했듯이, dcgm-exporter ↔ Prometheus 관계는 expose → scrape(pull)다. <strong>prometheus-adapter</strong>는 10.2 범위 밖이고, 이번 글에서 HPA 연동을 위해 새로 등장한다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="gpu-사용률-기반-hpa">GPU 사용률 기반 HPA</h2>
+
+<p>GPU utilization이 임계치를 넘으면 replica를 늘리고(scale-out), 낮게 유지되면 줄인다(scale-in). DCGM 커스텀 메트릭 기반 HPA는 <code class="highlighter-rouge">autoscaling/v2</code> 스키마로 다음처럼 쓴다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">autoscaling/v2</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">HorizontalPodAutoscaler</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">genai-training-hpa</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">scaleTargetRef</span><span class="pi">:</span>
+    <span class="na">apiVersion</span><span class="pi">:</span> <span class="s">apps/v1</span>
+    <span class="na">kind</span><span class="pi">:</span> <span class="s">Deployment</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">genai-training</span>
+  <span class="na">minReplicas</span><span class="pi">:</span> <span class="s">1</span>
+  <span class="na">maxReplicas</span><span class="pi">:</span> <span class="s">10</span>                      <span class="c1"># scale-out 상한</span>
+  <span class="na">metrics</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">type</span><span class="pi">:</span> <span class="s">Pods</span>                         <span class="c1"># Pod별 GPU 메트릭의 평균</span>
+    <span class="na">pods</span><span class="pi">:</span>
+      <span class="na">metric</span><span class="pi">:</span>
+        <span class="na">name</span><span class="pi">:</span> <span class="s">DCGM_FI_DEV_GPU_UTIL</span>
+      <span class="na">target</span><span class="pi">:</span>
+        <span class="na">type</span><span class="pi">:</span> <span class="s">AverageValue</span>             <span class="c1"># request 대비 %가 아니라 게이지 평균값</span>
+        <span class="na">averageValue</span><span class="pi">:</span> <span class="s2">"</span><span class="s">80"</span>             <span class="c1"># GPU util 평균 80 초과 시 scale-out</span>
+  <span class="na">behavior</span><span class="pi">:</span>
+    <span class="na">scaleDown</span><span class="pi">:</span>
+      <span class="na">stabilizationWindowSeconds</span><span class="pi">:</span> <span class="s">600</span>  <span class="c1"># 낮은 사용률이 10분 지속돼야 scale-in</span>
+</code></pre></div></div>
+
+<blockquote>
+  <p><strong><code class="highlighter-rouge">autoscaling/v2</code> 스키마 주의</strong>: 구 <code class="highlighter-rouge">v2beta1</code>에서 쓰던 <code class="highlighter-rouge">metricName</code>/<code class="highlighter-rouge">targetAverageValue</code>는 v2(GA)에서 제거됐다. v2는 <code class="highlighter-rouge">metric.name</code> + <code class="highlighter-rouge">target.{type, averageValue}</code> 구조를 쓴다. 또 DCGM GPU util은 특정 오브젝트 하나에 붙는 값이 아니라 Pod별 메트릭이므로 <code class="highlighter-rouge">type: Object</code>(이건 <code class="highlighter-rouge">describedObject</code> 필수)보다 <strong><code class="highlighter-rouge">type: Pods</code></strong>가 맞다. <code class="highlighter-rouge">averageUtilization</code>은 Pod의 resource request 대비 %라 커스텀 게이지엔 부적합해서 <code class="highlighter-rouge">AverageValue</code> + <code class="highlighter-rouge">averageValue</code>(여기선 게이지 값 80)를 쓴다.</p>
+</blockquote>
+
+<p><a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-02-GPU-Utilization-and-DCGM/">10.2</a>에서도 말했듯이, <strong>DCGM ≠ dcgm-exporter</strong>다. 전자(DCGM)는 NVML로 GPU 지표를 <strong>측정</strong>하고, 후자(dcgm-exporter)는 그 결과를 Prometheus 텍스트로 <strong>노출</strong>할 뿐이다 — 10.2는 여기까지(관측·Grafana)가 범위였다.</p>
+
+<p>HPA까지 가려면 <strong>10.2에서 다루지 않은</strong> 역할이 하나 더 있다: <strong>prometheus-adapter</strong>. <strong>exporter ≠ prometheus-adapter</strong> — 이름만 비슷할 뿐, exporter는 GPU → Prometheus 방향, adapter는 Prometheus → K8s 방향이다.</p>
+
+<h3 id="전체-체인-dcgm--hpa">전체 체인: DCGM → HPA</h3>
+
+<p>위 HPA manifest의 <code class="highlighter-rouge">metric.name: DCGM_FI_DEV_GPU_UTIL</code>이 실제로 어디서 오는지, hop마다 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>hop</th>
+      <th>컴포넌트</th>
+      <th>하는 일</th>
+      <th>출력</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><strong>DCGM</strong></td>
+      <td>NVML로 GPU 하드웨어에서 utilization·VRAM·온도 등 <strong>원시 지표 수집</strong></td>
+      <td>DCGM 필드 ID (예: <code class="highlighter-rouge">DCGM_FI_DEV_GPU_UTIL</code>)</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>dcgm-exporter</strong></td>
+      <td>DCGM에 질의 → Prometheus exposition format으로 <strong>렌더링</strong> → <code class="highlighter-rouge">:9400/metrics</code> 노출. PodResources API로 Pod/namespace 라벨 부착</td>
+      <td><code class="highlighter-rouge">/metrics</code> 텍스트 (Prometheus scrape 대상)</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>Prometheus</strong></td>
+      <td>exporter를 <strong>주기적으로 scrape(pull)</strong> → TSDB에 시계열 저장. PromQL로 조회 가능</td>
+      <td><code class="highlighter-rouge">DCGM_FI_DEV_GPU_UTIL{...}</code> 시계열</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><strong>prometheus-adapter</strong></td>
+      <td>PromQL 규칙(ConfigMap)에 따라 Prometheus를 <strong>조회</strong> → K8s <strong>custom/external metrics API</strong>로 <strong>번역·노출</strong></td>
+      <td><code class="highlighter-rouge">custom.metrics.k8s.io/v1beta1</code> 등 API 응답</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><strong>HPA</strong></td>
+      <td>metrics API에서 <code class="highlighter-rouge">DCGM_FI_DEV_GPU_UTIL</code> 값을 <strong>읽어</strong> target(80%)과 비교 → Deployment replica <strong>증감</strong></td>
+      <td>scale-out / scale-in</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>1~3hop은 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-02-GPU-Utilization-and-DCGM/">10.2</a>의 관측 파이프라인과 동일하다. Grafana까지는 3hop에서 끝나지만, HPA는 <strong>K8s 네이티브 metrics API</strong>만 이해한다. Prometheus TSDB나 exporter <code class="highlighter-rouge">/metrics</code> URL은 HPA가 접근할 수 없으므로, 4hop adapter가 <strong>Prometheus 세계 ↔ K8s 세계</strong> 사이의 번역기 역할을 한다. adapter의 PromQL→metricName 매핑은 ConfigMap(<code class="highlighter-rouge">rules</code>)으로 정의하며, 여기서 <code class="highlighter-rouge">DCGM_FI_DEV_GPU_UTIL</code>이 HPA가 요청할 수 있는 이름으로 등록된다.</p>
+
+<p><br /></p>
+
+<h2 id="dcgm-주요-메트릭">DCGM 주요 메트릭</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>메트릭</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>DCGM_FI_DEV_GPU_UTIL</strong></td>
+      <td>GPU 사용률 (%)</td>
+    </tr>
+    <tr>
+      <td><strong>DCGM_FI_DEV_FB_USED</strong></td>
+      <td>framebuffer(VRAM) 사용량</td>
+    </tr>
+    <tr>
+      <td><strong>DCGM_FI_DEV_MEM_COPY_UTIL</strong></td>
+      <td>메모리 인터페이스(read/write) 가동 시간 비율(%) — 대역폭(GB/s) 대비 %가 아님</td>
+    </tr>
+    <tr>
+      <td><strong>DCGM_FI_DEV_POWER_USAGE</strong></td>
+      <td>전력 소비</td>
+    </tr>
+    <tr>
+      <td><strong>DCGM_FI_DEV_GPU_TEMP</strong></td>
+      <td>GPU 온도</td>
+    </tr>
+    <tr>
+      <td><strong>DCGM_FI_DEV_XID_ERRORS</strong></td>
+      <td>XID 에러</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h2 id="gpu-health-기반-리스케줄드레인">GPU health 기반 리스케줄·드레인</h2>
+
+<p>DCGM은 error handling·health monitoring 정책도 지원한다. 메모리 에러·과열 감지 → K8s가 해당 노드를 제거하고, 워크로드를 healthier 노드로 이동시킨다.</p>
+
+<p><br /></p>
+
+<h2 id="gpu-기반-스케일링의-어려움">GPU 기반 스케일링의 어려움</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>어려움</th>
+      <th>내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>지표 ↔ 성능 불일치</strong></td>
+      <td>utilization이 실제 application 성능과 직접 연관 없을 수 있다</td>
+    </tr>
+    <tr>
+      <td><strong>공유 GPU 왜곡</strong></td>
+      <td>time-slicing/MIG 환경은 DCGM 메트릭이 공유 기준 → 보정 필요</td>
+    </tr>
+    <tr>
+      <td><strong>모니터링 오버헤드</strong></td>
+      <td>대규모 클러스터에서 GPU 메트릭 상시 수집은 부담이다</td>
+    </tr>
+    <tr>
+      <td><strong>health 미반영 위험</strong></td>
+      <td>error rate·온도를 포함해야 faulty 하드웨어를 회피할 수 있다</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>GPU_UTIL을 곧이곧대로 믿으면 안 되는 두 경우.</strong></p>
+
+  <p><strong>(1) phantom utilization</strong>: GPU에 프로세스도 메모리도 없는데 GPU_UTIL이 100%인 현상이다. 비정상 종료 후 orphaned CUDA context가 원인이다.</p>
+
+  <p>시그니처:</p>
+  <ul>
+    <li>GPU-Util 100%</li>
+    <li>Memory 0</li>
+    <li>프로세스 없음</li>
+    <li>SM activity 100%인데 memory activity 0%</li>
+  </ul>
+
+  <p>위험: 스케줄러·오토스케일러가 “이 GPU는 바쁘다”고 오인한다. 교훈: GPU_UTIL 단독 판단 금지.</p>
+
+  <p>관련 글: <a href="/dev/Dev-GPU-Phantom-Utilization/">Phantom GPU Utilization 사례 분석</a></p>
+
+  <p><strong>(2) util이 진짜 높은데 application 성능은 낮은 경우</strong>: 핵심 성능 지표는 throughput / latency다.</p>
+
+  <ul>
+    <li><strong>memory-bound 추론</strong>: SM이 HBM 대기에 “바쁨”으로 잡힌다. 실제로는 데이터를 기다리는 중이다</li>
+    <li><strong>작은 batch launch 오버헤드</strong>: 커널마다 준비 비용이 든다. 택배 비유로 말하면, 한 건씩 보내면 건당 포장·운송 비용이 커서 총 처리량이 떨어지는 것과 같다</li>
+    <li><strong>공유 GPU(time-slicing) 경합</strong>: 종합 util은 높으나 개별 워크로드의 latency는 길어진다</li>
+    <li><strong>p99 latency·throughput은 util에 안 잡힌다</strong>: GPU가 100% 바빠도 사용자 체감 응답 시간이 느리면 의미가 없다</li>
+  </ul>
+
+  <p>→ util 단일 지표 스케일링은 두 경우 모두 문제다. custom metric 병행이 필요하다.</p>
+</blockquote>
+
+<blockquote>
+  <p>운영자 책임 — time-slicing 환경에서 사용률만 보고 scale-out하면 VRAM OOM이 발생할 수 있다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="베스트-프랙티스">베스트 프랙티스</h2>
+
+<ul>
+  <li>DCGM built-in 정책 활용</li>
+  <li>GPU 지표 + application 지표를 결합한 custom Prometheus 메트릭 사용</li>
+  <li>NVIDIA GPU Operator 연동으로 GPU 스택 일괄 관리</li>
+  <li>scaling threshold를 정기적으로 테스트·튜닝</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="nvidia-nim">NVIDIA NIM</h1>
+
+<p>NIM(NVIDIA Inference Microservices)은 NVIDIA AI Enterprise의 구성요소로, NVIDIA가 AI 모델을 “바로 배포 가능한 추론 마이크로서비스 컨테이너”로 포장한 것이다. TensorRT-LLM, vLLM, SGLang, Triton 같은 최적화된 inference engine 위에 구축되며, runtime에 GPU를 탐지해 (model × GPU) 조합에 맞는 최적 엔진/프로파일을 자동으로 선택한다.</p>
+
+<p><br /></p>
+
+<h2 id="컨테이너-구성">컨테이너 구성</h2>
+
+<p><img src="https://sirzzang.github.io//assets/images/Week04-ch10-nvidia-nim-architecture.png" alt="NVIDIA NIM 컨테이너 구성" class="align-center" /></p>
+
+<p>위 그림은 NIM 컨테이너를 아래에서 위로 쌓은 <strong>레이어 스택</strong>이다. 맨 아래 CUDA runtime/driver 위에 TensorRT-LLM 같은 최적화 엔진과 모델 weights·engine cache가 올라가고, Triton Inference Server가 서빙 계층을 담당한다. 그 위 Enterprise/K8s 연동 레이어를 거쳐 REST/gRPC API로 노출된다. 즉 “모델 파일 + 추론 엔진 + 서빙 런타임 + 표준 API”를 한 이미지에 넣어, Ch10 실습의 <code class="highlighter-rouge">transformers.generate</code> 단순 서빙과 달리 프로덕션급 추론 스택을 바로 쓸 수 있게 하는 구조다.</p>
+
+<blockquote>
+  <p>위 스택 그림(Triton 서빙 계층 중심)은 초기 NIM 아키텍처 기준이다. 최신 LLM NIM은 “한 컨테이너에 한 백엔드(vLLM/TensorRT-LLM/SGLang)”로 단순화되는 추세이고, 노출 API도 LLM NIM은 <strong>OpenAI 호환 REST</strong>가 표준이다. 그림은 개념 이해용으로 보고, 세부 구성은 버전에 따라 달라질 수 있다.</p>
+</blockquote>
+
+<table>
+  <thead>
+    <tr>
+      <th>계층</th>
+      <th>구성</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>노출 (API)</strong></td>
+      <td>표준 REST/gRPC API</td>
+    </tr>
+    <tr>
+      <td><strong>관리 (Enterprise/K8s)</strong></td>
+      <td>AI Enterprise 런타임, K8s 연동</td>
+    </tr>
+    <tr>
+      <td><strong>서빙 (Triton)</strong></td>
+      <td>Triton Inference Server</td>
+    </tr>
+    <tr>
+      <td><strong>최적화 (엔진 + 모델)</strong></td>
+      <td>TensorRT-LLM + 모델 weights + engine cache</td>
+    </tr>
+    <tr>
+      <td><strong>기반 (CUDA)</strong></td>
+      <td>CUDA runtime + driver</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h2 id="용도">용도</h2>
+
+<p>AI 앱 배포를 단순화한다. RAG 기반 챗봇, simulation 파이프라인 등에 활용할 수 있다.</p>
+
+<blockquote>
+  <p><strong>AI Enterprise / 개발 vs 운영</strong>. 개발 단계에서는 Developer Program 무료 체험이 가능하다. 운영 환경에서는 AI Enterprise 라이선스가 필요하다. MIG/MPS/time-slicing이 “GPU를 어떻게 나눠 쓰나”의 인프라 레이어라면, NIM은 “모델을 어떻게 서빙하나”의 애플리케이션 레이어다.</p>
+</blockquote>
+
+<p>공식 링크:</p>
+
+<ul>
+  <li><a href="https://www.nvidia.com/en-us/ai-data-science/products/nim-microservices/">NVIDIA NIM Microservices</a></li>
+  <li><a href="https://developer.nvidia.com/nim">developer.nvidia.com/nim</a></li>
+  <li><a href="https://docs.nvidia.com/nim/index.html">docs.nvidia.com/nim</a></li>
+  <li><a href="https://build.nvidia.com/models">build.nvidia.com/models</a></li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>영역</th>
+      <th>핵심 포인트</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>스케일링 파이프라인</strong></td>
+      <td>DCGM-Exporter → Prometheus → adapter → HPA</td>
+    </tr>
+    <tr>
+      <td><strong>GPU_UTIL 주의</strong></td>
+      <td>phantom utilization(허수) + “바쁜데 느린” 상태 → custom metric 병행</td>
+    </tr>
+    <tr>
+      <td><strong>스케일링 어려움</strong></td>
+      <td>지표 불일치, 공유 GPU 왜곡, 모니터링 오버헤드, health 미반영</td>
+    </tr>
+    <tr>
+      <td><strong>NVIDIA NIM</strong></td>
+      <td>모델 + 엔진 + API 캡슐화 → 추론 마이크로서비스 컨테이너</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions">Kubernetes for Generative AI Solutions — GitHub</a></li>
+  <li><a href="https://docs.nvidia.com/datacenter/dcgm/latest/">NVIDIA DCGM Documentation</a></li>
+  <li><a href="https://www.nvidia.com/en-us/ai-data-science/products/nim-microservices/">NVIDIA NIM Microservices</a></li>
+  <li><a href="https://github.com/kubernetes-sigs/prometheus-adapter">Prometheus Adapter for Kubernetes Metrics APIs</a></li>
+  <li><a href="/dev/Dev-GPU-Phantom-Utilization/">Phantom GPU Utilization 사례 분석</a></li>
+  <li><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-00-Overview/">EKS GPU 트러블슈팅 개요</a></li>
+  <li><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-01-PreRequisites/">EC2 Service Quota 증설</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#autoscaling" class="page__taxonomy-item" rel="tag">Autoscaling</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#dcgm" class="page__taxonomy-item" rel="tag">DCGM</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#genai" class="page__taxonomy-item" rel="tag">GenAI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hpa" class="page__taxonomy-item" rel="tag">HPA</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions-chapter-10" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions-Chapter-10</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nim" class="page__taxonomy-item" rel="tag">NIM</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nvidia" class="page__taxonomy-item" rel="tag">NVIDIA</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#prometheus" class="page__taxonomy-item" rel="tag">Prometheus</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-06-07T00:00:00+09:00">June 7, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BGenAI%5D+GenAI+on+K8s%3A+10.5+-+GPU+%EC%8A%A4%EC%BC%80%EC%9D%BC%EB%A7%81%C2%B7%EC%B5%9C%EC%A0%81%ED%99%94%EC%99%80+NVIDIA+NIM%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-05-GPU-Scaling-Optimization-and-NIM%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-05-GPU-Scaling-Optimization-and-NIM%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-05-GPU-Scaling-Optimization-and-NIM%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-GenAI-on-K8s-10-05-GPU-Scaling-Optimization-and-NIM?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-04-GPU-Sharing-MPS-and-Time-Slicing/" class="pagination--pager" title="[GenAI] GenAI on K8s: 10.4 - GPU 공유: MPS와 Time-slicing
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-06-Ch10-Lab-Code-Analysis-Time-Slicing-and-Llama/" class="pagination--pager" title="[GenAI] GenAI on K8s: 10.6 - Ch10 실습 코드 분석: time-slicing과 Llama 워크로드
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-10-05-GPU-Scaling-Optimization-and-NIM/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-GenAI-on-K8s-10-05-GPU-Scaling-Optimization-and-NIM"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

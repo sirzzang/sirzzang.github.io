@@ -1,0 +1,1490 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] Kubernetes 클러스터 API 액세스 에러 해결 - Eraser’s StudyLog</title>
+<meta name="description" content="Kubernetes 인증 메커니즘에서 나타날 수 있는 kubeconfig 인증서 만료로 인한 클러스터 API 사용 불가 문제를 이해해보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] Kubernetes 클러스터 API 액세스 에러 해결">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-Kubernetes-Certificate-Trouble-Shooting/">
+
+
+  <meta property="og:description" content="Kubernetes 인증 메커니즘에서 나타날 수 있는 kubeconfig 인증서 만료로 인한 클러스터 API 사용 불가 문제를 이해해보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-01-10T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-Kubernetes-Certificate-Trouble-Shooting/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] Kubernetes 클러스터 API 액세스 에러 해결">
+    <meta itemprop="description" content="Kubernetes 인증 메커니즘에서 나타날 수 있는 kubeconfig 인증서 만료로 인한 클러스터 API 사용 불가 문제를 이해해보자.">
+    <meta itemprop="datePublished" content="2026-01-10T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] Kubernetes 클러스터 API 액세스 에러 해결
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-01-10T00:00:00+09:00">2026년 01월 10일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  9 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#배경">배경</a></li>
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#문제">문제</a></li>
+  <li><a href="#원인">원인</a>
+    <ul>
+      <li><a href="#인증서-만료-확인">인증서 만료 확인</a></li>
+      <li><a href="#kubernetes의-인증서-기반-인증-메커니즘">Kubernetes의 인증서 기반 인증 메커니즘</a>
+        <ul>
+          <li><a href="#인증서-만료가-문제가-되는-이유">인증서 만료가 문제가 되는 이유</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#해결">해결</a>
+    <ul>
+      <li><a href="#kubeconfig-파일-변경">kubeconfig 파일 변경</a></li>
+      <li><a href="#결과-확인">결과 확인</a></li>
+      <li><a href="#새-인증서-검증">새 인증서 검증</a></li>
+    </ul>
+  </li>
+  <li><a href="#참고">참고</a>
+    <ul>
+      <li><a href="#k3s의-pki-관리">K3s의 PKI 관리</a>
+        <ul>
+          <li><a href="#인증서-구조">인증서 구조</a></li>
+          <li><a href="#kubeconfig-구조와-인증서-활용">kubeconfig 구조와 인증서 활용</a></li>
+          <li><a href="#인증서-자동-갱신-메커니즘">인증서 자동 갱신 메커니즘</a></li>
+          <li><a href="#인증서-갱신-시-고려사항">인증서 갱신 시 고려사항</a></li>
+        </ul>
+      </li>
+      <li><a href="#다른-kubernetes-배포판에서의-인증서-관리">다른 Kubernetes 배포판에서의 인증서 관리</a>
+        <ul>
+          <li><a href="#kubeadm-기반-클러스터">kubeadm 기반 클러스터</a></li>
+          <li><a href="#클라우드-매니지드-클러스터">클라우드 매니지드 클러스터</a></li>
+          <li><a href="#minikube">Minikube</a></li>
+        </ul>
+      </li>
+      <li><a href="#kubernetes-the-hard-way에서의-인증서-배포">Kubernetes The Hard Way에서의 인증서 배포</a>
+        <ul>
+          <li><a href="#수동-pki-구성-시-인증서-배포-위치">수동 PKI 구성 시 인증서 배포 위치</a></li>
+          <li><a href="#controller-노드">Controller 노드</a></li>
+          <li><a href="#worker-노드">Worker 노드</a></li>
+          <li><a href="#kubeconfig-배포">kubeconfig 배포</a></li>
+          <li><a href="#k3s-vs-수동-구성-비교">K3s vs 수동 구성 비교</a></li>
+          <li><a href="#수동-배포를-통해-얻은-인사이트">수동 배포를 통해 얻은 인사이트</a></li>
+        </ul>
+      </li>
+      <li><a href="#인증서-관리-모범-사례">인증서 관리 모범 사례</a>
+        <ul>
+          <li><a href="#만료-여부-모니터링">만료 여부 모니터링</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+<h1 id="배경">배경</h1>
+
+<p>무려 반 년 가까이 된 일이지만, K3s 클러스터 내 인증서 만료 문제를 해결한 과정을 다시 한 번 짚어 본다. 부끄럽게도 당시에는 이런 저런 일정으로 인해 문제 해결이 급급하여, <code class="highlighter-rouge">/etc/rancher/k3s/k3s.yaml</code> 파일을 교체해 주면 되더라, 하고 넘어 갔다. 더 알아 보고 싶었지만, 줄줄이 딸려오는 개념이 많고 어디서부터 어떻게 접근해야 할지 몰라 <code class="highlighter-rouge">나중에..</code>하고 넘어 갔다.</p>
+
+<p>당시에는 PKI가 무엇인지, CA가 무슨 역할을 하는지, 인증서가 어떻게 신뢰 체계를 구축하는지 제대로 이해하지 못했다. 그저 “인증서가 만료되었으니 새로운 인증서로 교체한다”는 표면적인 해결책만 알고 있었을 뿐이다. 하지만 운영 환경의 Kubernetes 클러스터를 관리하다 보면, 이러한 기본 원리에 대한 이해 없이는 문제의 본질을 파악하기 어렵고, 유사한 문제가 발생했을 때 적절히 대응하기 힘들다.</p>
+
+<p>마침 최근 <a href="https://sirzzang.github.io/kubernetes/Kubernetes-Cluster-The-Hard-Way-04-1/">Kubernetes The Hard Way 실습</a>을 진행하면서 Kubernetes 클러스터의 인증서 체계를 처음부터 구성해 보는 경험을 했다. CA 인증서를 직접 생성하고, 각 컴포넌트의 인증서를 서명하며, kubeconfig를 구성하는 과정을 통해 비로소 PKI의 동작 원리와 TLS 인증 메커니즘을 체득할 수 있었다.</p>
+
+<p>이제 그때의 상황을 다시 돌아보며, 단순한 문제 해결을 넘어 Kubernetes의 보안 아키텍처를 이해하는 관점에서 재정리해 보고자 한다.</p>
+
+<p><br /></p>
+<h1 id="tldr">TL;DR</h1>
+
+<ol>
+  <li>문제와 해결
+    <ul>
+      <li>kubeconfig 인증서 만료로 kubectl API 호출 불가</li>
+      <li><code class="highlighter-rouge">/etc/rancher/k3s/k3s.yaml</code> → <code class="highlighter-rouge">~/.kube/config</code> 복사로 해결</li>
+    </ul>
+  </li>
+  <li>원리
+    <ul>
+      <li>Kubernetes는 TLS 기반 PKI로 모든 통신 인증</li>
+      <li>CA가 서명한 인증서로 신뢰 체계 구축</li>
+      <li>TLS handshake 5단계에서 인증서 유효 기간 검증 필수</li>
+    </ul>
+  </li>
+  <li>교훈
+    <ul>
+      <li>K3s는 인증서 자동 관리하지만 <code class="highlighter-rouge">~/.kube/config</code>는 수동 복사 필요</li>
+      <li>표면적 해결 넘어 PKI 원리 이해해야 문제 본질 파악 가능</li>
+      <li>정기적인 인증서 만료 모니터링 중요 (만료 30일 전 갱신 권장)</li>
+    </ul>
+  </li>
+</ol>
+
+<p><br /></p>
+
+<h1 id="문제">문제</h1>
+
+<p>K3s 클러스터 내 kubectl을 이용한 쿠버네티스 클러스터 API가 작동하지 않는다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get pod <span class="nt">-n</span> &lt;namespace&gt;
+E0807 14:15:26.155304 4012452 memcache.go:265] couldn<span class="s1">'t get current server API group list: the server has asked for the client to provide credentials
+E0807 14:15:26.155898 4012452 memcache.go:265] couldn'</span>t get current server API group list: the server has asked <span class="k">for </span>the client to provide credentials
+E0807 14:15:26.157457 4012452 memcache.go:265] couldn<span class="s1">'t get current server API group list: the server has asked for the client to provide credentials
+E0807 14:15:26.157934 4012452 memcache.go:265] couldn'</span>t get current server API group list: the server has asked <span class="k">for </span>the client to provide credentials
+E0807 14:15:26.159294 4012452 memcache.go:265] couldn<span class="s1">'t get current server API group list: the server has asked for the client to provide credentials
+error: You must be logged in to the server (the server has asked for the client to provide credentials)
+</span></code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="원인">원인</h1>
+
+<h2 id="인증서-만료-확인">인증서 만료 확인</h2>
+
+<p><code class="highlighter-rouge">kubectl</code> 클라이언트가 해당 kubernetes 클러스터에 인증되어 있지 않다. kubernetes 클러스터 인증을 위해 사용되는 kubeconfig 파일에서 인증서 만료 기한을 확인해 보자.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl config view <span class="nt">--raw</span> <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.users[0].user.client-certificate-data}'</span> | base64 <span class="nt">-d</span> | openssl x509 <span class="nt">-noout</span> <span class="nt">-enddate</span>
+<span class="nv">notAfter</span><span class="o">=</span>Jul 29 05:36:03 2025 GMT
+</code></pre></div></div>
+
+<p>당시 기준으로 하루 전에 클라이언트 인증서가 만료되었다.</p>
+
+<p><br /></p>
+
+<h2 id="kubernetes의-인증서-기반-인증-메커니즘">Kubernetes의 인증서 기반 인증 메커니즘</h2>
+
+<p>Kubernetes는 클러스터 컴포넌트 간 통신과 클라이언트 인증을 위해 TLS 기반 PKI를 사용한다. PKI 구조, 인증서의 역할(CA/서버/클라이언트 인증서), mTLS 인증 과정에 대한 자세한 내용은 <a href="/kubernetes/Kubernetes-PKI/">Kubernetes PKI 글</a>을 참고하자.</p>
+
+<p>kubectl이 API Server에 접근할 때 mTLS Handshake 과정에서 클라이언트 인증서의 유효 기간을 확인하는데, 이 단계에서 만료된 인증서가 문제가 된다.</p>
+
+<h3 id="인증서-만료가-문제가-되는-이유">인증서 만료가 문제가 되는 이유</h3>
+
+<p>위의 5단계에서 서버가 클라이언트 인증서의 유효 기간을 확인한다. 인증서가 만료되면,</p>
+
+<ul>
+  <li><code class="highlighter-rouge">notBefore</code>와 <code class="highlighter-rouge">notAfter</code> 필드로 정의된 유효 기간을 벗어나기 때문에,</li>
+  <li>서버는 만료된 인증서를 신뢰할 수 없다고 판단하여,</li>
+  <li>TLS handshake가 실패하고,</li>
+  <li>서버는 유효한 인증서를 요구하게 되며</li>
+</ul>
+
+<p>결과적으로 <code class="highlighter-rouge">the server has asked for the client to provide credentials</code> 에러가 발생하는 것이다. X.509 인증서 표준에서 유효 기간 검증은 필수 사항이며, 이는 <strong>보안을 위해 타협할 수 없는 부분</strong>이다.</p>
+
+<p><br /></p>
+
+<h1 id="해결">해결</h1>
+
+<p>K3s는 클러스터 접근을 위한 credentials 파일을 자체적으로 업데이트한다(<a href="https://docs.k3s.io/cluster-access">참고: K3s Cluster Access</a>). 그러니 K3s의 새로운 kubeconfig 파일로 대체해 주면 된다.</p>
+
+<h2 id="kubeconfig-파일-변경">kubeconfig 파일 변경</h2>
+
+<p>K3s kubeconfig 파일 위치: <code class="highlighter-rouge">/etc/rancher/k3s/k3s.yaml</code></p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 기존 인증서 백업</span>
+<span class="nv">$ </span>mv ~/.kube/config ~/.kube/config.bak
+
+<span class="c"># kubeconfig 업데이트</span>
+<span class="nv">$ </span><span class="nb">sudo </span>cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+
+<span class="c"># 권한 설정 (필요 시)</span>
+<span class="nv">$ </span><span class="nb">sudo </span>chown <span class="k">$(</span>id <span class="nt">-u</span><span class="k">)</span>:<span class="k">$(</span>id <span class="nt">-g</span><span class="k">)</span> ~/.kube/config
+</code></pre></div></div>
+
+<h2 id="결과-확인">결과 확인</h2>
+<p>교체 후 kubectl을 이용해 API를 호출해 보면, 정상적으로 작동함을 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get pod <span class="nt">-n</span> &lt;my-namespace&gt;
+NAME                                         READY   STATUS    RESTARTS   AGE
+&lt;pod-name&gt;                                   1/1     Running   0          22d
+</code></pre></div></div>
+
+<h2 id="새-인증서-검증">새 인증서 검증</h2>
+
+<p>갱신된 인증서의 유효 기간을 확인해 보자.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl config view <span class="nt">--raw</span> <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.users[0].user.client-certificate-data}'</span> | base64 <span class="nt">-d</span> | openssl x509 <span class="nt">-noout</span> <span class="nt">-text</span>
+
+Certificate:
+    Data:
+        Version: 3 <span class="o">(</span>0x2<span class="o">)</span>
+        Serial Number: &lt;serial&gt;
+        Signature Algorithm: sha256WithRSAEncryption
+        Issuer: CN <span class="o">=</span> k3s-client-ca@&lt;timestamp&gt;
+        Validity
+            Not Before: &lt;date&gt;
+            Not After : &lt;date&gt;  <span class="c"># 1년 뒤</span>
+        Subject: O <span class="o">=</span> system:masters, CN <span class="o">=</span> system:admin
+        ...
+</code></pre></div></div>
+
+<p>이 인증서에는 다음 정보가 포함되어 있다:</p>
+
+<ul>
+  <li><strong>Issuer</strong>: <code class="highlighter-rouge">k3s-client-ca</code> - K3s가 관리하는 클라이언트 CA</li>
+  <li><strong>Subject CN</strong>: <code class="highlighter-rouge">system:admin</code> - Kubernetes 사용자 이름</li>
+  <li><strong>Subject O</strong>: <code class="highlighter-rouge">system:masters</code> - Kubernetes 그룹(<code class="highlighter-rouge">cluster-admin</code> 권한을 가진 그룹)</li>
+  <li><strong>Validity</strong>: 발급일로부터 1년간 유효</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="참고">참고</h1>
+
+<h2 id="k3s의-pki-관리">K3s의 PKI 관리</h2>
+
+<p>K3s는 클러스터 시작 시 자동으로 PKI 인프라를 구성한다.</p>
+
+<h3 id="인증서-구조">인증서 구조</h3>
+
+<p>K3s는 <code class="highlighter-rouge">/var/lib/rancher/k3s/server/tls</code>에 다음과 같은 인증서들을 생성한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>/var/lib/rancher/k3s/server/tls/
+├── client-ca.crt              # 클라이언트 인증서 서명용 CA
+├── client-ca.key              # CA 개인키
+├── server-ca.crt              # 서버 인증서 서명용 CA
+├── server-ca.key              # CA 개인키
+├── request-header-ca.crt      # API Aggregation용 CA
+├── client-admin.crt           # admin 사용자 클라이언트 인증서
+├── client-admin.key           # admin 클라이언트 개인키
+├── serving-kube-apiserver.crt # API 서버 인증서
+├── serving-kube-apiserver.key # API 서버 개인키
+└── ...
+</code></pre></div></div>
+
+<h3 id="kubeconfig-구조와-인증서-활용">kubeconfig 구조와 인증서 활용</h3>
+
+<p><code class="highlighter-rouge">/etc/rancher/k3s/k3s.yaml</code>은 <code class="highlighter-rouge">/var/lib/rancher/k3s/server/cred/admin.kubeconfig</code>를 기반으로 K3s가 자동 생성한 kubeconfig 파일이다. kubeconfig 파일의 전체 구조와 필드 설명은 <a href="/kubernetes/Kubernetes-Kubeconfig-01/">kubeconfig 개요</a>와 <a href="/kubernetes/Kubernetes-Kubeconfig-03/">kubeconfig API Reference</a>를 참고하자.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">clusters</span><span class="pi">:</span>
+<span class="pi">-</span> <span class="na">cluster</span><span class="pi">:</span>
+    <span class="na">certificate-authority-data</span><span class="pi">:</span> <span class="s">&lt;base64-encoded-CA-certificate&gt;</span>
+    <span class="na">server</span><span class="pi">:</span> <span class="s">https://127.0.0.1:6443</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">default</span>
+<span class="na">contexts</span><span class="pi">:</span>
+<span class="pi">-</span> <span class="na">context</span><span class="pi">:</span>
+    <span class="na">cluster</span><span class="pi">:</span> <span class="s">default</span>
+    <span class="na">user</span><span class="pi">:</span> <span class="s">default</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">default</span>
+<span class="na">current-context</span><span class="pi">:</span> <span class="s">default</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Config</span>
+<span class="na">preferences</span><span class="pi">:</span> <span class="pi">{}</span>
+<span class="na">users</span><span class="pi">:</span>
+<span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">default</span>
+  <span class="na">user</span><span class="pi">:</span>
+    <span class="na">client-certificate-data</span><span class="pi">:</span> <span class="s">&lt;base64-encoded-client-certificate&gt;</span>
+    <span class="na">client-key-data</span><span class="pi">:</span> <span class="s">&lt;base64-encoded-client-private-key&gt;</span>
+</code></pre></div></div>
+
+<ol>
+  <li><strong>certificate-authority-data</strong>
+    <ul>
+      <li>서버 CA 인증서 (server-ca.crt)의 base64 인코딩 값</li>
+      <li>kubectl이 API 서버 인증서를 검증할 때 사용</li>
+      <li>“이 CA가 서명한 서버 인증서만 신뢰한다”는 정책</li>
+    </ul>
+  </li>
+  <li><strong>client-certificate-data</strong>
+    <ul>
+      <li>클라이언트 인증서 (client-admin.crt)의 base64 인코딩 값</li>
+      <li>클라이언트(kubectl)의 신원을 증명</li>
+      <li>Subject CN과 O 필드로 사용자 이름과 그룹 정보 전달</li>
+    </ul>
+  </li>
+  <li><strong>client-key-data</strong>
+    <ul>
+      <li>클라이언트 개인키 (client-admin.key)의 base64 인코딩 값</li>
+      <li>TLS handshake 시 클라이언트가 인증서의 소유자임을 증명</li>
+      <li>절대 공유하거나 전송해서는 안 되는 민감 정보</li>
+    </ul>
+  </li>
+</ol>
+
+<h3 id="인증서-자동-갱신-메커니즘">인증서 자동 갱신 메커니즘</h3>
+
+<p>K3s는 다음과 같이 인증서를 관리한다.</p>
+
+<ol>
+  <li><strong>인증서 생성</strong>: 클러스터 최초 시작 시
+    <ul>
+      <li>기본 유효 기간: 365일 (1년)</li>
+      <li>자체 서명된 CA 인증서 생성</li>
+      <li>CA로 서버 및 클라이언트 인증서 서명</li>
+    </ul>
+  </li>
+  <li><strong>인증서 갱신</strong>: K3s 서버 재시작 시
+    <ul>
+      <li>만료 90일 전부터 자동 갱신 시도</li>
+      <li>기존 인증서를 새 인증서로 교체</li>
+      <li><code class="highlighter-rouge">/etc/rancher/k3s/k3s.yaml</code> 자동 업데이트</li>
+    </ul>
+  </li>
+  <li><strong>유효 기간 커스터마이징</strong>: 유효기간 변경 가능
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>k3s server <span class="se">\</span>
+  <span class="nt">--cluster-init</span> <span class="se">\</span>
+  <span class="nt">--cluster-csr-ttl</span> 43800h  <span class="c"># 5년</span>
+</code></pre></div>    </div>
+    <ul>
+      <li>이미 발급된 인증서는 변경되지 않음</li>
+      <li>새로 생성되는 인증서에만 적용</li>
+    </ul>
+  </li>
+</ol>
+
+<h3 id="인증서-갱신-시-고려사항">인증서 갱신 시 고려사항</h3>
+
+<p>K3s가 자동으로 인증서를 갱신하더라도, 다음 상황에서는 수동 개입이 필요할 수 있다.</p>
+
+<ol>
+  <li><strong>kubeconfig 파일 미갱신</strong>: <em>← 내가 겪은 상황</em>
+    <ul>
+      <li>홈 디렉토리의 <code class="highlighter-rouge">~/.kube/config</code>는 자동 갱신되지 않음</li>
+      <li><code class="highlighter-rouge">/etc/rancher/k3s/k3s.yaml</code>에서 수동 복사 필요</li>
+    </ul>
+  </li>
+  <li><strong>외부 클라이언트</strong>:
+    <ul>
+      <li>K3s 노드 외부에서 접속하는 클라이언트</li>
+      <li>갱신된 kubeconfig를 수동으로 배포해야 함</li>
+    </ul>
+  </li>
+  <li><strong>Service Account 토큰</strong>:
+    <ul>
+      <li>Pod 내에서 사용하는 Service Account 토큰은 별도 관리</li>
+      <li>기본적으로 만료되지 않지만, BoundServiceAccountTokenVolume 기능 사용 시 주기적 갱신</li>
+    </ul>
+  </li>
+</ol>
+
+<p><br /></p>
+
+<h2 id="다른-kubernetes-배포판에서의-인증서-관리">다른 Kubernetes 배포판에서의 인증서 관리</h2>
+
+<p>Kubernetes 배포판마다 인증서 관리 방식이 다르지만, 모두 동일한 PKI 원리를 기반으로 한다.</p>
+
+<h3 id="kubeadm-기반-클러스터">kubeadm 기반 클러스터</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 인증서 상태 확인</span>
+<span class="nv">$ </span>kubeadm certs check-expiration
+
+<span class="c"># 모든 인증서 갱신</span>
+<span class="nv">$ </span>kubeadm certs renew all
+
+<span class="c"># kubeconfig 갱신</span>
+<span class="nv">$ </span>kubeadm init phase kubeconfig admin
+</code></pre></div></div>
+
+<p>kubeadm도 K3s와 유사하게 <code class="highlighter-rouge">/etc/kubernetes/pki</code>에 인증서를 관리한다.</p>
+
+<h3 id="클라우드-매니지드-클러스터">클라우드 매니지드 클러스터</h3>
+
+<p>클라우드 제공자들은 인증서 대신 단기 토큰 기반 인증을 주로 사용한다:</p>
+
+<ul>
+  <li><strong>EKS</strong>
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>aws eks update-kubeconfig <span class="nt">--name</span> &lt;cluster-name&gt;
+</code></pre></div>    </div>
+    <ul>
+      <li>AWS IAM을 통한 인증</li>
+      <li><code class="highlighter-rouge">aws-iam-authenticator</code>로 단기 토큰 발급</li>
+      <li>토큰 유효 기간: 15분 (자동 갱신)</li>
+    </ul>
+  </li>
+  <li><strong>GKE</strong>
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>gcloud container clusters get-credentials &lt;cluster-name&gt;
+</code></pre></div>    </div>
+    <ul>
+      <li>Google Cloud IAM을 통한 인증</li>
+      <li>gcloud가 자동으로 토큰 관리</li>
+    </ul>
+  </li>
+  <li><strong>AKS</strong>
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>az aks get-credentials <span class="nt">--name</span> &lt;cluster-name&gt; <span class="nt">--resource-group</span> &lt;rg&gt;
+</code></pre></div>    </div>
+    <ul>
+      <li>Azure AD를 통한 인증</li>
+      <li>Azure CLI가 토큰 관리</li>
+    </ul>
+  </li>
+</ul>
+
+<h3 id="minikube">Minikube</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>minikube update-context
+</code></pre></div></div>
+
+<p>Minikube는 VM을 재생성할 때마다 새 인증서를 발급하므로, 인증서 만료 문제가 거의 발생하지 않는다.</p>
+
+<p><br /></p>
+
+<h2 id="kubernetes-the-hard-way에서의-인증서-배포">Kubernetes The Hard Way에서의 인증서 배포</h2>
+
+<p><a href="https://sirzzang.github.io/kubernetes/Kubernetes-Cluster-The-Hard-Way-04-3/">Kubernetes The Hard Way 실습</a>에서 직접 클러스터를 구성하면서, K3s와 같은 배포판이 자동으로 처리해 주는 인증서 관리의 복잡성을 체감할 수 있었다. 수동으로 PKI를 구성하는 과정을 통해 각 인증서의 역할과 배포 위치를 명확히 이해하게 되었다.</p>
+
+<h3 id="수동-pki-구성-시-인증서-배포-위치">수동 PKI 구성 시 인증서 배포 위치</h3>
+
+<p>Kubernetes The Hard Way 방식으로 클러스터를 구축할 때는 openssl을 사용해 인증서를 직접 생성하고 배포했다.</p>
+
+<h3 id="controller-노드"><strong>Controller 노드</strong></h3>
+<p><code class="highlighter-rouge">/var/lib/kubernetes/</code>에 인증서가 위치한다.</p>
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>/var/lib/kubernetes/
+├── ca.pem                      # CA 인증서
+├── ca-key.pem                  # CA 개인키
+├── kubernetes.pem              # API 서버 인증서
+├── kubernetes-key.pem          # API 서버 개인키
+├── service-account.pem         # Service Account 서명용 공개키
+└── service-account-key.pem     # Service Account 서명용 개인키
+</code></pre></div></div>
+
+<h3 id="worker-노드"><strong>Worker 노드</strong></h3>
+<p><code class="highlighter-rouge">/var/lib/kubelet/</code>에 인증서가 위치한다.</p>
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>/var/lib/kubelet/
+├── ca.pem                      # CA 인증서 (API 서버 검증용)
+├── &lt;worker-name&gt;.pem           # 각 워커 노드의 클라이언트 인증서
+└── &lt;worker-name&gt;-key.pem       # 각 워커 노드의 개인키
+</code></pre></div></div>
+
+<h3 id="kubeconfig-배포"><strong>kubeconfig 배포</strong></h3>
+<p><code class="highlighter-rouge">~/.kube/config</code> 또는 <code class="highlighter-rouge">/etc/kubernetes/</code>에 인증서가 위치한다.</p>
+<ul>
+  <li>admin kubeconfig: 클러스터 관리자용</li>
+  <li>kube-proxy kubeconfig: kube-proxy 컴포넌트용</li>
+  <li>kubelet kubeconfig: 각 워커 노드의 kubelet용</li>
+</ul>
+
+<h3 id="k3s-vs-수동-구성-비교">K3s vs 수동 구성 비교</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>K3s</th>
+      <th>Kubernetes The Hard Way</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>CA 인증서 생성</td>
+      <td>자동 (<code class="highlighter-rouge">/var/lib/rancher/k3s/server/tls</code>)</td>
+      <td>수동 (openssl 등 도구 사용)</td>
+    </tr>
+    <tr>
+      <td>컴포넌트 인증서 서명</td>
+      <td>자동</td>
+      <td>수동 (각 컴포넌트별 CSR 생성 및 서명)</td>
+    </tr>
+    <tr>
+      <td>kubeconfig 생성</td>
+      <td>자동 (<code class="highlighter-rouge">/etc/rancher/k3s/k3s.yaml</code>)</td>
+      <td>수동 (kubectl config 명령어로 구성)</td>
+    </tr>
+    <tr>
+      <td>인증서 배포</td>
+      <td>단일 노드에 집중</td>
+      <td>Controller/Worker 노드에 수동 배포</td>
+    </tr>
+    <tr>
+      <td>인증서 갱신</td>
+      <td>자동 (90일 전부터)</td>
+      <td>수동 (만료 시 재발급 및 배포)</td>
+    </tr>
+    <tr>
+      <td>kubeconfig 위치</td>
+      <td><code class="highlighter-rouge">/etc/rancher/k3s/k3s.yaml</code></td>
+      <td>사용자 정의 (<code class="highlighter-rouge">~/.kube/config</code> 등)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="수동-배포를-통해-얻은-인사이트">수동 배포를 통해 얻은 인사이트</h3>
+
+<p>수동으로 인증서를 생성하고 배포하는 과정을 거치면서 깨달았던 것은 다음과 같다:</p>
+
+<ol>
+  <li><strong>CA의 중요성</strong>: 모든 신뢰의 기반이 되는 CA 개인키(<code class="highlighter-rouge">ca-key.pem</code>)를 안전하게 보관해야 한다는 것</li>
+  <li><strong>인증서의 목적별 분리</strong>: 인증서를 목적에 따라 분리해야 한다는 것
+    <ul>
+      <li>API 서버는 서버 인증서를 사용</li>
+      <li>kubelet, kube-proxy는 클라이언트 인증서를 사용</li>
+      <li>Service Account는 별도의 키 쌍을 사용</li>
+    </ul>
+  </li>
+  <li><strong>SAN의 필요성</strong>: API 서버 인증서에는 여러 접근 경로(IP, DNS)를 SAN에 명시해야 한다는 것</li>
+  <li><strong>권한 관리</strong>: 인증서의 CN과 O 필드로 Kubernetes RBAC 권한이 결정된다는 것</li>
+</ol>
+
+<p><br /></p>
+
+<p>무엇보다 가장 큰 깨달음은, 여러 노드에 걸쳐 적절한 인증서를 배포하고 관리하는 것은 매우 복잡하다는 것이다.</p>
+
+<p><br />
+K3s는 이 모든 과정을 자동화해 주기 때문에 편리하다. 그러나 문제가 발생했을 때 근본 원인을 파악하려면 이러한 수동 과정을 이해하는 것이 큰 도움이 된다. 특히 이번 kubeconfig 만료 문제처럼, “왜 <code class="highlighter-rouge">/etc/rancher/k3s/k3s.yaml</code>을 복사하면 해결되는가”를 이해하려면 kubeconfig 파일이 어떻게 구성되고 어떤 인증서를 참조하는지 알아야 한다.</p>
+
+<p><br /></p>
+
+<h2 id="인증서-관리-모범-사례">인증서 관리 모범 사례</h2>
+
+<ol>
+  <li><strong>개인키 보호</strong>
+    <ul>
+      <li><code class="highlighter-rouge">client-key-data</code>는 절대 공유하지 말 것</li>
+      <li>kubeconfig 파일 권한: <code class="highlighter-rouge">chmod 600 ~/.kube/config</code></li>
+      <li>Git 저장소에 커밋하지 말 것 (.gitignore 추가)</li>
+    </ul>
+  </li>
+  <li><strong>인증서 유효 기간 모니터링</strong> <em>← 내가 하지 않았던 것</em>
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 클라이언트 인증서 만료일 확인</span>
+<span class="nv">$ </span>kubectl config view <span class="nt">--raw</span> <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.users[0].user.client-certificate-data}'</span> <span class="se">\</span>
+  | base64 <span class="nt">-d</span> | openssl x509 <span class="nt">-noout</span> <span class="nt">-enddate</span>
+   
+<span class="c"># 서버 인증서 만료일 확인 (K3s)</span>
+<span class="nv">$ </span>openssl x509 <span class="nt">-in</span> /var/lib/rancher/k3s/server/tls/serving-kube-apiserver.crt <span class="nt">-noout</span> <span class="nt">-enddate</span>
+</code></pre></div>    </div>
+  </li>
+  <li><strong>정기적인 갱신</strong>
+    <ul>
+      <li>만료 30일 전 갱신 권장</li>
+      <li>자동화된 모니터링 및 알림 설정</li>
+      <li>Kubernetes 클러스터 업그레이드 시 인증서도 함께 확인</li>
+    </ul>
+  </li>
+  <li><strong>최소 권한 원칙</strong>
+    <ul>
+      <li>사용자별로 별도의 인증서 발급</li>
+      <li><code class="highlighter-rouge">system:masters</code> 그룹은 긴급 상황에만 사용</li>
+      <li>RBAC과 조합하여 세밀한 권한 제어</li>
+      <li>운영 환경에서는 개인별 kubeconfig 발급 및 관리</li>
+    </ul>
+  </li>
+  <li><strong>백업 및 복구 계획</strong>
+    <ul>
+      <li>CA 개인키는 안전한 곳에 별도 백업</li>
+      <li>kubeconfig 파일 백업 자동화</li>
+      <li>인증서 갱신 절차 문서화</li>
+    </ul>
+  </li>
+</ol>
+
+<h3 id="만료-여부-모니터링">만료 여부 모니터링</h3>
+
+<p>이번 문제를 겪으면서 배운 교훈은, 정기적인 모니터링의 중요성이다. 다음과 같이 간단한 스크립트로 인증서 만료 여부를 체크할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">#!/bin/bash</span>
+<span class="c"># check-cert-expiry.sh</span>
+
+<span class="nv">CERT_PATH</span><span class="o">=</span><span class="s2">"/var/lib/rancher/k3s/server/tls/serving-kube-apiserver.crt"</span>
+<span class="nv">WARNING_DAYS</span><span class="o">=</span>30
+
+<span class="nv">EXPIRY_DATE</span><span class="o">=</span><span class="k">$(</span>openssl x509 <span class="nt">-in</span> <span class="nv">$CERT_PATH</span> <span class="nt">-noout</span> <span class="nt">-enddate</span> | cut <span class="nt">-d</span><span class="o">=</span> <span class="nt">-f2</span><span class="k">)</span>
+<span class="nv">EXPIRY_EPOCH</span><span class="o">=</span><span class="k">$(</span>date <span class="nt">-d</span> <span class="s2">"</span><span class="nv">$EXPIRY_DATE</span><span class="s2">"</span> +%s<span class="k">)</span>
+<span class="nv">CURRENT_EPOCH</span><span class="o">=</span><span class="k">$(</span>date +%s<span class="k">)</span>
+<span class="nv">DAYS_LEFT</span><span class="o">=</span><span class="k">$((</span> <span class="o">(</span><span class="nv">$EXPIRY_EPOCH</span> <span class="o">-</span> <span class="nv">$CURRENT_EPOCH</span><span class="o">)</span> <span class="o">/</span> <span class="m">86400</span> <span class="k">))</span>
+
+<span class="k">if</span> <span class="o">[</span> <span class="nv">$DAYS_LEFT</span> <span class="nt">-lt</span> <span class="nv">$WARNING_DAYS</span> <span class="o">]</span><span class="p">;</span> <span class="k">then
+      </span><span class="nb">echo</span> <span class="s2">"WARNING: Certificate expires in </span><span class="nv">$DAYS_LEFT</span><span class="s2"> days!"</span>
+      <span class="c"># 알림 발송 로직 추가 가능</span>
+<span class="k">else
+      </span><span class="nb">echo</span> <span class="s2">"Certificate is valid for </span><span class="nv">$DAYS_LEFT</span><span class="s2"> days"</span>
+<span class="k">fi</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>이번 문제는 단순한 인증서 만료 문제처럼 보이지만, Kubernetes의 보안 아키텍처를 이해하는 좋은 기회였다. Kubernetes는 모든 컴포넌트 간 통신에 TLS를 사용하며, 이는 다음을 보장한다:</p>
+
+<ol>
+  <li><strong>기밀성(Confidentiality)</strong>: 통신 내용 암호화</li>
+  <li><strong>무결성(Integrity)</strong>: 통신 내용 변조 방지</li>
+  <li><strong>인증(Authentication)</strong>: 통신 당사자의 신원 확인</li>
+</ol>
+
+<p>kubeconfig 파일에 저장된 인증서와 키는 이 중 ‘인증’ 부분을 담당하며, PKI를 통해 분산 환경에서도 신뢰할 수 있는 인증 체계를 구축한다.</p>
+
+<p>K3s와 같은 배포판이 인증서를 자동으로 관리해주는 것은 편리하지만, Kubernetes The Hard Way 실습을 통해 수동으로 PKI를 구성해 보면서 그 내부 동작 원리를 깊이 이해할 수 있었다. 문제 발생 시 빠르게 대응하고 보안을 강화하려면, 표면적인 해결책을 넘어 근본 원리를 이해하는 것이 중요하다는 것을 다시 한번 깨달았다.</p>
+
+<p>반 년 전에는 그저 “파일을 복사하면 된다”는 해결책만 알았지만, 이제는 그 이유를 명확히 설명할 수 있게 되었다. TLS handshake의 각 단계에서 어떤 인증서가 어떻게 사용되는지, CA의 역할이 무엇인지, 왜 인증서 유효 기간이 중요한지를 이해하게 된 것이다. 이러한 개념적 이해는 앞으로 비슷한 문제를 마주쳤을 때 더 나은 대응을 가능하게 할 것이다.</p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-12/">[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 12. Smoke Test</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#certificate" class="page__taxonomy-item" rel="tag">certificate</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#k3s" class="page__taxonomy-item" rel="tag">k3s</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#k8s" class="page__taxonomy-item" rel="tag">k8s</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#pki" class="page__taxonomy-item" rel="tag">PKI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#tls" class="page__taxonomy-item" rel="tag">TLS</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-01-10T00:00:00+09:00">January 10, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+Kubernetes+%ED%81%B4%EB%9F%AC%EC%8A%A4%ED%84%B0+API+%EC%95%A1%EC%84%B8%EC%8A%A4+%EC%97%90%EB%9F%AC+%ED%95%B4%EA%B2%B0%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-Certificate-Trouble-Shooting%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-Certificate-Trouble-Shooting%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-Certificate-Trouble-Shooting%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-Kubernetes-Certificate-Trouble-Shooting?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/articles/Articles-Cursor-Retrospective-202512/" class="pagination--pager" title="12월 Cursor 사용 회고: 320달러의 교훈
+">이전</a>
+    
+    
+      <a href="/articles/Articles-AWS-EC2-Withdrawal/" class="pagination--pager" title="AWS EC2 인프라 철수기: 현황 분석부터 의사결정까지
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-Kubernetes-Certificate-Trouble-Shooting/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-Kubernetes-Certificate-Trouble-Shooting"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

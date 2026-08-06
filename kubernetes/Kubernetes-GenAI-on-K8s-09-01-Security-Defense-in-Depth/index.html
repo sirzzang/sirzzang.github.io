@@ -1,0 +1,1583 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[GenAI] GenAI on K8s: 9.1 - 보안 개념: Defense in Depth - Eraser’s StudyLog</title>
+<meta name="description" content="GenAI 워크로드를 K8s에 올릴 때의 보안 원칙을 defense in depth 관점에서 정리하고, 컨테이너 생애주기 전체에 걸친 보안 영역과 GenAI 고유 고려사항까지 살펴보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[GenAI] GenAI on K8s: 9.1 - 보안 개념: Defense in Depth">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-09-01-Security-Defense-in-Depth/">
+
+
+  <meta property="og:description" content="GenAI 워크로드를 K8s에 올릴 때의 보안 원칙을 defense in depth 관점에서 정리하고, 컨테이너 생애주기 전체에 걸친 보안 영역과 GenAI 고유 고려사항까지 살펴보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-05-24T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-09-01-Security-Defense-in-Depth/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[GenAI] GenAI on K8s: 9.1 - 보안 개념: Defense in Depth">
+    <meta itemprop="description" content="GenAI 워크로드를 K8s에 올릴 때의 보안 원칙을 defense in depth 관점에서 정리하고, 컨테이너 생애주기 전체에 걸친 보안 영역과 GenAI 고유 고려사항까지 살펴보자.">
+    <meta itemprop="datePublished" content="2026-05-24T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[GenAI] GenAI on K8s: 9.1 - 보안 개념: Defense in Depth
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-05-24T00:00:00+09:00">2026년 05월 24일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  8 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#defense-in-depth">Defense in Depth</a></li>
+  <li><a href="#컨테이너-보안">컨테이너 보안</a>
+    <ul>
+      <li><a href="#공급망-보안-supply-chain">공급망 보안 (Supply Chain)</a>
+        <ul>
+          <li><a href="#이미지-불변성과-multi-stage-build">이미지 불변성과 multi-stage build</a></li>
+        </ul>
+      </li>
+      <li><a href="#host-보안">Host 보안</a>
+        <ul>
+          <li><a href="#bottlerocket">Bottlerocket</a></li>
+          <li><a href="#imdsv2와-hop_limit">IMDSv2와 hop_limit</a></li>
+        </ul>
+      </li>
+      <li><a href="#런타임-보안-container-runtime">런타임 보안 (Container Runtime)</a>
+        <ul>
+          <li><a href="#pod-security-standards-3단계">Pod Security Standards 3단계</a></li>
+          <li><a href="#falco">Falco</a></li>
+        </ul>
+      </li>
+      <li><a href="#네트워크-보안">네트워크 보안</a></li>
+      <li><a href="#secrets-관리">Secrets 관리</a></li>
+    </ul>
+  </li>
+  <li><a href="#genai-워크로드-추가-고려사항">GenAI 워크로드 추가 고려사항</a>
+    <ul>
+      <li><a href="#데이터-프라이버시와-컴플라이언스">데이터 프라이버시와 컴플라이언스</a></li>
+      <li><a href="#irsa-vs-pod-identity">IRSA vs Pod Identity</a></li>
+      <li><a href="#모델-엔드포인트-보안">모델 엔드포인트 보안</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions">Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)</a> 9장의 학습 내용을 바탕으로 합니다</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>GenAI 워크로드의 보안 출발점은 <strong>defense in depth</strong> — 한 겹이 뚫려도 다음 겹이 막도록 여러 층의 통제를 겹쳐 둔다</li>
+  <li>컨테이너 보안은 <strong>빌드부터 런타임까지 생애주기 전체</strong>에 걸쳐야 한다: 공급망(supply chain) → 호스트(host) → 런타임(runtime) → 네트워크(network) → 시크릿(secrets)</li>
+  <li>공급망 보안의 핵심은 신뢰된 경량 이미지, 이미지 불변성(immutable tag), 서명·검증, 지속적 취약점 스캔이다</li>
+  <li>호스트 하드닝은 클라우드 공통 원리 — 컨테이너 전용 OS(Bottlerocket), IMDSv2, 프라이빗 서브넷 배치 등</li>
+  <li>GenAI 배포는 표준 K8s 보안 위에 <strong>모델 무결성, 데이터 프라이버시, GPU 자원 격리</strong> 같은 공격면이 더해진다</li>
+  <li>파드의 AWS 자격증명 획득 방식은 IRSA(2019)에서 <strong>Pod Identity(2023)</strong>로 진화 중이다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="defense-in-depth">Defense in Depth</h1>
+
+<p>GenAI 워크로드를 K8s에 올릴 때의 보안은 <strong>defense in depth</strong>(심층 방어)에서 시작한다. 여러 공격 벡터에 대비해 보안 레이어를 동심원으로 겹친 모델로, 안쪽일수록 핵심 자산이고 각 원이 하나의 레이어이자 공격 벡터다. (<a href="https://csrc.nist.gov/glossary/term/defense_in_depth">NIST 정의</a>)</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/genai-on-k8s-ch09-layered-security-model.png" alt="계층형 보안 모델 — defense in depth" class="align-center" /></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>레이어(안→밖)</th>
+      <th>무엇</th>
+      <th>대표 위협</th>
+      <th>대응</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>User Data</strong></td>
+      <td>민감 사용자 데이터(비밀번호, PII)</td>
+      <td>데이터 유출</td>
+      <td>저장·전송 시 암호화</td>
+    </tr>
+    <tr>
+      <td><strong>Configuration</strong></td>
+      <td>env, 설정, secret, API key</td>
+      <td>설정 노출 → 데이터 유출/권한 상승/오작동</td>
+      <td>secret 관리, 노출 최소화</td>
+    </tr>
+    <tr>
+      <td><strong>Application Code</strong></td>
+      <td>앱 코드</td>
+      <td>SQL injection, 원격 코드 실행(RCE)</td>
+      <td>정적·동적 분석, 즉시 패치</td>
+    </tr>
+    <tr>
+      <td><strong>Dependencies</strong></td>
+      <td>라이브러리, 프레임워크, 외부 패키지</td>
+      <td>취약·구버전 의존성(<strong>가장 흔한 침투 경로</strong>)</td>
+      <td>의존성 취약점 스캔</td>
+    </tr>
+    <tr>
+      <td><strong>Containers</strong></td>
+      <td>런타임, 이미지</td>
+      <td>권한 상승, host 공격, 정보 노출</td>
+      <td>이미지 서명, 런타임 보안(Falco)</td>
+    </tr>
+    <tr>
+      <td><strong>Host</strong></td>
+      <td>노드 OS, 커널</td>
+      <td>커널이 모든 컨테이너에 공유 → host 뚫리면 전체 감염</td>
+      <td>OS 하드닝, 컨테이너 전용 OS</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p>Configuration 레이어의 위험이 상위 레이어로 번지는 예시: API key가 평문 env로 유출 → 그 키로 다른 시스템에 접근(권한 상승) → 정상처럼 보이는 악성 동작(오작동). 설정 한 줄의 노출이 상위 레이어 침해로 번진다.</p>
+</blockquote>
+
+<blockquote>
+  <p>Dependencies가 “가장 흔한 진입점”인 대표 사례: Log4Shell(Log4j), event-stream(npm) 등 라이브러리 취약점이 곧 앱 침해로 이어진 경우가 많다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="컨테이너-보안">컨테이너 보안</h1>
+
+<p>컨테이너는 소프트웨어와 의존성을 캡슐화해 이식성이 높지만, 그만큼 위험도 캡슐화한다. 보안은 빌드부터 런타임까지 <strong>생애주기 전체</strong>에 걸쳐야 한다.</p>
+
+<h2 id="공급망-보안-supply-chain">공급망 보안 (Supply Chain)</h2>
+
+<p>이미지 빌드에서 운영 배포·모니터링까지 전 과정을 포괄한다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/genai-on-k8s-ch09-container-supply-chain.png" alt="컨테이너 공급망 단계" class="align-center" /></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>단계</th>
+      <th>위협</th>
+      <th>대응</th>
+      <th>도구</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Build</strong></td>
+      <td>비검증 의존성·잘못된 설정으로 악성코드 유입</td>
+      <td>신뢰된 베이스·경량 이미지(distroless/scratch), 이미지 불변성</td>
+      <td>DockerSlim</td>
+    </tr>
+    <tr>
+      <td><strong>Test</strong></td>
+      <td>미탐 취약점·오설정이 하류로 전파</td>
+      <td>CI/CD에 보안 테스트(정적·동적) 통합</td>
+      <td>Snyk</td>
+    </tr>
+    <tr>
+      <td><strong>Store</strong></td>
+      <td>레지스트리 내 이미지 변조·구버전</td>
+      <td>이미지 서명·검증, RBAC</td>
+      <td>Cosign, OPA Gatekeeper</td>
+    </tr>
+    <tr>
+      <td><strong>Encrypt</strong></td>
+      <td>이미지에 secret이 박힘</td>
+      <td>secret 임베드 금지 → 외부 secret store에서 런타임 주입</td>
+      <td>Vault, Secrets Manager</td>
+    </tr>
+    <tr>
+      <td><strong>Scan</strong></td>
+      <td>이미지·의존성 취약점</td>
+      <td>빌드·저장 단계 지속 스캔(CVE DB 대조)</td>
+      <td>Trivy, ECR Enhanced Scanning</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="이미지-불변성과-multi-stage-build">이미지 불변성과 multi-stage build</h3>
+
+<p><strong>이미지 불변성(immutable tag)</strong>이란 한 번 push한 태그를 덮어쓸 수 없게 고정하는 것이다(<code class="highlighter-rouge">latest</code>=mutable, <code class="highlighter-rouge">v1.0</code>=immutable). 보안상 의미는 <em>“안전하다고 검증·서명한 바로 그 이미지가 나중에 몰래 바뀌지 않음”</em>을 보장하는 데 있다. 재현성과 감사 추적에도 중요하고, GenAI에서는 fine-tune/추론 이미지의 model integrity 보장에 특히 중요하다.</p>
+
+<p><strong>multi-stage build</strong>는 빌드 과정을 단계로 쪼개 각 단계는 적합한 베이스로 특정 작업(컴파일, 의존성 설치)만 하고, 최종 이미지에는 필요한 산출물만 복사하는 기법이다. GenAI에서는 거대한 학습 프레임워크·전처리 스크립트를 최종 추론 이미지에서 제외해 더 작고 안전한 이미지를 만들 수 있다.</p>
+
+<h2 id="host-보안">Host 보안</h2>
+
+<p>노드 OS·커널은 모든 컨테이너가 공유하므로, host가 뚫리면 전체가 위험하다. 호스트 하드닝의 원리는 클라우드 공통이다 — 아래 원리로 일반화해 두면 다른 클라우드에도 그대로 통한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>원리 (클라우드 공통)</th>
+      <th>AWS/EKS 구현 예시</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>노드를 외부에 직접 노출하지 않는다</td>
+      <td><strong>private subnet</strong> 배치 — 외부 공개는 LB/Ingress로만</td>
+    </tr>
+    <tr>
+      <td>관리 접근 경로를 최소화한다</td>
+      <td><strong>SSH 차단</strong> → SSM Session Manager</td>
+    </tr>
+    <tr>
+      <td>자격증명·메타데이터 통로를 보호한다</td>
+      <td><strong>IMDSv2</strong> — 세션 토큰 요구 + <code class="highlighter-rouge">hop_limit=1</code>로 컨테이너 접근 차단</td>
+    </tr>
+    <tr>
+      <td>저장 데이터를 암호화한다</td>
+      <td>EBS 볼륨 KMS 암호화, NVMe instance store는 XTS-AES-256 자동</td>
+    </tr>
+    <tr>
+      <td>OS 공격표면을 최소화한다</td>
+      <td>컨테이너 전용 OS(<strong>Bottlerocket</strong>), CIS 벤치마크</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="bottlerocket">Bottlerocket</h3>
+
+<p>Bottlerocket은 AWS의 컨테이너 전용 OS로, host 계층의 공격 표면을 최소화한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>일반 AL2023</th>
+      <th>Bottlerocket</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>루트 파일시스템</td>
+      <td>읽기/쓰기</td>
+      <td><strong>읽기 전용</strong>(immutable)</td>
+    </tr>
+    <tr>
+      <td>패키지 매니저</td>
+      <td>있음</td>
+      <td><strong>없음</strong>(공격 표면 축소)</td>
+    </tr>
+    <tr>
+      <td>업데이트</td>
+      <td>in-place</td>
+      <td><strong>atomic</strong>(이미지 교체·롤백)</td>
+    </tr>
+    <tr>
+      <td>용도</td>
+      <td>범용</td>
+      <td>컨테이너 전용</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>atomic 업데이트</strong>란 OS를 패키지 단위(<code class="highlighter-rouge">yum</code>/<code class="highlighter-rouge">apt</code>)로 in-place 갱신하지 않고, <strong>OS 이미지 통째</strong>를 교체하는 방식이다. A/B 두 파티션을 두고 비활성 파티션에 새 이미지를 다 받은 뒤 재부팅 시 전환한다. “전부 적용 / 전혀 미적용” 둘 중 하나라 중간 깨진 상태가 없다. 문제 시 부팅 포인터를 직전 파티션으로 되돌려 롤백한다. 루트 FS가 읽기전용(dm-verity 무결성 검증)이라 실행 중 변조가 불가능하다 — EKS 노드를 <em>고쳐 쓰지 않고 통째로 교체</em>하는 <strong>불변 인프라(immutable infrastructure)</strong> 철학과 맞는다.</p>
+</blockquote>
+
+<h3 id="imdsv2와-hop_limit">IMDSv2와 hop_limit</h3>
+
+<p>EC2 안에는 <strong>IMDS</strong>(Instance Metadata Service)라는 특수 주소 <code class="highlighter-rouge">169.254.169.254</code>가 있고, 여기에 요청하면 그 노드에 붙은 IAM Role의 임시 자격증명을 돌려준다. <strong>SSRF</strong>(Server-Side Request Forgery) 공격으로 이 자격증명을 탈취하는 시나리오가 위험하다.</p>
+
+<p><strong>IMDSv2</strong>는 두 겹으로 이를 막는다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">http_tokens = "required"</code> — 자격증명을 받으려면 먼저 <code class="highlighter-rouge">PUT</code>으로 세션 토큰을 받고 그 토큰을 헤더에 실어야 한다. SSRF는 보통 단순 <code class="highlighter-rouge">GET</code>만 시킬 수 있어 토큰 협상을 못 한다</li>
+  <li><code class="highlighter-rouge">http_put_response_hop_limit = 1</code> — 메타데이터 응답의 네트워크 hop을 1로 제한한다. 컨테이너는 별도 network namespace라 응답이 host netns → veth/bridge → pod netns로 포워딩되며 여기서 TTL이 1 깎인다. <code class="highlighter-rouge">hop_limit=1</code>이면 파드로 들어가는 순간 TTL=0이 되어 폐기된다</li>
+</ul>
+
+<blockquote>
+  <p>파드가 <strong>Pod Identity</strong>로 자격증명을 받는다면 IMDS는 불필요하므로 <code class="highlighter-rouge">hop_limit=1</code>로 차단하는 게 맞다. <code class="highlighter-rouge">hostNetwork: true</code> 파드는 호스트 netns를 공유하므로 hop_limit에 영향받지 않는다.</p>
+</blockquote>
+
+<h2 id="런타임-보안-container-runtime">런타임 보안 (Container Runtime)</h2>
+
+<p>실행 중인 컨테이너의 권한 상승·무단 접근을 방지한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>자원 제한</td>
+      <td>CPU/메모리 limit 미설정 시 한 컨테이너가 노드 자원 독식 → DoS·클러스터 불안정</td>
+    </tr>
+    <tr>
+      <td>비-root 실행</td>
+      <td><code class="highlighter-rouge">securityContext</code>로 non-root 강제</td>
+    </tr>
+    <tr>
+      <td>capability drop</td>
+      <td>불필요한 Linux capability 제거(<code class="highlighter-rouge">drop: [ALL]</code>)</td>
+    </tr>
+    <tr>
+      <td><strong>PSS</strong>(Pod Security Standards)</td>
+      <td>내장 Pod Security Admission으로 프로파일 강제, namespace 라벨로 적용</td>
+    </tr>
+    <tr>
+      <td>런타임 모니터링</td>
+      <td>Falco 등으로 실시간 이상행위 탐지</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>핵심 <code class="highlighter-rouge">securityContext</code> 예시:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">securityContext</span><span class="pi">:</span>
+  <span class="na">runAsUser</span><span class="pi">:</span> <span class="s">1000</span>          <span class="c1"># 비-root 일반 사용자</span>
+  <span class="na">runAsGroup</span><span class="pi">:</span> <span class="s">1000</span>
+  <span class="na">allowPrivilegeEscalation</span><span class="pi">:</span> <span class="no">false</span>
+  <span class="na">capabilities</span><span class="pi">:</span>
+    <span class="na">drop</span><span class="pi">:</span> <span class="pi">[</span><span class="nv">ALL</span><span class="pi">]</span>
+</code></pre></div></div>
+
+<h3 id="pod-security-standards-3단계">Pod Security Standards 3단계</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>프로파일</th>
+      <th>수준</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">privileged</code></td>
+      <td>제한 없음</td>
+      <td>모든 권한 허용</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">baseline</code></td>
+      <td>흔한 권한상승 차단</td>
+      <td>일반 워크로드에 적합</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">restricted</code></td>
+      <td>엄격</td>
+      <td>강제 non-root, capability drop 등</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>namespace에 <code class="highlighter-rouge">pod-security.kubernetes.io/enforce=&lt;level&gt;</code> 라벨로 적용한다.</p>
+
+<h3 id="falco">Falco</h3>
+
+<p><strong>Falco</strong>는 DaemonSet으로 커널을 <strong>eBPF</strong>(또는 전통 syscall hook)로 관찰해 컨테이너 내 셸 생성, <code class="highlighter-rouge">/etc/passwd</code>·<code class="highlighter-rouge">/etc/shadow</code> 변조, 비신뢰 IP 연결, SA 토큰 오용 등을 실시간 탐지한다.</p>
+
+<blockquote>
+  <p><strong>eBPF</strong>는 리눅스 커널 안에서 안전하게 돌리는 샌드박스 프로그램이다. 커널을 수정하거나 모듈을 올리지 않고도 syscall·네트워크 이벤트를 가로채 관찰할 수 있다. 지금은 여기까지 알면 충분하다. 더 파고 싶다면 eBPF internals(커널 검증기, 맵, 프로그램 타입)를 별도로 살펴보자.</p>
+</blockquote>
+
+<h2 id="네트워크-보안">네트워크 보안</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>세그먼트·격리</td>
+      <td>namespace로 경계 분리, <strong>NetworkPolicy</strong>로 ingress/egress 제어(Pod 레벨)</td>
+    </tr>
+    <tr>
+      <td>Pod-to-Pod</td>
+      <td>기본 전부 허용 → 위험. zero-trust + service mesh(Istio/Linkerd) <strong>mTLS</strong>로 인증·암호화</td>
+    </tr>
+    <tr>
+      <td>Ingress/Egress</td>
+      <td>Ingress는 HTTPS/TLS + WAF, Egress는 egress 정책으로 외부 유출 제한</td>
+    </tr>
+    <tr>
+      <td>API server</td>
+      <td>RBAC + OIDC/IAM 인증, 신뢰 소스만 접근 허용</td>
+    </tr>
+    <tr>
+      <td>DNS</td>
+      <td>CoreDNS spoofing 방어. NetworkPolicy로 질의 제한, DNSSEC</td>
+    </tr>
+    <tr>
+      <td>모니터링</td>
+      <td>Cilium, Calico, Datadog 등으로 트래픽 가시성 확보</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>참고 — Ingress/Egress 보안 방향</strong></p>
+  <ul>
+    <li><strong>Ingress (들어오는 트래픽):</strong> HTTPS/TLS 로 전송 구간 암호화 + <strong>WAF(Web Application Firewall, 웹 애플리케이션 방화벽)</strong> 으로 SQL injection·XSS 등 L7 공격 차단.</li>
+    <li><strong>Egress (나가는 트래픽):</strong> egress 정책으로 외부로 나가는 연결을 화이트리스트화 → 데이터 유출(exfiltration) 경로 제한.</li>
+  </ul>
+</blockquote>
+
+<blockquote>
+  <p><strong>참고 — L7 방화벽(WAF) vs 일반 방화벽(L3/L4)</strong></p>
+
+  <p>우리가 흔히 “방화벽”이라 부르는 것(<code class="highlighter-rouge">iptables</code>, 보안그룹, K8s NetworkPolicy)은 대부분 <strong>L3/L4</strong> 에서 동작한다. 둘의 차이는 <em>패킷의 무엇을 보고 허용/차단을 결정하느냐</em> 에 있다.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>구분</th>
+        <th>일반 방화벽 (L3/L4)</th>
+        <th>WAF (L7)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>판단 기준</td>
+        <td>IP(L3) + 포트·프로토콜(L4) — 5-tuple</td>
+        <td>HTTP 요청 내용: URL·헤더·쿼리·바디·쿠키</td>
+      </tr>
+      <tr>
+        <td>보는 범위</td>
+        <td>패킷 봉투(주소·포트)만, 내용물은 안 봄</td>
+        <td>TLS 복호화 후 애플리케이션 메시지를 파싱</td>
+      </tr>
+      <tr>
+        <td>막는 것</td>
+        <td>“이 IP·포트로의 연결 자체”를 허용/거부</td>
+        <td>SQL injection, XSS, path traversal 등 <strong>요청 내용</strong>에 숨은 공격</td>
+      </tr>
+      <tr>
+        <td>K8s 대응</td>
+        <td>NetworkPolicy, 보안그룹</td>
+        <td>ALB 앞단 AWS WAF, Ingress 게이트웨이</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>왜 둘 다 필요한가:</strong> L3/L4 방화벽 입장에선 <code class="highlighter-rouge">443/TCP 로 들어오는 정상 HTTPS 연결</code>일 뿐이라, 그 안의 <code class="highlighter-rouge">GET /items?id=1' OR '1'='1</code> 같은 SQLi 페이로드를 구분할 수 없다. 포트·IP는 멀쩡하기 때문. WAF 는 그 HTTP 요청을 직접 열어보고 패턴/시그니처로 걸러낸다. 즉 <strong>방어 계층(layer)이 달라 서로 대체가 아니라 보완</strong> 관계다.</p>
+</blockquote>
+
+<h2 id="secrets-관리">Secrets 관리</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>K8s Secret</td>
+      <td>네이티브 리소스. <strong>base64 인코딩일 뿐 암호화가 아니다</strong> → 추가 보호 필요</td>
+    </tr>
+    <tr>
+      <td>etcd 암호화</td>
+      <td>EKS는 기본적으로 AWS 관리 키로 etcd 암호화. <strong>envelope encryption</strong> 추가 가능</td>
+    </tr>
+    <tr>
+      <td>RBAC</td>
+      <td>최소권한 — 필요한 Secret에만 접근 허용</td>
+    </tr>
+    <tr>
+      <td>외부 도구</td>
+      <td>Vault, Secrets Manager(중앙관리·암호화·감사·세밀 접근제어) + <code class="highlighter-rouge">secrets-store-csi-driver</code>로 K8s 통합</td>
+    </tr>
+    <tr>
+      <td>회전</td>
+      <td>K8s Secret은 자동 회전 미지원 → 외부 도구로 보완</td>
+    </tr>
+    <tr>
+      <td>전송</td>
+      <td>자격증명 교환 시 TLS</td>
+    </tr>
+    <tr>
+      <td>감사</td>
+      <td>K8s audit log + SIEM 연동</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>참고 — envelope encryption</strong></p>
+
+  <p><strong>envelope encryption</strong>이란 데이터를 <strong>데이터 키</strong>로 암호화하고, 그 데이터 키를 다시 <strong>KMS 마스터 키</strong>로 암호화하는 2단 구조다. 마스터 키는 KMS 밖으로 나오지 않고, etcd에는 암호화된 데이터 키만 남아 노출 위험이 줄어든다.</p>
+</blockquote>
+
+<blockquote>
+  <p><strong>참고 — SIEM(Security Information and Event Management)</strong></p>
+
+  <p>여러 소스의 보안 로그·이벤트를 <strong>한 곳으로 모아 상관분석(correlation)·탐지·알림</strong> 하는 시스템. 이름 그대로 두 축의 결합이다.</p>
+  <ul>
+    <li><strong>SIM (Information):</strong> 로그를 장기 수집·저장·검색 → 사후 감사·컴플라이언스 증적.</li>
+    <li><strong>SEM (Event):</strong> 실시간 이벤트 상관분석 → 의심 패턴 탐지·즉시 알림.</li>
+  </ul>
+
+  <p><strong>K8s audit log 와의 관계:</strong> API server 의 audit log 는 “누가(user) / 무엇을(verb·resource) / 언제 / 결과(allow·deny)” 를 남기는 <em>원천 데이터</em>일 뿐이다. 그 자체로는 노드 로컬 파일에 쌓일 뿐 탐지·알림 기능이 없다. SIEM 으로 흘려보내야 비로소</p>
+  <ul>
+    <li>여러 클러스터·여러 소스(CloudTrail, VPC Flow Log, 앱 로그)와 <strong>교차 상관분석</strong>,</li>
+    <li>“비정상 권한 상승 시도”, “심야 대량 Secret 조회” 같은 <strong>룰 기반 실시간 알림</strong>,</li>
+    <li>장기 보존 + 검색으로 <strong>사고 발생 시 역추적</strong>
+이 가능해진다.</li>
+  </ul>
+
+  <table>
+    <thead>
+      <tr>
+        <th>대표 도구</th>
+        <th>비고</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Splunk, IBM QRadar, Microsoft Sentinel</td>
+        <td>상용 SIEM</td>
+      </tr>
+      <tr>
+        <td>Elastic Stack(ELK), Wazuh</td>
+        <td>오픈소스 계열</td>
+      </tr>
+      <tr>
+        <td><strong>AWS:</strong> GuardDuty + Security Hub</td>
+        <td>EKS audit log 연동 가능, 매니지드 위협 탐지</td>
+      </tr>
+    </tbody>
+  </table>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="genai-워크로드-추가-고려사항">GenAI 워크로드 추가 고려사항</h1>
+
+<p>GenAI 배포는 모델 아티팩트, 대용량 민감 학습 데이터, 비신뢰 추론 요청을 다루기 때문에 표준 K8s 보안 위에 공격면이 더해진다.</p>
+
+<h2 id="데이터-프라이버시와-컴플라이언스">데이터 프라이버시와 컴플라이언스</h2>
+
+<p>학습/파인튜닝 데이터는 data lake/warehouse에 있다. 데이터 분류·규제에 맞춰 저장 암호화·엄격한 접근제어·감사를 적용하고, 접근은 TLS + 최소권한으로 한다. EKS라면 <strong>IRSA 또는 Pod Identity</strong>로 임시 자격증명을 받아 S3 등에 접근한다.</p>
+
+<h2 id="irsa-vs-pod-identity">IRSA vs Pod Identity</h2>
+
+<p>둘 다 <em>파드가 장기 자격증명 없이 IAM Role 권한으로 AWS에 접근</em>하게 하는 메커니즘이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>IRSA (2019)</th>
+      <th>Pod Identity (2023)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>trust principal</td>
+      <td>OIDC provider ARN</td>
+      <td>서비스 principal <code class="highlighter-rouge">pods.eks.amazonaws.com</code></td>
+    </tr>
+    <tr>
+      <td>사전 준비</td>
+      <td>클러스터마다 OIDC provider 등록, SA annotation, 복잡한 trust policy</td>
+      <td><code class="highlighter-rouge">eks-pod-identity-agent</code> 애드온 + association API</td>
+    </tr>
+    <tr>
+      <td>SA 연결</td>
+      <td>SA annotation <code class="highlighter-rouge">eks.amazonaws.com/role-arn</code></td>
+      <td><code class="highlighter-rouge">create-pod-identity-association</code>(cluster·ns·sa·role)</td>
+    </tr>
+    <tr>
+      <td>자격증명 흐름</td>
+      <td>SDK가 <code class="highlighter-rouge">AssumeRoleWithWebIdentity</code>(STS)로 web identity 토큰 교환</td>
+      <td>agent가 임시 자격증명 주입(<code class="highlighter-rouge">AssumeRole</code>+<code class="highlighter-rouge">TagSession</code>)</td>
+    </tr>
+    <tr>
+      <td>장점</td>
+      <td>—</td>
+      <td>OIDC 의존 제거, trust 단순, <strong>세션 태그</strong>(cluster·ns·pod·sa)로 한 Role을 여러 워크로드에 세밀 제어</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://sirzzang.github.io//assets/images/genai-on-k8s-ch09-irsa-overview.png" alt="IRSA 동작 개요" class="align-center" /></p>
+
+<blockquote>
+  <p>IRSA 흐름: annotated SA의 파드 생성 → control plane의 webhook이 projected SA 토큰을 마운트하도록 파드 스펙 mutate → 파드 내 SDK가 그 토큰으로 STS <code class="highlighter-rouge">AssumeRoleWithWebIdentity</code> 호출 → STS가 OIDC 검증·trust policy 확인 후 임시 자격증명 반환.</p>
+</blockquote>
+
+<p>이 개념들이 실제 Terraform 코드에 어떻게 적용되는지는 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-09-02-Security-Infrastructure-Code/">다음 글</a>에서 살펴본다.</p>
+
+<h2 id="모델-엔드포인트-보안">모델 엔드포인트 보안</h2>
+
+<p>파인튜닝 후 모델 아티팩트는 S3(접근제어) 또는 이미지에 패키징해 레지스트리로 보관한다. 엔드포인트는 K8s Service/Ingress로 노출하되 네트워크·API 레벨 보호를 건다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>보호</th>
+      <th>방법</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>전송 암호화</td>
+      <td>ACM 인증서를 ALB/NLB에 붙여 TLS(443) 종단</td>
+    </tr>
+    <tr>
+      <td>공격 방어</td>
+      <td>ALB에 <strong>AWS WAF</strong> 부착 → injection·악성 입력 차단</td>
+    </tr>
+    <tr>
+      <td>인증</td>
+      <td>클라이언트·서비스 진위 검증</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>GenAI 워크로드의 보안은 defense in depth를 뼈대로, 컨테이너 생애주기 전체에 걸쳐 공급망·호스트·런타임·네트워크·시크릿 5개 영역에 통제를 겹쳐야 한다. 여기에 GenAI 고유의 모델 무결성·데이터 프라이버시·GPU 격리까지 더해진다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>영역</th>
+      <th>핵심 포인트</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>공급망</td>
+      <td>경량 이미지, immutable tag, 서명·검증, 지속 스캔</td>
+    </tr>
+    <tr>
+      <td>호스트</td>
+      <td>Bottlerocket(읽기전용·atomic), IMDSv2(SSRF 차단)</td>
+    </tr>
+    <tr>
+      <td>런타임</td>
+      <td>non-root, capability drop, PSS, Falco</td>
+    </tr>
+    <tr>
+      <td>네트워크</td>
+      <td>NetworkPolicy, mTLS, WAF</td>
+    </tr>
+    <tr>
+      <td>시크릿</td>
+      <td>외부 store(Secrets Manager), CSI driver, envelope encryption</td>
+    </tr>
+    <tr>
+      <td>GenAI 고유</td>
+      <td>Pod Identity, 모델 엔드포인트 TLS/WAF, 데이터 암호화</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions">Kubernetes for Generative AI Solutions — GitHub</a></li>
+  <li><a href="https://csrc.nist.gov/glossary/term/defense_in_depth">NIST — Defense in Depth 정의</a></li>
+  <li><a href="https://aws.amazon.com/bottlerocket/">AWS Bottlerocket 공식 페이지</a></li>
+  <li><a href="https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html">EKS Pod Identity 소개</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/security/pod-security-standards/">Kubernetes Pod Security Standards</a></li>
+  <li><a href="https://secrets-store-csi-driver.sigs.k8s.io/">Secrets Store CSI Driver</a></li>
+  <li><a href="https://falco.org/">Falco — Cloud Native Runtime Security</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#container-security" class="page__taxonomy-item" rel="tag">Container-Security</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#defense-in-depth" class="page__taxonomy-item" rel="tag">Defense-in-Depth</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#genai" class="page__taxonomy-item" rel="tag">GenAI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#irsa" class="page__taxonomy-item" rel="tag">IRSA</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions-chapter-9" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions-Chapter-9</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes-for-generative-ai-solutions" class="page__taxonomy-item" rel="tag">Kubernetes-for-Generative-AI-Solutions</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#pod-identity" class="page__taxonomy-item" rel="tag">Pod-Identity</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#security" class="page__taxonomy-item" rel="tag">Security</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-05-24T00:00:00+09:00">May 24, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BGenAI%5D+GenAI+on+K8s%3A+9.1+-+%EB%B3%B4%EC%95%88+%EA%B0%9C%EB%85%90%3A+Defense+in+Depth%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-09-01-Security-Defense-in-Depth%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-09-01-Security-Defense-in-Depth%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-GenAI-on-K8s-09-01-Security-Defense-in-Depth%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-GenAI-on-K8s-09-01-Security-Defense-in-Depth?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-04-03-Fine-Tuning-QLoRA/" class="pagination--pager" title="[GenAI] GenAI on K8s: 4.3 - Fine-tuning (QLoRA)
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-GenAI-on-K8s-09-02-Security-Infrastructure-Code/" class="pagination--pager" title="[GenAI] GenAI on K8s: 9.2 - 보안 인프라 코드 분석: EKS + Secret 주입 흐름
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-09-01-Security-Defense-in-Depth/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-GenAI-on-K8s-09-01-Security-Defense-in-Depth"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

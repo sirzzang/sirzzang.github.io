@@ -1,0 +1,2150 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.7. Static Pod 및 애드온 확인 - Eraser’s StudyLog</title>
+<meta name="description" content="kubeadm init으로 배포된 Static Pod(etcd, API Server, Scheduler, Controller Manager)와 필수 애드온(CoreDNS, kube-proxy)을 상세히 확인해보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.7. Static Pod 및 애드온 확인">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-Kubeadm-01-7/">
+
+
+  <meta property="og:description" content="kubeadm init으로 배포된 Static Pod(etcd, API Server, Scheduler, Controller Manager)와 필수 애드온(CoreDNS, kube-proxy)을 상세히 확인해보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-01-18T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-Kubeadm-01-7/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.7. Static Pod 및 애드온 확인">
+    <meta itemprop="description" content="kubeadm init으로 배포된 Static Pod(etcd, API Server, Scheduler, Controller Manager)와 필수 애드온(CoreDNS, kube-proxy)을 상세히 확인해보자.">
+    <meta itemprop="datePublished" content="2026-01-18T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.7. Static Pod 및 애드온 확인
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-01-18T00:00:00+09:00">2026년 01월 18일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  14 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#들어가며">들어가며</a></li>
+  <li><a href="#static-pod-확인">Static Pod 확인</a>
+    <ul>
+      <li><a href="#static-pod-매니페스트-디렉토리">Static Pod 매니페스트 디렉토리</a></li>
+      <li><a href="#etcd">etcd</a>
+        <ul>
+          <li><a href="#etcd-데이터-디렉토리">etcd 데이터 디렉토리</a></li>
+        </ul>
+      </li>
+      <li><a href="#kube-apiserver">kube-apiserver</a></li>
+      <li><a href="#kube-scheduler">kube-scheduler</a>
+        <ul>
+          <li><a href="#leader-election-상세-확인">Leader Election 상세 확인</a></li>
+        </ul>
+      </li>
+      <li><a href="#kube-controller-manager">kube-controller-manager</a>
+        <ul>
+          <li><a href="#컨트롤러별-serviceaccount">컨트롤러별 ServiceAccount</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#필수-애드온-확인">필수 애드온 확인</a>
+    <ul>
+      <li><a href="#coredns">CoreDNS</a>
+        <ul>
+          <li><a href="#메트릭-엔드포인트-확인">메트릭 엔드포인트 확인</a></li>
+          <li><a href="#corefile-설정-확인">Corefile 설정 확인</a></li>
+        </ul>
+      </li>
+      <li><a href="#kube-proxy">kube-proxy</a>
+        <ul>
+          <li><a href="#pod-볼륨-마운트">Pod 볼륨 마운트</a></li>
+          <li><a href="#configmap-주요-설정">ConfigMap 주요 설정</a></li>
+          <li><a href="#포트-및-헬스체크">포트 및 헬스체크</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#결과">결과</a></li>
+  <li><a href="#부록-설정-전후-비교">부록: 설정 전후 비교</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 On-Premise K8s Hands-on Study 3주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li><strong>Static Pod</strong>: etcd, kube-apiserver, kube-scheduler, kube-controller-manager가 <code class="highlighter-rouge">/etc/kubernetes/manifests</code>의 YAML 매니페스트로 실행됨</li>
+  <li><strong>CoreDNS</strong>: 클러스터 내부 DNS 서비스. Deployment로 2개 Pod 운영, <code class="highlighter-rouge">kube-dns</code> Service(<code class="highlighter-rouge">10.96.0.10</code>)로 접근</li>
+  <li><strong>kube-proxy</strong>: 각 노드에서 iptables 규칙으로 Service → Pod 라우팅 관리. DaemonSet으로 모든 노드에 배포</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="들어가며">들어가며</h1>
+
+<p><a href="/kubernetes/Kubernetes-Kubeadm-01-6/">이전 글</a>에서 노드 정보, 인증서, kubeconfig를 확인했다. 이번 글에서는 컨트롤 플레인의 핵심인 Static Pod와 필수 애드온을 상세히 확인한다.</p>
+
+<p><br /></p>
+
+<h1 id="static-pod-확인">Static Pod 확인</h1>
+
+<h2 id="static-pod-매니페스트-디렉토리">Static Pod 매니페스트 디렉토리</h2>
+
+<p>컨트롤 플레인 컴포넌트들은 <strong>Static Pod</strong>로 실행된다. kubelet이 특정 디렉토리를 감시하고, 그 안의 YAML 파일을 읽어 Pod를 직접 생성한다. API Server 없이도 컨트롤 플레인을 부트스트랩할 수 있는 핵심 메커니즘이다.</p>
+
+<blockquote>
+  <p><strong>참고</strong>: Control Plane을 systemd vs Static Pod로 구성하는 방식의 차이와, 그 때문에 Control Plane에도 kubelet이 필요한 이유는 <a href="/kubernetes/Kubernetes-Kubeadm-00/#control-plane-구성-systemd-vs-static-pod">Overview의 Control Plane 구성: systemd vs Static Pod</a>를 참고하자.</p>
+</blockquote>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>tree /etc/kubernetes/manifests/
+<span class="c"># /etc/kubernetes/manifests/</span>
+<span class="c"># ├── etcd.yaml</span>
+<span class="c"># ├── kube-apiserver.yaml</span>
+<span class="c"># ├── kube-controller-manager.yaml</span>
+<span class="c"># └── kube-scheduler.yaml</span>
+<span class="c">#</span>
+<span class="c"># 1 directory, 4 files</span>
+</code></pre></div></div>
+
+<p><a href="/kubernetes/Kubernetes-Kubeadm-01-6/#kubelet-상태-및-설정-확인">이전 글에서 확인한</a> <code class="highlighter-rouge">staticPodPath: /etc/kubernetes/manifests</code> 설정에 의해 kubelet이 이 디렉토리를 감시하고, 각 YAML 파일을 Static Pod로 실행한다.</p>
+
+<p><br /></p>
+
+<h2 id="etcd">etcd</h2>
+
+<p>etcd는 Kubernetes <strong>모든 클러스터 상태</strong>를 저장하는 분산 키-값 저장소다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 주요 설정 확인</span>
+<span class="nb">cat</span> /etc/kubernetes/manifests/etcd.yaml | <span class="nb">grep</span> <span class="nt">-E</span> <span class="s1">'listen-|advertise-|data-dir'</span>
+<span class="c"># - --advertise-client-urls=https://192.168.10.100:2379</span>
+<span class="c"># - --data-dir=/var/lib/etcd</span>
+<span class="c"># - --initial-advertise-peer-urls=https://192.168.10.100:2380</span>
+<span class="c"># - --listen-client-urls=https://127.0.0.1:2379,https://192.168.10.100:2379</span>
+<span class="c"># - --listen-metrics-urls=http://127.0.0.1:2381</span>
+<span class="c"># - --listen-peer-urls=https://192.168.10.100:2380</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>포트</strong></td>
+      <td><code class="highlighter-rouge">2379</code></td>
+      <td>클라이언트 요청 (API Server → etcd)</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td><code class="highlighter-rouge">2380</code></td>
+      <td>피어 통신 (etcd 노드 간, HA 구성 시)</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td><code class="highlighter-rouge">2381</code></td>
+      <td>메트릭/헬스체크 (HTTP, TLS 없음)</td>
+    </tr>
+    <tr>
+      <td><strong>hostNetwork</strong></td>
+      <td><code class="highlighter-rouge">true</code></td>
+      <td>Pod 네트워크가 아닌 호스트 네트워크 사용</td>
+    </tr>
+    <tr>
+      <td><strong>priorityClassName</strong></td>
+      <td><code class="highlighter-rouge">system-node-critical</code></td>
+      <td>리소스 부족 시에도 최우선 스케줄링</td>
+    </tr>
+    <tr>
+      <td><strong>client-cert-auth</strong></td>
+      <td><code class="highlighter-rouge">true</code></td>
+      <td>클라이언트 인증서 필수 (API Server만 접근 가능)</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 주요 설정 확인</span>
+<span class="nb">cat</span> /etc/kubernetes/manifests/etcd.yaml | <span class="nb">grep</span> <span class="nt">-E</span> <span class="s1">'listen-|advertise-|data-dir'</span>
+<span class="c"># - --advertise-client-urls=https://192.168.10.100:2379</span>
+<span class="c"># - --data-dir=/var/lib/etcd</span>
+<span class="c"># - --initial-advertise-peer-urls=https://192.168.10.100:2380</span>
+<span class="c"># - --listen-client-urls=https://127.0.0.1:2379,https://192.168.10.100:2379</span>
+<span class="c"># - --listen-metrics-urls=http://127.0.0.1:2381</span>
+<span class="c"># - --listen-peer-urls=https://192.168.10.100:2380</span>
+</code></pre></div></div>
+
+<ul>
+  <li><strong><code class="highlighter-rouge">listen-client-urls</code></strong>: <code class="highlighter-rouge">127.0.0.1:2379</code>와 <code class="highlighter-rouge">192.168.10.100:2379</code> 모두에서 수신. 로컬과 네트워크 모두 접근 허용</li>
+  <li><strong><code class="highlighter-rouge">listen-peer-urls</code></strong>: <code class="highlighter-rouge">192.168.10.100:2380</code>에서만 수신. HA 구성 시 다른 etcd 노드가 이 주소로 연결</li>
+  <li><strong><code class="highlighter-rouge">listen-metrics-urls</code></strong>: <code class="highlighter-rouge">127.0.0.1:2381</code> (HTTP). 메트릭은 로컬에서만, TLS 없이 수집</li>
+</ul>
+
+<p><br /></p>
+
+<details>
+  <summary>etcd.yaml 전체 보기</summary>
+
+  <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">annotations</span><span class="pi">:</span>
+    <span class="s">kubeadm.kubernetes.io/etcd.advertise-client-urls</span><span class="pi">:</span> <span class="s">https://192.168.10.100:2379</span>
+  <span class="na">labels</span><span class="pi">:</span>
+    <span class="na">component</span><span class="pi">:</span> <span class="s">etcd</span>
+    <span class="na">tier</span><span class="pi">:</span> <span class="s">control-plane</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">etcd</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">kube-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">containers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">command</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="s">etcd</span>
+    <span class="pi">-</span> <span class="s">--advertise-client-urls=https://192.168.10.100:2379</span>
+    <span class="pi">-</span> <span class="s">--cert-file=/etc/kubernetes/pki/etcd/server.crt</span>
+    <span class="pi">-</span> <span class="s">--client-cert-auth=true</span>
+    <span class="pi">-</span> <span class="s">--data-dir=/var/lib/etcd</span>
+    <span class="pi">-</span> <span class="s">--experimental-initial-corrupt-check=true</span>
+    <span class="pi">-</span> <span class="s">--experimental-watch-progress-notify-interval=5s</span>
+    <span class="pi">-</span> <span class="s">--initial-advertise-peer-urls=https://192.168.10.100:2380</span>
+    <span class="pi">-</span> <span class="s">--initial-cluster=k8s-ctr=https://192.168.10.100:2380</span>
+    <span class="pi">-</span> <span class="s">--key-file=/etc/kubernetes/pki/etcd/server.key</span>
+    <span class="pi">-</span> <span class="s">--listen-client-urls=https://127.0.0.1:2379,https://192.168.10.100:2379</span> <span class="c1"># client는 https://192.168.10.100:2379 호출</span>
+    <span class="pi">-</span> <span class="s">--listen-metrics-urls=http://127.0.0.1:2381</span>
+    <span class="pi">-</span> <span class="s">--listen-peer-urls=https://192.168.10.100:2380</span>
+    <span class="pi">-</span> <span class="s">--name=k8s-ctr</span>
+    <span class="pi">-</span> <span class="s">--peer-cert-file=/etc/kubernetes/pki/etcd/peer.crt</span>
+    <span class="pi">-</span> <span class="s">--peer-client-cert-auth=true</span>
+    <span class="pi">-</span> <span class="s">--peer-key-file=/etc/kubernetes/pki/etcd/peer.key</span>
+    <span class="pi">-</span> <span class="s">--peer-trusted-ca-file=/etc/kubernetes/pki/etcd/ca.crt</span>
+    <span class="pi">-</span> <span class="s">--snapshot-count=10000</span>
+    <span class="pi">-</span> <span class="s">--trusted-ca-file=/etc/kubernetes/pki/etcd/ca.crt</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">registry.k8s.io/etcd:3.5.24-0</span>
+    <span class="na">livenessProbe</span><span class="pi">:</span>
+      <span class="na">httpGet</span><span class="pi">:</span>
+        <span class="na">host</span><span class="pi">:</span> <span class="s">127.0.0.1</span>
+        <span class="na">path</span><span class="pi">:</span> <span class="s">/livez</span>
+        <span class="na">port</span><span class="pi">:</span> <span class="s">2381</span>
+        <span class="na">scheme</span><span class="pi">:</span> <span class="s">HTTP</span>
+    <span class="na">volumeMounts</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/var/lib/etcd</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">etcd-data</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/etc/kubernetes/pki/etcd</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">etcd-certs</span>
+  <span class="na">hostNetwork</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">priorityClassName</span><span class="pi">:</span> <span class="s">system-node-critical</span>
+  <span class="na">volumes</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/etc/kubernetes/pki/etcd</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">etcd-certs</span>
+  <span class="pi">-</span> <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/var/lib/etcd</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">etcd-data</span>
+</code></pre></div>  </div>
+
+</details>
+
+<p><br /></p>
+
+<h3 id="etcd-데이터-디렉토리">etcd 데이터 디렉토리</h3>
+
+<p>etcd에는 Pod, Service, ConfigMap, Secret 등 모든 리소스 정보가 저장된다. etcd 데이터가 손실되면 클러스터 전체를 잃게 되므로, <strong>백업이 필수</strong>다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>tree /var/lib/etcd/
+<span class="c"># /var/lib/etcd/</span>
+<span class="c"># └── member</span>
+<span class="c">#     ├── snap</span>
+<span class="c">#     │   └── db              ← 실제 데이터베이스 (BoltDB)</span>
+<span class="c">#     └── wal</span>
+<span class="c">#         ├── 0000000000000000-0000000000000000.wal   ← Write-Ahead Log</span>
+<span class="c">#         └── 0.tmp</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>디렉토리/파일</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">member/snap/</code></td>
+      <td>주기적으로 생성되는 스냅샷. 장애 복구 시 이 시점부터 WAL 재생</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">member/snap/db</code></td>
+      <td><strong>실제 데이터베이스 파일</strong> (BoltDB 형식). 모든 Kubernetes 리소스가 여기에 저장됨</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">member/wal/</code></td>
+      <td><strong>Write-Ahead Log</strong>. 변경사항이 먼저 WAL에 기록된 후 db에 반영됨. 장애 복구에 사용</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>백업 팁</strong>: etcd 백업 시 <code class="highlighter-rouge">etcdctl snapshot save</code> 명령을 사용하거나, <code class="highlighter-rouge">/var/lib/etcd</code> 디렉토리 전체를 복사한다. 프로덕션에서는 정기적인 스냅샷 백업이 필수다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="kube-apiserver">kube-apiserver</h2>
+
+<p>API Server는 Kubernetes 클러스터의 중앙 허브로, 모든 컴포넌트와 사용자 요청이 이곳을 통해 처리된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># API Server 포트 확인</span>
+ss <span class="nt">-tnlp</span> | <span class="nb">grep </span>apiserver
+<span class="c"># LISTEN 0      4096                *:6443             *:*    users:(("kube-apiserver",pid=15952,fd=3))</span>
+
+<span class="c"># kubernetes Service 확인 (클러스터 내부에서 API Server 접근용)</span>
+kubectl get svc,ep
+<span class="c"># NAME                 TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE</span>
+<span class="c"># service/kubernetes   ClusterIP   10.96.0.1    &lt;none&gt;        443/TCP   138m</span>
+<span class="c">#</span>
+<span class="c"># NAME                   ENDPOINTS             AGE</span>
+<span class="c"># endpoints/kubernetes   192.168.10.100:6443   138m</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>리스닝 포트</strong></td>
+      <td><code class="highlighter-rouge">6443</code></td>
+      <td>모든 인터페이스(<code class="highlighter-rouge">*</code>)에서 수신</td>
+    </tr>
+    <tr>
+      <td><strong>Service ClusterIP</strong></td>
+      <td><code class="highlighter-rouge">10.96.0.1</code></td>
+      <td>Pod 내부에서 <code class="highlighter-rouge">https://kubernetes.default.svc:443</code>으로 접근 시 사용</td>
+    </tr>
+    <tr>
+      <td><strong>Endpoints</strong></td>
+      <td><code class="highlighter-rouge">192.168.10.100:6443</code></td>
+      <td>실제 API Server 주소</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Pod 내부에서 API Server에 접근할 때는 <code class="highlighter-rouge">kubernetes.default.svc</code> DNS를 사용하고, 이는 <code class="highlighter-rouge">10.96.0.1:443</code>으로 해석된 후 <code class="highlighter-rouge">192.168.10.100:6443</code>으로 라우팅된다.</p>
+
+<p><br /></p>
+
+<details>
+  <summary>kube-apiserver.yaml 전체 보기</summary>
+
+  <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">annotations</span><span class="pi">:</span>
+    <span class="s">kubeadm.kubernetes.io/kube-apiserver.advertise-address.endpoint</span><span class="pi">:</span> <span class="s">192.168.10.100:6443</span>
+  <span class="na">creationTimestamp</span><span class="pi">:</span> <span class="no">null</span>
+  <span class="na">labels</span><span class="pi">:</span>
+    <span class="na">component</span><span class="pi">:</span> <span class="s">kube-apiserver</span>
+    <span class="na">tier</span><span class="pi">:</span> <span class="s">control-plane</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">kube-apiserver</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">kube-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">containers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">command</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="s">kube-apiserver</span>
+    <span class="pi">-</span> <span class="s">--advertise-address=192.168.10.100</span>
+    <span class="pi">-</span> <span class="s">--allow-privileged=true</span>
+    <span class="pi">-</span> <span class="s">--authorization-mode=Node,RBAC</span>
+    <span class="pi">-</span> <span class="s">--client-ca-file=/etc/kubernetes/pki/ca.crt</span>
+    <span class="pi">-</span> <span class="s">--enable-admission-plugins=NodeRestriction</span>
+    <span class="pi">-</span> <span class="s">--enable-bootstrap-token-auth=true</span>
+    <span class="pi">-</span> <span class="s">--etcd-cafile=/etc/kubernetes/pki/etcd/ca.crt</span>
+    <span class="pi">-</span> <span class="s">--etcd-certfile=/etc/kubernetes/pki/apiserver-etcd-client.crt</span>
+    <span class="pi">-</span> <span class="s">--etcd-keyfile=/etc/kubernetes/pki/apiserver-etcd-client.key</span>
+    <span class="pi">-</span> <span class="s">--etcd-servers=https://127.0.0.1:2379</span>
+    <span class="pi">-</span> <span class="s">--kubelet-client-certificate=/etc/kubernetes/pki/apiserver-kubelet-client.crt</span>
+    <span class="pi">-</span> <span class="s">--kubelet-client-key=/etc/kubernetes/pki/apiserver-kubelet-client.key</span>
+    <span class="pi">-</span> <span class="s">--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname</span>
+    <span class="pi">-</span> <span class="s">--proxy-client-cert-file=/etc/kubernetes/pki/front-proxy-client.crt</span>
+    <span class="pi">-</span> <span class="s">--proxy-client-key-file=/etc/kubernetes/pki/front-proxy-client.key</span>
+    <span class="pi">-</span> <span class="s">--requestheader-allowed-names=front-proxy-client</span>
+    <span class="pi">-</span> <span class="s">--requestheader-client-ca-file=/etc/kubernetes/pki/front-proxy-ca.crt</span>
+    <span class="pi">-</span> <span class="s">--requestheader-extra-headers-prefix=X-Remote-Extra-</span>
+    <span class="pi">-</span> <span class="s">--requestheader-group-headers=X-Remote-Group</span>
+    <span class="pi">-</span> <span class="s">--requestheader-username-headers=X-Remote-User</span>
+    <span class="pi">-</span> <span class="s">--secure-port=6443</span>
+    <span class="pi">-</span> <span class="s">--service-account-issuer=https://kubernetes.default.svc.cluster.local</span>
+    <span class="pi">-</span> <span class="s">--service-account-key-file=/etc/kubernetes/pki/sa.pub</span>
+    <span class="pi">-</span> <span class="s">--service-account-signing-key-file=/etc/kubernetes/pki/sa.key</span>
+    <span class="pi">-</span> <span class="s">--service-cluster-ip-range=10.96.0.0/16</span>
+    <span class="pi">-</span> <span class="s">--tls-cert-file=/etc/kubernetes/pki/apiserver.crt</span>
+    <span class="pi">-</span> <span class="s">--tls-private-key-file=/etc/kubernetes/pki/apiserver.key</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">registry.k8s.io/kube-apiserver:v1.32.11</span>
+    <span class="na">imagePullPolicy</span><span class="pi">:</span> <span class="s">IfNotPresent</span>
+    <span class="na">livenessProbe</span><span class="pi">:</span>
+      <span class="na">failureThreshold</span><span class="pi">:</span> <span class="s">8</span>
+      <span class="na">httpGet</span><span class="pi">:</span>
+        <span class="na">host</span><span class="pi">:</span> <span class="s">192.168.10.100</span>
+        <span class="na">path</span><span class="pi">:</span> <span class="s">/livez</span>
+        <span class="na">port</span><span class="pi">:</span> <span class="s">6443</span>
+        <span class="na">scheme</span><span class="pi">:</span> <span class="s">HTTPS</span>
+      <span class="na">initialDelaySeconds</span><span class="pi">:</span> <span class="s">10</span>
+      <span class="na">periodSeconds</span><span class="pi">:</span> <span class="s">10</span>
+      <span class="na">timeoutSeconds</span><span class="pi">:</span> <span class="s">15</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">kube-apiserver</span>
+    <span class="na">readinessProbe</span><span class="pi">:</span>
+      <span class="na">failureThreshold</span><span class="pi">:</span> <span class="s">3</span>
+      <span class="na">httpGet</span><span class="pi">:</span>
+        <span class="na">host</span><span class="pi">:</span> <span class="s">192.168.10.100</span>
+        <span class="na">path</span><span class="pi">:</span> <span class="s">/readyz</span>
+        <span class="na">port</span><span class="pi">:</span> <span class="s">6443</span>
+        <span class="na">scheme</span><span class="pi">:</span> <span class="s">HTTPS</span>
+      <span class="na">periodSeconds</span><span class="pi">:</span> <span class="s">1</span>
+      <span class="na">timeoutSeconds</span><span class="pi">:</span> <span class="s">15</span>
+    <span class="na">resources</span><span class="pi">:</span>
+      <span class="na">requests</span><span class="pi">:</span>
+        <span class="na">cpu</span><span class="pi">:</span> <span class="s">250m</span>
+    <span class="na">startupProbe</span><span class="pi">:</span>
+      <span class="na">failureThreshold</span><span class="pi">:</span> <span class="s">24</span>
+      <span class="na">httpGet</span><span class="pi">:</span>
+        <span class="na">host</span><span class="pi">:</span> <span class="s">192.168.10.100</span>
+        <span class="na">path</span><span class="pi">:</span> <span class="s">/livez</span>
+        <span class="na">port</span><span class="pi">:</span> <span class="s">6443</span>
+        <span class="na">scheme</span><span class="pi">:</span> <span class="s">HTTPS</span>
+      <span class="na">initialDelaySeconds</span><span class="pi">:</span> <span class="s">10</span>
+      <span class="na">periodSeconds</span><span class="pi">:</span> <span class="s">10</span>
+      <span class="na">timeoutSeconds</span><span class="pi">:</span> <span class="s">15</span>
+    <span class="na">volumeMounts</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/etc/ssl/certs</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">ca-certs</span>
+      <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/etc/pki/ca-trust</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">etc-pki-ca-trust</span>
+      <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/etc/pki/tls/certs</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">etc-pki-tls-certs</span>
+      <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/etc/kubernetes/pki</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">k8s-certs</span>
+      <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">hostNetwork</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">priority</span><span class="pi">:</span> <span class="s">2000001000</span>
+  <span class="na">priorityClassName</span><span class="pi">:</span> <span class="s">system-node-critical</span>
+  <span class="na">securityContext</span><span class="pi">:</span>
+    <span class="na">seccompProfile</span><span class="pi">:</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">RuntimeDefault</span>
+  <span class="na">volumes</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/etc/ssl/certs</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">DirectoryOrCreate</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">ca-certs</span>
+  <span class="pi">-</span> <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/etc/pki/ca-trust</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">DirectoryOrCreate</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">etc-pki-ca-trust</span>
+  <span class="pi">-</span> <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/etc/pki/tls/certs</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">DirectoryOrCreate</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">etc-pki-tls-certs</span>
+  <span class="pi">-</span> <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/etc/kubernetes/pki</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">DirectoryOrCreate</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">k8s-certs</span>
+<span class="na">status</span><span class="pi">:</span> <span class="pi">{}</span>
+</code></pre></div>  </div>
+
+</details>
+
+<p><br /></p>
+
+<h2 id="kube-scheduler">kube-scheduler</h2>
+
+<p>스케줄러는 새로 생성된 Pod를 어떤 노드에 배치할지 결정하는 컴포넌트다. HA 구성에서는 여러 스케줄러 인스턴스가 실행되지만, <strong>한 번에 하나만 활성화</strong>(Leader)되어 스케줄링 충돌을 방지한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># scheduler 포트 확인</span>
+ss <span class="nt">-nltp</span> | <span class="nb">grep </span>scheduler
+<span class="c"># LISTEN 0      4096        127.0.0.1:10259      0.0.0.0:*    users:(("kube-scheduler",pid=15945,fd=3))</span>
+
+<span class="c"># Leader Election 확인 (Lease 리소스)</span>
+kubectl get leases.coordination.k8s.io <span class="nt">-n</span> kube-system kube-scheduler
+<span class="c"># NAME             HOLDER                                         AGE</span>
+<span class="c"># kube-scheduler   k8s-ctr_1c1836c2-c546-4dcf-8759-3368587749a8   139m</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>리스닝 주소</strong></td>
+      <td><code class="highlighter-rouge">127.0.0.1:10259</code></td>
+      <td>로컬에서만 접근 가능 (보안)</td>
+    </tr>
+    <tr>
+      <td><strong>Leader</strong></td>
+      <td><code class="highlighter-rouge">k8s-ctr_...</code></td>
+      <td>현재 이 노드의 스케줄러가 Leader</td>
+    </tr>
+  </tbody>
+</table>
+
+<details>
+  <summary>kube-scheduler.yaml 전체 보기</summary>
+
+  <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">creationTimestamp</span><span class="pi">:</span> <span class="no">null</span>
+  <span class="na">labels</span><span class="pi">:</span>
+    <span class="na">component</span><span class="pi">:</span> <span class="s">kube-scheduler</span>
+    <span class="na">tier</span><span class="pi">:</span> <span class="s">control-plane</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">kube-scheduler</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">kube-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">containers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">command</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="s">kube-scheduler</span>
+    <span class="pi">-</span> <span class="s">--authentication-kubeconfig=/etc/kubernetes/scheduler.conf</span>
+    <span class="pi">-</span> <span class="s">--authorization-kubeconfig=/etc/kubernetes/scheduler.conf</span>
+    <span class="pi">-</span> <span class="s">--bind-address=127.0.0.1</span>
+    <span class="pi">-</span> <span class="s">--kubeconfig=/etc/kubernetes/scheduler.conf</span>
+    <span class="pi">-</span> <span class="s">--leader-elect=true</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">registry.k8s.io/kube-scheduler:v1.32.11</span>
+    <span class="na">imagePullPolicy</span><span class="pi">:</span> <span class="s">IfNotPresent</span>
+    <span class="na">livenessProbe</span><span class="pi">:</span>
+      <span class="na">failureThreshold</span><span class="pi">:</span> <span class="s">8</span>
+      <span class="na">httpGet</span><span class="pi">:</span>
+        <span class="na">host</span><span class="pi">:</span> <span class="s">127.0.0.1</span>
+        <span class="na">path</span><span class="pi">:</span> <span class="s">/livez</span>
+        <span class="na">port</span><span class="pi">:</span> <span class="s">10259</span>
+        <span class="na">scheme</span><span class="pi">:</span> <span class="s">HTTPS</span>
+      <span class="na">initialDelaySeconds</span><span class="pi">:</span> <span class="s">10</span>
+      <span class="na">periodSeconds</span><span class="pi">:</span> <span class="s">10</span>
+      <span class="na">timeoutSeconds</span><span class="pi">:</span> <span class="s">15</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">kube-scheduler</span>
+    <span class="na">readinessProbe</span><span class="pi">:</span>
+      <span class="na">failureThreshold</span><span class="pi">:</span> <span class="s">3</span>
+      <span class="na">httpGet</span><span class="pi">:</span>
+        <span class="na">host</span><span class="pi">:</span> <span class="s">127.0.0.1</span>
+        <span class="na">path</span><span class="pi">:</span> <span class="s">/readyz</span>
+        <span class="na">port</span><span class="pi">:</span> <span class="s">10259</span>
+        <span class="na">scheme</span><span class="pi">:</span> <span class="s">HTTPS</span>
+      <span class="na">periodSeconds</span><span class="pi">:</span> <span class="s">1</span>
+      <span class="na">timeoutSeconds</span><span class="pi">:</span> <span class="s">15</span>
+    <span class="na">resources</span><span class="pi">:</span>
+      <span class="na">requests</span><span class="pi">:</span>
+        <span class="na">cpu</span><span class="pi">:</span> <span class="s">100m</span>
+    <span class="na">startupProbe</span><span class="pi">:</span>
+      <span class="na">failureThreshold</span><span class="pi">:</span> <span class="s">24</span>
+      <span class="na">httpGet</span><span class="pi">:</span>
+        <span class="na">host</span><span class="pi">:</span> <span class="s">127.0.0.1</span>
+        <span class="na">path</span><span class="pi">:</span> <span class="s">/livez</span>
+        <span class="na">port</span><span class="pi">:</span> <span class="s">10259</span>
+        <span class="na">scheme</span><span class="pi">:</span> <span class="s">HTTPS</span>
+      <span class="na">initialDelaySeconds</span><span class="pi">:</span> <span class="s">10</span>
+      <span class="na">periodSeconds</span><span class="pi">:</span> <span class="s">10</span>
+      <span class="na">timeoutSeconds</span><span class="pi">:</span> <span class="s">15</span>
+    <span class="na">volumeMounts</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/etc/kubernetes/scheduler.conf</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">kubeconfig</span>
+      <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">hostNetwork</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">priority</span><span class="pi">:</span> <span class="s">2000001000</span>
+  <span class="na">priorityClassName</span><span class="pi">:</span> <span class="s">system-node-critical</span>
+  <span class="na">securityContext</span><span class="pi">:</span>
+    <span class="na">seccompProfile</span><span class="pi">:</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">RuntimeDefault</span>
+  <span class="na">volumes</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/etc/kubernetes/scheduler.conf</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">FileOrCreate</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">kubeconfig</span>
+<span class="na">status</span><span class="pi">:</span> <span class="pi">{}</span>
+</code></pre></div>  </div>
+</details>
+
+<h3 id="leader-election-상세-확인">Leader Election 상세 확인</h3>
+
+<p><a href="/kubernetes/Kubernetes-Kubeadm-01-4/#lease">이전 글</a>에서 Lease 리소스가 Leader Election과 Node Heartbeat에 사용된다고 설명했다. Lease의 상세 정보를 확인하면 Leader Election 동작 방식을 이해할 수 있다.</p>
+
+<blockquote>
+  <p>현재 단일 컨트롤 플레인 구성이지만, <code class="highlighter-rouge">--leader-elect=true</code> 옵션이 기본 활성화되어 있어 HA 확장 시 별도 설정 없이 Leader Election이 작동할 수 있다.</p>
+</blockquote>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get lease <span class="nt">-n</span> kube-system kube-scheduler <span class="nt">-o</span> yaml
+<span class="c"># spec:</span>
+<span class="c">#   acquireTime: "2026-01-23T10:41:13.349875Z"                     # Leader 획득 시간</span>
+<span class="c">#   holderIdentity: k8s-ctr_1c1836c2-c546-4dcf-8759-3368587749a8  # 현재 Leader</span>
+<span class="c">#   leaseDurationSeconds: 15                                       # 15초 내 갱신 없으면 만료</span>
+<span class="c">#   leaseTransitions: 0                                            # Leader 변경 횟수</span>
+<span class="c">#   renewTime: "2026-01-24T15:23:19.653612Z"                       # 마지막 갱신 시간</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>필드</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">holderIdentity</code></td>
+      <td>현재 Leader (노드명_UUID 형식)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">leaseDurationSeconds</code></td>
+      <td>이 시간 내 갱신 없으면 Leader 상실</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">renewTime</code></td>
+      <td>Leader가 주기적으로 갱신하는 시간</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">leaseTransitions</code></td>
+      <td>Leader가 변경된 횟수 (HA 환경에서 failover 발생 시 증가)</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><strong>참고</strong>: HA 구성에서 여러 인스턴스가 실행되면, 각 인스턴스가 <code class="highlighter-rouge">holderIdentity</code>를 자신으로 설정하려고 경쟁한다. 먼저 설정에 성공한 인스턴스가 Leader가 되어 실제 작업을 수행하고, 나머지는 대기한다. Leader가 <code class="highlighter-rouge">leaseDurationSeconds</code> 내에 갱신하지 못하면 다른 인스턴스가 Leader를 획득한다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="kube-controller-manager">kube-controller-manager</h2>
+
+<p>Controller Manager는 클러스터 상태를 원하는 상태로 유지하는 <strong>여러 컨트롤러의 집합체</strong>다. Deployment, ReplicaSet, Node, Service 등 각 리소스 유형별로 전담 컨트롤러가 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">cat</span> /etc/kubernetes/manifests/kube-controller-manager.yaml | <span class="nb">grep</span> <span class="nt">-E</span> <span class="s1">'^\s+- --'</span>
+<span class="c">#     - --allocate-node-cidrs=true</span>
+<span class="c">#     - --authentication-kubeconfig=/etc/kubernetes/controller-manager.conf</span>
+<span class="c">#     - --authorization-kubeconfig=/etc/kubernetes/controller-manager.conf</span>
+<span class="c">#     - --bind-address=127.0.0.1</span>
+<span class="c">#     - --cluster-cidr=10.244.0.0/16</span>
+<span class="c">#     - --cluster-signing-cert-file=/etc/kubernetes/pki/ca.crt</span>
+<span class="c">#     - --cluster-signing-key-file=/etc/kubernetes/pki/ca.key</span>
+<span class="c">#     - --controllers=*,bootstrapsigner,tokencleaner</span>
+<span class="c">#     - --kubeconfig=/etc/kubernetes/controller-manager.conf</span>
+<span class="c">#     - --leader-elect=true</span>
+<span class="c">#     - --service-cluster-ip-range=10.96.0.0/16</span>
+<span class="c">#     - --use-service-account-credentials=true</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>옵션</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">--allocate-node-cidrs=true</code></td>
+      <td>각 노드에 Pod CIDR(<code class="highlighter-rouge">/24</code>) 자동 할당</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">--authentication-kubeconfig</code>, <code class="highlighter-rouge">--authorization-kubeconfig</code></td>
+      <td>API Server에 인증/인가 요청 시 사용하는 <a href="/kubernetes/Kubernetes-Kubeadm-01-6/#controller-managerconf">kubeconfig</a></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">--bind-address=127.0.0.1</code></td>
+      <td>로컬에서만 접근 가능 (보안)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">--cluster-cidr=10.244.0.0/16</code></td>
+      <td>Pod 네트워크 대역 (kubeadm 설정의 <code class="highlighter-rouge">podSubnet</code>)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">--cluster-signing-cert-file</code>, <code class="highlighter-rouge">--cluster-signing-key-file</code></td>
+      <td>CSR 서명용 CA. kubelet 클라이언트 인증서 갱신(<code class="highlighter-rouge">rotateCertificates</code>) 시 자동 적용</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">--controllers=*,bootstrapsigner,tokencleaner</code></td>
+      <td>모든 기본 컨트롤러 + 부트스트랩 관련 컨트롤러 활성화</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">--kubeconfig</code></td>
+      <td>API Server 접속에 사용하는 kubeconfig (<code class="highlighter-rouge">controller-manager.conf</code>)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">--leader-elect=true</code></td>
+      <td>HA 환경에서 Leader Election 활성화</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">--service-cluster-ip-range=10.96.0.0/16</code></td>
+      <td>Service CIDR (kubeadm 설정의 <code class="highlighter-rouge">serviceSubnet</code>)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">--use-service-account-credentials=true</code></td>
+      <td>각 컨트롤러가 <strong>개별 ServiceAccount</strong>로 API Server에 인증 (보안 강화)</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># controller-manager 포트 확인</span>
+ss <span class="nt">-tnlp</span> | <span class="nb">grep </span>controller
+<span class="c"># LISTEN 0      4096        127.0.0.1:10257      0.0.0.0:*    users:(("kube-controller",pid=15758,fd=3))</span>
+
+<span class="c"># Leader Election 확인 (scheduler와 동일하게 Lease 사용)</span>
+kubectl get lease <span class="nt">-n</span> kube-system kube-controller-manager
+<span class="c"># NAME                      HOLDER                                         AGE</span>
+<span class="c"># kube-controller-manager   k8s-ctr_5de52747-b49e-4b78-8424-ba461a604868   146m</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>리스닝 주소</strong></td>
+      <td><code class="highlighter-rouge">127.0.0.1:10257</code></td>
+      <td>로컬에서만 접근 가능 (보안)</td>
+    </tr>
+    <tr>
+      <td><strong>Leader</strong></td>
+      <td><code class="highlighter-rouge">k8s-ctr_...</code></td>
+      <td>현재 이 노드의 컨트롤러 매니저가 Leader</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<details>
+  <summary>kube-controller-manager.yaml 전체 보기</summary>
+  <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">creationTimestamp</span><span class="pi">:</span> <span class="no">null</span>
+  <span class="na">labels</span><span class="pi">:</span>
+    <span class="na">component</span><span class="pi">:</span> <span class="s">kube-controller-manager</span>
+    <span class="na">tier</span><span class="pi">:</span> <span class="s">control-plane</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">kube-controller-manager</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">kube-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">containers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">command</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="s">kube-controller-manager</span>
+    <span class="pi">-</span> <span class="s">--allocate-node-cidrs=true</span>
+    <span class="pi">-</span> <span class="s">--authentication-kubeconfig=/etc/kubernetes/controller-manager.conf</span>
+    <span class="pi">-</span> <span class="s">--authorization-kubeconfig=/etc/kubernetes/controller-manager.conf</span>
+    <span class="pi">-</span> <span class="s">--bind-address=127.0.0.1</span>
+    <span class="pi">-</span> <span class="s">--client-ca-file=/etc/kubernetes/pki/ca.crt</span>
+    <span class="pi">-</span> <span class="s">--cluster-cidr=10.244.0.0/16</span>
+    <span class="pi">-</span> <span class="s">--cluster-name=kubernetes</span>
+    <span class="pi">-</span> <span class="s">--cluster-signing-cert-file=/etc/kubernetes/pki/ca.crt</span>
+    <span class="pi">-</span> <span class="s">--cluster-signing-key-file=/etc/kubernetes/pki/ca.key</span>
+    <span class="pi">-</span> <span class="s">--controllers=*,bootstrapsigner,tokencleaner</span>
+    <span class="pi">-</span> <span class="s">--kubeconfig=/etc/kubernetes/controller-manager.conf</span>
+    <span class="pi">-</span> <span class="s">--leader-elect=true</span>
+    <span class="pi">-</span> <span class="s">--requestheader-client-ca-file=/etc/kubernetes/pki/front-proxy-ca.crt</span>
+    <span class="pi">-</span> <span class="s">--root-ca-file=/etc/kubernetes/pki/ca.crt</span>
+    <span class="pi">-</span> <span class="s">--service-account-private-key-file=/etc/kubernetes/pki/sa.key</span>
+    <span class="pi">-</span> <span class="s">--service-cluster-ip-range=10.96.0.0/16</span>
+    <span class="pi">-</span> <span class="s">--use-service-account-credentials=true</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">registry.k8s.io/kube-controller-manager:v1.32.11</span>
+    <span class="na">imagePullPolicy</span><span class="pi">:</span> <span class="s">IfNotPresent</span>
+    <span class="na">livenessProbe</span><span class="pi">:</span>
+      <span class="na">failureThreshold</span><span class="pi">:</span> <span class="s">8</span>
+      <span class="na">httpGet</span><span class="pi">:</span>
+        <span class="na">host</span><span class="pi">:</span> <span class="s">127.0.0.1</span>
+        <span class="na">path</span><span class="pi">:</span> <span class="s">/healthz</span>
+        <span class="na">port</span><span class="pi">:</span> <span class="s">10257</span>
+        <span class="na">scheme</span><span class="pi">:</span> <span class="s">HTTPS</span>
+      <span class="na">initialDelaySeconds</span><span class="pi">:</span> <span class="s">10</span>
+      <span class="na">periodSeconds</span><span class="pi">:</span> <span class="s">10</span>
+      <span class="na">timeoutSeconds</span><span class="pi">:</span> <span class="s">15</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">kube-controller-manager</span>
+    <span class="na">resources</span><span class="pi">:</span>
+      <span class="na">requests</span><span class="pi">:</span>
+        <span class="na">cpu</span><span class="pi">:</span> <span class="s">200m</span>
+    <span class="na">startupProbe</span><span class="pi">:</span>
+      <span class="na">failureThreshold</span><span class="pi">:</span> <span class="s">24</span>
+      <span class="na">httpGet</span><span class="pi">:</span>
+        <span class="na">host</span><span class="pi">:</span> <span class="s">127.0.0.1</span>
+        <span class="na">path</span><span class="pi">:</span> <span class="s">/healthz</span>
+        <span class="na">port</span><span class="pi">:</span> <span class="s">10257</span>
+        <span class="na">scheme</span><span class="pi">:</span> <span class="s">HTTPS</span>
+      <span class="na">initialDelaySeconds</span><span class="pi">:</span> <span class="s">10</span>
+      <span class="na">periodSeconds</span><span class="pi">:</span> <span class="s">10</span>
+      <span class="na">timeoutSeconds</span><span class="pi">:</span> <span class="s">15</span>
+    <span class="na">volumeMounts</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/etc/ssl/certs</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">ca-certs</span>
+      <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/etc/pki/ca-trust</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">etc-pki-ca-trust</span>
+      <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/etc/pki/tls/certs</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">etc-pki-tls-certs</span>
+      <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/usr/libexec/kubernetes/kubelet-plugins/volume/exec</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">flexvolume-dir</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/etc/kubernetes/pki</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">k8s-certs</span>
+      <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/etc/kubernetes/controller-manager.conf</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">kubeconfig</span>
+      <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">hostNetwork</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">priority</span><span class="pi">:</span> <span class="s">2000001000</span>
+  <span class="na">priorityClassName</span><span class="pi">:</span> <span class="s">system-node-critical</span>
+  <span class="na">securityContext</span><span class="pi">:</span>
+    <span class="na">seccompProfile</span><span class="pi">:</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">RuntimeDefault</span>
+  <span class="na">volumes</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/etc/ssl/certs</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">DirectoryOrCreate</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">ca-certs</span>
+  <span class="pi">-</span> <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/etc/pki/ca-trust</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">DirectoryOrCreate</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">etc-pki-ca-trust</span>
+  <span class="pi">-</span> <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/etc/pki/tls/certs</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">DirectoryOrCreate</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">etc-pki-tls-certs</span>
+  <span class="pi">-</span> <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/usr/libexec/kubernetes/kubelet-plugins/volume/exec</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">DirectoryOrCreate</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">flexvolume-dir</span>
+  <span class="pi">-</span> <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/etc/kubernetes/pki</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">DirectoryOrCreate</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">k8s-certs</span>
+  <span class="pi">-</span> <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/etc/kubernetes/controller-manager.conf</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">FileOrCreate</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">kubeconfig</span>
+<span class="na">status</span><span class="pi">:</span> <span class="pi">{}</span>
+</code></pre></div>  </div>
+</details>
+
+<h3 id="컨트롤러별-serviceaccount">컨트롤러별 ServiceAccount</h3>
+
+<p><strong>ServiceAccount</strong>는 Pod(또는 클러스터 내 프로세스)가 API Server에 접근할 때 사용하는 인증 수단이다. kube-controller-manager도 Pod로 실행되므로 ServiceAccount를 사용하여 API Server에 인증한다.</p>
+
+<p>kubeadm은 kube-controller-manager Static Pod 생성 시 <code class="highlighter-rouge">--use-service-account-credentials=true</code> 옵션을 <strong>기본 적용</strong>한다. 이 옵션이 활성화되면 각 내부 컨트롤러(deployment-controller, replicaset-controller 등)가 <strong>개별 ServiceAccount</strong>를 사용하여, 하나의 컨트롤러가 침해되더라도 다른 리소스에 대한 접근이 제한된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 옵션 확인</span>
+kubectl describe pod <span class="nt">-n</span> kube-system kube-controller-manager-k8s-ctr | <span class="nb">grep </span>credentials
+<span class="c">#      --use-service-account-credentials=true</span>
+</code></pre></div></div>
+
+<blockquote>
+  <p><strong>참고: Hard Way와의 비교</strong></p>
+
+  <p><a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-08-2/#kube-controller-manager-설정">Hard Way</a>에서는 kube-controller-manager가 systemd 서비스로 실행되었기 때문에:</p>
+  <ul>
+    <li>ServiceAccount가 아닌 단일 <strong>kubeconfig (X.509 인증서)</strong>로 API Server에 인증했다</li>
+    <li>모든 내부 컨트롤러가 <strong>같은 권한</strong>을 공유했다</li>
+  </ul>
+
+  <p>kubeadm은 <code class="highlighter-rouge">--use-service-account-credentials=true</code>로 각 컨트롤러에 <strong>최소 권한 원칙</strong>을 적용한다.</p>
+</blockquote>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 컨트롤러별 ServiceAccount 확인</span>
+kubectl get sa <span class="nt">-n</span> kube-system | <span class="nb">grep </span>controller
+<span class="c"># attachdetach-controller                       0         146m</span>
+<span class="c"># certificate-controller                        0         146m</span>
+<span class="c"># cronjob-controller                            0         146m</span>
+<span class="c"># daemon-set-controller                         0         146m</span>
+<span class="c"># deployment-controller                         0         146m</span>
+<span class="c"># endpoint-controller                           0         146m</span>
+<span class="c"># job-controller                                0         146m</span>
+<span class="c"># namespace-controller                          0         146m</span>
+<span class="c"># node-controller                               0         146m</span>
+<span class="c"># replicaset-controller                         0         146m</span>
+<span class="c"># replication-controller                        0         146m</span>
+<span class="c"># service-account-controller                    0         146m</span>
+<span class="c"># statefulset-controller                        0         146m</span>
+<span class="c"># ... (총 25개)</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="필수-애드온-확인">필수 애드온 확인</h1>
+
+<h2 id="coredns">CoreDNS</h2>
+
+<p>CoreDNS는 클러스터 내부 DNS 서비스를 제공한다. Pod가 Service 이름으로 통신할 때 CoreDNS가 해당 이름을 ClusterIP로 해석한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># CoreDNS Deployment 확인</span>
+kubectl get deploy <span class="nt">-n</span> kube-system coredns <span class="nt">-owide</span>
+<span class="c"># NAME      READY   UP-TO-DATE   AVAILABLE   AGE    CONTAINERS   IMAGES                                    SELECTOR</span>
+<span class="c"># coredns   2/2     2            2           147m   coredns      registry.k8s.io/coredns/coredns:v1.11.3   k8s-app=kube-dns</span>
+
+<span class="c"># CoreDNS Pod 확인</span>
+kubectl get pod <span class="nt">-n</span> kube-system <span class="nt">-l</span> k8s-app<span class="o">=</span>kube-dns <span class="nt">-owide</span>
+<span class="c"># NAME                       READY   STATUS    RESTARTS   AGE    IP           NODE      NOMINATED NODE   READINESS GATES</span>
+<span class="c"># coredns-668d6bf9bc-n8jxf   1/1     Running   0          147m   10.244.0.3   k8s-ctr   &lt;none&gt;           &lt;none&gt;</span>
+<span class="c"># coredns-668d6bf9bc-z6h69   1/1     Running   0          147m   10.244.0.2   k8s-ctr   &lt;none&gt;           &lt;none&gt;</span>
+
+<span class="c"># CoreDNS Service (이름은 kube-dns로 레거시 호환)</span>
+kubectl get svc,ep <span class="nt">-n</span> kube-system
+<span class="c"># NAME               TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)                  AGE</span>
+<span class="c"># service/kube-dns   ClusterIP   10.96.0.10   &lt;none&gt;        53/UDP,53/TCP,9153/TCP   148m</span>
+<span class="c">#</span>
+<span class="c"># NAME                 ENDPOINTS                                               AGE</span>
+<span class="c"># endpoints/kube-dns   10.244.0.2:53,10.244.0.3:53,10.244.0.2:53 + 3 more...   148m</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Deployment</strong></td>
+      <td>2개의 Pod로 고가용성 제공</td>
+    </tr>
+    <tr>
+      <td><strong>Service 이름</strong></td>
+      <td><code class="highlighter-rouge">kube-dns</code> (kube-dns에서 CoreDNS로 전환됐지만 호환성 유지)</td>
+    </tr>
+    <tr>
+      <td><strong>ClusterIP</strong></td>
+      <td><code class="highlighter-rouge">10.96.0.10</code> (Pod의 <code class="highlighter-rouge">/etc/resolv.conf</code>에 이 IP가 nameserver로 설정됨)</td>
+    </tr>
+    <tr>
+      <td><strong>포트</strong></td>
+      <td><code class="highlighter-rouge">53/UDP,TCP</code> (DNS), <code class="highlighter-rouge">9153/TCP</code> (Prometheus 메트릭)</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p>참고: <strong><code class="highlighter-rouge">k8s-app</code> 라벨</strong></p>
+
+  <p><code class="highlighter-rouge">-l k8s-app=kube-dns</code>에서 <code class="highlighter-rouge">k8s-app</code>은 Kubernetes <strong>시스템 컴포넌트</strong>를 식별하는 관례적 라벨이다. 일반 애플리케이션에서 사용하는 <code class="highlighter-rouge">app</code> 라벨과 구분하기 위해 <code class="highlighter-rouge">k8s-app</code>을 사용한다.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>라벨</th>
+        <th>용도</th>
+        <th>예시</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code class="highlighter-rouge">app</code></td>
+        <td>일반 사용자 애플리케이션</td>
+        <td><code class="highlighter-rouge">app=nginx</code>, <code class="highlighter-rouge">app=my-api</code></td>
+      </tr>
+      <tr>
+        <td><code class="highlighter-rouge">k8s-app</code></td>
+        <td>Kubernetes 시스템 컴포넌트</td>
+        <td><code class="highlighter-rouge">k8s-app=kube-dns</code>, <code class="highlighter-rouge">k8s-app=kube-proxy</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><code class="highlighter-rouge">kubeadm</code>이 설치하는 CoreDNS, kube-proxy 등은 모두 <code class="highlighter-rouge">k8s-app</code> 라벨을 사용한다.</p>
+</blockquote>
+
+<h3 id="메트릭-엔드포인트-확인">메트릭 엔드포인트 확인</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># CoreDNS 메트릭 확인</span>
+curl <span class="nt">-s</span> http://10.96.0.10:9153/metrics | head
+<span class="c"># # HELP coredns_build_info A metric with a constant '1' value labeled by version, revision, and goversion from which CoreDNS was built.</span>
+<span class="c"># # TYPE coredns_build_info gauge</span>
+<span class="c"># coredns_build_info{goversion="go1.21.11",revision="a6338e9",version="1.11.3"} 1</span>
+<span class="c"># # HELP coredns_cache_entries The number of elements in the cache.</span>
+<span class="c"># # TYPE coredns_cache_entries gauge</span>
+<span class="c"># coredns_cache_entries{server="dns://:53",type="denial",view="",zones="."} 1</span>
+<span class="c"># ...</span>
+</code></pre></div></div>
+
+<h3 id="corefile-설정-확인">Corefile 설정 확인</h3>
+
+<p>Corefile은 CoreDNS 설정 파일이다. Corefile 설정을 확인해 보자.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># CoreDNS ConfigMap 확인</span>
+kc describe cm <span class="nt">-n</span> kube-system coredns
+<span class="c"># Data</span>
+<span class="c"># ====</span>
+<span class="c"># Corefile:</span>
+<span class="c"># ----</span>
+<span class="c"># .:53 {</span>
+<span class="c">#     errors                                    # 에러 로깅</span>
+<span class="c">#     health { lameduck 5s }                    # 헬스체크 (/health)</span>
+<span class="c">#     ready                                     # 준비 상태 체크 (/ready)</span>
+<span class="c">#     kubernetes cluster.local in-addr.arpa ip6.arpa {</span>
+<span class="c">#        pods insecure                          # Pod A 레코드 생성</span>
+<span class="c">#        fallthrough in-addr.arpa ip6.arpa      # 역방향 DNS는 다음 플러그인으로</span>
+<span class="c">#        ttl 30</span>
+<span class="c">#     }</span>
+<span class="c">#     prometheus :9153                          # 메트릭 노출</span>
+<span class="c">#     forward . /etc/resolv.conf {              # 외부 DNS는 호스트의 resolv.conf로 포워딩</span>
+<span class="c">#        max_concurrent 1000</span>
+<span class="c">#     }</span>
+<span class="c">#     cache 30 {                                # 30초 캐싱 (cluster.local 제외)</span>
+<span class="c">#        disable success cluster.local</span>
+<span class="c">#        disable denial cluster.local</span>
+<span class="c">#     }</span>
+<span class="c">#     loop                                      # 무한 루프 방지</span>
+<span class="c">#     reload                                    # ConfigMap 변경 시 자동 리로드</span>
+<span class="c">#     loadbalance                               # 응답 라운드로빈</span>
+<span class="c"># }</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>플러그인</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">kubernetes</code></td>
+      <td><code class="highlighter-rouge">cluster.local</code> 도메인에 대한 DNS 레코드 생성 (Service, Pod)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">forward</code></td>
+      <td>클러스터 외부 도메인은 호스트의 DNS 서버로 포워딩</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">cache</code></td>
+      <td>DNS 응답 캐싱 (클러스터 내부 도메인은 캐싱 비활성화)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">prometheus</code></td>
+      <td>9153 포트로 메트릭 노출</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">forward . /etc/resolv.conf</code> 설정에 의해 클러스터 외부 도메인(예: <code class="highlighter-rouge">google.com</code>)은 호스트의 DNS 서버로 포워딩된다. 호스트의 DNS 설정을 확인해 보자.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 호스트의 DNS 서버 확인</span>
+<span class="nb">cat</span> /etc/resolv.conf
+<span class="c"># Generated by NetworkManager</span>
+<span class="c"># nameserver 168.126.63.1    ← KT 기본 DNS</span>
+<span class="c"># nameserver 168.126.63.2    ← KT 보조 DNS</span>
+</code></pre></div></div>
+
+<p>즉, Pod에서 <code class="highlighter-rouge">google.com</code>을 조회하면: Pod → CoreDNS(<code class="highlighter-rouge">10.96.0.10</code>) → 호스트 DNS(<code class="highlighter-rouge">168.126.63.1</code>) → 외부 DNS 응답 순서로 처리된다.</p>
+
+<blockquote>
+  <p><strong>참고: Corefile 이름의 유래</strong></p>
+
+  <p>CoreDNS는 <strong>Caddy</strong> 웹 서버를 기반으로 만들어졌다. Caddy의 설정 파일이 <code class="highlighter-rouge">Caddyfile</code>이었기 때문에, 같은 네이밍 컨벤션을 따라 CoreDNS의 설정 파일은 <code class="highlighter-rouge">Corefile</code>이 되었다. <code class="highlighter-rouge">Dockerfile</code>, <code class="highlighter-rouge">Makefile</code>, <code class="highlighter-rouge">Jenkinsfile</code>처럼 <code class="highlighter-rouge">[제품명]file</code> 패턴이다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="kube-proxy">kube-proxy</h2>
+
+<p>kube-proxy는 각 노드에서 실행되는 <strong>네트워크 프록시</strong>로, Service의 ClusterIP를 실제 Pod IP로 라우팅하는 iptables/IPVS 규칙을 관리한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># kube-proxy DaemonSet 확인</span>
+kubectl get ds <span class="nt">-n</span> kube-system <span class="nt">-owide</span>
+<span class="c"># NAME         DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE    CONTAINERS   IMAGES                                SELECTOR</span>
+<span class="c"># kube-proxy   1         1         1       1            1           kubernetes.io/os=linux   151m   kube-proxy   registry.k8s.io/kube-proxy:v1.32.11   k8s-app=kube-proxy</span>
+
+<span class="c"># kube-proxy Pod 확인</span>
+kubectl get pod <span class="nt">-n</span> kube-system <span class="nt">-l</span> k8s-app<span class="o">=</span>kube-proxy <span class="nt">-owide</span>
+<span class="c"># NAME               READY   STATUS    RESTARTS   AGE    IP               NODE      NOMINATED NODE   READINESS GATES</span>
+<span class="c"># kube-proxy-5p6jx   1/1     Running   0          152m   192.168.10.100   k8s-ctr   &lt;none&gt;           &lt;none&gt;</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>DaemonSet</strong></td>
+      <td>모든 노드에 하나씩 배포 (<code class="highlighter-rouge">NODE SELECTOR: kubernetes.io/os=linux</code>)</td>
+    </tr>
+    <tr>
+      <td><strong>Pod IP</strong></td>
+      <td><code class="highlighter-rouge">192.168.10.100</code> (hostNetwork 모드로 노드 IP 사용)</td>
+    </tr>
+    <tr>
+      <td><strong>Tolerations</strong></td>
+      <td>모든 Taint를 허용하여 컨트롤 플레인/문제 노드에도 배포됨</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="pod-볼륨-마운트">Pod 볼륨 마운트</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># kube-proxy Pod 상세 정보에서 Mounts 확인</span>
+kc describe pod <span class="nt">-n</span> kube-system <span class="nt">-l</span> k8s-app<span class="o">=</span>kube-proxy | <span class="nb">grep</span> <span class="nt">-A5</span> Mounts
+<span class="c">#     Mounts:</span>
+<span class="c">#       /lib/modules from lib-modules (ro)              # 커널 모듈 접근 (iptables 등)</span>
+<span class="c">#       /run/xtables.lock from xtables-lock (rw)        # iptables 동시 접근 잠금</span>
+<span class="c">#       /var/lib/kube-proxy from kube-proxy (rw)        # ConfigMap (설정 파일)</span>
+<span class="c">#       /var/run/secrets/kubernetes.io/serviceaccount   # API Server 인증 토큰</span>
+</code></pre></div></div>
+
+<h3 id="configmap-주요-설정">ConfigMap 주요 설정</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># kube-proxy ConfigMap 확인</span>
+kc describe cm <span class="nt">-n</span> kube-system kube-proxy
+<span class="c"># config.conf:</span>
+<span class="c"># ----</span>
+<span class="c"># apiVersion: kubeproxy.config.k8s.io/v1alpha1</span>
+<span class="c"># kind: KubeProxyConfiguration</span>
+<span class="c"># bindAddress: 0.0.0.0</span>
+<span class="c"># clusterCIDR: 10.244.0.0/16</span>
+<span class="c"># mode: ""                  # 기본값: iptables (빈 문자열 = iptables)</span>
+<span class="c"># conntrack:</span>
+<span class="c">#   maxPerCore: null        # 커널 기본값 사용</span>
+<span class="c">#   min: null</span>
+<span class="c"># nodePortAddresses: null   # 모든 노드 인터페이스에 바인딩</span>
+<span class="c"># portRange: ""             # 포트 범위 제한 없음</span>
+<span class="c"># iptables:</span>
+<span class="c">#   masqueradeAll: false    # 외부 트래픽만 SNAT</span>
+<span class="c">#   syncPeriod: 0s          # 기본 동기화 주기 사용</span>
+<span class="c"># ipvs:</span>
+<span class="c">#   scheduler: ""           # IPVS 모드 시 스케줄러 (rr, lc, dh 등)</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>설정</th>
+      <th>값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">mode</code></td>
+      <td><code class="highlighter-rouge">""</code> (빈 문자열)</td>
+      <td>기본값은 <code class="highlighter-rouge">iptables</code>. <code class="highlighter-rouge">ipvs</code>로 변경하면 IPVS 모드 사용</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">clusterCIDR</code></td>
+      <td><code class="highlighter-rouge">10.244.0.0/16</code></td>
+      <td>Pod 네트워크 대역</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nodePortAddresses</code></td>
+      <td><code class="highlighter-rouge">null</code></td>
+      <td>NodePort가 모든 노드 IP에 바인딩됨</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">conntrack.maxPerCore</code></td>
+      <td><code class="highlighter-rouge">null</code></td>
+      <td>커널 기본 conntrack 테이블 크기 사용</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="포트-및-헬스체크">포트 및 헬스체크</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># kube-proxy 포트 확인</span>
+ss <span class="nt">-nltp</span> | <span class="nb">grep </span>kube-proxy
+<span class="c"># LISTEN 0      4096        127.0.0.1:10249      0.0.0.0:*    users:(("kube-proxy",pid=16175,fd=11))</span>
+<span class="c"># LISTEN 0      4096                *:10256            *:*    users:(("kube-proxy",pid=16175,fd=10))</span>
+
+<span class="c"># 헬스체크 확인</span>
+curl 127.0.0.1:10249/healthz <span class="p">;</span> <span class="nb">echo</span>
+<span class="c"># ok</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>포트</th>
+      <th>바인딩</th>
+      <th>용도</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">10249</code></td>
+      <td><code class="highlighter-rouge">127.0.0.1</code> (로컬만)</td>
+      <td>헬스체크 (<code class="highlighter-rouge">/healthz</code>)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">10256</code></td>
+      <td><code class="highlighter-rouge">*</code> (모든 인터페이스)</td>
+      <td>메트릭 노출 (Prometheus 스크래핑용)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="결과">결과</h1>
+
+<p>이 단계를 완료하면 다음과 같은 결과를 얻을 수 있다:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>결과</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>노드</td>
+      <td><code class="highlighter-rouge">Ready</code> 상태, Flannel 어노테이션 추가됨</td>
+    </tr>
+    <tr>
+      <td>인증서</td>
+      <td>/etc/kubernetes/pki에 22개 파일 생성 (CA 3개 + 인증서/키 쌍)</td>
+    </tr>
+    <tr>
+      <td>kubeconfig</td>
+      <td>admin.conf, controller-manager.conf, scheduler.conf, kubelet.conf 생성</td>
+    </tr>
+    <tr>
+      <td>Static Pod</td>
+      <td>etcd, kube-apiserver, kube-controller-manager, kube-scheduler 실행 중</td>
+    </tr>
+    <tr>
+      <td>애드온</td>
+      <td>CoreDNS (Running), kube-proxy (Running)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<p>컨트롤 플레인 구성이 완료되었다. 다음 글에서는 워커 노드를 <code class="highlighter-rouge">kubeadm join</code>으로 클러스터에 추가한다.</p>
+
+<p><br /></p>
+
+<h1 id="부록-설정-전후-비교">부록: 설정 전후 비교</h1>
+
+<p>kubeadm init 전후의 시스템 상태를 비교하면 어떤 변경이 발생했는지 파악할 수 있다. 학습이나 트러블슈팅 시 유용하다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># kubeadm init 후 환경 정보 저장</span>
+<span class="nb">cat</span> /etc/sysconfig/kubelet
+tree /etc/kubernetes  | tee <span class="nt">-a</span> etc_kubernetes-2.txt
+tree /var/lib/kubelet | tee <span class="nt">-a</span> var_lib_kubelet-2.txt
+tree /run/containerd/ <span class="nt">-L</span> 3 | tee <span class="nt">-a</span> run_containerd-2.txt
+pstree <span class="nt">-alnp</span> | tee <span class="nt">-a</span> pstree-2.txt
+systemd-cgls <span class="nt">--no-pager</span> | tee <span class="nt">-a</span> systemd-cgls-2.txt
+lsns | tee <span class="nt">-a</span> lsns-2.txt
+ip addr | tee <span class="nt">-a</span> ip_addr-2.txt
+ss <span class="nt">-tnlp</span> | tee <span class="nt">-a</span> ss-2.txt
+df <span class="nt">-hT</span> | tee <span class="nt">-a</span> df-2.txt
+findmnt | tee <span class="nt">-a</span> findmnt-2.txt
+sysctl <span class="nt">-a</span> | tee <span class="nt">-a</span> sysctl-2.txt
+
+<span class="c"># init 전후 비교 (vi -d 로 diff 확인)</span>
+vi <span class="nt">-d</span> etc_kubernetes-1.txt etc_kubernetes-2.txt
+vi <span class="nt">-d</span> var_lib_kubelet-1.txt var_lib_kubelet-2.txt
+vi <span class="nt">-d</span> pstree-1.txt pstree-2.txt
+vi <span class="nt">-d</span> ss-1.txt ss-2.txt
+vi <span class="nt">-d</span> sysctl-1.txt sysctl-2.txt
+</code></pre></div></div>
+
+<blockquote>
+  <p><strong>팁</strong>: kubeadm init 전에 동일한 명령으로 <code class="highlighter-rouge">*-1.txt</code> 파일들을 생성해 두면, <code class="highlighter-rouge">vi -d</code>로 변경 사항을 시각적으로 비교할 수 있다.</p>
+</blockquote>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-EKS-01-01-04-EKS-Cluster-Result/">[EKS] EKS: Public-Public EKS 클러스터 - 4. 클러스터 구성 요소 확인</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Kubeadm-01-0/">[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.0. 실습 구성도</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Kubeadm-01-4/">[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.4. kubeadm init 실행</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Kubeadm-01-6/">[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.6. 노드 정보, 인증서 및 kubeconfig 확인</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#on-premise-k8s-hands-on-study-week-3" class="page__taxonomy-item" rel="tag">On-Premise-K8s-Hands-On-Study-Week-3</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#on-premise-k8s-hands-on-study" class="page__taxonomy-item" rel="tag">On-Premise-K8s-Hands-On-Study</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-01-18T00:00:00+09:00">January 18, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+Cluster%3A+Kubeadm%EC%9D%84+%EC%9D%B4%EC%9A%A9%ED%95%B4+%ED%81%B4%EB%9F%AC%EC%8A%A4%ED%84%B0+%EA%B5%AC%EC%84%B1%ED%95%98%EA%B8%B0+-+1.7.+Static+Pod+%EB%B0%8F+%EC%95%A0%EB%93%9C%EC%98%A8+%ED%99%95%EC%9D%B8%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Kubeadm-01-7%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Kubeadm-01-7%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Kubeadm-01-7%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-Kubeadm-01-7?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-Kubeadm-01-6/" class="pagination--pager" title="[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.6. 노드 정보, 인증서 및 kubeconfig 확인
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-Kubeadm-02-1/" class="pagination--pager" title="[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 2.1. kubeadm join
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-Kubeadm-01-7/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-Kubeadm-01-7"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

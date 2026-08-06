@@ -1,0 +1,1699 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 2. 배경지식: cgroup, 컨테이너, 쿠버네티스 - Eraser’s StudyLog</title>
+<meta name="description" content="cgroup이 프로세스 그룹의 CPU를 어떻게 제한하는지, 그리고 K8s의 CPU limit이 커널까지 전달되는 경로를 알아 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 2. 배경지식: cgroup, 컨테이너, 쿠버네티스">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-FFmpeg-CPU-02/">
+
+
+  <meta property="og:description" content="cgroup이 프로세스 그룹의 CPU를 어떻게 제한하는지, 그리고 K8s의 CPU limit이 커널까지 전달되는 경로를 알아 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-02-06T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-FFmpeg-CPU-02/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 2. 배경지식: cgroup, 컨테이너, 쿠버네티스">
+    <meta itemprop="description" content="cgroup이 프로세스 그룹의 CPU를 어떻게 제한하는지, 그리고 K8s의 CPU limit이 커널까지 전달되는 경로를 알아 보자.">
+    <meta itemprop="datePublished" content="2026-02-06T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 2. 배경지식: cgroup, 컨테이너, 쿠버네티스
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-02-06T00:00:00+09:00">2026년 02월 06일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#cgroup">cgroup</a>
+    <ul>
+      <li><a href="#개념">개념</a></li>
+      <li><a href="#cpumax-quotaperiod-설정">cpu.max: quota/period 설정</a></li>
+      <li><a href="#cpustat-커널이-기록하는-카운터">cpu.stat: 커널이 기록하는 카운터</a></li>
+      <li><a href="#cgroup-계층-구조">cgroup 계층 구조</a></li>
+    </ul>
+  </li>
+  <li><a href="#컨테이너와-cgroup">컨테이너와 cgroup</a>
+    <ul>
+      <li><a href="#컨테이너--namespace--cgroup">컨테이너 = namespace + cgroup</a></li>
+      <li><a href="#호스트-커널이-모든-것을-스케줄링한다">호스트 커널이 모든 것을 스케줄링한다</a></li>
+      <li><a href="#mount-namespace와-cgroup-가시성">mount namespace와 cgroup 가시성</a></li>
+    </ul>
+  </li>
+  <li><a href="#쿠버네티스-리소스-관리">쿠버네티스 리소스 관리</a>
+    <ul>
+      <li><a href="#request-limit-qos">request, limit, QoS</a></li>
+      <li><a href="#cgroup-계층-구조-1">cgroup 계층 구조</a></li>
+      <li><a href="#yaml에서-cgroup까지의-경로">YAML에서 cgroup까지의 경로</a>
+        <ul>
+          <li><a href="#request--cpuweight-상대적-가중치">request → cpu.weight: 상대적 가중치</a></li>
+          <li><a href="#limit--cpumax-절대적-시간-할당량">limit → cpu.max: 절대적 시간 할당량</a></li>
+          <li><a href="#정리">정리</a></li>
+          <li><a href="#시끄러운-이웃-문제와-limit의-역할">“시끄러운 이웃” 문제와 limit의 역할</a></li>
+        </ul>
+      </li>
+      <li><a href="#측정-도구">측정 도구</a>
+        <ul>
+          <li><a href="#kubectl-top">kubectl top</a></li>
+          <li><a href="#cpustat-직접-읽기">cpu.stat 직접 읽기</a></li>
+          <li><a href="#prometheus-메트릭">Prometheus 메트릭</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#정리-1">정리</a></li>
+  <li><a href="#참고">참고</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<p><a href="/dev/Dev-FFmpeg-CPU-01/">이전 글</a>에서 CFS bandwidth control이 quota/period 기반으로 CPU 시간을 제한하고, quota를 초과하면 throttling이 발생한다는 것을 알았다. 그런데 이 제한은 “프로세스 그룹” 단위로 적용된다고 했다. 이 그룹은 어떻게 정의되고, K8s의 CPU limit 설정이 실제로 어떤 경로를 거쳐 커널에 전달되는 걸까?</p>
+
+<blockquote>
+  <p>cgroup, 컨테이너 런타임, 쿠버네티스의 리소스 관리 각각이 그 자체로 깊은 주제다. 여기서는 CPU limit이 커널까지 전달되는 경로를 따라가는 데 필요한 수준으로만 정리한다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li><strong>cgroup</strong>: 프로세스 그룹 단위로 리소스를 제한하는 리눅스 커널 기능</li>
+  <li><code class="highlighter-rouge">cpu.max</code> 파일에 quota/period를 설정하고, <code class="highlighter-rouge">cpu.stat</code> 파일에서 사용량과 throttling 정보를 확인</li>
+  <li><strong>컨테이너 = namespace(격리) + cgroup(제한)</strong>이며, 별도 커널 없이 호스트 커널 하나가 모든 컨테이너를 스케줄링</li>
+  <li>K8s CPU limit 설정은 kubelet → 컨테이너 런타임 → cgroup <code class="highlighter-rouge">cpu.max</code>로 변환된다</li>
+  <li>정밀한 throttling 분석에는 <code class="highlighter-rouge">kubectl top</code>보다 <code class="highlighter-rouge">cpu.stat</code>을 직접 읽는 것이 신뢰할 만하다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="cgroup">cgroup</h1>
+
+<h2 id="개념">개념</h2>
+
+<p><strong>cgroup</strong>(control group)은 프로세스들을 그룹으로 묶어 리소스 사용량을 제한하고 추적하는 리눅스 커널 기능이다. CPU, 메모리, I/O 등 다양한 리소스를 제어할 수 있다.</p>
+
+<p>이전 글에서 다룬 CFS bandwidth control의 quota/period 설정이 바로 이 cgroup 단위로 적용된다. cgroup이 없으면 개별 프로세스마다 제한을 걸어야 하지만, cgroup이 있으면 “이 그룹에 속한 모든 프로세스가 합산해서 CPU를 얼마까지만 쓸 수 있다”고 선언할 수 있다.</p>
+
+<p>cgroup에는 v1과 v2 두 가지 버전이 있다. v1은 리소스 컨트롤러별로 별도의 계층 구조를 가지고, v2는 단일 통합 계층 구조를 사용한다. 이 시리즈의 실험 환경은 <strong>cgroup v2</strong>이며, 이후 등장하는 파일 경로와 인터페이스(<code class="highlighter-rouge">cpu.max</code>, <code class="highlighter-rouge">cpu.weight</code>, <code class="highlighter-rouge">cpu.stat</code> 등)는 모두 cgroup v2 기준이다. 기존 자료에서 자주 등장하는 cgroup v1 인터페이스와의 대응 관계는 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>기능</th>
+      <th>cgroup v1</th>
+      <th>cgroup v2</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>quota/period 설정</td>
+      <td><code class="highlighter-rouge">cpu.cfs_quota_us</code> + <code class="highlighter-rouge">cpu.cfs_period_us</code></td>
+      <td><code class="highlighter-rouge">cpu.max</code></td>
+    </tr>
+    <tr>
+      <td>상대적 가중치</td>
+      <td><code class="highlighter-rouge">cpu.shares</code> (범위: 2~262144)</td>
+      <td><code class="highlighter-rouge">cpu.weight</code> (범위: 1~10000)</td>
+    </tr>
+    <tr>
+      <td>사용량/throttling 통계</td>
+      <td><code class="highlighter-rouge">cpuacct.stat</code> + <code class="highlighter-rouge">cpu.stat</code> (별도 파일)</td>
+      <td><code class="highlighter-rouge">cpu.stat</code> (통합)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h2 id="cpumax-quotaperiod-설정">cpu.max: quota/period 설정</h2>
+
+<p>cgroup v2에서 CPU 제한은 <code class="highlighter-rouge">cpu.max</code> 파일로 설정한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">cat</span> /sys/fs/cgroup/&lt;cgroup-path&gt;/cpu.max
+<span class="c"># 출력: 100000 100000</span>
+</code></pre></div></div>
+
+<p>형식은 <code class="highlighter-rouge">&lt;quota&gt; &lt;period&gt;</code>이며, 단위는 마이크로초(us)다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>설정</th>
+      <th>quota</th>
+      <th>period</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">100000 100000</code></td>
+      <td>100ms</td>
+      <td>100ms</td>
+      <td>1코어 분량</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">200000 100000</code></td>
+      <td>200ms</td>
+      <td>100ms</td>
+      <td>2코어 분량</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">400000 100000</code></td>
+      <td>400ms</td>
+      <td>100ms</td>
+      <td>4코어 분량</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">max 100000</code></td>
+      <td>제한 없음</td>
+      <td>100ms</td>
+      <td>무제한</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>K8s에서 CPU limit <code class="highlighter-rouge">1000m</code>을 설정하면, <code class="highlighter-rouge">cpu.max</code>가 <code class="highlighter-rouge">100000 100000</code>(1코어)으로 설정된다.</p>
+
+<p><br /></p>
+
+<h2 id="cpustat-커널이-기록하는-카운터">cpu.stat: 커널이 기록하는 카운터</h2>
+
+<p><code class="highlighter-rouge">cpu.stat</code>은 커널이 cgroup 단위로 CPU 사용량과 throttling 정보를 <strong>누적</strong> 기록하는 파일이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">cat</span> /sys/fs/cgroup/&lt;cgroup-path&gt;/cpu.stat
+usage_usec 601310324000
+user_usec 394662213000
+system_usec 206648111000
+nr_periods 0
+nr_throttled 0
+throttled_usec 0
+nr_bursts 0
+burst_usec 0
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>필드</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">usage_usec</code></td>
+      <td>cgroup 내 프로세스들이 사용한 총 CPU 시간 (us)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">user_usec</code></td>
+      <td>사용자 모드에서 소비한 CPU 시간</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">system_usec</code></td>
+      <td>커널 모드에서 소비한 CPU 시간</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nr_periods</code></td>
+      <td>bandwidth control이 활성화된 상태에서 경과한 총 period 수</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nr_throttled</code></td>
+      <td>quota를 초과해 throttle된 period 수</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">throttled_usec</code></td>
+      <td>throttle 상태로 대기한 총 시간 (us)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nr_bursts</code></td>
+      <td>burst가 발생한 횟수</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">burst_usec</code></td>
+      <td>burst로 추가 사용한 총 CPU 시간 (us)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">nr_bursts</code>와 <code class="highlighter-rouge">burst_usec</code>은 cgroup v2의 <strong><code class="highlighter-rouge">cpu.max.burst</code></strong> 기능과 관련된다. <code class="highlighter-rouge">cpu.max.burst</code>는 이전 period에서 사용하지 않은 quota를 축적해 두었다가, 순간적으로 quota를 초과하여 사용할 수 있게 하는 burst capacity다. 기본값은 0(burst 비활성)이며, K8s에서 직접 설정하지는 않는다. burst가 설정되어 있으면, 일시적인 CPU 사용량 급증에 대해 throttling 없이 유연하게 대응할 수 있다.</p>
+
+<p><br /></p>
+
+<p>모든 값이 <strong>누적</strong> 카운터라는 점에 주의해야 한다. 파일을 읽는 순간(<code class="highlighter-rouge">cat</code> 등으로) 그 시점까지의 누적값이 보인다. 따라서 특정 구간의 상태를 분석하려면 <strong>before/after 패턴으로 delta를 구해야</strong> 한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># before</span>
+<span class="nb">cat </span>cpu.stat <span class="o">&gt;</span> before.txt
+
+<span class="c"># (작업 실행)</span>
+
+<span class="c"># after</span>
+<span class="nb">cat </span>cpu.stat <span class="o">&gt;</span> after.txt
+
+<span class="c"># delta 계산</span>
+<span class="c"># nr_periods: after - before = 해당 구간의 period 수</span>
+<span class="c"># nr_throttled: after - before = throttle된 period 수</span>
+</code></pre></div></div>
+
+<p>각 필드의 업데이트 시점도 다르다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>값</th>
+      <th>업데이트 시점</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">usage_usec</code> / <code class="highlighter-rouge">user_usec</code> / <code class="highlighter-rouge">system_usec</code></td>
+      <td>컨텍스트 스위치마다 (수 us ~ 수 ms 단위)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nr_periods</code> / <code class="highlighter-rouge">nr_throttled</code> / <code class="highlighter-rouge">throttled_usec</code></td>
+      <td>CFS period마다 (기본 100ms 간격)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>throttling 관점에서 중요한 세 필드를 자세히 보자. <code class="highlighter-rouge">nr_periods</code>와 <code class="highlighter-rouge">nr_throttled</code>는 <code class="highlighter-rouge">cpu.max</code>에 quota가 설정되어 bandwidth control이 활성화된 경우에만 카운트된다. <code class="highlighter-rouge">cpu.max</code>가 <code class="highlighter-rouge">max</code>(제한 없음)이면 두 값 모두 0으로 남는다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>필드</th>
+      <th>카운트 단위</th>
+      <th>증가 조건</th>
+      <th>해석 예시</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">nr_periods</code></td>
+      <td>period</td>
+      <td>bandwidth control 활성 + 해당 period에 실행 대기 태스크 존재</td>
+      <td>215 = 21.5초간 측정</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nr_throttled</code></td>
+      <td>period</td>
+      <td>해당 period에서 quota 소진으로 throttling 발생</td>
+      <td>208 = 208개 period에서 throttle</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">throttled_usec</code></td>
+      <td>마이크로초(us)</td>
+      <td>throttle 상태에서 대기할 때마다 누적</td>
+      <td>154,500,000us = 154.5초 대기</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">nr_throttled / nr_periods</code>는 “실행 대기 태스크가 있었던 period 중 몇 %에서 throttling이 발생했는가”를 의미한다. 이 비율이 높을수록 CPU 제한이 심한 것이다 (예: 208/215 = 96.7%).</p>
+
+<p><br /></p>
+
+<h2 id="cgroup-계층-구조">cgroup 계층 구조</h2>
+
+<p>cgroup은 트리 구조로 구성된다. 호스트의 <code class="highlighter-rouge">/sys/fs/cgroup/</code> 아래에 계층적으로 배치되며, 각 소프트웨어가 자신의 하위 계층을 만든다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>/sys/fs/cgroup/                              ← 호스트 루트 cgroup
+├── cpu.stat                                 ← 시스템 전체 CPU 사용량
+├── system.slice/                            ← systemd 서비스들
+│   ├── sshd.service/
+│   └── containerd.service/
+└── user.slice/                              ← 사용자 프로세스들
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">.slice</code> 네이밍은 <strong>systemd</strong>의 cgroup 관리 방식이다. systemd가 cgroup driver로 사용될 때, 프로세스 그룹을 slice 단위로 관리하고, 이름에서 <code class="highlighter-rouge">-</code>가 계층 구분자 역할을 한다 (예: <code class="highlighter-rouge">A-B.slice</code>는 <code class="highlighter-rouge">A.slice</code> 아래의 <code class="highlighter-rouge">B</code>).</p>
+
+<p>이 트리의 핵심은 <strong>읽는 위치에 따라 보이는 범위가 달라진다</strong>는 점이다. 루트에서 읽으면 시스템 전체, 특정 slice에서 읽으면 해당 그룹만 보인다. 컨테이너 런타임이나 K8s도 이 트리 아래에 자신만의 하위 계층을 만들어 프로세스를 관리한다.</p>
+
+<p><br /></p>
+
+<h1 id="컨테이너와-cgroup">컨테이너와 cgroup</h1>
+
+<h2 id="컨테이너--namespace--cgroup">컨테이너 = namespace + cgroup</h2>
+
+<p>컨테이너는 VM과 다르다. 별도의 커널을 가지지 않는다. 컨테이너는 두 가지 리눅스 커널 기능의 조합이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>기능</th>
+      <th>역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>namespace</strong></td>
+      <td>격리 (프로세스, 네트워크, 파일시스템 등을 분리)</td>
+    </tr>
+    <tr>
+      <td><strong>cgroup</strong></td>
+      <td>제한 (CPU, 메모리 등 리소스 사용량 상한 설정)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>namespace가 “무엇이 보이는지”를 제어하고, cgroup이 “얼마나 쓸 수 있는지”를 제어한다.</p>
+
+<p>컨테이너 런타임(containerd, Docker 등)이 컨테이너를 생성할 때, 앞서 본 cgroup 트리 아래에 컨테이너 전용 cgroup을 만든다. 예를 들어 containerd가 단독으로 컨테이너를 실행하면 <code class="highlighter-rouge">system.slice/</code> 아래에 scope가 생긴다. K8s 환경에서는 kubelet이 런타임에게 별도의 계층 구조를 지시하는데, 이 부분은 <a href="#쿠버네티스-리소스-관리">쿠버네티스 리소스 관리</a> 섹션에서 자세히 다룬다.</p>
+
+<p><br /></p>
+
+<h2 id="호스트-커널이-모든-것을-스케줄링한다">호스트 커널이 모든 것을 스케줄링한다</h2>
+
+<p>이것이 핵심이다. 컨테이너에는 별도의 커널이 없다. <strong>호스트의 리눅스 커널 하나가 모든 컨테이너의 프로세스를 스케줄링</strong>한다. 컨테이너를 쓰다 보면 마치 독립된 머신인 것처럼 느끼기 쉬운데, 실제로는 하나의 커널 위에서 돌아가고 있다는 점을 잊지 말아야 한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Container A (ffmpeg 스레드들)     Container B     Container C
+         \                            |               /
+          \                           |              /
+     +--------------------------------------------+
+          호스트 Linux 커널 (단일)
+        CFS 스케줄러 + cgroup bandwidth ctrl
+     +--------------------------------------------+
+                  물리 CPU (멀티코어)
+     +--------------------------------------------+
+</code></pre></div></div>
+
+<p>컨테이너 내부에서 <code class="highlighter-rouge">fork()</code>를 하든, 스레드를 만들든, 전부 호스트 커널의 CFS 스케줄러가 관리한다. cgroup의 <code class="highlighter-rouge">cpu.max</code>에 설정된 quota/period에 따라 throttling을 적용하는 것도 호스트 커널이다.</p>
+
+<p><br /></p>
+
+<h2 id="mount-namespace와-cgroup-가시성">mount namespace와 cgroup 가시성</h2>
+
+<p>컨테이너 내부에서 <code class="highlighter-rouge">/sys/fs/cgroup/cpu.stat</code>을 읽으면 자기 컨테이너의 값만 보인다. 이는 mount namespace에 의해 cgroup 파일시스템의 마운트 포인트가 자기 cgroup 디렉토리로 바인드 마운트되어 있기 때문이다.</p>
+
+<p>실제 데이터는 호스트 커널이 관리하는 단일 cgroup 트리에 있고, 컨테이너는 그 중 자기 노드만 볼 수 있는 구조다.</p>
+
+<p>호스트에서 컨테이너의 cgroup 경로를 찾아 직접 확인할 수도 있다. 구체적인 경로 확인 방법은 K8s 환경의 cgroup 계층 구조와 함께 <a href="#cgroup-계층-구조-1">아래</a>에서 다룬다.</p>
+
+<p><br /></p>
+
+<h1 id="쿠버네티스-리소스-관리">쿠버네티스 리소스 관리</h1>
+
+<h2 id="request-limit-qos">request, limit, QoS</h2>
+
+<p>K8s에서 컨테이너의 CPU 리소스는 request와 limit으로 설정한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>설정</th>
+      <th>의미</th>
+      <th>cgroup 매핑</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>request</strong></td>
+      <td>최소 보장량. 스케줄링 기준</td>
+      <td><code class="highlighter-rouge">cpu.weight</code> (상대적 가중치)</td>
+    </tr>
+    <tr>
+      <td><strong>limit</strong></td>
+      <td>최대 사용량. 초과 시 throttling</td>
+      <td><code class="highlighter-rouge">cpu.max</code> (quota/period)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>CPU 단위는 밀리코어(m)다. <code class="highlighter-rouge">1000m</code> = 1코어, <code class="highlighter-rouge">500m</code> = 0.5코어.</p>
+
+<p>request와 limit 설정에 따라 Pod의 QoS(Quality of Service) 클래스가 결정된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>QoS 클래스</th>
+      <th>조건</th>
+      <th>cgroup 계층</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Guaranteed</strong></td>
+      <td>모든 컨테이너에 request = limit</td>
+      <td><code class="highlighter-rouge">kubepods-guaranteed.slice</code></td>
+    </tr>
+    <tr>
+      <td><strong>Burstable</strong></td>
+      <td>request와 limit이 다름</td>
+      <td><code class="highlighter-rouge">kubepods-burstable.slice</code></td>
+    </tr>
+    <tr>
+      <td><strong>BestEffort</strong></td>
+      <td>request, limit 모두 미설정</td>
+      <td><code class="highlighter-rouge">kubepods-besteffort.slice</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이전 글의 매니페스트는 <code class="highlighter-rouge">request: 500m, limit: 1000m</code>이었으므로 Burstable QoS다.</p>
+
+<p><br /></p>
+
+<h2 id="cgroup-계층-구조-1">cgroup 계층 구조</h2>
+
+<p>kubelet은 QoS 클래스별로 cgroup 하위 계층을 만들어 Pod를 배치한다. K8s가 없으면 이 계층은 존재하지 않는다. 앞서 본 일반적인 cgroup 트리에 K8s가 추가하는 부분을 포함하면 다음과 같다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>/sys/fs/cgroup/                              ← 호스트 루트 cgroup
+├── cpu.stat                                 ← 시스템 전체 CPU 사용량
+├── system.slice/                            ← systemd 서비스들
+│   ├── sshd.service/
+│   └── containerd.service/
+├── user.slice/                              ← 사용자 프로세스들
+└── kubepods.slice/                          ← K8s가 관리하는 모든 Pod
+    ├── cpu.stat                             ← 모든 Pod의 CPU 합산
+    ├── kubepods-guaranteed.slice/           ← Guaranteed QoS Pod들
+    ├── kubepods-burstable.slice/            ← Burstable QoS Pod들
+    │   └── kubepods-burstable-pod&lt;UID&gt;.slice/   ← 특정 Pod
+    │       ├── cpu.stat                          ← Pod 레벨 합산
+    │       └── cri-containerd-&lt;CID&gt;.scope/       ← 특정 컨테이너
+    │           ├── cpu.max                        ← CPU limit 설정
+    │           └── cpu.stat                       ← 컨테이너의 CPU 사용량
+    └── kubepods-besteffort.slice/           ← BestEffort QoS Pod들
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">kubepods.slice</code> → <code class="highlighter-rouge">kubepods-burstable.slice</code> 같은 네이밍은 systemd의 slice 규칙을 따른 것이다 (이름의 <code class="highlighter-rouge">-</code>가 계층 구분자). kubelet의 cgroup driver가 <code class="highlighter-rouge">systemd</code>로 설정되어 있기 때문에 이 네이밍이 적용된다.</p>
+
+<blockquote>
+  <p>참고: cgroup 드라이버 설정</p>
+
+  <p>cgroup 드라이버를 <code class="highlighter-rouge">systemd</code>로 맞춰야 하는 이유는, systemd가 이미 호스트의 cgroup 트리를 관리하고 있어서 kubelet이 직접 cgroup을 조작(<code class="highlighter-rouge">cgroupfs</code>)하면 관리 주체가 둘이 되어 충돌이 발생할 수 있기 때문이다. containerd의 <code class="highlighter-rouge">SystemdCgroup = true</code>와 kubelet의 <code class="highlighter-rouge">cgroupDriver: systemd</code>를 일치시켜야 하며, 이에 대한 상세한 설명은 <a href="/kubernetes/Kubernetes-Kubeadm-01-3/">kubeadm 시리즈</a>에서 다룬 바 있다.</p>
+</blockquote>
+
+<p>QoS별로 계층이 분리되는 이유는 <strong>축출(eviction) 우선순위</strong> 때문이다. 노드 리소스가 부족하면 BestEffort → Burstable → Guaranteed 순으로 축출하는데, cgroup이 분리되어 있어야 QoS 클래스 단위로 리소스 사용량을 추적하고 제어할 수 있다.</p>
+
+<p><br /></p>
+
+<p>이 계층 구조 역시 읽는 위치에 따라 보이는 범위가 달라진다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>읽는 위치</th>
+      <th>보이는 범위</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>컨테이너 내부 <code class="highlighter-rouge">/sys/fs/cgroup/cpu.stat</code></td>
+      <td><strong>자기 컨테이너만</strong></td>
+    </tr>
+    <tr>
+      <td>호스트 <code class="highlighter-rouge">kubepods-burstable-pod&lt;UID&gt;.slice/cpu.stat</code></td>
+      <td><strong>해당 Pod의 모든 컨테이너 합산</strong></td>
+    </tr>
+    <tr>
+      <td>호스트 <code class="highlighter-rouge">kubepods.slice/cpu.stat</code></td>
+      <td><strong>모든 K8s Pod 합산</strong></td>
+    </tr>
+    <tr>
+      <td>호스트 루트 <code class="highlighter-rouge">/sys/fs/cgroup/cpu.stat</code></td>
+      <td><strong>시스템 전체</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<p>호스트에서 특정 컨테이너의 cgroup 경로를 찾아 직접 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 컨테이너 ID 확인</span>
+crictl ps | <span class="nb">grep</span> &lt;container-name&gt;
+
+<span class="c"># 해당 컨테이너의 cgroup 경로 확인</span>
+crictl inspect &lt;container-id&gt; | <span class="nb">grep </span>cgroupsPath
+
+<span class="c"># 호스트에서 직접 cpu.stat 읽기</span>
+<span class="nb">cat</span> /sys/fs/cgroup/kubepods.slice/kubepods-burstable.slice/<span class="se">\</span>
+kubepods-burstable-pod&lt;pod-uid&gt;.slice/<span class="se">\</span>
+cri-containerd-&lt;container-id&gt;.scope/cpu.stat
+</code></pre></div></div>
+
+<p><br /></p>
+
+<p>실제로 Burstable QoS Pod의 컨테이너 cgroup에 들어가 보면 다음과 같은 파일들을 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">cd</span> /sys/fs/cgroup/kubepods.slice/kubepods-burstable.slice/ <span class="se">\</span>
+     kubepods-burstable-pod&lt;UID&gt;.slice/ <span class="se">\</span>
+     cri-containerd-&lt;CID&gt;.scope
+
+<span class="nv">$ </span><span class="nb">ls
+</span>cgroup.controllers  cpu.max           cpu.stat          cpuset.cpus ...
+cgroup.events       cpu.max.burst     cpu.stat.local    cpuset.mems ...
+cgroup.procs        cpu.pressure      cpu.weight        memory.current ...
+...
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">cpu.max</code>, <code class="highlighter-rouge">cpu.weight</code>, <code class="highlighter-rouge">cpu.stat</code> 등 앞서 다룬 파일들이 모두 이 디렉토리에 존재한다. <code class="highlighter-rouge">cpu.stat</code>을 읽으면 현재까지의 누적 카운터를 확인할 수 있다.</p>
+
+<p><br /></p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">cat </span>cpu.stat
+usage_usec 20581
+user_usec 11581
+system_usec 8999
+core_sched.force_idle_usec 0
+nr_periods 0
+nr_throttled 0
+throttled_usec 0
+nr_bursts 0
+burst_usec 0
+</code></pre></div></div>
+
+<p>이 Pod는 <code class="highlighter-rouge">nr_periods</code>와 <code class="highlighter-rouge">nr_throttled</code>가 모두 0이다. <code class="highlighter-rouge">nr_periods = 0</code>은 bandwidth control이 비활성 상태(<code class="highlighter-rouge">cpu.max</code>가 <code class="highlighter-rouge">max</code>로 설정)이거나 해당 cgroup에 실행 중인 프로세스가 없었다는 뜻이다. <code class="highlighter-rouge">nr_periods</code>는 bandwidth control이 활성화된 상태에서 경과한 총 period 수를 기록하므로, throttling 발생 여부와는 별개다. throttling이 한 번도 발생하지 않았음을 나타내는 것은 <code class="highlighter-rouge">nr_throttled = 0</code>이다.</p>
+
+<p><br /></p>
+
+<h2 id="yaml에서-cgroup까지의-경로">YAML에서 cgroup까지의 경로</h2>
+
+<p>K8s에서 CPU request와 limit을 선언하면, kubelet이 Pod spec을 읽어 컨테이너 런타임을 통해 cgroup 파일에 값을 쓰는 방식으로 커널에 전달된다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Deployment YAML (cpu request/limit)
+    ↓
+kubelet (Pod spec 수신)
+    ↓
+컨테이너 런타임 (containerd)
+    ↓
+cgroup v2 파일에 값 설정
+    ├── request → cpu.weight (상대적 가중치)
+    └── limit   → cpu.max   (quota/period)
+    ↓
+호스트 커널 CFS bandwidth control 적용
+    ↓
+quota 초과 시 throttling 발생
+</code></pre></div></div>
+
+<p>request와 limit은 각각 다른 cgroup 메커니즘으로 매핑된다.</p>
+
+<p><br /></p>
+
+<h3 id="request--cpuweight-상대적-가중치">request → cpu.weight: 상대적 가중치</h3>
+
+<p>request는 cgroup v2의 <code class="highlighter-rouge">cpu.weight</code>로 변환된다. 핵심은 이 값이 <strong>CPU 경합이 있을 때만 의미를 가지는 상대적 가중치</strong>라는 점이다.</p>
+
+<p>cgroup v2에서 <code class="highlighter-rouge">cpu.weight</code>의 범위는 1~10000(기본값 100)이다. kubelet은 내부적으로 request 밀리코어 값을 먼저 cgroup v1의 shares 값으로 변환한 뒤, 이를 다시 v2 weight로 매핑한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 1단계: request → shares (v1 호환 중간값)
+shares = request(millicores) × 1024 / 1000
+
+# 2단계: shares → weight (v2)
+weight = 1 + ((shares - 2) × 9999) / 262142
+</code></pre></div></div>
+
+<p>예를 들어 <code class="highlighter-rouge">1000m</code> request는 shares 1024를 거쳐 weight 약 39로, <code class="highlighter-rouge">500m</code> request는 shares 512를 거쳐 weight 약 20으로 변환된다. 두 컨테이너가 CPU를 두고 경쟁할 때, weight가 높은 컨테이너가 비례적으로 더 많은 CPU 시간을 할당 받는다. 하지만 <strong>노드가 유휴 상태이고 CPU 경합이 없다면</strong>, 컨테이너는 weight 값과 무관하게 필요한 만큼 CPU를 사용할 수 있다.</p>
+
+<blockquote>
+  <p>참고: cgroup v1 환경에서는 <code class="highlighter-rouge">cpu.shares</code>(범위 2~262144)가 직접 사용되며, <code class="highlighter-rouge">shares = request(millicores) × 1024 / 1000</code> 공식이 최종 값이 된다.</p>
+</blockquote>
+
+<p>이 가중치 값은 cgroup 계층 구조를 따라 전파된다. 아래 그림은 cgroup v1 기준의 예시로, 괄호 안의 숫자가 각 레벨의 <code class="highlighter-rouge">cpu.shares</code> 값이다. cgroup v2에서도 <code class="highlighter-rouge">cpu.weight</code>로 동일한 비례 배분 원리가 적용된다.</p>
+
+<p><img src="/assets/images/cgroup-shares-hierarchy.png" alt="cgroup shares hierarchy" /></p>
+<center><sup>출처: <a href="https://engineering.omio.com/cpu-limits-and-aggressive-throttling-in-kubernetes-c5b20bd8a718">CPU limits and aggressive throttling in Kubernetes - Omio Engineering</a></sup></center>
+
+<p><br /></p>
+
+<h3 id="limit--cpumax-절대적-시간-할당량">limit → cpu.max: 절대적 시간 할당량</h3>
+
+<p>limit은 CFS bandwidth control의 quota/period로 변환된다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>quota = limit(코어) × period
+period = 100,000us (100ms, 고정)
+</code></pre></div></div>
+
+<p>예를 들어, <code class="highlighter-rouge">1000m</code>(1코어) limit은 <code class="highlighter-rouge">cpu.max</code>가 <code class="highlighter-rouge">100000 100000</code>으로 설정된다. 100ms period마다 100ms의 CPU 시간, 즉 1코어 분량이다. <code class="highlighter-rouge">500m</code> limit이면 <code class="highlighter-rouge">50000 100000</code>, 매 100ms마다 50ms만 사용할 수 있다.</p>
+
+<p>request와 달리, <strong>limit은 노드에 유휴 CPU가 있더라도 항상 강제된다.</strong> 다른 컨테이너가 CPU를 전혀 쓰지 않고 있어도, limit을 초과하면 throttling이 발생한다. 이것이 CPU limit을 안티패턴으로 보는 시각의 핵심 근거다.</p>
+
+<p><br /></p>
+
+<h3 id="정리">정리</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>K8s 설정</th>
+      <th>목적</th>
+      <th>cgroup v2 매핑</th>
+      <th>동작 방식</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">requests.cpu</code></td>
+      <td>스케줄링 + 경합 시 최소 보장</td>
+      <td><code class="highlighter-rouge">cpu.weight</code></td>
+      <td><strong>상대적</strong> 가중치. 경합 시에만 활성화</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">limits.cpu</code></td>
+      <td>최대 사용량 제한</td>
+      <td><code class="highlighter-rouge">cpu.max</code> (quota/period)</td>
+      <td><strong>절대적</strong> 시간 할당량. 항상 활성화, throttling 발생</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h3 id="시끄러운-이웃-문제와-limit의-역할">“시끄러운 이웃” 문제와 limit의 역할</h3>
+
+<p><strong>시끄러운 이웃(noisy neighbor) 문제</strong>란, 동일 노드에서 특정 Pod가 CPU를 과도하게 소비하여 같은 노드의 다른 Pod 성능을 저하시키는 현상이다.</p>
+
+<p>CPU limit이 이 문제를 해결해 줄 것 같지만, 실제로 경합 상황에서 리소스를 공정하게 배분하는 것은 request에 의해 결정되는 <code class="highlighter-rouge">cpu.weight</code>다. 모든 Pod에 적절한 request가 설정되어 있다면, CFS 스케줄러는 shares 값에 비례하여 CPU 시간을 분배하고, 특정 Pod가 다른 Pod를 기아 상태에 빠뜨리는 것을 방지한다.</p>
+
+<p>반면 limit은 <strong>다른 누구도 CPU를 필요로 하지 않는 상황에서조차</strong> Pod의 사용량을 제한한다. 노드에 유휴 코어가 남아 있어도 quota를 초과하면 강제로 대기해야 한다. 이런 의미에서 limit은 경합 문제를 해결하는 정밀한 도구라기보다, 상한선을 강제하는 무딘 도구에 가깝다.</p>
+
+<blockquote>
+  <p>이전 글에서도 언급했지만, CPU limit을 안티패턴으로 보는 시각이 여기에서 출발한다. request만 적절히 설정하면 CFS가 경합을 해결해 주는데, limit은 오히려 유휴 리소스가 있는 상황에서도 불필요한 throttling을 유발할 수 있기 때문이다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="측정-도구">측정 도구</h2>
+
+<h3 id="kubectl-top">kubectl top</h3>
+
+<p><code class="highlighter-rouge">kubectl top pod</code>은 메트릭 서버가 수집한 CPU 사용량을 보여준다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl top pod &lt;pod-name&gt;
+</code></pre></div></div>
+
+<p>내부적으로는 kubelet의 cAdvisor가 cgroup <code class="highlighter-rouge">usage_usec</code> 값을 읽어, 일정 윈도우(기본 약 15초) 동안의 delta를 계산해 평균 CPU 사용률을 구한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>CPU 사용률 = (usage_usec_after - usage_usec_before) / (wall_time_after - wall_time_before)
+</code></pre></div></div>
+
+<p>편리하지만 한계가 있다. 샘플링 윈도우와 실제 작업 구간이 정확히 일치하지 않으면, idle 시간이 섞여 부정확한 값이 나올 수 있다. throttling 여부도 알 수 없다.</p>
+
+<p><br /></p>
+
+<h3 id="cpustat-직접-읽기">cpu.stat 직접 읽기</h3>
+
+<p>정밀한 분석에는 <code class="highlighter-rouge">cpu.stat</code>을 직접 읽는 것이 낫다. 커널이 기록한 정확한 누적값을 볼 수 있고, throttling 정보도 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 작업 전</span>
+<span class="nb">cat</span> /sys/fs/cgroup/cpu.stat
+<span class="c"># nr_periods 4495</span>
+<span class="c"># nr_throttled 3859</span>
+<span class="c"># throttled_usec 2189358984</span>
+
+<span class="c"># (작업 실행)</span>
+
+<span class="c"># 작업 후</span>
+<span class="nb">cat</span> /sys/fs/cgroup/cpu.stat
+<span class="c"># nr_periods 4710</span>
+<span class="c"># nr_throttled 4067</span>
+<span class="c"># throttled_usec 2343860882</span>
+
+<span class="c"># delta 계산</span>
+<span class="c"># nr_periods: 4710 - 4495 = 215 (21.5초간 측정)</span>
+<span class="c"># nr_throttled: 4067 - 3859 = 208 (208/215 period에서 throttle 발생)</span>
+<span class="c"># throttled_usec: 2343860882 - 2189358984 = 154501898us (≈154.5초 대기)</span>
+</code></pre></div></div>
+
+<p>위 예시에서 215개 period 중 208개(96.7%)에서 throttle이 발생했다. 거의 매 period마다 CPU quota를 소진하고 대기했다는 뜻이다.</p>
+
+<p><br /></p>
+
+<h3 id="prometheus-메트릭">Prometheus 메트릭</h3>
+
+<p>Prometheus를 사용하는 환경이라면 cAdvisor가 노출하는 메트릭으로도 확인할 수 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>메트릭</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">container_cpu_cfs_throttled_periods_total</code></td>
+      <td>throttling이 발생한 period 수</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">container_cpu_cfs_periods_total</code></td>
+      <td>전체 CFS period 수</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">container_cpu_cfs_throttled_seconds_total</code></td>
+      <td>throttling된 총 시간 (초)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">container_cpu_usage_seconds_total</code></td>
+      <td>CPU 사용량</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 메트릭들의 원본 데이터가 바로 <code class="highlighter-rouge">cpu.stat</code>이다.</p>
+
+<p><br /></p>
+
+<h1 id="정리-1">정리</h1>
+
+<p>지금까지의 내용을 다시 이 문제에 연결하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>개념</th>
+      <th>이 문제에서의 의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>cgroup</td>
+      <td>Pod 컨테이너의 CPU 제한이 실제로 적용되는 메커니즘</td>
+    </tr>
+    <tr>
+      <td>cpu.max</td>
+      <td>K8s CPU limit <code class="highlighter-rouge">1000m</code> → <code class="highlighter-rouge">100000 100000</code> (1코어)</td>
+    </tr>
+    <tr>
+      <td>cpu.stat</td>
+      <td>throttling 발생 여부와 정도를 확인하는 수단</td>
+    </tr>
+    <tr>
+      <td>호스트 커널 단일 스케줄링</td>
+      <td>ffmpeg 스레드도 호스트 커널이 스케줄링, cgroup quota에 종속</td>
+    </tr>
+    <tr>
+      <td>kubectl top의 한계</td>
+      <td>정밀 분석에는 cpu.stat 직접 읽기 필요</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>CPU limit이 cgroup을 통해 어떻게 적용되고, throttling이 어떻게 발생하는지는 알았다. 다음으로 알아야 할 것은 ffmpeg이 내부적으로 CPU를 어떻게 사용하는지다. ffmpeg이 몇 개의 스레드를 만들고, 어떤 방식으로 병렬 처리하는지에 따라 throttling의 양상이 달라지기 때문이다.</p>
+
+<blockquote>
+  <p>YAML에서 <code class="highlighter-rouge">cpu: "1000m"</code>이라는 한 줄은, kubelet → 컨테이너 런타임 → cgroup <code class="highlighter-rouge">cpu.max</code> → CFS bandwidth control → throttling이라는 긴 경로를 거쳐 커널 수준의 동작으로 이어진다. 이 경로를 이해하면 리소스 설정을 단순한 숫자가 아닌, 커널 메커니즘에 대한 선언으로 바라볼 수 있다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="참고">참고</h1>
+
+<ul>
+  <li><a href="https://meetup.nhncloud.com/posts/395">Kubernetes CPU Limit을 사용하면 벌어지는 일 - NHN Cloud Meetup</a></li>
+</ul>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/dev/Dev-FFmpeg-CPU-00/">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 0. 목격한 상황</a></li>
+    
+    <li><a href="/dev/Dev-FFmpeg-CPU-01/">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 1. 배경지식: CPU와 스케줄링</a></li>
+    
+    <li><a href="/dev/Dev-FFmpeg-CPU-03/">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 3. 배경지식: 영상 처리와 FFmpeg</a></li>
+    
+    <li><a href="/dev/Dev-FFmpeg-CPU-04-01/">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.1. 문제 원인 파악: 현상 관찰</a></li>
+    
+    <li><a href="/dev/Dev-FFmpeg-CPU-04-02/">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.2. 튜닝 실험 설계</a></li>
+    
+    <li><a href="/dev/Dev-FFmpeg-CPU-05/">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 5. 결론: CPU Limit을 설정하지 않기로 한 이유</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#cgroup" class="page__taxonomy-item" rel="tag">cgroup</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#cpu" class="page__taxonomy-item" rel="tag">CPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#linux" class="page__taxonomy-item" rel="tag">Linux</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#throttling" class="page__taxonomy-item" rel="tag">throttling</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#%EC%BB%A8%ED%85%8C%EC%9D%B4%EB%84%88" class="page__taxonomy-item" rel="tag">컨테이너</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-02-06T00:00:00+09:00">February 6, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+Pod+CPU+Limit%EA%B3%BC+FFmpeg+Thread+%EC%B5%9C%EC%A0%81+%EC%A1%B0%EC%A0%95+-+2.+%EB%B0%B0%EA%B2%BD%EC%A7%80%EC%8B%9D%3A+cgroup%2C+%EC%BB%A8%ED%85%8C%EC%9D%B4%EB%84%88%2C+%EC%BF%A0%EB%B2%84%EB%84%A4%ED%8B%B0%EC%8A%A4%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-FFmpeg-CPU-02%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-FFmpeg-CPU-02%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-FFmpeg-CPU-02%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-FFmpeg-CPU-02?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-FFmpeg-CPU-01/" class="pagination--pager" title="[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 1. 배경지식: CPU와 스케줄링
+">이전</a>
+    
+    
+      <a href="/dev/Dev-FFmpeg-CPU-03/" class="pagination--pager" title="[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 3. 배경지식: 영상 처리와 FFmpeg
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-FFmpeg-CPU-02/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-FFmpeg-CPU-02"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

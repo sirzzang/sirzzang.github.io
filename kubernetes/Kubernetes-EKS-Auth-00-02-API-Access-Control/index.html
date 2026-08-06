@@ -1,0 +1,1442 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 1. API 접근 통제 - Eraser’s StudyLog</title>
+<meta name="description" content="K8S API 서버로 들어오는 모든 요청이 거치는 파이프라인을 TLS, 인증, 인가, Admission Control까지 정리해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 1. API 접근 통제">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-Auth-00-02-API-Access-Control/">
+
+
+  <meta property="og:description" content="K8S API 서버로 들어오는 모든 요청이 거치는 파이프라인을 TLS, 인증, 인가, Admission Control까지 정리해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-02T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-Auth-00-02-API-Access-Control/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 1. API 접근 통제">
+    <meta itemprop="description" content="K8S API 서버로 들어오는 모든 요청이 거치는 파이프라인을 TLS, 인증, 인가, Admission Control까지 정리해 보자.">
+    <meta itemprop="datePublished" content="2026-04-02T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 1. API 접근 통제
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-02T00:00:00+09:00">2026년 04월 02일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  8 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#들어가며">들어가며</a></li>
+  <li><a href="#transport-security">Transport Security</a></li>
+  <li><a href="#authentication">Authentication</a>
+    <ul>
+      <li><a href="#authenticator-모듈-동작-방식">Authenticator 모듈 동작 방식</a></li>
+      <li><a href="#인증-결과-username과-group">인증 결과: username과 group</a></li>
+      <li><a href="#k8s에-user-오브젝트가-없다는-것의-의미">K8s에 User 오브젝트가 없다는 것의 의미</a></li>
+      <li><a href="#인증-메커니즘별-특성-프로덕션에서-뭘-써야-하는가">인증 메커니즘별 특성: 프로덕션에서 뭘 써야 하는가</a>
+        <ul>
+          <li><a href="#x509-클라이언트-인증서">X.509 클라이언트 인증서</a></li>
+          <li><a href="#static-token-파일">Static Token 파일</a></li>
+          <li><a href="#bootstrap-token">Bootstrap Token</a></li>
+          <li><a href="#sa-secret-token-레거시">SA Secret Token (레거시)</a></li>
+          <li><a href="#tokenrequest-api-token">TokenRequest API Token</a></li>
+          <li><a href="#oidc-token--권장">OIDC Token — 권장</a></li>
+          <li><a href="#webhook-token">Webhook Token</a></li>
+          <li><a href="#authenticating-proxy">Authenticating Proxy</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#authorization">Authorization</a>
+    <ul>
+      <li><a href="#rest-attributes-기반-판단">REST Attributes 기반 판단</a></li>
+      <li><a href="#authorization-모듈">Authorization 모듈</a></li>
+    </ul>
+  </li>
+  <li><a href="#admission-control">Admission Control</a>
+    <ul>
+      <li><a href="#깔때기funnel-구조">깔때기(Funnel) 구조</a></li>
+      <li><a href="#authenticationauthorization과의-결정적-차이">Authentication/Authorization과의 결정적 차이</a></li>
+    </ul>
+  </li>
+  <li><a href="#auditing-전체-과정의-기록">Auditing: 전체 과정의 기록</a></li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 AWS EKS Workshop Study(AEWS) 4주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>K8S API 서버로 들어오는 모든 요청은 <strong>TLS → Authentication → Authorization → Admission Control → etcd</strong> 파이프라인을 거친다</li>
+  <li>Authentication(인증): 여러 모듈 중 <strong>하나만 성공하면 통과</strong>(OR). 실패 시 401</li>
+  <li>Authorization(인가): 여러 모듈 중 <strong>하나만 승인하면 통과</strong>(OR). 거부 시 403</li>
+  <li>Admission Control: <strong>하나라도 거부하면 즉시 거부</strong>(AND). 오브젝트 내용까지 검사하는 마지막 관문</li>
+  <li>K8s에는 <code class="highlighter-rouge">User</code> 오브젝트가 없다 — 인증은 지원하지만 사용자 관리는 외부에 위임한다</li>
+  <li>프로덕션 멀티유저 클러스터에서는 <strong>OIDC 등 외부 인증 소스</strong>를 사용하는 것이 권장된다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="들어가며">들어가며</h1>
+
+<p><a href="/kubernetes/Kubernetes-EKS-Auth-00-00-Overview/">이전 포스트</a>에서 EKS에는 세 가지 인증 흐름이 있고, 그 중 흐름 2(Pod → K8S API)는 “K8s 안에서 완결”된다고 정리했다. 이 완결이 무엇인지, 즉 <strong>K8S API 서버가 요청을 어떻게 처리하는지</strong>를 이해해야 흐름 1(사용자 → K8S API)과 흐름 3(Pod → AWS API)에서 “무엇이 추가되는지”가 보인다.</p>
+
+<p>Human User든 ServiceAccount든, K8S API 서버에 도달하는 <strong>모든 요청은 동일한 파이프라인</strong>을 거친다. 차이는 Authentication 단계에서 어떤 authenticator 모듈이 처리하느냐뿐이다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>모든 요청 (사람이든 Pod이든)
+  → TLS → Authentication → Authorization → Admission Control → etcd
+</code></pre></div></div>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-access-control-overview.svg" alt="K8S API 접근 통제 개요" class="align-center" /></p>
+
+<ul>
+  <li>Human User → X.509 인증서, OIDC, webhook 등으로 인증</li>
+  <li>ServiceAccount → K8S가 발급한 JWT 토큰으로 인증</li>
+</ul>
+
+<p>EKS에서 <code class="highlighter-rouge">aws-iam-authenticator</code>가 하는 일도 결국 이 Authentication 단계에 <strong>webhook authenticator 모듈을 하나 끼워넣는 것</strong>이다. 파이프라인 자체는 바뀌지 않는다.</p>
+
+<p><br /></p>
+
+<h1 id="transport-security">Transport Security</h1>
+
+<p>파이프라인의 첫 번째 전제 조건은 TLS다. 인증·인가 이전에 통신 자체가 암호화되어야 한다. 토큰이 평문으로 날아다니면 인증이고 뭐고 의미가 없기 때문이다.</p>
+
+<ul>
+  <li>K8S API 서버는 기본적으로 <strong>포트 6443</strong>에서 TLS로 보호된 상태로 리슨한다. 프로덕션에서는 보통 443번 포트를 사용한다</li>
+  <li>API 서버가 인증서를 제시하고, Private CA 또는 공인 CA가 서명한 인증서를 사용할 수 있다</li>
+  <li>Private CA를 사용하는 경우, 클라이언트의 <code class="highlighter-rouge">~/.kube/config</code>에 해당 CA 인증서를 등록해야 한다</li>
+  <li>클라이언트도 이 단계에서 TLS 클라이언트 인증서를 제시할 수 있다(X.509 인증)</li>
+</ul>
+
+<blockquote>
+  <p>EKS에서는 이 부분을 AWS가 관리한다. EKS API 서버 엔드포인트는 AWS가 발급한 TLS 인증서로 보호되고, kubeconfig에 cluster CA certificate가 자동으로 설정된다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="authentication">Authentication</h1>
+
+<p>TLS가 수립되면 HTTP 요청은 Authentication(인증) 단계로 넘어간다.</p>
+
+<h2 id="authenticator-모듈-동작-방식">Authenticator 모듈 동작 방식</h2>
+
+<p>클러스터 관리자가 API 서버 기동 시 플래그로 활성화한 <strong>Authenticator 모듈들이 순서대로 인증을 시도</strong>한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>API 서버 플래그</th>
+      <th>Authenticator 모듈</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">--client-ca-file</code></td>
+      <td>X.509 Client Certificate</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">--oidc-issuer-url</code></td>
+      <td>OIDC</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">--token-auth-file</code></td>
+      <td>Static Token</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">--service-account-key-file</code></td>
+      <td>Service Account Token</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>기술적으로 authenticator는 전체 HTTP request 객체를 입력으로 받지만, 실제로 확인하는 부분은 주로 <code class="highlighter-rouge">Authorization</code> 헤더(Bearer token 등)와 TLS handshake 시 제시된 <strong>클라이언트 인증서</strong> 둘이다.</p>
+
+<p>핵심 동작: 여러 모듈이 설정되어 있으면 <strong>순서대로 시도</strong>하고, <strong>하나라도 성공하면 인증 통과</strong>한다. 나머지 모듈은 더 이상 시도하지 않는다. 모든 모듈이 실패해야 <strong>401 Unauthorized</strong>가 반환된다.</p>
+
+<blockquote>
+  <p>EKS에서는 여기에 <code class="highlighter-rouge">--authentication-token-webhook-config-file</code>로 <strong>aws-iam-authenticator</strong>가 추가된다. 이 모듈이 STS pre-signed URL 형태의 bearer token을 받아서 IAM identity를 확인하는 것이다. K8s 입장에서는 그냥 webhook authenticator 모듈 중 하나일 뿐이다.</p>
+</blockquote>
+
+<h2 id="인증-결과-username과-group">인증 결과: username과 group</h2>
+
+<p>인증 성공 시 authenticator는 반드시 <strong>username</strong>을 반환한다. group은 authenticator에 따라 포함될 수도 있고 아닐 수도 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Authenticator</th>
+      <th>username 추출 방식</th>
+      <th>group 추출 방식</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>X.509 Client Certificate</td>
+      <td>인증서 Subject의 <code class="highlighter-rouge">CN</code></td>
+      <td>Subject의 <code class="highlighter-rouge">O</code>(Organization)</td>
+    </tr>
+    <tr>
+      <td>Service Account Token</td>
+      <td>토큰 payload에서 추출 (<code class="highlighter-rouge">system:serviceaccount:&lt;ns&gt;:&lt;name&gt;</code>)</td>
+      <td>자동 소속 (<code class="highlighter-rouge">system:serviceaccounts</code>, <code class="highlighter-rouge">system:serviceaccounts:&lt;ns&gt;</code>)</td>
+    </tr>
+    <tr>
+      <td>OIDC</td>
+      <td>ID Token의 <code class="highlighter-rouge">sub</code> 또는 설정된 claim</td>
+      <td><code class="highlighter-rouge">groups</code> claim이 있으면 매핑</td>
+    </tr>
+    <tr>
+      <td>Static Token</td>
+      <td>파일에 직접 정의</td>
+      <td>파일에 정의된 group</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이전 포스트에서 K8s authentication은 결국 <code class="highlighter-rouge">UserInfo{Username, Groups, UID}</code>를 반환하는 인터페이스라고 정리했다. 여기서 보는 것이 정확히 그 과정이다. authenticator가 어떤 방식으로든 이 정보를 채워서 반환하면, 이후 Authorization은 이 문자열만 보고 판단한다.</p>
+
+<h2 id="k8s에-user-오브젝트가-없다는-것의-의미">K8s에 User 오브젝트가 없다는 것의 의미</h2>
+
+<p>이전 포스트에서도 짚었지만 다시 한 번 확인하자. K8s는 인증에 username을 사용하지만, <code class="highlighter-rouge">User</code>라는 API 오브젝트는 <strong>존재하지 않는다</strong>.</p>
+
+<blockquote>
+  <p><em>“Kubernetes does not have objects which represent normal user accounts”</em></p>
+</blockquote>
+
+<p>authenticator가 반환하는 username/group은 <strong>문자열</strong>일 뿐, etcd에 저장되는 사용자 레코드 같은 건 없다. 사용자 관리(생성, 삭제, 비밀번호 변경 등)는 K8s 범위 <strong>밖</strong>에서 이루어진다.</p>
+
+<p>반면 <strong>ServiceAccount</strong>는 K8s API 오브젝트(<code class="highlighter-rouge">v1/ServiceAccount</code>)로 존재하며, K8s가 직접 생성·관리한다. 이 비대칭이 EKS 같은 관리형 서비스에서 <strong>외부 인증 체계를 자연스럽게 플러그인할 수 있게</strong> 해주는 설계적 기반이다. User 오브젝트가 있었다면 IAM User/Role과 K8s User 사이의 동기화 문제가 생겼을 것이다.</p>
+
+<h2 id="인증-메커니즘별-특성-프로덕션에서-뭘-써야-하는가">인증 메커니즘별 특성: 프로덕션에서 뭘 써야 하는가</h2>
+
+<p>프로덕션 멀티유저 클러스터에서는 <strong>OIDC 등 외부 인증 소스를 사용하는 것이 권장</strong>된다. 가능한 한 <strong>적은 수의 인증 메커니즘만 활성화</strong>하여 사용자 관리를 단순화하는 것이 좋다. 각 메커니즘의 특성을 살펴보자.</p>
+
+<h3 id="x509-클라이언트-인증서">X.509 클라이언트 인증서</h3>
+
+<p>kubelet 등 <strong>시스템 컴포넌트 인증</strong>에 주로 사용된다. 사용자 인증에도 쓸 수 있지만 프로덕션에서는 제약이 많다.</p>
+
+<ul>
+  <li>개별 인증서를 <strong>폐기(revoke)할 수 없다</strong> — CA 자체를 re-key해야 하므로 가용성 위험</li>
+  <li>Private key에 <strong>패스워드 보호 불가</strong></li>
+  <li>group 정보가 인증서 <code class="highlighter-rouge">O</code> 필드에 고정되어 <strong>수명 동안 그룹 변경 불가</strong></li>
+  <li>API 서버와의 <strong>직접 연결 필요</strong> (중간 TLS termination 불가)</li>
+</ul>
+
+<h3 id="static-token-파일">Static Token 파일</h3>
+
+<p>컨트롤 플레인 디스크에 credential을 평문 저장하는 방식이다. credential 변경 시 <strong>API 서버 재시작</strong> 필요, rotation 메커니즘 없음, lockout 메커니즘 없음. 프로덕션에서 <strong>쓸 이유가 없다</strong>.</p>
+
+<h3 id="bootstrap-token">Bootstrap Token</h3>
+
+<p><strong>노드를 클러스터에 조인</strong>시키기 위해 사용된다. hard-coded 그룹 멤버십으로 범용 사용에 부적합하고, 수동 생성 시 약한 토큰이 만들어질 위험이 있다. 사용자 인증 용도가 아니다.</p>
+
+<h3 id="sa-secret-token-레거시">SA Secret Token (레거시)</h3>
+
+<p>K8s &lt; 1.23의 기본이었으나, 만료 없는 영구 토큰이라 <strong>현재는 비권장</strong>. 다음 포스트에서 자세히 다룬다.</p>
+
+<h3 id="tokenrequest-api-token">TokenRequest API Token</h3>
+
+<p>서비스 인증용 <strong>short-lived credential</strong>을 생성하는 도구다. 사용자 인증에는 revocation 메커니즘이 없어 부적합하지만, SA 토큰 발급에는 핵심 역할을 한다. 역시 다음 포스트에서 상세히 본다.</p>
+
+<h3 id="oidc-token--권장">OIDC Token — 권장</h3>
+
+<p>K8s와 외부 IdP(Okta, Google, Azure AD 등)를 연동하는 <strong>권장 방식</strong>이다.</p>
+
+<ul>
+  <li>OIDC 지원 소프트웨어는 높은 권한으로 실행되므로 <strong>일반 워크로드와 격리</strong> 필요</li>
+  <li>토큰 수명을 <strong>짧게</strong> 설정해야 한다</li>
+  <li>일부 관리형 서비스는 사용 가능한 OIDC provider가 제한될 수 있다</li>
+</ul>
+
+<blockquote>
+  <p>EKS에서 사람 사용자 인증(흐름 1)에는 OIDC가 아니라 IAM + aws-iam-authenticator를 쓴다. 그런데 흐름 3(Pod → AWS API)에서는 EKS 자체가 <strong>OIDC Provider</strong> 역할을 한다. 같은 OIDC 기술이 방향에 따라 다른 위치에서 쓰인다는 점이 흥미롭다.</p>
+</blockquote>
+
+<h3 id="webhook-token">Webhook Token</h3>
+
+<p>외부 인증 서비스에 webhook으로 인증 판단을 위임하는 방식이다. 컨트롤 플레인 서버 파일시스템 접근이 필요하므로 <strong>관리형 K8s에서는 사용이 제한</strong>될 수 있다. EKS의 aws-iam-authenticator가 바로 이 방식이다.</p>
+
+<h3 id="authenticating-proxy">Authenticating Proxy</h3>
+
+<p>프록시가 특정 헤더 값을 설정하여 username과 group을 전달하는 방식이다. 프록시와 API 서버 간 <strong>TLS 필수</strong>, 헤더 변조 시 <strong>무단 접근</strong> 가능하므로 보안에 주의해야 한다.</p>
+
+<p><br /></p>
+
+<h1 id="authorization">Authorization</h1>
+
+<p>인증이 완료되면 요청은 Authorization(인가) 단계로 넘어간다.</p>
+
+<h2 id="rest-attributes-기반-판단">REST Attributes 기반 판단</h2>
+
+<p>중요한 건, 사용자가 인가 요청을 직접 구성하는 게 아니라는 점이다. API 서버가 HTTP 요청에서 <strong>자동으로</strong> authorization attributes를 추출한다.</p>
+
+<p><code class="highlighter-rouge">kubectl get pods -n projectCaribou</code>를 실행하면 kubectl이 이를 REST 요청으로 변환한다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>GET /api/v1/namespaces/projectCaribou/pods
+</code></pre></div></div>
+
+<p>API 서버는 이 URL 경로와 HTTP method에서 다음을 추출한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Attribute</th>
+      <th>추출 방식</th>
+      <th>예시</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>username</strong></td>
+      <td>Authentication 단계에서 확보</td>
+      <td><code class="highlighter-rouge">bob</code></td>
+    </tr>
+    <tr>
+      <td><strong>verb</strong></td>
+      <td>HTTP method 매핑</td>
+      <td><code class="highlighter-rouge">GET</code> → <code class="highlighter-rouge">get</code>, <code class="highlighter-rouge">POST</code> → <code class="highlighter-rouge">create</code></td>
+    </tr>
+    <tr>
+      <td><strong>resource</strong></td>
+      <td>URL 경로</td>
+      <td><code class="highlighter-rouge">pods</code></td>
+    </tr>
+    <tr>
+      <td><strong>namespace</strong></td>
+      <td>URL 경로</td>
+      <td><code class="highlighter-rouge">projectCaribou</code></td>
+    </tr>
+    <tr>
+      <td><strong>API group</strong></td>
+      <td>URL 경로</td>
+      <td><code class="highlighter-rouge">/apis/apps/v1/...</code> → <code class="highlighter-rouge">apps</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>REST URL 구조 자체가 “누가 무엇을 어디에 하려는지”를 인코딩</strong>하고 있고, API 서버가 이를 파싱하여 authorization 모듈에 전달한다. K8s가 REST attributes를 기반으로 설계한 이유는 기존 조직의 접근 제어 시스템(LDAP, 기업 IAM 등)과 통합하기 쉽게 하기 위해서다.</p>
+
+<h2 id="authorization-모듈">Authorization 모듈</h2>
+
+<p>K8s는 여러 authorization 모듈을 지원한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>모듈</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>RBAC</strong></td>
+      <td>Role/ClusterRole에 verb+resource 권한을 정의하고, RoleBinding/ClusterRoleBinding으로 연결. <strong>사실상 표준</strong></td>
+    </tr>
+    <tr>
+      <td><strong>ABAC</strong></td>
+      <td>JSON 정책 파일에 조합을 정의. 변경 시 API 서버 재시작 필요. 현재는 거의 사용 안 함</td>
+    </tr>
+    <tr>
+      <td><strong>Node</strong></td>
+      <td>kubelet이 자기 노드에 스케줄된 Pod 관련 리소스만 접근할 수 있도록 제한하는 특수 모듈</td>
+    </tr>
+    <tr>
+      <td><strong>Webhook</strong></td>
+      <td>외부 HTTP 서비스에 authorization 판단을 위임. 기업 IAM 연동에 활용</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Authentication과 동일한 OR 로직이다. 여러 모듈이 설정되어 있으면 <strong>하나만 승인하면 통과</strong>하고, 모든 모듈이 거부해야 <strong>403 Forbidden</strong>이 반환된다. 다만 Authorization에는 “의견 없음(no opinion)”이라는 옵션이 하나 더 있다.</p>
+
+<blockquote>
+  <p>ABAC 예제를 보면 개념이 바로 잡힌다. Bob이 <code class="highlighter-rouge">projectCaribou</code> 네임스페이스의 Pod를 읽기만 할 수 있는 정책:</p>
+
+  <div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+    </span><span class="s2">"apiVersion"</span><span class="p">:</span><span class="w"> </span><span class="s2">"abac.authorization.kubernetes.io/v1beta1"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Policy"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"spec"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+        </span><span class="s2">"user"</span><span class="p">:</span><span class="w"> </span><span class="s2">"bob"</span><span class="p">,</span><span class="w">
+        </span><span class="s2">"namespace"</span><span class="p">:</span><span class="w"> </span><span class="s2">"projectCaribou"</span><span class="p">,</span><span class="w">
+        </span><span class="s2">"resource"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pods"</span><span class="p">,</span><span class="w">
+        </span><span class="s2">"readonly"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">
+    </span><span class="p">}</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div>  </div>
+
+  <p>Bob이 <code class="highlighter-rouge">projectCaribou</code>에서 Pod <code class="highlighter-rouge">get</code> → 승인. Pod <code class="highlighter-rouge">create</code> → 거부. <code class="highlighter-rouge">projectFish</code>에서 Pod <code class="highlighter-rouge">get</code> → 거부. 문서가 ABAC 예제를 먼저 보여주는 이유는 개념을 단순하게 설명하기 위해서이고, 실제 프로덕션에서는 거의 항상 <strong>RBAC</strong>을 쓴다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="admission-control">Admission Control</h1>
+
+<p>인증·인가를 통과한 요청은 Admission Control 단계로 넘어간다. 요청을 <strong>수정(modify)하거나 거부(reject)할 수 있는 소프트웨어 모듈</strong>이다.</p>
+
+<p>“인증 → 인가는 통과했지만, 실제로 이 오브젝트를 만들거나 수정해도 되는가?”를 세밀하게 검사하거나, 요청 내용을 보정하는 단계다.</p>
+
+<p>Admission Controller는 각각 특정 검증·보정 로직을 담당하는 플러그인이다. Kubernetes에 여러 종류가 내장되어 있고, Webhook으로 사용자 정의 로직을 추가할 수도 있다. 대표적인 것들을 보면 역할이 감이 온다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Controller</th>
+      <th>동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>NamespaceLifecycle</strong></td>
+      <td>삭제 중인 namespace에 새 오브젝트 생성 → 거부</td>
+    </tr>
+    <tr>
+      <td><strong>LimitRanger</strong></td>
+      <td>resource limits/requests 없으면 namespace 기본값 자동 주입</td>
+    </tr>
+    <tr>
+      <td><strong>ResourceQuota</strong></td>
+      <td>namespace 리소스 할당량 초과 → 거부</td>
+    </tr>
+    <tr>
+      <td><strong>PodSecurity</strong></td>
+      <td>securityContext가 정책에 맞지 않으면 거부</td>
+    </tr>
+    <tr>
+      <td><strong>MutatingAdmissionWebhook</strong></td>
+      <td>사용자 정의 webhook으로 요청 수정 (Istio sidecar 자동 주입이 이 방식)</td>
+    </tr>
+    <tr>
+      <td><strong>ValidatingAdmissionWebhook</strong></td>
+      <td>사용자 정의 webhook으로 요청 검증만</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="깔때기funnel-구조">깔때기(Funnel) 구조</h2>
+
+<p>Admission Control이 이전 단계와 결정적으로 다른 점은, 생성·수정되는 <strong>오브젝트의 실제 내용(spec)</strong>까지 접근할 수 있다는 것이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>단계</th>
+      <th>접근 가능한 정보</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Authentication</strong></td>
+      <td>HTTP 헤더, 클라이언트 인증서</td>
+    </tr>
+    <tr>
+      <td><strong>Authorization</strong></td>
+      <td>username, group, verb, resource, namespace 등 <strong>요청 메타데이터</strong></td>
+    </tr>
+    <tr>
+      <td><strong>Admission Control</strong></td>
+      <td>위 메타데이터 + <strong>요청 body (오브젝트 spec 전체)</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>의도적인 설계다. 앞 단계에서 “누구인가” → “권한이 있는가”를 먼저 걸러내고, 마지막에 실제 오브젝트 내용까지 검사한다.</p>
+
+<h2 id="authenticationauthorization과의-결정적-차이">Authentication/Authorization과의 결정적 차이</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>Authentication / Authorization</th>
+      <th>Admission Control</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>다중 모듈 시</td>
+      <td>하나만 성공/승인하면 통과 (<strong>OR</strong>)</td>
+      <td><strong>하나라도 거부하면 즉시 거부 (AND)</strong></td>
+    </tr>
+    <tr>
+      <td>설계 의도</td>
+      <td>“할 수 있는가?”</td>
+      <td>“해도 <strong>안전한가</strong>?”</td>
+    </tr>
+    <tr>
+      <td>대상 작업</td>
+      <td>모든 요청</td>
+      <td><strong>변경 요청만</strong> (create, modify, delete, proxy)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>클러스터 상태를 변경하는 작업이므로 모든 검증 게이트를 통과해야만 허용된다. 보안/안정성에 대해서는 보수적(fail-closed)으로 동작한다. <strong>조회(GET/LIST/WATCH)는 Admission Control을 거치지 않는다</strong> — 상태를 바꾸지 않으니 Authorization에서 읽기 권한만 확인하면 충분하다.</p>
+
+<p>모든 Admission Controller를 통과하면, 해당 API 오브젝트의 validation 루틴을 거친 후 최종적으로 etcd에 기록된다.</p>
+
+<p><br /></p>
+
+<h1 id="auditing-전체-과정의-기록">Auditing: 전체 과정의 기록</h1>
+
+<p>Auditing은 파이프라인의 특정 단계가 아니라, <strong>전 과정에서 로그를 기록하는 횡단(cross-cutting) 관심사</strong>다. 누가 인증을 시도했는지, 인가가 승인/거부되었는지, Admission에서 수정/거부되었는지, 최종 저장되었는지 — 모든 이벤트를 시간순으로 기록한다.</p>
+
+<p>별도의 “관문”이 아니라 전체를 아우르는 기록 메커니즘이기 때문에 문서에서도 개별 단계 설명이 끝난 후 마지막에 언급된다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>K8S API 서버의 요청 처리 파이프라인을 다시 한 번 정리하면 다음과 같다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>클라이언트 → TLS → Authentication → Authorization → Admission Control → etcd
+                    (신원 확인)       (권한 확인)      (요청 검증/보정)
+                    (너 누구야?)      (할 수 있어?)    (해도 안전해?)
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>단계</th>
+      <th>실패 시</th>
+      <th>다중 모듈 동작</th>
+      <th>접근 정보</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Authentication</strong></td>
+      <td>401</td>
+      <td>OR (하나만 성공하면 됨)</td>
+      <td>HTTP 헤더, 인증서</td>
+    </tr>
+    <tr>
+      <td><strong>Authorization</strong></td>
+      <td>403</td>
+      <td>OR (하나만 승인하면 됨)</td>
+      <td>요청 메타데이터</td>
+    </tr>
+    <tr>
+      <td><strong>Admission Control</strong></td>
+      <td>즉시 거부</td>
+      <td>AND (모두 통과해야 함)</td>
+      <td>메타데이터 + 오브젝트 spec</td>
+    </tr>
+    <tr>
+      <td><strong>Auditing</strong></td>
+      <td>-</td>
+      <td>횡단</td>
+      <td>전 과정 기록</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 파이프라인은 EKS에서도 동일하다. EKS가 추가하는 것은 Authentication 단계의 <strong>webhook authenticator 모듈</strong>(aws-iam-authenticator)과 Authorization의 <strong>Access Entry 기반 RBAC 매핑</strong>이다. 파이프라인 자체가 바뀌는 건 아니다.</p>
+
+<p>프로덕션에서 인증 메커니즘을 선택할 때 기억할 것:</p>
+
+<ul>
+  <li><strong>OIDC 등 외부 인증 소스</strong>가 권장된다. 내부 메커니즘(X.509, Static Token, SA Secret)은 사용자 인증에 부적합하다</li>
+  <li>활성화하는 인증 메커니즘 수는 <strong>최소화</strong>한다</li>
+  <li>K8s에 User 오브젝트가 없다는 설계가 EKS 같은 관리형 서비스에서 <strong>외부 인증 체계를 자연스럽게 끼워넣을 수 있는 기반</strong>이 된다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://kubernetes.io/docs/concepts/security/controlling-access/">Controlling Access to the Kubernetes API</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/security/hardening-guide/authentication-mechanisms/">Hardening Guide - Authentication Mechanisms</a></li>
+  <li><a href="https://kubernetes.io/docs/reference/access-authn-authz/authentication/">Authenticating</a></li>
+  <li><a href="https://kubernetes.io/docs/reference/access-authn-authz/authorization/">Authorization</a></li>
+  <li><a href="https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/">Admission Controllers</a></li>
+</ul>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-EKS-Auth-02-02-EKS-Auth-AuthZ/">[EKS] EKS: 인증/인가 - 5. 사용자 → K8s API: 매핑과 인가(AuthZ)</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#admission-control" class="page__taxonomy-item" rel="tag">Admission-Control</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#authentication" class="page__taxonomy-item" rel="tag">Authentication</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#authorization" class="page__taxonomy-item" rel="tag">Authorization</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study-week-4" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study-Week-4</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-02T00:00:00+09:00">April 2, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEKS%5D+EKS%3A+%EC%9D%B8%EC%A6%9D%2F%EC%9D%B8%EA%B0%80+-+1.+K8S+%EC%9D%B8%EC%A6%9D%2F%EC%9D%B8%EA%B0%80+%EA%B8%B0%EC%B4%88+-+1.+API+%EC%A0%91%EA%B7%BC+%ED%86%B5%EC%A0%9C%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-Auth-00-02-API-Access-Control%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-Auth-00-02-API-Access-Control%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-Auth-00-02-API-Access-Control%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-EKS-Auth-00-02-API-Access-Control?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-EKS-Auth-00-00-Overview/" class="pagination--pager" title="[EKS] EKS: 인증/인가 - 0. 개요
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-EKS-Auth-00-03-Service-Accounts/" class="pagination--pager" title="[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 2. Service Account
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-EKS-Auth-00-02-API-Access-Control/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-EKS-Auth-00-02-API-Access-Control"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,1541 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] K3s Split Brain 트러블슈팅 - 1. 상황 복기 - Eraser’s StudyLog</title>
+<meta name="description" content="K3s 컨트롤 플레인 노드를 재조인하는 과정에서 발생한 Split Brain 문제의 발견과 당시 해결 과정을 복기한다. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] K3s Split Brain 트러블슈팅 - 1. 상황 복기">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-Kubernetes-Split-Brain-01/">
+
+
+  <meta property="og:description" content="K3s 컨트롤 플레인 노드를 재조인하는 과정에서 발생한 Split Brain 문제의 발견과 당시 해결 과정을 복기한다. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-02-19T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-Kubernetes-Split-Brain-01/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] K3s Split Brain 트러블슈팅 - 1. 상황 복기">
+    <meta itemprop="description" content="K3s 컨트롤 플레인 노드를 재조인하는 과정에서 발생한 Split Brain 문제의 발견과 당시 해결 과정을 복기한다.">
+    <meta itemprop="datePublished" content="2026-02-19T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] K3s Split Brain 트러블슈팅 - 1. 상황 복기
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-02-19T00:00:00+09:00">2026년 02월 19일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  13 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#배경">배경</a>
+    <ul>
+      <li><a href="#클러스터-전환-이력">클러스터 전환 이력</a></li>
+      <li><a href="#하드웨어-장애와-재조인-시도">하드웨어 장애와 재조인 시도</a></li>
+    </ul>
+  </li>
+  <li><a href="#문제-두-개의-클러스터">문제: 두 개의 클러스터</a>
+    <ul>
+      <li><a href="#증상-발견">증상 발견</a></li>
+      <li><a href="#상황-정리">상황 정리</a></li>
+      <li><a href="#당시-놓쳤던-의문점">당시 놓쳤던 의문점</a></li>
+    </ul>
+  </li>
+  <li><a href="#배경지식">배경지식</a>
+    <ul>
+      <li><a href="#k3s-데이터스토어와-다중화">K3s 데이터스토어와 다중화</a></li>
+      <li><a href="#etcd-클러스터와-raft-합의-알고리즘">etcd 클러스터와 Raft 합의 알고리즘</a></li>
+      <li><a href="#split-brain">Split Brain</a>
+        <ul>
+          <li><a href="#정의">정의</a></li>
+          <li><a href="#원인">원인</a></li>
+          <li><a href="#raftquorum의-네트워크-파티션-보호-메커니즘">Raft/quorum의 네트워크 파티션 보호 메커니즘</a></li>
+          <li><a href="#보호가-우회되는-경우-수동-재초기화--이번-케이스">보호가 우회되는 경우: 수동 재초기화 — 이번 케이스</a></li>
+          <li><a href="#시스템-설계별-차이">시스템 설계별 차이</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#추정한-원인">추정한 원인</a></li>
+  <li><a href="#해결">해결</a>
+    <ul>
+      <li><a href="#올바른-제거재조인-절차">올바른 제거/재조인 절차</a></li>
+      <li><a href="#실제-복구-과정">실제 복구 과정</a>
+        <ul>
+          <li><a href="#1단계-원래-클러스터에서-분리된-노드-제거">1단계: 원래 클러스터에서 분리된 노드 제거</a></li>
+          <li><a href="#2단계-분리된-노드에서-k3s-완전-제거">2단계: 분리된 노드에서 K3s 완전 제거</a></li>
+          <li><a href="#3단계-클러스터-상태-확인">3단계: 클러스터 상태 확인</a></li>
+          <li><a href="#4단계-클러스터-재조인">4단계: 클러스터 재조인</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#트러블슈팅">트러블슈팅</a>
+    <ul>
+      <li><a href="#k3s-버전-불일치">K3s 버전 불일치</a></li>
+      <li><a href="#호스트명으로-조인-시-dns-실패">호스트명으로 조인 시 DNS 실패</a></li>
+      <li><a href="#재조인-후-kubectl-인증-에러">재조인 후 kubectl 인증 에러</a></li>
+      <li><a href="#private-registry-이미지-풀-실패">Private Registry 이미지 풀 실패</a></li>
+    </ul>
+  </li>
+  <li><a href="#남은-의문">남은 의문</a></li>
+  <li><a href="#정리">정리</a>
+    <ul>
+      <li><a href="#당시의-교훈">당시의 교훈</a></li>
+    </ul>
+  </li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<p>K3s 컨트롤 플레인 노드의 하드웨어를 수리한 뒤, 클러스터에 다시 합류시키려다 Split Brain이 발생했다. <code class="highlighter-rouge">k3s server</code>를 <code class="highlighter-rouge">--server</code> 플래그 없이 실행한 것이 원인이었는데, 당시에는 정확히 무엇이 잘못된 건지 몰랐다. 이 글에서는 당시 상황을 복기하고, 어떻게 발견하고 해결했는지를 정리한다.</p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<p>이번 글의 목표는 <strong>K3s Split Brain 발생 상황의 복기와 해결 과정 정리</strong>다.</p>
+
+<ul>
+  <li><strong>상황</strong>: K3s 삼중화 컨트롤 플레인에서 노드 하나를 수리 후 <code class="highlighter-rouge">--server</code> 플래그 없이 <code class="highlighter-rouge">k3s server</code>를 실행</li>
+  <li><strong>문제</strong>: 해당 노드가 기존 클러스터에 복귀하지 않고, 독립된 단독 클러스터를 생성하여 Split Brain 발생</li>
+  <li><strong>해결</strong>: K3s 데이터를 완전히 제거한 뒤, <code class="highlighter-rouge">--server</code> 플래그를 명시하여 재조인</li>
+  <li><strong>후속</strong>: 정확한 원인(etcd 데이터 소실 → SQLite 폴백)은 <a href="/dev/Dev-Kubernetes-Split-Brain-02/">Part 2</a>에서 소스 코드 분석과 재현 실험으로 확인</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="배경">배경</h1>
+
+<h2 id="클러스터-전환-이력">클러스터 전환 이력</h2>
+
+<p>원래 단일 서버(embedded SQLite)로 운영하던 K3s 클러스터를, <code class="highlighter-rouge">--cluster-init</code>을 통해 embedded etcd 기반 삼중화 컨트롤 플레인으로 전환하여 운영하고 있었다. 다만 전환 시점의 정확한 절차가 남아 있지 않아, 당시 systemd unit 파일 구성이나 사용된 플래그 등은 확인할 수 없는 상태였다.</p>
+
+<h2 id="하드웨어-장애와-재조인-시도">하드웨어 장애와 재조인 시도</h2>
+
+<p>이 클러스터에서, 컨트롤 플레인 노드 하나(cp-node-c)의 하드웨어에 문제가 생겼다. 하드웨어 수리를 위해 해당 노드의 K3s systemd 서비스를 중단해 두었고, 수리 후 해당 노드를 다시 클러스터에 합류시키려 했다. 이때 systemd 서비스를 재시작하는 대신, 직접 커맨드 라인에서 <code class="highlighter-rouge">k3s server</code>를 실행했는데, 의도한 대로 동작하지 않았다.</p>
+
+<p>운영 초기에 벌어졌던 정말 미숙한 실수이지만, 이번 글에서는 해당 상황을 복기하고 당시 어떻게 해결했는지 정리한다. 정확한 원인 분석은 <a href="/dev/Dev-Kubernetes-Split-Brain-02/">Part 2</a>에서 소스 코드 분석과 재현 실험을 통해 다룬다.</p>
+
+<p><br /></p>
+
+<h1 id="문제-두-개의-클러스터">문제: 두 개의 클러스터</h1>
+
+<h2 id="증상-발견">증상 발견</h2>
+
+<p>기존 클러스터의 컨트롤 플레인(cp-node-a)에서 확인했을 때, cp-node-c가 <code class="highlighter-rouge">NotReady</code> 상태로 표시된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get nodes
+NAME       STATUS     ROLES                       AGE    VERSION
+cp-node-a  Ready      control-plane,etcd,master   490d   v1.27.9+k3s1
+cp-node-b  Ready      control-plane,etcd,master   75d    v1.27.9+k3s1
+cp-node-c  NotReady   control-plane,etcd,master   77d    v1.27.9+k3s1
+worker-01  Ready      &lt;none&gt;                      340d   v1.27.9+k3s1
+worker-02  Ready      &lt;none&gt;                      313d   v1.27.9+k3s1
+...
+</code></pre></div></div>
+
+<p>그런데 해당 노드(cp-node-c)에서 직접 확인하면, 자기 자신만 <code class="highlighter-rouge">Ready</code> 상태로 보인다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get nodes
+NAME      STATUS   ROLES                  AGE   VERSION
+cp-node-c Ready    control-plane,master   19h   v1.27.9+k3s1
+</code></pre></div></div>
+
+<h2 id="상황-정리">상황 정리</h2>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>원래 클러스터 (cp-node-a에서 확인)                 분리된 클러스터 (cp-node-c에서 확인)
+├─ cp-node-a (control-plane,etcd,master)      cp-node-c (control-plane,master, 19h)
+├─ cp-node-b (control-plane,etcd,master)      └─ 단일 노드: 자기만 보임
+└─ cp-node-c (77d, NotReady)
+</code></pre></div></div>
+
+<p>하나의 클러스터였던 것이 둘로 분리되어, 각각이 자신이 정상이라고 판단하며 독립적으로 동작하고 있다. 이른바 <strong>Split Brain</strong> 상태다.</p>
+
+<h2 id="당시-놓쳤던-의문점">당시 놓쳤던 의문점</h2>
+
+<p>당시에는 “Split Brain이 발생했다”는 사실 자체에 집중하여 빠르게 복구하는 데 초점을 맞췄다. 하지만 복기해 보면, 위 출력에 몇 가지 의문스러운 점이 있다.</p>
+
+<ul>
+  <li><strong>AGE 19h</strong>: 원래 클러스터에서 cp-node-c의 AGE는 77d인데, 분리된 클러스터에서는 19h다. 기존 데이터를 그대로 가지고 부팅했다면 AGE도 77d여야 하지 않은가?</li>
+  <li><strong>ROLES의 차이</strong>: 원래 클러스터에서는 <code class="highlighter-rouge">control-plane,etcd,master</code>인데, 분리된 클러스터에서는 <code class="highlighter-rouge">control-plane,master</code>로 <code class="highlighter-rouge">etcd</code> 역할이 빠져 있다.</li>
+  <li><strong>다른 노드 부재</strong>: 기존 etcd 데이터를 가지고 부팅했다면, 다른 노드들(cp-node-a, cp-node-b, worker 등)도 NotReady 상태로라도 보여야 하지 않은가?</li>
+</ul>
+
+<p>이 의문점들은 <a href="/dev/Dev-Kubernetes-Split-Brain-02/">Part 2</a>에서 분석한다.</p>
+
+<p><br /></p>
+
+<h1 id="배경지식">배경지식</h1>
+
+<h2 id="k3s-데이터스토어와-다중화">K3s 데이터스토어와 다중화</h2>
+
+<p>Kubernetes 클러스터의 모든 상태 데이터는 데이터스토어에 저장된다. K3s 단일 서버에서는 embedded SQLite가 기본 데이터스토어다. SQLite는 단일 파일 기반 임베디드 데이터베이스로, 복제 메커니즘이 없어 다중 노드 간 데이터 동기화가 불가능하다. 따라서 컨트롤 플레인을 삼중화하려면 분산 합의가 가능한 데이터스토어가 필요하며, K3s에서는 <code class="highlighter-rouge">--cluster-init</code> 옵션으로 embedded etcd로 전환하여 이를 지원한다.</p>
+
+<h2 id="etcd-클러스터와-raft-합의-알고리즘">etcd 클러스터와 Raft 합의 알고리즘</h2>
+
+<p>etcd를 사용하면 각 컨트롤 플레인 노드가 etcd 멤버가 되어 동일한 데이터의 복제본을 유지한다. etcd는 Raft 합의 알고리즘을 사용하는데, 이 알고리즘의 핵심 개념이 <strong>quorum</strong>이다.</p>
+
+<p>Raft에서 quorum은 <strong>과반수</strong>이며, 공식은 <strong>quorum = ⌊N/2⌋ + 1</strong> (N: 클러스터 멤버 수)이다. N=3이면 2, N=5이면 3이 된다.</p>
+
+<ul>
+  <li>3개 멤버 클러스터에서 quorum은 2다. 즉, 2개 이상의 멤버가 동의해야 쓰기 작업이 가능하다.</li>
+  <li>1개가 장애나도 나머지 2개가 quorum을 유지하므로, 클러스터가 정상 동작한다.</li>
+  <li>2개가 장애나면 1/3으로 quorum 미달이 되어, 클러스터 전체가 읽기 전용 또는 동작 불가 상태가 된다.</li>
+</ul>
+
+<p>멤버 수에 따른 quorum과 장애 허용 범위를 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구성</th>
+      <th>quorum</th>
+      <th>1개 장애 시</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1멤버</td>
+      <td>1/1</td>
+      <td>클러스터 전체 장애</td>
+    </tr>
+    <tr>
+      <td>2멤버</td>
+      <td>2/2</td>
+      <td>클러스터 전체 장애 (동일, 복잡도만 증가)</td>
+    </tr>
+    <tr>
+      <td>3멤버</td>
+      <td>2/3</td>
+      <td>1개 장애 허용</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>2멤버는 단일 노드 대비 장애 허용이 전혀 늘어나지 않으면서 복잡도만 높아진다. etcd 공식 문서에서도 2멤버 구성을 권장하지 않는다. 따라서 컨트롤 플레인 다중화 시 최소 3멤버(홀수) 구성이 기본이다. etcd 클러스터 구성 후 서비스 상태·멤버 목록·엔드포인트 상태 확인 등 검증 방법은 <a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-07/#검증">내 손으로 클러스터 구성하기 - Bootstrapping the etcd Cluster</a>의 검증 섹션을 참고하면 된다. quorum 미달, unhealthy 멤버, Split Brain 등 비정상 시나리오별 진단(<code class="highlighter-rouge">endpoint health</code> vs <code class="highlighter-rouge">endpoint status</code>)과 대응은 <a href="/dev/Dev-Kubernetes-Etcd-Failure-Scenarios/">etcd 비정상 시나리오별 대응</a>을 참고하면 된다.</p>
+
+<p>여기서 중요한 점은, <strong>quorum의 분모는 “현재 응답하는 멤버 수”가 아니라 “클러스터에 등록된 전체 멤버 수”</strong>라는 것이다. 멤버가 장애 등으로 응답하지 않더라도 멤버 리스트에서 자동으로 빠지지 않는다. 멤버 수를 줄이려면 <code class="highlighter-rouge">etcdctl member remove</code> 같은 명시적인 관리 작업이 필요하다.</p>
+
+<h2 id="split-brain">Split Brain</h2>
+
+<h3 id="정의">정의</h3>
+
+<p>Split Brain은 <strong>하나의 클러스터였던 것이 둘 이상의 독립적인 클러스터로 분리되어, 각각이 자기 내부에서는 정상이라고 판단하며 독립적으로 동작하는 상태</strong>를 가리킨다. 엄밀히 말하면, <strong>양쪽 모두 쓰기 작업을 수행하며 데이터가 분기되는 상황</strong>을 의미한다.</p>
+
+<h3 id="원인">원인</h3>
+
+<p>Split Brain이 발생하는 원인은 다양하다. 네트워크 파티션, 합의 알고리즘 버그(quorum 오판), HA 환경에서의 펜싱 실패(양쪽이 상대를 죽은 것으로 판단), 혹은 <strong>노드 재초기화</strong> 같은 운영 실수 등이 있다. 가장 흔히 거론되는 원인이 네트워크 파티션이다.</p>
+
+<h3 id="raftquorum의-네트워크-파티션-보호-메커니즘">Raft/quorum의 네트워크 파티션 보호 메커니즘</h3>
+
+<p>네트워크 파티션이란 네트워크 장애로 인해 클러스터 멤버들이 서로 통신할 수 없는 둘 이상의 그룹으로 나뉘는 것이다. Raft에서 리더는 팔로워들에게 주기적으로 하트비트를 보내고, 팔로워는 리더의 하트비트를 기다린다. 하트비트 응답이 일정 시간 이상 없으면 해당 멤버에 도달할 수 없는 것으로 판단한다.</p>
+
+<p><strong>Raft 알고리즘을 사용하는 etcd 기반 시스템에서는</strong> 컨트롤 플레인(etcd 멤버)을 홀수(3, 5, 7…)로 구성할 때 네트워크 파티션에 의한 Split Brain이 발생하지 않도록 보장된다. 앞서 설명한 대로 quorum의 분모는 전체 등록 멤버 수이므로, 네트워크 파티션이 발생해도 분모는 변하지 않고 분자(응답하는 멤버 수)만 줄어든다. 홀수로 두면 2 vs 1, 3 vs 2처럼 한쪽만 과반을 갖는 분할만 가능하고, 2 vs 2처럼 양쪽이 똑같이 나뉘는 경우는 없다.</p>
+
+<p>예컨대 3멤버 클러스터에서 네트워크가 2 vs 1로 분리되더라도 항상 한쪽은 다수다.</p>
+
+<ul>
+  <li>다수 쪽(2/3): quorum 확보, 정상 쓰기 가능</li>
+  <li>소수 쪽(1/3): quorum 미달, 쓰기 불가, 읽기 전용</li>
+</ul>
+
+<p>quorum을 <strong>과반(절반 초과)</strong>으로 두기 때문에, 한 번에 하나의 파티션만 quorum을 가질 수 있어 네트워크 파티션만으로는 “양쪽 모두 쓰기”가 불가능하다.</p>
+
+<p>그렇다면 순차적으로 파티션이 발생해 <strong>3-way 분할</strong>(1:1:1)이 되면 어떻게 될까? 예를 들어 3멤버 클러스터(A, B, C)에서 A-B vs C로 파티션이 발생한 뒤, A-B 사이에서도 파티션이 발생하면 A, B, C 각각 1/3이 되어 모두 quorum 미달이다. 결과는 <strong>전체 쓰기 불가이지, Split Brain이 아니다</strong>. quorum을 만족하는 쪽이 어디에도 없기 때문에, 세 노드 모두 쓰기가 불가능하다. 이것은 “양쪽이 동시에 쓰기를 해서 데이터가 분기되는” Split Brain이 아니다.</p>
+
+<p>Raft는 어떤 파티션 패턴에서도 양쪽이 동시에 write를 commit하는 Split Brain이 발생하지 않도록 보장한다. 다만, 1:1:1처럼 어느 쪽도 quorum을 확보하지 못하면 클러스터 전체가 쓰기 불가 상태가 되어 사실상 서비스가 중단된다. 데이터가 분기되는 것은 막았지만, <strong>가용성(availability)은 포기</strong>한 것이다. 이는 Raft가 CAP 이론에서 CP(Consistency + Partition tolerance)를 선택한 설계이기 때문으로, 파티션 상황에서 일관성을 지키기 위해 가용성을 희생하는 것이 의도된 동작이다.</p>
+
+<h3 id="보호가-우회되는-경우-수동-재초기화--이번-케이스">보호가 우회되는 경우: 수동 재초기화 — 이번 케이스</h3>
+
+<p>위의 보호는 <strong>같은 Raft 합의 그룹 안에서의 네트워크 파티션</strong>에 대한 것이다. 이번 케이스처럼 <strong>완전히 새로운 독립 클러스터</strong>가 생성되면 상황이 근본적으로 달라진다. 두 시나리오를 비교하면 차이가 명확하다.</p>
+
+<p><br /></p>
+
+<p><strong>네트워크 파티션 (같은 Raft 합의 그룹):</strong></p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>하나의 Raft 클러스터
+[cp-node-a] ←→ [cp-node-b]    |    [cp-node-c]
+         quorum 2/3           |    quorum 미달 1/3
+         쓰기 가능              |    쓰기 불가, 읽기 전용
+</code></pre></div></div>
+
+<p>양쪽 모두 <strong>같은 Raft 합의 그룹</strong>의 멤버다. 소수 쪽은 quorum을 확보하지 못해 쓰기가 불가능하므로, 양쪽이 동시에 쓰는 <strong>Split Brain이 아니다</strong>.</p>
+
+<p><br /></p>
+
+<p><strong>수동 재초기화 (별개의 Raft 합의 그룹) — 이번 케이스:</strong></p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Raft 클러스터 A (원래)                   Raft 클러스터 B (신규)
+[cp-node-a] ←→ [cp-node-b]           [cp-node-c]
+         멤버 리스트: {A, B, C}           멤버 리스트: {C}
+         quorum 2/3                    quorum 1/1
+         쓰기 가능                       쓰기 가능
+</code></pre></div></div>
+
+<p>cp-node-c가 <strong>완전히 새로운 독립 Raft 클러스터</strong>를 구성한 것이다. 두 클러스터는 <strong>서로 다른 Raft 합의 그룹</strong>이고, 각자의 합의 그룹 안에서 quorum을 만족한다. 따라서 <strong>양쪽 모두 쓰기가 가능</strong>하며, 이것이 진짜 Split Brain이다.</p>
+
+<blockquote>
+  <p>참고: 원래 클러스터(A)의 quorum이 2/3인 이유</p>
+
+  <p>Split Brain이 발생한 시점에 원래 클러스터의 etcd 멤버 리스트에는 여전히 cp-node-c가 남아 있다. cp-node-c가 새 클러스터를 만들었다고 해서 원래 클러스터의 멤버 리스트가 자동으로 줄어들지는 않기 때문이다. <code class="highlighter-rouge">kubectl delete node</code>나 <code class="highlighter-rouge">etcdctl member remove</code>로 명시적으로 제거해야 비로소 2/2가 된다. 다만, 2/3이든 2/2이든 quorum(2)을 충족하므로 쓰기가 가능하고, 반대쪽 독립 클러스터도 1/1로 쓰기가 가능하니 <strong>Split Brain이라는 결론은 동일</strong>하다.</p>
+</blockquote>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>네트워크 파티션</th>
+      <th>수동 재초기화 (이번 케이스)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Raft 클러스터 수</td>
+      <td>1개 (분리되었지만 같은 그룹)</td>
+      <td>2개 (완전히 독립)</td>
+    </tr>
+    <tr>
+      <td>소수 쪽 쓰기</td>
+      <td>불가 (quorum 미달)</td>
+      <td><strong>가능</strong> (자기 클러스터에서 quorum 충족, 1/1)</td>
+    </tr>
+    <tr>
+      <td>Raft 보호</td>
+      <td>작동</td>
+      <td><strong>우회됨</strong></td>
+    </tr>
+    <tr>
+      <td>Split Brain</td>
+      <td>아님</td>
+      <td><strong>맞음</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="시스템-설계별-차이">시스템 설계별 차이</h3>
+
+<p>네트워크 파티션 시 Split Brain이 발생하는지 여부는 분산 시스템의 설계(quorum 유무, 멤버 수 홀짝 등)에 따라 달라진다. 다만 이번 글의 핵심은 아니므로, 시스템 설계별 비교는 별도의 글에서 다루기로 한다. 여기서 기억할 점은, <strong>어떤 설계든 기존 클러스터와 무관한 별개의 합의 그룹이 생성되면 각각이 독립적으로 쓰기를 수행하게 되어 결과적으로 Split Brain이 된다</strong>는 것이다 — 이번 케이스가 바로 이 경우에 해당한다.</p>
+
+<p><br /></p>
+
+<h1 id="추정한-원인">추정한 원인</h1>
+
+<p>복기를 통해 다음과 같이 원인을 추정했다.</p>
+
+<blockquote>
+  <p>하드웨어 수리가 끝난 cp-node-c에서, 기존 K3s 데이터를 정리하지 않은 채 <code class="highlighter-rouge">k3s server</code>를 <code class="highlighter-rouge">--server</code> 플래그 없이 실행한 것이 원인이다. K3s가 이 노드를 클러스터의 시작점으로 해석하여, 로컬에 남아 있던 etcd 데이터를 가지고 단독 클러스터로 부팅해 버린 것이다.</p>
+</blockquote>
+
+<p>이 추정에는 맞는 부분과 재검증이 필요한 부분이 있다. 정확한 원인은 <a href="/dev/Dev-Kubernetes-Split-Brain-02/">Part 2</a>에서 K3s 소스 코드 분석과 재현 실험을 통해 확인한다.</p>
+
+<p><br /></p>
+
+<h1 id="해결">해결</h1>
+
+<p>Split Brain이 발생하면, 분기된 데이터를 자동으로 합칠 수 없다. etcd(Raft 기반)에는 분기된 데이터를 merge하는 메커니즘이 없기 때문이다. 한쪽을 버려야 한다. 실무적으로는 quorum이 유지된 다수 쪽을 정본(source of truth)으로 선택한다. 이번 복구에서도 소수 쪽(cp-node-c)의 데이터를 버리고, 다수 쪽(cp-node-a, cp-node-b)을 기준으로 복구했다.</p>
+
+<h2 id="올바른-제거재조인-절차">올바른 제거/재조인 절차</h2>
+
+<p>원래 아래와 같이 했어야 한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 1. Kubernetes 노드 오브젝트 제거 (기존 컨트롤 플레인에서 실행)</span>
+kubectl delete node cp-node-c
+
+<span class="c"># 2. etcd 멤버 목록에서도 제거 (기존 컨트롤 플레인에서 실행)</span>
+<span class="c"># kubectl delete node는 Kubernetes 오브젝트만 삭제하고 etcd 멤버 정보는 남긴다.</span>
+<span class="c"># member list로 cp-node-c의 ID를 확인한 뒤 제거한다.</span>
+<span class="nb">sudo </span><span class="nv">ETCDCTL_API</span><span class="o">=</span>3 etcdctl <span class="se">\</span>
+  <span class="nt">--endpoints</span><span class="o">=</span>https://127.0.0.1:2379 <span class="se">\</span>
+  <span class="nt">--cacert</span><span class="o">=</span>/var/lib/rancher/k3s/server/tls/etcd/server-ca.crt <span class="se">\</span>
+  <span class="nt">--cert</span><span class="o">=</span>/var/lib/rancher/k3s/server/tls/etcd/server-client.crt <span class="se">\</span>
+  <span class="nt">--key</span><span class="o">=</span>/var/lib/rancher/k3s/server/tls/etcd/server-client.key <span class="se">\</span>
+  member list <span class="nt">-w</span> table
+
+<span class="c"># 위 결과에서 cp-node-c의 ID를 확인한 뒤:</span>
+<span class="nb">sudo </span><span class="nv">ETCDCTL_API</span><span class="o">=</span>3 etcdctl <span class="se">\</span>
+  <span class="nt">--endpoints</span><span class="o">=</span>https://127.0.0.1:2379 <span class="se">\</span>
+  <span class="nt">--cacert</span><span class="o">=</span>/var/lib/rancher/k3s/server/tls/etcd/server-ca.crt <span class="se">\</span>
+  <span class="nt">--cert</span><span class="o">=</span>/var/lib/rancher/k3s/server/tls/etcd/server-client.crt <span class="se">\</span>
+  <span class="nt">--key</span><span class="o">=</span>/var/lib/rancher/k3s/server/tls/etcd/server-client.key <span class="se">\</span>
+  member remove &lt;cp-node-c의_멤버_ID&gt;
+
+<span class="c"># 3. 해당 노드에서 K3s 완전 제거 (cp-node-c에서 실행)</span>
+<span class="nb">sudo</span> /usr/local/bin/k3s-uninstall.sh
+<span class="nb">sudo </span>rm <span class="nt">-rf</span> /var/lib/rancher/k3s
+<span class="nb">sudo </span>rm <span class="nt">-rf</span> /etc/rancher/k3s
+
+<span class="c"># 4. 데이터가 정리되었는지 확인</span>
+<span class="nb">ls</span> /var/lib/rancher/k3s/  <span class="c"># 디렉토리 자체가 없어야 정상</span>
+
+<span class="c"># 5. 올바른 플래그로 재조인</span>
+curl <span class="nt">-sfL</span> https://get.k3s.io | <span class="nv">INSTALL_K3S_VERSION</span><span class="o">=</span><span class="s2">"v1.27.9+k3s1"</span> <span class="se">\</span>
+  <span class="nv">K3S_URL</span><span class="o">=</span>https://&lt;컨트롤플레인IP&gt;:6443 <span class="se">\</span>
+  <span class="nv">K3S_TOKEN</span><span class="o">=</span>&lt;TOKEN&gt; <span class="se">\</span>
+  sh <span class="nt">-s</span> - server <span class="se">\</span>
+  <span class="nt">--server</span> https://&lt;컨트롤플레인IP&gt;:6443
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">--server</code>에 지정하는 컨트롤 플레인 노드는 삼중화된 노드 중 어느 것이든 상관없다. etcd 데이터를 공유하고 있기 때문에 결국 같은 클러스터에 조인하게 된다. 실무에서는 로드 밸런서 URL을 사용하거나, 관행적으로 클러스터를 처음 초기화한 노드를 지정하는 경우가 많다.</p>
+
+<h2 id="실제-복구-과정">실제 복구 과정</h2>
+
+<p>이미 Split Brain이 발생한 상태에서 복구한 과정을 정리한다.</p>
+
+<h3 id="1단계-원래-클러스터에서-분리된-노드-제거">1단계: 원래 클러스터에서 분리된 노드 제거</h3>
+
+<blockquote>
+  <p>분리된 노드에서 서비스가 돌고 있었다면, 바로 제거하면 서비스 중단이 발생할 수 있다. 독립 클러스터에서 실행 중인 워크로드를 먼저 확인하고(<code class="highlighter-rouge">kubectl get pods -A</code>), 원래 클러스터에 없는 워크로드가 있다면 매니페스트를 백업한 뒤 제거를 진행해야 한다. 다만, Split Brain 상태의 소수 쪽 노드에서 돌던 워크로드는 대부분 원래 클러스터에 이미 재스케줄링되어 있다.</p>
+</blockquote>
+
+<p>기존 컨트롤 플레인(cp-node-a)에서 실행한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl delete node cp-node-c
+node <span class="s2">"cp-node-c"</span> deleted
+</code></pre></div></div>
+
+<blockquote>
+  <p><strong>참고</strong>: K3s에서 <code class="highlighter-rouge">kubectl delete node</code>는 Kubernetes Node 오브젝트만 삭제하는 것이 아니라, etcd 멤버도 함께 제거한다. K3s의 <a href="https://github.com/k3s-io/k3s/blob/v1.27.9%2Bk3s1/pkg/etcd/member_controller.go"><code class="highlighter-rouge">member_controller.go</code></a>에 구현된 <code class="highlighter-rouge">onRemove</code> 핸들러가 Node 삭제 이벤트에 반응하여 <code class="highlighter-rouge">etcd RemovePeer</code>를 호출하기 때문이다. 따라서 “올바른 제거/재조인 절차”에서 2단계로 별도 기술한 <code class="highlighter-rouge">etcdctl member remove</code>는 실제로 <code class="highlighter-rouge">kubectl delete node</code>가 자동으로 수행해 준다. 이 메커니즘은 <a href="/dev/Dev-Kubernetes-Split-Brain-02/">Part 2</a>에서 소스 코드 분석(실험 5b)으로 검증한다.</p>
+</blockquote>
+
+<h3 id="2단계-분리된-노드에서-k3s-완전-제거">2단계: 분리된 노드에서 K3s 완전 제거</h3>
+
+<p>cp-node-c에서 실행한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">sudo</span> /usr/local/bin/k3s-uninstall.sh
+<span class="nv">$ </span><span class="nb">sudo </span>rm <span class="nt">-rf</span> /var/lib/rancher/k3s/
+<span class="nv">$ </span><span class="nb">sudo </span>rm <span class="nt">-rf</span> /etc/rancher/k3s
+</code></pre></div></div>
+
+<h3 id="3단계-클러스터-상태-확인">3단계: 클러스터 상태 확인</h3>
+
+<p>재조인 전에 기존 클러스터의 etcd 상태를 확인한다. 진단 없이 재조인부터 하면 상황이 더 꼬일 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 노드 상태 확인 (cp-node-a에서 실행)</span>
+<span class="nv">$ </span>kubectl get nodes
+NAME        STATUS   ROLES                       AGE    VERSION
+cp-node-a   Ready    control-plane,etcd,master   490d   v1.27.9+k3s1
+cp-node-b   Ready    control-plane,etcd,master   75d    v1.27.9+k3s1
+worker-01   Ready    &lt;none&gt;                      340d   v1.27.9+k3s1
+...
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># etcd 멤버 목록 확인</span>
+<span class="nv">$ </span><span class="nb">sudo </span><span class="nv">ETCDCTL_API</span><span class="o">=</span>3 etcdctl <span class="se">\</span>
+  <span class="nt">--endpoints</span><span class="o">=</span>https://127.0.0.1:2379 <span class="se">\</span>
+  <span class="nt">--cacert</span><span class="o">=</span>/var/lib/rancher/k3s/server/tls/etcd/server-ca.crt <span class="se">\</span>
+  <span class="nt">--cert</span><span class="o">=</span>/var/lib/rancher/k3s/server/tls/etcd/server-client.crt <span class="se">\</span>
+  <span class="nt">--key</span><span class="o">=</span>/var/lib/rancher/k3s/server/tls/etcd/server-client.key <span class="se">\</span>
+  member list <span class="nt">-w</span> table
++------------------+---------+------------+----------------------------+----------------------------+
+|        ID        | STATUS  |    NAME    |         PEER ADDRS         |        CLIENT ADDRS        |
++------------------+---------+------------+----------------------------+----------------------------+
+| aaaaaaaaaaaaaaaa | started | cp-node-b  | https://x.x.x.x:2380      | https://x.x.x.x:2379      |
+| bbbbbbbbbbbbbbbb | started | cp-node-a  | https://y.y.y.y:2380      | https://y.y.y.y:2379      |
++------------------+---------+------------+----------------------------+----------------------------+
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># etcd 헬스 체크</span>
+<span class="nv">$ </span><span class="nb">sudo </span><span class="nv">ETCDCTL_API</span><span class="o">=</span>3 etcdctl <span class="se">\</span>
+  <span class="nt">--endpoints</span><span class="o">=</span>https://127.0.0.1:2379 <span class="se">\</span>
+  <span class="nt">--cacert</span><span class="o">=</span>/var/lib/rancher/k3s/server/tls/etcd/server-ca.crt <span class="se">\</span>
+  <span class="nt">--cert</span><span class="o">=</span>/var/lib/rancher/k3s/server/tls/etcd/server-client.crt <span class="se">\</span>
+  <span class="nt">--key</span><span class="o">=</span>/var/lib/rancher/k3s/server/tls/etcd/server-client.key <span class="se">\</span>
+  endpoint health <span class="nt">--cluster</span> <span class="nt">-w</span> table
++----------------------------+--------+-------------+-------+
+|          ENDPOINT          | HEALTH |    TOOK     | ERROR |
++----------------------------+--------+-------------+-------+
+| https://x.x.x.x:2379       |  <span class="nb">true</span>  | 10.399169ms |       |
+| https://y.y.y.y:2379       |  <span class="nb">true</span>  | 10.207552ms |       |
++----------------------------+--------+-------------+-------+
+</code></pre></div></div>
+
+<p>etcd 멤버 2개, 장애 없이 유지되고 있다. 원래 삼중화였으므로 cp-node-c의 멤버 정보가 있어야 하는데, 이미 목록에서 사라져 있다. 이 현상의 원인에 대해서는 <a href="/dev/Dev-Kubernetes-Split-Brain-02/">Part 2</a>에서 K3s 소스 코드(<code class="highlighter-rouge">member_controller.go</code>)를 분석하며 확인한다.</p>
+
+<p>다만, 이 상태에서는 1개만 장애가 나도 quorum을 상실하여 클러스터 전체에 문제가 생기므로, 빠르게 삼중화를 복구해야 한다.</p>
+
+<h3 id="4단계-클러스터-재조인">4단계: 클러스터 재조인</h3>
+
+<p>기존 컨트롤 플레인에서 토큰을 확인한 뒤, cp-node-c에서 재조인한다. 반드시 동일한 K3s 버전으로 설치해야 하며, <code class="highlighter-rouge">--server</code> 플래그를 명시해야 한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># cp-node-a에서 토큰 확인</span>
+<span class="nv">$ </span><span class="nb">sudo cat</span> /var/lib/rancher/k3s/server/node-token
+K10xxxxx...::server:yyyyyy...
+
+<span class="c"># cp-node-c에서 재조인</span>
+<span class="nv">$ </span>curl <span class="nt">-sfL</span> https://get.k3s.io | <span class="nv">INSTALL_K3S_VERSION</span><span class="o">=</span><span class="s2">"v1.27.9+k3s1"</span> <span class="se">\</span>
+  <span class="nv">K3S_URL</span><span class="o">=</span>https://&lt;cp-node-a IP&gt;:6443 <span class="se">\</span>
+  <span class="nv">K3S_TOKEN</span><span class="o">=</span>&lt;TOKEN&gt; <span class="se">\</span>
+  sh <span class="nt">-s</span> - server <span class="se">\</span>
+  <span class="nt">--server</span> https://&lt;cp-node-a IP&gt;:6443
+</code></pre></div></div>
+
+<p>재조인 후 확인하면, 삼중화 컨트롤 플레인이 정상적으로 복구된 것을 볼 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get nodes
+NAME        STATUS   ROLES                       AGE    VERSION
+cp-node-a  Ready    control-plane,etcd,master   490d   v1.27.9+k3s1
+cp-node-b  Ready    control-plane,etcd,master   75d    v1.27.9+k3s1
+cp-node-c  Ready    control-plane,etcd,master   119s   v1.27.9+k3s1
+worker-01  Ready    &lt;none&gt;                      340d   v1.27.9+k3s1
+...
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="트러블슈팅">트러블슈팅</h1>
+
+<p>재조인 과정이 한 번에 깔끔하게 되지는 않았다. 발생한 이슈들을 정리한다.</p>
+
+<h2 id="k3s-버전-불일치">K3s 버전 불일치</h2>
+
+<p><code class="highlighter-rouge">INSTALL_K3S_VERSION</code>을 지정하지 않으면, 설치 스크립트가 최신 stable 버전을 받아 온다. 기존 클러스터와 버전이 다르면 조인에 실패한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>curl <span class="nt">-sfL</span> https://get.k3s.io | <span class="nv">K3S_URL</span><span class="o">=</span>https://&lt;IP&gt;:6443 <span class="se">\</span>
+  <span class="nv">K3S_TOKEN</span><span class="o">=</span>&lt;TOKEN&gt; <span class="se">\</span>
+  sh <span class="nt">-s</span> - server <span class="nt">--server</span> https://&lt;IP&gt;:6443
+<span class="o">[</span>INFO]  Finding release <span class="k">for </span>channel stable
+<span class="o">[</span>INFO]  Using v1.33.6+k3s1 as release    <span class="c"># 기존 클러스터는 v1.27.9+k3s1</span>
+...
+Job <span class="k">for </span>k3s.service failed because the control process exited with error code.
+</code></pre></div></div>
+
+<p>반드시 기존 클러스터와 동일한 버전을 명시해야 한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">INSTALL_K3S_VERSION</span><span class="o">=</span><span class="s2">"v1.27.9+k3s1"</span>
+</code></pre></div></div>
+
+<h2 id="호스트명으로-조인-시-dns-실패">호스트명으로 조인 시 DNS 실패</h2>
+
+<p><code class="highlighter-rouge">--server</code> 값에 IP 대신 호스트명을 사용하면, 해당 호스트명의 DNS 해석이 안 될 경우 조인에 실패한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 로그 확인</span>
+<span class="nv">$ </span><span class="nb">sudo </span>journalctl <span class="nt">-u</span> k3s <span class="nt">-n</span> 100 <span class="nt">--no-pager</span>
+...
+<span class="nv">level</span><span class="o">=</span>fatal <span class="nv">msg</span><span class="o">=</span><span class="s2">"starting kubernetes: preparing server: failed to get CA certs:
+  Get </span><span class="se">\"</span><span class="s2">https://cp-node-a:6443/cacerts</span><span class="se">\"</span><span class="s2">: dial tcp: lookup cp-node-a: Try again"</span>
+</code></pre></div></div>
+
+<p>K3s가 CA 인증서를 가져오기 위해 기존 컨트롤 플레인에 접속을 시도하는데, 호스트명을 IP로 해석하지 못해 실패하는 것이다. 이 경우 <code class="highlighter-rouge">--server</code> 플래그가 있기 때문에, 혼자 클러스터를 만들지 않고 계속 재시도 루프를 반복한다.</p>
+
+<p>해결은 두 가지다. 호스트명 대신 IP 주소를 직접 쓰거나, 해당 노드의 <code class="highlighter-rouge">/etc/hosts</code>에 기존 컨트롤 플레인 호스트명과 IP를 등록해 두면 된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 방법 1: --server에 IP 직접 지정</span>
+<span class="nt">--server</span> https://&lt;IP주소&gt;:6443
+
+<span class="c"># 방법 2: /etc/hosts에 호스트명 등록 후 기존대로 호스트명 사용</span>
+<span class="c"># (재조인 대상 노드에서) /etc/hosts 예시:</span>
+<span class="c"># &lt;기존컨트롤플레인_IP&gt;  cp-node-a</span>
+</code></pre></div></div>
+
+<h2 id="재조인-후-kubectl-인증-에러">재조인 후 kubectl 인증 에러</h2>
+
+<p>재조인 후 cp-node-c에서 <code class="highlighter-rouge">kubectl</code> 명령을 실행하면, 인증서 에러가 발생할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get nodes
+Unable to connect to the server: tls: failed to verify certificate:
+  x509: certificate signed by unknown authority
+</code></pre></div></div>
+
+<p>이전 Split Brain 상태에서 사용하던 kubeconfig의 CA 인증서와 현재 클러스터의 CA 인증서가 다르기 때문이다. 재조인 후 새로 생성된 kubeconfig를 복사하면 해결된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>mv ~/.kube/config ~/.kube/config.old 2&gt;/dev/null
+<span class="nv">$ </span>mkdir <span class="nt">-p</span> ~/.kube
+<span class="nv">$ </span><span class="nb">sudo </span>cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+<span class="nv">$ </span><span class="nb">sudo </span>chown <span class="k">$(</span>id <span class="nt">-u</span><span class="k">)</span>:<span class="k">$(</span>id <span class="nt">-g</span><span class="k">)</span> ~/.kube/config
+<span class="nv">$ </span>kubectl get nodes   <span class="c"># 정상 동작 확인</span>
+</code></pre></div></div>
+
+<h2 id="private-registry-이미지-풀-실패">Private Registry 이미지 풀 실패</h2>
+
+<p>기존 클러스터에서 사내 private registry를 사용하고 있었다면, 재조인 후 해당 노드에서 이미지를 가져오지 못할 수 있다. K3s를 완전히 제거하고 재설치했기 때문에, registry 설정이 초기화되었기 때문이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get pods <span class="nt">-A</span> <span class="nt">--field-selector</span> spec.nodeName<span class="o">=</span>cp-node-c
+NAMESPACE    NAME                          READY   STATUS              ...
+gpu-operator gpu-feature-discovery-xxxxx   0/2     Init:ImagePullBackOff
+...
+</code></pre></div></div>
+
+<p>K3s의 private registry 설정은 <code class="highlighter-rouge">/etc/rancher/k3s/registries.yaml</code>에서 관리한다. 기존 컨트롤 플레인의 설정을 참고하여, 재조인한 노드에도 동일하게 설정한 뒤 K3s를 재시작하면 된다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># /etc/rancher/k3s/registries.yaml</span>
+<span class="na">mirrors</span><span class="pi">:</span>
+  <span class="s2">"</span><span class="s">docker.io"</span><span class="pi">:</span>
+    <span class="na">endpoint</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="s2">"</span><span class="s">http://&lt;registry주소&gt;:&lt;포트&gt;"</span>
+  <span class="s2">"</span><span class="s">&lt;registry주소&gt;:&lt;포트&gt;"</span><span class="pi">:</span>
+    <span class="na">endpoint</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="s2">"</span><span class="s">http://&lt;registry주소&gt;:&lt;포트&gt;"</span>
+
+<span class="na">configs</span><span class="pi">:</span>
+  <span class="s2">"</span><span class="s">&lt;registry주소&gt;:&lt;포트&gt;"</span><span class="pi">:</span>
+    <span class="na">tls</span><span class="pi">:</span>
+      <span class="na">insecure_skip_verify</span><span class="pi">:</span> <span class="no">true</span>
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">sudo </span>systemctl restart k3s
+</code></pre></div></div>
+
+<p>설정 후 ImagePullBackOff 상태의 Pod가 없는지 확인한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get pods <span class="nt">-A</span> | <span class="nb">grep</span> <span class="nt">-E</span> <span class="s2">"ImagePull|ErrImage"</span>
+<span class="c"># 출력 없으면 정상</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="남은-의문">남은 의문</h1>
+
+<p>당시에는 빠른 복구에 집중했지만, 복기하면서 몇 가지 의문이 남는다.</p>
+
+<ol>
+  <li>
+    <p><strong>정확히 어떤 메커니즘으로 독립 클러스터가 생성되었는가?</strong> <code class="highlighter-rouge">k3s server</code>를 플래그 없이 실행했을 때 K3s 내부에서 어떤 코드 경로를 타는지, etcd 데이터 유무에 따라 동작이 어떻게 달라지는지 확인이 필요하다.</p>
+  </li>
+  <li>
+    <p><strong>etcd 데이터가 보존된 것인가, 사라진 것인가?</strong> 분리된 클러스터에서 AGE가 19h이고, <code class="highlighter-rouge">etcd</code> 역할이 없고, 다른 노드가 안 보인다. 이는 기존 etcd 데이터 위에서 부팅한 것이 아니라, 새로운 빈 클러스터를 생성한 것처럼 보인다. 하드웨어 수리 과정에서 데이터가 사라진 것은 아닌지 확인이 필요하다.</p>
+  </li>
+  <li>
+    <p><strong>etcd 멤버가 자동으로 제거된 것인가, <code class="highlighter-rouge">kubectl delete node</code>에 의해 제거된 것인가?</strong> 3단계에서 etcd 멤버가 2개만 보인 원인이 K3s의 자동 제거인지, 1단계의 <code class="highlighter-rouge">kubectl delete node</code>가 트리거한 것인지 확인이 필요하다.</p>
+  </li>
+  <li>
+    <p><strong>단독 → 삼중화 전환 후 systemd unit에 플래그가 남아 있었는가?</strong> 전환 이력이 남아 있지 않아, 각 컨트롤 플레인의 systemd unit에 <code class="highlighter-rouge">--cluster-init</code>이나 <code class="highlighter-rouge">--server</code> 플래그가 있었는지 확인할 수 없다. 플래그가 빠져 있었다면 그 자체가 이번 문제의 원인 중 하나일 수 있다.</p>
+  </li>
+</ol>
+
+<p>이 의문점들을 <a href="/dev/Dev-Kubernetes-Split-Brain-02/">Part 2</a>에서 K3s v1.27.9 소스 코드 분석과 재현 실험을 통해 확인한다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>컨트롤 플레인 노드의 제거와 재조인은, 워커 노드에 비해 훨씬 주의가 필요하다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구분</th>
+      <th>워커 노드</th>
+      <th>컨트롤 플레인 노드</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>etcd 멤버</td>
+      <td>X</td>
+      <td>O</td>
+    </tr>
+    <tr>
+      <td>상태 데이터</td>
+      <td>없음</td>
+      <td>etcd 데이터베이스</td>
+    </tr>
+    <tr>
+      <td>제거 영향</td>
+      <td>없음</td>
+      <td>quorum 영향 가능</td>
+    </tr>
+    <tr>
+      <td>Split Brain 위험</td>
+      <td>없음</td>
+      <td>있음</td>
+    </tr>
+    <tr>
+      <td>재조인</td>
+      <td>언제든지 가능</td>
+      <td>데이터 정리 필수</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="당시의-교훈">당시의 교훈</h2>
+
+<p>이번 사례를 복기하며 당시 얻은 교훈은 다음과 같다. 정확한 원인 분석 후에 보완이 필요한 부분은 <a href="/dev/Dev-Kubernetes-Split-Brain-02/">Part 2</a>에서 추가한다.</p>
+
+<ol>
+  <li><strong>제거 시 반드시 K3s 데이터를 완전히 정리한다.</strong> <code class="highlighter-rouge">k3s-uninstall.sh</code> 실행 후 <code class="highlighter-rouge">/var/lib/rancher/k3s</code>와 <code class="highlighter-rouge">/etc/rancher/k3s</code> 디렉토리가 남아 있지 않은지 확인한다.</li>
+  <li><strong>재조인 시 반드시 <code class="highlighter-rouge">--server</code> 플래그를 명시한다.</strong> 이 플래그가 없으면 K3s는 독립 클러스터를 생성할 수 있다.</li>
+  <li><strong>재조인 전 etcd 상태를 확인한다.</strong> etcd 멤버 목록과 헬스 상태를 점검한 뒤, 문제가 있으면 <a href="/dev/Dev-Kubernetes-Etcd-Failure-Scenarios/">etcd 비정상 시나리오별 대응</a>을 참고하여 대응한 후에 재조인을 진행한다.</li>
+  <li><strong>컨트롤 플레인은 etcd 데이터를 보유하므로</strong>, 제거·재조인 절차를 워커 노드와 동일하게 취급하면 안 된다.</li>
+  <li><strong>Split Brain은 원래 클러스터에서 감지할 수 없다.</strong> 분리된 노드는 단순히 <code class="highlighter-rouge">NotReady</code>로만 보인다. 하드웨어 수리 등으로 노드를 재투입할 때는 반드시 <code class="highlighter-rouge">kubectl get nodes</code>와 <code class="highlighter-rouge">etcdctl member list</code>를 양쪽에서 확인하여 클러스터 상태가 일치하는지 검증해야 한다.</li>
+</ol>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/dev/Dev-Kubernetes-Split-Brain-02/">[Kubernetes] K3s Split Brain 트러블슈팅 - 2. 원인 분석</a></li>
+    
+    <li><a href="/dev/Dev-Kubernetes-Etcd-Failure-Scenarios/">[Kubernetes] etcd 비정상 시나리오별 대응</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#etcd" class="page__taxonomy-item" rel="tag">etcd</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#k3s" class="page__taxonomy-item" rel="tag">K3s</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#split-brain" class="page__taxonomy-item" rel="tag">split-brain</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#trouble-shooting" class="page__taxonomy-item" rel="tag">trouble-shooting</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-02-19T00:00:00+09:00">February 19, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+K3s+Split+Brain+%ED%8A%B8%EB%9F%AC%EB%B8%94%EC%8A%88%ED%8C%85+-+1.+%EC%83%81%ED%99%A9+%EB%B3%B5%EA%B8%B0%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-Split-Brain-01%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-Split-Brain-01%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-Split-Brain-01%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-Kubernetes-Split-Brain-01?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-Kubeconfig-03/" class="pagination--pager" title="[Kubernetes] kubeconfig - 3. API Reference 톺아보기
+">이전</a>
+    
+    
+      <a href="/dev/Dev-Kubernetes-Split-Brain-02/" class="pagination--pager" title="[Kubernetes] K3s Split Brain 트러블슈팅 - 2. 원인 분석
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-Kubernetes-Split-Brain-01/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-Kubernetes-Split-Brain-01"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

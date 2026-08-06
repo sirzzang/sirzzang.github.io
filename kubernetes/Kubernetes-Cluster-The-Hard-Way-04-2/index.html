@@ -1,0 +1,1510 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.2. Provisioning a CA and Generating TLS Certificates - Eraser’s StudyLog</title>
+<meta name="description" content="Kubernetes 클러스터의 인증서 생성을 위한 OpenSSL 설정 파일(ca.conf)의 구조를 분석해보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.2. Provisioning a CA and Generating TLS Certificates">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-Cluster-The-Hard-Way-04-2/">
+
+
+  <meta property="og:description" content="Kubernetes 클러스터의 인증서 생성을 위한 OpenSSL 설정 파일(ca.conf)의 구조를 분석해보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-01-05T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-Cluster-The-Hard-Way-04-2/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.2. Provisioning a CA and Generating TLS Certificates">
+    <meta itemprop="description" content="Kubernetes 클러스터의 인증서 생성을 위한 OpenSSL 설정 파일(ca.conf)의 구조를 분석해보자.">
+    <meta itemprop="datePublished" content="2026-01-05T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.2. Provisioning a CA and Generating TLS Certificates
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-01-05T00:00:00+09:00">2026년 01월 05일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  8 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#생성할-인증서-목록">생성할 인증서 목록</a></li>
+  <li><a href="#caconf">ca.conf</a>
+    <ul>
+      <li><a href="#섹션별-항목-설명">섹션별 항목 설명</a>
+        <ul>
+          <li><a href="#섹션-공통-구조">섹션 공통 구조</a></li>
+          <li><a href="#req_extensions">req_extensions</a></li>
+          <li><a href="#distinguished_name">distinguished_name</a></li>
+        </ul>
+      </li>
+      <li><a href="#파일-구성-확인">파일 구성 확인</a>
+        <ul>
+          <li><a href="#root-ca">Root CA</a></li>
+          <li><a href="#admin">Admin</a></li>
+          <li><a href="#service-accounts">Service Accounts</a></li>
+          <li><a href="#worker-nodes">Worker Nodes</a></li>
+          <li><a href="#kube-proxy">Kube Proxy</a></li>
+          <li><a href="#controller-manager-scheduler">Controller Manager, Scheduler</a></li>
+          <li><a href="#api-server">API Server</a></li>
+          <li><a href="#공통-섹션">공통 섹션</a></li>
+        </ul>
+      </li>
+      <li><a href="#참조-동작-방식">참조 동작 방식</a>
+        <ul>
+          <li><a href="#단순-참조">단순 참조</a></li>
+          <li><a href="#체인-참조">체인 참조</a></li>
+          <li><a href="#공통-참조">공통 참조</a></li>
+        </ul>
+      </li>
+      <li><a href="#실제-동작">실제 동작</a></li>
+    </ul>
+  </li>
+  <li><a href="#결과">결과</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 On-Premise K8s Hands-on Study 1주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<p>이번 글의 목표는 <strong>OpenSSL 설정 파일(ca.conf)의 구조 이해</strong>다. <a href="https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/04-certificate-authority.md">Kubernetes the Hard Way 튜토리얼의 Provisioning a CA and Generating TLS Certificates 단계</a>에서 사용하는 <code class="highlighter-rouge">ca.conf</code> 파일을 분석한다.</p>
+
+<ul>
+  <li>ca.conf 파일의 전체 구조와 섹션별 역할 분석</li>
+  <li>Root CA, Admin, Worker Node, API Server 등 각 인증서 설정 이해</li>
+  <li>Subject 필드(CN, O)와 Kubernetes RBAC의 연동 방식</li>
+  <li>SAN(Subject Alternative Name) 설정의 중요성</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="생성할-인증서-목록">생성할 인증서 목록</h1>
+
+<p>이번 실습에서 생성할 인증서 구조는 다음과 같다. 이전 글에서 살펴본 것처럼 mTLS 기반 인증 구조에서 각 컴포넌트가 독립적인 신원을 가져야 하므로, 컴포넌트마다 별도의 인증서가 필요하다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>CA (Certificate Authority)
+├── kube-apiserver 인증서
+│   └── 용도: API 서버 식별
+├── kubelet 인증서 (각 노드마다)
+│   └── 용도: 워커 노드 식별  
+├── kube-controller-manager 인증서
+├── kube-scheduler 인증서
+├── kube-proxy 인증서
+├── service-accounts 인증서
+└── admin 인증서
+    └── 용도: kubectl로 클러스터 관리
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>용도</th>
+      <th>개인키</th>
+      <th>CSR</th>
+      <th>인증서</th>
+      <th>Subject 정보</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Root CA</td>
+      <td>ca.key</td>
+      <td>-</td>
+      <td>ca.crt</td>
+      <td>CN=CA</td>
+    </tr>
+    <tr>
+      <td>admin</td>
+      <td>admin.key</td>
+      <td>admin.csr</td>
+      <td>admin.crt</td>
+      <td>CN=admin, O=system:masters</td>
+    </tr>
+    <tr>
+      <td>node-0</td>
+      <td>node-0.key</td>
+      <td>node-0.csr</td>
+      <td>node-0.crt</td>
+      <td>CN=system:node:node-0, O=system:nodes</td>
+    </tr>
+    <tr>
+      <td>node-1</td>
+      <td>node-1.key</td>
+      <td>node-1.csr</td>
+      <td>node-1.crt</td>
+      <td>CN=system:node:node-1, O=system:nodes</td>
+    </tr>
+    <tr>
+      <td>kube-proxy</td>
+      <td>kube-proxy.key</td>
+      <td>kube-proxy.csr</td>
+      <td>kube-proxy.crt</td>
+      <td>CN=system:kube-proxy, O=system:node-proxier</td>
+    </tr>
+    <tr>
+      <td>kube-scheduler</td>
+      <td>kube-scheduler.key</td>
+      <td>kube-scheduler.csr</td>
+      <td>kube-scheduler.crt</td>
+      <td>CN=system:kube-scheduler, O=system:kube-scheduler</td>
+    </tr>
+    <tr>
+      <td>kube-controller-manager</td>
+      <td>kube-controller-manager.key</td>
+      <td>kube-controller-manager.csr</td>
+      <td>kube-controller-manager.crt</td>
+      <td>CN=system:kube-controller-manager, O=system:kube-controller-manager</td>
+    </tr>
+    <tr>
+      <td>kube-api-server</td>
+      <td>kube-api-server.key</td>
+      <td>kube-api-server.csr</td>
+      <td>kube-api-server.crt</td>
+      <td>CN=kubernetes, SAN 포함</td>
+    </tr>
+    <tr>
+      <td>service-accounts</td>
+      <td>service-accounts.key</td>
+      <td>service-accounts.csr</td>
+      <td>service-accounts.crt</td>
+      <td>CN=service-accounts</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="caconf">ca.conf</h1>
+
+<p>실습에서는 위의 모든 인증서를 생성하기 위한 <a href="https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/ca.conf">설정 파일</a>을 제공해 주고 있다. 실습 환경의 편의를 위해 미리 정의된 파일을 사용하지만, 그 본질은 클러스터 내 모든 통신의 신원을 보장하는 정책을 한 데 모아 정의하는 데에 있다(<a href="https://yyeon2.medium.com/bootstrap-kubernetes-the-hard-way-48644e868550">출처: 박용연님 스터디 정리 글</a>)</p>
+
+<p><code class="highlighter-rouge">ca.conf</code>는 쿠버네티스 클러스터 내 모든 컴포넌트의 TLS 인증서를 생성하기 위한 OpenSSL 설정 파일 형식을 따른다. 하나의 설정 파일에 여러 인증서 설정을 섹션별로 정의해 두고, OpenSSL 명령어 실행 시 <code class="highlighter-rouge">-section</code> 옵션으로 해당 섹션을 참조하여 각각의 인증서를 생성한다.</p>
+
+<p>단, Root CA 생성 시에는 <code class="highlighter-rouge">-section</code> 옵션 없이 기본 <code class="highlighter-rouge">[req]</code> 섹션을 사용하고, 컴포넌트 인증서들은 각자의 섹션(admin, node-0 등)을 명시적으로 지정한다.</p>
+
+<p><br /></p>
+
+<h2 id="섹션별-항목-설명">섹션별 항목 설명</h2>
+
+<p><em><a href="https://yyeon2.medium.com/bootstrap-kubernetes-the-hard-way-48644e868550">박용연님의 1주차 스터디 정리 글</a>을 참고하였습니다.</em></p>
+
+<h3 id="섹션-공통-구조">섹션 공통 구조</h3>
+<p>각 섹션 별로 아래와 같은 구조를 따른다.</p>
+<ul>
+  <li><code class="highlighter-rouge">distinguished_name</code>: 인증서의 주체(Subject) 정보를 어디서 가져올지 지정</li>
+  <li><code class="highlighter-rouge">XXX_req_extensions</code>: CSR을 만들 때, 추가할 확장(extension) 필드들이 어디에 있는지 지정</li>
+</ul>
+
+<h3 id="req_extensions">req_extensions</h3>
+<ul>
+  <li><code class="highlighter-rouge">basicConstraints</code>: CA 인증서인지 확인</li>
+  <li><code class="highlighter-rouge">extendedKeyUSage</code>: 인증서 사용 용도 지정</li>
+  <li><code class="highlighter-rouge">keyUsage</code>: 키의 사용 방식 지정</li>
+  <li><code class="highlighter-rouge">subjectAltName</code>: 해당 인증서로 접근할 수 있는 DNS 이름과 IP 주소 목록(SAN, Subject Alternative Name). 항목이 많을 경우 <code class="highlighter-rouge">@</code>를 사용해 별도 섹션으로 분리 가능</li>
+</ul>
+
+<h3 id="distinguished_name">distinguished_name</h3>
+<p>인증서의 Subject 정보를 정의하는 섹션이다. <code class="highlighter-rouge">CN</code>, <code class="highlighter-rouge">O</code> 등의 필드는 X.500 표준에서 유래한 Distinguished Name(DN) 구조를 따른다.</p>
+<blockquote>
+  <p>DN 필드의 유래와 의미는 <a href="/cs/CS-Security-X509-Certificate/#distinguished-name-dn과-x500-표준">X.509 인증서 글의 Distinguished Name (DN)과 X.500 표준</a> 섹션을 참고하자.</p>
+</blockquote>
+
+<ul>
+  <li><strong><code class="highlighter-rouge">CN</code></strong> (Common Name): 사용자 이름으로 매핑. <code class="highlighter-rouge">system:node:&lt;nodeName&gt;</code>, <code class="highlighter-rouge">system:kube-scheduler</code> 등</li>
+  <li><strong><code class="highlighter-rouge">O</code></strong> (Organization): 그룹 이름으로 매핑. <code class="highlighter-rouge">system:nodes</code>, <code class="highlighter-rouge">system:masters</code> 등</li>
+</ul>
+
+<p>이 필드들은 RBAC 권한 부여 시 사용되므로, 올바른 값 설정이 중요하다.</p>
+
+<p><br /></p>
+
+<h2 id="파일-구성-확인">파일 구성 확인</h2>
+
+<p><code class="highlighter-rouge">ca.conf</code> 파일은 다음 8가지 부분으로 구성된다.</p>
+
+<ol>
+  <li><strong>Root CA</strong>: CA 자체의 인증서 설정</li>
+  <li><strong>Admin</strong>: kubectl 사용자 인증서</li>
+  <li><strong>Service Accounts</strong>: ServiceAccount 토큰 서명용 인증서</li>
+  <li><strong>Worker Nodes</strong>: kubelet 인증서 (node-0, node-1)</li>
+  <li><strong>Kube Proxy</strong>: kube-proxy 인증서</li>
+  <li><strong>Controller Manager</strong>: kube-controller-manager 인증서</li>
+  <li><strong>Scheduler</strong>: kube-scheduler 인증서</li>
+  <li><strong>API Server</strong>: kube-apiserver 인증서 (SAN 포함)</li>
+  <li><strong>공통 섹션</strong>: 여러 인증서에서 공통으로 참조하는 설정</li>
+</ol>
+
+<p><br /></p>
+
+<h3 id="root-ca">Root CA</h3>
+
+<p>CA 자체의 인증서를 생성하기 위한 부분으로, <code class="highlighter-rouge">[req]</code>, <code class="highlighter-rouge">[ca_x509_extensions]</code>, <code class="highlighter-rouge">[req_distinguished_name]</code> 섹션으로 구성된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>req]
+distinguished_name <span class="o">=</span> req_distinguished_name
+prompt             <span class="o">=</span> no                      <span class="c"># CSR 생성 시 대화형 입력 없음</span>
+x509_extensions    <span class="o">=</span> ca_x509_extensions      <span class="c"># CA 인증서 생성 시 사용할 확장 필드: ca_x509_extensions</span>
+
+<span class="c"># x_509_extensions에 의해 바로 아래 해당 블록을 참조함</span>
+<span class="o">[</span>ca_x509_extensions]                         <span class="c"># CA 인증서 설정 (Root of Trust)</span>
+basicConstraints <span class="o">=</span> CA:TRUE                   <span class="c"># 이 인증서가 CA임을 명시</span>
+keyUsage         <span class="o">=</span> cRLSign, keyCertSign      <span class="c"># CA의 핵심 권한</span>
+                                             <span class="c"># - keyCertSign: 다른 인증서에 서명</span>
+                                             <span class="c"># - cRLSign: 인증서 폐기 목록(CRL) 서명</span>
+
+<span class="o">[</span>req_distinguished_name]
+C   <span class="o">=</span> US                                     <span class="c"># Country: 국가 코드</span>
+ST  <span class="o">=</span> Washington                             <span class="c"># State: 주/도</span>
+L   <span class="o">=</span> Seattle                                <span class="c"># Locality: 지역/도시</span>
+CN  <span class="o">=</span> CA                                     <span class="c"># Common Name: 이름. 이 경우, CA로 클러스터 CA  </span>
+</code></pre></div></div>
+
+<ul>
+  <li><code class="highlighter-rouge">basicConstraints = CA:TRUE</code>가 설정이 핵심으로, 이 설정이 있어야 다른 인증서에 서명할 수 있는 CA 인증서가 된다</li>
+  <li><code class="highlighter-rouge">[req_distinguished_name]</code> 항목에 따라, 인증서가 생성될 때 Subject 필드에 <code class="highlighter-rouge">Subject: C=US, ST=Washington, L=Seattle, CN=CA</code> 값이 들어간다</li>
+</ul>
+
+<blockquote>
+  <p>Root CA는 지리적 정보(C, ST, L)를 포함하지만, 다른 컴포넌트 인증서들은 주로 CN(사용자)과 O(그룹)만 중요하다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h3 id="admin">Admin</h3>
+
+<p>Admin 사용자를 위한 설정이다. <code class="highlighter-rouge">[admin]</code>, <code class="highlighter-rouge">[admin_distinguished_name]</code> 섹션으로 구성된다.</p>
+
+<p>클러스터 관리자 권한을 가진 사용자(<code class="highlighter-rouge">CN=admin</code>)를 위한 인증서이다. 이 실습에서는 jumpbox에서 kubectl을 실행할 때 이 인증서를 사용하여 클러스터를 관리한다.</p>
+<blockquote>
+  <p>실제 kubectl 설정 방법은 <a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-10/">10. Configuring kubectl for Remote Access</a>에서 다룬다.</p>
+</blockquote>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>admin]                                      <span class="c"># Admin 사용자 (kubectl)</span>
+distinguished_name <span class="o">=</span> admin_distinguished_name
+prompt             <span class="o">=</span> no
+req_extensions     <span class="o">=</span> default_req_extensions
+
+<span class="o">[</span>admin_distinguished_name]
+CN <span class="o">=</span> admin                                   <span class="c"># 쿠버네티스 사용자 이름</span>
+O  <span class="o">=</span> system:masters                          <span class="c"># 쿠버네티스 슈퍼유저 그룹, 모든 RBAC 인가 우회</span>
+</code></pre></div></div>
+
+<ul>
+  <li><code class="highlighter-rouge">O = system:masters</code>는 쿠버네티스의 built-in 슈퍼유저 그룹이다. 이 그룹에 속한 사용자는 모든 리소스에 대한 전체 권한을 가진다.</li>
+  <li>kubectl은 여러 사용자 인증서를 전환하며 사용할 수 있지만, 이 실습에서는 단순화를 위해 admin 인증서만 사용한다.</li>
+</ul>
+
+<p><br /></p>
+
+<h3 id="service-accounts">Service Accounts</h3>
+
+<p><code class="highlighter-rouge">[service-accounts]</code>, <code class="highlighter-rouge">[service-accounts_distinguished_name]</code> 섹션으로 구성된다.</p>
+
+<p>ServiceAccount 토큰의 생성(서명)과 검증에 사용되는 키 쌍이다. Pod 내부에서 실행되는 애플리케이션이 API Server와 통신할 때 인증에 사용하는 토큰을 발급하고 검증하는 데 필요하다.</p>
+
+<p>이후 실습 진행 과정의 kube-apiserver, kube-controller-manager 설정 과정에서 사용될 것이다.</p>
+
+<ul>
+  <li><strong>kube-controller-manager</strong>: <code class="highlighter-rouge">--service-account-private-key-file</code>에 개인키(<code class="highlighter-rouge">.key</code>)를 지정하여 ServiceAccount 토큰 생성 및 서명</li>
+  <li><strong>kube-apiserver</strong>:
+    <ul>
+      <li><code class="highlighter-rouge">--service-account-key-file</code>에 공개키(<code class="highlighter-rouge">.crt</code>)를 지정하여 Pod가 보낸 토큰 검증</li>
+      <li><code class="highlighter-rouge">--service-account-signing-key-file</code>에 개인키(<code class="highlighter-rouge">.key</code>)를 지정하여 API Server도 토큰 발급 가능 (v1.20+)</li>
+    </ul>
+  </li>
+</ul>
+
+<blockquote>
+  <p>실제 설정은 <a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-08-1/">8.1. Bootstrapping the Kubernetes Control Plane</a>에서 확인할 수 있다.</p>
+</blockquote>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>service-accounts]                           <span class="c"># Service Account 서명자</span>
+distinguished_name <span class="o">=</span> service-accounts_distinguished_name
+prompt             <span class="o">=</span> no
+req_extensions     <span class="o">=</span> default_req_extensions
+
+<span class="o">[</span>service-accounts_distinguished_name] 
+CN <span class="o">=</span> service-accounts                        <span class="c"># ServiceAccount 토큰 서명용 인증서</span>
+</code></pre></div></div>
+<blockquote>
+  <p>ServiceAccount 인증서는 API Server와 통신하는 데에 사용되지 않고, 단지 Service Account 토큰을 서명하고 검증하는 데에만 사용된다. 따라서 RBAC 매핑이 필요 없어 O 필드가 필요하지 않다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h3 id="worker-nodes">Worker Nodes</h3>
+
+<p><code class="highlighter-rouge">[node-0]</code>, <code class="highlighter-rouge">[node-1]</code> 및 각각의 하위 섹션들로 구성된다.</p>
+
+<p>kubelet이 API 서버와 통신하기 위한 인증서이다.</p>
+<ul>
+  <li>kubelet 인증서는 <a href="https://kubernetes.io/docs/reference/access-authn-authz/node/">Node Authorizer</a>의 요구사항을 충족해야 한다. CN은 반드시 <code class="highlighter-rouge">system:node:&lt;nodeName&gt;</code> 형식이어야 하고, O는 <code class="highlighter-rouge">system:nodes</code>여야 한다.</li>
+  <li><code class="highlighter-rouge">extendedKeyUsage</code>에 <code class="highlighter-rouge">clientAuth</code>와 <code class="highlighter-rouge">serverAuth</code>가 모두 포함된 이유는, kubelet이 API 서버의 클라이언트이면서 동시에 10250 포트로 HTTPS 서버를 운영하기 때문이다.</li>
+</ul>
+
+<p>node-0과 node-1이 동일한 구조로 정의된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>node-0]                                       <span class="c"># Worker Node 인증서 (kubelet)</span>
+distinguished_name <span class="o">=</span> node-0_distinguished_name <span class="c"># node-0_distinguished_name 참조 </span>
+prompt             <span class="o">=</span> no
+req_extensions     <span class="o">=</span> node-0_req_extensions
+
+<span class="o">[</span>node-0_req_extensions]
+basicConstraints     <span class="o">=</span> CA:FALSE
+extendedKeyUsage     <span class="o">=</span> clientAuth, serverAuth  <span class="c"># 클라이언트 및 서버 인증 모두 사용</span>
+keyUsage             <span class="o">=</span> critical, digitalSignature, keyEncipherment
+nsCertType           <span class="o">=</span> client
+nsComment            <span class="o">=</span> <span class="s2">"Node-0 Certificate"</span>
+subjectAltName       <span class="o">=</span> DNS:node-0, IP:127.0.0.1
+subjectKeyIdentifier <span class="o">=</span> <span class="nb">hash</span>
+
+<span class="o">[</span>node-0_distinguished_name]
+CN <span class="o">=</span> system:node:node-0                     <span class="c"># CN = system:node:&lt;nodeName&gt;</span>
+O  <span class="o">=</span> system:nodes                           <span class="c"># O = system:nodes</span>
+C  <span class="o">=</span> US
+ST <span class="o">=</span> Washington
+L  <span class="o">=</span> Seattle
+
+<span class="c"># node-1 생략</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h3 id="kube-proxy">Kube Proxy</h3>
+
+<p><code class="highlighter-rouge">[kube-proxy]</code> 및 하위 섹션들로 구성된다. 각 노드의 kube-proxy가 API 서버와 통신하기 위한 인증서이다.</p>
+<ul>
+  <li><code class="highlighter-rouge">O = system:node-proxier</code>는 kube-proxy에 필요한 권한을 부여하는 built-in ClusterRoleBinding과 연결된다.</li>
+</ul>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>kube-proxy]                                <span class="c"># kube-proxy</span>
+distinguished_name <span class="o">=</span> kube-proxy_distinguished_name
+prompt             <span class="o">=</span> no
+req_extensions     <span class="o">=</span> kube-proxy_req_extensions
+
+<span class="o">[</span>kube-proxy_req_extensions]
+basicConstraints     <span class="o">=</span> CA:FALSE
+extendedKeyUsage     <span class="o">=</span> clientAuth, serverAuth
+keyUsage             <span class="o">=</span> critical, digitalSignature, keyEncipherment
+nsCertType           <span class="o">=</span> client
+nsComment            <span class="o">=</span> <span class="s2">"Kube Proxy Certificate"</span>
+subjectAltName       <span class="o">=</span> DNS:kube-proxy, IP:127.0.0.1
+subjectKeyIdentifier <span class="o">=</span> <span class="nb">hash</span>
+
+<span class="o">[</span>kube-proxy_distinguished_name]
+CN <span class="o">=</span> system:kube-proxy
+O  <span class="o">=</span> system:node-proxier                    <span class="c"># 서비스 네트워크 제어 권한</span>
+C  <span class="o">=</span> US
+ST <span class="o">=</span> Washington
+L  <span class="o">=</span> Seattle
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h3 id="controller-manager-scheduler">Controller Manager, Scheduler</h3>
+
+<p>Control plane 컴포넌트인 kube-controller-manager와 kube-scheduler의 인증서이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Controller Manager</span>
+<span class="o">[</span>kube-controller-manager]
+distinguished_name <span class="o">=</span> kube-controller-manager_distinguished_name
+prompt             <span class="o">=</span> no
+req_extensions     <span class="o">=</span> kube-controller-manager_req_extensions
+
+<span class="o">[</span>kube-controller-manager_req_extensions]
+basicConstraints     <span class="o">=</span> CA:FALSE
+extendedKeyUsage     <span class="o">=</span> clientAuth, serverAuth
+keyUsage             <span class="o">=</span> critical, digitalSignature, keyEncipherment
+nsCertType           <span class="o">=</span> client
+nsComment            <span class="o">=</span> <span class="s2">"Kube Controller Manager Certificate"</span>
+subjectAltName       <span class="o">=</span> DNS:kube-controller-manager, IP:127.0.0.1
+subjectKeyIdentifier <span class="o">=</span> <span class="nb">hash</span>
+
+<span class="o">[</span>kube-controller-manager_distinguished_name]
+CN <span class="o">=</span> system:kube-controller-manager
+O  <span class="o">=</span> system:kube-controller-manager         <span class="c"># 클러스터 상태 관리 권한</span>
+C  <span class="o">=</span> US
+ST <span class="o">=</span> Washington
+L  <span class="o">=</span> Seattle
+
+
+<span class="c"># Scheduler</span>
+<span class="o">[</span>kube-scheduler]
+distinguished_name <span class="o">=</span> kube-scheduler_distinguished_name
+prompt             <span class="o">=</span> no
+req_extensions     <span class="o">=</span> kube-scheduler_req_extensions
+
+<span class="o">[</span>kube-scheduler_req_extensions]
+basicConstraints     <span class="o">=</span> CA:FALSE
+extendedKeyUsage     <span class="o">=</span> clientAuth, serverAuth
+keyUsage             <span class="o">=</span> critical, digitalSignature, keyEncipherment
+nsCertType           <span class="o">=</span> client
+nsComment            <span class="o">=</span> <span class="s2">"Kube Scheduler Certificate"</span>
+subjectAltName       <span class="o">=</span> DNS:kube-scheduler, IP:127.0.0.1
+subjectKeyIdentifier <span class="o">=</span> <span class="nb">hash</span>
+
+<span class="o">[</span>kube-scheduler_distinguished_name]
+CN <span class="o">=</span> system:kube-scheduler
+O  <span class="o">=</span> system:kube-scheduler                  <span class="c"># Pod 스케줄링 권한</span>
+C  <span class="o">=</span> US
+ST <span class="o">=</span> Washington
+L  <span class="o">=</span> Seattle
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h3 id="api-server">API Server</h3>
+
+<p><code class="highlighter-rouge">[kube-api-server]</code> 및 하위 섹션들로 구성된다. 가장 복잡한 SAN(Subject Alternative Names) 설정을 가진다.</p>
+
+<p>API 서버는 여러 경로로 접근 가능해야 하므로, 인증서에 모든 접근 주소를 SAN으로 포함해야 한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>접근 경로</th>
+      <th>예시</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>localhost</td>
+      <td>127.0.0.1</td>
+    </tr>
+    <tr>
+      <td>Service ClusterIP</td>
+      <td>10.32.0.1 (ServiceCIDR의 첫 번째 IP)</td>
+    </tr>
+    <tr>
+      <td>내부 DNS</td>
+      <td>kubernetes, kubernetes.default, kubernetes.default.svc 등</td>
+    </tr>
+    <tr>
+      <td>외부 접근용</td>
+      <td>server.kubernetes.local, api-server.kubernetes.local</td>
+    </tr>
+  </tbody>
+</table>
+
+<ul>
+  <li><code class="highlighter-rouge">10.32.0.1</code>은 ServiceCIDR(<code class="highlighter-rouge">10.32.0.0/24</code>)의 첫 번째 IP이다. 쿠버네티스는 이 IP를 <code class="highlighter-rouge">kubernetes</code> Service의 ClusterIP로 자동 할당한다. Pod 내부에서 API 서버에 접근할 때 이 IP를 사용한다.</li>
+  <li>로드밸런서나 외부 접근용 도메인을 추가해야 한다면, <code class="highlighter-rouge">[kube-api-server_alt_names]</code> 섹션에 해당 IP나 DNS를 추가해야 한다.</li>
+</ul>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>kube-api-server]                           <span class="c"># API Server 인증서</span>
+distinguished_name <span class="o">=</span> kube-api-server_distinguished_name
+prompt             <span class="o">=</span> no
+req_extensions     <span class="o">=</span> kube-api-server_req_extensions
+
+<span class="o">[</span>kube-api-server_req_extensions]
+basicConstraints     <span class="o">=</span> CA:FALSE
+extendedKeyUsage     <span class="o">=</span> clientAuth, serverAuth
+keyUsage             <span class="o">=</span> critical, digitalSignature, keyEncipherment
+nsCertType           <span class="o">=</span> client, server
+nsComment            <span class="o">=</span> <span class="s2">"Kube API Server Certificate"</span>
+subjectAltName       <span class="o">=</span> @kube-api-server_alt_names
+subjectKeyIdentifier <span class="o">=</span> <span class="nb">hash</span>
+
+<span class="o">[</span>kube-api-server_alt_names]                 <span class="c"># SAN: 모든 내부/외부 접근 주소</span>
+IP.0  <span class="o">=</span> 127.0.0.1
+IP.1  <span class="o">=</span> 10.32.0.1                           <span class="c"># ServiceCIDR의 첫 번째 IP</span>
+DNS.0 <span class="o">=</span> kubernetes
+DNS.1 <span class="o">=</span> kubernetes.default
+DNS.2 <span class="o">=</span> kubernetes.default.svc
+DNS.3 <span class="o">=</span> kubernetes.default.svc.cluster
+DNS.4 <span class="o">=</span> kubernetes.svc.cluster.local
+DNS.5 <span class="o">=</span> server.kubernetes.local
+DNS.6 <span class="o">=</span> api-server.kubernetes.local
+
+<span class="o">[</span>kube-api-server_distinguished_name]
+CN <span class="o">=</span> kubernetes
+C  <span class="o">=</span> US
+ST <span class="o">=</span> Washington
+L  <span class="o">=</span> Seattle
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h3 id="공통-섹션">공통 섹션</h3>
+
+<p><code class="highlighter-rouge">[default_req_extensions]</code>는 여러 클라이언트 인증서에서 공통으로 참조하는 설정이다.</p>
+<ul>
+  <li>admin, service-accounts 인증서가 이 공통 섹션을 참조한다.</li>
+  <li>kubelet과 apiserver는 서버 역할도 해야 하므로 별도의 <code class="highlighter-rouge">req_extensions</code>를 정의한다.</li>
+</ul>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>default_req_extensions]                    <span class="c"># 공통 CSR 확장</span>
+basicConstraints     <span class="o">=</span> CA:FALSE
+extendedKeyUsage     <span class="o">=</span> clientAuth           <span class="c"># 클라이언트 인증 전용</span>
+keyUsage             <span class="o">=</span> critical, digitalSignature, keyEncipherment
+nsCertType           <span class="o">=</span> client
+nsComment            <span class="o">=</span> <span class="s2">"Admin Client Certificate"</span>
+subjectKeyIdentifier <span class="o">=</span> <span class="nb">hash</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="참조-동작-방식">참조 동작 방식</h2>
+
+<p><code class="highlighter-rouge">ca.conf</code> 파일은 섹션 간 참조를 통해 설정을 재사용한다.</p>
+
+<h3 id="단순-참조">단순 참조</h3>
+
+<p><code class="highlighter-rouge">distinguished_name</code> 지시어로 Subject 정보가 담긴 섹션을 참조한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[섹션명]
+distinguished_name = [다른섹션명]_distinguished_name
+                     └─────────────┘
+                            │
+                            ▼
+              [다른섹션명_distinguished_name]
+              CN = ...
+              O  = ...
+</code></pre></div></div>
+
+<h3 id="체인-참조">체인 참조</h3>
+
+<p><code class="highlighter-rouge">req_extensions</code>가 다시 <code class="highlighter-rouge">subjectAltName</code>을 통해 다른 섹션을 참조하는 구조이다. API Server 인증서에서 사용된다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[섹션명]
+req_extensions = [섹션명]_req_extensions
+                          │
+                          ▼
+      [섹션명_req_extensions]
+      subjectAltName = @[섹션명]_alt_names
+                        └──────────┘
+                              │
+                              ▼
+              [섹션명_alt_names]
+              IP.0 = ...
+              DNS.0 = ...
+</code></pre></div></div>
+
+<h3 id="공통-참조">공통 참조</h3>
+
+<p>여러 섹션이 동일한 공통 섹션을 참조하는 구조이다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[admin]                    [service-accounts]
+req_extensions = default   req_extensions = default
+                    │                │
+                    └────────┬───────┘
+                             ▼
+                [default_req_extensions]
+                (공통 클라이언트 설정)
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="실제-동작">실제 동작</h2>
+
+<p><img src="https://sirzzang.github.io//assets/images/kubernetes-the-hard-way-ca-conf.png" alt="kubernetes-the-hard-way-ca-conf.png" /></p>
+
+<p>OpenSSL 명령어 실행 시 <code class="highlighter-rouge">-section</code> 옵션으로 섹션을 지정하면, 해당 섹션에서 시작하여 참조를 따라가며 설정을 읽는다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># admin 인증서 CSR 생성 시</span>
+openssl req <span class="nt">-new</span> <span class="nt">-key</span> admin.key <span class="se">\</span>
+    <span class="nt">-config</span> ca.conf <span class="se">\</span>
+    <span class="nt">-section</span> admin <span class="se">\ </span>     <span class="c"># ← [admin] 섹션 참조</span>
+    <span class="nt">-out</span> admin.csr
+
+<span class="c"># 내부적으로:</span>
+<span class="c"># 1. [admin] 섹션 읽기</span>
+<span class="c"># 2. distinguished_name = admin_distinguished_name 발견</span>
+<span class="c"># 3. [admin_distinguished_name] 섹션으로 이동 → CN, O 값 읽기</span>
+<span class="c"># 4. req_extensions = default_req_extensions 발견</span>
+<span class="c"># 5. [default_req_extensions] 섹션으로 이동 → 확장 정보 읽기</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="결과">결과</h1>
+
+<p>이 단계를 완료하면 다음과 같은 결과를 얻을 수 있다:</p>
+
+<ol>
+  <li><strong>ca.conf 파일 구조 이해</strong>: 하나의 파일에 여러 인증서 설정을 섹션별로 정의하고, <code class="highlighter-rouge">-section</code> 옵션으로 선택</li>
+  <li><strong>Subject 필드와 RBAC 연동</strong>: CN은 사용자 이름, O는 그룹 이름으로 매핑되어 Kubernetes 인증/인가에 사용</li>
+  <li><strong>SAN(Subject Alternative Name) 설정</strong>: API Server 인증서에 모든 접근 경로(IP, DNS)를 포함해야 함</li>
+</ol>
+
+<p><br /></p>
+
+<p>이번 실습에서는 <a href="https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/configs/ca.conf">Kubernetes the Hard Way 튜토리얼</a>에서 제공하는 <code class="highlighter-rouge">ca.conf</code> 파일을 분석했다. 실무에서 인증서 갱신, 컴포넌트 추가, 커스텀 네트워크 환경 구성 시 이 글에서 분석한 각 섹션의 의미와 필드 설정 방법을 참고하면 된다.</p>
+
+<p><br /></p>
+
+<p>다음 단계에서는 이 설정 파일을 사용하여 실제로 인증서를 생성하고 확인한다.</p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-Kubeadm-00/">[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 0. Overview</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-PKI/">[Kubernetes] Kubernetes PKI</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#on-premise-k8s-hands-on-study-week-1" class="page__taxonomy-item" rel="tag">On-Premise-K8s-Hands-On-Study-Week-1</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#on-premise-k8s-hands-on-study" class="page__taxonomy-item" rel="tag">On-Premise-K8s-Hands-On-Study</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-01-05T00:00:00+09:00">January 5, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+Cluster%3A+%EB%82%B4+%EC%86%90%EC%9C%BC%EB%A1%9C+%ED%81%B4%EB%9F%AC%EC%8A%A4%ED%84%B0+%EA%B5%AC%EC%84%B1%ED%95%98%EA%B8%B0+-+4.2.+Provisioning+a+CA+and+Generating+TLS+Certificates%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Cluster-The-Hard-Way-04-2%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Cluster-The-Hard-Way-04-2%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Cluster-The-Hard-Way-04-2%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-Cluster-The-Hard-Way-04-2?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-04-1/" class="pagination--pager" title="[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.1. Provisioning a CA and Generating TLS Certificates
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-Cluster-The-Hard-Way-04-3/" class="pagination--pager" title="[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.3. Provisioning a CA and Generating TLS Certificates
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-Cluster-The-Hard-Way-04-2/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-Cluster-The-Hard-Way-04-2"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

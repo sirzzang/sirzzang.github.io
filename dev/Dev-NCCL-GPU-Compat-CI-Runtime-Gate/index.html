@@ -1,0 +1,1766 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[NCCL] GPU 호환성 게이트: 빌드 타임과 배포 타임에서 NCCL 커널 미스매치 차단하기 - Eraser’s StudyLog</title>
+<meta name="description" content="cuobjdump로 NCCL 바이너리의 SASS/PTX 아키텍처를 분석하고, CI와 init container에서 GPU 호환성을 자동 검증하는 패턴을 정리해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[NCCL] GPU 호환성 게이트: 빌드 타임과 배포 타임에서 NCCL 커널 미스매치 차단하기">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-NCCL-GPU-Compat-CI-Runtime-Gate/">
+
+
+  <meta property="og:description" content="cuobjdump로 NCCL 바이너리의 SASS/PTX 아키텍처를 분석하고, CI와 init container에서 GPU 호환성을 자동 검증하는 패턴을 정리해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-30T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-NCCL-GPU-Compat-CI-Runtime-Gate/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[NCCL] GPU 호환성 게이트: 빌드 타임과 배포 타임에서 NCCL 커널 미스매치 차단하기">
+    <meta itemprop="description" content="cuobjdump로 NCCL 바이너리의 SASS/PTX 아키텍처를 분석하고, CI와 init container에서 GPU 호환성을 자동 검증하는 패턴을 정리해 보자.">
+    <meta itemprop="datePublished" content="2026-04-30T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[NCCL] GPU 호환성 게이트: 빌드 타임과 배포 타임에서 NCCL 커널 미스매치 차단하기
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-30T00:00:00+09:00">2026년 04월 30일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  16 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#들어가며">들어가며</a></li>
+  <li><a href="#배경-지식-gpu-바이너리의-구조">배경 지식: GPU 바이너리의 구조</a>
+    <ul>
+      <li><a href="#gpu-아키텍처와-compute-capability">GPU 아키텍처와 Compute Capability</a></li>
+      <li><a href="#fat-binary-gpu-바이너리가-뚱뚱한-이유">Fat binary: GPU 바이너리가 “뚱뚱한” 이유</a></li>
+      <li><a href="#sass와-ptx">SASS와 PTX</a>
+        <ul>
+          <li><a href="#sass-호환성">SASS 호환성</a></li>
+          <li><a href="#ptx-forward-compatibility">PTX forward compatibility</a></li>
+          <li><a href="#sass-vs-ptx-비교">SASS vs PTX 비교</a></li>
+        </ul>
+      </li>
+      <li><a href="#nvidia-라이브러리의-fatbin-구성-전략">NVIDIA 라이브러리의 fatbin 구성 전략</a>
+        <ul>
+          <li><a href="#sass-구성-원칙">SASS 구성 원칙</a></li>
+          <li><a href="#ptx-구성-원칙">PTX 구성 원칙</a></li>
+          <li><a href="#세대-교체-시-어떻게-변하는가">세대 교체 시 어떻게 변하는가</a></li>
+        </ul>
+      </li>
+      <li><a href="#cuobjdump-fatbin을-들여다보는-도구">cuobjdump: fatbin을 들여다보는 도구</a>
+        <ul>
+          <li><a href="#핵심-옵션">핵심 옵션</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#ci-게이트-빌드-타임-검증">CI 게이트: 빌드 타임 검증</a>
+    <ul>
+      <li><a href="#학습-이미지와-호환성의-결정-시점">학습 이미지와 호환성의 결정 시점</a></li>
+      <li><a href="#원리">원리</a></li>
+      <li><a href="#패턴">패턴</a></li>
+      <li><a href="#major-호환성-판정">Major 호환성 판정</a></li>
+      <li><a href="#passfail-출력-예시">PASS/FAIL 출력 예시</a></li>
+      <li><a href="#ci-workflow에서의-위치">CI workflow에서의 위치</a></li>
+    </ul>
+  </li>
+  <li><a href="#런타임-게이트-init-container">런타임 게이트: init container</a>
+    <ul>
+      <li><a href="#원리-1">원리</a></li>
+      <li><a href="#3-stage-구조">3-Stage 구조</a>
+        <ul>
+          <li><a href="#stage-1-gpu-detection">Stage 1: GPU Detection</a></li>
+          <li><a href="#stage-2-nccl-kernel-static-check">Stage 2: NCCL Kernel Static Check</a></li>
+          <li><a href="#stage-3-nccl-init-dynamic-test">Stage 3: NCCL Init Dynamic Test</a></li>
+        </ul>
+      </li>
+      <li><a href="#passfail-출력-예시-1">PASS/FAIL 출력 예시</a></li>
+      <li><a href="#helm-통합">Helm 통합</a></li>
+    </ul>
+  </li>
+  <li><a href="#두-게이트의-분업">두 게이트의 분업</a>
+    <ul>
+      <li><a href="#비교">비교</a></li>
+      <li><a href="#권장-조합">권장 조합</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-자료">참고 자료</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>NCCL <code class="highlighter-rouge">.so</code> 바이너리 안에는 GPU 아키텍처별로 미리 컴파일된 SASS 커널과 forward compatibility용 PTX가 fatbin으로 묶여 있다. <code class="highlighter-rouge">cuobjdump</code>로 이 목록을 추출하면 “이 NCCL이 어떤 GPU를 지원하는가”를 정적으로 판정할 수 있다</li>
+  <li><strong>CI 게이트</strong>(빌드 타임): 이미지 빌드 후, push 전에 <code class="highlighter-rouge">docker run</code> + <code class="highlighter-rouge">cuobjdump</code>로 SASS/PTX 아키텍처를 대조한다. GPU 없이도 검증 가능하고, 호환되지 않는 이미지가 레지스트리에 올라가는 것 자체를 차단한다</li>
+  <li><strong>런타임 게이트</strong>(배포 타임): K8s init container로 실제 GPU의 compute capability에서 SM 표기를 도출하고, NCCL fatbin의 SASS 목록과 대조한 뒤, 동적으로 NCCL init까지 확인한다. 학습 컨테이너 진입 전에 초 단위로 판정한다</li>
+  <li>두 게이트 모두 ML 엔지니어의 학습 코드를 수정하지 않는다. 빌드 타임은 “배포 전 차단”, 배포 타임은 “실제 GPU 기반 정밀 감지”로 역할이 다르다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="들어가며">들어가며</h1>
+
+<p><a href="/dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/">이전 글</a>에서 NCCL communicator의 lazy init이 디버깅을 어떻게 어렵게 만드는지 분석하고, 마지막에 “플랫폼 레벨에서 GPU↔NCCL 호환성을 사전 검증하는 대안”을 세 가지 제시했다. 빌드 타임 CI/CD 체크, K8s init container, 환경변수 + 타임아웃.</p>
+
+<p>이 글은 그중 앞의 두 가지를 실제로 구현한 결과물이다. 구현하면서 “어떤 원리로 호환성을 판정하는가”가 핵심이라는 걸 느꼈는데, 그 원리는 CUDA fatbin의 구조와 <code class="highlighter-rouge">cuobjdump</code>라는 도구에 있다. 이걸 먼저 정리하고, 그 위에서 CI 게이트와 런타임 게이트가 어떤 패턴으로 동작하는지 풀어 보겠다.</p>
+
+<p><br /></p>
+
+<h1 id="배경-지식-gpu-바이너리의-구조">배경 지식: GPU 바이너리의 구조</h1>
+
+<blockquote>
+  <p>이 글에서 다루는 NCCL은 NVIDIA GPU 전용 라이브러리이므로, 이하 GPU 바이너리 설명은 모두 NVIDIA CUDA 생태계 기준이다.</p>
+</blockquote>
+
+<h2 id="gpu-아키텍처와-compute-capability">GPU 아키텍처와 Compute Capability</h2>
+
+<p>NVIDIA는 GPU를 세대별로 <strong>아키텍처</strong>(microarchitecture)로 분류한다. Ampere, Hopper, Blackwell 같은 이름이 아키텍처명이다. 각 아키텍처 안에서도 칩 구성(SM 수, 메모리 대역 등)이 다른 변종이 있으므로, 이를 구분하기 위해 <strong>compute capability</strong>라는 숫자를 부여한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>아키텍처</th>
+      <th>대표 GPU</th>
+      <th>Compute Capability</th>
+      <th>SM 표기</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Ampere</td>
+      <td>A100, RTX 3090</td>
+      <td>8.0, 8.6</td>
+      <td>sm_80, sm_86</td>
+    </tr>
+    <tr>
+      <td>Hopper</td>
+      <td>H100</td>
+      <td>9.0</td>
+      <td>sm_90</td>
+    </tr>
+    <tr>
+      <td>Blackwell</td>
+      <td>B200, RTX 5090</td>
+      <td>10.0, 12.0</td>
+      <td>sm_100, sm_120</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Compute capability는 <code class="highlighter-rouge">X.Y</code>(major.minor) 형식이고, SM 표기는 이를 합쳐서 <code class="highlighter-rouge">sm_(X*10+Y)</code>로 쓴다. 예를 들어 compute capability 12.0은 sm_120, 8.6은 sm_86이다. major는 아키텍처 세대, minor는 같은 세대 내 변종을 나타낸다. 이 번호는 단순한 “기능 레벨 표기”가 아니라, <strong>해당 GPU에서 실행 가능한 기계어의 종류를 결정하는 식별자</strong>다. sm_80용으로 컴파일된 바이너리와 sm_90용으로 컴파일된 바이너리는 서로 다른 명령어를 사용한다.</p>
+
+<h2 id="fat-binary-gpu-바이너리가-뚱뚱한-이유">Fat binary: GPU 바이너리가 “뚱뚱한” 이유</h2>
+
+<p>CPU 바이너리는 대체로 하위 호환성이 잘 유지된다. x86-64 바이너리 하나를 빌드하면 10년 전 CPU에서도, 최신 CPU에서도 그냥 돌아간다. ISA(명령어 집합)가 확장은 되어도 기존 명령어를 제거하지 않기 때문이다. 그래서 CPU 라이브러리는 “하나 빌드해서 어디서든 돌린다”가 기본 전제다.</p>
+
+<p>GPU는 사정이 다르다. 같은 NVIDIA라도 major가 바뀌면 기계어(machine code) 자체가 크게 달라진다. sm_80(Ampere)용으로 컴파일된 커널은 sm_120(Blackwell)에서 직접 실행할 수 없고, 그 반대도 마찬가지다. GPU 아키텍처마다 레지스터 파일 구조, warp 스케줄링, 메모리 계층이 재설계되기 때문이다.</p>
+
+<p>그래서 NVIDIA GPU 라이브러리들은 <strong>fat binary(fatbin)</strong> 전략을 쓴다. 하나의 <code class="highlighter-rouge">.so</code> 안에 여러 아키텍처용 바이너리를 함께 묶어 놓고, 런타임에 현재 GPU에 맞는 것을 골라 실행하는 구조다. “여러 벌을 다 넣어야 한다”는 것은 바이너리 크기가 커진다는 뜻이지만, 그 대가로 두 가지를 얻는다.</p>
+
+<ul>
+  <li><strong>즉시 실행</strong>: 현재 GPU에 맞는 native 기계어가 이미 들어 있으면 JIT 컴파일 없이 바로 실행한다. NCCL처럼 통신 latency에 민감한 라이브러리에서는 첫 호출에서 발생하는 JIT 지연을 피할 수 있다는 점이 중요하다</li>
+  <li><strong>아키텍처별 최적화</strong>: 같은 allreduce 커널이라도 sm_80과 sm_90에서 최적의 구현이 다르다. 레지스터 수, shared memory 크기, warp 내 동기화 primitive가 달라지기 때문이다. fat binary에 각 아키텍처 전용 native binary(SASS — 아래에서 자세히 다룬다)를 넣어 두면 해당 GPU에서 최적 성능을 낼 수 있다</li>
+</ul>
+
+<p>바이너리 크기 비용은 감수할 만하다. NCCL <code class="highlighter-rouge">.so</code>의 경우 7개 아키텍처 x 약 19개 커널 = 132개 cubin(개별 GPU 바이너리)이 들어 있어도 전체 크기는 수십 MB 수준이다. 학습 이미지가 수 GB인 환경에서 유의미한 오버헤드가 아니다.</p>
+
+<p>fat binary 안에 들어가는 GPU 코드는 아래서 살펴 볼 SASS, PTX 두 종류로 나뉜다.</p>
+
+<h2 id="sass와-ptx">SASS와 PTX</h2>
+
+<p>NVIDIA GPU 라이브러리의 <code class="highlighter-rouge">.so</code> 파일 안에는 두 종류의 GPU 코드가 들어 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구분</th>
+      <th>설명</th>
+      <th>실행 방식</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>SASS</strong>(cubin)</td>
+      <td>특정 GPU 아키텍처용으로 미리 컴파일된 native binary</td>
+      <td>즉시 실행. JIT 불필요</td>
+    </tr>
+    <tr>
+      <td><strong>PTX</strong></td>
+      <td>가상 ISA(Intermediate Representation)</td>
+      <td>로딩 시점에 GPU driver가 JIT 컴파일해서 SASS로 변환</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>SASS는 빠르지만 특정 아키텍처에 종속된다. PTX는 느리지만(첫 로드 시 JIT 지연) 상위 호환(forward compatibility)을 제공한다. cubin이라는 이름은 SASS 쪽에만 붙는다 — cubin은 “CUDA binary”의 줄임말로, 이미 특정 SM을 타깃으로 최종 컴파일된 native 기계어 파일(<code class="highlighter-rouge">.cubin</code>)을 뜻한다. PTX는 아직 기계어가 아닌 중간 표현이므로 cubin이 아니다. fatbin 안에서도 SASS는 ELF 섹션(<code class="highlighter-rouge">.cubin</code>)으로, PTX는 텍스트 섹션(<code class="highlighter-rouge">.ptx</code>)으로 구분되어 들어가며, 후술할 <code class="highlighter-rouge">cuobjdump</code>의 <code class="highlighter-rouge">-lelf</code> / <code class="highlighter-rouge">-lptx</code> 옵션이 이 구분을 그대로 반영한다.</p>
+
+<h3 id="sass-호환성">SASS 호환성</h3>
+
+<p>SASS(cubin)는 <strong>같은 major 안에서 minor가 올라가는 방향</strong>으로 호환된다.</p>
+
+<blockquote>
+  <p>A cubin for a certain compute capability is supported to run on any GPU with the same major revision and same or higher minor revision of compute capability.
+— <a href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#compute-capabilities">CUDA C++ Programming Guide, Compute Capability</a></p>
+</blockquote>
+
+<table>
+  <thead>
+    <tr>
+      <th>cubin 타깃</th>
+      <th>동작하는 GPU</th>
+      <th>동작하지 않는 GPU</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>sm_80 (major 8, minor 0)</td>
+      <td>sm_80, sm_86, sm_87, sm_89</td>
+      <td>sm_70, sm_90 (다른 major)</td>
+    </tr>
+    <tr>
+      <td>sm_86 (major 8, minor 6)</td>
+      <td>sm_86, sm_87, sm_89</td>
+      <td>sm_80 (minor가 더 낮음)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 규칙 덕분에 라이브러리 빌더는 한 family 안에서 <strong>base(가장 낮은 minor) 하나만</strong> 빌드해 넣으면 상위 variant들을 모두 커버할 수 있다.</p>
+
+<h3 id="ptx-forward-compatibility">PTX forward compatibility</h3>
+
+<p>PTX는 SASS와 다른 방향의 호환성을 제공한다. 위에서 봤듯이 PTX는 native 기계어가 아닌 가상 ISA이므로, driver가 JIT 컴파일할 수만 있다면 특정 아키텍처에 묶이지 않는다.</p>
+
+<p>PTX의 호환 방향은 <strong>상위 한 방향</strong>이다. sm_120 PTX는 sm_120 이상의 GPU에서만 JIT 가능하다. driver가 “sm_120 이상의 명령어 집합을 알고 있을 때”만 변환할 수 있기 때문이다. sm_86 같은 하위 아키텍처에서는 sm_120 PTX를 JIT할 수 없다 — 더 새로운 세대의 명령어를 더 오래된 하드웨어로 변환하는 것은 불가능하다.</p>
+
+<p>이 성질 덕분에 PTX는 “미래의 아직 나오지 않은 GPU”를 위한 보험 역할을 한다. 라이브러리 빌드 시점에는 존재하지 않았던 GPU가 나와도, driver가 업데이트되면 PTX를 JIT해서 동작시킬 수 있다. 다만 JIT 컴파일에는 첫 로드 시 수 초에서 수십 초까지 지연이 발생할 수 있고(라이브러리 크기와 GPU에 따라 다르다), 아키텍처 전용 최적화를 활용하지 못하므로 성능은 native SASS보다 떨어진다.</p>
+
+<h3 id="sass-vs-ptx-비교">SASS vs PTX 비교</h3>
+
+<p>두 메커니즘의 차이를 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>PTX fallback</th>
+      <th>SASS minor 호환</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>동작 방식</td>
+      <td>로드 시 driver JIT 컴파일</td>
+      <td>미리 컴파일된 binary 직접 실행</td>
+    </tr>
+    <tr>
+      <td>방향</td>
+      <td>동일/상위 모든 아키텍처 (major 경계 넘음)</td>
+      <td>같은 major 안에서만, minor 상승 방향</td>
+    </tr>
+    <tr>
+      <td>비용</td>
+      <td>첫 로드 시 JIT 지연</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>성능</td>
+      <td>아키텍처 전용 최적화 미적용</td>
+      <td>native 최적 성능</td>
+    </tr>
+    <tr>
+      <td>용도</td>
+      <td>미래 GPU를 위한 보험</td>
+      <td>현재 지원 GPU의 주 실행 경로</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="nvidia-라이브러리의-fatbin-구성-전략">NVIDIA 라이브러리의 fatbin 구성 전략</h2>
+
+<p>실제 NVIDIA 라이브러리들은 위의 SASS minor 호환성과 PTX forward compatibility를 조합해서, fat binary를 효율적으로 구성한다.</p>
+
+<h3 id="sass-구성-원칙">SASS 구성 원칙</h3>
+
+<p>모든 SM 변종을 다 넣지 않는다. 각 아키텍처 family에서 <strong>base(가장 낮은 minor)</strong> 하나만 포함하면, minor 호환성에 의해 같은 family의 상위 변종이 자동으로 커버된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>family base SASS</th>
+      <th>커버하는 GPU (minor 호환)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>sm_60 (Pascal)</td>
+      <td>sm_60, sm_61</td>
+    </tr>
+    <tr>
+      <td>sm_70 (Volta)</td>
+      <td>sm_70, sm_75 (Turing)</td>
+    </tr>
+    <tr>
+      <td>sm_80 (Ampere)</td>
+      <td>sm_80, sm_86, sm_87, sm_89</td>
+    </tr>
+    <tr>
+      <td>sm_90 (Hopper)</td>
+      <td>sm_90</td>
+    </tr>
+    <tr>
+      <td>sm_100, sm_120 (Blackwell)</td>
+      <td>sm_100, sm_120</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>예를 들어 sm_86(RTX 3090)은 NCCL SASS에 전용 커널이 없다. 한 번도 포함된 적이 없다. 하지만 sm_80 SASS가 있으면 minor 호환에 의해 문제 없이 동작한다. 호환성 게이트를 만들 때 <strong>exact match가 아닌 major 호환성 체크</strong>가 필요한 이유가 여기에 있다.</p>
+
+<h3 id="ptx-구성-원칙">PTX 구성 원칙</h3>
+
+<p>빌드 시점의 최신 아키텍처 하나만 포함한다. 옛 아키텍처는 SASS에 다 들어 있으니 PTX가 불필요하고, 미래 아키텍처를 위한 fallback 용도로는 최신 하나면 충분하다. 예를 들어 NCCL 2.29.7은 sm_120 PTX만 포함하고 있으므로, 향후 sm_120 이상의 새 GPU가 나와도 driver JIT으로 동작할 수 있다.</p>
+
+<h3 id="세대-교체-시-어떻게-변하는가">세대 교체 시 어떻게 변하는가</h3>
+
+<p>NCCL의 빌드 대상 아키텍처는 <a href="https://github.com/NVIDIA/nccl/blob/master/makefiles/common.mk">빌드 시스템</a>에서 CUDA toolkit 버전에 따라 결정된다. 새 GPU 세대가 나오면 해당 SM이 추가되고, 오래된 세대는 점진적으로 제거된다.</p>
+
+<p><a href="/dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/">이전 글</a>의 트러블슈팅 과정에서 문제의 NCCL 2.26.2와 교체 대상인 2.29.7의 SASS를 <code class="highlighter-rouge">cuobjdump</code>로 직접 비교해 봤다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>NCCL 2.26.2 (CUDA 12.2)</th>
+      <th>NCCL 2.29.7 (CUDA 12.8)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>SASS</td>
+      <td>sm_50, sm_60, sm_61, sm_70, sm_80, sm_90</td>
+      <td>sm_60, sm_61, sm_70, sm_80, sm_90, sm_100, sm_120</td>
+    </tr>
+    <tr>
+      <td>PTX</td>
+      <td>sm_90</td>
+      <td>sm_120</td>
+    </tr>
+    <tr>
+      <td>추가된 것</td>
+      <td>—</td>
+      <td>sm_100, sm_120 (Blackwell)</td>
+    </tr>
+    <tr>
+      <td>제거된 것</td>
+      <td>—</td>
+      <td>sm_50 (Maxwell, deprecated)</td>
+    </tr>
+    <tr>
+      <td>유지된 것</td>
+      <td>—</td>
+      <td>sm_80 (Ampere family base)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 비교에서 읽을 수 있는 것은 세 가지다.</p>
+
+<ul>
+  <li><strong>sm_50이 제거되었다</strong>: Maxwell/초기 Pascal 세대로, CUDA 13.0부터는 sm_75 미만 전체가 deprecated 대상이다. NCCL도 이에 맞춰 점진 제거한다</li>
+  <li><strong>sm_80은 제거되지 않았다</strong>: Ampere GPU(A100, RTX 3090 등)가 아직 현역이므로 base SASS를 유지한다. sm_86/87/89를 커버하는 유일한 SASS이기 때문에, sm_80이 빠지면 Ampere 계열 전체가 동작하지 않는다</li>
+  <li><strong>sm_100, sm_120이 추가되었다</strong>: CUDA 12.8에서 Blackwell 지원이 들어오면서 추가. 이것이 없으면 Blackwell GPU에서 NCCL이 동작하지 않는다 — <a href="/dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/">이전 글</a>에서 겪었던 문제의 정확한 원인이다</li>
+</ul>
+
+<p>이 패턴은 예측 가능하다. 새 GPU가 나오면 해당 SASS가 추가되고, 오래된 GPU가 deprecated되면 해당 SASS가 제거된다. 그 사이 <strong>family base는 반드시 유지된다</strong> — 제거하면 해당 family 전체가 깨지기 때문이다. 이 성질을 활용하면 호환성 게이트를 설계할 때 “exact SM이 있는가?”가 아니라 “같은 major의 base SASS가 있는가?”로 판정할 수 있다. 이 판정 로직의 구체적인 구현은 <a href="#major-호환성-판정">CI 게이트</a> 섹션에서 다룬다.</p>
+
+<h2 id="cuobjdump-fatbin을-들여다보는-도구">cuobjdump: fatbin을 들여다보는 도구</h2>
+
+<p><code class="highlighter-rouge">cuobjdump</code>는 CUDA Toolkit의 developer tools에 속하는 바이너리로, <code class="highlighter-rouge">.so</code>나 <code class="highlighter-rouge">.fatbin</code> 안에 묶인 GPU 코드를 분석하는 도구다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>컨테이너 이미지 계층</th>
+      <th>cuobjdump 포함 여부</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>NVIDIA 공식 <code class="highlighter-rouge">-devel</code> 이미지 (<code class="highlighter-rouge">nvidia/cuda:12.x-devel-*</code>)</td>
+      <td>O</td>
+    </tr>
+    <tr>
+      <td>NVIDIA 공식 <code class="highlighter-rouge">-runtime</code> 이미지 (<code class="highlighter-rouge">nvidia/cuda:12.x-runtime-*</code>)</td>
+      <td>X</td>
+    </tr>
+    <tr>
+      <td>PyTorch wheel (<code class="highlighter-rouge">torch+cu12x</code>)</td>
+      <td>X</td>
+    </tr>
+    <tr>
+      <td>pip <code class="highlighter-rouge">nvidia-nccl-cu12</code> wheel</td>
+      <td>X</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>호환성 게이트를 사용하려면 학습 이미지가 <code class="highlighter-rouge">-devel</code> variant 기반이거나, <code class="highlighter-rouge">cuda-cuobjdump-12-x</code> 패키지가 별도 설치되어 있어야 한다. ML 학습 이미지는 보통 <code class="highlighter-rouge">-devel</code> 기반이므로 대부분 바로 사용 가능하다.</p>
+
+<h3 id="핵심-옵션">핵심 옵션</h3>
+
+<p>게이트에서 사용하는 옵션은 아래 두 가지다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>옵션</th>
+      <th>출력</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">-lelf</code></td>
+      <td>fatbin에 포함된 <strong>SASS(cubin)</strong> 목록. 각 cubin의 아키텍처 식별 가능</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">-lptx</code></td>
+      <td>fatbin에 포함된 <strong>PTX</strong> 목록</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># NCCL .so의 SASS 아키텍처 목록 확인</span>
+<span class="nv">$ </span>cuobjdump <span class="nt">-lelf</span> /path/to/libnccl.so.2 | <span class="nb">grep</span> <span class="nt">-oP</span> <span class="s1">'sm_\d+'</span> | sort <span class="nt">-u</span>
+sm_100
+sm_120
+sm_60
+sm_61
+sm_70
+sm_80
+sm_90
+
+<span class="c"># PTX 아키텍처 확인</span>
+<span class="nv">$ </span>cuobjdump <span class="nt">-lptx</span> /path/to/libnccl.so.2 | <span class="nb">grep</span> <span class="nt">-oP</span> <span class="s1">'sm_\d+'</span> | sort <span class="nt">-u</span>
+sm_120
+</code></pre></div></div>
+
+<p>위 결과를 해석해 보자.</p>
+
+<ul>
+  <li>SASS 7종이 들어 있다. sm_60~sm_120까지 family별 base가 모두 있고, sm_86(Ampere 변종)은 sm_80이 커버한다</li>
+  <li>PTX는 sm_120 하나만 포함되어 있다. 미래 아키텍처를 위한 fallback 용도다</li>
+  <li>총 cubin 수는 132개 정도다. 7개 아키텍처 x 약 19개 collective primitive(allreduce, broadcast 등)가 각각 별도 cubin으로 들어 있다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="ci-게이트-빌드-타임-검증">CI 게이트: 빌드 타임 검증</h1>
+
+<h2 id="학습-이미지와-호환성의-결정-시점">학습 이미지와 호환성의 결정 시점</h2>
+
+<p>ML 학습 이미지는 보통 NVIDIA base 이미지(CUDA user-space libraries 포함, driver는 host 노드에 별도 설치) 위에 PyTorch, NCCL 등 의존성을 쌓아 빌드한다. 이 이미지에 어떤 버전의 NCCL <code class="highlighter-rouge">.so</code>가 들어가느냐에 따라 GPU 호환성이 결정되므로, <strong>이미지 빌드가 곧 “호환성이 결정되는 시점”</strong>이다.</p>
+
+<p><a href="/dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/">이전 글</a>에서 다뤘던 문제가 정확히 이 지점에서 발생했다. base 이미지에 포함된 NCCL 2.26.2가 CUDA 12.2로 빌드되어 있어서 sm_120(Blackwell) 커널이 누락되어 있었고, 그 위에 빌드된 학습 이미지가 RTX 5090 노드에 배포되면서 silent hang이 발생했다. NCCL을 sm_120 지원 버전(2.29.7)으로 올린 새 base 이미지를 만들어서 문제 자체는 해결했지만, “다음에 또 같은 실수가 반복되지 않으려면?” 이라는 질문이 남았다. CI 게이트는 그 답이다.</p>
+
+<h2 id="원리">원리</h2>
+
+<p>이미지를 빌드한 직후, 레지스트리에 push하기 전에 “이 이미지 안의 NCCL이 우리 클러스터의 GPU를 지원하는가?”를 검증한다. GPU 디바이스 없이도 가능한 정적 분석이다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Git tag push → CI 트리거 → 이미지 빌드 완료
+  → GPU 호환성 게이트 (cuobjdump 분석)
+    → PASS → 이미지 push
+    → FAIL → push 차단, 빌드 실패
+</code></pre></div></div>
+
+<h2 id="패턴">패턴</h2>
+
+<p>CI 러너에서 빌드된 이미지를 <code class="highlighter-rouge">docker run</code>으로 띄우고, 이미지 내부의 <code class="highlighter-rouge">cuobjdump</code>로 NCCL <code class="highlighter-rouge">.so</code>를 분석한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># CI 게이트 핵심 로직 (간략화)</span>
+<span class="nv">IMAGE</span><span class="o">=</span><span class="s2">"registry.example.com/myorg/train-image:latest"</span>
+<span class="nv">REQUIRED_GPU_ARCHS</span><span class="o">=</span><span class="s2">"sm_120 sm_80"</span>  <span class="c"># 클러스터에 있는 GPU들의 base SM</span>
+
+docker run <span class="nt">--rm</span> <span class="nt">--entrypoint</span><span class="o">=</span><span class="s2">""</span> <span class="s2">"</span><span class="nv">$IMAGE</span><span class="s2">"</span> python3 <span class="nt">-c</span> <span class="s2">"
+import subprocess, re, glob, sys
+
+# 1. NCCL .so 경로 탐지 (환경에 따라 후보 경로를 조정)
+search_patterns = [
+    '/usr/lib/x86_64-linux-gnu/libnccl.so*',           # system NCCL
+    '/usr/local/lib/python*/dist-packages/nvidia/nccl/lib/libnccl.so*',  # pip wheel
+    '/opt/conda/lib/python*/site-packages/nvidia/nccl/lib/libnccl.so*',  # conda
+]
+nccl_paths = []
+for pat in search_patterns:
+    nccl_paths.extend(glob.glob(pat))
+if not nccl_paths:
+    print('NCCL_NOT_FOUND'); sys.exit(2)
+nccl_so = nccl_paths[0]
+
+# 2. cuobjdump로 SASS/PTX 추출
+sass_out = subprocess.run(['cuobjdump', '-lelf', nccl_so], capture_output=True, text=True)
+sass_archs = sorted(set(re.findall(r'sm_</span><span class="se">\d</span><span class="s2">+', sass_out.stdout)))
+
+ptx_out = subprocess.run(['cuobjdump', '-lptx', nccl_so], capture_output=True, text=True)
+ptx_archs = sorted(set(re.findall(r'sm_</span><span class="se">\d</span><span class="s2">+', ptx_out.stdout)))
+
+print(f'SO_PATH={nccl_so}')
+print(f'SASS={</span><span class="se">\"</span><span class="s2"> </span><span class="se">\"</span><span class="s2">.join(sass_archs)}')
+print(f'PTX={</span><span class="se">\"</span><span class="s2"> </span><span class="se">\"</span><span class="s2">.join(ptx_archs)}')
+"</span>
+</code></pre></div></div>
+
+<blockquote>
+  <p>이 스크립트는 이미지 내부에 <code class="highlighter-rouge">python3</code>이 있어야 동작한다. ML 학습 이미지는 PyTorch 등 Python 기반 프레임워크가 기본이므로 거의 문제 없지만, 외부 벤더의 runtime-only 이미지처럼 Python이 없는 경우를 대비해 스크립트 진입 전에 <code class="highlighter-rouge">python3 --version</code> probe를 넣어 두는 것이 좋다. probe 실패 시 “python3 미존재” 명시적 에러로 분리하면, “SASS가 없어서 실패한 건지” “분석 자체가 안 된 건지” 모호함을 방지할 수 있다.</p>
+</blockquote>
+
+<h2 id="major-호환성-판정">Major 호환성 판정</h2>
+
+<p>CI 게이트가 <code class="highlighter-rouge">REQUIRED_GPU_ARCHS="sm_120 sm_80"</code>을 받으면, 각 required arch에 대해 3단계로 판정한다.</p>
+
+<ol>
+  <li><strong>Exact SASS match</strong>: SASS 목록에 해당 SM이 있으면 PASS</li>
+  <li><strong>Major-compatible SASS</strong>: 같은 major의 base SM이 있으면 PASS (예: sm_86 요구 → sm_80 있으면 통과)</li>
+  <li><strong>PTX coverage</strong>: PTX가 해당 SM 이상이면 WARNING (JIT 가능하지만 성능 불확실)</li>
+  <li>어디에도 해당 없으면 FAIL</li>
+</ol>
+
+<p>Major 추출은 <code class="highlighter-rouge">floor(SM번호 / 10)</code>으로 계산한다. sm_80 → major 8, sm_86 → major 8, sm_120 → major 12. compute capability X.Y에서 SM = X*10+Y이므로, floor(SM/10) = X(major)가 된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># major 호환성 함수 (bash)</span>
+extract_major<span class="o">()</span> <span class="o">{</span>
+    <span class="nb">local </span><span class="nv">sm</span><span class="o">=</span><span class="s2">"</span><span class="nv">$1</span><span class="s2">"</span>
+    <span class="nb">local </span><span class="nv">num</span><span class="o">=</span><span class="s2">"</span><span class="k">${</span><span class="nv">sm</span><span class="p">#sm_</span><span class="k">}</span><span class="s2">"</span>
+    <span class="nb">echo</span> <span class="k">$((</span>num <span class="o">/</span> <span class="m">10</span><span class="k">))</span>
+<span class="o">}</span>
+<span class="c"># sm_80 → 8, sm_86 → 8, sm_120 → 12, sm_90 → 9</span>
+</code></pre></div></div>
+
+<h2 id="passfail-출력-예시">PASS/FAIL 출력 예시</h2>
+
+<p>sm_80이 정확히 일치하여 PASS하는 경우다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[gpu-compat-check]   .so path: /path/to/libnccl.so.2
+[gpu-compat-check]   SASS architectures: sm_50 sm_60 sm_61 sm_70 sm_80 sm_90
+[gpu-compat-check]   PTX architectures:  none
+[gpu-compat-check]   RESULT: PASS
+[gpu-compat-check] All GPU compatibility checks passed.
+</code></pre></div></div>
+
+<p>sm_86을 sm_80의 major 호환으로 통과하는 경우다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[gpu-compat-check]   SASS architectures: sm_50 sm_60 sm_61 sm_70 sm_80 sm_90
+[gpu-compat-check]   sm_86: covered by sm_80 (same major 8)
+[gpu-compat-check]   RESULT: PASS
+</code></pre></div></div>
+
+<p>sm_120이 누락되어 NCCL 구버전이 Blackwell을 지원하지 못해 FAIL하는 경우다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>========================================
+  FATAL: GPU kernel mismatch
+========================================
+  Library:   libnccl
+  Image:     registry.example.com/myorg/train-image:v1.2.3
+  SASS:      sm_50 sm_60 sm_61 sm_70 sm_80 sm_90
+  PTX:       none
+  Required:  sm_120 sm_80
+  Missing:   sm_120
+
+  Action:  Upgrade the GPU library to a version built with a
+           CUDA toolkit that supports the missing architectures.
+========================================
+</code></pre></div></div>
+
+<p>이 FAIL이 걸리면 이미지 push 단계가 실행되지 않으므로, 호환되지 않는 이미지가 레지스트리에 올라가는 것 자체를 차단한다.</p>
+
+<h2 id="ci-workflow에서의-위치">CI workflow에서의 위치</h2>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># CI workflow (간략화)</span>
+<span class="na">jobs</span><span class="pi">:</span>
+  <span class="na">build</span><span class="pi">:</span>
+    <span class="na">steps</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">Build image</span>
+        <span class="c1"># ... docker build ...</span>
+
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">Validate GPU library compatibility</span>
+        <span class="na">if</span><span class="pi">:</span> <span class="s">${{ inputs.skip_gpu_check != 'true' }}</span>
+        <span class="na">env</span><span class="pi">:</span>
+          <span class="na">IMAGE</span><span class="pi">:</span> <span class="s">${{ steps.meta.outputs.image_tag }}</span>
+          <span class="na">REQUIRED_GPU_ARCHS</span><span class="pi">:</span> <span class="s2">"</span><span class="s">sm_120</span><span class="nv"> </span><span class="s">sm_80"</span>
+        <span class="na">run</span><span class="pi">:</span> <span class="pi">|</span>
+          <span class="no">bash gpu-compat-check.sh</span>
+
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">Push image</span>
+        <span class="c1"># ... docker push ...</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">skip_gpu_check</code> input은 긴급 우회용이다. 게이트 자체에 문제가 있거나, 의도적으로 호환되지 않는 이미지를 push해야 할 때 사용한다.</p>
+
+<p><br /></p>
+
+<h1 id="런타임-게이트-init-container">런타임 게이트: init container</h1>
+
+<h2 id="원리-1">원리</h2>
+
+<p>CI 게이트는 “이미지가 특정 GPU를 지원하는가”를 이미지 빌드 시점에 검증하지만, 실제로 어떤 GPU가 할당되는지는 배포 시점에야 알 수 있다. 런타임 게이트는 <strong>실제 GPU가 할당된 상태에서</strong> 호환성을 검증하고, 학습 컨테이너가 뜨기 전에 차단한다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Pod 생성 → init container (gpu-compat-check)
+  → PASS → main container (학습) 시작
+  → FAIL → Pod Init:Error, 학습 미시작
+</code></pre></div></div>
+
+<h2 id="3-stage-구조">3-Stage 구조</h2>
+
+<p>init container는 3단계로 검사한다. 단계가 올라갈수록 검증 범위가 넓어진다.</p>
+
+<h3 id="stage-1-gpu-detection">Stage 1: GPU Detection</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># nvidia-smi로 GPU 정보 쿼리</span>
+<span class="nv">GPU_NAME</span><span class="o">=</span><span class="k">$(</span>nvidia-smi <span class="nt">--query-gpu</span><span class="o">=</span>name <span class="nt">--format</span><span class="o">=</span>csv,noheader | head <span class="nt">-1</span><span class="k">)</span>
+<span class="nv">COMPUTE_CAP</span><span class="o">=</span><span class="k">$(</span>nvidia-smi <span class="nt">--query-gpu</span><span class="o">=</span>compute_cap <span class="nt">--format</span><span class="o">=</span>csv,noheader | head <span class="nt">-1</span><span class="k">)</span>
+<span class="c"># → "NVIDIA GeForce RTX 5090", "12.0"</span>
+<span class="c"># SM 계산: 12.0 → sm_120</span>
+</code></pre></div></div>
+
+<p>GPU가 감지되지 않으면 즉시 FATAL로 종료한다. device plugin 미등록 등의 문제를 학습 시작 전에 잡아낸다.</p>
+
+<h3 id="stage-2-nccl-kernel-static-check">Stage 2: NCCL Kernel Static Check</h3>
+
+<p>Stage 1에서 얻은 GPU SM과, NCCL <code class="highlighter-rouge">.so</code>의 SASS/PTX를 대조한다. CI 게이트와 동일한 major 호환성 로직을 사용한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># cuobjdump으로 NCCL SASS/PTX 분석</span>
+<span class="nv">NCCL_SO</span><span class="o">=</span><span class="k">$(</span>find / <span class="nt">-name</span> <span class="s1">'libnccl.so*'</span> <span class="nt">-type</span> f 2&gt;/dev/null | head <span class="nt">-1</span><span class="k">)</span>
+<span class="nv">SASS</span><span class="o">=</span><span class="k">$(</span>cuobjdump <span class="nt">-lelf</span> <span class="s2">"</span><span class="nv">$NCCL_SO</span><span class="s2">"</span> 2&gt;&amp;1 | <span class="nb">grep</span> <span class="nt">-oP</span> <span class="s1">'sm_\d+'</span> | sort <span class="nt">-u</span> | tr <span class="s1">'\n'</span> <span class="s1">' '</span><span class="k">)</span>
+<span class="nv">PTX</span><span class="o">=</span><span class="k">$(</span>cuobjdump <span class="nt">-lptx</span> <span class="s2">"</span><span class="nv">$NCCL_SO</span><span class="s2">"</span> 2&gt;&amp;1 | <span class="nb">grep</span> <span class="nt">-oP</span> <span class="s1">'sm_\d+'</span> | sort <span class="nt">-u</span> | tr <span class="s1">'\n'</span> <span class="s1">' '</span><span class="k">)</span>
+
+<span class="c"># GPU SM이 SASS에 있는지 (exact 또는 major-compat) 판정</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">cuobjdump</code>이나 <code class="highlighter-rouge">libnccl.so</code>가 없는 경우 WARNING만 출력하고 Stage 3으로 넘어간다(graceful degradation).</p>
+
+<h3 id="stage-3-nccl-init-dynamic-test">Stage 3: NCCL Init Dynamic Test</h3>
+
+<p>정적 분석을 통과했더라도 driver/runtime/PyTorch binding 레벨에서 문제가 있을 수 있다. 단일 rank로 NCCL <code class="highlighter-rouge">init_process_group</code> + <code class="highlighter-rouge">all_reduce</code>를 한 번 실행해서 스택 전체가 동작하는지 확인한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>timeout <span class="nv">$TIMEOUT</span> python3 <span class="nt">-c</span> <span class="s2">"
+import os, torch, torch.distributed as dist
+os.environ.update({
+    'MASTER_ADDR': '127.0.0.1', 'MASTER_PORT': '29500',
+    'RANK': '0', 'WORLD_SIZE': '1'
+})
+dist.init_process_group(backend='nccl')
+t = torch.ones(1, device='cuda')
+dist.all_reduce(t)
+print('NCCL init + all_reduce: OK')
+dist.destroy_process_group()
+"</span>
+</code></pre></div></div>
+
+<p>timeout이 발생하면(exit 124) NCCL init hang으로 판정한다.</p>
+
+<blockquote>
+  <p>Stage 3도 <code class="highlighter-rouge">python3</code>을 호출한다. 학습 이미지이므로 PyTorch + Python이 없을 리 없지만, 스크립트 진입 전 <code class="highlighter-rouge">command -v python3</code> probe를 두면 “Python 미존재”와 “NCCL 문제”를 명확히 분리할 수 있다.</p>
+</blockquote>
+
+<blockquote>
+  <p>Stage 3는 single-rank(WORLD_SIZE=1) sanity check다. single-rank <code class="highlighter-rouge">all_reduce</code>는 NCCL의 P2P 경로를 거의 타지 않으므로, 이 stage가 검증하는 것은 “NCCL communicator init이 시작되고 기본 collective primitive가 호출 가능한가” 수준이다. cross-rank handshake(NIC/IB 설정, NCCL_SOCKET_IFNAME 등) 이슈는 검증 범위 밖이다. 그러나 이 글이 다루는 문제(SASS 미스매치로 인한 lazy init hang)는 init 시점에 잡히는 종류이므로, Stage 2 정적 분석을 통과한 후 “실제로 NCCL init까지 가는가”를 확인하는 보완 검사로서 충분히 의미가 있다.</p>
+</blockquote>
+
+<h2 id="passfail-출력-예시-1">PASS/FAIL 출력 예시</h2>
+
+<p>NCCL 신버전과 호환 GPU에서 PASS하는 경우다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>========================================
+  GPU Compatibility Pre-flight Check
+========================================
+  Node:  gpu-node-01
+  Image: registry.example.com/myorg/train-image-base:latest
+
+[Stage 1] Detecting GPU...
+  GPU:     NVIDIA GeForce RTX 5090
+  SM:      sm_120 (major: 12, base: sm_120)
+  Driver:  580.126.09
+
+[Stage 2] Checking NCCL kernels...
+  NCCL path: /path/to/libnccl.so.2
+  SASS: sm_100 sm_120 sm_60 sm_61 sm_70 sm_80 sm_90
+  PTX:  sm_120
+  RESULT: PASS (exact SASS match: sm_120)
+
+[Stage 3] Testing NCCL initialization (timeout: 30s)...
+NCCL init + all_reduce: OK
+
+========================================
+  All GPU compatibility checks PASSED
+========================================
+</code></pre></div></div>
+
+<p>NCCL 구버전과 Blackwell GPU에서 FAIL하는 경우다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>========================================
+  GPU Compatibility Pre-flight Check
+========================================
+  Node:  gpu-node-01
+  Image: registry.example.com/myorg/train-image:v1.2.3
+
+[Stage 1] Detecting GPU...
+  GPU:     NVIDIA GeForce RTX 5090
+  SM:      sm_120 (major: 12, base: sm_120)
+  Driver:  580.126.09
+
+[Stage 2] Checking NCCL kernels...
+  NCCL path: /path/to/libnccl.so.2
+  SASS: sm_50 sm_60 sm_61 sm_70 sm_80 sm_90
+  PTX:  none
+
+========================================
+  FATAL: NCCL GPU kernel mismatch
+========================================
+  Node:      gpu-node-01
+  GPU:       NVIDIA GeForce RTX 5090 (sm_120)
+  Driver:    580.126.09
+  NCCL SASS: sm_50 sm_60 sm_61 sm_70 sm_80 sm_90
+  NCCL PTX:  none
+  Required:  sm_120 (or major-compatible sm_12X)
+
+  NCCL .so에 이 GPU용 커널이 포함되어 있지 않습니다.
+  분산 학습 시 ncclCommInitRank에서 silent hang이 발생합니다.
+
+  해결:
+  1. training-base 이미지의 nvidia-nccl-cu12 버전 확인
+  2. sm_120 지원하는 NCCL 버전으로 업그레이드
+  3. 참조: 호환성 매트릭스
+========================================
+</code></pre></div></div>
+
+<p>이전 글에서 다뤘던 “학습이 한참 진행된 뒤에야 발견되는” 문제가, 여기서는 <strong>학습 시작 전 수 초 만에</strong> root cause를 직접 가리키는 에러 메시지와 함께 차단된다.</p>
+
+<h2 id="helm-통합">Helm 통합</h2>
+
+<p>init container는 Helm values로 on/off 전환한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># values.yaml</span>
+<span class="na">gpuCompatCheck</span><span class="pi">:</span>
+  <span class="na">enabled</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">timeoutSeconds</span><span class="pi">:</span> <span class="s">30</span>  <span class="c1"># Stage 3 single-rank sanity check 기준. 실제 분산 학습 NCCL init timeout과는 별개</span>
+</code></pre></div></div>
+
+<p>템플릿에서는 GPU worker group에만 init container를 추가한다. 아래 예시는 RayJob spec 기준이지만, init container 패턴 자체는 plain Pod, Job, KubeflowJob 등 어디에든 동일하게 적용할 수 있다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># rayjob.yaml (간략화)</span>
+<span class="na">workerGroupSpecs</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">groupName</span><span class="pi">:</span> <span class="s">gpu-workers</span>
+    <span class="na">template</span><span class="pi">:</span>
+      <span class="na">spec</span><span class="pi">:</span>
+        <span class="pi">{{</span><span class="nv">- if .Values.gpuCompatCheck.enabled</span> <span class="pi">}}</span>
+        <span class="na">initContainers</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">gpu-compat-check</span>
+            <span class="na">image</span><span class="pi">:</span> <span class="pi">{{</span> <span class="nv">.Values.image.repository</span> <span class="pi">}}</span><span class="s">:{{ .Values.image.tag }}</span>
+            <span class="na">command</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">bash"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">-c"</span><span class="pi">]</span>
+            <span class="na">args</span><span class="pi">:</span>
+              <span class="pi">-</span> <span class="pi">|</span>
+                <span class="no"># 3-stage check script (~150줄)</span>
+                <span class="no">...</span>
+            <span class="na">env</span><span class="pi">:</span>
+              <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">NODE_NAME</span>
+                <span class="na">valueFrom</span><span class="pi">:</span>
+                  <span class="na">fieldRef</span><span class="pi">:</span>
+                    <span class="na">fieldPath</span><span class="pi">:</span> <span class="s">spec.nodeName</span>
+              <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">TIMEOUT</span>
+                <span class="na">value</span><span class="pi">:</span> <span class="s2">"</span><span class="s">{{</span><span class="nv"> </span><span class="s">.Values.gpuCompatCheck.timeoutSeconds</span><span class="nv"> </span><span class="s">}}"</span>
+            <span class="na">resources</span><span class="pi">:</span>
+              <span class="na">limits</span><span class="pi">:</span>
+                <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="pi">{{</span> <span class="nv">.Values.gpuWorker.gpu</span> <span class="pi">}}</span>
+        <span class="pi">{{</span><span class="nv">- end</span> <span class="pi">}}</span>
+        <span class="na">containers</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">ray-gpu-worker</span>
+            <span class="c1"># ... 학습 컨테이너 ...</span>
+</code></pre></div></div>
+
+<p>설계 시 고려한 포인트는 다음과 같다.</p>
+
+<ul>
+  <li><strong>head/cpu-workers에는 추가하지 않는다</strong>: NCCL을 사용하지 않는 노드에 불필요</li>
+  <li><strong>학습과 동일 이미지를 사용한다</strong>: cuobjdump, NCCL <code class="highlighter-rouge">.so</code> 경로가 동일해야 정확한 검사가 가능</li>
+  <li><strong>GPU 리소스를 동일하게 요청한다</strong>: K8s는 <code class="highlighter-rouge">max(init, main)</code> 기준으로 스케줄링하므로 추가 GPU를 소비하지 않음</li>
+  <li><strong>NODE_NAME을 fieldRef로 주입한다</strong>: 에러 메시지에 노드 식별 정보를 포함, 이종 GPU 환경에서 어떤 노드가 문제인지 즉시 파악 가능</li>
+</ul>
+
+<p>긴급 비활성화는 <code class="highlighter-rouge">gpuCompatCheck.enabled=false</code>로 전환한다.</p>
+
+<p><br /></p>
+
+<h1 id="두-게이트의-분업">두 게이트의 분업</h1>
+
+<h2 id="비교">비교</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>CI 게이트 (빌드 타임)</th>
+      <th>런타임 게이트 (init container)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>감지 시점</td>
+      <td>이미지 빌드 시 (배포 전)</td>
+      <td>Pod 시작 시 (학습 전)</td>
+    </tr>
+    <tr>
+      <td>GPU 필요 여부</td>
+      <td>불필요 (정적 분석)</td>
+      <td>필요 (실제 GPU 할당 상태)</td>
+    </tr>
+    <tr>
+      <td>에러 메시지 명확도</td>
+      <td>높음 (SASS/PTX 목록 + missing arch)</td>
+      <td>높음 (GPU 모델 + SASS + 해결 가이드)</td>
+    </tr>
+    <tr>
+      <td>GPU 점유</td>
+      <td>없음</td>
+      <td>수 초</td>
+    </tr>
+    <tr>
+      <td>이종 GPU 대응</td>
+      <td>클러스터 known GPU set으로 정의</td>
+      <td>자동 (실제 GPU compute cap 감지)</td>
+    </tr>
+    <tr>
+      <td>검증 깊이</td>
+      <td>SASS/PTX 존재 여부만</td>
+      <td>+ driver/runtime/PyTorch binding</td>
+    </tr>
+    <tr>
+      <td>우회 방법</td>
+      <td><code class="highlighter-rouge">skip_gpu_check=true</code></td>
+      <td><code class="highlighter-rouge">gpuCompatCheck.enabled=false</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="권장-조합">권장 조합</h2>
+
+<p>두 게이트는 상호 보완 관계다.</p>
+
+<ul>
+  <li><strong>CI 게이트만 있으면</strong>: 이미지에는 커널이 있지만, 실제 할당된 GPU가 예상과 다른 경우(이종 GPU 환경)를 놓친다</li>
+  <li><strong>런타임 게이트만 있으면</strong>: 호환되지 않는 이미지가 레지스트리에 올라가는 것을 막지 못한다. 매번 Pod 시작 시마다 GPU를 점유한다</li>
+  <li><strong>둘 다 있으면</strong>: CI 게이트가 1차 방어선으로 “명백히 틀린 이미지”를 배포 전에 차단하고, 런타임 게이트가 2차 방어선으로 “실제 GPU와의 정합성”을 확인한다</li>
+</ul>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>이미지 빌드 → [CI 게이트] → 레지스트리 push → 배포 → [런타임 게이트] → 학습 시작
+     ↑ 1차 방어: "이 이미지가 맞나?"        ↑ 2차 방어: "이 GPU에서 되나?"
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>NCCL lazy init 환경에서 GPU 호환성 문제는 “학습이 한참 진행된 뒤에야” 발견되고, 에러 메시지는 root cause를 가리키지 않는다. 이 문제를 ML 엔지니어의 학습 코드를 건드리지 않고 플랫폼 레벨에서 해결하는 방법을 세 가지로 정리할 수 있다.</p>
+
+<ol>
+  <li><strong>원리</strong>: <code class="highlighter-rouge">cuobjdump</code>로 NCCL <code class="highlighter-rouge">.so</code>의 SASS/PTX 아키텍처를 추출하고, GPU의 compute capability와 major 호환성 기준으로 대조한다</li>
+  <li><strong>빌드 타임</strong>: CI 파이프라인에서 이미지 push 전에 정적 분석으로 차단한다. GPU 없이 실행 가능</li>
+  <li><strong>배포 타임</strong>: K8s init container로 실제 GPU와 NCCL의 정합성을 확인한다. 학습 진입 전 초 단위로 판정</li>
+</ol>
+
+<p>GPU 종류가 바뀌거나 NCCL 버전이 올라가도, 게이트 로직은 수정 없이 동작한다. cuobjdump가 매번 실제 바이너리를 분석하기 때문이다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-자료">참고 자료</h1>
+
+<ul>
+  <li><a href="https://docs.nvidia.com/cuda/ampere-compatibility-guide/">NVIDIA Ampere Compatibility Guide</a> — cubin minor 호환성 규칙</li>
+  <li><a href="https://docs.nvidia.com/cuda/blackwell-compatibility-guide/">NVIDIA Blackwell Compatibility Guide</a> — Blackwell GPU 지원 요구사항</li>
+  <li><a href="https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/">Matching CUDA arch and gencode for various NVIDIA architectures</a> — SM 아키텍처 매핑 정리</li>
+  <li><a href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#compute-capabilities">CUDA Programming Guide — Compute Capabilities</a> — compute capability 공식 문서</li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#ci-cd" class="page__taxonomy-item" rel="tag">CI-CD</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#cuda" class="page__taxonomy-item" rel="tag">CUDA</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#cuobjdump" class="page__taxonomy-item" rel="tag">cuobjdump</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#init-container" class="page__taxonomy-item" rel="tag">Init-Container</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nccl" class="page__taxonomy-item" rel="tag">NCCL</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-30T00:00:00+09:00">April 30, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BNCCL%5D+GPU+%ED%98%B8%ED%99%98%EC%84%B1+%EA%B2%8C%EC%9D%B4%ED%8A%B8%3A+%EB%B9%8C%EB%93%9C+%ED%83%80%EC%9E%84%EA%B3%BC+%EB%B0%B0%ED%8F%AC+%ED%83%80%EC%9E%84%EC%97%90%EC%84%9C+NCCL+%EC%BB%A4%EB%84%90+%EB%AF%B8%EC%8A%A4%EB%A7%A4%EC%B9%98+%EC%B0%A8%EB%8B%A8%ED%95%98%EA%B8%B0%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-NCCL-GPU-Compat-CI-Runtime-Gate%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-NCCL-GPU-Compat-CI-Runtime-Gate%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-NCCL-GPU-Compat-CI-Runtime-Gate%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-NCCL-GPU-Compat-CI-Runtime-Gate?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/articles/Articles-GitOps-And-Training-Task/" class="pagination--pager" title="MLOps와 GitOps: 어느 영역까지 적용할 수 있는가
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-Networking-00-Model/" class="pagination--pager" title="[Kubernetes] 네트워킹 모델: 4가지 문제와 ‘NAT 없이’ 원칙
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-NCCL-GPU-Compat-CI-Runtime-Gate/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-NCCL-GPU-Compat-CI-Runtime-Gate"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

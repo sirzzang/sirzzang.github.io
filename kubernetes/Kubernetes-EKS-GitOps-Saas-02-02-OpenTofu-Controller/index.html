@@ -1,0 +1,1691 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[EKS] GitOps 기반 SaaS: 테넌트 인프라 배포 - 2. Tofu Controller - Eraser’s StudyLog</title>
+<meta name="description" content="Tofu Controller로 Terraform CRD를 Git에 push하면 인프라가 생기고, 삭제하면 인프라가 사라지도록 GitOps 기반 인프라 배포를 진행해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[EKS] GitOps 기반 SaaS: 테넌트 인프라 배포 - 2. Tofu Controller">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller/">
+
+
+  <meta property="og:description" content="Tofu Controller로 Terraform CRD를 Git에 push하면 인프라가 생기고, 삭제하면 인프라가 사라지도록 GitOps 기반 인프라 배포를 진행해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-16T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[EKS] GitOps 기반 SaaS: 테넌트 인프라 배포 - 2. Tofu Controller">
+    <meta itemprop="description" content="Tofu Controller로 Terraform CRD를 Git에 push하면 인프라가 생기고, 삭제하면 인프라가 사라지도록 GitOps 기반 인프라 배포를 진행해 보자.">
+    <meta itemprop="datePublished" content="2026-04-16T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[EKS] GitOps 기반 SaaS: 테넌트 인프라 배포 - 2. Tofu Controller
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-16T00:00:00+09:00">2026년 04월 16일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  10 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#tofu-controller-동작-원리">Tofu Controller 동작 원리</a>
+    <ul>
+      <li><a href="#tf-controller-실행-상태-확인">tf-controller 실행 상태 확인</a></li>
+    </ul>
+  </li>
+  <li><a href="#terraform-crd-생성">Terraform CRD 생성</a>
+    <ul>
+      <li><a href="#crd-매니페스트-작성">CRD 매니페스트 작성</a></li>
+      <li><a href="#sourceref-확인">sourceRef 확인</a></li>
+      <li><a href="#kustomizationyaml에-등록">kustomization.yaml에 등록</a></li>
+    </ul>
+  </li>
+  <li><a href="#git-push-및-flux-조정">Git Push 및 Flux 조정</a>
+    <ul>
+      <li><a href="#변경-사항-커밋-및-푸시">변경 사항 커밋 및 푸시</a></li>
+      <li><a href="#flux-reconcile-트리거">Flux reconcile 트리거</a></li>
+      <li><a href="#tf-runner-pod-생성-확인">tf-runner Pod 생성 확인</a></li>
+      <li><a href="#tf-runner-로그-모니터링">tf-runner 로그 모니터링</a></li>
+    </ul>
+  </li>
+  <li><a href="#aws-리소스-검증">AWS 리소스 검증</a>
+    <ul>
+      <li><a href="#dynamodb-테이블">DynamoDB 테이블</a></li>
+      <li><a href="#sqs-큐">SQS 큐</a></li>
+    </ul>
+  </li>
+  <li><a href="#gitops-방식의-리소스-삭제">GitOps 방식의 리소스 삭제</a>
+    <ul>
+      <li><a href="#crd-파일-삭제-및-kustomizationyaml-수정">CRD 파일 삭제 및 kustomization.yaml 수정</a></li>
+      <li><a href="#커밋-푸시-reconcile">커밋, 푸시, reconcile</a></li>
+      <li><a href="#tf-runner-destroy-로그-확인">tf-runner destroy 로그 확인</a></li>
+      <li><a href="#aws-리소스-삭제-확인">AWS 리소스 삭제 확인</a></li>
+    </ul>
+  </li>
+  <li><a href="#인프라-배포-vs-앱-배포">“인프라 배포” vs “앱 배포”</a>
+    <ul>
+      <li><a href="#이번-실습에서-한-일">이번 실습에서 한 일</a></li>
+      <li><a href="#인프라-추가-vs-앱-버전-업데이트">인프라 추가 vs 앱 버전 업데이트</a></li>
+      <li><a href="#현재-상태">현재 상태</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a>
+    <ul>
+      <li><a href="#핵심-설정값">핵심 설정값</a></li>
+      <li><a href="#gitops-사이클-요약">GitOps 사이클 요약</a></li>
+    </ul>
+  </li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/ianychoi/">최영락</a>님의 AWS EKS Workshop Study(AEWS) 6주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>Tofu Controller(tf-controller)는 Kubernetes <strong>Terraform CRD</strong>를 감시하여 <code class="highlighter-rouge">terraform plan/apply</code>를 자동 실행하는 GitOps 도구다</li>
+  <li>Terraform CRD YAML을 Git에 push하면, Flux가 변경을 감지하고 tf-controller가 tf-runner Pod를 띄워 AWS 인프라를 생성한다</li>
+  <li><code class="highlighter-rouge">destroyResourcesOnDeletion: true</code> 설정 덕분에 CRD 파일을 Git에서 삭제하면 AWS 리소스도 자동으로 정리(destroy)된다</li>
+  <li>이 실습은 “테넌트 <strong>인프라</strong> 배포”이지 “<strong>앱</strong> 배포”가 아니다. 앱 배포(HelmRelease)는 이후 별도 실습에서 다룬다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="tofu-controller-동작-원리">Tofu Controller 동작 원리</h1>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GitOps-Saas-02-01-Terraform-Module/">이전 포스트</a>에서는 Terraform CLI를 직접 실행하여 <code class="highlighter-rouge">tenant-apps</code> 모듈이 어떤 AWS 리소스를 만드는지 확인했다. 이번에는 그 모듈을 <strong>GitOps 파이프라인 위에 올린다</strong>. 핵심은 Tofu Controller(이하 tf-controller)다.</p>
+
+<p>tf-controller는 Kubernetes 클러스터 안에서 동작하는 컨트롤러로, <strong>Terraform CRD</strong>(Custom Resource Definition)를 감시한다. 여기서 Terraform CRD란 “어떤 Terraform 모듈을 어떤 변수로 실행할지”를 선언하는 Kubernetes 매니페스트(manifest)다. 실행되어야 할 AWS 리소스 자체가 아니라, <strong>Terraform 실행 명세서</strong>라고 생각하면 된다.</p>
+
+<p>전체 흐름은 다음과 같다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-w6-tofu-controller-flow.png" alt="Tofu Controller 동작 흐름" class="align-center" /></p>
+
+<p>각 구성 요소의 역할을 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구성 요소</th>
+      <th>역할</th>
+      <th>수명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>tf-controller</strong></td>
+      <td>Terraform CRD를 감시하는 컨트롤러 (Deployment)</td>
+      <td>상시 실행</td>
+    </tr>
+    <tr>
+      <td><strong>tf-runner</strong></td>
+      <td>실제 <code class="highlighter-rouge">terraform</code> 명령을 실행하는 Pod</td>
+      <td>1회성 (plan/apply 완료 후 종료)</td>
+    </tr>
+    <tr>
+      <td><strong>Terraform CRD</strong></td>
+      <td>“이 모듈을, 이 변수로 실행하라”는 선언</td>
+      <td>Git에 존재하는 한 유지</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="tf-controller-실행-상태-확인">tf-controller 실행 상태 확인</h2>
+
+<p><code class="highlighter-rouge">flux-system</code> 네임스페이스의 Pod 목록을 보면 tf-controller가 실행 중인 것을 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get po <span class="nt">-n</span> flux-system
+NAME                                           READY   STATUS      RESTARTS        AGE
+capacitor-dc778678d-th54n                      1/1     Running     4 <span class="o">(</span>7h15m ago<span class="o">)</span>   40h
+ecr-credentials-sync-29619810-4dr8f            0/1     Completed   0               20s
+flux-operator-6d6f8cbc94-lcxqt                 1/1     Running     0               40h
+helm-controller-b7bbcf854-z94kj                1/1     Running     0               40h
+kustomize-controller-77c78b7f4d-zld4m          1/1     Running     0               40h
+notification-controller-58cfb55954-xr7nc       1/1     Running     0               40h
+pool-1-tf-runner                               1/1     Running     0               51s
+source-controller-6c64896f47-q8z96             1/1     Running     0               40h
+tf-controller-7b8cb5d4-m2cdx                   1/1     Running     0               40h
+</code></pre></div></div>
+
+<p>두 가지를 주목해서 살펴 본다.</p>
+
+<ol>
+  <li><strong><code class="highlighter-rouge">pool-1-tf-runner</code></strong>: AGE가 51s로 매우 짧다. tf-controller가 기존 <code class="highlighter-rouge">pool-1</code> 테넌트의 Terraform CRD를 주기적으로 reconcile하면서 띄운 runner Pod다. plan/apply가 끝나면 종료되므로 AGE가 항상 짧은 것이 정상이다.</li>
+  <li><strong><code class="highlighter-rouge">ecr-credentials-sync-29619810-4dr8f</code></strong>: STATUS가 <code class="highlighter-rouge">Completed</code>이고, 이름 끝에 숫자+해시가 붙어 있다. 이것은 컨트롤러가 아니라 <strong>CronJob이 주기적으로 띄우는 Job Pod</strong>다. ECR(Elastic Container Registry) 인증 토큰은 12시간마다 만료되는데, Flux의 source-controller나 helm-controller가 ECR에서 이미지와 차트를 pull하려면 유효한 토큰이 필요하다. 이 CronJob이 5분마다 실행되어 <code class="highlighter-rouge">ecr-credentials</code> Secret을 갱신한다.
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="nv">$ </span>kubectl get cronjob <span class="nt">-n</span> flux-system ecr-credentials-sync
+ NAME                   SCHEDULE      SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+ ecr-credentials-sync   <span class="k">*</span>/5 <span class="k">*</span> <span class="k">*</span> <span class="k">*</span> <span class="k">*</span>   False     0        2m2s            41h
+</code></pre></div>    </div>
+  </li>
+</ol>
+
+<p><br /></p>
+
+<h1 id="terraform-crd-생성">Terraform CRD 생성</h1>
+
+<p><code class="highlighter-rouge">example-tenant</code>를 위한 Terraform CRD 파일을 만들어 보자.</p>
+
+<h2 id="crd-매니페스트-작성">CRD 매니페스트 작성</h2>
+
+<p><code class="highlighter-rouge">application-plane/production/tenants/</code> 경로에 <code class="highlighter-rouge">example-tenant-terraform-crd.yaml</code>을 생성한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nn">---</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">infra.contrib.fluxcd.io/v1alpha2</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Terraform</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">example-tenant</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">flux-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">path</span><span class="pi">:</span> <span class="s">./terraform/modules/tenant-apps</span>
+  <span class="na">interval</span><span class="pi">:</span> <span class="s">1m</span>
+  <span class="na">approvePlan</span><span class="pi">:</span> <span class="s">auto</span>
+  <span class="na">destroyResourcesOnDeletion</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">sourceRef</span><span class="pi">:</span>
+    <span class="na">kind</span><span class="pi">:</span> <span class="s">GitRepository</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">terraform-v0-0-1</span>
+  <span class="na">vars</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">tenant_id</span>
+      <span class="na">value</span><span class="pi">:</span> <span class="s">example-tenant</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s2">"</span><span class="s">enable_producer"</span>
+      <span class="na">value</span><span class="pi">:</span> <span class="no">true</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s2">"</span><span class="s">enable_consumer"</span>
+      <span class="na">value</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">writeOutputsToSecret</span><span class="pi">:</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">example-tenant-infra-output</span>
+</code></pre></div></div>
+
+<p>주요 필드를 살펴보면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>필드</th>
+      <th>값</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">spec.path</code></td>
+      <td><code class="highlighter-rouge">./terraform/modules/tenant-apps</code></td>
+      <td>Git 저장소 내 Terraform 모듈 경로</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">spec.sourceRef</code></td>
+      <td><code class="highlighter-rouge">GitRepository/terraform-v0-0-1</code></td>
+      <td>모듈을 가져올 Git 소스</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">spec.vars</code></td>
+      <td><code class="highlighter-rouge">tenant_id</code>, <code class="highlighter-rouge">enable_producer</code>, <code class="highlighter-rouge">enable_consumer</code></td>
+      <td>모듈에 전달할 변수</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">spec.approvePlan</code></td>
+      <td><code class="highlighter-rouge">auto</code></td>
+      <td>plan 결과를 자동 승인하여 바로 apply</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">spec.destroyResourcesOnDeletion</code></td>
+      <td><code class="highlighter-rouge">true</code></td>
+      <td>CRD 삭제 시 <code class="highlighter-rouge">terraform destroy</code> 자동 실행</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">spec.writeOutputsToSecret</code></td>
+      <td><code class="highlighter-rouge">example-tenant-infra-output</code></td>
+      <td>apply 결과(output)를 K8s Secret에 저장</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">approvePlan: auto</code>는 plan 결과를 사람이 확인하지 않고 바로 apply하겠다는 뜻이다. 실습 환경에서는 편리하지만, 프로덕션에서는 승인 절차를 두는 것이 안전하다.</p>
+
+<h2 id="sourceref-확인">sourceRef 확인</h2>
+
+<p><code class="highlighter-rouge">sourceRef</code>가 가리키는 <code class="highlighter-rouge">terraform-v0-0-1</code>은 Git 태그 <code class="highlighter-rouge">v0.0.1</code>을 참조하는 GitRepository 리소스다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get GitRepository terraform-v0-0-1 <span class="nt">-n</span> flux-system <span class="nt">-o</span> yaml
+</code></pre></div></div>
+
+<details>
+  <summary><b>전체 출력</b></summary>
+
+  <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">source.toolkit.fluxcd.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">GitRepository</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">terraform-v0-0-1</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">flux-system</span>
+  <span class="na">labels</span><span class="pi">:</span>
+    <span class="s">kustomize.toolkit.fluxcd.io/name</span><span class="pi">:</span> <span class="s">sources</span>
+    <span class="s">kustomize.toolkit.fluxcd.io/namespace</span><span class="pi">:</span> <span class="s">flux-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">interval</span><span class="pi">:</span> <span class="s">300s</span>
+  <span class="na">ref</span><span class="pi">:</span>
+    <span class="na">tag</span><span class="pi">:</span> <span class="s">v0.0.1</span>
+  <span class="na">secretRef</span><span class="pi">:</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">flux-system</span>
+  <span class="na">timeout</span><span class="pi">:</span> <span class="s">60s</span>
+  <span class="na">url</span><span class="pi">:</span> <span class="s">http://10.x.x.x:3000/admin/eks-saas-gitops.git</span>
+<span class="na">status</span><span class="pi">:</span>
+  <span class="na">artifact</span><span class="pi">:</span>
+    <span class="na">revision</span><span class="pi">:</span> <span class="s">v0.0.1@sha1:2d19a84a88a6ded7c9aa8ac76508452e3f1d48b2</span>
+  <span class="na">conditions</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">reason</span><span class="pi">:</span> <span class="s">Succeeded</span>
+      <span class="na">status</span><span class="pi">:</span> <span class="s2">"</span><span class="s">True"</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">Ready</span>
+</code></pre></div>  </div>
+
+</details>
+
+<p>핵심은 <code class="highlighter-rouge">spec.ref.tag: v0.0.1</code>이다. tf-controller는 이 GitRepository를 통해 태그 <code class="highlighter-rouge">v0.0.1</code> 시점의 Terraform 모듈 코드를 pull하여 사용한다. 태그가 고정되어 있으므로 모듈 버전이 의도치 않게 변경될 걱정은 없다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>git tag
+v0.0.1
+</code></pre></div></div>
+
+<h2 id="kustomizationyaml에-등록">kustomization.yaml에 등록</h2>
+
+<p>CRD 파일을 만들었다고 끝이 아니다. <code class="highlighter-rouge">kustomization.yaml</code>에 새 파일을 등록해야 Flux가 인식한다. <a href="/kubernetes/Kubernetes-EKS-GitOps-Saas-02-00-02-Cluster-Flux-Architecture/">Flux 아키텍처 분석</a> 포스트에서 살펴본 것처럼, Kustomize의 <code class="highlighter-rouge">resources</code> 목록에 없는 파일은 폴더에 존재하더라도 Flux가 무시한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># application-plane/production/tenants/kustomization.yaml</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kustomize.config.k8s.io/v1beta1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Kustomization</span>
+<span class="na">resources</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="s">basic</span>
+  <span class="pi">-</span> <span class="s">advanced</span>
+  <span class="pi">-</span> <span class="s">premium</span>
+  <span class="pi">-</span> <span class="s">example-tenant-terraform-crd.yaml</span>  <span class="c1"># 추가</span>
+</code></pre></div></div>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-w6-kustomization-add-crd.png" alt="kustomization.yaml에 CRD 등록" class="align-center" /></p>
+
+<p><br /></p>
+
+<h1 id="git-push-및-flux-조정">Git Push 및 Flux 조정</h1>
+
+<h2 id="변경-사항-커밋-및-푸시">변경 사항 커밋 및 푸시</h2>
+
+<p>작성한 CRD 파일과 수정한 <code class="highlighter-rouge">kustomization.yaml</code>을 Git에 push한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">cd</span> /home/ec2-user/environment/gitops-gitea-repo/
+<span class="nv">$ </span>git add <span class="nb">.</span>
+<span class="nv">$ </span>git commit <span class="nt">-m</span> <span class="s2">"Added example terraform CRD for testing"</span>
+<span class="nv">$ </span>git push origin main
+</code></pre></div></div>
+
+<h2 id="flux-reconcile-트리거">Flux reconcile 트리거</h2>
+
+<p>Flux는 기본적으로 <code class="highlighter-rouge">interval</code>에 설정된 주기마다 Git 변경을 감지하지만, 즉시 반영하고 싶다면 수동으로 reconcile을 트리거할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>flux reconcile <span class="nb">source </span>git flux-system
+► annotating GitRepository flux-system <span class="k">in </span>flux-system namespace
+✔ GitRepository annotated
+◎ waiting <span class="k">for </span>GitRepository reconciliation
+✔ fetched revision refs/heads/main@sha1:c4c06b2bd36014dae4e3dfeb2f3b50c50e9c8ec6
+</code></pre></div></div>
+
+<h2 id="tf-runner-pod-생성-확인">tf-runner Pod 생성 확인</h2>
+
+<p>reconcile이 완료되면 tf-controller가 새로 추가된 Terraform CRD를 감지하고, <code class="highlighter-rouge">example-tenant-tf-runner</code> Pod를 생성한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Flux Kustomization(dataplane-tenants)
+  → Terraform CRD(example-tenant) 감지
+    → tf-controller
+      → Pod/example-tenant-tf-runner 생성
+</code></pre></div></div>
+
+<p>여기서 Flux의 역할과 tf-controller의 역할을 구분할 필요가 있다. Flux는 tf-controller라는 도구를 HelmRelease로 설치한 주체일 뿐이고, <strong>tf-runner Pod를 직접 띄우는 것은 tf-controller</strong>다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>계층</th>
+      <th>역할</th>
+      <th>생성 주체</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>HelmRelease/tf-controller</td>
+      <td>tf-controller 설치 선언</td>
+      <td>Flux Kustomization(infrastructure)</td>
+    </tr>
+    <tr>
+      <td>Deployment/tf-controller</td>
+      <td>tf-controller 본체 (상시)</td>
+      <td>helm-controller가 차트를 풀어서 생성</td>
+    </tr>
+    <tr>
+      <td><strong>Pod/example-tenant-tf-runner</strong></td>
+      <td><strong>terraform plan/apply 실행기 (1회성)</strong></td>
+      <td><strong>tf-controller가 Terraform CRD를 보고 직접 생성</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>tf-runner Pod는 IRSA(IAM Roles for Service Accounts)가 연결된 <code class="highlighter-rouge">tf-runner</code> ServiceAccount로 실행되며, 이를 통해 AWS API(SQS, DynamoDB, IAM 생성)에 대한 권한을 얻는다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get po <span class="nt">-n</span> flux-system <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>tf-runner
+NAME                       READY   STATUS    RESTARTS   AGE
+example-tenant-tf-runner   1/1     Running   0          18s
+</code></pre></div></div>
+
+<h2 id="tf-runner-로그-모니터링">tf-runner 로그 모니터링</h2>
+
+<p>tf-runner Pod의 로그를 보면 Terraform이 실행되는 전체 과정을 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl logs po/example-tenant-tf-runner <span class="nt">-n</span> flux-system <span class="nt">-f</span>
+</code></pre></div></div>
+
+<p>핵심 로그를 단계별로 발췌하면 다음과 같다.</p>
+
+<p><strong>init 단계</strong> — Terraform 초기화:</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>{"logger":"runner.terraform","msg":"initializing","instance-id":"..."}
+</code></pre></div></div>
+
+<p><strong>plan 단계</strong> — 변경 계획 생성:</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>{"logger":"runner.terraform","msg":"creating a plan","instance-id":"..."}
+{"logger":"runner.terraform","msg":"save the plan","instance-id":"..."}
+</code></pre></div></div>
+
+<p><strong>apply 단계</strong> — 리소스 생성:</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>{"logger":"runner.terraform","msg":"running apply","instance-id":"..."}
+random_string.random_suffix: Creating...
+random_string.random_suffix: Creation complete after 0s [id=s2v]
+aws_sqs_queue.consumer_sqs[0]: Creating...
+module.producer_irsa_role[0].aws_iam_role.this[0]: Creating...
+module.consumer_irsa_role[0].aws_iam_role.this[0]: Creating...
+aws_dynamodb_table.consumer_ddb[0]: Creating...
+# ... (중간 생략) ...
+Apply complete! Resources: 11 added, 0 changed, 0 destroyed.
+</code></pre></div></div>
+
+<p><strong>outputs 단계</strong> — 결과 저장:</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Outputs:
+
+consumer = {
+  "irsa_role" = "arn:aws:iam::123456789012:role/consumer-role-example-tenant"
+}
+producer = {
+  "irsa_role" = "arn:aws:iam::123456789012:role/producer-role-example-tenant"
+}
+{"logger":"runner.terraform","msg":"write outputs to secret","instance-id":"..."}
+{"logger":"runner.terraform","msg":"cleanup TmpDir","instance-id":"..."}
+</code></pre></div></div>
+
+<p>총 11개의 AWS 리소스가 생성되었다. 이전 포스트에서 <code class="highlighter-rouge">terraform plan</code>으로 확인했던 것과 동일한 리소스(SQS, DynamoDB, IAM Role, IAM Policy, SSM Parameter 등)가 만들어진 것이다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-w6-tf-runner-apply-logs.png" alt="tf-runner apply 로그" class="align-center" /></p>
+
+<details>
+  <summary><b>tf-runner 전체 로그 (apply)</b></summary>
+
+  <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Starting the runner... version  sha
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"preparing for Upload and Extraction","instance-id":""}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"write backend config","instance-id":"","path":"/tmp/flux-system-example-tenant/terraform/modules/tenant-apps","config":"backend_override.tf"}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"write config to file","instance-id":"","filePath":"/tmp/flux-system-example-tenant/terraform/modules/tenant-apps/backend_override.tf"}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"looking for path","instance-id":"","file":"terraform"}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"creating new terraform","instance-id":"...","workingDir":"/tmp/flux-system-example-tenant/terraform/modules/tenant-apps","execPath":"/usr/local/bin/terraform"}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"setting envvars","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"getting envvars from os environments","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"setting up the input variables","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"mapping the Spec.Values","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"mapping the Spec.Vars","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"mapping the Spec.VarsFrom","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"generating the template founds"}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"main.tf.tpl not found, skipping"}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"initializing","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"mapping the Spec.BackendConfigsFrom","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"workspace select"}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"creating a plan","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"save the plan","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"loading plan from secret","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"running apply","instance-id":"..."}
+random_string.random_suffix: Creating...
+random_string.random_suffix: Creation complete after 0s [id=s2v]
+aws_sqs_queue.consumer_sqs[0]: Creating...
+module.producer_irsa_role[0].aws_iam_role.this[0]: Creating...
+module.consumer_irsa_role[0].aws_iam_role.this[0]: Creating...
+aws_dynamodb_table.consumer_ddb[0]: Creating...
+module.producer_irsa_role[0].aws_iam_role.this[0]: Creation complete after 0s [id=producer-role-example-tenant]
+module.consumer_irsa_role[0].aws_iam_role.this[0]: Creation complete after 0s [id=consumer-role-example-tenant]
+aws_dynamodb_table.consumer_ddb[0]: Creation complete after 7s [id=consumer-example-tenant-s2v]
+aws_ssm_parameter.dedicated_consumer_ddb[0]: Creating...
+aws_ssm_parameter.dedicated_consumer_ddb[0]: Creation complete after 0s [id=/example-tenant/consumer_ddb]
+aws_sqs_queue.consumer_sqs[0]: Still creating... [10s elapsed]
+aws_sqs_queue.consumer_sqs[0]: Still creating... [20s elapsed]
+aws_sqs_queue.consumer_sqs[0]: Creation complete after 25s [id=https://sqs.ap-northeast-2.amazonaws.com/123456789012/consumer-example-tenant-s2v]
+aws_ssm_parameter.dedicated_consumer_sqs[0]: Creating...
+aws_ssm_parameter.dedicated_consumer_sqs[0]: Creation complete after 0s [id=/example-tenant/consumer_sqs]
+aws_iam_policy.producer-iampolicy[0]: Creating...
+aws_iam_policy.consumer-iampolicy[0]: Creating...
+aws_iam_policy.producer-iampolicy[0]: Creation complete after 0s [id=arn:aws:iam::123456789012:policy/producer-policy-example-tenant]
+aws_iam_policy.consumer-iampolicy[0]: Creation complete after 0s [id=arn:aws:iam::123456789012:policy/consumer-policy-example-tenant]
+module.producer_irsa_role[0].aws_iam_role_policy_attachment.this["policy"]: Creating...
+module.consumer_irsa_role[0].aws_iam_role_policy_attachment.this["policy"]: Creating...
+module.producer_irsa_role[0].aws_iam_role_policy_attachment.this["policy"]: Creation complete after 0s [id=producer-role-example-tenant/arn:aws:iam::123456789012:policy/producer-policy-example-tenant]
+module.consumer_irsa_role[0].aws_iam_role_policy_attachment.this["policy"]: Creation complete after 0s [id=consumer-role-example-tenant/arn:aws:iam::123456789012:policy/consumer-policy-example-tenant]
+
+Apply complete! Resources: 11 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+consumer = {
+  "irsa_role" = "arn:aws:iam::123456789012:role/consumer-role-example-tenant"
+}
+producer = {
+  "irsa_role" = "arn:aws:iam::123456789012:role/producer-role-example-tenant"
+}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"creating outputs","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"write outputs to secret","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"cleanup TmpDir","instance-id":"...","tmpDir":"/tmp/flux-system-example-tenant"}
+</code></pre></div>  </div>
+
+</details>
+
+<p><br /></p>
+
+<h1 id="aws-리소스-검증">AWS 리소스 검증</h1>
+
+<p>tf-runner가 생성한 AWS 리소스를 직접 확인해 보자.</p>
+
+<h2 id="dynamodb-테이블">DynamoDB 테이블</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>aws dynamodb list-tables
+<span class="o">{</span>
+    <span class="s2">"TableNames"</span>: <span class="o">[</span>
+        <span class="s2">"consumer-example-tenant-s2v"</span>,
+        <span class="s2">"consumer-pool-1-bbi"</span>
+    <span class="o">]</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>기존에 <code class="highlighter-rouge">pool-1</code> 테넌트의 테이블만 있었는데, <code class="highlighter-rouge">consumer-example-tenant-s2v</code>가 새로 추가되었다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-w6-dynamodb-created.png" alt="DynamoDB 테이블 생성 확인" class="align-center" /></p>
+
+<h2 id="sqs-큐">SQS 큐</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>aws sqs list-queues
+<span class="o">{</span>
+    <span class="s2">"QueueUrls"</span>: <span class="o">[</span>
+        <span class="s2">"https://sqs.ap-northeast-2.amazonaws.com/123456789012/argoworkflows-deployment-queue"</span>,
+        <span class="s2">"https://sqs.ap-northeast-2.amazonaws.com/123456789012/argoworkflows-offboarding-queue"</span>,
+        <span class="s2">"https://sqs.ap-northeast-2.amazonaws.com/123456789012/argoworkflows-onboarding-queue"</span>,
+        <span class="s2">"https://sqs.ap-northeast-2.amazonaws.com/123456789012/consumer-example-tenant-s2v"</span>,
+        <span class="s2">"https://sqs.ap-northeast-2.amazonaws.com/123456789012/consumer-pool-1-bbi"</span>,
+        <span class="s2">"https://sqs.ap-northeast-2.amazonaws.com/123456789012/eks-saas-gitops"</span>
+    <span class="o">]</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>마찬가지로 <code class="highlighter-rouge">consumer-example-tenant-s2v</code> 큐가 새로 생성되었다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-w6-sqs-created.png" alt="SQS 큐 생성 확인" class="align-center" /></p>
+
+<p><br /></p>
+
+<h1 id="gitops-방식의-리소스-삭제">GitOps 방식의 리소스 삭제</h1>
+
+<p>생성을 확인했으니 이제 삭제다. GitOps에서 리소스 삭제는 <strong>파일 삭제</strong>로 수행한다. CRD에 <code class="highlighter-rouge">destroyResourcesOnDeletion: true</code>를 설정해 두었기 때문에, CRD가 클러스터에서 사라지면 tf-controller가 <code class="highlighter-rouge">terraform destroy</code>를 실행하여 AWS 리소스까지 정리한다.</p>
+
+<h2 id="crd-파일-삭제-및-kustomizationyaml-수정">CRD 파일 삭제 및 kustomization.yaml 수정</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rm application-plane/production/tenants/example-tenant-terraform-crd.yaml
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">kustomization.yaml</code>에서도 참조를 제거한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># application-plane/production/tenants/kustomization.yaml</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kustomize.config.k8s.io/v1beta1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Kustomization</span>
+<span class="na">resources</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="s">basic</span>
+  <span class="pi">-</span> <span class="s">advanced</span>
+  <span class="pi">-</span> <span class="s">premium</span>
+  <span class="c1"># example-tenant-terraform-crd.yaml 제거됨</span>
+</code></pre></div></div>
+
+<h2 id="커밋-푸시-reconcile">커밋, 푸시, reconcile</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>git add <span class="nb">.</span>
+<span class="nv">$ </span>git commit <span class="nt">-m</span> <span class="s2">"Removed Terraform CRD and reference from kustomization.yaml"</span>
+<span class="nv">$ </span>git push origin main
+<span class="nv">$ </span>flux reconcile <span class="nb">source </span>git flux-system
+► annotating GitRepository flux-system <span class="k">in </span>flux-system namespace
+✔ GitRepository annotated
+◎ waiting <span class="k">for </span>GitRepository reconciliation
+✔ fetched revision refs/heads/main@sha1:531e8336e2a508a53fe70a69374549d50902b137
+</code></pre></div></div>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-w6-gitea-crd-removed.png" alt="Gitea에서 CRD 파일 삭제 확인" class="align-center" /></p>
+
+<h2 id="tf-runner-destroy-로그-확인">tf-runner destroy 로그 확인</h2>
+
+<p>reconcile이 완료되면 tf-controller가 CRD 삭제를 감지하고, 다시 tf-runner Pod를 띄워 <code class="highlighter-rouge">terraform destroy</code>를 실행한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl logs po/example-tenant-tf-runner <span class="nt">-n</span> flux-system <span class="nt">-f</span>
+</code></pre></div></div>
+
+<p>핵심 로그를 발췌하면 다음과 같다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>{"logger":"runner.terraform","msg":"running apply","instance-id":"..."}
+module.consumer_irsa_role[0].aws_iam_role_policy_attachment.this["policy"]: Destroying...
+module.producer_irsa_role[0].aws_iam_role_policy_attachment.this["policy"]: Destroying...
+aws_iam_policy.consumer-iampolicy[0]: Destroying...
+module.consumer_irsa_role[0].aws_iam_role.this[0]: Destroying...
+aws_iam_policy.producer-iampolicy[0]: Destroying...
+module.producer_irsa_role[0].aws_iam_role.this[0]: Destroying...
+aws_ssm_parameter.dedicated_consumer_ddb[0]: Destroying...
+aws_dynamodb_table.consumer_ddb[0]: Destroying...
+aws_ssm_parameter.dedicated_consumer_sqs[0]: Destroying...
+aws_sqs_queue.consumer_sqs[0]: Destroying...
+random_string.random_suffix: Destroying...
+
+Apply complete! Resources: 0 added, 0 changed, 11 destroyed.
+</code></pre></div></div>
+
+<p>생성할 때와 정확히 대칭적으로, 11개 리소스가 모두 삭제되었다.</p>
+
+<details>
+  <summary><b>tf-runner 전체 로그 (destroy)</b></summary>
+
+  <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Starting the runner... version  sha
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"preparing for Upload and Extraction","instance-id":""}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"write backend config","instance-id":"","path":"/tmp/flux-system-example-tenant/terraform/modules/tenant-apps","config":"backend_override.tf"}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"write config to file","instance-id":"","filePath":"/tmp/flux-system-example-tenant/terraform/modules/tenant-apps/backend_override.tf"}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"looking for path","instance-id":"","file":"terraform"}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"creating new terraform","instance-id":"...","workingDir":"/tmp/flux-system-example-tenant/terraform/modules/tenant-apps","execPath":"/usr/local/bin/terraform"}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"setting envvars","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"getting envvars from os environments","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"setting up the input variables","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"mapping the Spec.Values","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"mapping the Spec.Vars","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"mapping the Spec.VarsFrom","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"generating the template founds"}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"main.tf.tpl not found, skipping"}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"initializing","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"mapping the Spec.BackendConfigsFrom","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"workspace select"}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"creating a plan","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"save the plan","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"loading plan from secret","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"running apply","instance-id":"..."}
+module.consumer_irsa_role[0].aws_iam_role_policy_attachment.this["policy"]: Destroying... [id=consumer-role-example-tenant/arn:aws:iam::123456789012:policy/consumer-policy-example-tenant]
+module.producer_irsa_role[0].aws_iam_role_policy_attachment.this["policy"]: Destroying... [id=producer-role-example-tenant/arn:aws:iam::123456789012:policy/producer-policy-example-tenant]
+module.consumer_irsa_role[0].aws_iam_role_policy_attachment.this["policy"]: Destruction complete after 0s
+aws_iam_policy.consumer-iampolicy[0]: Destroying... [id=arn:aws:iam::123456789012:policy/consumer-policy-example-tenant]
+module.consumer_irsa_role[0].aws_iam_role.this[0]: Destroying... [id=consumer-role-example-tenant]
+module.producer_irsa_role[0].aws_iam_role_policy_attachment.this["policy"]: Destruction complete after 0s
+aws_iam_policy.producer-iampolicy[0]: Destroying... [id=arn:aws:iam::123456789012:policy/producer-policy-example-tenant]
+module.producer_irsa_role[0].aws_iam_role.this[0]: Destroying... [id=producer-role-example-tenant]
+aws_iam_policy.consumer-iampolicy[0]: Destruction complete after 1s
+aws_ssm_parameter.dedicated_consumer_ddb[0]: Destroying... [id=/example-tenant/consumer_ddb]
+aws_ssm_parameter.dedicated_consumer_ddb[0]: Destruction complete after 0s
+aws_dynamodb_table.consumer_ddb[0]: Destroying... [id=consumer-example-tenant-s2v]
+aws_iam_policy.producer-iampolicy[0]: Destruction complete after 1s
+aws_ssm_parameter.dedicated_consumer_sqs[0]: Destroying... [id=/example-tenant/consumer_sqs]
+aws_ssm_parameter.dedicated_consumer_sqs[0]: Destruction complete after 0s
+aws_sqs_queue.consumer_sqs[0]: Destroying... [id=https://sqs.ap-northeast-2.amazonaws.com/123456789012/consumer-example-tenant-s2v]
+module.consumer_irsa_role[0].aws_iam_role.this[0]: Destruction complete after 2s
+module.producer_irsa_role[0].aws_iam_role.this[0]: Destruction complete after 2s
+aws_dynamodb_table.consumer_ddb[0]: Destruction complete after 7s
+aws_sqs_queue.consumer_sqs[0]: Still destroying... [10s elapsed]
+aws_sqs_queue.consumer_sqs[0]: Still destroying... [20s elapsed]
+aws_sqs_queue.consumer_sqs[0]: Still destroying... [30s elapsed]
+aws_sqs_queue.consumer_sqs[0]: Still destroying... [40s elapsed]
+aws_sqs_queue.consumer_sqs[0]: Still destroying... [50s elapsed]
+aws_sqs_queue.consumer_sqs[0]: Still destroying... [1m0s elapsed]
+aws_sqs_queue.consumer_sqs[0]: Still destroying... [1m10s elapsed]
+aws_sqs_queue.consumer_sqs[0]: Still destroying... [1m20s elapsed]
+aws_sqs_queue.consumer_sqs[0]: Still destroying... [1m30s elapsed]
+aws_sqs_queue.consumer_sqs[0]: Still destroying... [1m40s elapsed]
+aws_sqs_queue.consumer_sqs[0]: Still destroying... [1m50s elapsed]
+aws_sqs_queue.consumer_sqs[0]: Still destroying... [2m0s elapsed]
+aws_sqs_queue.consumer_sqs[0]: Destruction complete after 2m10s
+random_string.random_suffix: Destroying... [id=s2v]
+random_string.random_suffix: Destruction complete after 0s
+
+Apply complete! Resources: 0 added, 0 changed, 11 destroyed.
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"finalize the output secrets","instance-id":"..."}
+{"level":"info","ts":"...","logger":"runner.terraform","msg":"cleanup TmpDir","instance-id":"...","tmpDir":"/tmp/flux-system-example-tenant"}
+</code></pre></div>  </div>
+
+</details>
+
+<h2 id="aws-리소스-삭제-확인">AWS 리소스 삭제 확인</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>aws dynamodb list-tables
+<span class="o">{</span>
+    <span class="s2">"TableNames"</span>: <span class="o">[</span>
+        <span class="s2">"consumer-pool-1-bbi"</span>
+    <span class="o">]</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">consumer-example-tenant-*</code> 테이블이 사라졌다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>aws sqs list-queues
+<span class="o">{</span>
+    <span class="s2">"QueueUrls"</span>: <span class="o">[</span>
+        <span class="s2">"https://sqs.ap-northeast-2.amazonaws.com/123456789012/argoworkflows-deployment-queue"</span>,
+        <span class="s2">"https://sqs.ap-northeast-2.amazonaws.com/123456789012/argoworkflows-offboarding-queue"</span>,
+        <span class="s2">"https://sqs.ap-northeast-2.amazonaws.com/123456789012/argoworkflows-onboarding-queue"</span>,
+        <span class="s2">"https://sqs.ap-northeast-2.amazonaws.com/123456789012/consumer-pool-1-bbi"</span>,
+        <span class="s2">"https://sqs.ap-northeast-2.amazonaws.com/123456789012/eks-saas-gitops"</span>
+    <span class="o">]</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">consumer-example-tenant-*</code> 큐도 사라졌다. <strong>파일을 추가하면 인프라가 생기고, 파일을 삭제하면 인프라가 사라진다.</strong> Git이 Single Source of Truth라는 GitOps의 핵심 원칙이 그대로 적용된 것이다.</p>
+
+<p><br /></p>
+
+<h1 id="인프라-배포-vs-앱-배포">“인프라 배포” vs “앱 배포”</h1>
+
+<p>이번 실습에서 정확히 무엇을 했는지 정리할 필요가 있다.</p>
+
+<h2 id="이번-실습에서-한-일">이번 실습에서 한 일</h2>
+
+<p>Terraform CRD를 Git에 push하여 <code class="highlighter-rouge">example-tenant</code>를 위한 <strong>AWS 인프라</strong>(SQS, DynamoDB, IAM Role, IAM Policy, SSM Parameter)만 생성하고 삭제했다. 테넌트에 대한 HelmRelease(앱 배포)는 추가하지 않았다.</p>
+
+<h2 id="인프라-추가-vs-앱-버전-업데이트">인프라 추가 vs 앱 버전 업데이트</h2>
+
+<p>두 흐름 모두 “Git push하면 Flux가 감지하여 자동 반영”이라는 패턴은 동일하지만, push하는 내용과 결과가 다르다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>인프라 배포 (이번 실습)</th>
+      <th>앱 배포 (이후 실습)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Git에 push하는 것</td>
+      <td>Terraform CRD YAML</td>
+      <td>소스 코드 변경</td>
+    </tr>
+    <tr>
+      <td>Flux가 하는 일</td>
+      <td>Tofu Controller로 인프라 생성</td>
+      <td>HelmRelease로 Pod 재배포</td>
+    </tr>
+    <tr>
+      <td>결과</td>
+      <td>AWS 리소스 생성</td>
+      <td>새 버전 컨테이너 배포</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="현재-상태">현재 상태</h2>
+
+<p>환경 세팅 시 <code class="highlighter-rouge">install.sh</code>가 이미 <code class="highlighter-rouge">pool-1</code> 테넌트에 대한 인프라와 앱을 함께 배포해 두었다. 이번 실습에서는 <code class="highlighter-rouge">example-tenant</code>의 인프라만 추가했다가 다시 삭제한 것이다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>install.sh 실행 시 이미 만들어진 것:
+├── pool-1 네임스페이스
+│   ├── Producer Pod (공유)       ← HelmRelease/pool-1로 배포
+│   ├── Consumer Pod (공유)       ← HelmRelease/pool-1로 배포
+│   ├── 공유 SQS 큐              ← Terraform CRD(pool-1)로 생성
+│   └── 공유 DynamoDB 테이블      ← Terraform CRD(pool-1)로 생성
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>실습 전:  pool-1(앱+인프라)
+실습 후:  pool-1(앱+인프라) + example-tenant(인프라만) → 삭제됨
+</code></pre></div></div>
+
+<p>이후 실습에서 테넌트에 대한 HelmRelease까지 추가하면, 그때 비로소 <strong>인프라 + 앱이 완성된 테넌트 환경</strong>이 된다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>이번 포스트에서는 Tofu Controller를 통해 GitOps 기반 인프라 배포의 전체 사이클(생성, 검증, 삭제)을 경험했다.</p>
+
+<h2 id="핵심-설정값">핵심 설정값</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>설정</th>
+      <th>값</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">approvePlan</code></td>
+      <td><code class="highlighter-rouge">auto</code></td>
+      <td>plan 자동 승인 후 apply</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">destroyResourcesOnDeletion</code></td>
+      <td><code class="highlighter-rouge">true</code></td>
+      <td>CRD 삭제 시 <code class="highlighter-rouge">terraform destroy</code> 자동 실행</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">writeOutputsToSecret</code></td>
+      <td>Secret 이름</td>
+      <td>apply 결과를 K8s Secret에 저장</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">sourceRef</code></td>
+      <td>GitRepository 참조</td>
+      <td>Terraform 모듈을 가져올 Git 소스</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">interval</code></td>
+      <td><code class="highlighter-rouge">1m</code></td>
+      <td>reconcile 주기</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">destroyResourcesOnDeletion: true</code>는 편리하지만 양면성이 있다. 의도적으로 테넌트를 오프보딩할 때는 파일 삭제만으로 인프라까지 깔끔하게 정리되어 편리하다. 반면, 실수로 파일을 삭제하거나 잘못된 브랜치를 push하면 프로덕션 인프라가 날아갈 수 있다. 프로덕션 환경에서는 브랜치 보호 규칙(branch protection)이나 별도의 승인 절차를 반드시 함께 구성해야 한다.</p>
+
+<h2 id="gitops-사이클-요약">GitOps 사이클 요약</h2>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[생성]  YAML 추가 → git push → Flux 감지 → tf-controller → terraform apply → AWS 리소스 생성
+[삭제]  YAML 삭제 → git push → Flux 감지 → tf-controller → terraform destroy → AWS 리소스 삭제
+</code></pre></div></div>
+
+<p>두 흐름이 완전히 대칭적이다. “어떤 인프라가 존재해야 하는가”를 Git에 선언하면, 클러스터가 그 상태를 자동으로 맞춘다.</p>
+
+<p>이번 실습에서는 테넌트 인프라만 다루었다. 다음 실습에서는 HelmRelease를 추가하여 테넌트에 실제 SaaS 앱(Producer, Consumer)을 배포하는 과정을 살펴볼 예정이다.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study-week-6" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study-Week-6</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws" class="page__taxonomy-item" rel="tag">AWS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#flux" class="page__taxonomy-item" rel="tag">Flux</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gitops" class="page__taxonomy-item" rel="tag">GitOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#saas" class="page__taxonomy-item" rel="tag">SaaS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#terraform" class="page__taxonomy-item" rel="tag">Terraform</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#tofu-controller" class="page__taxonomy-item" rel="tag">Tofu-Controller</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-16T00:00:00+09:00">April 16, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEKS%5D+GitOps+%EA%B8%B0%EB%B0%98+SaaS%3A+%ED%85%8C%EB%84%8C%ED%8A%B8+%EC%9D%B8%ED%94%84%EB%9D%BC+%EB%B0%B0%ED%8F%AC+-+2.+Tofu+Controller%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-EKS-GitOps-Saas-02-01-Terraform-Module/" class="pagination--pager" title="[EKS] GitOps 기반 SaaS: 테넌트 인프라 배포 - 1. Terraform 모듈 테스트
+">이전</a>
+    
+    
+      <a href="/dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/" class="pagination--pager" title="[NCCL] NCCL Communicator 초기화 시점: Lazy vs Eager Init
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

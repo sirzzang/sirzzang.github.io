@@ -1,0 +1,1503 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.0. 문제 원인 파악: 실험 - Eraser’s StudyLog</title>
+<meta name="description" content="환경별 성능 차이를 측정하고, CPU limit이 원인인지 실험으로 확인해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.0. 문제 원인 파악: 실험">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-FFmpeg-CPU-04-00/">
+
+
+  <meta property="og:description" content="환경별 성능 차이를 측정하고, CPU limit이 원인인지 실험으로 확인해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-02-06T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-FFmpeg-CPU-04-00/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.0. 문제 원인 파악: 실험">
+    <meta itemprop="description" content="환경별 성능 차이를 측정하고, CPU limit이 원인인지 실험으로 확인해 보자.">
+    <meta itemprop="datePublished" content="2026-02-06T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.0. 문제 원인 파악: 실험
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-02-06T00:00:00+09:00">2026년 02월 06일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  5 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#실험-설계">실험 설계</a>
+    <ul>
+      <li><a href="#측정-방법">측정 방법</a></li>
+      <li><a href="#테스트-영상">테스트 영상</a></li>
+    </ul>
+  </li>
+  <li><a href="#실험-1-환경별-요청-처리-시간">실험 1: 환경별 요청 처리 시간</a>
+    <ul>
+      <li><a href="#목적">목적</a></li>
+      <li><a href="#실험-환경">실험 환경</a></li>
+      <li><a href="#결과">결과</a>
+        <ul>
+          <li><a href="#time-curl-결과">time curl 결과</a></li>
+          <li><a href="#curl--w-결과">curl -w 결과</a></li>
+          <li><a href="#서버-처리-시간-total---ttfb">서버 처리 시간 (Total - TTFB)</a></li>
+        </ul>
+      </li>
+      <li><a href="#분석">분석</a></li>
+    </ul>
+  </li>
+  <li><a href="#실험-2-동일-노드에서-k8s-pod-vs-docker-컨테이너">실험 2: 동일 노드에서 K8s Pod vs. Docker 컨테이너</a>
+    <ul>
+      <li><a href="#목적-1">목적</a></li>
+      <li><a href="#실험-환경-1">실험 환경</a></li>
+      <li><a href="#결과-1">결과</a></li>
+      <li><a href="#분석-1">분석</a></li>
+    </ul>
+  </li>
+  <li><a href="#실험-3-k8s-pod-cpu-limit-해제">실험 3: K8s Pod CPU limit 해제</a>
+    <ul>
+      <li><a href="#목적-2">목적</a></li>
+      <li><a href="#실험-방법">실험 방법</a></li>
+      <li><a href="#결과-2">결과</a></li>
+      <li><a href="#분석-2">분석</a></li>
+    </ul>
+  </li>
+  <li><a href="#결론">결론</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<p><a href="/dev/Dev-FFmpeg-CPU-01/">배경지식</a>을 정리했으니, 이제 실험으로 가설을 검증할 차례다. <a href="/dev/Dev-FFmpeg-CPU-00/">처음 목격한 상황</a>에서 세운 가설들 중 어떤 것이 실제 원인인지 좁혀 나간다.</p>
+
+<blockquote>
+  <p>솔직히 말하면, 배경지식을 정리하면서 “아, CPU limit이 원인이겠구나”라는 심증은 이미 굳어져 있었다. 그래도 다른 가능성을 배제하지 않고 실험으로 확인하는 과정이 필요했다. 확증 편향에 빠지지 않기 위해서라도.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>환경별 요청 처리 시간 측정 결과, TTFB는 모든 환경에서 유사(~0.2초). 클라이언트/네트워크는 병목이 아님</li>
+  <li>동일 노드에서 K8s Pod(CPU limit <code class="highlighter-rouge">1000m</code>)과 Docker 컨테이너(제한 없음) 비교 시 처리 시간 차이 극명</li>
+  <li>K8s Pod의 CPU limit을 해제하면 Docker 컨테이너와 동일한 성능 회복</li>
+  <li>CPU throttling이 성능 저하의 핵심 원인임을 확인</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="실험-설계">실험 설계</h1>
+
+<h2 id="측정-방법">측정 방법</h2>
+
+<p>두 가지 방법으로 요청 처리 시간을 측정한다.</p>
+
+<p><strong>1. <code class="highlighter-rouge">time curl</code></strong>: 전체 수행 시간 측정</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">time </span>curl <span class="nt">-X</span> <span class="s1">'POST'</span> <span class="se">\</span>
+  <span class="s1">'http://&lt;host&gt;:&lt;port&gt;/api/train/manual/init'</span> <span class="se">\</span>
+  <span class="nt">-H</span> <span class="s1">'accept: application/json'</span> <span class="se">\</span>
+  <span class="nt">-H</span> <span class="s1">'Content-Type: multipart/form-data'</span> <span class="se">\</span>
+  <span class="nt">-F</span> <span class="s1">'model_name=test'</span> <span class="se">\</span>
+  <span class="nt">-F</span> <span class="s1">'video=@play.mp4;type=video/mp4'</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">time curl</code>에서 주의할 점이 있다. 여기서 측정되는 user/sys는 <strong>클라이언트(curl 프로세스)의 CPU 시간</strong>이지, 서버의 CPU 시간이 아니다. curl은 요청을 보낸 후 응답이 올 때까지 거의 sleep 상태이므로 user/sys는 0에 가깝고, real만 의미 있다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>real    2m30.302s  ← 서버가 응답할 때까지 대기한 시간
+user    0m0.008s   ← curl 프로세스의 user space CPU 시간 (거의 0)
+sys     0m0.031s   ← curl 프로세스의 kernel space CPU 시간 (거의 0)
+</code></pre></div></div>
+
+<p>즉, <code class="highlighter-rouge">time curl</code>의 real은 사실상 서버의 전체 처리 시간이다.</p>
+
+<p><br /></p>
+
+<p><strong>2. <code class="highlighter-rouge">curl -w</code></strong>: 단계별 타이밍 측정</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-X</span> <span class="s1">'POST'</span> <span class="se">\</span>
+  <span class="s1">'http://&lt;host&gt;:&lt;port&gt;/api/train/manual/init'</span> <span class="se">\</span>
+  <span class="nt">-H</span> <span class="s1">'Content-Type: multipart/form-data'</span> <span class="se">\</span>
+  <span class="nt">-F</span> <span class="s1">'model_name=test'</span> <span class="se">\</span>
+  <span class="nt">-F</span> <span class="s1">'video=@play.mp4;type=video/mp4'</span> <span class="se">\</span>
+  <span class="nt">-o</span> /dev/null <span class="nt">-s</span> <span class="se">\</span>
+  <span class="nt">-w</span> <span class="s2">"DNS: %{time_namelookup}s</span><span class="se">\n</span><span class="s2">Connect: %{time_connect}s</span><span class="se">\n</span><span class="s2">TTFB: %{time_starttransfer}s</span><span class="se">\n</span><span class="s2">Total: %{time_total}s</span><span class="se">\n</span><span class="s2">"</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">time_namelookup</code></td>
+      <td>DNS 조회 시간</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">time_connect</code></td>
+      <td>TCP 연결 완료까지 시간</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">time_starttransfer</code></td>
+      <td>첫 바이트 도착(TTFB). 파일 업로드 + 서버 처리 시작 후 첫 응답까지</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">time_total</code></td>
+      <td>전체 요청 완료</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>TTFB가 유사하다면 네트워크 구간은 병목이 아니고, Total - TTFB가 서버의 실제 처리 시간에 해당한다.</p>
+
+<p><br /></p>
+
+<h2 id="테스트-영상">테스트 영상</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>값</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>길이</td>
+      <td>약 2분</td>
+    </tr>
+    <tr>
+      <td>크기</td>
+      <td>22.7MB</td>
+    </tr>
+    <tr>
+      <td>해상도</td>
+      <td>1280 x 720</td>
+    </tr>
+    <tr>
+      <td>FPS</td>
+      <td>29.97</td>
+    </tr>
+    <tr>
+      <td>코덱</td>
+      <td>H.264 (High)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="실험-1-환경별-요청-처리-시간">실험 1: 환경별 요청 처리 시간</h1>
+
+<h2 id="목적">목적</h2>
+
+<p>서로 다른 환경에서 동일한 요청의 처리 시간이 어떻게 다른지 확인한다.</p>
+
+<p><br /></p>
+
+<h2 id="실험-환경">실험 환경</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>환경</th>
+      <th>설명</th>
+      <th>CPU 제한</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>A</td>
+      <td>Ubuntu 22.04, 로컬 Docker 컨테이너</td>
+      <td>없음</td>
+    </tr>
+    <tr>
+      <td>B</td>
+      <td>Ubuntu 22.04, VirtualBox VM 위 Docker 컨테이너</td>
+      <td>없음</td>
+    </tr>
+    <tr>
+      <td>C</td>
+      <td>Ubuntu 22.04, K3s 클러스터 Pod</td>
+      <td><code class="highlighter-rouge">1000m</code> (1 core)</td>
+    </tr>
+  </tbody>
+</table>
+
+<ul>
+  <li>클라이언트: 클러스터 외부 로컬 PC</li>
+  <li>A, B, C 모두 동일한 이미지로 실행</li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="결과">결과</h2>
+
+<h3 id="time-curl-결과"><code class="highlighter-rouge">time curl</code> 결과</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>A (로컬 Docker)</th>
+      <th>B (VM Docker)</th>
+      <th>C (K8s Pod)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>real</td>
+      <td>2.655s</td>
+      <td>43.679s</td>
+      <td><strong>2m 30.302s</strong></td>
+    </tr>
+    <tr>
+      <td>user</td>
+      <td>0.007s</td>
+      <td>0.005s</td>
+      <td>0.008s</td>
+    </tr>
+    <tr>
+      <td>sys</td>
+      <td>0.027s</td>
+      <td>0.019s</td>
+      <td>0.031s</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="curl--w-결과"><code class="highlighter-rouge">curl -w</code> 결과</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>A (로컬 Docker)</th>
+      <th>B (VM Docker)</th>
+      <th>C (K8s Pod)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>DNS</td>
+      <td>0.000011s</td>
+      <td>0.000012s</td>
+      <td>0.000047s</td>
+    </tr>
+    <tr>
+      <td>Connect</td>
+      <td>0.000388s</td>
+      <td>0.000833s</td>
+      <td>0.000651s</td>
+    </tr>
+    <tr>
+      <td>TTFB</td>
+      <td>0.199s</td>
+      <td>0.235s</td>
+      <td>0.254s</td>
+    </tr>
+    <tr>
+      <td>Total</td>
+      <td>2.639s</td>
+      <td>37.983s</td>
+      <td><strong>151.762s</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="서버-처리-시간-total---ttfb">서버 처리 시간 (Total - TTFB)</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>A (로컬 Docker)</th>
+      <th>B (VM Docker)</th>
+      <th>C (K8s Pod)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>서버 처리 시간</td>
+      <td><strong>2.44s</strong></td>
+      <td><strong>37.75s</strong></td>
+      <td><strong>151.51s</strong></td>
+    </tr>
+    <tr>
+      <td>A 대비 배율</td>
+      <td>1x</td>
+      <td>15.5x</td>
+      <td><strong>62.1x</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h2 id="분석">분석</h2>
+
+<ul>
+  <li><strong>TTFB는 모든 환경에서 유사</strong> (~0.2초): 네트워크 전송과 요청 수신까지는 환경 간 차이가 없다</li>
+  <li><strong>차이가 벌어지는 구간은 서버 처리 시간</strong>: Total - TTFB</li>
+  <li><code class="highlighter-rouge">time curl</code>의 user/sys가 모든 환경에서 거의 0: curl은 그냥 기다린 것뿐, 클라이언트는 병목이 아님</li>
+</ul>
+
+<p>K8s Pod 환경(C)이 로컬 Docker(A)보다 현저히 느리다. VM 위 Docker(B)보다도 느리다.</p>
+
+<p><br /></p>
+
+<h1 id="실험-2-동일-노드에서-k8s-pod-vs-docker-컨테이너">실험 2: 동일 노드에서 K8s Pod vs. Docker 컨테이너</h1>
+
+<h2 id="목적-1">목적</h2>
+
+<p>실험 1에서는 환경이 다른 노드에 분산되어 있었으므로, 하드웨어 차이의 영향을 배제할 수 없었다. 동일한 노드에서 K8s Pod과 Docker 컨테이너를 비교하여 순수하게 런타임 환경의 차이만 확인한다.</p>
+
+<p><br /></p>
+
+<h2 id="실험-환경-1">실험 환경</h2>
+
+<p>K8s Pod이 실행 중인 노드에 동일한 이미지로 Docker 컨테이너를 추가로 띄웠다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>환경</th>
+      <th>실행 위치</th>
+      <th>CPU 제한</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>K8s Pod</td>
+      <td>worker-node (20코어, 128GB)</td>
+      <td><code class="highlighter-rouge">1000m</code> (1 core)</td>
+    </tr>
+    <tr>
+      <td>Docker 컨테이너</td>
+      <td>동일 노드</td>
+      <td>없음</td>
+    </tr>
+  </tbody>
+</table>
+
+<ul>
+  <li>클라이언트: 동일 PC에서 동일 노드 IP로 요청 (포트만 다름)</li>
+  <li>노드 사양: Intel Xeon (20코어), 128GB RAM, Ubuntu 22.04, Kernel 6.8</li>
+  <li>동일한 영상, 동일한 이미지, 동일한 API</li>
+</ul>
+
+<p><br /></p>
+
+<h2 id="결과-1">결과</h2>
+
+<p><strong>1. <code class="highlighter-rouge">time curl</code> 결과</strong></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>지표</th>
+      <th>K8s Pod (CPU limit 1 core)</th>
+      <th>Docker 컨테이너 (제한 없음)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>real</td>
+      <td><strong>2m28.263s</strong></td>
+      <td><strong>0m4.539s</strong></td>
+    </tr>
+    <tr>
+      <td>user</td>
+      <td>0m0.011s</td>
+      <td>0m0.018s</td>
+    </tr>
+    <tr>
+      <td>sys</td>
+      <td>0m0.010s</td>
+      <td>0m0.000s</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>2. <code class="highlighter-rouge">curl -w</code> 결과</strong></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>지표</th>
+      <th>K8s Pod</th>
+      <th>Docker 컨테이너</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>DNS</td>
+      <td>0.000017s</td>
+      <td>0.000015s</td>
+    </tr>
+    <tr>
+      <td>Connect</td>
+      <td>0.002364s</td>
+      <td>0.000631s</td>
+    </tr>
+    <tr>
+      <td>TTFB</td>
+      <td>0.209851s</td>
+      <td>0.205074s</td>
+    </tr>
+    <tr>
+      <td><strong>Total</strong></td>
+      <td><strong>148.835s</strong></td>
+      <td><strong>4.584s</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">time curl</code>에서 user/sys가 양쪽 모두 거의 0이다. curl 클라이언트 자체는 CPU를 거의 쓰지 않았고, real 시간 대부분을 서버 응답을 <strong>기다리는 데</strong> 보냈다는 뜻이다. 즉 병목은 클라이언트가 아니라 서버 측이다.</p>
+
+<p><code class="highlighter-rouge">curl -w</code>에서 DNS, Connect, TTFB는 거의 동일한데 Total만 극명하게 다르다. TTFB(첫 바이트 수신까지)가 동일하다는 것은 네트워크 경로나 서버 초기 처리에는 차이가 없다는 뜻이고, Total의 차이는 <strong>서버가 영상을 처리하는 시간</strong> 자체에서 발생한 것이다.</p>
+
+<p>동일 노드에서 약 <strong>32배</strong> 차이이다.</p>
+
+<p><br /></p>
+
+<h2 id="분석-1">분석</h2>
+
+<p>동일 하드웨어, 동일 이미지, 동일 영상에서 처리 시간 차이가 극명하다. 하드웨어, I/O(같은 디스크), 네트워크(같은 NIC)가 동일하므로, 차이의 원인은 <strong>런타임 환경 설정</strong>에 있다.</p>
+
+<p>두 환경의 유일한 차이: <strong>K8s Pod에는 CPU limit <code class="highlighter-rouge">1000m</code>이 설정되어 있고, Docker 컨테이너에는 없다.</strong></p>
+
+<p><br /></p>
+
+<h1 id="실험-3-k8s-pod-cpu-limit-해제">실험 3: K8s Pod CPU limit 해제</h1>
+
+<h2 id="목적-2">목적</h2>
+
+<p>CPU limit이 원인이라면, limit을 해제하면 성능이 회복되어야 한다. 이를 직접 확인한다.</p>
+
+<p><br /></p>
+
+<h2 id="실험-방법">실험 방법</h2>
+
+<p>Deployment 매니페스트에서 <code class="highlighter-rouge">resources</code> 항목을 제거하고 재배포했다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># 변경 전</span>
+<span class="na">resources</span><span class="pi">:</span>
+  <span class="na">requests</span><span class="pi">:</span>
+    <span class="na">memory</span><span class="pi">:</span> <span class="s2">"</span><span class="s">512Mi"</span>
+    <span class="na">cpu</span><span class="pi">:</span> <span class="s2">"</span><span class="s">500m"</span>
+  <span class="na">limits</span><span class="pi">:</span>
+    <span class="na">memory</span><span class="pi">:</span> <span class="s2">"</span><span class="s">2Gi"</span>
+    <span class="na">cpu</span><span class="pi">:</span> <span class="s2">"</span><span class="s">1000m"</span>
+
+<span class="c1"># 변경 후</span>
+<span class="na">resources</span><span class="pi">:</span> <span class="pi">{}</span>
+</code></pre></div></div>
+
+<p>QoS 클래스가 Burstable에서 <strong>BestEffort</strong>로 변경된 것을 확인했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl describe pod &lt;pod-name&gt; <span class="nt">-n</span> &lt;namespace&gt; | <span class="nb">grep </span>QoS
+<span class="c"># QoS Class: BestEffort</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="결과-2">결과</h2>
+
+<p><strong>1. <code class="highlighter-rouge">time curl</code> 결과</strong></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>지표</th>
+      <th>BestEffort (CPU limit 해제)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>real</td>
+      <td><strong>0m4.655s</strong></td>
+    </tr>
+    <tr>
+      <td>user</td>
+      <td>0m0.015s</td>
+    </tr>
+    <tr>
+      <td>sys</td>
+      <td>0m0.000s</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>2. <code class="highlighter-rouge">curl -w</code> 결과</strong></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>지표</th>
+      <th>BestEffort (CPU limit 해제)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>DNS</td>
+      <td>0.000015s</td>
+    </tr>
+    <tr>
+      <td>Connect</td>
+      <td>0.000687s</td>
+    </tr>
+    <tr>
+      <td>TTFB</td>
+      <td>0.189714s</td>
+    </tr>
+    <tr>
+      <td><strong>Total</strong></td>
+      <td><strong>4.718s</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>실험 2의 Docker 컨테이너(4.584s)와 거의 동일한 수준으로 회복되었다.</p>
+
+<p><br /></p>
+
+<h2 id="분석-2">분석</h2>
+
+<p>CPU limit을 해제하자 K8s Pod에서도 Docker 컨테이너와 동일한 수준의 성능이 나왔다. 예상했던 결과이긴 하지만, 직접 확인하니 확신이 들었다. 이로써 다른 가설들을 배제할 수 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>가설</th>
+      <th>검증 결과</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>CPU 리소스 제약</strong></td>
+      <td><strong>원인 확인</strong>. limit 해제 시 성능 회복</td>
+    </tr>
+    <tr>
+      <td>I/O 성능 차이</td>
+      <td>배제. 동일 노드에서 Docker도 동일 PVC/디스크 사용 가능, limit 해제로 해결</td>
+    </tr>
+    <tr>
+      <td>메모리 압박</td>
+      <td>배제. 22.7MB 영상에 2Gi는 충분, limit 해제 시 메모리 설정도 제거했으나 성능 회복</td>
+    </tr>
+    <tr>
+      <td>네트워크 오버헤드</td>
+      <td>배제. TTFB 동일, 처리 시간 구간에서만 차이</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="결론">결론</h1>
+
+<p>세 가지 실험을 통해 아래와 같은 점을 확인했다:</p>
+
+<ol>
+  <li><strong>TTFB는 모든 환경에서 ~0.2초로 동일</strong> → 네트워크, 클라이언트는 병목이 아님</li>
+  <li><strong>동일 노드에서도 K8s Pod이 Docker 컨테이너 대비 현저히 느림</strong> → 하드웨어/I/O 차이가 아님</li>
+  <li><strong>CPU limit 해제 시 동일 성능 회복</strong> → CPU limit <code class="highlighter-rouge">1000m</code>이 원인</li>
+</ol>
+
+<p>CPU limit에 의한 throttling이 성능 저하의 핵심 원인이라는 것까지는 확인했다. 다음 글에서는 실제로 throttling이 어떻게 발생하고 있는지, cgroup <code class="highlighter-rouge">cpu.stat</code>과 ffmpeg stat을 통해 직접 관찰한다.</p>
+
+<blockquote>
+  <p>실험 결과를 정리하면서, 처음 리소스 설정을 할 때 “CPU 1 core면 충분하겠지”라고 안이하게 판단했던 것이 떠올랐다. ffmpeg이 내부적으로 어떻게 동작하는지, CPU limit이 실제로 무엇을 의미하는지 모른 채 설정한 값이었다. 앞으로는 리소스를 설정할 때, 해당 워크로드의 특성을 먼저 파악하는 습관을 들여야겠다.</p>
+</blockquote>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/dev/Dev-FFmpeg-CPU-00/">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 0. 목격한 상황</a></li>
+    
+    <li><a href="/dev/Dev-FFmpeg-CPU-04-01/">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.1. 문제 원인 파악: 현상 관찰</a></li>
+    
+    <li><a href="/dev/Dev-FFmpeg-CPU-05/">[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 5. 결론: CPU Limit을 설정하지 않기로 한 이유</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#cpu" class="page__taxonomy-item" rel="tag">CPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#curl" class="page__taxonomy-item" rel="tag">curl</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#ffmpeg" class="page__taxonomy-item" rel="tag">FFmpeg</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#throttling" class="page__taxonomy-item" rel="tag">throttling</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#%EC%84%B1%EB%8A%A5%EC%B8%A1%EC%A0%95" class="page__taxonomy-item" rel="tag">성능측정</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-02-06T00:00:00+09:00">February 6, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+Pod+CPU+Limit%EA%B3%BC+FFmpeg+Thread+%EC%B5%9C%EC%A0%81+%EC%A1%B0%EC%A0%95+-+4.0.+%EB%AC%B8%EC%A0%9C+%EC%9B%90%EC%9D%B8+%ED%8C%8C%EC%95%85%3A+%EC%8B%A4%ED%97%98%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-FFmpeg-CPU-04-00%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-FFmpeg-CPU-04-00%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-FFmpeg-CPU-04-00%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-FFmpeg-CPU-04-00?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-FFmpeg-CPU-03/" class="pagination--pager" title="[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 3. 배경지식: 영상 처리와 FFmpeg
+">이전</a>
+    
+    
+      <a href="/dev/Dev-FFmpeg-CPU-04-01/" class="pagination--pager" title="[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.1. 문제 원인 파악: 현상 관찰
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-FFmpeg-CPU-04-00/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-FFmpeg-CPU-04-00"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

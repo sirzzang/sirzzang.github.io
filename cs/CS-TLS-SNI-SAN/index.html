@@ -1,0 +1,1351 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[TLS] SNI와 SAN: 개념, 차이, 그리고 인증서 디버깅 팁 - Eraser’s StudyLog</title>
+<meta name="description" content="TLS handshake에서 SNI와 SAN이 각각 어떤 역할을 하는지, 그리고 openssl s_client로 인증서를 디버깅할 때 servername을 신경써야 하는 이유에 대해 알아 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[TLS] SNI와 SAN: 개념, 차이, 그리고 인증서 디버깅 팁">
+<meta property="og:url" content="https://sirzzang.github.io//cs/CS-TLS-SNI-SAN/">
+
+
+  <meta property="og:description" content="TLS handshake에서 SNI와 SAN이 각각 어떤 역할을 하는지, 그리고 openssl s_client로 인증서를 디버깅할 때 servername을 신경써야 하는 이유에 대해 알아 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-25T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//cs/CS-TLS-SNI-SAN/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[TLS] SNI와 SAN: 개념, 차이, 그리고 인증서 디버깅 팁">
+    <meta itemprop="description" content="TLS handshake에서 SNI와 SAN이 각각 어떤 역할을 하는지, 그리고 openssl s_client로 인증서를 디버깅할 때 servername을 신경써야 하는 이유에 대해 알아 보자.">
+    <meta itemprop="datePublished" content="2026-04-25T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[TLS] SNI와 SAN: 개념, 차이, 그리고 인증서 디버깅 팁
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-25T00:00:00+09:00">2026년 04월 25일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  9 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#sni-vs-san">SNI vs SAN</a>
+    <ul>
+      <li><a href="#sni-server-name-indication">SNI (Server Name Indication)</a></li>
+      <li><a href="#san-subject-alternative-name">SAN (Subject Alternative Name)</a></li>
+      <li><a href="#전체-흐름">전체 흐름</a></li>
+    </ul>
+  </li>
+  <li><a href="#서버-측-sni-매칭과-default-인증서">서버 측: SNI 매칭과 default 인증서</a>
+    <ul>
+      <li><a href="#sni-매칭-성공">SNI 매칭 성공</a></li>
+      <li><a href="#sni-매칭-실패-시">SNI 매칭 실패 시</a>
+        <ul>
+          <li><a href="#default-인증서를-내려주는-경우">default 인증서를 내려주는 경우</a></li>
+          <li><a href="#tls-에러로-끊는-경우">TLS 에러로 끊는 경우</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#클라이언트-측-san-검증">클라이언트 측: SAN 검증</a>
+    <ul>
+      <li><a href="#검증-타이밍">검증 타이밍</a></li>
+      <li><a href="#이름-검증의-기준-sni-값이-아니다">이름 검증의 기준: SNI 값이 아니다</a></li>
+      <li><a href="#검증-규칙">검증 규칙</a></li>
+      <li><a href="#실패-시-에러-메시지">실패 시 에러 메시지</a></li>
+      <li><a href="#요약">요약</a></li>
+    </ul>
+  </li>
+  <li><a href="#kube-apiserver에서의-sni">kube-apiserver에서의 SNI</a>
+    <ul>
+      <li><a href="#단일-서빙-인증서-구조">단일 서빙 인증서 구조</a></li>
+      <li><a href="#sni가-영향을-미치지-않는-이유">SNI가 영향을 미치지 않는 이유</a></li>
+      <li><a href="#만약-다중-바인딩이-설정되어-있다면">만약 다중 바인딩이 설정되어 있다면</a></li>
+    </ul>
+  </li>
+  <li><a href="#openssl-s_client의-sni-동작">openssl s_client의 SNI 동작</a></li>
+  <li><a href="#실무-디버깅-팁">실무 디버깅 팁</a>
+    <ul>
+      <li><a href="#snidefault-인증서를-의심해야-하는-증상">SNI/default 인증서를 의심해야 하는 증상</a></li>
+      <li><a href="#디버깅-패턴-sni-비교">디버깅 패턴: SNI 비교</a>
+        <ul>
+          <li><a href="#nginx-ingress-예시">NGINX Ingress 예시</a></li>
+          <li><a href="#다른-환경에서도-동일한-패턴">다른 환경에서도 동일한 패턴</a></li>
+        </ul>
+      </li>
+      <li><a href="#ssl-inspection-환경에서의-sni">SSL Inspection 환경에서의 SNI</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><a href="/dev/Dev-Kubectl-VPN-SSL-Inspection/">VPN SSL Inspection 트러블슈팅</a>에서 <code class="highlighter-rouge">openssl s_client</code>로 서버 인증서를 확인하던 중, <code class="highlighter-rouge">-servername</code>(SNI)을 지정하는 것이 좋다는 팁을 발견하고 공부한 내용을 정리한다.</p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li><strong>SNI</strong>(Server Name Indication)는 클라이언트가 TLS handshake 시 서버에 보내는 힌트(ClientHello에 평문으로 포함)</li>
+  <li><strong>SAN</strong>(Subject Alternative Name)은 인증서에 박혀 있는 필드로, 해당 인증서가 유효한 이름/IP 목록</li>
+  <li>SNI는 <strong>서버가 어떤 인증서를 줄지</strong> 결정하는 데 쓰이고, SAN은 <strong>클라이언트가 받은 인증서를 검증</strong>하는 데 쓰인다</li>
+  <li><code class="highlighter-rouge">openssl s_client</code>로 디버깅할 때는 <code class="highlighter-rouge">-servername</code>을 실제 접속 대상(kubeconfig의 <code class="highlighter-rouge">server</code> 주소 등)과 맞춰야 정확한 인증서를 확인할 수 있다</li>
+  <li>다만, kube-apiserver는 기본적으로 단일 서빙 인증서만 사용하므로 SNI에 민감하지 않다. 멀티 인증서 환경(NGINX Ingress, ALB, Envoy 등)에서 더 중요한 개념이다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="sni-vs-san">SNI vs SAN</h1>
+
+<p>한 줄로 요약하면, <strong>SNI는 클라이언트가 보낼 때 쓰는 이름</strong>이고 <strong>SAN은 클라이언트가 받은 뒤 검증할 때 쓰는 이름</strong>이다.</p>
+
+<h2 id="sni-server-name-indication">SNI (Server Name Indication)</h2>
+
+<p>TLS handshake의 ClientHello 단계에서, 클라이언트가 서버에 “나 이 이름으로 연결하려고 하는데?”하는 힌트를 보내는 것이다.</p>
+
+<ul>
+  <li>ClientHello 패킷에 <strong>평문</strong>으로 들어간다</li>
+  <li>방향: 클라이언트 → 서버</li>
+  <li>원래 목적: 한 IP에 여러 TLS 사이트(virtual host)가 있을 때, 서버가 올바른 인증서를 골라 응답하기 위함</li>
+</ul>
+
+<p>SNI의 기본 개념은 <a href="/cs/CS-Security-TLS-SSL/">TLS/SSL 프로토콜 글</a>의 “SNI” 절에서 다룬 바 있다. 이 글에서는 디버깅 관점에서 더 깊이 들어간다.</p>
+
+<h2 id="san-subject-alternative-name">SAN (Subject Alternative Name)</h2>
+
+<p>인증서 내부에 박혀 있는 필드로, “이 인증서는 다음 이름들/IP들에 대해 유효하다”는 목록이다.</p>
+
+<ul>
+  <li>서버가 가진 인증서의 속성이지, 어딘가로 전송되는 값이 아니다</li>
+  <li>DNS 이름(<code class="highlighter-rouge">DNS:example.com</code>)과 IP 주소(<code class="highlighter-rouge">IP:10.0.0.1</code>) 두 종류가 들어갈 수 있다</li>
+  <li>현재 표준에서는 CN(Common Name)보다 SAN을 우선 참조한다. 최신 브라우저와 Go는 CN을 아예 무시한다</li>
+</ul>
+
+<p>SAN 필드의 구조에 대한 상세 설명은 <a href="/cs/CS-Security-X509-Certificate/">X.509 인증서 글</a>을 참고하자.</p>
+
+<h2 id="전체-흐름">전체 흐름</h2>
+
+<p>SNI와 SAN이 TLS handshake에서 어떻게 맞물리는지 단계별로 보자.</p>
+
+<ol>
+  <li>클라이언트 → 서버: ClientHello + SNI=”api.example.com”</li>
+  <li>서버: SNI를 보고 적절한 인증서 선택 (또는 default)</li>
+  <li>서버 → 클라이언트: ServerHello + Certificate (선택된 인증서)</li>
+  <li>클라이언트: 받은 인증서의 SAN에 “내가 접속하려던 이름/IP”가 있는지 검증</li>
+</ol>
+
+<p><strong>1단계</strong>에서 클라이언트가 SNI를 보내면, <strong>2단계</strong>에서 서버가 그걸 보고 인증서를 고른다. <strong>3단계</strong>에서 인증서가 내려오면, <strong>4단계</strong>에서 클라이언트가 SAN을 검증한다. 즉 SNI는 서버 측의 인증서 선택에 영향을 주고, SAN 검증은 클라이언트 측에서 독립적으로 수행된다.</p>
+
+<p><br /></p>
+
+<h1 id="서버-측-sni-매칭과-default-인증서">서버 측: SNI 매칭과 default 인증서</h1>
+
+<h2 id="sni-매칭-성공">SNI 매칭 성공</h2>
+
+<p>서버가 여러 인증서를 가지고 있을 때, 클라이언트가 보낸 SNI 값에 매칭되는 인증서를 골라 반환한다. 가장 단순하고 정상적인 경우다.</p>
+
+<h2 id="sni-매칭-실패-시">SNI 매칭 실패 시</h2>
+
+<p>SNI가 비어 있거나, 서버가 가진 어떤 인증서와도 매칭되지 않으면, 서버 구현에 따라 두 갈래로 갈린다.</p>
+
+<h3 id="default-인증서를-내려주는-경우">default 인증서를 내려주는 경우</h3>
+
+<p>대부분의 서버 구현이 이 방식이다. 매칭 실패 시 미리 지정된 기본 인증서(default cert)를 내려준다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구현체</th>
+      <th>default 인증서 결정 방식</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>NGINX / NGINX Ingress</td>
+      <td><code class="highlighter-rouge">--default-ssl-certificate</code> 또는 <code class="highlighter-rouge">default_server</code> 블록의 cert</td>
+    </tr>
+    <tr>
+      <td>HAProxy</td>
+      <td><code class="highlighter-rouge">bind ... ssl crt-list ...</code>의 첫 번째 cert</td>
+    </tr>
+    <tr>
+      <td>Envoy</td>
+      <td><code class="highlighter-rouge">filter_chain_match</code> 없는 fallback filter chain의 cert</td>
+    </tr>
+    <tr>
+      <td>Apache httpd</td>
+      <td>첫 번째 VirtualHost의 cert</td>
+    </tr>
+    <tr>
+      <td>AWS ALB</td>
+      <td>리스너 생성 시 지정하는 default certificate</td>
+    </tr>
+    <tr>
+      <td>Go <code class="highlighter-rouge">crypto/tls</code></td>
+      <td><code class="highlighter-rouge">Config.Certificates[0]</code> 또는 <code class="highlighter-rouge">GetCertificate(nil)</code> 반환값</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="tls-에러로-끊는-경우">TLS 에러로 끊는 경우</h3>
+
+<p>default cert가 설정되어 있지 않거나, 명시적으로 거부하도록 설정한 경우다.</p>
+
+<ul>
+  <li>Envoy, 최신 NGINX(<code class="highlighter-rouge">ssl_reject_handshake on;</code>): <code class="highlighter-rouge">unrecognized_name</code>(TLS alert 112) 또는 <code class="highlighter-rouge">handshake_failure</code> alert를 보내고 세션을 종료한다</li>
+  <li>일부 구현: SNI 매칭 실패 시 TCP RST로 끊어 버린다</li>
+</ul>
+
+<blockquote>
+  <p><code class="highlighter-rouge">unrecognized_name</code> alert는 SNI로 도달은 했지만 매칭에 실패했을 때 서버가 보낼 수 있는 표준 alert다. warning 레벨이면 연결은 계속 진행(default cert)되고, fatal 레벨이면 끊긴다.</p>
+</blockquote>
+
+<p>클라이언트 쪽에서는 <code class="highlighter-rouge">OpenSSL SSL_connect: SSL_ERROR_SYSCALL</code> 또는 <code class="highlighter-rouge">tlsv1 alert unrecognized name</code> 같은 에러가 뜬다</p>
+
+<p><br /></p>
+
+<h1 id="클라이언트-측-san-검증">클라이언트 측: SAN 검증</h1>
+
+<h2 id="검증-타이밍">검증 타이밍</h2>
+
+<p>서버 측의 SNI 처리와 달리, SAN 검증은 <strong>인증서를 받은 뒤 클라이언트가 로컬에서</strong> 수행한다. 전체 흐름 안에서의 위치를 보면 다음과 같다. 1번은 TCP handshake(전송 계층)이고, 2~5번이 그 위에서 이루어지는 TLS handshake(보안 계층)다.</p>
+
+<ol>
+  <li>TCP 3-way handshake: SYN → SYN-ACK → ACK → TCP 연결 수립 (전송 계층)</li>
+  <li>ClientHello (SNI 포함) 전송 ← 여기서부터 TLS handshake</li>
+  <li>ServerHello + Certificate (서버가 cert를 내려줌)</li>
+  <li>클라이언트가 받은 cert를 검증:
+    <ul>
+      <li>Chain 검증: CA 신뢰 체인이 유효한가? → 실패 시 “unknown authority”</li>
+      <li>이름 검증 (hostname verification): 접속 대상이 cert의 SAN에 있는가? → 실패 시 “cannot validate certificate”</li>
+      <li>기타: 유효기간, revocation 등</li>
+    </ul>
+  </li>
+  <li>전부 통과 → Finished 메시지 교환 → 애플리케이션 데이터 전송 시작</li>
+</ol>
+
+<p>검증 실패 시 TLS handshake 자체는 끝까지 간다. 클라이언트가 인증서를 받고 나서 “검증 실패”로 세션을 끊는 구조다. “접속 안 하는” 게 아니라 “handshake는 갔다가 클라이언트가 끊는” 것이다.</p>
+
+<p>CA 체인 검증과 신뢰 구조에 대한 상세 내용은 <a href="/cs/CS-PKI/">PKI 글</a>을 참고하자.</p>
+
+<h2 id="이름-검증의-기준-sni-값이-아니다">이름 검증의 기준: SNI 값이 아니다</h2>
+
+<p>흔한 오해 중 하나가 “SNI에 넣은 값으로 SAN 검증을 한다”는 것이다. 체감상 그렇게 보이지만, <strong>엄밀히는 별개</strong>다.</p>
+
+<p>이름 검증에서 “내가 접속하려던 호스트/IP”란, 애플리케이션이 TLS 라이브러리에 지정한 <code class="highlighter-rouge">ServerName</code> 값이다. 보통 URL의 호스트 부분이 된다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">curl https://api.example.com/</code> → 검증 기준은 <code class="highlighter-rouge">api.example.com</code></li>
+  <li><code class="highlighter-rouge">kubectl</code>의 kubeconfig <code class="highlighter-rouge">server: https://10.50.31.212:6443</code> → 검증 기준은 <code class="highlighter-rouge">10.50.31.212</code> (IP)</li>
+</ul>
+
+<p>이 값이 SNI로도 같이 나가기 때문에 체감상 SNI에 넣은 값으로 검증하는 것처럼 보이지만, 프로토콜 상으로는 SNI 전송과 SAN 검증은 독립된 단계다.</p>
+
+<h2 id="검증-규칙">검증 규칙</h2>
+
+<p>검증 규칙은 접속 대상의 형태에 따라 다르고, 관련 RFC도 다르다.</p>
+
+<ul>
+  <li><strong>도메인명으로 접속</strong> (<code class="highlighter-rouge">https://api.example.com</code>): cert SAN의 <code class="highlighter-rouge">DNS:</code> 항목과 비교한다. 와일드카드 매칭(<code class="highlighter-rouge">*.example.com</code>)도 지원된다. CN은 최신 브라우저/Go에서 <strong>무시</strong>한다. <a href="https://datatracker.ietf.org/doc/html/rfc6125">RFC 6125</a>가 이 규칙을 체계화하면서 CN 사용을 공식적으로 폐기(deprecate)했다</li>
+  <li><strong>IP literal로 접속</strong> (<code class="highlighter-rouge">https://10.50.31.212</code>): cert SAN의 <code class="highlighter-rouge">IP:</code> 항목과<strong>만</strong> 비교한다. <code class="highlighter-rouge">DNS:</code> 항목은 보지 않는다. RFC 6125는 IP 주소를 명시적으로 범위 밖으로 두고 있어, 이 경우에는 <a href="https://datatracker.ietf.org/doc/html/rfc2818">RFC 2818</a>(HTTP Over TLS)의 규칙이 여전히 적용된다</li>
+</ul>
+
+<blockquote>
+  <p>RFC 2818은 HTTPS 인증서 검증의 원조 규격으로 도메인명과 IP 매칭을 둘 다 다루지만, 도메인명 검증 부분은 RFC 6125가 사실상 대체했다. IP literal 검증은 RFC 6125이 다루지 않으므로 RFC 2818이 현역이다.</p>
+</blockquote>
+
+<h2 id="실패-시-에러-메시지">실패 시 에러 메시지</h2>
+
+<p>SAN 검증 실패 시 환경별로 보이는 에러 메시지는 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>환경</th>
+      <th>에러 메시지</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Go (kubectl 등)</td>
+      <td><code class="highlighter-rouge">x509: cannot validate certificate for 10.50.31.212 because it doesn't contain any IP SANs</code></td>
+    </tr>
+    <tr>
+      <td>curl</td>
+      <td><code class="highlighter-rouge">SSL: no alternative certificate subject name matches target host name 'api.example.com'</code></td>
+    </tr>
+    <tr>
+      <td>브라우저</td>
+      <td><code class="highlighter-rouge">NET::ERR_CERT_COMMON_NAME_INVALID</code> / “이 사이트의 보안 연결에 문제가 있습니다”</td>
+    </tr>
+    <tr>
+      <td>Java</td>
+      <td><code class="highlighter-rouge">java.security.cert.CertificateException: No subject alternative names matching IP address 10.50.31.212 found</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="요약">요약</h2>
+
+<ul>
+  <li><strong>SNI 매칭은 서버 쪽 일</strong>: 실패 시 default cert를 주거나 alert로 끊는다</li>
+  <li><strong>SAN 검증은 클라이언트 쪽 일</strong>: 실패 시 handshake 후 로컬에서 에러를 내고 연결을 종료한다. TCP 레벨 RST나 TLS alert로 종료되며, 애플리케이션은 “certificate invalid” 에러를 받는다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="kube-apiserver에서의-sni">kube-apiserver에서의 SNI</h1>
+
+<h2 id="단일-서빙-인증서-구조">단일 서빙 인증서 구조</h2>
+
+<p>kube-apiserver는 기본적으로 <strong>단일 서빙 인증서 하나</strong>만 들고 있다. 그 인증서의 SAN에 다음과 같은 이름/IP가 한꺼번에 박혀 있는 구조다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">kubernetes</code>, <code class="highlighter-rouge">kubernetes.default</code>, <code class="highlighter-rouge">kubernetes.default.svc</code>, <code class="highlighter-rouge">kubernetes.default.svc.cluster.local</code></li>
+  <li>컨트롤플레인 노드의 호스트명</li>
+  <li>default <code class="highlighter-rouge">kubernetes</code> 서비스 ClusterIP (예: <code class="highlighter-rouge">10.43.0.1</code>), 각 노드 IP</li>
+  <li>RKE2의 경우 설치 시 <code class="highlighter-rouge">tls-san</code>으로 추가한 값들</li>
+</ul>
+
+<p>kube-apiserver의 인증서 구조에 대해서는 <a href="/kubernetes/Kubernetes-PKI/">Kubernetes PKI 글</a>에서 자세히 다룬 바 있다.</p>
+
+<h2 id="sni가-영향을-미치지-않는-이유">SNI가 영향을 미치지 않는 이유</h2>
+
+<p>인증서가 여러 개인 구조가 아니므로, SNI가 비어 있든(<code class="highlighter-rouge">""</code>), <code class="highlighter-rouge">10.50.31.212</code>든, <code class="highlighter-rouge">kubernetes</code>든, 엉뚱한 <code class="highlighter-rouge">foo.bar</code>든 <strong>응답으로 내려오는 인증서는 동일</strong>하다.</p>
+
+<p><code class="highlighter-rouge">--tls-sni-cert-key</code> 플래그로 SNI별 다중 바인딩을 <strong>명시적으로</strong> 구성하지 않는 한, kube-apiserver는 항상 같은 인증서를 내려준다. RKE2나 kubeadm 기본 설치는 <code class="highlighter-rouge">--tls-sni-cert-key</code>를 쓰지 않고 <code class="highlighter-rouge">--tls-cert-file</code> 하나로만 세팅하므로, 사내에서 누군가 일부러 멀티 cert 구성을 하지 않았다면 SNI 걱정은 실질적으로 불필요하다.</p>
+
+<p><a href="/dev/Dev-Kubectl-VPN-SSL-Inspection/">VPN SSL Inspection 트러블슈팅</a>에서 <code class="highlighter-rouge">-servername</code> 없이 진단할 수 있었던 것도 이 때문이다. SSL Inspection 환경에서의 구체적인 영향은 <a href="#ssl-inspection-환경에서의-sni">아래 디버깅 영향</a>에서 다시 짚는다.</p>
+
+<h2 id="만약-다중-바인딩이-설정되어-있다면">만약 다중 바인딩이 설정되어 있다면</h2>
+
+<p>드문 경우지만, 누군가 <code class="highlighter-rouge">--tls-sni-cert-key</code>를 설정해 놓았다면 SNI에 따라 다른 인증서가 내려올 수 있다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># kube-apiserver 플래그 예시</span>
+<span class="s">--tls-cert-file=apiserver.crt</span>                          <span class="c1"># default</span>
+<span class="s">--tls-sni-cert-key=kubernetes.crt,kubernetes.key:kubernetes,kubernetes.default</span>
+</code></pre></div></div>
+
+<p>이 구성에서는 SNI=<code class="highlighter-rouge">kubernetes</code>로 붙으면 <code class="highlighter-rouge">kubernetes.crt</code>를 주고, SNI 없이 IP로 붙으면 <code class="highlighter-rouge">apiserver.crt</code>(default)가 내려온다. 두 인증서의 CA는 같아도 SAN 구성이 다를 수 있으므로, <code class="highlighter-rouge">kubectl</code>이 kubeconfig의 <code class="highlighter-rouge">server: https://10.50.31.212:6443</code> 기준으로 IP SAN 검증을 하는데 default cert의 SAN에 그 IP가 없으면 <code class="highlighter-rouge">x509: cannot validate certificate for 10.50.31.212</code> 에러가 발생한다.</p>
+
+<p><br /></p>
+
+<h1 id="openssl-s_client의-sni-동작">openssl s_client의 SNI 동작</h1>
+
+<p>앞서 kube-apiserver는 단일 인증서 구조라 SNI에 민감하지 않다고 했다. 그렇다면 <code class="highlighter-rouge">openssl s_client</code>는 SNI를 어떻게 처리하길래, <a href="/dev/Dev-Kubectl-VPN-SSL-Inspection/">트러블슈팅</a>에서 <code class="highlighter-rouge">-servername</code> 없이도 문제가 없었을까?</p>
+
+<p><code class="highlighter-rouge">openssl s_client</code>는 <code class="highlighter-rouge">-servername</code>을 명시하지 않더라도 <code class="highlighter-rouge">-connect</code>의 호스트 부분을 기본 SNI로 <strong>자동 세팅</strong>한다. 단, IP로 접속하면 RFC 6066 권고에 따라 SNI가 빈 상태가 된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># IP로 접속 → SNI가 비어서 나감</span>
+openssl s_client <span class="nt">-connect</span> 10.50.31.212:6443
+
+<span class="c"># 호스트명으로 접속 → SNI에 "kubernetes" 자동 세팅</span>
+openssl s_client <span class="nt">-connect</span> kubernetes:6443
+</code></pre></div></div>
+
+<p>kube-apiserver는 단일 인증서 구조이므로 어느 쪽이든 같은 인증서를 준다. 그러나 반복적으로 강조하듯 멀티 인증서 환경에서는 이 차이가 전혀 다른 인증서를 가져오는 결과로 이어질 수 있다.</p>
+
+<p>원칙은 <strong>kubeconfig <code class="highlighter-rouge">server:</code> 에 들어 있는 값과 동일하게 맞추는 것</strong>이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 1. kubeconfig가 IP 기반인 경우 (server: https://10.50.31.212:6443)</span>
+<span class="c">#     → SNI를 비워서 kubectl과 동일한 조건으로 확인</span>
+openssl s_client <span class="nt">-connect</span> 10.50.31.212:6443 <span class="nt">-servername</span> <span class="s2">""</span> 2&gt;/dev/null <span class="se">\</span>
+  | openssl x509 <span class="nt">-noout</span> <span class="nt">-issuer</span> <span class="nt">-subject</span>
+
+<span class="c"># 2. kubeconfig가 호스트명 기반이거나, 정식 인증서를 확인하고 싶은 경우</span>
+<span class="c">#     → -servername에 해당 호스트명 지정</span>
+openssl s_client <span class="nt">-connect</span> 10.50.31.212:6443 <span class="nt">-servername</span> kubernetes 2&gt;/dev/null <span class="se">\</span>
+  | openssl x509 <span class="nt">-noout</span> <span class="nt">-issuer</span> <span class="nt">-subject</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="실무-디버깅-팁">실무 디버깅 팁</h1>
+
+<h2 id="snidefault-인증서를-의심해야-하는-증상">SNI/default 인증서를 의심해야 하는 증상</h2>
+
+<p>아래 증상이 나타나면 SNI 미지정 또는 default 인증서가 문제일 가능성이 있다.</p>
+
+<ol>
+  <li><code class="highlighter-rouge">openssl s_client -connect IP:PORT</code>로는 Subject가 이상한데, <code class="highlighter-rouge">-servername 호스트명</code>을 붙이면 정상 Subject가 나오는 경우</li>
+  <li>kubectl이 <code class="highlighter-rouge">certificate signed by unknown authority</code>가 아니라 <code class="highlighter-rouge">cannot validate certificate for X because it doesn't contain any IP SANs / DNS names</code>를 뱉는 경우</li>
+  <li>kubeconfig의 <code class="highlighter-rouge">clusters[].cluster.server</code>를 IP에서 호스트명으로 바꿨더니 에러가 달라지는 경우</li>
+</ol>
+
+<h2 id="디버깅-패턴-sni-비교">디버깅 패턴: SNI 비교</h2>
+
+<p>핵심은 <strong>“실제로 접속하려던 이름을 <code class="highlighter-rouge">-servername</code>에 넣기”</strong>와 <strong>“그걸 뺐을 때 뭐가 나오는지 비교하기”</strong> 두 가지다. 이 둘의 차이가 default cert 문제인지 아닌지를 가른다.</p>
+
+<h3 id="nginx-ingress-예시">NGINX Ingress 예시</h3>
+
+<p>NGINX Ingress Controller에 <code class="highlighter-rouge">api.example.com</code>, <code class="highlighter-rouge">app.example.com</code> 두 Ingress가 붙어 있고, <code class="highlighter-rouge">--default-ssl-certificate</code>로 self-signed default가 설정된 환경을 가정하자.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">INGRESS_IP</span><span class="o">=</span>10.0.0.50
+
+<span class="c"># 1. SNI 없이 → default cert 확인</span>
+openssl s_client <span class="nt">-connect</span> <span class="nv">$INGRESS_IP</span>:443 <span class="nt">-servername</span> <span class="s2">""</span> 2&gt;/dev/null <span class="se">\</span>
+  | openssl x509 <span class="nt">-noout</span> <span class="nt">-subject</span> <span class="nt">-issuer</span>
+<span class="c"># subject=CN=ingress-default   ← default SSL cert (self-signed)</span>
+
+<span class="c"># 2. 문제 도메인 SNI로 → 정상이면 Let's Encrypt cert가 나와야 함</span>
+openssl s_client <span class="nt">-connect</span> <span class="nv">$INGRESS_IP</span>:443 <span class="nt">-servername</span> api.example.com 2&gt;/dev/null <span class="se">\</span>
+  | openssl x509 <span class="nt">-noout</span> <span class="nt">-subject</span> <span class="nt">-issuer</span> <span class="nt">-ext</span> subjectAltName
+<span class="c"># subject=CN=api.example.com</span>
+<span class="c"># issuer=C=US, O=Let's Encrypt, CN=R3</span>
+<span class="c"># X509v3 Subject Alternative Name: DNS:api.example.com</span>
+
+<span class="c"># 3. 다른 도메인 SNI로 → 해당 Ingress의 cert 확인</span>
+openssl s_client <span class="nt">-connect</span> <span class="nv">$INGRESS_IP</span>:443 <span class="nt">-servername</span> app.example.com 2&gt;/dev/null <span class="se">\</span>
+  | openssl x509 <span class="nt">-noout</span> <span class="nt">-subject</span>
+</code></pre></div></div>
+
+<p>이 비교를 통해 진단할 수 있는 것들:</p>
+
+<ul>
+  <li><code class="highlighter-rouge">-servername api.example.com</code>을 줬는데 default cert가 내려온다 → <strong>해당 Ingress의 TLS secret이 안 붙어 있거나, secret 이름 오타이거나, cert-manager 발급 실패</strong></li>
+  <li>받은 cert의 SAN에 <code class="highlighter-rouge">api.example.com</code>이 없다 → <strong>cert-manager가 잘못된 도메인으로 발급</strong>했거나 <strong>와일드카드 범위 밖</strong></li>
+  <li>정상 cert가 나오는데 브라우저만 안 된다 → <strong>클라이언트 쪽 신뢰 문제</strong> (루트 CA 미설치, 체인 누락)</li>
+</ul>
+
+<h3 id="다른-환경에서도-동일한-패턴">다른 환경에서도 동일한 패턴</h3>
+
+<ul>
+  <li><strong>AWS ALB</strong>: <code class="highlighter-rouge">-servername your-domain.com</code> vs <code class="highlighter-rouge">-servername ""</code> → SNI 없으면 ALB가 default action certificate를 내려준다</li>
+  <li><strong>Envoy</strong>: 리스너에 여러 <code class="highlighter-rouge">filter_chain_match.server_names</code>가 있을 때, 해당 SNI로 비교한다</li>
+  <li><strong>CloudFront</strong>: SNI를 잘못 주면 완전히 다른 distribution cert가 내려올 수 있다</li>
+</ul>
+
+<h2 id="ssl-inspection-환경에서의-sni">SSL Inspection 환경에서의 SNI</h2>
+
+<p><a href="/dev/Dev-Kubectl-VPN-SSL-Inspection/">VPN SSL Inspection 글</a>에서 다뤘던 상황을 이 관점에서 다시 보자.</p>
+
+<p>방화벽이 SSL Inspection을 수행하는 환경에서, default 인증서를 주는 주체가 방화벽/프록시(SSL Inspection 장비)인 경우를 생각해 보면:</p>
+
+<ul>
+  <li>방화벽이 SNI/도착지에 따라 재서명 인증서의 Subject를 만들어 주는데, SNI가 비어 있거나 매칭되지 않으면 플레이스홀더성 Subject로 재서명할 수 있다</li>
+  <li>kubectl 입장에서는 Issuer 불일치(<code class="highlighter-rouge">x509: certificate signed by unknown authority</code>)와 Hostname/IP SAN 불일치(<code class="highlighter-rouge">x509: cannot validate certificate for 10.50.31.212 because it doesn't contain any IP SANs</code>)가 겹칠 수 있다</li>
+  <li>에러 메시지가 평소와 다르게 나올 때, SNI 미지정으로 인한 default cert 문제인지 아닌지를 구분하려면 <code class="highlighter-rouge">-servername</code>을 붙여서 비교해 보는 것이 유효하다</li>
+</ul>
+
+<p>해당 트러블슈팅에서는 방화벽 재서명이 원인이었고, SNI 없이 뽑아낸 Issuer 값만으로도 원인 판정이 충분히 성립했다. 다만, default 인증서를 받게 되면 Issuer 불일치 외에 호스트/IP SAN 불일치까지 겹쳐서 에러 메시지가 달라질 수 있으므로, 그때 진단을 헷갈리지 않으려면 <code class="highlighter-rouge">-servername</code>을 붙이는 것이 안전한 습관이다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>SNI와 SAN은 이름이 비슷하고 TLS handshake라는 같은 맥락에서 등장하지만, 역할과 담당 주체가 다르다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>SNI</th>
+      <th>SAN</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>정체</td>
+      <td>ClientHello의 확장 필드</td>
+      <td>인증서 내부 필드</td>
+    </tr>
+    <tr>
+      <td>방향</td>
+      <td>클라이언트 → 서버</td>
+      <td>인증서 속성 (전송되는 값 아님)</td>
+    </tr>
+    <tr>
+      <td>역할</td>
+      <td>서버가 인증서를 <strong>선택</strong>하는 힌트</td>
+      <td>클라이언트가 인증서를 <strong>검증</strong>하는 기준</td>
+    </tr>
+    <tr>
+      <td>실패 시</td>
+      <td>서버가 default cert를 주거나 끊음</td>
+      <td>클라이언트가 handshake 후 연결을 끊음</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">openssl s_client</code>로 인증서를 디버깅할 때는, <strong>접속 대상과 동일한 SNI를 <code class="highlighter-rouge">-servername</code>으로 넣는 것</strong>을 습관으로 들이자. kube-apiserver처럼 단일 인증서 환경에서는 실질적 차이가 없지만, NGINX Ingress나 ALB 같은 멀티 인증서 환경에서는 SNI 하나 차이로 전혀 다른 인증서가 내려올 수 있다.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#certificate" class="page__taxonomy-item" rel="tag">certificate</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#debugging" class="page__taxonomy-item" rel="tag">debugging</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kube-apiserver" class="page__taxonomy-item" rel="tag">kube-apiserver</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#openssl" class="page__taxonomy-item" rel="tag">openssl</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#san" class="page__taxonomy-item" rel="tag">SAN</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#sni" class="page__taxonomy-item" rel="tag">SNI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#tls" class="page__taxonomy-item" rel="tag">TLS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#x-509" class="page__taxonomy-item" rel="tag">X.509</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#cs" class="page__taxonomy-item" rel="tag">CS</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-25T00:00:00+09:00">April 25, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BTLS%5D+SNI%EC%99%80+SAN%3A+%EA%B0%9C%EB%85%90%2C+%EC%B0%A8%EC%9D%B4%2C+%EA%B7%B8%EB%A6%AC%EA%B3%A0+%EC%9D%B8%EC%A6%9D%EC%84%9C+%EB%94%94%EB%B2%84%EA%B9%85+%ED%8C%81%20https%3A%2F%2Fsirzzang.github.io%2F%2Fcs%2FCS-TLS-SNI-SAN%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fcs%2FCS-TLS-SNI-SAN%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fcs%2FCS-TLS-SNI-SAN%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fcs%2FCS-TLS-SNI-SAN?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-EKS-Upgrade-02-02-Blue-Green-Cluster-Upgrade/" class="pagination--pager" title="[EKS] EKS 업그레이드: Blue-Green 클러스터 업그레이드
+">이전</a>
+    
+    
+      <a href="/dev/Dev-Notion-MCP-VPN-SSL-Inspection/" class="pagination--pager" title="[MCP] VPN SSL Inspection으로 인한 Notion MCP 연결 실패
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//cs/CS-TLS-SNI-SAN/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/cs/CS-TLS-SNI-SAN"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

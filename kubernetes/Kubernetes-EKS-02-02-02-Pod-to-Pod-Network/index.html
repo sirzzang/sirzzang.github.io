@@ -1,0 +1,1585 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[EKS] EKS: Networking - 3. 파드 간 통신 - Eraser’s StudyLog</title>
+<meta name="description" content="VPC CNI가 파드 네트워크를 구성하는 와이어링 과정과 파드 간 패킷 흐름을 tcpdump로 추적해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[EKS] EKS: Networking - 3. 파드 간 통신">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-02-02-02-Pod-to-Pod-Network/">
+
+
+  <meta property="og:description" content="VPC CNI가 파드 네트워크를 구성하는 와이어링 과정과 파드 간 패킷 흐름을 tcpdump로 추적해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-03-19T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-02-02-02-Pod-to-Pod-Network/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[EKS] EKS: Networking - 3. 파드 간 통신">
+    <meta itemprop="description" content="VPC CNI가 파드 네트워크를 구성하는 와이어링 과정과 파드 간 패킷 흐름을 tcpdump로 추적해 보자.">
+    <meta itemprop="datePublished" content="2026-03-19T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[EKS] EKS: Networking - 3. 파드 간 통신
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-03-19T00:00:00+09:00">2026년 03월 19일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  12 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#들어가며">들어가며</a></li>
+  <li><a href="#cni-와이어링">CNI 와이어링</a>
+    <ul>
+      <li><a href="#vpc-cni-plugin-sequence">VPC CNI Plugin Sequence</a></li>
+      <li><a href="#실습-결과와의-대조">실습 결과와의 대조</a></li>
+      <li><a href="#16925411-link-local-게이트웨이">169.254.1.1: link-local 게이트웨이</a></li>
+    </ul>
+  </li>
+  <li><a href="#policy-routing">Policy Routing</a>
+    <ul>
+      <li><a href="#eni별-라우팅이-필요한-이유">ENI별 라우팅이 필요한 이유</a></li>
+      <li><a href="#ip-rule-확인">ip rule 확인</a></li>
+      <li><a href="#eni별-라우팅-테이블">ENI별 라우팅 테이블</a></li>
+    </ul>
+  </li>
+  <li><a href="#파드-간-통신-흐름">파드 간 통신 흐름</a>
+    <ul>
+      <li><a href="#같은-노드-내-통신">같은 노드 내 통신</a></li>
+      <li><a href="#크로스-노드-통신">크로스 노드 통신</a></li>
+    </ul>
+  </li>
+  <li><a href="#패킷-흐름">패킷 흐름</a>
+    <ul>
+      <li><a href="#구성-요소">구성 요소</a></li>
+      <li><a href="#나가는-경로">나가는 경로</a></li>
+      <li><a href="#돌아오는-경로">돌아오는 경로</a></li>
+      <li><a href="#주요-사항">주요 사항</a></li>
+    </ul>
+  </li>
+  <li><a href="#tcpdump-검증">tcpdump 검증</a>
+    <ul>
+      <li><a href="#캡처-방법">캡처 방법</a></li>
+      <li><a href="#인터페이스별-결과">인터페이스별 결과</a>
+        <ul>
+          <li><a href="#전체-인터페이스--i-any">전체 인터페이스 (-i any)</a></li>
+          <li><a href="#eni0--i-ens5">ENI0 (-i ens5)</a></li>
+          <li><a href="#eni1--i-ens6">ENI1 (-i ens6)</a></li>
+          <li><a href="#파드-veth--i-eni31b43252b24">파드 veth (-i eni31b43252b24)</a></li>
+        </ul>
+      </li>
+      <li><a href="#결과-종합">결과 종합</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 AWS EKS Workshop Study(AEWS) 2주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>VPC CNI Plugin은 파드 생성 시 <strong>7단계 와이어링</strong>(veth pair 생성 → 파드 네임스페이스 이동 → <code class="highlighter-rouge">/32</code> IP 할당 → link-local 게이트웨이 → static ARP → 호스트 라우트 → ip rule)을 수행한다</li>
+  <li><a href="/kubernetes/Kubernetes-EKS-02-02-01-Installation-Result/">이전 글</a>에서 관찰한 파드 내부 구조(<code class="highlighter-rouge">eth0 /32</code>, <code class="highlighter-rouge">169.254.1.1</code> 게이트웨이, 호스트 라우트)가 이 와이어링의 결과물이다</li>
+  <li><code class="highlighter-rouge">169.254.1.1</code>은 실제로 존재하지 않는 <strong>link-local 주소</strong>다. static ARP로 veth 호스트 측 MAC 주소를 주입해 게이트웨이처럼 동작시킨다</li>
+  <li>Secondary ENI에 할당된 파드는 <strong>policy routing</strong>(<code class="highlighter-rouge">ip rule</code> + ENI별 라우팅 테이블)으로 올바른 ENI를 통해 송신한다</li>
+  <li>tcpdump로 확인하면 <strong>파드 IP가 경로 전체에서 한 번도 변환되지 않는다</strong> — VPC CNI의 “NAT 없는 통신”</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="들어가며">들어가며</h1>
+
+<p>이전 글(<a href="/kubernetes/Kubernetes-EKS-02-02-01-Installation-Result/">EKS: Networking - 3. 실습 환경 네트워크 확인</a>)에서 테스트 파드를 배포하고, 파드 내부 네트워크를 확인하고, 크로스 노드 ping이 동작하는 것까지 확인했다. 이 글에서는 한 발 더 들어가 파드 간 통신이 어떻게 이뤄지는지 살펴 본다.</p>
+
+<ul>
+  <li>VPC CNI Plugin이 파드 네트워크를 <strong>구성하는 과정</strong> (와이어링)</li>
+  <li>파드 간 패킷이 <strong>흐르는 경로</strong> (policy routing)</li>
+  <li><strong>tcpdump</strong>로 실제 패킷 흐름을 검증한다</li>
+</ul>
+
+<p>이 글에서 다루는 파드 간 통신은 주로 <strong>크로스 노드(다른 노드 간)</strong> 통신이다. 같은 노드 내 파드 통신은 veth pair → 호스트 라우팅 테이블 → veth pair로 완결되는 일반적인 Linux 네트워킹이며, <a href="/kubernetes/Kubernetes-EKS-02-00-01-Kubernetes-Pod-to-Pod-Networking/#같은-노드의-파드-간-통신">기존 배경 설명 편</a>에서 이미 다뤘다. VPC CNI가 와이어링(veth pair 생성, 호스트 라우트 추가)은 해주지만, 패킷 전달 자체는 노드 커널의 라우팅이 처리한다. VPC CNI의 고유한 가치 — <strong>policy routing, ENI별 라우팅 테이블, VPC 라우팅 패브릭</strong> — 가 동작하는 것은 크로스 노드 통신이다.</p>
+
+<p><br /></p>
+
+<h1 id="cni-와이어링">CNI 와이어링</h1>
+
+<p><a href="/kubernetes/Kubernetes-EKS-02-02-01-Installation-Result/#파드-내부-네트워크-확인">이전 글</a>에서 파드 내부를 확인했을 때 다음과 같은 결과가 나왔다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">eth0</code>에 <code class="highlighter-rouge">/32</code> IP 할당 (예: <code class="highlighter-rouge">192.168.2.151/32</code>)</li>
+  <li>기본 게이트웨이 <code class="highlighter-rouge">169.254.1.1</code> (link-local)</li>
+  <li>호스트에는 파드 IP로의 호스트 라우트 (예: <code class="highlighter-rouge">192.168.2.151 dev eniac70eec268d scope link</code>)</li>
+</ul>
+
+<p>모두 CNI Plugin이 파드 생성 시 수행하는 와이어링의 결과물이다.</p>
+
+<h2 id="vpc-cni-plugin-sequence">VPC CNI Plugin Sequence</h2>
+
+<p>AWS VPC CNI의 <a href="https://github.com/aws/amazon-vpc-cni-k8s/blob/master/docs/cni-proposal.md">설계 문서(Proposal)</a>에 정의된 와이어링 순서다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 1. L-IPAMD가 인스턴스에 할당한 보조 IP를 받아 온다</span>
+
+<span class="c"># 2. veth pair를 생성하고, 한쪽은 호스트 네임스페이스에, 다른 한쪽은 파드 네임스페이스에 연결한다</span>
+ip link add veth-1 <span class="nb">type </span>veth peer name veth-1c
+ip link <span class="nb">set </span>veth-1c netns ns1
+ip link <span class="nb">set </span>veth-1 up
+ip netns <span class="nb">exec </span>ns1 ip link <span class="nb">set </span>veth-1c up
+
+<span class="c"># 3. 파드 네임스페이스 안에서 IP를 할당하고, 게이트웨이와 라우트를 설정한다</span>
+ip netns <span class="nb">exec </span>ns1 ip addr add 20.0.49.215/32 dev veth-1c
+ip netns <span class="nb">exec </span>ns1 ip route add 169.254.1.1 dev veth-1c
+ip netns <span class="nb">exec </span>ns1 ip route add default via 169.254.1.1 dev veth-1c
+
+<span class="c"># 4. 게이트웨이(169.254.1.1)의 MAC을 veth 호스트 측 MAC으로 고정한다</span>
+ip netns <span class="nb">exec </span>ns1 arp <span class="nt">-i</span> veth-1c <span class="nt">-s</span> 169.254.1.1 &lt;veth-1<span class="s1">'s MAC&gt;
+
+# 5. 호스트 측에서 파드 IP로의 호스트 라우트와 ip rule을 추가한다
+ip route add 20.0.49.215/32 dev veth-1
+ip rule add from all to 20.0.49.215/32 table main prio 512
+
+# 6. 파드 IP가 Secondary ENI에 속하는 경우, from-pod rule도 추가한다
+ip rule add from 20.0.49.215/32 table 2 prio 1536
+</span></code></pre></div></div>
+
+<h2 id="실습-결과와의-대조">실습 결과와의 대조</h2>
+
+<p>각 단계가 어떤 결과를 만들어내는지 이전 글의 <a href="/kubernetes/Kubernetes-EKS-02-02-01-Installation-Result/#파드-내부-네트워크-확인">파드 내부 네트워크 확인</a> 및 <a href="/kubernetes/Kubernetes-EKS-02-02-01-Installation-Result/#네트워크-변화-확인">네트워크 변화 확인</a> 결과와 대조해 보자.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>단계</th>
+      <th>와이어링 명령</th>
+      <th>실습 결과</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>veth pair 생성</td>
+      <td><code class="highlighter-rouge">ip link add veth-1 type veth peer name veth-1c</code></td>
+      <td>호스트: <code class="highlighter-rouge">eni73af7ba7811@if3</code>, 파드: <code class="highlighter-rouge">eth0@if5</code></td>
+    </tr>
+    <tr>
+      <td>네임스페이스 이동</td>
+      <td><code class="highlighter-rouge">ip link set veth-1c netns ns1</code></td>
+      <td><code class="highlighter-rouge">ip link</code>에서 <code class="highlighter-rouge">link-netns cni-f6c99138...</code> 표시</td>
+    </tr>
+    <tr>
+      <td>IP 할당 (<code class="highlighter-rouge">/32</code>)</td>
+      <td><code class="highlighter-rouge">ip addr add .../32 dev veth-1c</code></td>
+      <td>파드 안: <code class="highlighter-rouge">inet 192.168.11.173/32 scope global eth0</code></td>
+    </tr>
+    <tr>
+      <td>게이트웨이 설정</td>
+      <td><code class="highlighter-rouge">ip route add default via 169.254.1.1</code></td>
+      <td>파드 안: <code class="highlighter-rouge">default via 169.254.1.1 dev eth0</code></td>
+    </tr>
+    <tr>
+      <td>호스트 라우트</td>
+      <td><code class="highlighter-rouge">ip route add .../32 dev veth-1</code></td>
+      <td>호스트: <code class="highlighter-rouge">192.168.11.173 dev eni73af7ba7811 scope link</code></td>
+    </tr>
+    <tr>
+      <td>to-pod rule</td>
+      <td><code class="highlighter-rouge">ip rule add from all to .../32 table main</code></td>
+      <td><code class="highlighter-rouge">ip rule</code>: <code class="highlighter-rouge">512: from all to 192.168.4.248 lookup main</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>CNI Plugin이 실행한 명령의 결과가 그대로 관찰된다.</p>
+
+<p>대부분의 단계는 직관적이지만, 한 가지 의문이 남는다. 게이트웨이로 설정된 <code class="highlighter-rouge">169.254.1.1</code>은 어디에도 할당되지 않은 IP다. 실제로 존재하지 않는 주소가 어떻게 게이트웨이 역할을 할 수 있는 걸까.</p>
+
+<h2 id="16925411-link-local-게이트웨이">169.254.1.1: link-local 게이트웨이</h2>
+
+<p>핵심은 와이어링 4단계의 <strong>static ARP</strong>다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip netns <span class="nb">exec </span>ns1 arp <span class="nt">-i</span> veth-1c <span class="nt">-s</span> 169.254.1.1 &lt;veth-1<span class="s1">'s MAC&gt;
+</span></code></pre></div></div>
+
+<p>이 명령이 파드의 ARP 테이블에 <code class="highlighter-rouge">169.254.1.1 → veth 호스트 측 MAC</code>을 고정한다. 파드가 패킷을 보낼 때 게이트웨이 <code class="highlighter-rouge">169.254.1.1</code>의 MAC을 ARP 요청 없이 곧바로 알 수 있으므로, veth의 호스트 측으로 L2 프레임을 직접 전달한다.</p>
+
+<p>이런 방식을 쓰는 이유는 다음과 같다:</p>
+
+<ul>
+  <li><strong>/32 서브넷</strong>: 파드 IP가 <code class="highlighter-rouge">/32</code>로 할당되므로 같은 서브넷에 다른 호스트가 없다. 일반적인 게이트웨이 IP를 사용할 수 없다</li>
+  <li><strong>충돌 방지</strong>: <code class="highlighter-rouge">169.254.0.0/16</code>은 <a href="https://www.rfc-editor.org/rfc/rfc3927">Link-Local</a> 대역으로, VPC의 실제 IP와 절대 충돌하지 않는다</li>
+  <li><strong>단순성</strong>: 모든 파드가 동일한 게이트웨이 주소를 사용하므로 CNI 로직이 단순해진다</li>
+</ul>
+
+<blockquote>
+  <p>AWS VPC CNI만의 방식은 아니다. Calico도 동일한 link-local 게이트웨이 패턴을 사용한다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="policy-routing">Policy Routing</h1>
+
+<h2 id="eni별-라우팅이-필요한-이유">ENI별 라우팅이 필요한 이유</h2>
+
+<p>VPC는 ENI를 통과하는 패킷의 소스 IP가 해당 ENI에 할당된 IP인지 검사한다(<strong>소스/목적지 검사</strong>). Secondary ENI(ens6)에 할당된 보조 IP를 가진 파드가 Primary ENI(ens5)를 통해 패킷을 보내면 VPC가 드롭한다.</p>
+
+<p>이 문제를 해결하기 위해 VPC CNI는 <strong>policy routing</strong>을 설정한다. 각 ENI마다 별도의 라우팅 테이블을 만들고, <code class="highlighter-rouge">ip rule</code>로 “이 IP에서 나가는 트래픽은 이 테이블을 써라”고 지정한다.</p>
+
+<h2 id="ip-rule-확인">ip rule 확인</h2>
+
+<p>노드 1(192.168.4.12)에서 확인한 routing policy database를 살펴 보자.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip rule
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>0:      from all lookup local
+512:    from all to 192.168.5.1 lookup main
+512:    from all to 192.168.4.248 lookup main
+1024:   from all fwmark 0x80/0x80 lookup main
+32765:  from 192.168.7.41 lookup 2
+32766:  from all lookup main
+32767:  from all lookup default
+</code></pre></div></div>
+
+<p>우선순위별로 정리하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>우선순위</th>
+      <th>규칙</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0</td>
+      <td><code class="highlighter-rouge">from all lookup local</code></td>
+      <td>로컬 주소 매칭 (기본)</td>
+    </tr>
+    <tr>
+      <td>512</td>
+      <td><code class="highlighter-rouge">to 192.168.5.1 lookup main</code></td>
+      <td>coredns 파드로 가는 트래픽 → main 테이블</td>
+    </tr>
+    <tr>
+      <td>512</td>
+      <td><code class="highlighter-rouge">to 192.168.4.248 lookup main</code></td>
+      <td>netshoot 파드로 가는 트래픽 → main 테이블</td>
+    </tr>
+    <tr>
+      <td>1024</td>
+      <td><code class="highlighter-rouge">fwmark 0x80/0x80 lookup main</code></td>
+      <td>SNAT 마킹된 트래픽 → main 테이블</td>
+    </tr>
+    <tr>
+      <td>32765</td>
+      <td><code class="highlighter-rouge">from 192.168.7.41 lookup 2</code></td>
+      <td>ENI1(ens6) IP에서 나가는 트래픽 → table 2</td>
+    </tr>
+    <tr>
+      <td>32766</td>
+      <td><code class="highlighter-rouge">from all lookup main</code></td>
+      <td>나머지 전부 → main 테이블</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>to-pod 규칙</strong>(우선순위 512)이 가장 먼저 매칭되어 파드로 들어오는 트래픽을 main 테이블로 라우팅한다. main 테이블에는 파드별 호스트 라우트(<code class="highlighter-rouge">192.168.4.248 dev eni31b43252b24 scope link</code>)가 있으므로 올바른 veth pair로 전달된다.</p>
+
+<h2 id="eni별-라우팅-테이블">ENI별 라우팅 테이블</h2>
+
+<p><code class="highlighter-rouge">ip rule</code>이 “어떤 테이블을 볼지”를 정하는 규칙이라면, 실제로 그 테이블 안에 어떤 경로가 들어 있는지도 확인해야 한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip route show table main
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>default via 192.168.4.1 dev ens5 proto dhcp src 192.168.4.12 metric 512
+192.168.0.2 via 192.168.4.1 dev ens5 proto dhcp src 192.168.4.12 metric 512
+192.168.4.0/22 dev ens5 proto kernel scope link src 192.168.4.12 metric 512
+192.168.4.1 dev ens5 proto dhcp scope link src 192.168.4.12 metric 512
+192.168.4.248 dev eni31b43252b24 scope link
+192.168.5.1 dev enifdec4b696ce scope link
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ip route show table 2
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>default via 192.168.4.1 dev ens6
+192.168.4.1 dev ens6 scope link
+</code></pre></div></div>
+
+<p>table 2는 ens6을 통해 나가는 경로만 갖고 있다. <code class="highlighter-rouge">from 192.168.7.41 lookup 2</code> 규칙에 의해, ens6의 IP에서 출발하는 트래픽은 이 테이블을 사용하여 ens6을 통해 나간다.</p>
+
+<p>현재 실습 환경에서는 두 파드(coredns, netshoot) 모두 ENI0(ens5)의 보조 IP를 사용하므로, ENI1 전용 from-pod 규칙(<code class="highlighter-rouge">from &lt;pod_ip&gt; lookup 2 prio 1536</code>)은 아직 보이지 않는다. 이후 ENI1의 보조 IP가 파드에 할당되면 해당 규칙이 자동으로 추가된다.</p>
+
+<blockquote>
+  <p>와이어링 마지막 단계(<code class="highlighter-rouge">ip rule add from 20.0.49.215/32 table 2 prio 1536</code>)가 바로 이 from-pod 규칙이다. CNI Plugin이 파드 IP가 어느 ENI에 속하는지 판단하여 필요한 경우에만 추가한다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="파드-간-통신-흐름">파드 간 통신 흐름</h1>
+
+<h2 id="같은-노드-내-통신">같은 노드 내 통신</h2>
+
+<p>같은 노드에 있는 두 파드 간 통신은 호스트의 라우팅만으로 완결된다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>파드A (eth0) → veth pair → 호스트 라우팅 테이블 → veth pair → 파드B (eth0)
+</code></pre></div></div>
+
+<ol>
+  <li>파드A가 파드B의 IP로 패킷을 보내면 기본 게이트웨이 <code class="highlighter-rouge">169.254.1.1</code>(= veth 호스트 측)로 전달</li>
+  <li>호스트의 main 테이블에서 <code class="highlighter-rouge">파드B_IP dev eniXXX scope link</code> 매칭</li>
+  <li>해당 veth pair를 통해 파드B의 네임스페이스로 전달</li>
+</ol>
+
+<p>VPC 밖으로 나가지 않으므로 ENI를 통과하지도, policy routing이 개입하지도 않는다. VPC CNI가 위에서 본 와이어링(veth pair 생성, 호스트 라우트 추가)을 해주지만, 패킷 전달 자체는 <a href="/kubernetes/Kubernetes-EKS-02-00-01-Kubernetes-Pod-to-Pod-Networking/#같은-노드의-파드-간-통신">일반적인 Linux 네트워킹</a>과 동일하다. VPC CNI의 고유한 메커니즘이 동작하는 것은 아래의 크로스 노드 통신이다.</p>
+
+<h2 id="크로스-노드-통신">크로스 노드 통신</h2>
+
+<p>다른 노드에 있는 파드 간 통신은 VPC 라우팅 패브릭을 거친다. 이전 글의 환경을 기준으로, 파드 1(192.168.2.151, 노드 2)에서 파드 2(192.168.4.248, 노드 1)로 ping을 보내는 경우:</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-w2-networking-pod-to-pod-structure.png" alt="크로스 노드 파드 간 통신 구조" class="align-center" /></p>
+
+<p>각 노드의 파드 네임스페이스, veth pair, 호스트 네임스페이스(ENI), 서브넷 게이트웨이, VPC 라우팅까지의 전체 경로가 표현되어 있다. 단계별로 보면:</p>
+
+<ol>
+  <li><strong>파드 1 → veth</strong>: 파드 1이 <code class="highlighter-rouge">192.168.4.248</code>로 패킷 전송. 기본 게이트웨이 <code class="highlighter-rouge">169.254.1.1</code>(= veth 호스트 측 MAC)로 L2 전달</li>
+  <li><strong>노드 2 라우팅</strong>: 호스트의 main 테이블에 <code class="highlighter-rouge">192.168.4.248</code>에 대한 호스트 라우트가 <strong>없다</strong>(다른 노드의 파드이므로). <code class="highlighter-rouge">default via 192.168.0.1 dev ens5</code>를 타고 ENI0을 통해 VPC로 나간다</li>
+  <li><strong>VPC 라우팅</strong>: VPC 라우팅 테이블이 <code class="highlighter-rouge">192.168.4.248</code>을 노드 1의 ENI로 전달한다. VPC CNI에서 파드 IP는 ENI의 보조 IP이므로, VPC가 해당 ENI의 위치를 알고 있다</li>
+  <li><strong>노드 1 수신</strong>: 패킷이 ENI0(ens5)으로 도착. <code class="highlighter-rouge">ip rule</code>의 <code class="highlighter-rouge">512: from all to 192.168.4.248 lookup main</code>이 매칭</li>
+  <li><strong>호스트 → veth</strong>: main 테이블의 <code class="highlighter-rouge">192.168.4.248 dev eni31b43252b24 scope link</code>로 veth pair를 통해 파드 2에 전달</li>
+</ol>
+
+<p>이 과정에서 패킷의 <strong>소스 IP(192.168.2.151)</strong>와 <strong>목적지 IP(192.168.4.248)</strong>는 한 번도 변하지 않는다. NAT도 오버레이 캡슐화도 없다.</p>
+
+<p><br /></p>
+
+<h1 id="패킷-흐름">패킷 흐름</h1>
+
+<p>위에서 크로스 노드 통신의 경로를 5단계로 살펴봤다. 여기서는 <a href="https://github.com/aws/amazon-vpc-cni-k8s/blob/master/docs/cni-proposal.md">AWS VPC CNI Proposal</a>의 시퀀스 다이어그램을 기반으로, ENI별 policy routing과 <code class="highlighter-rouge">ip rule</code> 흐름까지 포함한 전체 패킷 경로를 추적한다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-proposal-pod-to-pod-sequence.png" alt="pod-to-pod-sequence" class="align-center" /></p>
+
+<center><sup><a href="https://github.com/aws/amazon-vpc-cni-k8s/blob/master/docs/cni-proposal.md#life-of-a-pod-to-pod-ping-packet">AWS VPC CNI Proposal</a>의 Pod to Pod 통신 시퀀스. 파드 IP가 어느 ENI에 속하느냐에 따라 policy routing으로 나가는 ENI가 달라진다.</sup></center>
+
+<p>핵심은 파드 IP가 어느 ENI에 속하느냐에 따라 <strong>policy routing</strong>으로 나가는 ENI가 달라진다는 점이다. <code class="highlighter-rouge">ip rule</code>의 <code class="highlighter-rouge">from &lt;파드IP&gt; lookup eni-1</code> 규칙이 해당 ENI의 라우팅 테이블을 사용하게 만든다. 반드시 “첫 번째 인터페이스”만 쓰는 것이 아니다.</p>
+
+<h2 id="구성-요소">구성 요소</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>구성 요소</th>
+      <th>역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>pod1 on node1</strong></td>
+      <td>통신의 출발점. source IP가 파드 IP인 상태로 시작</td>
+    </tr>
+    <tr>
+      <td><strong>veth-1 on node1</strong></td>
+      <td>파드 eth0과 pair로 연결된 가상 인터페이스. 파드 네임스페이스 → 노드 네임스페이스 경계</td>
+    </tr>
+    <tr>
+      <td><strong>eth0 on node1 (ens5)</strong></td>
+      <td>송신 노드의 ENI. 목적지가 VPC CIDR 안이므로 <strong>SNAT 없이</strong> 파드 IP 그대로 나감</td>
+    </tr>
+    <tr>
+      <td><strong>eth0 on node2 (ens5)</strong></td>
+      <td>수신 노드의 ENI. VPC 라우팅을 통해 패킷이 도착하는 지점</td>
+    </tr>
+    <tr>
+      <td><strong>veth-1 on node2</strong></td>
+      <td>수신 노드에서 pod2와 연결된 veth pair. <code class="highlighter-rouge">ip rule</code>의 <code class="highlighter-rouge">to &lt;pod2 IP&gt; lookup main</code> → 호스트 라우트로 직접 전달</td>
+    </tr>
+    <tr>
+      <td><strong>pod2 on node2</strong></td>
+      <td>최종 목적지. source IP는 <strong>pod1의 파드 IP 그대로</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>예시 IP: pod1 IP = <code class="highlighter-rouge">192.168.2.151</code> (node1), pod2 IP = <code class="highlighter-rouge">192.168.4.248</code> (node2)</p>
+
+<h2 id="나가는-경로">나가는 경로</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>순서</th>
+      <th>구간</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>pod1 eth0</td>
+      <td>L3 lookup → pod2 IP는 내 서브넷 밖 → next hop = default gw (<code class="highlighter-rouge">169.254.1.1</code>)</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>pod1 eth0</td>
+      <td>ARP로 default gw(veth)의 MAC 주소 획득</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>pod1 eth0 → veth-1 on node1</td>
+      <td>ping 전송: <code class="highlighter-rouge">MAC-DA=veth MAC</code>, <code class="highlighter-rouge">IP-DA=pod2 IP</code>, <code class="highlighter-rouge">IP-SA=pod1 IP</code></td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>veth-1 → node1’s eth0</td>
+      <td>L3 lookup: 목적지가 VPC CIDR <strong>안</strong> → <code class="highlighter-rouge">AWS-SNAT-CHAIN-0</code>에서 <code class="highlighter-rouge">-d 192.168.0.0/16 -j RETURN</code> → <strong>SNAT 안 함</strong></td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>node1’s eth0 → EC2-VPC fabric → node2’s eth0</td>
+      <td>VPC 라우팅: pod2 IP가 node2 ENI의 secondary IP → node2로 직접 전달. <strong>파드 IP 그대로</strong></td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>node2’s eth0 → veth-1 on node2</td>
+      <td>L3 lookup: <code class="highlighter-rouge">ip rule</code>에서 <code class="highlighter-rouge">to 192.168.4.248 lookup main</code> → <code class="highlighter-rouge">192.168.4.248 dev eniXXXX scope link</code></td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>veth-1 → pod2 eth0</td>
+      <td>ping 도착: <code class="highlighter-rouge">IP-SA=pod1 IP</code>, <code class="highlighter-rouge">IP-DA=pod2 IP</code> — 파드 IP 변환 없음</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="돌아오는-경로">돌아오는 경로</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>순서</th>
+      <th>구간</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>8</td>
+      <td>pod2 eth0 → veth-1 on node2</td>
+      <td>ping reply: <code class="highlighter-rouge">IP-SA=pod2 IP</code>, <code class="highlighter-rouge">IP-DA=pod1 IP</code></td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>node2’s eth0 → EC2-VPC fabric → node1’s eth0</td>
+      <td>역방향 VPC 라우팅 (동일하게 SNAT 없음)</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>node1’s eth0 → veth-1 → pod1 eth0</td>
+      <td>ping reply 수신: <code class="highlighter-rouge">IP-SA=pod2 IP</code>, <code class="highlighter-rouge">IP-DA=pod1 IP</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>경로 전체에서 소스 IP(<code class="highlighter-rouge">192.168.2.151</code>)와 목적지 IP(<code class="highlighter-rouge">192.168.4.248</code>)가 <strong>한 번도 변하지 않는다</strong>. <a href="/kubernetes/Kubernetes-EKS-02-02-03-Pod-to-External-Network/#패킷-흐름">다음 글</a>의 파드→외부 통신에서는 4 지점에서 SNAT이 적용되어 ens5에서 노드 IP가 찍히는 것과 대조된다.</p>
+
+<h2 id="주요-사항">주요 사항</h2>
+
+<ul>
+  <li><strong>1~3 파드 → veth → 호스트</strong> — 목적지 IP(<code class="highlighter-rouge">192.168.4.248</code>)가 내 서브넷 밖 → default gateway(<code class="highlighter-rouge">169.254.1.1</code>) → ARP로 veth MAC 획득 → <code class="highlighter-rouge">MAC-DA=veth MAC</code>, <code class="highlighter-rouge">IP-DA=192.168.4.248</code>, <code class="highlighter-rouge">IP-SA=192.168.2.151</code>으로 veth pair를 통해 노드 네임스페이스에 전달. 여기까지는 파드→외부와 완전히 동일하다.</li>
+  <li><strong>4 SNAT이 안 일어나는 이유</strong> — 노드 라우팅 참조 → 목적지가 <code class="highlighter-rouge">192.168.0.0/16</code> 안 → default route로 ens5를 통해 나간다. <code class="highlighter-rouge">AWS-SNAT-CHAIN-0</code>의 첫 번째 규칙이 <code class="highlighter-rouge">-d 192.168.0.0/16 -j RETURN</code>이다. pod2 IP(<code class="highlighter-rouge">192.168.4.248</code>)가 VPC CIDR 안이므로 RETURN → SNAT 규칙에 도달하지 않는다. <strong>파드 IP 그대로 나간다</strong>. 파드→외부에서는 목적지가 VPC CIDR 밖이라 이 규칙을 통과해서 SNAT이 적용된다.</li>
+  <li><strong>5 VPC native 라우팅</strong> — VPC가 <code class="highlighter-rouge">192.168.4.248</code>은 node2 ENI의 secondary IP임을 알고 있어 직접 전달한다. 오버레이(VXLAN, Geneve 등) 없이 직접 전달 가능. IGW 불필요, NAT 불필요.</li>
+  <li><strong>6 policy routing</strong> — 수신 노드에서 <code class="highlighter-rouge">ip rule</code>의 <code class="highlighter-rouge">to 192.168.4.248 lookup main</code> → 호스트 라우트(<code class="highlighter-rouge">192.168.4.248 dev eni31b43252b24 scope link</code>)로 정확한 veth에 전달한다.</li>
+  <li><strong>8~10 역방향</strong> — reply도 동일한 경로를 역순으로 탄다. SNAT 없었으니 conntrack/역NAT도 불필요하다.</li>
+  <li><strong>tcpdump에서의 차이</strong> — 파드→외부에서는 ens5에서 노드 IP가 찍힌다 (SNAT 후). 파드→파드에서는 ens5에서도 <strong>파드 IP가 그대로</strong> 찍힌다 (SNAT 없음). 아래 <a href="#tcpdump-검증">tcpdump 검증</a>에서 이를 직접 확인한다.</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="tcpdump-검증">tcpdump 검증</h1>
+
+<p>실제로 패킷이 위 경로를 따르는지 tcpdump로 확인한다. <strong>수신 노드</strong>(노드 1, 파드 2가 있는 노드)에서 인터페이스별로 캡처한다. 하나의 인터페이스에서만 잡으면 “패킷이 도착했다”는 사실만 알 수 있지만, ENI(ens5, ens6)와 veth를 각각 따로 잡으면 <strong>패킷이 어떤 경로로 흘러가는지</strong>(어느 ENI로 들어와서 어느 veth로 전달되는지) 정확히 추적할 수 있다.</p>
+
+<h2 id="캡처-방법">캡처 방법</h2>
+
+<p>파드 1(노드 2)에서 파드 2(노드 1)로 <code class="highlighter-rouge">ping -c 2</code>를 보내면서, 노드 1에서 인터페이스별로 tcpdump를 실행한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 전체 인터페이스</span>
+<span class="nb">sudo </span>tcpdump <span class="nt">-i</span> any <span class="nt">-nn</span> icmp
+
+<span class="c"># ENI0 (Primary)</span>
+<span class="nb">sudo </span>tcpdump <span class="nt">-i</span> ens5 <span class="nt">-nn</span> icmp
+
+<span class="c"># ENI1 (Secondary)</span>
+<span class="nb">sudo </span>tcpdump <span class="nt">-i</span> ens6 <span class="nt">-nn</span> icmp
+
+<span class="c"># 파드2의 veth pair (호스트 측)</span>
+<span class="nb">sudo </span>tcpdump <span class="nt">-i</span> eni31b43252b24 <span class="nt">-nn</span> icmp
+</code></pre></div></div>
+
+<h2 id="인터페이스별-결과">인터페이스별 결과</h2>
+
+<h3 id="전체-인터페이스--i-any">전체 인터페이스 (<code class="highlighter-rouge">-i any</code>)</h3>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>16:34:02.537302 ens5  In  IP 192.168.2.151 &gt; 192.168.4.248: ICMP echo request, id 3, seq 1, length 64
+16:34:02.537366 eni31b43252b24 Out IP 192.168.2.151 &gt; 192.168.4.248: ICMP echo request, id 3, seq 1, length 64
+16:34:02.537379 eni31b43252b24 In  IP 192.168.4.248 &gt; 192.168.2.151: ICMP echo reply, id 3, seq 1, length 64
+16:34:02.537386 ens5  Out IP 192.168.4.248 &gt; 192.168.2.151: ICMP echo reply, id 3, seq 1, length 64
+16:34:03.538413 ens5  In  IP 192.168.2.151 &gt; 192.168.4.248: ICMP echo request, id 3, seq 2, length 64
+16:34:03.538443 eni31b43252b24 Out IP 192.168.2.151 &gt; 192.168.4.248: ICMP echo request, id 3, seq 2, length 64
+16:34:03.538458 eni31b43252b24 In  IP 192.168.4.248 &gt; 192.168.2.151: ICMP echo reply, id 3, seq 2, length 64
+16:34:03.538468 ens5  Out IP 192.168.4.248 &gt; 192.168.2.151: ICMP echo reply, id 3, seq 2, length 64
+</code></pre></div></div>
+
+<p>8개 패킷이 캡처되었다. <code class="highlighter-rouge">ping -c 2</code>이므로 ICMP 요청 2개 + 응답 2개 = 4개인데, <code class="highlighter-rouge">-i any</code>는 패킷이 통과하는 <strong>모든 인터페이스에서</strong> 잡으므로 ens5에서 4개 + veth에서 4개 = 8개다.</p>
+
+<p>한 패킷의 수신 경로를 타임스탬프로 추적해 보면, 요청이 <code class="highlighter-rouge">ens5 In → veth Out</code>으로 흐르고, 응답이 <code class="highlighter-rouge">veth In → ens5 Out</code>으로 나간다. 앞서 설명한 크로스 노드 통신 경로와 정확히 일치한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>시간</th>
+      <th>인터페이스</th>
+      <th>방향</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>.537302</td>
+      <td>ens5</td>
+      <td>In</td>
+      <td>VPC에서 ENI0으로 도착</td>
+    </tr>
+    <tr>
+      <td>.537366</td>
+      <td>eni31b43252b24</td>
+      <td>Out</td>
+      <td>호스트 → veth → 파드로 전달</td>
+    </tr>
+    <tr>
+      <td>.537379</td>
+      <td>eni31b43252b24</td>
+      <td>In</td>
+      <td>파드가 응답, veth → 호스트</td>
+    </tr>
+    <tr>
+      <td>.537386</td>
+      <td>ens5</td>
+      <td>Out</td>
+      <td>호스트 → ENI0 → VPC로 송신</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="eni0--i-ens5">ENI0 (<code class="highlighter-rouge">-i ens5</code>)</h3>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>16:34:51.424926 IP 192.168.2.151 &gt; 192.168.4.248: ICMP echo request, id 4, seq 1, length 64
+16:34:51.424992 IP 192.168.4.248 &gt; 192.168.2.151: ICMP echo reply, id 4, seq 1, length 64
+16:34:52.458979 IP 192.168.2.151 &gt; 192.168.4.248: ICMP echo request, id 4, seq 2, length 64
+16:34:52.459035 IP 192.168.4.248 &gt; 192.168.2.151: ICMP echo reply, id 4, seq 2, length 64
+</code></pre></div></div>
+
+<p>4개 패킷. 요청 2개가 ens5로 들어오고, 응답 2개가 ens5로 나간다. 파드 2의 IP(<code class="highlighter-rouge">192.168.4.248</code>)가 <strong>ENI0의 보조 IP</strong>이므로 ens5를 통과하는 것이 정상이다.</p>
+
+<h3 id="eni1--i-ens6">ENI1 (<code class="highlighter-rouge">-i ens6</code>)</h3>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>(캡처 없음 — 0개)
+</code></pre></div></div>
+
+<p>파드 2의 IP가 ENI1 소속이 아니므로 ens6을 통과하는 ICMP 패킷이 없다. Policy routing이 올바르게 동작하고 있다는 증거이기도 하다.</p>
+
+<h3 id="파드-veth--i-eni31b43252b24">파드 veth (<code class="highlighter-rouge">-i eni31b43252b24</code>)</h3>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>16:38:30.894643 IP 192.168.2.151 &gt; 192.168.4.248: ICMP echo request, id 7, seq 1, length 64
+16:38:30.894655 IP 192.168.4.248 &gt; 192.168.2.151: ICMP echo reply, id 7, seq 1, length 64
+16:38:31.899026 IP 192.168.2.151 &gt; 192.168.4.248: ICMP echo request, id 7, seq 2, length 64
+16:38:31.899047 IP 192.168.4.248 &gt; 192.168.2.151: ICMP echo reply, id 7, seq 2, length 64
+</code></pre></div></div>
+
+<p>4개 패킷. veth pair를 통해 파드로 들어가고 나오는 트래픽만 캡처된다.</p>
+
+<h2 id="결과-종합">결과 종합</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>인터페이스</th>
+      <th>캡처 패킷 수</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">-i any</code></td>
+      <td>8개</td>
+      <td>ens5(4) + veth(4) 합산</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">-i ens5</code> (ENI0)</td>
+      <td>4개</td>
+      <td>VPC ↔ 노드 구간</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">-i ens6</code> (ENI1)</td>
+      <td>0개</td>
+      <td>파드 IP가 ENI0 소속이라 미통과</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">-i eni31b43252b24</code> (veth)</td>
+      <td>4개</td>
+      <td>노드 ↔ 파드 구간</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>모든 캡처에서 <strong>소스 IP(<code class="highlighter-rouge">192.168.2.151</code>)와 목적지 IP(<code class="highlighter-rouge">192.168.4.248</code>)가 그대로 찍혀 있다</strong>. 오버레이 CNI(예: Flannel VXLAN)라면 <code class="highlighter-rouge">tcpdump -i ens5</code>에서 파드 IP 대신 노드 IP가 보일 것이다. VPC CNI에서는 파드 IP가 VPC의 실제 IP이므로 변환 없이 그대로 전달된다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>구성 요소</th>
+      <th>역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>veth pair</td>
+      <td>파드 네임스페이스 ↔ 호스트 네임스페이스 연결</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">/32</code> IP 할당</td>
+      <td>point-to-point 파드 IP 설정</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">169.254.1.1</code> + static ARP</td>
+      <td>link-local 가상 게이트웨이</td>
+    </tr>
+    <tr>
+      <td>호스트 라우트 (<code class="highlighter-rouge">dev eniXXX scope link</code>)</td>
+      <td>파드 IP → veth pair 매핑</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">ip rule</code> to-pod (prio 512)</td>
+      <td>파드로 향하는 트래픽을 main 테이블로 라우팅</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">ip rule</code> from-pod (prio 1536)</td>
+      <td>Secondary ENI 파드의 송신 트래픽을 올바른 ENI로 라우팅</td>
+    </tr>
+    <tr>
+      <td>VPC 라우팅 패브릭</td>
+      <td>크로스 노드 파드 통신을 ENI 보조 IP 기반으로 직접 전달</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>VPC CNI는 파드에게 VPC의 실제 IP를 부여하고, veth + 호스트 라우트 + policy routing으로 패킷 경로를 구성한다. 그 결과 오버레이나 NAT 없이 파드 간 직접 통신이 가능하다. tcpdump 결과에서 확인했듯이 패킷은 출발지부터 목적지까지 <strong>파드 IP 그대로</strong> 전달된다.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-EKS-02-02-01-Installation-Result/">[EKS] EKS: Networking - 2. 실습 환경 구성 - 2. 확인</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-EKS-02-02-03-Pod-to-External-Network/">[EKS] EKS: Networking - 4. 파드와 외부 간 통신</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study-week-2" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study-Week-2</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws" class="page__taxonomy-item" rel="tag">AWS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#cni" class="page__taxonomy-item" rel="tag">CNI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#networking" class="page__taxonomy-item" rel="tag">Networking</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#policy-routing" class="page__taxonomy-item" rel="tag">Policy-Routing</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#tcpdump" class="page__taxonomy-item" rel="tag">tcpdump</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#vpc-cni" class="page__taxonomy-item" rel="tag">VPC-CNI</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-03-19T00:00:00+09:00">March 19, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEKS%5D+EKS%3A+Networking+-+3.+%ED%8C%8C%EB%93%9C+%EA%B0%84+%ED%86%B5%EC%8B%A0%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-02-02-02-Pod-to-Pod-Network%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-02-02-02-Pod-to-Pod-Network%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-02-02-02-Pod-to-Pod-Network%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-EKS-02-02-02-Pod-to-Pod-Network?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-EKS-02-02-01-Installation-Result/" class="pagination--pager" title="[EKS] EKS: Networking - 2. 실습 환경 구성 - 2. 확인
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-EKS-02-02-03-Pod-to-External-Network/" class="pagination--pager" title="[EKS] EKS: Networking - 4. 파드와 외부 간 통신
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-EKS-02-02-02-Pod-to-Pod-Network/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-EKS-02-02-02-Pod-to-Pod-Network"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,1662 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 3. 분산학습과 NCCL 통신 - 2. SG 차단 네트워크 장애 재현 - Eraser’s StudyLog</title>
+<meta name="description" content="EKS node SG에서 ephemeral self-ref를 제거하면 분산학습이 어떻게 실패하는지 재현해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 3. 분산학습과 NCCL 통신 - 2. SG 차단 네트워크 장애 재현">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-02-Distributed-Learning-Network-Failure/">
+
+
+  <meta property="og:description" content="EKS node SG에서 ephemeral self-ref를 제거하면 분산학습이 어떻게 실패하는지 재현해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-09T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-02-Distributed-Learning-Network-Failure/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 3. 분산학습과 NCCL 통신 - 2. SG 차단 네트워크 장애 재현">
+    <meta itemprop="description" content="EKS node SG에서 ephemeral self-ref를 제거하면 분산학습이 어떻게 실패하는지 재현해 보자.">
+    <meta itemprop="datePublished" content="2026-04-09T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 3. 분산학습과 NCCL 통신 - 2. SG 차단 네트워크 장애 재현
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-09T00:00:00+09:00">2026년 04월 09일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  10 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#전제-환경">전제 환경</a></li>
+  <li><a href="#baseline-스냅샷">Baseline 스냅샷</a>
+    <ul>
+      <li><a href="#sg-rule-상태">SG rule 상태</a></li>
+      <li><a href="#2-node-all_reduce-성공">2-node all_reduce 성공</a></li>
+    </ul>
+  </li>
+  <li><a href="#장애-주입">장애 주입</a>
+    <ul>
+      <li><a href="#terraform-sg-rule-차단">Terraform SG rule 차단</a></li>
+      <li><a href="#제거되는-sg-rule-8개">제거되는 SG rule 8개</a></li>
+      <li><a href="#차단-후-sg-상태">차단 후 SG 상태</a></li>
+    </ul>
+  </li>
+  <li><a href="#디버깅-경로">디버깅 경로</a>
+    <ul>
+      <li><a href="#1단계-pod-상태-확인">1단계: Pod 상태 확인</a></li>
+      <li><a href="#2단계-kubectl-logs--에러-메시지-확인">2단계: kubectl logs — 에러 메시지 확인</a>
+        <ul>
+          <li><a href="#master-rank-0">Master (rank 0)</a></li>
+          <li><a href="#worker-rank-1">Worker (rank 1)</a></li>
+          <li><a href="#nccl-info-라인-0줄">NCCL INFO 라인: 0줄</a></li>
+        </ul>
+      </li>
+      <li><a href="#3단계-층-분석--왜-nccl이-아닌가">3단계: 층 분석 — 왜 NCCL이 아닌가</a></li>
+      <li><a href="#4단계-sg-rule-확인">4단계: SG rule 확인</a></li>
+      <li><a href="#부수-효과-관찰">부수 효과 관찰</a></li>
+    </ul>
+  </li>
+  <li><a href="#예상-vs-실측">예상 vs 실측</a></li>
+  <li><a href="#해결복구">해결/복구</a>
+    <ul>
+      <li><a href="#terraform-sg-원복">Terraform SG 원복</a></li>
+      <li><a href="#all_reduce-재성공">all_reduce 재성공</a></li>
+      <li><a href="#복구-검증">복구 검증</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a>
+    <ul>
+      <li><a href="#진단-공식">진단 공식</a></li>
+      <li><a href="#디버깅-경로-비교">디버깅 경로 비교</a></li>
+      <li><a href="#운영-함정-2가지">운영 함정 2가지</a></li>
+      <li><a href="#요약">요약</a></li>
+      <li><a href="#다음-단계">다음 단계</a></li>
+    </ul>
+  </li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em>정영준님의 AWS EKS Workshop Study(AEWS) <a href="https://devfloor9.github.io/engineering-playbook/slides/eks-debugging/">5주차 학습 내용</a>을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background/">이전 글</a>에서 정리한 실험 설계(Pod 2개 + headless Service, torchrun 기반 2-node all_reduce)를 바탕으로, EKS node SG의 <strong>ephemeral self-ref(1025-65535/tcp) 제거</strong>로 분산학습 네트워크 장애를 재현한다.</p>
+
+<ul>
+  <li><strong>장애 재현</strong>: Terraform 토글 2개 플립 → SG rule 8개 제거(ephemeral self-ref + webhook 5개 + egress + aux VPC allow) → 2-node torchrun이 <strong>120초 후 실패</strong></li>
+  <li><strong>핵심 발견</strong>: 실패 지점이 예상(NCCL)과 다르다. <strong>NCCL이 아니라 PyTorch c10d TCPStore</strong>에서 rendezvous timeout이 먼저 발생. <code class="highlighter-rouge">NCCL_DEBUG=INFO</code> 로그가 <strong>한 줄도 출력되지 않는다</strong></li>
+  <li><strong>진단 공식</strong>: <code class="highlighter-rouge">NCCL_DEBUG=INFO</code> 로그가 비어 있고 Python traceback에 <code class="highlighter-rouge">socket.cpp</code>/<code class="highlighter-rouge">TCPStore</code>/<code class="highlighter-rouge">DistNetworkError</code>가 보이면 → NCCL이 아니라 c10d 층. SG/방화벽/<code class="highlighter-rouge">MASTER_PORT</code> 접근성을 먼저 확인</li>
+  <li><strong>복구</strong>: Terraform SG 원복(8 rule 재생성, 4초) → all_reduce 재성공(21초)</li>
+  <li><strong>운영 함정</strong>: “NCCL 이슈”라고 불리는 것의 상당수는 NCCL 바깥이다. EKS managed node SG의 recommended rule 덩어리는 한 묶음으로 움직인다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="전제-환경">전제 환경</h1>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background/">이전 글</a>에서 설계한 실험 환경을 그대로 이어받는다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>값</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>클러스터</td>
+      <td>myeks5w, K8s 1.35</td>
+    </tr>
+    <tr>
+      <td>GPU 노드</td>
+      <td>g5.xlarge × 2, AZ ap-northeast-2a, private subnet</td>
+    </tr>
+    <tr>
+      <td>GPU Operator</td>
+      <td>v26.3.1, ClusterPolicy <code class="highlighter-rouge">status.state: ready</code></td>
+    </tr>
+    <tr>
+      <td>Device Plugin DS</td>
+      <td>2/2/2 Ready</td>
+    </tr>
+    <tr>
+      <td>컨테이너 이미지</td>
+      <td><code class="highlighter-rouge">nvcr.io/nvidia/pytorch:24.10-py3</code> (NCCL 2.22.3+cuda12.6 내장)</td>
+    </tr>
+    <tr>
+      <td>NCCL transport</td>
+      <td>NET/Socket (IB 없음, <code class="highlighter-rouge">NCCL_IB_DISABLE=1</code>)</td>
+    </tr>
+    <tr>
+      <td>실험 구조</td>
+      <td>Pod 2개 + headless Service, torchrun 기반 2-node all_reduce</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="baseline-스냅샷">Baseline 스냅샷</h1>
+
+<p>장애 주입 전, SG가 온전한 상태에서 2-node all_reduce가 정상 동작함을 먼저 증명한다. 이것이 있어야 “차단 후 실패”를 SG 때문이라고 귀속할 수 있다.</p>
+
+<h2 id="sg-rule-상태">SG rule 상태</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>SG</th>
+      <th>ingress 수</th>
+      <th>egress 수</th>
+      <th>핵심 rule</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>node SG</td>
+      <td><strong>10</strong></td>
+      <td>1 (<code class="highlighter-rouge">0.0.0.0/0</code> all)</td>
+      <td>self-ref ephemeral <code class="highlighter-rouge">1025-65535/tcp</code>, cluster→node webhook 5개(4443/6443/8443/9443/10251), kubelet 10250, DNS 53/tcp+udp self, cluster→node 443</td>
+    </tr>
+    <tr>
+      <td>aux SG</td>
+      <td><strong>1</strong> (<code class="highlighter-rouge">192.168.0.0/16</code> all-traffic)</td>
+      <td>1 (<code class="highlighter-rouge">0.0.0.0/0</code> all)</td>
+      <td>VPC 대역 전체 허용</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="2-node-all_reduce-성공">2-node all_reduce 성공</h2>
+
+<p>정상 상태에서 torchrun 기반 2-node all_reduce를 실행한 결과, 핵심 로그를 발췌하면 다음과 같다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NCCL INFO Bootstrap : Using eth0:192.168.xx.xx&lt;0&gt;
+NCCL INFO NET/Socket : Using [0]eth0:192.168.xx.xx&lt;0&gt;
+NCCL INFO Using network Socket
+NCCL INFO ncclCommInitRank ... - Init COMPLETE
+NCCL INFO Connected all rings
+[rank 0] iter 0 sum-first=3.0
+[rank 0] iter 1 sum-first=6.0
+[rank 0] iter 2 sum-first=12.0
+[rank 0] iter 3 sum-first=24.0
+[rank 0] iter 4 sum-first=48.0
+</code></pre></div></div>
+
+<ul>
+  <li>NCCL 2.22.3+cuda12.6, NET/Socket transport(IB 없음)</li>
+  <li><code class="highlighter-rouge">Init COMPLETE</code> → <code class="highlighter-rouge">Connected all rings</code> → rank 0/1 양쪽 sum 일치(3→6→12→24→48)</li>
+  <li>Pod 상태: 양쪽 <code class="highlighter-rouge">Completed</code></li>
+</ul>
+
+<details>
+  <summary><b>Master(rank 0) 전체 NCCL 로그</b></summary>
+
+  <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>nccl-master-0:1:1 [0] NCCL INFO NCCL_SOCKET_IFNAME set by environment to eth0
+nccl-master-0:1:1 [0] NCCL INFO Bootstrap : Using eth0:192.168.xx.xx&lt;0&gt;
+nccl-master-0:1:1 [0] NCCL INFO cudaDriverVersion 13000
+nccl-master-0:1:1 [0] NCCL INFO NCCL version 2.22.3+cuda12.6
+nccl-master-0:1:84 [0] NCCL INFO Plugin Path : /opt/hpcx/nccl_rdma_sharp_plugin/lib/libnccl-net.so
+nccl-master-0:1:84 [0] NCCL INFO P2P plugin v8 IBext_v8
+nccl-master-0:1:84 [0] NCCL INFO NET/IB : No device found.          # ← IB 디바이스 탐색 실패 (우선순위 2 탈락)
+nccl-master-0:1:84 [0] NCCL INFO NCCL_IB_DISABLE set by environment to 1.  # ← 환경변수로 IB 명시적 비활성화
+nccl-master-0:1:84 [0] NCCL INFO NET/Socket : Using [0]eth0:192.168.xx.xx&lt;0&gt;  # ← TCP Socket으로 fallback (우선순위 3)
+nccl-master-0:1:84 [0] NCCL INFO Using network Socket               # ← 최종 transport 확정: TCP Socket
+nccl-master-0:1:84 [0] NCCL INFO ncclCommInitRank comm 0x56223d711810 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 1e0 commId 0xef1a7a6ce2d1f588 - Init START
+nccl-master-0:1:84 [0] NCCL INFO comm 0x56223d711810 rank 0 nRanks 2 nNodes 2 localRanks 1 localRank 0 MNNVL 0
+nccl-master-0:1:84 [0] NCCL INFO Channel 00/02 :    0   1
+nccl-master-0:1:84 [0] NCCL INFO Channel 01/02 :    0   1
+nccl-master-0:1:84 [0] NCCL INFO Trees [0] 1/-1/-1-&gt;0-&gt;-1 [1] -1/-1/-1-&gt;0-&gt;1
+nccl-master-0:1:84 [0] NCCL INFO ncclCommInitRank comm 0x56223d711810 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 1e0 commId 0xef1a7a6ce2d1f588 - Init COMPLETE
+nccl-master-0:1:87 [0] NCCL INFO Channel 00/0 : 1[0] -&gt; 0[0] [receive] via NET/Socket/0
+nccl-master-0:1:87 [0] NCCL INFO Channel 01/0 : 1[0] -&gt; 0[0] [receive] via NET/Socket/0
+nccl-master-0:1:87 [0] NCCL INFO Channel 00/0 : 0[0] -&gt; 1[0] [send] via NET/Socket/0
+nccl-master-0:1:87 [0] NCCL INFO Channel 01/0 : 0[0] -&gt; 1[0] [send] via NET/Socket/0
+nccl-master-0:1:87 [0] NCCL INFO Connected all rings
+</code></pre></div>  </div>
+
+  <p>NCCL transport 선택 과정을 정리하면 다음과 같다. NCCL은 우선순위가 높은 transport부터 시도하여, 사용 가능한 첫 번째 경로를 선택한다.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>우선순위</th>
+        <th>transport</th>
+        <th>이 실험에서</th>
+        <th>로그</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td>NVLink</td>
+        <td>해당 없음 (노드 간 통신, 같은 서버 내 GPU 간만 가능)</td>
+        <td>-</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>GPUDirect RDMA / IB</td>
+        <td>g5.xlarge에 EFA/IB 없음 → <code class="highlighter-rouge">No device found</code> + <code class="highlighter-rouge">IB_DISABLE=1</code></td>
+        <td>line 7-8</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><strong>TCP Socket</strong></td>
+        <td><strong>선택됨</strong> → <code class="highlighter-rouge">NET/Socket : Using [0]eth0</code></td>
+        <td>line 9-10</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>g5.xlarge에는 NVLink도 EFA도 없으므로 <strong>TCP Socket이 유일한 노드 간 NCCL 통신 경로</strong>다. 이 TCP Socket 통신이 node SG의 ephemeral self-ref(1025-65535/tcp) rule을 통해 허용된다. 즉, 이 rule이 제거되면 NCCL의 유일한 통신 경로가 막힌다.</p>
+
+</details>
+
+<p><br /></p>
+
+<h1 id="장애-주입">장애 주입</h1>
+
+<h2 id="terraform-sg-rule-차단">Terraform SG rule 차단</h2>
+
+<p>Terraform 변수 2개를 <code class="highlighter-rouge">false</code>로 플립하여 SG rule 8개를 제거한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>terraform plan <span class="se">\</span>
+  <span class="nt">-var</span> <span class="nv">gpu_desired_size</span><span class="o">=</span>2 <span class="se">\</span>
+  <span class="nt">-var</span> <span class="nv">enable_aux_sg_vpc_allow</span><span class="o">=</span><span class="nb">false</span> <span class="se">\</span>
+  <span class="nt">-var</span> <span class="nv">node_sg_enable_recommended_rules</span><span class="o">=</span><span class="nb">false</span> <span class="se">\</span>
+  <span class="nt">-out</span><span class="o">=</span>tfplan-c3-block
+<span class="c"># Plan: 0 to add, 0 to change, 8 to destroy</span>
+</code></pre></div></div>
+
+<h2 id="제거되는-sg-rule-8개">제거되는 SG rule 8개</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>rule</th>
+      <th>의미</th>
+      <th>실험상 역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>1</strong></td>
+      <td>aux SG VPC <code class="highlighter-rouge">192.168.0.0/16</code> all-traffic ingress</td>
+      <td>노드 간 숨은 허용 경로</td>
+      <td><strong>분산학습 통신 차단 (핵심)</strong></td>
+    </tr>
+    <tr>
+      <td><strong>2</strong></td>
+      <td>node SG self-ref <code class="highlighter-rouge">1025-65535/tcp</code> ingress</td>
+      <td>노드 간 ephemeral 포트 허용</td>
+      <td><strong>분산학습 통신 차단 (핵심)</strong></td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>node SG <code class="highlighter-rouge">egress 0.0.0.0/0</code></td>
+      <td>노드 outbound all</td>
+      <td>부수 효과 (<code class="highlighter-rouge">aux_egress_all</code>이 보완)</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>cluster→node 4443/tcp</td>
+      <td>webhook</td>
+      <td>부수 효과</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>cluster→node 6443/tcp</td>
+      <td>webhook</td>
+      <td>부수 효과</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>cluster→node 8443/tcp</td>
+      <td>Karpenter webhook</td>
+      <td>부수 효과</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>cluster→node 9443/tcp</td>
+      <td>aws-lb-controller, cert-manager webhook</td>
+      <td>부수 효과</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>cluster→node 10251/tcp</td>
+      <td>webhook</td>
+      <td>부수 효과</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>1번과 2번이 분산학습 통신의 실제 차단 대상이다. 3번(egress)은 <code class="highlighter-rouge">aux_egress_all</code>이 커버하고, 4~8번은 webhook 부수 효과다.</p>
+
+<p>“1번과 2번만 골라서 제거하면 되지 않나?”라고 생각할 수 있지만, EKS Terraform 모듈의 <code class="highlighter-rouge">node_security_group_enable_recommended_rules</code>는 단일 boolean이다. 이 토글 하나로 ephemeral self-ref, webhook 5개, egress가 한 묶음으로 켜지거나 꺼진다. 개별 rule만 골라 빼는 옵션이 모듈에 없다. <code class="highlighter-rouge">aws ec2 revoke-security-group-ingress</code> CLI로 수동 제거할 수는 있지만, 실무에서 이 장애가 발생하는 경로는 “누군가 PR에서 토글을 <code class="highlighter-rouge">false</code>로 바꾸거나, 모듈 업그레이드 시 기본값이 바뀌면서 8개가 한꺼번에 내려가는 것”이다. 이 실험은 그 실무 사고 경로를 그대로 재현한다.</p>
+
+<h2 id="차단-후-sg-상태">차단 후 SG 상태</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>SG</th>
+      <th>baseline ingress</th>
+      <th>차단 후 ingress</th>
+      <th>남는 rule</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>node SG</td>
+      <td>10</td>
+      <td><strong>4</strong></td>
+      <td>kubelet 10250, DNS 53/tcp+udp self, cluster→node 443</td>
+    </tr>
+    <tr>
+      <td>aux SG</td>
+      <td>1</td>
+      <td><strong>0</strong></td>
+      <td>(egress <code class="highlighter-rouge">0.0.0.0/0</code>만 유지)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="디버깅-경로">디버깅 경로</h1>
+
+<blockquote>
+  <p>장애 원인을 <strong>모르는 상태</strong>에서 분산학습 실패를 만났다고 가정하고, 단계별로 원인을 좁혀간다.</p>
+</blockquote>
+
+<h2 id="1단계-pod-상태-확인">1단계: Pod 상태 확인</h2>
+
+<p>차단 상태에서 2-node all_reduce를 실행하면, 약 2분 23초 후 양쪽 Pod가 <code class="highlighter-rouge">Error</code>로 전이한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get pods <span class="nt">-o</span> wide
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NAME              READY   STATUS   RESTARTS   AGE     NODE
+nccl-master-0     0/1     Error    0          2m23s   ip-192-168-aa-aa...
+nccl-worker-0     0/1     Error    0          2m23s   ip-192-168-bb-bb...
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">podAntiAffinity</code>에 의해 두 Pod가 서로 다른 GPU 노드에 분산되었다. 120초 PG timeout + container teardown 시간을 합치면 약 2분 23초다.</p>
+
+<h2 id="2단계-kubectl-logs--에러-메시지-확인">2단계: kubectl logs — 에러 메시지 확인</h2>
+
+<h3 id="master-rank-0">Master (rank 0)</h3>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[init] host=nccl-master-0 rank=0 ws=2 master=nccl-master:29500
+Traceback (most recent call last):
+  File "/tmp/allreduce.py", line 4, in &lt;module&gt;
+    dist.init_process_group(backend="nccl", timeout=datetime.timedelta(seconds=120))
+  ...
+torch.distributed.DistStoreError: Timed out after 121 seconds waiting for clients. 1/2 clients joined.
+</code></pre></div></div>
+
+<p>rank 0은 <code class="highlighter-rouge">MASTER_PORT</code>(29500)에서 TCP listen을 열고 나머지 rank가 접속하기를 기다렸지만, 121초가 지나도 1/2만 참가(자기 자신)했다.</p>
+
+<h3 id="worker-rank-1">Worker (rank 1)</h3>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[init] host=nccl-worker-0 rank=1 ws=2 master=nccl-master:29500
+[E419 13:27:42.301344821 socket.cpp:1011] [c10d] The client socket has timed out after 120000ms
+  while trying to connect to (nccl-master, 29500).
+torch.distributed.DistNetworkError: The client socket has timed out after 120000ms
+  while trying to connect to (nccl-master, 29500).
+</code></pre></div></div>
+
+<p>rank 1은 <code class="highlighter-rouge">MASTER_ADDR:MASTER_PORT</code>(nccl-master:29500)에 TCP connect를 시도했지만, 120초 후 timeout이 발생했다.</p>
+
+<details>
+  <summary><b>Worker(rank 1) 전체 traceback</b></summary>
+
+  <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[E419 13:27:42.301344821 socket.cpp:1011] [c10d] The client socket has timed out after 120000ms while trying to connect to (nccl-master, 29500).
+[E419 13:27:42.317323202 TCPStore.cpp:390] [c10d] TCP client failed to connect/validate to host nccl-master:29500 - timed out (try=0, timeout=120000ms): The client socket has timed out after 120000ms while trying to connect to (nccl-master, 29500).
+Exception raised from throwTimeoutError at /opt/pytorch/pytorch/torch/csrc/distributed/c10d/socket.cpp:1013 (most recent call first):
+frame #0: c10::Error::Error(...) in libc10.so
+frame #7: c10d::TCPStore::TCPStore(...) in libtorch_cpu.so
+...
+Traceback (most recent call last):
+  File "/tmp/allreduce.py", line 4, in &lt;module&gt;
+    dist.init_process_group(backend="nccl", timeout=datetime.timedelta(seconds=120))
+  ...
+torch.distributed.DistNetworkError: The client socket has timed out after 120000ms while trying to connect to (nccl-master, 29500).
+</code></pre></div>  </div>
+
+</details>
+
+<h3 id="nccl-info-라인-0줄">NCCL INFO 라인: 0줄</h3>
+
+<p>양쪽 로그 모두 <strong>NCCL 관련 출력이 한 줄도 없다</strong>. baseline 성공 시와 동일한 Pod 매니페스트, 동일한 <code class="highlighter-rouge">NCCL_DEBUG=INFO</code> 환경변수를 사용했는데도, baseline에서 출력되었던 <code class="highlighter-rouge">NCCL INFO Bootstrap</code>, <code class="highlighter-rouge">NCCL INFO NET/Socket</code>, <code class="highlighter-rouge">Init START</code> 등의 라인이 전혀 나타나지 않는다.</p>
+
+<p>같은 설정에서 한쪽은 NCCL 로그가 나오고 한쪽은 0줄이므로, 로그 레벨 설정 문제가 아니다. <code class="highlighter-rouge">NCCL_DEBUG=INFO</code>는 NCCL 코드가 한 줄이라도 실행되면 bootstrap·transport 선택·communicator init 로그를 반드시 출력하는 레벨이다. 0줄이라는 것은 <strong>NCCL 코드 경로에 아예 진입하지 못했다</strong>는 뜻이다.</p>
+
+<h2 id="3단계-층-분석--왜-nccl이-아닌가">3단계: 층 분석 — 왜 NCCL이 아닌가</h2>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background/">이전 글</a>에서 정리한 초기화 시퀀스를 다시 보자.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>1. c10d TCPStore rendezvous   ← 여기서 실패 (120s timeout)
+   rank 0: MASTER_PORT에 TCP listen
+   rank 1: MASTER_ADDR:MASTER_PORT로 TCP connect
+         → ephemeral 범위(1025-65535) 차단으로 connect 불가
+
+2. NCCL bootstrap             ← 도달하지 못함
+3. NCCL communicator 구성     ← 도달하지 못함
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">init_process_group(backend="nccl")</code>이 내부적으로 c10d <code class="highlighter-rouge">TCPStore</code>를 먼저 생성한다. TCPStore는 <code class="highlighter-rouge">MASTER_ADDR:MASTER_PORT</code>(nccl-master:29500)에 대한 TCP 연결이다. 29500은 ephemeral 범위(1025-65535)에 속하므로, self-ref rule이 제거된 상태에서는 이 TCP connect가 차단된다.</p>
+
+<p>c10d TCPStore 단계에서 먼저 죽기 때문에, <strong>NCCL bootstrap 단계에 도달하지 못한다</strong>. 그래서 <code class="highlighter-rouge">NCCL_DEBUG=INFO</code> 로그가 한 줄도 출력되지 않는 것이다.</p>
+
+<h2 id="4단계-sg-rule-확인">4단계: SG rule 확인</h2>
+
+<p>차단 후 SG 상태를 조회하면, baseline 대비 정확히 8개 rule이 제거되었음을 확인할 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>aws ec2 describe-security-groups <span class="nt">--group-ids</span> &lt;NODE_SG_ID&gt; &lt;AUX_SG_ID&gt; <span class="se">\</span>
+  <span class="nt">--region</span> ap-northeast-2 <span class="nt">--output</span> json
+</code></pre></div></div>
+
+<ul>
+  <li>node SG: 10 → <strong>4</strong> ingress (ephemeral self-ref + webhook 5개 + egress 제거 확인)</li>
+  <li>aux SG: 1 → <strong>0</strong> ingress (VPC all-traffic 제거 확인)</li>
+</ul>
+
+<h2 id="부수-효과-관찰">부수 효과 관찰</h2>
+
+<p>SG 차단 3분 48초 구간 동안 webhook/controller 상태를 관찰했다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>컴포넌트</th>
+      <th>상태</th>
+      <th>비고</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>cert-manager</td>
+      <td>Running 유지, 재시작 0회</td>
+      <td>차단 구간에 신규 Certificate 생성을 하면 9443 차단으로 실패했을 것 (미검증)</td>
+    </tr>
+    <tr>
+      <td>gpu-operator</td>
+      <td>Running 유지, 재시작 0회</td>
+      <td>validator Job은 이미 Completed 상태라 webhook 재호출 없음</td>
+    </tr>
+    <tr>
+      <td>ClusterPolicy <code class="highlighter-rouge">status.state</code></td>
+      <td><code class="highlighter-rouge">ready</code> 유지</td>
+      <td>operator reconcile은 노드 내부 경로라 SG 영향 없음</td>
+    </tr>
+    <tr>
+      <td>aws-lb-controller</td>
+      <td>N/A</td>
+      <td>본 클러스터에 미설치</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>차단 구간이 짧고(3분 48초), 이 동안 신규 admission 호출이 없었기 때문에 부수 효과가 표면화되지 않았다. 운영 환경에서 이 시간이 길어지면 webhook 장애로 이어질 수 있다.</p>
+
+<p><br /></p>
+
+<h1 id="예상-vs-실측">예상 vs 실측</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>예상</th>
+      <th>실측</th>
+      <th>일치</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>terraform plan</td>
+      <td>8 destroy</td>
+      <td><strong>8 destroy</strong> (정확 일치)</td>
+      <td>O</td>
+    </tr>
+    <tr>
+      <td>차단 후 node SG ingress</td>
+      <td>recommended 외 rule만 남음</td>
+      <td><strong>4개</strong> (kubelet/DNS/443)</td>
+      <td>O</td>
+    </tr>
+    <tr>
+      <td>torchrun 실패 지점</td>
+      <td>NCCL bootstrap 후 peer TCP connect hang</td>
+      <td><strong>c10d TCPStore rendezvous timeout</strong> (NCCL 이전)</td>
+      <td><strong>X</strong> (층이 다름)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">NCCL_DEBUG=INFO</code> 출력</td>
+      <td>Bootstrap, NET/Socket 등</td>
+      <td><strong>0줄</strong> (NCCL 초기화 미도달)</td>
+      <td><strong>X</strong></td>
+    </tr>
+    <tr>
+      <td>Pod 상태</td>
+      <td>Error</td>
+      <td><strong>Error</strong> (2m23s)</td>
+      <td>O</td>
+    </tr>
+    <tr>
+      <td>webhook 영향</td>
+      <td>일시적 admission 실패 가능</td>
+      <td>Running 유지 (호출 미발생)</td>
+      <td>△</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>핵심 불일치는 <strong>실패 층</strong>이다. NCCL이 아니라 그 앞의 c10d TCPStore에서 먼저 막혔다. 이 불일치 자체가 “NCCL 이슈인지 아닌지 판정하는 기준”을 제시하는 가장 강력한 실측 근거가 된다.</p>
+
+<p><br /></p>
+
+<h1 id="해결복구">해결/복구</h1>
+
+<h2 id="terraform-sg-원복">Terraform SG 원복</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># SG rule 8개 재생성 (기본값 true/true 복귀)</span>
+terraform plan <span class="nt">-var</span> <span class="nv">gpu_desired_size</span><span class="o">=</span>2 <span class="nt">-out</span><span class="o">=</span>tfplan-c3-restore
+<span class="c"># Plan: 8 to add, 0 to change, 0 to destroy</span>
+
+terraform apply <span class="s2">"tfplan-c3-restore"</span>
+<span class="c"># Apply complete! Resources: 8 added (4초 내)</span>
+</code></pre></div></div>
+
+<h2 id="all_reduce-재성공">all_reduce 재성공</h2>
+
+<p>SG 원복 후 동일 매니페스트로 all_reduce를 재실행하면, 21초 내 양쪽 <code class="highlighter-rouge">Completed</code>로 전이한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NCCL INFO Bootstrap : Using eth0:192.168.xx.xx&lt;0&gt;
+NCCL INFO NET/Socket : Using [0]eth0:192.168.xx.xx&lt;0&gt;
+NCCL INFO ncclCommInitRank ... - Init COMPLETE
+NCCL INFO Connected all rings
+[rank 0] iter 0 sum-first=3.0
+[rank 0] iter 1 sum-first=6.0
+[rank 0] iter 2 sum-first=12.0
+[rank 0] iter 3 sum-first=24.0
+[rank 0] iter 4 sum-first=48.0
+</code></pre></div></div>
+
+<p>Baseline과 100% 동일한 출력이다.</p>
+
+<h2 id="복구-검증">복구 검증</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>baseline</th>
+      <th>복구 후</th>
+      <th>일치</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>node SG ingress 수</td>
+      <td>10</td>
+      <td><strong>10</strong></td>
+      <td>O</td>
+    </tr>
+    <tr>
+      <td>aux SG ingress VPC allow</td>
+      <td>존재</td>
+      <td><strong>존재</strong></td>
+      <td>O</td>
+    </tr>
+    <tr>
+      <td>sum-first (iter 0~4)</td>
+      <td>3.0/6.0/12.0/24.0/48.0</td>
+      <td><strong>동일</strong></td>
+      <td>O</td>
+    </tr>
+    <tr>
+      <td>NCCL <code class="highlighter-rouge">Init COMPLETE</code> + <code class="highlighter-rouge">Connected all rings</code></td>
+      <td>O</td>
+      <td><strong>O</strong></td>
+      <td>O</td>
+    </tr>
+    <tr>
+      <td>Pod phase</td>
+      <td>Completed</td>
+      <td><strong>Completed</strong> (21s, 이미지 캐시)</td>
+      <td>O</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>차단→복구 사이클 닫힘 확인</strong>: baseline 성공 → 차단 후 실패 → 복구 apply → 동일 매니페스트 재실행으로 baseline과 동일 값 재현.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<h2 id="진단-공식">진단 공식</h2>
+
+<blockquote>
+  <p><code class="highlighter-rouge">NCCL_DEBUG=INFO</code> 로그가 stdout에 아예 없고, Python traceback이 <code class="highlighter-rouge">torch.distributed.socket.cpp</code> / <code class="highlighter-rouge">TCPStore</code> / <code class="highlighter-rouge">DistNetworkError</code> 키워드를 포함하면 → NCCL이 아니라 <strong>PyTorch c10d 층의 rendezvous 단계</strong>(MASTER_ADDR:MASTER_PORT TCP connect)가 원인이다. SG/방화벽/<code class="highlighter-rouge">MASTER_PORT</code> 접근성을 먼저 확인한다.</p>
+</blockquote>
+
+<p>이 공식은 NCCL communicator lazy init 디버깅(<a href="/dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/">관련 글</a>)과 함께 읽으면, “NCCL 로그가 비어 있을 때 어디를 봐야 하는가”에 대한 판단 근거가 된다.</p>
+
+<h2 id="디버깅-경로-비교">디버깅 경로 비교</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending/">03-01: Device Plugin 비활성화</a></th>
+      <th><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-02-vLLM-TroubleShooting/">03-02: vLLM 기동 실패</a></th>
+      <th>03-03-02: SG 차단 (이번 글)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>장애 층</td>
+      <td><strong>인프라 층</strong> (GPU Operator)</td>
+      <td><strong>앱 층</strong> (vLLM)</td>
+      <td><strong>네트워크 층</strong> (SG/c10d)</td>
+    </tr>
+    <tr>
+      <td>Pod STATUS</td>
+      <td>Pending</td>
+      <td>CrashLoopBackOff</td>
+      <td>Error</td>
+    </tr>
+    <tr>
+      <td>핵심 도구</td>
+      <td><code class="highlighter-rouge">kubectl get/describe</code></td>
+      <td><code class="highlighter-rouge">kubectl logs --previous</code></td>
+      <td><code class="highlighter-rouge">kubectl logs</code> + <code class="highlighter-rouge">aws ec2 describe-security-groups</code></td>
+    </tr>
+    <tr>
+      <td>GPU 인프라</td>
+      <td>비정상 (Allocatable 0)</td>
+      <td>정상</td>
+      <td>정상</td>
+    </tr>
+    <tr>
+      <td>NCCL 관여</td>
+      <td>없음</td>
+      <td>없음</td>
+      <td>예상했으나 <strong>c10d에서 먼저 실패</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>같은 “GPU 워크로드가 안 된다”는 증상이지만, Pod STATUS와 에러 메시지의 층위가 디버깅 경로의 분기점이 된다.</p>
+
+<h2 id="운영-함정-2가지">운영 함정 2가지</h2>
+
+<p><strong>1. “NCCL 이슈”라고 불리는 것의 상당수는 NCCL 바깥이다</strong></p>
+
+<p><code class="highlighter-rouge">NCCL_DEBUG=INFO</code>를 켰는데도 NCCL INFO 라인이 한 줄도 없다면, 원인은 그 아래 계층이다: PyTorch c10d TCPStore, Kubernetes Service DNS, 방화벽/SG, kube-proxy. NCCL 자체를 의심하기 전에 네트워크 연결성부터 확인해야 한다.</p>
+
+<p><strong>2. EKS managed node SG의 “recommended rule 덩어리”는 한 묶음으로 움직인다</strong></p>
+
+<p><code class="highlighter-rouge">node_security_group_enable_recommended_rules=false</code> 토글 하나가 self-ref ephemeral(분산학습)과 webhook(4443/6443/8443/9443/10251)을 동시에 내린다. 분산학습만 끊기는 것이 아니라 admission webhook도 영향을 받을 수 있다. IaC 가드레일로 이 토글을 잠그는 것이 재발 방지의 핵심이다.</p>
+
+<h2 id="요약">요약</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>장애 상태</th>
+      <th>복구 상태</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>node SG ephemeral self-ref</td>
+      <td><strong>제거됨</strong></td>
+      <td>존재 (1025-65535/tcp)</td>
+    </tr>
+    <tr>
+      <td>aux SG VPC allow</td>
+      <td><strong>제거됨</strong></td>
+      <td>존재 (192.168.0.0/16)</td>
+    </tr>
+    <tr>
+      <td>c10d TCPStore rendezvous</td>
+      <td><strong>timeout 120s</strong></td>
+      <td>성공</td>
+    </tr>
+    <tr>
+      <td>NCCL <code class="highlighter-rouge">Init COMPLETE</code></td>
+      <td><strong>미도달</strong> (NCCL 로그 0줄)</td>
+      <td>Init COMPLETE</td>
+    </tr>
+    <tr>
+      <td>all_reduce sum</td>
+      <td><strong>실패</strong></td>
+      <td>3.0/6.0/12.0/24.0/48.0</td>
+    </tr>
+    <tr>
+      <td>Pod phase</td>
+      <td><strong>Error</strong> (2m23s)</td>
+      <td>Completed (21s)</td>
+    </tr>
+    <tr>
+      <td>차단→복구 총 소요</td>
+      <td>—</td>
+      <td><strong>SG apply 4초 + all_reduce 21초</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="다음-단계">다음 단계</h2>
+
+<p>이번 글까지 인프라 층(Device Plugin), 앱 층(vLLM), 네트워크 층(SG 차단) 장애를 각각 재현했다. <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-04-Error-Cases/">다음 글</a>에서는 EKS 관리형 환경에서 재현할 수 없는 3개 주제(CUDA XID, Auto Mode, EFA)를 사례 탐구로 다룬다.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study-week-5" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study-Week-5</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws" class="page__taxonomy-item" rel="tag">AWS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#distributed-training" class="page__taxonomy-item" rel="tag">Distributed-Training</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nccl" class="page__taxonomy-item" rel="tag">NCCL</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#pytorch" class="page__taxonomy-item" rel="tag">PyTorch</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#security-group" class="page__taxonomy-item" rel="tag">Security-Group</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#terraform" class="page__taxonomy-item" rel="tag">Terraform</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#troubleshooting" class="page__taxonomy-item" rel="tag">Troubleshooting</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-09T00:00:00+09:00">April 9, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEKS%5D+EKS+GPU+%ED%8A%B8%EB%9F%AC%EB%B8%94%EC%8A%88%ED%8C%85%3A+3.+%EC%9E%A5%EC%95%A0+%EC%9E%AC%ED%98%84+-+3.+%EB%B6%84%EC%82%B0%ED%95%99%EC%8A%B5%EA%B3%BC+NCCL+%ED%86%B5%EC%8B%A0+-+2.+SG+%EC%B0%A8%EB%8B%A8+%EB%84%A4%ED%8A%B8%EC%9B%8C%ED%81%AC+%EC%9E%A5%EC%95%A0+%EC%9E%AC%ED%98%84%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-03-03-02-Distributed-Learning-Network-Failure%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-03-03-02-Distributed-Learning-Network-Failure%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-03-03-02-Distributed-Learning-Network-Failure%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-03-03-02-Distributed-Learning-Network-Failure?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background/" class="pagination--pager" title="[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 3. 분산학습과 NCCL 통신 - 1. 배경 및 재현 실험 설계
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-04-Error-Cases/" class="pagination--pager" title="[EKS] EKS GPU 트러블슈팅: 4. 사례 탐구 - CUDA XID, Auto Mode, EFA
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-02-Distributed-Learning-Network-Failure/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-02-Distributed-Learning-Network-Failure"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

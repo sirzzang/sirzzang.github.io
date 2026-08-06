@@ -1,0 +1,1867 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 1. Device Plugin 비활성화 - Eraser’s StudyLog</title>
+<meta name="description" content="Device Plugin 비활성화로 GPU Pod Pending 장애를 재현하고, Pod에서 ClusterPolicy까지 단계별로 원인을 추적해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 1. Device Plugin 비활성화">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending/">
+
+
+  <meta property="og:description" content="Device Plugin 비활성화로 GPU Pod Pending 장애를 재현하고, Pod에서 ClusterPolicy까지 단계별로 원인을 추적해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-04-09T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 1. Device Plugin 비활성화">
+    <meta itemprop="description" content="Device Plugin 비활성화로 GPU Pod Pending 장애를 재현하고, Pod에서 ClusterPolicy까지 단계별로 원인을 추적해 보자.">
+    <meta itemprop="datePublished" content="2026-04-09T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 1. Device Plugin 비활성화
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-04-09T00:00:00+09:00">2026년 04월 09일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  14 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#전제-환경">전제 환경</a>
+    <ul>
+      <li><a href="#baseline-스냅샷">Baseline 스냅샷</a>
+        <ul>
+          <li><a href="#노드--gpu-라벨">노드 + GPU 라벨</a></li>
+          <li><a href="#allocatable-gpu">Allocatable GPU</a></li>
+          <li><a href="#device-plugin-daemonset">Device Plugin DaemonSet</a></li>
+          <li><a href="#clusterpolicy">ClusterPolicy</a></li>
+          <li><a href="#gpu-probe-테스트-pod">gpu-probe 테스트 Pod</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#장애-주입">장애 주입</a>
+    <ul>
+      <li><a href="#clusterpolicy-패치">ClusterPolicy 패치</a></li>
+      <li><a href="#operator-reconcile-관찰">Operator reconcile 관찰</a></li>
+      <li><a href="#예상-vs-실측">예상 vs 실측</a></li>
+    </ul>
+  </li>
+  <li><a href="#디버깅-경로">디버깅 경로</a>
+    <ul>
+      <li><a href="#1-pod-레벨-왜-pending인가">1. Pod 레벨: “왜 Pending인가?”</a></li>
+      <li><a href="#2-node-레벨-gpu-노드가-gpu를-광고-중인가">2. Node 레벨: “GPU 노드가 GPU를 광고 중인가?”</a></li>
+      <li><a href="#3-daemonset-레벨-광고-주체가-살아있나">3. DaemonSet 레벨: “광고 주체가 살아있나?”</a></li>
+      <li><a href="#4-clusterpolicy--operator-레벨-누가-ds를-죽였나">4. ClusterPolicy / Operator 레벨: “누가 DS를 죽였나?”</a></li>
+      <li><a href="#5-노드-내부-드라이버-vs-플러그인-분리-검증">5. 노드 내부: “드라이버 vs 플러그인 분리 검증”</a>
+        <ul>
+          <li><a href="#kubelet-device-plugin-소켓-디렉토리">kubelet device-plugin 소켓 디렉토리</a></li>
+          <li><a href="#chroot-nvidia-smi의-함정">chroot nvidia-smi의 함정</a></li>
+          <li><a href="#driver-alive-검증--dcgm-exporter-pod-활용">driver alive 검증 — dcgm-exporter Pod 활용</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#해결">해결</a>
+    <ul>
+      <li><a href="#clusterpolicy-복구">ClusterPolicy 복구</a></li>
+      <li><a href="#회복-관찰">회복 관찰</a></li>
+      <li><a href="#최종-검증">최종 검증</a>
+        <ul>
+          <li><a href="#nvidia-smi-정상-확인">nvidia-smi 정상 확인</a></li>
+          <li><a href="#events-시계열--장애와-복구가-한-객체에-보존">Events 시계열 — 장애와 복구가 한 객체에 보존</a></li>
+          <li><a href="#daemonset-age--재생성-증거">DaemonSet AGE — 재생성 증거</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#실무-운영-주의-사항">실무 운영 주의 사항</a>
+    <ul>
+      <li><a href="#ds-자체가-사라지는-경우">DS 자체가 사라지는 경우</a></li>
+      <li><a href="#ds는-running인데-gpu-광고가-0인-경우">DS는 Running인데 GPU 광고가 0인 경우</a></li>
+      <li><a href="#pod-spec-자체의-문제">Pod spec 자체의 문제</a></li>
+      <li><a href="#디버깅-분기-플로우">디버깅 분기 플로우</a></li>
+      <li><a href="#재발-방지">재발 방지</a>
+        <ul>
+          <li><a href="#prometheus-alert--allocatable-0-on-gpu-노드">Prometheus alert — Allocatable 0 on GPU 노드</a></li>
+          <li><a href="#gitops로-clusterpolicy-잠금">GitOps로 ClusterPolicy 잠금</a></li>
+          <li><a href="#ds-ready-등치-검증">DS Ready 등치 검증</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a>
+    <ul>
+      <li><a href="#요약">요약</a></li>
+      <li><a href="#운영-함정-3가지">운영 함정 3가지</a></li>
+      <li><a href="#다음-단계">다음 단계</a></li>
+    </ul>
+  </li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em>정영준님의 AWS EKS Workshop Study(AEWS) <a href="https://devfloor9.github.io/engineering-playbook/slides/eks-debugging/">5주차 학습 내용</a>을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-03-GPU-Node-Provisioning/">이전 글</a>에서 구성한 GPU 환경(g5.xlarge × 2, gpu-operator v26.3.1, ClusterPolicy <code class="highlighter-rouge">ready</code>) 위에서 <strong>Device Plugin 비활성화</strong> 장애를 재현하고 디버깅한다.</p>
+
+<ul>
+  <li><strong>장애 재현</strong>: ClusterPolicy <code class="highlighter-rouge">spec.devicePlugin.enabled: false</code> 패치 → <strong>10초 내</strong> device-plugin DaemonSet이 통째로 삭제되고, 노드 Allocatable <code class="highlighter-rouge">nvidia.com/gpu</code>가 0으로 떨어진다</li>
+  <li><strong>증상</strong>: GPU Pod가 <code class="highlighter-rouge">FailedScheduling: 0/4 nodes are available: 4 Insufficient nvidia.com/gpu</code>로 Pending</li>
+  <li><strong>디버깅</strong>: Pod → Node → DaemonSet → ClusterPolicy → 노드 내부 순으로 좁혀가는 <strong>top-down 추적</strong></li>
+  <li><strong>운영 함정 3가지</strong>: 1. <code class="highlighter-rouge">status.state</code>가 <code class="highlighter-rouge">ready</code> 유지 — status만 보면 놓친다, 2. <code class="highlighter-rouge">kubectl debug node ... chroot nvidia-smi</code>가 NVML 에러 — driver 사망으로 오해하기 쉽다, 3. Allocatable 키가 사라지지 않고 값만 0 — <code class="highlighter-rouge">absent()</code> 기반 alert이 누락된다</li>
+  <li><strong>복구</strong>: <code class="highlighter-rouge">enabled: true</code> 패치 → <strong>40초 내</strong> 완전 복구. 동일 Pod의 Events에 <code class="highlighter-rouge">FailedScheduling → Scheduled</code> 전이가 보존된다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="전제-환경">전제 환경</h1>
+
+<p><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-03-GPU-Node-Provisioning/">이전 글</a>에서 구성한 환경을 그대로 이어받는다. GPU 노드 2대에 GPU Operator가 설치되어 ClusterPolicy가 <code class="highlighter-rouge">ready</code> 상태인 시점이다.</p>
+
+<h2 id="baseline-스냅샷">Baseline 스냅샷</h2>
+
+<p>장애 주입 전, 정상 상태의 스냅샷을 캡처한다. 복구 후 비교 기준이 된다.</p>
+
+<h3 id="노드--gpu-라벨">노드 + GPU 라벨</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># NFD 라벨 nvidia.com/gpu.present 로 GPU 노드 식별</span>
+kubectl get nodes <span class="nt">-L</span> nvidia.com/gpu.present,node.kubernetes.io/instance-type <span class="nt">-o</span> wide
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NAME                                               STATUS   ROLES    AGE    INSTANCE-TYPE   GPU.PRESENT
+ip-192-168-xx-xx.ap-northeast-2.compute.internal   Ready    &lt;none&gt;   5h3m   t3.medium
+ip-192-168-yy-yy.ap-northeast-2.compute.internal   Ready    &lt;none&gt;   5h3m   t3.medium
+ip-192-168-aa-aa.ap-northeast-2.compute.internal   Ready    &lt;none&gt;   31m    g5.xlarge       true
+ip-192-168-bb-bb.ap-northeast-2.compute.internal   Ready    &lt;none&gt;   31m    g5.xlarge       true
+</code></pre></div></div>
+
+<p>시스템 노드 t3.medium 2대, GPU 노드 g5.xlarge 2대. GPU 노드에만 <code class="highlighter-rouge">nvidia.com/gpu.present=true</code> 라벨이 붙어 있다.</p>
+
+<h3 id="allocatable-gpu">Allocatable GPU</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># GPU 노드의 nvidia.com/gpu Allocatable 확인</span>
+kubectl describe node ip-192-168-aa-aa.ap-northeast-2.compute.internal | <span class="nb">grep</span> <span class="nt">-A5</span> Allocatable
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Allocatable:
+  cpu:                3920m
+  memory:             15147936Ki
+  nvidia.com/gpu:     1
+  pods:               50
+</code></pre></div></div>
+
+<p>두 GPU 노드 모두 <code class="highlighter-rouge">nvidia.com/gpu: 1</code>이 Capacity와 Allocatable에 정상 노출되어 있다.</p>
+
+<h3 id="device-plugin-daemonset">Device Plugin DaemonSet</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># gpu-operator 네임스페이스의 DaemonSet 전수 조사</span>
+kubectl get ds <span class="nt">-n</span> gpu-operator <span class="nt">-o</span> wide
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">nvidia-device-plugin-daemonset</code>이 2/2/2 Ready, selector <code class="highlighter-rouge">nvidia.com/gpu.deploy.device-plugin=true</code>. 나머지 6개 DaemonSet도 정상이다.</p>
+
+<h3 id="clusterpolicy">ClusterPolicy</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Device Plugin 설정값 확인</span>
+kubectl get clusterpolicy cluster-policy <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.spec.devicePlugin}'</span> | jq <span class="nb">.</span>
+</code></pre></div></div>
+
+<div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+    </span><span class="s2">"enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"image"</span><span class="p">:</span><span class="w"> </span><span class="s2">"k8s-device-plugin"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"imagePullPolicy"</span><span class="p">:</span><span class="w"> </span><span class="s2">"IfNotPresent"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"repository"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvcr.io/nvidia"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"v0.19.0"</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div></div>
+
+<p><code class="highlighter-rouge">enabled: true</code>. 이 값을 <code class="highlighter-rouge">false</code>로 바꾸는 것이 이번 장애의 트리거다.</p>
+
+<h3 id="gpu-probe-테스트-pod">gpu-probe 테스트 Pod</h3>
+
+<p>장애 재현과 검증에 사용할 테스트 Pod 매니페스트다. <code class="highlighter-rouge">nvidia.com/gpu: 1</code>을 요청하고, GPU 노드 taint에 대한 toleration을 포함한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># gpu-probe.yaml — GPU 리소스 1개 요청 + taint toleration</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">gpu-probe</span>
+  <span class="na">labels</span><span class="pi">:</span>
+    <span class="na">app</span><span class="pi">:</span> <span class="s">gpu-probe</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">restartPolicy</span><span class="pi">:</span> <span class="s">Never</span>
+  <span class="na">tolerations</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">key</span><span class="pi">:</span> <span class="s">nvidia.com/gpu</span>
+      <span class="na">operator</span><span class="pi">:</span> <span class="s">Exists</span>
+      <span class="na">effect</span><span class="pi">:</span> <span class="s">NoSchedule</span>
+  <span class="na">containers</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">cuda</span>
+      <span class="na">image</span><span class="pi">:</span> <span class="s">nvcr.io/nvidia/cuda:12.4.1-base-ubuntu22.04</span>
+      <span class="na">command</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">sh"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">-c"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">nvidia-smi</span><span class="nv"> </span><span class="s">-L</span><span class="nv"> </span><span class="s">&amp;&amp;</span><span class="nv"> </span><span class="s">nvidia-smi</span><span class="nv"> </span><span class="s">--query-gpu=name,driver_version,memory.total</span><span class="nv"> </span><span class="s">--format=csv"</span><span class="pi">]</span>
+      <span class="na">resources</span><span class="pi">:</span>
+        <span class="na">limits</span><span class="pi">:</span>
+          <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">1</span>
+</code></pre></div></div>
+
+<p>Baseline 상태에서 이 Pod를 apply하면 <strong>7초 내</strong> Scheduled → Running으로 전이한다. nvidia-smi 출력에서 NVIDIA A10G / Driver 580.126.09 / 23028 MiB이 확인된다. 장애 주입 후 같은 매니페스트를 다시 apply해서 결과를 비교할 것이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>Baseline 값</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>GPU 노드</td>
+      <td>g5.xlarge × 2, <code class="highlighter-rouge">nvidia.com/gpu.present=true</code></td>
+    </tr>
+    <tr>
+      <td>Allocatable <code class="highlighter-rouge">nvidia.com/gpu</code></td>
+      <td><strong>1</strong> × 2 노드</td>
+    </tr>
+    <tr>
+      <td>Device Plugin DS</td>
+      <td><strong>2/2/2</strong> Ready</td>
+    </tr>
+    <tr>
+      <td>ClusterPolicy <code class="highlighter-rouge">spec.devicePlugin.enabled</code></td>
+      <td><strong>true</strong></td>
+    </tr>
+    <tr>
+      <td>ClusterPolicy <code class="highlighter-rouge">status.state</code></td>
+      <td><strong>ready</strong></td>
+    </tr>
+    <tr>
+      <td>gpu-probe Pod</td>
+      <td><strong>7초 내 Scheduled → Running</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="장애-주입">장애 주입</h1>
+
+<h2 id="clusterpolicy-패치">ClusterPolicy 패치</h2>
+
+<p>Baseline Pod를 삭제한 뒤, ClusterPolicy의 <code class="highlighter-rouge">spec.devicePlugin.enabled</code>를 <code class="highlighter-rouge">false</code>로 패치한다.</p>
+
+<p>GPU를 점유한 Pod가 있는 상태에서 device-plugin을 내리면 두 가지 문제가 생길 수 있다:</p>
+<ol>
+  <li>이미 실행 중인 컨테이너는 커널 레벨에서 GPU device file(<code class="highlighter-rouge">/dev/nvidia0</code>)이 마운트된 상태라 <strong>계속 돌아간다.</strong> 이후 device-plugin이 복구되면 새 plugin 인스턴스가 kubelet에 재등록하는데, kubelet의 <code class="highlighter-rouge">kubelet_internal_checkpoint</code>(device-container 할당 추적)와 새 plugin 상태가 어긋나 동일 GPU가 이중 할당되거나 “미할당”으로 잘못 인식될 수 있다.</li>
+  <li>이 실습에서는 동일한 gpu-probe 매니페스트를 장애 상태에서 다시 apply해야 하므로, 기존 Pod가 남아있으면 이름 충돌이 생긴다.</li>
+</ol>
+
+<p>이런 이유로 baseline Pod를 선삭제한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Baseline Pod 정리</span>
+kubectl delete pod gpu-probe
+
+<span class="c"># Device Plugin 비활성화 — 장애 트리거</span>
+kubectl patch clusterpolicy cluster-policy <span class="nt">--type</span><span class="o">=</span>merge <span class="se">\</span>
+  <span class="nt">-p</span> <span class="s1">'{"spec":{"devicePlugin":{"enabled":false}}}'</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>clusterpolicy.nvidia.com/cluster-policy patched
+</code></pre></div></div>
+
+<blockquote>
+  <p><code class="highlighter-rouge">kubectl edit</code> 대신 <code class="highlighter-rouge">patch</code>를 쓴 이유: 1. 결정론적이고 재현 가능, 2. 스크립트에 그대로 복사 가능, 3. 인터랙티브 에디터 우회.</p>
+</blockquote>
+
+<h2 id="operator-reconcile-관찰">Operator reconcile 관찰</h2>
+
+<p>패치 직후 10초 간격으로 DaemonSet 상태와 노드 Allocatable을 polling한다. Operator가 ClusterPolicy의 desired 상태(<code class="highlighter-rouge">enabled: false</code>)에 맞춰 실제 클러스터 상태를 조정(reconcile)하는 과정을 시계열로 캡처하는 것이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 10초 간격 × 9회 = 90초 polling</span>
+<span class="k">for </span>i <span class="k">in</span> <span class="k">$(</span>seq 1 9<span class="k">)</span><span class="p">;</span> <span class="k">do
+  </span>sleep 10
+  <span class="nv">ds</span><span class="o">=</span><span class="k">$(</span>kubectl get ds <span class="nt">-n</span> gpu-operator nvidia-device-plugin-daemonset <span class="nt">--no-headers</span> 2&gt;&amp;1 <span class="se">\</span>
+    | awk <span class="s1">'{print $2"/"$3"/"$4}'</span><span class="k">)</span>
+  <span class="nv">alloc_1</span><span class="o">=</span><span class="k">$(</span>kubectl get node ip-192-168-aa-aa.ap-northeast-2.compute.internal <span class="se">\</span>
+    <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.allocatable.nvidia\.com/gpu}'</span> 2&gt;&amp;1<span class="k">)</span>
+  <span class="nv">alloc_2</span><span class="o">=</span><span class="k">$(</span>kubectl get node ip-192-168-bb-bb.ap-northeast-2.compute.internal <span class="se">\</span>
+    <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.allocatable.nvidia\.com/gpu}'</span> 2&gt;&amp;1<span class="k">)</span>
+  <span class="nb">echo</span> <span class="s2">"T+</span><span class="k">$((</span>i<span class="o">*</span><span class="m">10</span><span class="k">))</span><span class="s2">s DS=</span><span class="k">${</span><span class="nv">ds</span><span class="k">}</span><span class="s2"> Alloc[node-1]='</span><span class="k">${</span><span class="nv">alloc_1</span><span class="k">}</span><span class="s2">' Alloc[node-2]='</span><span class="k">${</span><span class="nv">alloc_2</span><span class="k">}</span><span class="s2">'"</span>
+<span class="k">done</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>T+10s DS=from/server/(NotFound): Alloc[node-1]='0' Alloc[node-2]='0'
+T+20s DS=from/server/(NotFound): Alloc[node-1]='0' Alloc[node-2]='0'
+T+30s DS=from/server/(NotFound): Alloc[node-1]='0' Alloc[node-2]='0'
+...
+T+90s DS=from/server/(NotFound): Alloc[node-1]='0' Alloc[node-2]='0'
+</code></pre></div></div>
+
+<p><strong>T+10초 시점에 이미 reconcile 완료.</strong> DaemonSet은 서버에서 <code class="highlighter-rouge">NotFound</code>(통째로 삭제됨)이고, 양쪽 노드 Allocatable은 0이다. Operator가 desired 상태(<code class="highlighter-rouge">enabled: false</code>)에 맞춰 device-plugin DS를 삭제하고, 노드의 GPU 광고가 사라지기까지 10초도 안 걸린 것이다.</p>
+
+<h2 id="예상-vs-실측">예상 vs 실측</h2>
+
+<p>Device Plugin을 끄면 어떤 일이 벌어질지 직관적으로 떠올리기 쉬운 동작(“예상”)과, 실제로 polling과 이후 디버깅 과정에서 확인한 결과(“실측”)를 비교한다. 차이가 나는 부분이 운영에서 놓치기 쉬운 함정이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>관찰 항목</th>
+      <th>예상</th>
+      <th>실측</th>
+      <th>함의</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Allocatable <code class="highlighter-rouge">nvidia.com/gpu</code></td>
+      <td>키 자체 사라짐(absent)</td>
+      <td><strong>키 잔존 + 값 0</strong></td>
+      <td><code class="highlighter-rouge">absent()</code> 기반 alert 누락 위험. <code class="highlighter-rouge">== 0</code> 조건이 정확</td>
+    </tr>
+    <tr>
+      <td>Device Plugin DS</td>
+      <td>desired/current 0/0 (스케일 다운)</td>
+      <td><strong>DS object 통째 삭제</strong>(NotFound)</td>
+      <td>Operator가 scaling이 아닌 destruction으로 동작. 복구 시 AGE 0부터 시작</td>
+    </tr>
+    <tr>
+      <td>GPU Pod</td>
+      <td>Pending, Insufficient</td>
+      <td><strong>Pending, <code class="highlighter-rouge">0/4 nodes: 4 Insufficient nvidia.com/gpu</code></strong></td>
+      <td>시스템 노드도 “Insufficient”로 표시 — scheduler 표현 방식</td>
+    </tr>
+    <tr>
+      <td>CP <code class="highlighter-rouge">status.state</code></td>
+      <td>—</td>
+      <td><strong><code class="highlighter-rouge">ready</code> 유지</strong></td>
+      <td><strong>함정</strong>: 의도적 disable도 정상 reconcile로 처리됨. status만 보고 안심하면 못 잡음</td>
+    </tr>
+    <tr>
+      <td>Reconcile 시간</td>
+      <td>수십 초</td>
+      <td><strong>10초 이내</strong></td>
+      <td>Operator reconcile 매우 빠름</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="디버깅-경로">디버깅 경로</h1>
+
+<blockquote>
+  <p>장애 원인을 <strong>모르는 상태</strong>에서 GPU Pod Pending을 만났다고 가정하고, <strong>Pod → Node → DaemonSet → ClusterPolicy → 노드 내부</strong> 순으로 좁혀가는 top-down 추적을 따라간다.</p>
+</blockquote>
+
+<h2 id="1-pod-레벨-왜-pending인가">1. Pod 레벨: “왜 Pending인가?”</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 장애 상태에서 gpu-probe 재배포</span>
+kubectl apply <span class="nt">-f</span> gpu-probe.yaml
+sleep 30
+
+<span class="c"># Pending 확인</span>
+kubectl get pod gpu-probe <span class="nt">-o</span> wide
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NAME        READY   STATUS    RESTARTS   AGE   IP       NODE     NOMINATED NODE
+gpu-probe   0/1     Pending   0          30s   &lt;none&gt;   &lt;none&gt;   &lt;none&gt;
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Events에서 FailedScheduling 메시지 확인</span>
+kubectl describe pod gpu-probe | tail <span class="nt">-10</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Events:
+  Type     Reason            Age   From               Message
+  ----     ------            ----  ----               -------
+  Warning  FailedScheduling  30s   default-scheduler  0/4 nodes are available: 4 Insufficient nvidia.com/gpu.
+                                                      preemption: 0/4 nodes are available:
+                                                      4 Preemption is not helpful for scheduling.
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">Insufficient nvidia.com/gpu</code>. 4개 노드(시스템 2 + GPU 2) 모두에서 GPU 리소스가 부족하다. 시스템 노드는 원래 GPU가 없고, GPU 노드도 GPU를 광고하지 않고 있다는 뜻이다.</p>
+
+<p><strong>다음 분기</strong>: “노드 자체는 있는데 GPU가 부족” → 노드 측에서 GPU 광고 상태를 확인한다.</p>
+
+<blockquote>
+  <p><strong>참고: Pod Pending은 GPU 문제가 아닐 수도 있다</strong></p>
+
+  <p>이번 실습에서는 <code class="highlighter-rouge">Insufficient nvidia.com/gpu</code> 경로만 따라가지만, 실제 Pod Pending의 원인이 반드시 GPU와 관련된 것은 아니다. <code class="highlighter-rouge">kubectl describe pod</code>의 Events 메시지로 1차 분기를 결정한다.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>분기</th>
+        <th>Events 메시지</th>
+        <th>1차 액션</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Insufficient resource</td>
+        <td><code class="highlighter-rouge">Insufficient cpu/memory/nvidia.com/gpu</code></td>
+        <td>노드 Allocatable vs Pod requests 비교</td>
+      </tr>
+      <tr>
+        <td>Taint mismatch</td>
+        <td><code class="highlighter-rouge">had untolerated taint {…}</code></td>
+        <td>Pod tolerations 추가</td>
+      </tr>
+      <tr>
+        <td>Selector mismatch</td>
+        <td><code class="highlighter-rouge">didn't match Pod's node affinity/selector</code></td>
+        <td>nodeSelector / NFD 라벨 점검</td>
+      </tr>
+      <tr>
+        <td>PVC unbound</td>
+        <td><code class="highlighter-rouge">pod has unbound immediate PersistentVolumeClaims</code></td>
+        <td>StorageClass / PV 상태</td>
+      </tr>
+      <tr>
+        <td>Topology spread</td>
+        <td><code class="highlighter-rouge">didn't match topology spread constraints</code></td>
+        <td>spread rule 또는 노드 추가</td>
+      </tr>
+      <tr>
+        <td>Image pull 실패</td>
+        <td><code class="highlighter-rouge">ImagePullBackOff</code> (Pending이 아닌 경우가 많음)</td>
+        <td>이미지/credential 점검</td>
+      </tr>
+    </tbody>
+  </table>
+</blockquote>
+
+<h2 id="2-node-레벨-gpu-노드가-gpu를-광고-중인가">2. Node 레벨: “GPU 노드가 GPU를 광고 중인가?”</h2>
+
+<p><code class="highlighter-rouge">Insufficient nvidia.com/gpu</code>는 두 가지 원인이 가능하다. 1. GPU Allocatable 자체가 0이거나, 2. Allocatable은 있지만 다른 워크로드가 이미 전부 점유 중이거나. 노드별 Allocatable/Capacity를 일괄 비교해서 어느 쪽인지 판별한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 전체 노드의 GPU Allocatable을 일괄 비교</span>
+kubectl get nodes <span class="nt">-o</span> json | jq <span class="nt">-r</span> <span class="s1">'
+  .items[] | {
+    name: .metadata.name,
+    instance: .metadata.labels["node.kubernetes.io/instance-type"],
+    gpu_alloc: .status.allocatable["nvidia.com/gpu"],
+    gpu_cap: .status.capacity["nvidia.com/gpu"]
+  }'</span>
+</code></pre></div></div>
+
+<div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+  </span><span class="s2">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ip-192-168-xx-xx.ap-northeast-2.compute.internal"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"instance"</span><span class="p">:</span><span class="w"> </span><span class="s2">"t3.medium"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"gpu_alloc"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"gpu_cap"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span><span class="p">{</span><span class="w">
+  </span><span class="s2">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ip-192-168-aa-aa.ap-northeast-2.compute.internal"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"instance"</span><span class="p">:</span><span class="w"> </span><span class="s2">"g5.xlarge"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"gpu_alloc"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"gpu_cap"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0"</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span><span class="p">{</span><span class="w">
+  </span><span class="s2">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ip-192-168-bb-bb.ap-northeast-2.compute.internal"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"instance"</span><span class="p">:</span><span class="w"> </span><span class="s2">"g5.xlarge"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"gpu_alloc"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"gpu_cap"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0"</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span><span class="p">{</span><span class="w">
+  </span><span class="s2">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ip-192-168-yy-yy.ap-northeast-2.compute.internal"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"instance"</span><span class="p">:</span><span class="w"> </span><span class="s2">"t3.medium"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"gpu_alloc"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"gpu_cap"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div></div>
+
+<p>g5.xlarge 두 노드 모두 <code class="highlighter-rouge">nvidia.com/gpu: 0</code>(키는 잔존, 값만 0). 시스템 t3.medium 노드는 키 자체가 <code class="highlighter-rouge">null</code>(정상). <strong>GPU 노드의 Device Plugin 광고가 끊긴 패턴</strong>이다.</p>
+
+<p><strong>다음 분기</strong>: “광고가 끊겼다” → 광고의 주체인 Device Plugin DaemonSet을 확인한다.</p>
+
+<h2 id="3-daemonset-레벨-광고-주체가-살아있나">3. DaemonSet 레벨: “광고 주체가 살아있나?”</h2>
+
+<p>노드의 <code class="highlighter-rouge">nvidia.com/gpu</code> Allocatable은 <strong>Device Plugin DaemonSet이 kubelet에 GPU를 등록(advertise)해야</strong> 나타난다. Device Plugin은 <code class="highlighter-rouge">ListAndWatch</code> gRPC stream으로 GPU 개수를 kubelet에 지속 보고하고, kubelet이 이를 Allocatable에 반영하는 구조다(상세 동작은 <a href="/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/">NVIDIA Device Plugin 동작 원리</a> 글 참고). Allocatable이 0이라면 1. Device Plugin DS 자체가 없거나, 2. DS는 있는데 plugin Pod가 GPU를 감지하지 못하거나 둘 중 하나다.</p>
+
+<p>DS 존재 여부를 먼저 확인하고, 존재한다면 <a href="#5-노드-내부-드라이버-vs-플러그인-분리-검증">노드 내부(5단계)</a>로 분기한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># gpu-operator 네임스페이스 DaemonSet 확인</span>
+kubectl get ds <span class="nt">-n</span> gpu-operator
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NAME                                         DESIRED   CURRENT   READY   AGE
+gpu-feature-discovery                        2         2         2       3h49m
+gpu-operator-node-feature-discovery-worker   4         4         4       3h50m
+nvidia-dcgm-exporter                         2         2         2       3h49m
+nvidia-mig-manager                           0         0         0       3h49m
+nvidia-operator-validator                    2         2         2       3h49m
+</code></pre></div></div>
+
+<p><strong><code class="highlighter-rouge">nvidia-device-plugin-daemonset</code>이 목록에서 사라졌다.</strong> 다른 DaemonSet 5개는 그대로인데, device-plugin DS만 없다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># device-plugin Pod 직접 확인</span>
+kubectl get pods <span class="nt">-n</span> gpu-operator <span class="nt">-l</span> <span class="nv">app</span><span class="o">=</span>nvidia-device-plugin-daemonset
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>No resources found in gpu-operator namespace.
+</code></pre></div></div>
+
+<p>Pod도 없다. 그런데 이게 DS selector의 노드 라벨이 바뀌었기 때문인지, 아니면 DS 자체가 삭제된 것인지 구분해야 한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># DS의 nodeSelector로 쓰이는 라벨 확인</span>
+kubectl get nodes <span class="nt">-L</span> nvidia.com/gpu.deploy.device-plugin,nvidia.com/gpu.present
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NAME                                               GPU.DEPLOY.DEVICE-PLUGIN   GPU.PRESENT
+ip-192-168-xx-xx.ap-northeast-2.compute.internal
+ip-192-168-yy-yy.ap-northeast-2.compute.internal
+ip-192-168-aa-aa.ap-northeast-2.compute.internal   true                       true
+ip-192-168-bb-bb.ap-northeast-2.compute.internal   true                       true
+</code></pre></div></div>
+
+<p>NFD 라벨 <code class="highlighter-rouge">nvidia.com/gpu.deploy.device-plugin=true</code>는 GPU 노드에 살아있다. <strong>nodeSelector 측 문제가 아니라 DS 자체가 사라진 것이다.</strong></p>
+
+<p><strong>다음 분기</strong>: “DS 자체가 없다” → DS를 관리하는 Operator/ClusterPolicy를 확인한다.</p>
+
+<h2 id="4-clusterpolicy--operator-레벨-누가-ds를-죽였나">4. ClusterPolicy / Operator 레벨: “누가 DS를 죽였나?”</h2>
+
+<p>Device Plugin DaemonSet은 GPU Operator 컨트롤러가 ClusterPolicy CR을 reconcile하면서 생성·삭제하는 리소스다. DS가 통째로 사라졌다면 1. ClusterPolicy <code class="highlighter-rouge">spec</code>에서 해당 컴포넌트가 비활성화되었거나, 2. Operator 컨트롤러 자체가 장애 상태여서 reconcile을 수행하지 못하는 두 가지 경우가 가능하다.</p>
+
+<p>ClusterPolicy spec과 Operator 상태를 함께 확인한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># ClusterPolicy의 devicePlugin 설정값 확인</span>
+kubectl get clusterpolicy cluster-policy <span class="se">\</span>
+  <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.spec.devicePlugin}'</span> | jq <span class="nb">.</span>
+</code></pre></div></div>
+
+<div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+    </span><span class="s2">"enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"image"</span><span class="p">:</span><span class="w"> </span><span class="s2">"k8s-device-plugin"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"imagePullPolicy"</span><span class="p">:</span><span class="w"> </span><span class="s2">"IfNotPresent"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"repository"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nvcr.io/nvidia"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"v0.19.0"</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div></div>
+
+<p><strong><code class="highlighter-rouge">enabled: false</code></strong> — 스모킹 건이다. 이 값 때문에 Operator가 device-plugin DS를 삭제한 것이다.</p>
+
+<p>원인은 찾았지만, 실무에서는 “그럼 ClusterPolicy 전체 상태는 정상인가?”를 추가로 확인하게 된다. <code class="highlighter-rouge">status.state</code>를 확인해 보자.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># ClusterPolicy status 확인 — 함정 주의</span>
+kubectl get clusterpolicy cluster-policy <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.state}'</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ready
+</code></pre></div></div>
+
+<p><strong>함정</strong>: <code class="highlighter-rouge">status.state</code>가 <code class="highlighter-rouge">ready</code>다. “의도적으로 disable한 것도 정상적인 reconcile 결과”이므로 Operator 입장에서는 ready가 맞다. <strong>status만 보고 안심하면 장애를 놓친다.</strong></p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Operator 컨트롤러 로그에서 devicePlugin 관련 메시지 확인</span>
+kubectl logs <span class="nt">-n</span> gpu-operator deploy/gpu-operator <span class="nt">--tail</span><span class="o">=</span>120 <span class="se">\</span>
+  | <span class="nb">grep</span> <span class="nt">-i</span> <span class="s2">"device-plugin</span><span class="se">\|</span><span class="s2">deviceplugin"</span>
+</code></pre></div></div>
+
+<details>
+  <summary><b>Operator 로그 발췌</b></summary>
+
+  <div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"info"</span><span class="p">,</span><span class="s2">"ts"</span><span class="p">:</span><span class="mf">1776590638.9078515</span><span class="p">,</span><span class="s2">"logger"</span><span class="p">:</span><span class="s2">"controllers.ClusterPolicy"</span><span class="p">,</span><span class="s2">"msg"</span><span class="p">:</span><span class="s2">"Number of nodes with GPU label"</span><span class="p">,</span><span class="s2">"NodeCount"</span><span class="p">:</span><span class="mi">2</span><span class="p">}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"info"</span><span class="p">,</span><span class="s2">"ts"</span><span class="p">:</span><span class="mf">1776590639.476854</span><span class="p">,</span><span class="s2">"logger"</span><span class="p">:</span><span class="s2">"controllers.ClusterPolicy"</span><span class="p">,</span><span class="s2">"msg"</span><span class="p">:</span><span class="s2">"ClusterPolicy step completed"</span><span class="p">,</span><span class="s2">"state:"</span><span class="p">:</span><span class="s2">"state-device-plugin"</span><span class="p">,</span><span class="s2">"status"</span><span class="p">:</span><span class="s2">"disabled"</span><span class="p">}</span><span class="w">
+</span><span class="p">{</span><span class="s2">"level"</span><span class="p">:</span><span class="s2">"info"</span><span class="p">,</span><span class="s2">"ts"</span><span class="p">:</span><span class="mf">1776590639.5161002</span><span class="p">,</span><span class="s2">"logger"</span><span class="p">:</span><span class="s2">"controllers.ClusterPolicy"</span><span class="p">,</span><span class="s2">"msg"</span><span class="p">:</span><span class="s2">"ClusterPolicy step completed"</span><span class="p">,</span><span class="s2">"state:"</span><span class="p">:</span><span class="s2">"state-mps-control-daemon"</span><span class="p">,</span><span class="s2">"status"</span><span class="p">:</span><span class="s2">"disabled"</span><span class="p">}</span><span class="w">
+</span></code></pre></div>  </div>
+
+</details>
+
+<p><code class="highlighter-rouge">"state-device-plugin","status":"disabled"</code> — Operator가 device-plugin을 <strong>의도적으로 disabled 처리</strong>한 기록이다.</p>
+
+<h2 id="5-노드-내부-드라이버-vs-플러그인-분리-검증">5. 노드 내부: “드라이버 vs 플러그인 분리 검증”</h2>
+
+<p>원인은 4에서 확정됐지만, 실무에서는 “드라이버 자체가 죽은 건 아닌지” 확인해야 할 때가 있다. <strong>driver 사망 vs plugin off</strong>는 외부 관찰만으로 구분이 어렵기 때문이다.</p>
+
+<h3 id="kubelet-device-plugin-소켓-디렉토리">kubelet device-plugin 소켓 디렉토리</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># GPU 노드에서 device-plugin 소켓 파일 확인</span>
+kubectl debug node/ip-192-168-aa-aa.ap-northeast-2.compute.internal <span class="se">\</span>
+  <span class="nt">-it</span> <span class="nt">--image</span><span class="o">=</span>public.ecr.aws/amazonlinux/amazonlinux:2023 <span class="se">\</span>
+  <span class="nt">--</span> chroot /host <span class="nb">ls</span> <span class="nt">-la</span> /var/lib/kubelet/device-plugins/
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>total 20
+drwxr-xr-x.  2 root root    61 ...
+drwxr-xr-x. 10 root root 16384 ...
+srwxr-xr-x.  1 root root     0 ... kubelet.sock
+-rw-------.  1 root root   660 ... kubelet_internal_checkpoint
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">kubelet.sock</code>과 <code class="highlighter-rouge">kubelet_internal_checkpoint</code>만 남아있다. <strong><code class="highlighter-rouge">nvidia-gpu.sock</code>이 없다</strong> — device-plugin이 kubelet에서 gRPC unregister한 흔적이다. 이 소켓은 Device Plugin이 시작할 때 생성하여 kubelet과의 gRPC 통신 채널로 사용하는 Unix domain socket이다(상세 동작은 <a href="/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/#보고">NVIDIA Device Plugin 동작 원리 — 보고</a> 참고). 소켓이 없다는 건 kubelet이 GPU 리소스를 광고할 수단 자체가 사라진 것이다.</p>
+
+<h3 id="chroot-nvidia-smi의-함정">chroot nvidia-smi의 함정</h3>
+
+<p>소켓이 없다면 혹시 드라이버 자체가 죽은 건 아닌지 의심할 수 있다. 노드에 직접 SSH하지 않고 확인하는 가장 빠른 방법이 <code class="highlighter-rouge">kubectl debug node</code> + <code class="highlighter-rouge">chroot</code>다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># GPU 노드에서 chroot로 nvidia-smi 실행</span>
+kubectl debug node/ip-192-168-aa-aa.ap-northeast-2.compute.internal <span class="se">\</span>
+  <span class="nt">-it</span> <span class="nt">--image</span><span class="o">=</span>public.ecr.aws/amazonlinux/amazonlinux:2023 <span class="se">\</span>
+  <span class="nt">--</span> chroot /host nvidia-smi <span class="nt">-L</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Failed to initialize NVML: Unknown Error
+</code></pre></div></div>
+
+<p>이 에러만 보면 드라이버가 죽은 것처럼 보이지만, <strong>실제로는 드라이버가 정상</strong>이다. <code class="highlighter-rouge">kubectl debug node</code>는 호스트 PID/network namespace는 공유하지만, <strong>device namespace는 공유하지 않는다.</strong> nvidia-smi는 NVML 라이브러리를 통해 <code class="highlighter-rouge">/dev/nvidia*</code> device file에 접근해야 동작하는데, debug Pod의 <code class="highlighter-rouge">/dev</code>에는 GPU device file이 존재하지 않는다. chroot로 호스트 파일시스템의 바이너리를 실행해도 <code class="highlighter-rouge">/dev</code>는 여전히 debug Pod의 것이므로 NVML 초기화가 실패하는 것이다. 드라이버는 호스트 커널에 정상 로드되어 있다.</p>
+
+<h3 id="driver-alive-검증--dcgm-exporter-pod-활용">driver alive 검증 — dcgm-exporter Pod 활용</h3>
+
+<p>드라이버 생존 여부는 GPU device file이 올바르게 마운트된 Pod 안에서 확인해야 한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># dcgm-exporter Pod에서 nvidia-smi 실행 (device mount가 정상인 Pod)</span>
+<span class="nv">DCGM_POD</span><span class="o">=</span><span class="k">$(</span>kubectl get pods <span class="nt">-n</span> gpu-operator <span class="se">\</span>
+  <span class="nt">-l</span> <span class="nv">app</span><span class="o">=</span>nvidia-dcgm-exporter <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.items[0].metadata.name}'</span><span class="k">)</span>
+kubectl <span class="nb">exec</span> <span class="nt">-n</span> gpu-operator <span class="nv">$DCGM_POD</span> <span class="nt">--</span> nvidia-smi <span class="nt">-L</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>GPU 0: NVIDIA A10G (UUID: GPU-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+</code></pre></div></div>
+
+<p><strong>NVIDIA A10G가 정상 인식된다.</strong> 드라이버/toolkit은 살아있고, kubelet 광고만 끊긴 상태임이 확정되었다.</p>
+
+<p><br /></p>
+
+<h1 id="해결">해결</h1>
+
+<h2 id="clusterpolicy-복구">ClusterPolicy 복구</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Device Plugin 재활성화</span>
+kubectl patch clusterpolicy cluster-policy <span class="nt">--type</span><span class="o">=</span>merge <span class="se">\</span>
+  <span class="nt">-p</span> <span class="s1">'{"spec":{"devicePlugin":{"enabled":true}}}'</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>clusterpolicy.nvidia.com/cluster-policy patched
+</code></pre></div></div>
+
+<h2 id="회복-관찰">회복 관찰</h2>
+
+<p>복구 패치 직후 10초 간격으로 polling한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 회복 polling (10초 간격)</span>
+<span class="k">for </span>i <span class="k">in</span> <span class="k">$(</span>seq 1 12<span class="k">)</span><span class="p">;</span> <span class="k">do
+  </span>sleep 10
+  <span class="nv">ds</span><span class="o">=</span><span class="k">$(</span>kubectl get ds <span class="nt">-n</span> gpu-operator nvidia-device-plugin-daemonset <span class="nt">--no-headers</span> 2&gt;&amp;1 <span class="se">\</span>
+    | awk <span class="s1">'{print $2"/"$3"/"$4}'</span><span class="k">)</span>
+  <span class="nv">alloc</span><span class="o">=</span><span class="k">$(</span>kubectl get node ip-192-168-aa-aa.ap-northeast-2.compute.internal <span class="se">\</span>
+    <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.allocatable.nvidia\.com/gpu}'</span> 2&gt;&amp;1<span class="k">)</span>
+  <span class="nv">podstatus</span><span class="o">=</span><span class="k">$(</span>kubectl get pod gpu-probe <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.phase}'</span> 2&gt;&amp;1<span class="k">)</span>
+  <span class="nb">echo</span> <span class="s2">"T+</span><span class="k">$((</span>i<span class="o">*</span><span class="m">10</span><span class="k">))</span><span class="s2">s DS=</span><span class="k">${</span><span class="nv">ds</span><span class="k">}</span><span class="s2"> Alloc='</span><span class="k">${</span><span class="nv">alloc</span><span class="k">}</span><span class="s2">' Pod=</span><span class="k">${</span><span class="nv">podstatus</span><span class="k">}</span><span class="s2">"</span>
+<span class="k">done</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>시점</th>
+      <th>DS Ready</th>
+      <th>Allocatable GPU</th>
+      <th>gpu-probe</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>T+10s</td>
+      <td>2/2/<strong>1</strong></td>
+      <td><strong>1</strong></td>
+      <td><strong>Succeeded</strong></td>
+    </tr>
+    <tr>
+      <td>T+20s</td>
+      <td>2/2/1</td>
+      <td>1</td>
+      <td>Succeeded</td>
+    </tr>
+    <tr>
+      <td>T+30s</td>
+      <td>2/2/1</td>
+      <td>1</td>
+      <td>Succeeded</td>
+    </tr>
+    <tr>
+      <td>T+40s</td>
+      <td>2/2/<strong>2</strong></td>
+      <td>1</td>
+      <td>Succeeded</td>
+    </tr>
+  </tbody>
+</table>
+
+<ul>
+  <li><strong>T+10초</strong>: DS가 재생성되고 1개 노드에서 Ready. Allocatable이 1로 복구되자마자 scheduler가 gpu-probe를 즉시 배치해 <strong>Succeeded</strong>로 전이</li>
+  <li><strong>T+40초</strong>: 양쪽 노드 모두 device-plugin Pod Ready. <strong>완전 복구</strong></li>
+</ul>
+
+<p>gpu-probe가 이렇게 빨리 완료된 이유는 1. scheduler가 Pending Pod를 주기적으로 재시도하고, 2. CUDA 이미지가 이미 노드에 캐시되어 있으며, 3. nvidia-smi 명령 자체가 1초 미만에 끝나기 때문이다.</p>
+
+<h2 id="최종-검증">최종 검증</h2>
+
+<h3 id="nvidia-smi-정상-확인">nvidia-smi 정상 확인</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl logs gpu-probe
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>GPU 0: NVIDIA A10G (UUID: GPU-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+name, driver_version, memory.total [MiB]
+NVIDIA A10G, 580.126.09, 23028 MiB
+</code></pre></div></div>
+
+<p>Baseline과 100% 동일하다.</p>
+
+<h3 id="events-시계열--장애와-복구가-한-객체에-보존">Events 시계열 — 장애와 복구가 한 객체에 보존</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl describe pod gpu-probe | tail <span class="nt">-15</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Events:
+  Type     Reason            Age                    From               Message
+  ----     ------            ----                   ----               -------
+  Warning  FailedScheduling  6m9s (x3 over 9m40s)   default-scheduler  0/4 nodes are available:
+                                                                       4 Insufficient nvidia.com/gpu.
+  Normal   Scheduled         3m52s                  default-scheduler  Successfully assigned
+                                                                       default/gpu-probe to
+                                                                       ip-192-168-aa-aa...
+  Normal   Pulled            3m52s                  kubelet            Container image already
+                                                                       present on machine
+  Normal   Created           3m52s                  kubelet            Container created
+  Normal   Started           3m52s                  kubelet            Container started
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">FailedScheduling x3 over 9m40s</code> → <code class="highlighter-rouge">Scheduled</code> 전이가 <strong>단일 Pod의 Events 안에</strong> 고스란히 남아있다. 장애 발생 시점부터 복구까지의 전체 타임라인을 하나의 Pod에서 추적할 수 있다.</p>
+
+<h3 id="daemonset-age--재생성-증거">DaemonSet AGE — 재생성 증거</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl get ds <span class="nt">-n</span> gpu-operator
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>NAME                                         DESIRED   CURRENT   READY   AGE
+gpu-feature-discovery                        2         2         2       3h56m
+gpu-operator-node-feature-discovery-worker   4         4         4       3h56m
+nvidia-dcgm-exporter                         2         2         2       3h56m
+nvidia-device-plugin-daemonset               2         2         2       3m55s    # ← 재생성됨
+nvidia-mig-manager                           0         0         0       3h56m
+nvidia-operator-validator                    2         2         2       3h56m
+</code></pre></div></div>
+
+<p>다른 DaemonSet은 AGE가 3시간 56분인데, <code class="highlighter-rouge">nvidia-device-plugin-daemonset</code>만 <strong>3분 55초</strong>다. disable 시 Operator가 DS를 통째로 삭제하고, enable 시 새로 생성했다는 증거다.</p>
+
+<p><br /></p>
+
+<h1 id="실무-운영-주의-사항">실무 운영 주의 사항</h1>
+
+<p>이번 실습에서는 ClusterPolicy를 수동 패치해 장애를 재현했다. 하지만 실무에서는 다양한 경로로 <strong>동일한 증상</strong>(GPU Pod Pending, <code class="highlighter-rouge">Insufficient nvidia.com/gpu</code>)이 발생한다. 각 시나리오가 위 디버깅 경로의 어느 단계에서 갈라지는지 매핑한다. (참고: <a href="https://devfloor9.github.io/engineering-playbook/slides/eks-debugging/">EKS 디버깅 마스터 가이드</a>)</p>
+
+<h2 id="ds-자체가-사라지는-경우">DS 자체가 사라지는 경우</h2>
+
+<p>이번 실습과 동일한 패턴이다. 디버깅 경로 <strong>3</strong>(DaemonSet)에서 DS 부재를 발견하고, <strong>4</strong>(ClusterPolicy/Operator)로 진행한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>시나리오</th>
+      <th>원인</th>
+      <th>신호</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>GPU Operator Helm upgrade 중 ClusterPolicy 리셋</td>
+      <td>Helm values 변경 시 ClusterPolicy가 일시 재생성되면서 DS 삭제-재생성 윈도우 발생</td>
+      <td>DS AGE가 비정상적으로 짧음</td>
+    </tr>
+    <tr>
+      <td>의도치 않은 ClusterPolicy 수정</td>
+      <td>GitOps drift, 운영자의 <code class="highlighter-rouge">kubectl patch</code> 실수</td>
+      <td><code class="highlighter-rouge">spec.devicePlugin.enabled: false</code> (이번 실습과 동일)</td>
+    </tr>
+    <tr>
+      <td>Operator 컨트롤러 장애</td>
+      <td>gpu-operator Deployment가 OOMKill/CrashLoop이면 reconcile이 중단되고 DS 재생성 불가</td>
+      <td><code class="highlighter-rouge">kubectl get deploy -n gpu-operator gpu-operator</code> → 0/1 Ready</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="ds는-running인데-gpu-광고가-0인-경우">DS는 Running인데 GPU 광고가 0인 경우</h2>
+
+<p>가장 혼란스러운 패턴이다. <code class="highlighter-rouge">kubectl get ds</code>에서 device-plugin이 정상처럼 보이는데 GPU가 0이다. 디버깅 경로 <strong>3</strong>에서 DS Running을 확인한 뒤 <strong>5</strong>(노드 내부)로 분기한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>시나리오</th>
+      <th>원인</th>
+      <th>신호</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>드라이버 초기화 실패</td>
+      <td>nouveau 모듈 충돌, AMI 드라이버와 GPU 하드웨어 불일치(예: K80에 550+ 드라이버)</td>
+      <td>device-plugin 로그에 <code class="highlighter-rouge">No devices found. Waiting indefinitely</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">FAIL_ON_INIT_ERROR=false</code> 함정</td>
+      <td>기본값이 <code class="highlighter-rouge">false</code>라서 초기화 에러가 은폐됨. Pod는 Running이지만 GPU를 0개 광고</td>
+      <td>Pod STATUS는 Running인데 Allocatable GPU 0</td>
+    </tr>
+    <tr>
+      <td>kubelet 재시작 후 소켓 재등록 실패</td>
+      <td><code class="highlighter-rouge">systemctl restart kubelet</code> 시 device-plugin이 GPU를 unhealthy로 마킹</td>
+      <td>kubelet restart 직후 갑자기 Allocatable 0, device-plugin Pod 재시작 없음</td>
+    </tr>
+    <tr>
+      <td>config-manager 레이스 컨디션</td>
+      <td>device-plugin v0.18.2+에서 Karpenter가 노드 라벨을 늦게 적용하면 빈 설정으로 초기화</td>
+      <td>신규 노드에서만 Allocatable 0, 기존 노드 정상</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p>이 패턴에서는 device-plugin Pod의 로그가 핵심 단서다. <code class="highlighter-rouge">kubectl logs -n gpu-operator &lt;device-plugin-pod&gt;</code>에서 <code class="highlighter-rouge">No devices found</code>, <code class="highlighter-rouge">Incompatible strategy</code>, <code class="highlighter-rouge">NVML error</code> 등의 메시지를 확인한다.</p>
+</blockquote>
+
+<h2 id="pod-spec-자체의-문제">Pod spec 자체의 문제</h2>
+
+<p>디버깅 경로 <strong>1</strong>(Pod Events)에서 바로 발견할 수 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>시나리오</th>
+      <th>원인</th>
+      <th>Events 메시지</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>tolerations 누락</td>
+      <td>GPU 노드 taint <code class="highlighter-rouge">nvidia.com/gpu:NoSchedule</code>에 toleration이 없음</td>
+      <td><code class="highlighter-rouge">had untolerated taint {nvidia.com/gpu}</code></td>
+    </tr>
+    <tr>
+      <td>resource limits 미지정</td>
+      <td><code class="highlighter-rouge">nvidia.com/gpu</code> limits 없이 배포</td>
+      <td>스케줄러가 GPU 노드를 고려하지 않음(GPU 관련 메시지 없음)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="디버깅-분기-플로우">디버깅 분기 플로우</h2>
+
+<p>위 시나리오들을 포함한 전체 디버깅 분기를 정리하면 다음과 같다. (참고: <a href="https://devfloor9.github.io/engineering-playbook/slides/eks-debugging/">EKS 디버깅 마스터 가이드</a>)</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/eks-5w-gpu-pending-troubleshooting-workflow.png" alt="GPU Pod Pending 디버깅 분기 플로우" class="align-center" /></p>
+
+<p>이번 실습에서 따라간 경로는 <strong>1 → 2 → 3(DS 부재) → 4(<code class="highlighter-rouge">enabled: false</code>)</strong> 루트다.</p>
+
+<h2 id="재발-방지">재발 방지</h2>
+
+<h3 id="prometheus-alert--allocatable-0-on-gpu-노드">Prometheus alert — Allocatable 0 on GPU 노드</h3>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># GPU 노드인데 Allocatable GPU가 0인 상태를 감지</span>
+<span class="pi">-</span> <span class="na">alert</span><span class="pi">:</span> <span class="s">GpuAllocatableZeroOnGpuNode</span>
+  <span class="na">expr</span><span class="pi">:</span> <span class="pi">|</span>
+    <span class="no">kube_node_status_allocatable{resource="nvidia_com_gpu"} == 0</span>
+    <span class="no">and on(node)</span>
+    <span class="no">kube_node_labels{label_nvidia_com_gpu_present="true"} == 1</span>
+  <span class="na">for</span><span class="pi">:</span> <span class="s">2m</span>
+  <span class="na">labels</span><span class="pi">:</span>
+    <span class="na">severity</span><span class="pi">:</span> <span class="s">page</span>
+  <span class="na">annotations</span><span class="pi">:</span>
+    <span class="na">summary</span><span class="pi">:</span> <span class="s2">"</span><span class="s">GPU</span><span class="nv"> </span><span class="s">node</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">$labels.node</span><span class="nv"> </span><span class="s">}}</span><span class="nv"> </span><span class="s">advertises</span><span class="nv"> </span><span class="s">nvidia.com/gpu</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">0"</span>
+    <span class="na">runbook</span><span class="pi">:</span> <span class="s2">"</span><span class="s">Check</span><span class="nv"> </span><span class="s">ClusterPolicy</span><span class="nv"> </span><span class="s">spec.devicePlugin.enabled</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">gpu-operator</span><span class="nv"> </span><span class="s">logs"</span>
+</code></pre></div></div>
+
+<ul>
+  <li><code class="highlighter-rouge">== 0</code> 조건: 키 잔존 + 값 0 패턴을 잡는다 (<code class="highlighter-rouge">absent()</code>만으로는 누락)</li>
+  <li><code class="highlighter-rouge">on(node) gpu.present=true</code> 조인: 시스템 노드의 false alarm 차단</li>
+  <li><code class="highlighter-rouge">for: 2m</code>: Operator restart 등 일시적 reconcile 윈도우 흡수</li>
+</ul>
+
+<h3 id="gitops로-clusterpolicy-잠금">GitOps로 ClusterPolicy 잠금</h3>
+
+<ul>
+  <li>ClusterPolicy CR을 Git에 보관 → ArgoCD/Flux로 sync. drift 감지 시 자동 복원</li>
+  <li>RBAC로 운영자의 <code class="highlighter-rouge">clusterpolicies.nvidia.com</code> UPDATE 권한 제거 (관리자만 유지)</li>
+  <li>이중 차단(GitOps + RBAC)으로 사람의 kubectl patch 경로를 원천 차단</li>
+</ul>
+
+<h3 id="ds-ready-등치-검증">DS Ready 등치 검증</h3>
+
+<p><code class="highlighter-rouge">status.state</code> 함정을 우회하는 추가 alert다. Device Plugin DS의 Ready 수가 GPU 노드 수와 일치하는지 직접 검증한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># DS Ready 수 ≠ desired 수 감지</span>
+<span class="pi">-</span> <span class="na">alert</span><span class="pi">:</span> <span class="s">DevicePluginDaemonSetNotFullyReady</span>
+  <span class="na">expr</span><span class="pi">:</span> <span class="pi">|</span>
+    <span class="no">kube_daemonset_status_number_ready{daemonset="nvidia-device-plugin-daemonset"}</span>
+    <span class="no">!=</span>
+    <span class="no">kube_daemonset_status_desired_number_scheduled{daemonset="nvidia-device-plugin-daemonset"}</span>
+  <span class="na">for</span><span class="pi">:</span> <span class="s">5m</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<h2 id="요약">요약</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>장애 상태</th>
+      <th>복구 상태</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>ClusterPolicy <code class="highlighter-rouge">spec.devicePlugin.enabled</code></td>
+      <td><strong>false</strong></td>
+      <td>true</td>
+    </tr>
+    <tr>
+      <td>Device Plugin DS</td>
+      <td><strong>삭제됨</strong>(NotFound)</td>
+      <td>2/2/2 Ready (AGE 재시작)</td>
+    </tr>
+    <tr>
+      <td>Node Allocatable <code class="highlighter-rouge">nvidia.com/gpu</code></td>
+      <td><strong>0</strong>(키 잔존)</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td>gpu-probe Pod</td>
+      <td><strong>Pending</strong>(FailedScheduling x3)</td>
+      <td>Succeeded (A10G / 580.126.09 / 23028 MiB)</td>
+    </tr>
+    <tr>
+      <td>ClusterPolicy <code class="highlighter-rouge">status.state</code></td>
+      <td><strong>ready</strong>(함정)</td>
+      <td>ready</td>
+    </tr>
+    <tr>
+      <td>Reconcile 시간</td>
+      <td><strong>&lt;10초</strong></td>
+      <td><strong>&lt;40초</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="운영-함정-3가지">운영 함정 3가지</h2>
+
+<p>ClusterPolicy <code class="highlighter-rouge">spec.devicePlugin.enabled</code> 한 줄을 끄면 Operator reconcile이 <strong>10초 안에</strong> device-plugin DaemonSet을 통째로 삭제하고, 노드의 Allocatable <code class="highlighter-rouge">nvidia.com/gpu</code>는 키가 잔존한 채 값만 0으로 떨어진다. 이 시나리오에서 주의할 운영 함정을 정리한다.</p>
+
+<p><strong>1. <code class="highlighter-rouge">status.state: ready</code> 함정</strong></p>
+
+<p>ClusterPolicy의 <code class="highlighter-rouge">status.state</code>가 <code class="highlighter-rouge">ready</code>를 유지한다. “의도적 disable도 정상 reconcile 결과”이기 때문이다. status만 모니터링하면 의도적 disable과 사고를 구분할 수 없다.</p>
+
+<p><strong>2. <code class="highlighter-rouge">kubectl debug node ... chroot nvidia-smi</code> 함정</strong></p>
+
+<p>chroot 환경에서 nvidia-smi를 실행하면 <code class="highlighter-rouge">Failed to initialize NVML: Unknown Error</code>가 뜬다. GPU device file 마운트 한계 때문이지 driver 사망이 아니다. <strong>driver alive 검증은 dcgm-exporter 등 device mount가 정상인 Pod 안에서</strong> 해야 한다.</p>
+
+<p><strong>3. Allocatable 키 잔존 함정</strong></p>
+
+<p>Allocatable에서 <code class="highlighter-rouge">nvidia.com/gpu</code> 키가 사라지지 않고 값만 0으로 남는다. Prometheus의 <code class="highlighter-rouge">absent()</code> 기반 alert rule은 이 패턴을 놓친다. <code class="highlighter-rouge">== 0</code> 조건을 사용해야 한다.</p>
+
+<h2 id="다음-단계">다음 단계</h2>
+
+<p>이번 글에서는 인프라 층(Device Plugin 비활성화)에서 GPU Pod Pending을 재현했다. <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-02-vLLM-TroubleShooting/">다음 글</a>에서는 같은 GPU 환경 위에서 <strong>어플리케이션 계층</strong> 장애를 재현한다. vLLM 서빙 엔진의 기동 실패 시나리오(KV cache 부족, context window 초과, TP 불일치)를 다룬다.</p>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study-week-5" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study-Week-5</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws-eks-workshop-study" class="page__taxonomy-item" rel="tag">AWS-EKS-Workshop-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#aws" class="page__taxonomy-item" rel="tag">AWS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#device-plugin" class="page__taxonomy-item" rel="tag">Device-Plugin</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu-operator" class="page__taxonomy-item" rel="tag">GPU-Operator</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nvidia" class="page__taxonomy-item" rel="tag">NVIDIA</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#troubleshooting" class="page__taxonomy-item" rel="tag">Troubleshooting</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-04-09T00:00:00+09:00">April 9, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEKS%5D+EKS+GPU+%ED%8A%B8%EB%9F%AC%EB%B8%94%EC%8A%88%ED%8C%85%3A+3.+%EC%9E%A5%EC%95%A0+%EC%9E%AC%ED%98%84+-+1.+Device+Plugin+%EB%B9%84%ED%99%9C%EC%84%B1%ED%99%94%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-03-GPU-Node-Provisioning/" class="pagination--pager" title="[EKS] EKS GPU 트러블슈팅: 2. 실습 환경 구성 - 3. GPU 노드 프로비저닝 결과
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-02-vLLM-TroubleShooting/" class="pagination--pager" title="[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 2. vLLM 기동 실패
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="permalink">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요: 언어 모델의 발전, LLM 서빙과 트랜스포머 아키텍처
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  11 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙을 이해하기 위한 LLM, 트랜스포머 아키텍처 개요에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-01-AI-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-Continual-Learning-Industrial-AI/" rel="permalink">[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 07월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>
