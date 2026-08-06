@@ -54,6 +54,16 @@ last_modified_at: 2026-08-02
 
  위의 그림에서 Attention Score를 계산하기 위해 입력으로 받은 현재 벡터를 **Query**라고 한다. 다른 단어와의 점수를 매기기 위해 기준으로 삼을 벡터이다. 주어진 Query와의 Attention Score를 계산할 때 대상이 되는 단어 벡터들을 **Key**라고 한다. 다른 위치의 단어 벡터이다. **Value**는 원래 문장의 각 단어가 벡터로 수치화된 값을 의미한다.
 
+> *주의* : 위 그림은 Seq2Seq 모델이지 Transformer가 아니다
+>
+>  위 그림은 LSTM 기반 Seq2Seq 모델에 Attention을 적용한 것이다. 이해를 잇기 위해 가져왔지만, 두 모델에서 Q, K, V의 **성격이 다르다**는 점은 짚고 넘어가야 한다.
+>
+>  Seq2Seq에는 $$W^Q$$, $$W^K$$, $$W^V$$ 가 **아예 없다.** LSTM의 hidden state를 그대로 Query, Key, Value로 쓴다. 그리고 Query는 디코더에서, Key와 Value는 인코더에서 오므로 **출처가 비대칭**이다. 반면 Transformer의 Self-Attention에서는 Q, K, V가 **모두 같은 입력**에서 나온다. 각각 다른 가중치를 통과할 뿐 출처는 하나다.
+>
+>  이 그림만 보고 *"Key와 Value는 주어져 있는 것이고 Query만 내가 들고 오는 것"* 이라고 이해하면 뒤에서 반드시 막힌다.
+>
+>  한 가지 더. 위 그림에서 **Value는 Key와 같은 것**이다. 둘 다 인코더 출력 $$e_1 \sim e_{10}$$ 이고, 그림 안에서 $$a_1 e_1, a_2 e_2, \ldots$$ 를 합산하는 부분이 그 증거다. attention weight을 곱해 가중합하는 대상이 바로 그 인코더 출력이다. Value가 "중요도 값"이나 "계산 결과"인 것이 아니다. 중요도에 해당하는 것은 $$\{a_1, \ldots, a_{10}\}$$, 즉 **attention weight** 이다.
+
  Attention에 Query, Key, Value 개념만 입혀 다시 이해해 보자. 
 
 |                       Attention Weight                       |                       Attention                        |
@@ -164,5 +174,32 @@ $$Attention(Q, K, V) = softmax(\frac {QK^T} {\sqrt {d_k}})V$$
 >  인용문이 말하는 것은 비용이 "similar" 하다는 것이다. head를 8개로 늘렸으니 차원을 그대로 두면 계산량이 8배가 될 텐데, head마다 차원을 $$1/8$$ 로 줄였기 때문에 **전체 비용이 single-head로 full dimension을 쓸 때와 비슷한 수준에 머무른다**. 즉 $$d_k = d_{model}/h$$ 는 head를 늘리면서도 비용을 그대로 유지하기 위한 배분이지, $$d_k$$ 가 반드시 그 값이어야 할 구조적인 이유는 없다.
 
 
+
+<br>
+
+## 3. 전체 연산 순서 정리
+
+ 여기까지의 과정을 순서대로 정리해 두자. $$X$$ 는 이 레이어에 들어온 입력이고, shape은 $$(seq\_len, d_{model})$$ 이다.
+
+| 단계 | 연산 | 결과 shape |
+|---|---|---|
+| 1 | $$Q = X W^Q$$, $$K = X W^K$$, $$V = X W^V$$ | $$(seq\_len, d_k)$$, $$(seq\_len, d_k)$$, $$(seq\_len, d_v)$$ |
+| 2 | $$S = Q K^T$$ | $$(seq\_len, seq\_len)$$ |
+| 3 | $$S \leftarrow S / \sqrt{d_k}$$ | 동일 |
+| 4 | $$A = softmax(S)$$ | 동일 |
+| 5 | $$head_i = A V$$ | $$(seq\_len, d_v)$$ |
+| 6 | $$Concat(head_1, \ldots, head_h) W^O$$ | $$(seq\_len, d_{model})$$ |
+
+<br>
+
+ 1번부터 5번까지가 head **하나**에서 벌어지는 일이고, 6번에서 $$h$$ 개의 head 결과가 합쳐지며 입력과 같은 $$d_{model}$$ 차원으로 되돌아온다. 들어온 shape과 나가는 shape이 같아야 레이어를 쌓을 수 있고, Residual Connection으로 더할 수도 있다.
+
+<br>
+
+ 이 표에서 확인해 둘 것이 세 가지 있다.
+
+* **Q, K, V는 모두 같은 $$X$$ 에서 나온다.** 서로 다른 종류의 데이터가 아니라, 같은 재료를 세 개의 다른 가중치로 변환한 결과다. 단, Encoder-Decoder Attention에서는 1번의 $$X$$ 가 하나가 아니다. Q는 디코더 쪽 $$X$$ 에서, K와 V는 인코더 쪽 $$X$$ 에서 만들어진다.
+* **K와 V는 한 번도 만나지 않는다.** Q와 K는 2번에서 만나 "누가 누구를 얼마나 볼지"를 정하고 역할이 끝난다. 실제로 다음 레이어로 전달되는 내용물은 5번에서 가중합되는 V뿐이다.
+* **2번에서는 입력끼리 곱한다.** Feed-Forward Network는 처음부터 끝까지 "입력 × 학습된 가중치"만 하는데, Attention은 중간에 $$QK^T$$ 로 입력끼리 곱한다. 그래서 4번의 가중치 $$A$$ 는 학습된 값이 아니라 문장에 따라 매번 새로 만들어지는 값이다. Attention이 갖는 결정적인 차이가 여기에 있다.
 
 <br>
