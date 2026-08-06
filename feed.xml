@@ -1,4 +1,454 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-08-07T00:17:59+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="alternate" type="text/html" title="[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-08-07T01:01:03+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[Transformer] LLM 서빙과 최적화 - 2.3. Transformer Explainer 임베딩: 텍스트가 벡터가 되기까지</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/" rel="alternate" type="text/html" title="[Transformer] LLM 서빙과 최적화 - 2.3. Transformer Explainer 임베딩: 텍스트가 벡터가 되기까지" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;임베딩은 텍스트를 벡터로 바꾸는 &lt;strong&gt;과정&lt;/strong&gt;이자 그 &lt;strong&gt;결과 벡터&lt;/strong&gt;를 가리키는 말이다. 토크나이제이션(텍스트 → 토큰 ID) → 토큰 임베딩(ID → 768차원 벡터) → 위치 인코딩(위치 정보 덧셈)의 세 단계로 이루어진다&lt;/li&gt;
+  &lt;li&gt;어휘 사전은 모델 학습 &lt;strong&gt;전에&lt;/strong&gt; BPE로 한 번 만들어 고정하는 목록이고, 모델 학습으로 다듬어지는 것은 각 토큰의 임베딩 벡터다. GPT 계열의 byte-level BPE는 UTF-8 바이트 수준에서 동작해 OOV가 구조적으로 없다&lt;/li&gt;
+  &lt;li&gt;임베딩 테이블은 “비슷한 단어를 가깝게”라는 loss로 학습되는 것이 아니다. 다음 토큰 예측이라는 프록시 태스크의 오차를 줄이다 보면, 분포 가설에 따라 의미의 기하 구조가 부산물로 나타난다&lt;/li&gt;
+  &lt;li&gt;트랜스포머는 병렬화를 얻는 대가로 RNN이 공짜로 갖던 순서 감각을 잃었고, 그래서 위치 정보를 입력에 명시적으로 넣는다. 그 방식 — 학습된 위치 임베딩(GPT-2), sinusoidal, RoPE — 이 곧 최대 컨텍스트 길이라는 서빙 상수를 결정한다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;임베딩-텍스트가-벡터가-되기까지&quot;&gt;임베딩: 텍스트가 벡터가 되기까지&lt;/h1&gt;
+
+&lt;p&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/&quot;&gt;앞 글&lt;/a&gt;에서 트랜스포머 아키텍처를 Embedding → Transformer Block → Probabilities 세 부분으로 잡았다. 이번 글은 그 첫 부분인 임베딩을 줌인한다.&lt;/p&gt;
+
+&lt;p&gt;트랜스포머가 텍스트를 사용하려면, 먼저 텍스트를 작은 단위로 쪼개고 각 단위를 숫자 목록(벡터)으로 표현해야 한다. Transformer Explainer는 이 과정을 &lt;strong&gt;임베딩(embedding)&lt;/strong&gt;이라 부르면서, 이 용어가 &lt;strong&gt;과정 자체와 결과 벡터 모두&lt;/strong&gt;를 가리킨다는 점을 짚는다. “임베딩한다”(과정)와 “임베딩 벡터”(결과)가 같은 단어로 불리는 이유다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-embedding.gif&quot; alt=&quot;Transformer Explainer의 Embedding 열: 입력 텍스트가 토큰으로 쪼개지고, 토큰 임베딩에 위치 인코딩이 더해져 최종 임베딩이 만들어지는 과정&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;화면의 Embedding 열을 펼치면 세 단계가 보인다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;토크나이제이션(tokenization)&lt;/strong&gt;: 텍스트를 토큰으로 쪼개고, 어휘 사전에서 각 토큰의 ID를 찾는다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;토큰 임베딩(token embedding)&lt;/strong&gt;: 각 토큰 ID로 임베딩 행렬에서 768차원 벡터를 꺼낸다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;위치 인코딩(positional encoding)&lt;/strong&gt;: 각 토큰이 시퀀스의 몇 번째에 있는지에 대한 정보를 더한다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;My hobby is&lt;/code&gt;가 벡터가 되기까지의 전체 파이프라인을 미리 그려 보면 다음과 같다(␣는 토큰 문자열에 포함된 앞 공백 표시).&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart TD
+    A[&quot;입력 텍스트: My hobby is&quot;]
+    A --&amp;gt; B[&quot;1. 사전 분할 (pre-tokenization)&amp;lt;br/&amp;gt;공백·구두점 등을 기준으로 큰 덩어리로 자른다&quot;]
+    B --&amp;gt; C[&quot;2. BPE 병합 규칙 적용 (merges.txt)&amp;lt;br/&amp;gt;병합 규칙을 우선순위 순서대로 반복 적용한다&quot;]
+    C --&amp;gt; D[&quot;3. 토큰 문자열 시퀀스&amp;lt;br/&amp;gt;[My, ␣hobby, ␣is]&quot;]
+    D --&amp;gt; E[&quot;4. 어휘 사전 조회 (vocab.json)&amp;lt;br/&amp;gt;토큰 ID 시퀀스 [3669, 16311, 318]&quot;]
+    E --&amp;gt; F[&quot;5. 임베딩 행렬(50,257 x 768) 행 조회&amp;lt;br/&amp;gt;토큰 ID = 행 인덱스, 행 하나가 768차원 벡터&quot;]
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;이 그림의 1~4단계가 토크나이제이션, 5단계가 토큰 임베딩이고, 그 결과 위에 위치 인코딩이 더해진다. 이제 한 단계씩 뜯어 보자.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;토크나이제이션&quot;&gt;토크나이제이션&lt;/h1&gt;
+
+&lt;h2 id=&quot;어휘-사전&quot;&gt;어휘 사전&lt;/h2&gt;
+
+&lt;p&gt;토크나이저는 &lt;strong&gt;어휘 사전(vocabulary)&lt;/strong&gt;을 기반으로 동작한다. 어휘 사전은 모델이 인식할 수 있는 &lt;strong&gt;고유 토큰의 고정 목록&lt;/strong&gt;이고, 각 토큰에는 ID가 하나씩 매핑되어 있다. GPT-2는 50,257개, 1주차 후반 실습에서 다룰 Qwen2.5는 151,936개다.&lt;/p&gt;
+
+&lt;p&gt;여기서 중요한 포인트가 있다. &lt;strong&gt;사전 자체는 학습되지 않는다.&lt;/strong&gt; 모델 학습 전에 별도 단계 — 학습 코퍼스에 BPE 알고리즘을 돌리는 토크나이저 학습 — 로 한 번 만들어 고정해 둔다. 이후 모델 학습에서 다듬어지는 것은 각 토큰의 &lt;strong&gt;임베딩 벡터&lt;/strong&gt;이지, “어떤 토큰이 몇 번 ID인지”는 바뀌지 않는다.&lt;/p&gt;
+
+&lt;p&gt;그리고 모델이 처리하는 모든 텍스트는 결국 &lt;strong&gt;사전 안 토큰들의 조합으로 분해&lt;/strong&gt;된다. 사전에 없는 단어도 더 잘게 쪼개서 표현한다.&lt;/p&gt;
+
+&lt;h2 id=&quot;텍스트에서-토큰-id까지&quot;&gt;텍스트에서 토큰 ID까지&lt;/h2&gt;
+
+&lt;p&gt;Transformer Explainer에 &lt;code class=&quot;highlighter-rouge&quot;&gt;My hobby is&lt;/code&gt;를 넣으면, 앞의 파이프라인 그림대로 &lt;code class=&quot;highlighter-rouge&quot;&gt;My&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;␣hobby&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;␣is&lt;/code&gt; 세 토큰으로 쪼개지고 토큰마다 어휘 사전의 ID가 매핑된다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-embedding-1.png&quot; alt=&quot;Transformer Explainer의 토크나이제이션: 입력 문장이 어휘 사전 기반으로 토큰과 토큰 ID로 변환된 모습&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;GPT-2 토크나이저 기준으로 각 단계를 부연하면 다음과 같다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;사전 분할&lt;/strong&gt;: 정규식으로 공백·구두점 등을 기준 삼아 텍스트를 큰 덩어리로 먼저 자른다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;병합 규칙 적용&lt;/strong&gt;: &lt;code class=&quot;highlighter-rouge&quot;&gt;merges.txt&lt;/code&gt;에 “어떤 쌍을 어떤 순서로 합칠지”가 적혀 있다. 토크나이저 학습 때 코퍼스에서 빈번했던 쌍일수록 우선순위가 높고, 이 규칙을 순서대로 반복 적용해 서브워드 토큰을 만든다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;ID 변환&lt;/strong&gt;: &lt;code class=&quot;highlighter-rouge&quot;&gt;vocab.json&lt;/code&gt;이 토큰 문자열 → ID 매핑표다. 여기서 나온 ID가 곧 임베딩 행렬의 행 인덱스가 된다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;한 가지 눈에 띄는 점은 &lt;code class=&quot;highlighter-rouge&quot;&gt;␣hobby&lt;/code&gt;처럼 &lt;strong&gt;앞 공백이 토큰 문자열에 포함&lt;/strong&gt;된다는 것이다. 문장 처음의 &lt;code class=&quot;highlighter-rouge&quot;&gt;My&lt;/code&gt;와 문장 중간의 &lt;code class=&quot;highlighter-rouge&quot;&gt;␣My&lt;/code&gt;가 서로 다른 토큰인 식인데, 공백을 따로 처리하는 대신 토큰에 붙여 버리는 GPT-2 토크나이저의 설계다.&lt;/p&gt;
+
+&lt;h2 id=&quot;토크나이제이션-방식-비교&quot;&gt;토크나이제이션 방식 비교&lt;/h2&gt;
+
+&lt;p&gt;결론부터 정리하면, 현대 LLM은 대부분 &lt;strong&gt;서브워드(subword)&lt;/strong&gt; 방식을 쓰고, 그중에서도 GPT 계열과 Qwen은 &lt;strong&gt;byte-level BPE&lt;/strong&gt;를 쓴다. 문자가 아니라 UTF-8 바이트 수준에서 BPE를 돌리기 때문에, 어떤 텍스트(이모지, 한글, 깨진 문자열 포함)도 사전 밖으로 나가지 않는다 — &lt;strong&gt;OOV(Out of Vocabulary)가 구조적으로 없다.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;방식&lt;/th&gt;
+      &lt;th&gt;단위/원리&lt;/th&gt;
+      &lt;th&gt;장점&lt;/th&gt;
+      &lt;th&gt;단점&lt;/th&gt;
+      &lt;th&gt;사용 예&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;단어 단위&lt;/td&gt;
+      &lt;td&gt;공백·단어 기준 분할&lt;/td&gt;
+      &lt;td&gt;직관적, 시퀀스가 짧음&lt;/td&gt;
+      &lt;td&gt;사전이 폭발적으로 커지고 OOV 처리 불가&lt;/td&gt;
+      &lt;td&gt;초기 NLP 모델&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;문자 단위&lt;/td&gt;
+      &lt;td&gt;글자 하나하나를 토큰으로&lt;/td&gt;
+      &lt;td&gt;사전이 극도로 작고 OOV 없음&lt;/td&gt;
+      &lt;td&gt;시퀀스가 과도하게 길어지고 의미 단위 학습이 어려움&lt;/td&gt;
+      &lt;td&gt;일부 연구용 모델&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;BPE (서브워드)&lt;/td&gt;
+      &lt;td&gt;코퍼스에서 가장 빈번한 쌍을 반복 병합해 서브워드 구성&lt;/td&gt;
+      &lt;td&gt;사전 크기와 시퀀스 길이의 균형, 미등록 단어도 쪼개서 표현&lt;/td&gt;
+      &lt;td&gt;병합 규칙이 학습 코퍼스에 의존 → 코퍼스에 적은 언어에 약함&lt;/td&gt;
+      &lt;td&gt;GPT-2/3/4 (byte-level), Qwen&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;WordPiece (서브워드)&lt;/td&gt;
+      &lt;td&gt;빈도가 아니라 우도(likelihood)를 최대화하는 쌍을 병합&lt;/td&gt;
+      &lt;td&gt;BPE와 유사한 효율, 확률 기준 병합&lt;/td&gt;
+      &lt;td&gt;마찬가지로 코퍼스 의존&lt;/td&gt;
+      &lt;td&gt;BERT 계열&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Unigram (서브워드)&lt;/td&gt;
+      &lt;td&gt;큰 사전에서 시작해 확률 모델로 불필요한 토큰을 제거&lt;/td&gt;
+      &lt;td&gt;확률적 토큰화, 한 문장을 여러 방식으로 분할 가능&lt;/td&gt;
+      &lt;td&gt;구현이 상대적으로 복잡&lt;/td&gt;
+      &lt;td&gt;T5 등 SentencePiece 계열&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;em&gt;참고&lt;/em&gt;: Llama 계열은 Unigram이 아니라 SentencePiece/tiktoken 기반의 BPE 토크나이저를 쓰는 것으로 알려져 있다. “SentencePiece = Unigram”이 아니라, SentencePiece는 BPE와 Unigram을 모두 구현한 라이브러리다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;“병합 규칙이 학습 코퍼스에 의존한다”는 단점이 실제로 어떻게 나타나는지는 &lt;a href=&quot;/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/&quot;&gt;앞 글&lt;/a&gt;에서 이미 봤다. 영어 중심 코퍼스로 사전을 만든 GPT-2에 한글을 넣으면, 한글 토큰이 사전에 거의 없어 바이트 단위로 잘게 쪼개지고 시퀀스가 길어진다. OOV로 죽지 않는 대신 비효율로 대가를 치르는 것이다.&lt;/p&gt;
+
+&lt;p&gt;돌아보면 2020년에 &lt;a href=&quot;/ai/AI-NLP-WordEmbedding-Keras/&quot;&gt;Keras Embedding 레이어로 단어 임베딩&lt;/a&gt;을 정리하면서 “vocabulary에 없는 단어(OOV)들의 경우 학습하지 못한다”는 한계를 적어 둔 적이 있다. 당시의 단어 단위 사전이 가진 그 한계에 대한 업계의 답이 바로 서브워드 토크나이제이션이었던 셈이다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;토큰-임베딩&quot;&gt;토큰 임베딩&lt;/h1&gt;
+
+&lt;h2 id=&quot;학습되는-룩업-테이블&quot;&gt;학습되는 룩업 테이블&lt;/h2&gt;
+
+&lt;p&gt;토크나이제이션이 끝나면 각 토큰 ID를 768차원 벡터로 바꾼다. Transformer Explainer의 설명은 간결하다. 모든 토큰은 커다란 &lt;strong&gt;룩업 테이블(lookup table)&lt;/strong&gt;에서 768개 숫자로 이루어진 벡터 하나와 매칭되고, 이 벡터들은 각 토큰의 의미를 가장 잘 표현하도록 &lt;strong&gt;학습 과정에서 다듬어진다&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;물리적으로 임베딩의 역할은 어디서나 같다. &lt;strong&gt;[어휘 사전 크기 × 임베딩 차원]&lt;/strong&gt; 모양의 행렬을 두고, 토큰 ID가 들어오면 해당 행을 꺼내 벡터로 반환한다. GPT-2는 50,257 × 768 행렬이므로, 임베딩 테이블 하나에만 약 3,860만 개의 숫자가 있고, 이 전부가 &lt;a href=&quot;/ai/AI-LLM-Optimization-01-AI-Overview/&quot;&gt;시리즈 1편&lt;/a&gt;의 용어 정리에서 본 대로 학습되는 파라미터다(GPT-2 small 전체 파라미터는 약 1억 2,400만 개다).&lt;/p&gt;
+
+&lt;h2 id=&quot;768이라는-숫자의-근거&quot;&gt;768이라는 숫자의 근거&lt;/h2&gt;
+
+&lt;p&gt;결론부터 말하면, 768은 수학적 필연이 아니라 &lt;strong&gt;설계 선택&lt;/strong&gt;이다. 다만 아무 숫자나 고른 것은 아니고, 구조적 제약과 관행이 겹쳐 있다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;구조적 제약&lt;/strong&gt;: 모델 차원 $d_{model}$은 Multi-Head Attention에서 헤드들이 나눠 가지므로 헤드 수로 나눠떨어져야 한다. GPT-2 small은 768 = 12헤드 × 헤드당 64차원이다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;관행의 계승&lt;/strong&gt;: 768(12헤드)이라는 조합은 GPT-1과 BERT-base가 먼저 쓴 값이고, GPT-2 small이 그대로 물려받았다. 같은 시리즈 안에서도 medium 1024(16×64), large 1280(20×64), XL 1600(25×64)처럼 “헤드당 64차원”을 유지하며 계단식으로 커진다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;트레이드오프&lt;/strong&gt;: 차원을 키우면 표현 용량이 늘지만 파라미터·연산량·메모리도 함께 는다. 768은 그 트레이드오프 위에서 경험적으로 검증된 규모의 한 계단이지, “언어의 의미를 담으려면 768차원이 필요하다”는 식의 근거가 있는 것은 아니다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;그리고 이 $d_{model}$은 &lt;a href=&quot;/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/&quot;&gt;2.1편&lt;/a&gt;에서 말한 &lt;strong&gt;아키텍처 상수&lt;/strong&gt;이기도 하다. 임베딩 행렬의 크기(어휘 사전 크기 × $d_{model}$)를 정하고, 헤드당 차원(head_dim)으로 쪼개져 KV cache 크기 공식의 항으로 들어간다. 설계 시점의 선택 하나가 서빙 시점의 메모리 계산까지 흘러내려오는 것이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;임베딩-학습의-원리-프록시-태스크&quot;&gt;임베딩 학습의 원리: 프록시 태스크&lt;/h2&gt;
+
+&lt;p&gt;여기서 자연스러운 질문이 나온다. “문맥이 비슷한 단어를 공간상 가깝게 두자”가 목표라면, 그 목표를 loss 함수에 반영할 수 있을까.&lt;/p&gt;
+
+&lt;p&gt;결과적으로 그 방식은 성립하지 않는다. 그러려면 먼저 “어떤 단어들이 의미상 가까운지”를 컴퓨터가 읽을 수 있는 형태로 알려줘야 하는데, 그것이 바로 우리가 임베딩으로 &lt;strong&gt;얻고 싶은 것 자체&lt;/strong&gt;라서 순환 논리에 빠진다. 인간도 그 기준을 정확히 적지 못한다.&lt;/p&gt;
+
+&lt;p&gt;그래서 실제로는 &lt;strong&gt;프록시 태스크(proxy task, 대리 과제)를 잘 풀도록 하는 loss&lt;/strong&gt;를 쓴다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Word2Vec&lt;/strong&gt;: 중심 단어로 주변 단어를 맞추는 분류 문제(skip-gram). loss는 “주변에 실제 등장한 단어를 높은 확률로 예측했는가”다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;LLM&lt;/strong&gt;: 다음 토큰 예측. 임베딩 테이블은 거대한 네트워크 안의 파라미터 덩어리 중 하나일 뿐이고, 언어 모델링 loss에서 역전파되는 gradient를 그대로 받는다. 즉, 다음 단어를 맞추는 과정(언어 모델링) 그 자체가 임베딩 테이블을 학습시키고 업데이트하는 과정인 것이다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;흥미로운 것은, 이 프록시 태스크를 풀다 보면 &lt;strong&gt;의미의 기하 구조가 부산물로 나온다&lt;/strong&gt;는 점이다. 이유는 &lt;strong&gt;분포 가설(distributional hypothesis)&lt;/strong&gt; — “단어는 그것이 함께 등장하는 문맥으로 정의된다” — 때문이다. 비슷한 의미의 단어는 비슷한 문맥에 등장하고, 비슷한 문맥은 비슷한 예측을 요구하니, 해당 단어들의 벡터는 학습 중 비슷한 방향으로 계속 밀려서 결국 가까운 곳에 모인다. 사람이 “가깝다”를 알려준 것이 아니라, &lt;strong&gt;예측 오차를 줄이는 과정이 의미의 지도를 그려낸 것&lt;/strong&gt;이다.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-01-AI-Overview/&quot;&gt;시리즈 1편&lt;/a&gt;에서 정리한 구조와 정확히 같은 패턴이기도 하다. 규칙을 쓰는 대신 규칙이 들어갈 빈 그릇(아키텍처)을 만들어 놓고, 데이터가 오차 역전파를 통해 그 그릇을 채우게 하는 것.&lt;/p&gt;
+
+&lt;p&gt;이 과정을 2차원 개념도로 보면 아래와 같다. 학습 전에는 단어 벡터들이 의미와 무관하게 무작위로 흩어져 있다 — Man이 Female 쪽에, Wife가 Child 쪽에 놓여 있는 식이다. 학습이 끝나면 같은 단어들이 가로축은 성별(Male ↔ Female), 세로축은 연령(Adult ↔ Child)을 따라 갈라진 군집으로 정렬된다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;시점&lt;/th&gt;
+      &lt;th&gt;임베딩 공간&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;학습 전&lt;/td&gt;
+      &lt;td&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-embedding-before.png&quot; alt=&quot;학습 전 임베딩 공간: 가족 호칭 단어들이 성별·연령 축과 무관하게 무작위로 흩어져 있다&quot; /&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;학습 후&lt;/td&gt;
+      &lt;td&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-embedding-after.png&quot; alt=&quot;학습 후 임베딩 공간: 가로축은 성별, 세로축은 연령을 따라 단어들이 군집으로 정렬되어 있다&quot; /&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;center&gt;&lt;sup&gt;학습 전후의 임베딩 공간 개념도. 출처: LLMSO 스터디 자료&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;다만 이 그림은 어디까지나 이해를 돕는 2차원 개념도다. 실제 GPT-2의 임베딩은 768차원이고, 완성된 임베딩의 차원 하나하나는 인간이 해석할 수 없다. “이 차원은 성별, 저 차원은 연령” 같은 의미를 부여해 준 적이 없는데, 학습 결과물에서 방향과 거리로 구조가 드러날 뿐이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;수작업-임베딩이-성립하지-않는-이유&quot;&gt;수작업 임베딩이 성립하지 않는 이유&lt;/h2&gt;
+
+&lt;p&gt;프록시 태스크 이야기를 뒤집으면 이런 질문도 나온다. “인간이 정밀하게 벡터를 정해 주면 학습이 필요 없는 것 아닌가.”&lt;/p&gt;
+
+&lt;p&gt;원리상으로는 맞다. &lt;strong&gt;최적의 가중치 값을 전부 알고 있다면 학습은 필요 없다.&lt;/strong&gt; 학습이란 그 숫자를 찾는 검색 과정일 뿐이다. 하지만 세 가지 지점에서 무너진다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;개수가 너무 많다&lt;/strong&gt;. GPT-2 임베딩만 해도 50,257 × 768 ≈ 3,860만 개의 숫자이고, 모델 전체는 1.2억 개(큰 모델은 수천억 개)다. 손으로 적을 수 있는 양이 아니다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;더 근본적으로, 인간은 “정확한 값”을 모른다&lt;/strong&gt;. &lt;a href=&quot;/ai/AI-LLM-Optimization-01-AI-Overview/&quot;&gt;시리즈 1편&lt;/a&gt;에서 짚었던 바로 그 문제와 궤를 같이 한다 — 인간의 판단 기준은 말로 옮겨 쓸 수 없고, “키가 몇 이상이면 어른”이라고 적기 시작하면 예외가 무한히 쏟아진다. 의미의 기준도 마찬가지다. 실제로 인간이 손으로 의미를 구조화하려던 시도 — WordNet 같은 수작업 온톨로지, 원-핫에 &lt;a href=&quot;/ai/AI-NLP-01-TFIDF/&quot;&gt;TF-IDF&lt;/a&gt; 같은 수제 피처 — 가 2013년 이전에 있었고, 스케일과 일관성에서 한계에 부딪혔다. 그래서 “빈 그릇에 데이터가 채우게 하는” 방향으로 튼 것이다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;설령 인간 기준으로 그럴듯한 의미 공간을 만들어도, 그것이 네트워크에 최적인지는 별개 문제다&lt;/strong&gt;. 모델이 필요로 하는 벡터는 인간 직관의 “가까움”이 아니라, 이어지는 연산(셀프 어텐션, MLP, 다음 토큰 예측)이 잘 굴러가는 벡터다. 임베딩은 이산적인 토큰과 연속적인 행렬 연산 사이의 &lt;strong&gt;인터페이스&lt;/strong&gt;라서, 중요한 것은 사람 눈에 그럴듯한 배치가 아니라 뒤의 계산에 잘 맞는 표현이다. 게다가 임베딩만 손으로 정해도 뒤의 트랜스포머 블록 12개의 가중치는 전부 미지수로 남고, 둘은 서로 얽혀 있어 한쪽만 정답으로 만들 수 없다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;정리하면, 인간의 역할은 숫자를 정하는 것이 아니라 &lt;strong&gt;그릇(아키텍처)과 평가 기준(loss, 프록시 태스크)을 설계하는 것&lt;/strong&gt;이고, 숫자는 데이터가 채운다. 가중치 학습 전반에 공통으로 적용되는 원리다.&lt;/p&gt;
+
+&lt;h2 id=&quot;2020년의-임베딩과-지금&quot;&gt;2020년의 임베딩과 지금&lt;/h2&gt;
+
+&lt;p&gt;결론부터 말하면, &lt;strong&gt;메커니즘은 그대로이고 역할이 달라졌다&lt;/strong&gt;. “학습으로 다듬어지는 룩업 테이블”이라는 구조는 2020년에 배운 Keras Embedding 레이어나 GPT-2나 동일한데, 임베딩이 시스템 안에서 차지하는 위상이 “의미의 최종 산물”에서 “네트워크의 입구”로 바뀌었다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;구분&lt;/th&gt;
+      &lt;th&gt;학습 방식&lt;/th&gt;
+      &lt;th&gt;고정 여부&lt;/th&gt;
+      &lt;th&gt;임베딩 단위&lt;/th&gt;
+      &lt;th&gt;문맥 반영&lt;/th&gt;
+      &lt;th&gt;모델 안에서의 역할&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Word2Vec / GloVe (2013~)&lt;/td&gt;
+      &lt;td&gt;프록시 태스크(주변 단어 예측, 동시 출현 통계)로 별도 사전학습&lt;/td&gt;
+      &lt;td&gt;보통 그대로 가져와 고정해 사용&lt;/td&gt;
+      &lt;td&gt;단어&lt;/td&gt;
+      &lt;td&gt;없음 — 단어당 벡터 하나(정적)&lt;/td&gt;
+      &lt;td&gt;외부에서 만든 “의미 사전”을 모델에 이식&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Keras Embedding 레이어&lt;/td&gt;
+      &lt;td&gt;랜덤 초기화 → 다운스트림 태스크(예: IMDB 감성 분류) 학습 중 함께 학습&lt;/td&gt;
+      &lt;td&gt;학습됨 (&lt;code class=&quot;highlighter-rouge&quot;&gt;trainable=True&lt;/code&gt;가 기본값)&lt;/td&gt;
+      &lt;td&gt;단어(정수 인덱스)&lt;/td&gt;
+      &lt;td&gt;테이블 자체는 정적 — 문맥화는 위에 쌓은 RNN/CNN 담당&lt;/td&gt;
+      &lt;td&gt;태스크와 함께 학습되는 내부 lookup table&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;LLM 토큰 임베딩 (GPT-2, Qwen)&lt;/td&gt;
+      &lt;td&gt;랜덤 초기화 → 다음 토큰 예측 대규모 사전학습으로 함께 학습&lt;/td&gt;
+      &lt;td&gt;학습됨 (사전학습 후 추론 시 고정)&lt;/td&gt;
+      &lt;td&gt;서브워드 토큰(BPE)&lt;/td&gt;
+      &lt;td&gt;테이블 자체는 정적 — 문맥화는 뒤의 트랜스포머 블록 담당&lt;/td&gt;
+      &lt;td&gt;거대 네트워크의 입력 진입점 — 최종 산물이 아니라 시작 재료&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;a href=&quot;/ai/AI-NLP-WordEmbedding-Keras/&quot;&gt;2020년의 Keras Embedding 글&lt;/a&gt;은 이 구조를 “학습을 통해 Embedding 레이어의 가중치 행렬 값들을 업데이트한다”라고 기록해 두었다. 그 문장은 GPT-2의 50,257 × 768 행렬에도 그대로 성립한다. 당시 글은 원핫 벡터와 가중치 행렬의 행렬곱으로 임베딩을 설명했는데, 원핫 벡터와의 곱은 결국 행렬에서 행 하나를 꺼내는 것과 같으므로 지금의 “행 인덱스 조회”와 같은 이야기다. Keras Embedding 레이어는 &lt;code class=&quot;highlighter-rouge&quot;&gt;trainable=True&lt;/code&gt;가 기본값이라 역전파로 계속 업데이트되는 학습 가능한 가중치이고, 고정된 값이 아니다(GloVe 같은 사전학습 임베딩을 불러와 &lt;code class=&quot;highlighter-rouge&quot;&gt;trainable=False&lt;/code&gt;로 얼려 쓰는 경우만 고정이다).&lt;/p&gt;
+
+&lt;p&gt;달라진 것은 임베딩의 위상이다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;2013~2018년&lt;/strong&gt;: 임베딩 테이블 자체가 의미를 담는 &lt;strong&gt;최종 산물&lt;/strong&gt;이었다. Word2Vec의 king − man + woman ≈ queen처럼 임베딩 품질이 곧 모델 품질에 가까웠고, 임베딩 층이 학습되고 나면 시각화해서 “의미 공간이 형성됐다”고 확인하는 식이었다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;지금 LLM&lt;/strong&gt;: 입력 토큰 임베딩도 여전히 토큰당 벡터 하나인 &lt;strong&gt;정적 테이블&lt;/strong&gt;이지만, 그것은 네트워크의 &lt;strong&gt;입구&lt;/strong&gt;일 뿐이다. 진짜 문맥 이해는 뒤에 오는 트랜스포머 블록 수십 개(셀프 어텐션 + MLP)가 담당한다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;이 전환이 일어난 지점이 ELMo(2018) → BERT/GPT(2018~)다. 정적 임베딩이 “단어의 의미를 테이블에 저장”하는 방식이라면, 지금은 “테이블은 재료만 저장하고, 의미는 네트워크가 문맥에 따라 그때그때 조립”하는 방식이라고 구분하면 깔끔하다.&lt;/p&gt;
+
+&lt;p&gt;실무 관점의 차이도 몇 가지 짚어 둘 만하다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;단위&lt;/strong&gt;: 옛 방식은 단어 단위라 OOV 문제가 있었고, 지금은 서브워드(BPE)라 사전에 없는 단어도 쪼개서 표현한다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;위치 정보&lt;/strong&gt;: 옛날에는 임베딩 뒤에 RNN이 붙어 순서 정보가 구조에서 자연스럽게 들어갔지만, 트랜스포머는 순서를 모르기 때문에 위치 인코딩을 임베딩에 명시적으로 더한다 — 다음 섹션의 주제다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Weight tying&lt;/strong&gt;: LLM은 입력 임베딩 행렬과 출력층(마지막에 어휘 사전 크기의 로짓을 만드는 선형층, LM head)을 &lt;strong&gt;공유&lt;/strong&gt;하는 경우가 많다. GPT-2가 그렇고, Qwen2.5 0.5B의 config에도 &lt;code class=&quot;highlighter-rouge&quot;&gt;tie_word_embeddings: true&lt;/code&gt;가 있다. 옛 Keras 파이프라인에는 없던 개념으로, 임베딩이 “입력과 출력을 잇는 다리”로 역할이 확장된 사례다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;스케일&lt;/strong&gt;: 옛 튜토리얼은 보통 수만 단어 × 32~128차원이었지만, Qwen2.5 0.5B는 151,936 토큰 × 896차원 = 약 1.36억 개 파라미터가 임베딩 하나에 있다. 전체 파라미터(약 4.9억)의 27% 수준이다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;서빙-관점-어휘-사전-크기의-트레이드오프&quot;&gt;서빙 관점: 어휘 사전 크기의 트레이드오프&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/&quot;&gt;앞 글&lt;/a&gt;에서 “토크나이저와 어휘 사전이 모델 성능·비용에 미치는 영향은 임베딩 글에서 제대로 다룬다”고 미뤄 두었는데, 그 이야기가 여기다. 어휘 사전 크기는 취향이 아니라 &lt;strong&gt;서빙 비용의 양팔 저울&lt;/strong&gt;이다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;사전이 크면&lt;/strong&gt;: 같은 텍스트가 더 적은 토큰으로 표현된다 → 시퀀스가 짧아져 prefill/decode 비용이 준다. 대신 임베딩 행렬 파라미터(어휘 사전 크기 × $d_{model}$)가 커진다. Qwen2.5 0.5B처럼 전체 파라미터의 27%가 임베딩인 작은 모델에서는 이 부담이 특히 커서, &lt;code class=&quot;highlighter-rouge&quot;&gt;tie_word_embeddings: true&lt;/code&gt;로 입력 임베딩과 LM head를 공유해 부담을 절반으로 줄인다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;사전이 작으면&lt;/strong&gt;: 임베딩은 가볍지만 같은 텍스트의 시퀀스가 길어진다 → 셀프 어텐션 비용이 시퀀스 길이의 제곱($O(L^2)$)으로 늘고, 컨텍스트 낭비도 커진다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;앞 글에서 본 GPT-2의 한글 처리가 후자의 극단적 사례다. 어휘 사전 크기 역시 &lt;a href=&quot;/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/&quot;&gt;2.1편&lt;/a&gt;에서 본 아키텍처 상수들과 같은 성격으로, 설계 시점에 고정되어 서빙 시점의 메모리·토큰 효율을 결정한다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;위치-인코딩&quot;&gt;위치 인코딩&lt;/h1&gt;
+
+&lt;h2 id=&quot;순서-정보가-사라진-자리&quot;&gt;순서 정보가 사라진 자리&lt;/h2&gt;
+
+&lt;p&gt;언어에서 단어의 순서는 의미를 바꾼다. 위치 인코딩은 각 토큰에 “시퀀스의 어디에 있는지”에 대한 정보를 주는 장치다. 그런데 왜 이런 장치가 &lt;strong&gt;필요해졌는지&lt;/strong&gt;가 더 재미있는 질문이다. 결론부터 말하면, 트랜스포머가 병렬화를 얻는 대가로 순서 감각을 잃었기 때문이다.&lt;/p&gt;
+
+&lt;p&gt;트랜스포머 이전의 주류였던 &lt;a href=&quot;/ai/AI-02-RNN/&quot;&gt;RNN&lt;/a&gt;/LSTM 계열은 입력을 한 스텝씩 순차 처리한다. t번째 토큰을 처리할 때 이전 스텝까지의 hidden state가 함께 들어오므로, “지금 몇 번째를 처리 중인지”가 &lt;strong&gt;계산 흐름 자체에 새겨져 있다&lt;/strong&gt;. 위치 정보가 암묵적(implicit)이다 — 누가 설계해 넣은 것이 아니라, 처리 순서 자체가 곧 위치 정보였다.&lt;/p&gt;
+
+&lt;p&gt;그런데 이 순차성이 바로 &lt;a href=&quot;/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/&quot;&gt;2.1편&lt;/a&gt;에서 본 RNN의 한계였다. 순차 계산이라 GPU 병렬화가 안 되고, 멀리 떨어진 토큰의 정보가 hidden state를 거쳐 오며 희석된다. &lt;a href=&quot;/ai/AI-Transformer-01/&quot;&gt;트랜스포머&lt;/a&gt;는 recurrent 레이어를 제거하고 셀프 어텐션으로 모든 토큰을 동시에 처리하는 길을 택했는데, 이 교체로 얻고 잃은 것이 정확히 대칭이다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;얻은 것&lt;/strong&gt;: 모든 토큰을 동시에 처리하는 병렬성. GPU 행렬 연산과 궁합이 맞는 이유&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;잃은 것&lt;/strong&gt;: 순차 처리가 공짜로 주던 위치 감각&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;그래서 트랜스포머는 위치 정보를 &lt;strong&gt;입력 데이터에 명시적으로 섞는 방식&lt;/strong&gt;으로 되찾았다. 위치 정보가 놓인 자리가 바뀐 것이다. RNN에서는 위치 정보가 &lt;strong&gt;처리 흐름&lt;/strong&gt; 속에 있었고(계산의 순서가 곧 위치), 트랜스포머에서는 &lt;strong&gt;입력 벡터&lt;/strong&gt; 속에 있다(토큰 임베딩에 위치를 더해 넣는다).&lt;/p&gt;
+
+&lt;p&gt;Transformer Explainer에서도 각 토큰에 position 0, 1, 2 … 가 붙고, 위치별 벡터가 토큰 임베딩에 더해지는 것을 확인할 수 있다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-positional-encoding.png&quot; alt=&quot;Transformer Explainer의 위치 인코딩: 각 토큰에 position 번호가 붙어 있는 모습&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-positional-encoding-2.png&quot; alt=&quot;Transformer Explainer의 위치 인코딩: 토큰 임베딩에 위치 임베딩이 더해져 최종 임베딩이 되는 모습&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;GPT-2는 &lt;strong&gt;학습된 위치 임베딩(learned positional embedding)&lt;/strong&gt;을 쓴다. 위치별 벡터를 테이블(위치 수 × 768)에 두고 토큰 임베딩에 더하는데, 이 테이블도 다른 가중치처럼 랜덤 초기화 후 학습으로 다듬어진다. 토큰 임베딩이 “무엇”을 말하고, 위치 임베딩이 “어디에 있는지”를 말하는 셈이다. 최신 모델은 RoPE처럼 다른 방법을 쓰기도 하는데, Transformer Explainer의 표현을 빌리면 방법이 다를 뿐 목표는 모두 같다 — &lt;strong&gt;모델이 텍스트의 순서를 이해하게 하는 것&lt;/strong&gt;이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;방식-비교&quot;&gt;방식 비교&lt;/h2&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;방식&lt;/th&gt;
+      &lt;th&gt;위치 정보를 얻는 경로&lt;/th&gt;
+      &lt;th&gt;학습 여부&lt;/th&gt;
+      &lt;th&gt;절대/상대 위치&lt;/th&gt;
+      &lt;th&gt;사용 모델&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;RNN / LSTM (암묵적)&lt;/td&gt;
+      &lt;td&gt;한 스텝씩 순차 처리 — 처리 순서 자체가 위치 정보&lt;/td&gt;
+      &lt;td&gt;해당 없음 (구조에 내장)&lt;/td&gt;
+      &lt;td&gt;사실상 상대적 — 이전 hidden state에 이전 토큰 정보가 누적&lt;/td&gt;
+      &lt;td&gt;RNN·LSTM·GRU 시대 모델&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Sinusoidal (2017 원조 트랜스포머)&lt;/td&gt;
+      &lt;td&gt;사인/코사인 함수로 위치별 벡터를 생성해 토큰 임베딩에 더함&lt;/td&gt;
+      &lt;td&gt;학습 안 함 — 인간이 함수로 설계&lt;/td&gt;
+      &lt;td&gt;절대 위치 벡터, 내적에 상대 거리 정보도 반영&lt;/td&gt;
+      &lt;td&gt;Attention Is All You Need&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;학습된 위치 임베딩 (learned)&lt;/td&gt;
+      &lt;td&gt;위치별 벡터 테이블(위치 수 × 차원)을 토큰 임베딩에 더함&lt;/td&gt;
+      &lt;td&gt;학습됨 — 다른 가중치와 함께 다듬어짐&lt;/td&gt;
+      &lt;td&gt;절대 위치 (0번~최대 문맥 길이까지 위치마다 고유 벡터)&lt;/td&gt;
+      &lt;td&gt;GPT-2, BERT&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;RoPE (rotary)&lt;/td&gt;
+      &lt;td&gt;Q/K 벡터를 위치에 따라 회전시켜 어텐션 스코어에 위치를 반영&lt;/td&gt;
+      &lt;td&gt;학습 안 함 — 회전 함수 (rope_theta만 아키텍처 상수)&lt;/td&gt;
+      &lt;td&gt;상대 위치 — 두 토큰 사이 거리가 어텐션 스코어에 반영&lt;/td&gt;
+      &lt;td&gt;Qwen, Llama 등 최신 모델&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h2 id=&quot;설계할-수-있는-위치-설계할-수-없는-의미&quot;&gt;설계할 수 있는 위치, 설계할 수 없는 의미&lt;/h2&gt;
+
+&lt;p&gt;이 표에서 눈여겨볼 지점이 있다. 토큰 임베딩 섹션에서 “의미는 인간이 손으로 설계할 수 없어서 학습에 맡긴다”고 했는데, &lt;strong&gt;위치 인코딩은 굳이 학습하지 않아도 된다&lt;/strong&gt;. 실제로 2017년 원조 트랜스포머의 sinusoidal 방식은 학습 없이 인간이 설계한 사인/코사인 함수로 만들었고, 잘 작동했다.&lt;/p&gt;
+
+&lt;p&gt;차이는 대상의 성질에 있다. “의미”는 기준 자체를 적을 수 없는 양이었지만, “위치”는 구조가 완전히 알려진 단순한 양이다. 유일해야 하고, 위치 간 간격이 일정해야 하고, 두 위치 벡터의 관계가 절대 번호가 아니라 간격에 의존해야 한다 — 이런 조건을 명시할 수 있으니 함수로 설계할 수 있다. 이 조건들에서 sinusoidal 벡터를 유도하는 과정은 &lt;a href=&quot;/ai/AI-Transformer-02/&quot;&gt;Transformer Positional Encoding 글&lt;/a&gt;에 정리해 둔 적이 있다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;실제 Trnasformer 원 논문은 learned 방식과 sinusoidal 방식을 실제로 비교했고 성능이 거의 같았는데도 sinusoidal을 택했다 — 고정된 함수는 &lt;strong&gt;학습 때 본 것보다 긴 문장이 들어와도 인코딩 값을 계산해 낼 수 있고&lt;/strong&gt;, learned 방식은 학습 때 보지 못한 위치에 대한 벡터가 아예 존재하지 않기 때문이다. 이는 아래 서빙 관점에서 정확히 실전 문제로 되돌아온다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;h2 id=&quot;서빙-관점-위치-인코딩과-컨텍스트-길이&quot;&gt;서빙 관점: 위치 인코딩과 컨텍스트 길이&lt;/h2&gt;
+
+&lt;p&gt;위치 인코딩 방식의 선택은 설계 취향으로 끝나지 않고 서빙 상수로 이어진다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;GPT-2 (learned)&lt;/strong&gt;: 위치 임베딩 테이블에 1,024개 위치밖에 없으므로, 그것이 곧 최대 컨텍스트 길이(1,024 토큰)다. 그 이상은 테이블에 벡터가 없어서 불가능하다. 방금 본 “학습 때 보지 못한 위치의 벡터는 존재하지 않는다”가 그대로 컨텍스트 한계가 된 것이다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Qwen2.5 (RoPE)&lt;/strong&gt;: 절대 위치 벡터를 더하는 대신 Q/K 벡터를 위치에 따라 회전시켜, 두 토큰 사이의 &lt;strong&gt;상대 거리&lt;/strong&gt;가 어텐션 스코어에 반영되게 한다. 상대 위치 방식이라 학습 길이를 넘는 시퀀스에 대한 외삽(extrapolation)이 상대적으로 유리하고, 회전 주기의 밑인 rope_theta 조정으로 긴 컨텍스트 확장도 가능한 것으로 알려져 있다. Qwen2.5가 32K급 컨텍스트를 지원하는 배경이다. Qwen2.5 0.5B의 config에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;rope_theta: 1000000.0&lt;/code&gt; 같은 값을 확인할 수 있는데, 이 역시 학습되는 값이 아니라 아키텍처 상수다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;즉 위치 인코딩 방식은 서빙 엔진의 &lt;code class=&quot;highlighter-rouge&quot;&gt;max_model_len&lt;/code&gt; 같은 설정 노브로 내려오는 &lt;strong&gt;아키텍처 상수&lt;/strong&gt;다. &lt;a href=&quot;/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/&quot;&gt;2.1편&lt;/a&gt;에서 본 KV cache 공식의 항들과 같은 성격이다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;임베딩은 토크나이제이션(텍스트 → 토큰 ID) → 토큰 임베딩(ID → 벡터) → 위치 인코딩(순서 정보 덧셈)의 세 단계이고, 과정과 결과 벡터 모두를 가리키는 용어다&lt;/li&gt;
+  &lt;li&gt;임베딩 테이블은 “가까운 단어를 가깝게”라는 loss가 아니라 다음 토큰 예측이라는 프록시 태스크로 학습되고, 의미의 기하 구조는 그 부산물로 나타난다. 2020년 Keras Embedding 레이어와 메커니즘은 같지만, 의미의 최종 산물에서 네트워크의 입구로 역할이 달라졌다&lt;/li&gt;
+  &lt;li&gt;RNN은 순차 처리 덕에 위치 정보가 공짜였지만 병렬화를 못 했고, 트랜스포머는 병렬화를 얻은 대가로 위치 정보를 입력에 명시적으로 넣는다. 그 방법이 sinusoidal(함수) → 학습된 위치 임베딩(GPT-2) → RoPE(Qwen 등)로 진화해 왔다&lt;/li&gt;
+  &lt;li&gt;무엇이 학습되고 무엇이 고정인지 갈라 두면 다음과 같다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;구성 요소&lt;/th&gt;
+      &lt;th&gt;학습 여부&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;어휘 사전 (BPE 병합 규칙)&lt;/td&gt;
+      &lt;td&gt;학습 안 됨 — 모델 학습 전에 별도로 구축해 고정&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;토큰 임베딩 테이블&lt;/td&gt;
+      &lt;td&gt;학습됨 — LM loss의 역전파로 다듬어짐&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Sinusoidal 위치 인코딩&lt;/td&gt;
+      &lt;td&gt;학습 안 됨 — 사람이 설계한 함수&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;학습된 위치 임베딩 (GPT-2)&lt;/td&gt;
+      &lt;td&gt;학습됨 — 위치별 벡터 테이블&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;RoPE&lt;/td&gt;
+      &lt;td&gt;학습 안 됨 — 회전 함수 (rope_theta는 아키텍처 상수)&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;어휘 사전 크기는 임베딩 메모리 ↔ 시퀀스 길이(토큰 효율)의 트레이드오프이고, 위치 인코딩 방식은 최대 컨텍스트 길이를 결정한다. 둘 다 설계 시점의 선택이 서빙 시점의 상수로 흘러내려오는 사례다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;다음 글에서는 두 번째 부분인 Transformer Block으로 들어가, Multi-Head Self-Attention이 임베딩된 토큰들 사이의 정보를 어떻게 섞는지 행렬 모양을 따라가며 줌인한다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://poloclub.github.io/transformer-explainer/&quot;&gt;Transformer Explainer&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://arxiv.org/abs/1706.03762&quot;&gt;Attention Is All You Need (Vaswani et al., 2017)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf&quot;&gt;Language Models are Unsupervised Multitask Learners (GPT-2 논문)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://arxiv.org/abs/1508.07909&quot;&gt;Neural Machine Translation of Rare Words with Subword Units (BPE, Sennrich et al., 2016)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://arxiv.org/abs/2104.09864&quot;&gt;RoFormer: Enhanced Transformer with Rotary Position Embedding (RoPE 논문)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://arxiv.org/abs/2412.15115&quot;&gt;Qwen2.5 Technical Report&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/&quot;&gt;LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-NLP-WordEmbedding-Keras/&quot;&gt;2020년 Word Embedding 글: Keras Embedding 레이어&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-Transformer-01/&quot;&gt;2020년 트랜스포머 시리즈 1편: 모델 구조&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-Transformer-02/&quot;&gt;2020년 트랜스포머 시리즈 2편: Positional Encoding&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Transformer" /><category term="Transformer-Explainer" /><category term="GPT-2" /><category term="Tokenization" /><category term="BPE" /><category term="Embedding" /><category term="Positional-Encoding" /><category term="RoPE" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-1" /><summary type="html">트랜스포머의 입구인 임베딩 — 토큰화, 토큰 임베딩, 위치 인코딩 — 이 텍스트를 벡터로 바꾸는 과정을 줌인해 보자.</summary></entry><entry><title type="html">[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/" rel="alternate" type="text/html" title="[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -4029,502 +4479,4 @@ F1        = 69.6%
   &lt;li&gt;&lt;a href=&quot;https://docs.vllm.ai/&quot;&gt;vLLM&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="MLOps" /><category term="Kubernetes" /><category term="GenAI" /><category term="Ray" /><category term="KubeRay" /><category term="Ray-Serve" /><category term="vLLM" /><category term="Distributed-Computing" /><category term="Kubernetes-for-Generative-AI-Solutions" /><category term="Kubernetes-for-Generative-AI-Solutions-Chapter-11" /><summary type="html">KubeRay operator·CRD 3종·계층적 스케줄링, Ray Train 숨은 +1 CPU 트러블슈팅, vLLM PagedAttention 메커니즘을 정리해 보자.</summary></entry><entry><title type="html">[GenAI] GenAI on K8s: 11.4 - Argo Workflows와 ML 파이프라인 오케스트레이션</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-11-04-Argo-Workflows/" rel="alternate" type="text/html" title="[GenAI] GenAI on K8s: 11.4 - Argo Workflows와 ML 파이프라인 오케스트레이션" /><published>2026-06-09T00:00:00+09:00</published><updated>2026-06-09T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-11-04-Argo-Workflows</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-11-04-Argo-Workflows/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions&quot;&gt;Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)&lt;/a&gt; 11장의 학습 내용을 바탕으로 합니다&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-11-02-Kubeflow-Ecosystem/&quot;&gt;11.2&lt;/a&gt;에서 Kubeflow Pipelines가 Argo Workflows를 백엔드로 쓴다고 했다. 이번 글은 그 &lt;strong&gt;백엔드 자체&lt;/strong&gt;를 본다. Argo Workflows가 워크플로우를 실제로 어떻게 실행하는지(CRD 구조와 step이 Pod가 되는 과정), Kubeflow Pipelines·Argo CD와의 관계, ML·인프라·CI/CD 유스케이스, 그리고 Ray와 한 클러스터에 있을 때 겹쳐 보이는 parallelism 제한까지 정리한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;Argo Workflows&lt;/strong&gt; = K8s-native 범용 DAG 실행 엔진. 워크플로우를 &lt;code class=&quot;highlighter-rouge&quot;&gt;Workflow&lt;/code&gt; CRD로 정의하고, 그 안의 step/task 하나가 &lt;strong&gt;Pod 하나&lt;/strong&gt;로 뜬다&lt;/li&gt;
-  &lt;li&gt;Pod 안은 &lt;code class=&quot;highlighter-rouge&quot;&gt;init&lt;/code&gt;(입력 artifact·parameter fetch) → &lt;code class=&quot;highlighter-rouge&quot;&gt;main&lt;/code&gt;(사용자 이미지 실행) → &lt;code class=&quot;highlighter-rouge&quot;&gt;wait&lt;/code&gt;(출력 저장·cleanup) &lt;strong&gt;3컨테이너 구조&lt;/strong&gt;. v3.4 이후 실행은 &lt;strong&gt;Emissary executor&lt;/strong&gt;(&lt;code class=&quot;highlighter-rouge&quot;&gt;argoexec&lt;/code&gt;)가 담당한다&lt;/li&gt;
-  &lt;li&gt;템플릿은 &lt;strong&gt;일을 하는 것&lt;/strong&gt;(&lt;code class=&quot;highlighter-rouge&quot;&gt;container&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;script&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;resource&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;suspend&lt;/code&gt;)과 &lt;strong&gt;흐름을 짜는 것&lt;/strong&gt;(&lt;code class=&quot;highlighter-rouge&quot;&gt;steps&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;dag&lt;/code&gt;)으로 갈린다. &lt;code class=&quot;highlighter-rouge&quot;&gt;dag&lt;/code&gt;는 &lt;code class=&quot;highlighter-rouge&quot;&gt;dependencies&lt;/code&gt;로 의존 그래프를, &lt;code class=&quot;highlighter-rouge&quot;&gt;steps&lt;/code&gt;는 list-of-lists로 순차·병렬을 표현한다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Kubeflow Pipelines&lt;/strong&gt; = Argo 위에 ML DSL·artifact tracking·metadata store를 얹은 layer다. &lt;strong&gt;Argo CD&lt;/strong&gt; = GitOps 상태 reconcile — 같은 Argo 패밀리지만 “절차 실행” vs “상태 동기화”로 책임이 다르다.&lt;/li&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;parallelism&lt;/code&gt;은 &lt;strong&gt;세 층위&lt;/strong&gt;(컨트롤러 = 동시 워크플로우 수, workflow &lt;code class=&quot;highlighter-rouge&quot;&gt;spec.parallelism&lt;/code&gt; = 워크플로우 내 동시 Pod 수, template 수준)로 나뉘고, 이는 Ray task scheduling과는 별개 레이어다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;argo-workflows-개요&quot;&gt;Argo Workflows 개요&lt;/h1&gt;
-
-&lt;p&gt;Argo Workflows는 K8s 위에서 복잡한 파이프라인을 실행하기 위한 &lt;strong&gt;범용 워크플로우 엔진&lt;/strong&gt;이다. 특정 도메인(ML 전용 등)에 묶이지 않고, “여러 단계를 순서·의존 관계에 맞춰 컨테이너로 돌린다”는 일을 K8s-native 방식으로 한다.&lt;/p&gt;
-
-&lt;p&gt;핵심 설계는 한 문장으로 줄일 수 있다 — &lt;strong&gt;워크플로우의 각 step을 K8s Pod로 실행한다.&lt;/strong&gt; 이 결정 하나에서 Argo의 성격 대부분이 따라 나온다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;step이 Pod이므로, K8s의 스케줄링·자원 할당·fault tolerance·노드 확장을 &lt;strong&gt;그대로&lt;/strong&gt; 물려받는다. Argo가 별도 실행자 인프라를 두지 않는 이유다&lt;/li&gt;
-  &lt;li&gt;워크플로우는 &lt;code class=&quot;highlighter-rouge&quot;&gt;DAG&lt;/code&gt;(의존 그래프) 또는 step-by-step 시퀀스로 정의하고, step 간에는 artifact(파일)와 parameter(값)를 주고받는다&lt;/li&gt;
-  &lt;li&gt;조건 분기, 자동 retry, 에러 핸들링, 수평 확장(수천 워크플로우 동시 실행)이 엔진 차원에서 제공된다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;전부 K8s &lt;strong&gt;CRD&lt;/strong&gt;로 표현된다. 워크플로우 정의·재사용·스케줄이 각각 별도 리소스 종류로 나뉘는데, 이건 뒤에서 따로 본다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;workflow-실행-모델&quot;&gt;Workflow 실행 모델&lt;/h1&gt;
-
-&lt;p&gt;개요의 “step = Pod”가 실제로 어떻게 돌아가는지를 CRD 구조부터 따라가 보자. 이 절이 이 글에서 다른 Argo 소개 글과 갈리는 지점이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;workflow-spec--entrypoint와-templates&quot;&gt;Workflow spec — entrypoint와 templates&lt;/h2&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;Workflow&lt;/code&gt; 리소스의 spec은 본질적으로 &lt;strong&gt;템플릿 목록 + 시작점&lt;/strong&gt;이다.&lt;/p&gt;
-
-&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;na&quot;&gt;apiVersion&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;argoproj.io/v1alpha1&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;kind&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;Workflow&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;metadata&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-  &lt;span class=&quot;na&quot;&gt;generateName&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;hello-world-&lt;/span&gt;   &lt;span class=&quot;c1&quot;&gt;# Workflow 인스턴스 이름 prefix&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;spec&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-  &lt;span class=&quot;na&quot;&gt;entrypoint&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;main&lt;/span&gt;             &lt;span class=&quot;c1&quot;&gt;# 어느 템플릿부터 실행할지 (main 함수 격)&lt;/span&gt;
-  &lt;span class=&quot;na&quot;&gt;arguments&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;                   &lt;span class=&quot;c1&quot;&gt;# 워크플로우 전역 입력&lt;/span&gt;
-    &lt;span class=&quot;na&quot;&gt;parameters&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-      &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;message&lt;/span&gt;
-        &lt;span class=&quot;na&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;hello&lt;/span&gt;
-  &lt;span class=&quot;na&quot;&gt;templates&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;                   &lt;span class=&quot;c1&quot;&gt;# 실행 단위 정의 목록&lt;/span&gt;
-    &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;main&lt;/span&gt;
-      &lt;span class=&quot;c1&quot;&gt;# ...&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;spec.entrypoint&lt;/code&gt;: 워크플로우를 시작할 템플릿 이름. 프로그램의 &lt;code class=&quot;highlighter-rouge&quot;&gt;main()&lt;/code&gt;에 해당한다&lt;/li&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;spec.templates&lt;/code&gt;: 실행 단위(template) 정의의 목록&lt;/li&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;spec.arguments&lt;/code&gt;: 워크플로우 전체에 넘기는 입력 parameter·artifact&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;templates&lt;/code&gt;에 정의만 나열한다고 실행 순서가 정해지는 건 아니다. 순서는 &lt;strong&gt;흐름을 짜는 템플릿&lt;/strong&gt;이 따로 표현한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;일을-하는-템플릿-vs-흐름을-짜는-템플릿&quot;&gt;일을 하는 템플릿 vs 흐름을 짜는 템플릿&lt;/h2&gt;
-
-&lt;p&gt;Argo 템플릿은 역할이 둘로 갈린다. 이 구분을 잡아야 YAML이 읽힌다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;분류&lt;/th&gt;
-      &lt;th&gt;템플릿 타입&lt;/th&gt;
-      &lt;th&gt;하는 일&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;정의 템플릿&lt;/strong&gt; (일을 함)&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;container&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;사용자 이미지를 컨테이너로 실행&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt; &lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;script&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;source:&lt;/code&gt;에 인라인 스크립트를 넣어 실행 (container의 wrapper)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt; &lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;resource&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;클러스터 리소스 조작 (get/create/apply/delete/patch)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt; &lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;suspend&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;지정 시간 또는 수동 resume까지 일시정지&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;호출 템플릿&lt;/strong&gt; (흐름을 짬)&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;steps&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;step들을 순차·병렬로 나열&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt; &lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;dag&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;task 간 의존 관계를 그래프로 선언&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;container&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;script&lt;/code&gt;는 실제로 Pod를 띄워 일을 하고, &lt;code class=&quot;highlighter-rouge&quot;&gt;steps&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;dag&lt;/code&gt;는 그 일들을 &lt;strong&gt;어떤 순서로 엮을지&lt;/strong&gt;만 정한다. 호출 템플릿이 정의 템플릿을 &lt;code class=&quot;highlighter-rouge&quot;&gt;template:&lt;/code&gt; 이름으로 참조하는 구조다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;steps-vs-dag&quot;&gt;steps vs dag&lt;/h2&gt;
-
-&lt;p&gt;흐름을 짜는 방식이 둘인데, 표현력과 가독성이 다르다. 결론부터 보면, 단순한 직선·고정 분기는 &lt;code class=&quot;highlighter-rouge&quot;&gt;steps&lt;/code&gt;가 읽기 쉽고, 의존 관계가 복잡해질수록 &lt;code class=&quot;highlighter-rouge&quot;&gt;dag&lt;/code&gt;가 그래프를 그대로 옮기기 좋다. ML 파이프라인(전처리 → 학습 → 평가 → 배포)처럼 단계가 갈라지고 합쳐지면 보통 &lt;code class=&quot;highlighter-rouge&quot;&gt;dag&lt;/code&gt;를 쓴다. 둘을 차례로 본다.&lt;/p&gt;
-
-&lt;h3 id=&quot;steps&quot;&gt;steps&lt;/h3&gt;
-
-&lt;p&gt;list-of-lists 구조다. 바깥 리스트는 순차 실행, 안쪽 리스트는 병렬 실행이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;- -&lt;/code&gt;(이중 하이픈)이 “이 단계는 앞 단계가 끝난 뒤”를 뜻한다.&lt;/p&gt;
-
-&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;hello-hello-hello&lt;/span&gt;
-    &lt;span class=&quot;na&quot;&gt;steps&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-      &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;step1&lt;/span&gt;
-          &lt;span class=&quot;na&quot;&gt;template&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;prepare-data&lt;/span&gt;      &lt;span class=&quot;c1&quot;&gt;# 먼저 실행&lt;/span&gt;
-      &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;step2a&lt;/span&gt;
-          &lt;span class=&quot;na&quot;&gt;template&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;run-first-half&lt;/span&gt;    &lt;span class=&quot;c1&quot;&gt;# step1 이후, step2a·step2b는&lt;/span&gt;
-        &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;step2b&lt;/span&gt;                &lt;span class=&quot;c1&quot;&gt;#   서로 병렬&lt;/span&gt;
-          &lt;span class=&quot;na&quot;&gt;template&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;run-second-half&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h3 id=&quot;dag&quot;&gt;dag&lt;/h3&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;dag.tasks&lt;/code&gt;에 task를 나열하고 각 task의 &lt;code class=&quot;highlighter-rouge&quot;&gt;dependencies&lt;/code&gt;로 선행 조건을 선언한다. 의존이 없는 task는 즉시 시작되고, 나머지는 의존이 충족되는 대로 풀린다.&lt;/p&gt;
-
-&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;diamond&lt;/span&gt;
-    &lt;span class=&quot;na&quot;&gt;dag&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-      &lt;span class=&quot;na&quot;&gt;tasks&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-        &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;A&lt;/span&gt;
-          &lt;span class=&quot;na&quot;&gt;template&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;echo&lt;/span&gt;
-        &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;B&lt;/span&gt;
-          &lt;span class=&quot;na&quot;&gt;dependencies&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;A&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;]&lt;/span&gt;   &lt;span class=&quot;c1&quot;&gt;# A가 끝나야 B&lt;/span&gt;
-          &lt;span class=&quot;na&quot;&gt;template&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;echo&lt;/span&gt;
-        &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;C&lt;/span&gt;
-          &lt;span class=&quot;na&quot;&gt;dependencies&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;A&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;]&lt;/span&gt;   &lt;span class=&quot;c1&quot;&gt;# A가 끝나야 C (B와 병렬)&lt;/span&gt;
-          &lt;span class=&quot;na&quot;&gt;template&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;echo&lt;/span&gt;
-        &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;D&lt;/span&gt;
-          &lt;span class=&quot;na&quot;&gt;dependencies&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;C&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;]&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;# B·C 둘 다 끝나야 D&lt;/span&gt;
-          &lt;span class=&quot;na&quot;&gt;template&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;echo&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;step이-pod가-되기까지--controller와-3컨테이너&quot;&gt;step이 Pod가 되기까지 — controller와 3컨테이너&lt;/h2&gt;
-
-&lt;p&gt;정의·흐름을 선언했으면, 그걸 실제 Pod로 바꾸는 주체가 있어야 한다. 그게 &lt;strong&gt;workflow-controller&lt;/strong&gt;다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;workflow-controller&lt;/code&gt;는 &lt;code class=&quot;highlighter-rouge&quot;&gt;Workflow&lt;/code&gt; 리소스와 그 Pod들을 watch하면서 reconcile한다. 워크플로우를 큐에 넣고 worker goroutine이 하나씩 처리하며, 의존이 충족된 step에 대해 Pod를 생성한다&lt;/li&gt;
-  &lt;li&gt;사용자가 API·UI로 워크플로우를 제출·조회하는 창구는 별도 컴포넌트인 &lt;code class=&quot;highlighter-rouge&quot;&gt;argo-server&lt;/code&gt;다 (API + UI 호스팅)&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;여기서 핵심은 &lt;strong&gt;step Pod 내부 구조&lt;/strong&gt;다. step/task 하나가 Pod 하나로 뜨는데, 그 Pod 안에는 컨테이너가 셋 들어간다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;컨테이너&lt;/th&gt;
-      &lt;th&gt;역할&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;init&lt;/code&gt; (InitContainer)&lt;/td&gt;
-      &lt;td&gt;입력 artifact·parameter를 받아 &lt;code class=&quot;highlighter-rouge&quot;&gt;main&lt;/code&gt;이 쓸 수 있게 준비&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;main&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;사용자가 지정한 이미지 실행. &lt;code class=&quot;highlighter-rouge&quot;&gt;argoexec&lt;/code&gt;가 volume mount되어 entrypoint로 들어가고, 원래 커맨드를 &lt;strong&gt;subprocess로 실행&lt;/strong&gt;하며 출력을 캡처&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;wait&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;출력 parameter·artifact 저장과 cleanup&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;즉 &lt;code class=&quot;highlighter-rouge&quot;&gt;main&lt;/code&gt; 컨테이너가 곧장 사용자 커맨드를 PID 1로 실행하는 게 아니라, &lt;code class=&quot;highlighter-rouge&quot;&gt;argoexec&lt;/code&gt;(executor)가 한 겹 감싸서 입출력 수집과 라이프사이클 관리를 한다. 이 executor를 &lt;strong&gt;Emissary&lt;/strong&gt;라고 부르며, &lt;strong&gt;v3.4 이후로는 유일한 executor&lt;/strong&gt;다. 과거 &lt;code class=&quot;highlighter-rouge&quot;&gt;docker&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;pns&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;k8sapi&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;kubelet&lt;/code&gt; executor는 제거됐으므로, 옛 자료의 &lt;code class=&quot;highlighter-rouge&quot;&gt;containerRuntimeExecutor&lt;/code&gt; 설정은 최신 버전에서 더 이상 유효하지 않다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;artifact-passing--step-간-파일-전달&quot;&gt;artifact passing — step 간 파일 전달&lt;/h2&gt;
-
-&lt;p&gt;step이 각자 다른 Pod라는 건, step 사이에 메모리·로컬 디스크를 공유하지 않는다는 뜻이다. 그래서 단계 간 데이터 전달은 두 갈래로 표현된다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;parameter&lt;/strong&gt;: 작은 값(문자열·숫자). 한 step의 output을 다음 step의 input으로 `` 식으로 참조&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;artifact&lt;/strong&gt;: 파일·디렉토리. 한 step이 &lt;code class=&quot;highlighter-rouge&quot;&gt;outputs.artifacts&lt;/code&gt;로 내보내고 다음 step이 &lt;code class=&quot;highlighter-rouge&quot;&gt;inputs.artifacts&lt;/code&gt;로 받는다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;artifact는 Pod 로컬에 머물 수 없으므로 &lt;strong&gt;artifact repository&lt;/strong&gt;(S3 호환 object storage 등)를 거쳐 전달된다. &lt;code class=&quot;highlighter-rouge&quot;&gt;init&lt;/code&gt; 컨테이너가 저장소에서 받아오고 &lt;code class=&quot;highlighter-rouge&quot;&gt;wait&lt;/code&gt; 컨테이너가 올려보내는, 앞 절의 3컨테이너 구조가 여기서 그대로 쓰인다.&lt;/p&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;이 artifact 저장소를 직접 설정하고 MinIO를 붙여 ML 파이프라인 step 간에 데이터를 넘긴 실습은 따로 정리해 둔 적이 있다 — &lt;a href=&quot;/dev/Dev-Kubernetes-Argo-Workflow-Artifact/&quot;&gt;Argo Workflow Artifact 기능 사용하기&lt;/a&gt;에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;workflow-controller-configmap&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;artifactRepository&lt;/code&gt; 설정과 S3 호환 저장소 연동을 다룬다.&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;crd-패밀리--workflow--workflowtemplate--cronworkflow&quot;&gt;CRD 패밀리 — Workflow / WorkflowTemplate / CronWorkflow&lt;/h2&gt;
-
-&lt;p&gt;Argo는 “한 번 실행”, “재사용 정의”, “스케줄 실행”을 각각 다른 CRD로 나눈다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;CRD&lt;/th&gt;
-      &lt;th&gt;성격&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;Workflow&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;워크플로우 &lt;strong&gt;한 번의 실행 인스턴스&lt;/strong&gt;. 제출하면 곧장 돈다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;WorkflowTemplate&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;클러스터에 저장해 두는 &lt;strong&gt;재사용 정의&lt;/strong&gt;(namespace 범위). 그 자체로는 실행 단위가 아니라, 다른 워크플로우가 참조하거나 &lt;code class=&quot;highlighter-rouge&quot;&gt;--from&lt;/code&gt;으로 인스턴스화&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;ClusterWorkflowTemplate&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;WorkflowTemplate&lt;/code&gt;의 &lt;strong&gt;클러스터 범위&lt;/strong&gt; 버전&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;CronWorkflow&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;cron 스케줄에 맞춰 &lt;code class=&quot;highlighter-rouge&quot;&gt;Workflow&lt;/code&gt;를 주기 생성&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;WorkflowTemplate&lt;/code&gt;은 두 방식으로 참조된다 — 전체 spec을 끌어다 쓰는 &lt;code class=&quot;highlighter-rouge&quot;&gt;workflowTemplateRef&lt;/code&gt;, 그리고 &lt;code class=&quot;highlighter-rouge&quot;&gt;steps&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;dag&lt;/code&gt; 안에서 개별 템플릿만 불러오는 &lt;code class=&quot;highlighter-rouge&quot;&gt;templateRef&lt;/code&gt;다. 같은 전처리·학습 정의를 여러 워크플로우가 공유할 때 정의를 한 곳에 모으는 용도다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;argo와-다른-도구의-관계&quot;&gt;Argo와 다른 도구의 관계&lt;/h1&gt;
-
-&lt;p&gt;Argo가 범용 엔진이다 보니, 여러 도구가 Argo를 자기 백엔드로 끌어다 쓰거나(Pipelines) 같은 패밀리로 역할을 나눠 갖는다(Argo CD). 이 관계를 세 각도로 본다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;argo를-내부-엔진으로-쓰는-도구&quot;&gt;Argo를 내부 엔진으로 쓰는 도구&lt;/h2&gt;
-
-&lt;p&gt;여러 ML 도구가 자기 실행 백엔드로 Argo를 끌어다 쓴다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;도구&lt;/th&gt;
-      &lt;th&gt;사용 방식&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Kubeflow Pipelines&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;Pipelines DSL → Argo Workflow로 컴파일해 실행&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Katib&lt;/strong&gt; (옵션)&lt;/td&gt;
-      &lt;td&gt;trial orchestrator로 Argo 선택 가능&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Seldon Core&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;모델 배포 워크플로우 일부&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;MLflow Projects&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;mlflow run&lt;/code&gt;을 Argo step으로 오케스트레이션&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;이 중 가장 밀접한 Kubeflow Pipelines와의 관계를 다음 절에서 본다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;kubeflow-pipelines와의-레이어-관계&quot;&gt;Kubeflow Pipelines와의 레이어 관계&lt;/h2&gt;
-
-&lt;p&gt;Kubeflow Pipelines와 Argo Workflows는 같은 백엔드(Argo)를 공유하지만, 추상화 레벨과 타깃 사용자가 다르다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/argo-workflows.png&quot; alt=&quot;argo-workflows&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;항목&lt;/th&gt;
-      &lt;th&gt;Argo Workflows&lt;/th&gt;
-      &lt;th&gt;Kubeflow Pipelines&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;카테고리&lt;/td&gt;
-      &lt;td&gt;범용 K8s workflow engine&lt;/td&gt;
-      &lt;td&gt;ML 특화 플랫폼&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;인터페이스&lt;/td&gt;
-      &lt;td&gt;YAML / WorkflowTemplate&lt;/td&gt;
-      &lt;td&gt;Python DSL (&lt;code class=&quot;highlighter-rouge&quot;&gt;@dsl.component&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;@dsl.pipeline&lt;/code&gt;)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;타깃 사용자&lt;/td&gt;
-      &lt;td&gt;플랫폼/DevOps&lt;/td&gt;
-      &lt;td&gt;데이터 사이언티스트&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;ML 통합&lt;/td&gt;
-      &lt;td&gt;일반 컨테이너 step&lt;/td&gt;
-      &lt;td&gt;artifact tracking, metadata, metric 시각화&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;백엔드&lt;/td&gt;
-      &lt;td&gt;(본인)&lt;/td&gt;
-      &lt;td&gt;&lt;strong&gt;Argo Workflows&lt;/strong&gt; (default)&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;Kubeflow Pipelines는 &lt;strong&gt;Argo 위에 ML metadata·UI·SDK를 얹은 layer&lt;/strong&gt;다. 데이터 사이언티스트는 Python DSL로 파이프라인을 짜고, 그게 내려가면 결국 앞에서 본 &lt;code class=&quot;highlighter-rouge&quot;&gt;Workflow&lt;/code&gt; CRD로 컴파일돼 같은 controller가 Pod를 띄운다. 둘은 경쟁이 아니라 &lt;strong&gt;레이어 관계&lt;/strong&gt;다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;argo-workflows-vs-argo-cd&quot;&gt;Argo Workflows vs Argo CD&lt;/h2&gt;
-
-&lt;p&gt;이름이 비슷해 헷갈리지만, 같은 Argo 패밀리 안에서 책임이 명확히 다르다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;도구&lt;/th&gt;
-      &lt;th&gt;책임&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Argo Workflows&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;step-by-step task DAG 실행. “build → test → deploy” &lt;strong&gt;절차&lt;/strong&gt; 자동화&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Argo CD&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;GitOps 컨트롤러. Git의 desired state ↔ K8s의 actual state &lt;strong&gt;상태 reconcile&lt;/strong&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;한쪽은 “정해진 절차를 한 번 끝까지 돌린다”(Workflows), 다른 쪽은 “선언된 상태를 계속 맞춰 둔다”(Argo CD)는 점이 다르다. CI/CD에서는 둘이 보완 관계로 엮인다 — Workflows로 빌드·테스트·이미지 push까지 하고, 그 결과 manifest를 Git에 반영하면, Argo CD가 그 Git 상태를 클러스터에 지속적으로 동기화한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;유스케이스&quot;&gt;유스케이스&lt;/h1&gt;
-
-&lt;p&gt;범용 엔진이라 적용 범위가 넓다. 책이 드는 대표 사례는 네 갈래다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;ML 파이프라인&lt;/strong&gt; — 데이터 전처리 → 학습 → 평가 → 배포를 DAG로 묶는다. &lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-11-01-GenAIOps-Pipeline-and-Monitoring/&quot;&gt;11.1&lt;/a&gt; 파이프라인 5단계 중 adaptation·serving 사이를 자동화하는 지점이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;데이터 배치 처리&lt;/strong&gt; — ETL, 스케줄된 데이터 sync. 주기 실행은 &lt;code class=&quot;highlighter-rouge&quot;&gt;CronWorkflow&lt;/code&gt;로 표현한다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;인프라 자동화&lt;/strong&gt; — EKS 프로비저닝, namespace·RBAC 자동 생성, 테넌트 온보딩. &lt;code class=&quot;highlighter-rouge&quot;&gt;resource&lt;/code&gt; 템플릿으로 클러스터 리소스를 직접 다루는 패턴이 여기 들어맞는다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;CI/CD&lt;/strong&gt; — 코드 빌드 → 테스트 → 이미지 push → manifest apply&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;parallelism-세-층위와-ray-scheduling&quot;&gt;parallelism 세 층위와 Ray scheduling&lt;/h1&gt;
-
-&lt;p&gt;Argo Workflows와 Ray가 같은 클러스터에 있으면 “동시 실행 제한”이 겹쳐 보이지만 &lt;strong&gt;레이어가 다르다.&lt;/strong&gt; 먼저 Argo 안에서도 &lt;code class=&quot;highlighter-rouge&quot;&gt;parallelism&lt;/code&gt;이 한 가지가 아니라는 점부터 짚는다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;층위&lt;/th&gt;
-      &lt;th&gt;설정 위치&lt;/th&gt;
-      &lt;th&gt;무엇을 제한&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;컨트롤러&lt;/td&gt;
-      &lt;td&gt;controller configmap &lt;code class=&quot;highlighter-rouge&quot;&gt;parallelism&lt;/code&gt; / &lt;code class=&quot;highlighter-rouge&quot;&gt;namespaceParallelism&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;동시에 도는 &lt;strong&gt;워크플로우 개수&lt;/strong&gt;(전체 / namespace 단위)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;워크플로우&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;spec.parallelism&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;한 워크플로우 안에서 동시에 뜨는 &lt;strong&gt;Pod(step) 수&lt;/strong&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;템플릿&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;steps&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;dag&lt;/code&gt; 템플릿의 &lt;code class=&quot;highlighter-rouge&quot;&gt;parallelism&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;그 템플릿 범위 내 동시 실행 수&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;이 셋은 전부 &lt;strong&gt;Argo가 띄우는 워크플로우 step Pod&lt;/strong&gt;를 대상으로 한다. 반면 Ray와는 다음과 같이 갈린다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;레이어&lt;/th&gt;
-      &lt;th&gt;제한 주체&lt;/th&gt;
-      &lt;th&gt;무엇을 제한&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Argo&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;위 세 층위의 &lt;code class=&quot;highlighter-rouge&quot;&gt;parallelism&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;동시 실행 &lt;strong&gt;워크플로우 step Pod&lt;/strong&gt; 수&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Ray&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;Ray scheduler + autoscaler&lt;/td&gt;
-      &lt;td&gt;task/actor/PG bundle이 &lt;strong&gt;Ray node&lt;/strong&gt;에 배치되는 수&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;K8s&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;Resource quota, scheduler&lt;/td&gt;
-      &lt;td&gt;namespace·노드 단위 Pod·자원&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;Argo step 안에서 Ray cluster를 띄우는 구성을 생각하면 경계가 분명해진다. Argo는 “이 step Pod가 떠 있는가”까지만 관리하고, 그 Pod 안에서 Ray가 task를 어느 raylet에 배치하는지는 Ray scheduler의 몫이다. 병목이 Argo의 동시 Pod 상한인지, Ray의 logical resource인지, K8s 노드 capacity인지를 분리해서 봐야 한다 — Ray 쪽 계층적 스케줄링은 &lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-11-05-Ray-KubeRay-and-vLLM-Inference/&quot;&gt;11.5&lt;/a&gt;에서 다룬다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;영역&lt;/th&gt;
-      &lt;th&gt;핵심&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;실행 모델&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;Workflow&lt;/code&gt; CRD, step/task = Pod 1개, 그 안 &lt;code class=&quot;highlighter-rouge&quot;&gt;init&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;main&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;wait&lt;/code&gt; 3컨테이너&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;executor&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;v3.4+ Emissary(&lt;code class=&quot;highlighter-rouge&quot;&gt;argoexec&lt;/code&gt;)가 사용자 커맨드를 subprocess로 감싸 입출력 수집&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;흐름 표현&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;steps&lt;/code&gt;(list-of-lists) vs &lt;code class=&quot;highlighter-rouge&quot;&gt;dag&lt;/code&gt;(&lt;code class=&quot;highlighter-rouge&quot;&gt;dependencies&lt;/code&gt; 그래프)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;CRD 패밀리&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;Workflow&lt;/code&gt;(1회) / &lt;code class=&quot;highlighter-rouge&quot;&gt;WorkflowTemplate&lt;/code&gt;(재사용 정의) / &lt;code class=&quot;highlighter-rouge&quot;&gt;CronWorkflow&lt;/code&gt;(스케줄)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;vs Pipelines&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;Argo = 엔진, Pipelines = 그 위 ML layer&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;vs Argo CD&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;절차 실행 vs GitOps 상태 reconcile&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;parallelism&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;컨트롤러·워크플로우·템플릿 세 층위 — Ray task scheduling과는 별개 레이어&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://argo-workflows.readthedocs.io/&quot;&gt;Argo Workflows&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://argo-workflows.readthedocs.io/en/latest/workflow-concepts/&quot;&gt;Argo Workflows — Core Concepts&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://argo-workflows.readthedocs.io/en/latest/architecture/&quot;&gt;Argo Workflows — Architecture&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://argo-workflows.readthedocs.io/en/latest/workflow-executors/&quot;&gt;Argo Workflows — Workflow Executors&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://argo-workflows.readthedocs.io/en/latest/parallelism/&quot;&gt;Argo Workflows — Limiting Parallelism&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://argo-cd.readthedocs.io/&quot;&gt;Argo CD&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/dev/Dev-Kubernetes-Argo-Workflow-Artifact/&quot;&gt;Argo Workflow Artifact 기능 사용하기&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="GenAI" /><category term="Argo-Workflows" /><category term="Argo-CD" /><category term="Kubeflow-Pipelines" /><category term="DAG" /><category term="MLOps" /><category term="Kubernetes-for-Generative-AI-Solutions" /><category term="Kubernetes-for-Generative-AI-Solutions-Chapter-11" /><summary type="html">Argo Workflows의 Workflow CRD 실행 모델(step = Pod, init/main/wait 3컨테이너), Kubeflow Pipelines와의 레이어 관계, Argo CD와의 책임 분리, parallelism 세 층위를 정리해 보자.</summary></entry></feed>
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="MLOps" /><category term="Kubernetes" /><category term="GenAI" /><category term="Ray" /><category term="KubeRay" /><category term="Ray-Serve" /><category term="vLLM" /><category term="Distributed-Computing" /><category term="Kubernetes-for-Generative-AI-Solutions" /><category term="Kubernetes-for-Generative-AI-Solutions-Chapter-11" /><summary type="html">KubeRay operator·CRD 3종·계층적 스케줄링, Ray Train 숨은 +1 CPU 트러블슈팅, vLLM PagedAttention 메커니즘을 정리해 보자.</summary></entry></feed>
