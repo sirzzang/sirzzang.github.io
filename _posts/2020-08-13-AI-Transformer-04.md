@@ -64,9 +64,9 @@ last_modified_at: 2026-08-02
 
 * 각 head에 대해 서로 다른 가중치 행렬이 설정된다. 그 shape은 $$(d_{model}, d_k)$$ 이다. 단어 임베딩 행렬이 이 가중치를 통과하면, head 하나가 담당할 $$d_k$$ 차원의 Query, Key, Value가 나온다.
 
-  > *주의* : 위 그림과 논문 정의의 차이
+  > *주의* : 위 그림에서 헷갈리기 쉬운 지점
   >
-  >  위 그림은 이해를 돕기 위해 **임베딩 벡터를 head 개수만큼 먼저 쪼갠 뒤** 그 조각에 가중치를 곱하는 형태로 그렸다. 그러나 논문의 정의는 다르다. 쪼개지 않은 **$$d_{model}$$ 차원 전체**를 head별로 서로 다른 $$(d_{model}, d_k)$$ 가중치에 통과시켜 $$d_k$$ 차원으로 사영하는 것이다.
+  >  위 그림의 수식($$X \times W_2^Q$$)과 세로로 긴 가중치 블록은 논문 정의 그대로다. 다만 $$X$$ 위에 그어진 head 분할선과 강조 표시가 **임베딩을 잘라서 쓴다**는 인상을 줄 수 있다. 그렇지 않다. 자르지 않은 **$$d_{model}$$ 차원 전체**가 head별로 서로 다른 $$(d_{model}, d_k)$$ 가중치를 통과해 $$d_k$$ 차원으로 사영된다. 분할선은 "몇 번 head의 가중치를 쓰는가"를 표시한 것으로 읽자.
   >
   > > MultiHead(Q, K, V) = Concat(head_1, ..., head_h)W^O, where head_i = Attention(QW_i^Q, KW_i^K, VW_i^V). Where the projections are parameter matrices W_i^Q ∈ R^(d_model × d_k), W_i^K ∈ R^(d_model × d_k), W_i^V ∈ R^(d_model × d_v) and W^O ∈ R^(h·d_v × d_model).
   >
