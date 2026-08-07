@@ -1,6 +1,6 @@
 ---
-title: "[Transformer] LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요: GPT-2로 트랜스포머 내부 들여다보기"
-excerpt: "브라우저에서 GPT-2가 다음 토큰을 만드는 과정을 직접 눌러 보고, 트랜스포머의 세 부분 — 임베딩, 트랜스포머 블록, 확률 — 을 큰 그림으로 잡아 보자."
+title: "[LLM] LLM 서빙과 최적화 - 2.2. Transformer: Transformer Explainer"
+excerpt: "Transformer Explainer를 이용해 브라우저에서 GPT-2를 이용해 트랜스포머 내부를 들여다 보자."
 categories:
   - AI
 toc: true
@@ -26,7 +26,7 @@ tags:
 - [Transformer Explainer](https://poloclub.github.io/transformer-explainer/)는 GPT-2(small)를 브라우저에서 직접 돌리며 트랜스포머 내부를 시각화하는 인터랙티브 도구다. 작은 모델이지만 기본 구조를 배우기에는 충분하다
 - 트랜스포머는 마법이 아니다. "이 입력 다음에 올 가장 그럴듯한 토큰은 무엇인가"를 반복해서 묻는 기계다. My hobby를 넣으면 is가 나온다
 - GPT-2의 어휘 사전은 영어 중심이라 한글을 넣으면 바이트 단위로 잘게 쪼개져 망가진다. 토크나이저가 왜 중요한지를 개요 수준에서 미리 확인할 수 있다
-- 전체 아키텍처는 Embedding → Transformer Block(Self-Attention + MLP) ×12 → Probabilities 세 부분이다. 이후 글에서 이 세 부분을 하나씩 줌인한다
+- 전체 아키텍처는 Embedding → Transformer Block(Self-Attention + MLP(Multi-Layer Perceptron)) ×12 → Probabilities 세 부분이다. 이후 글에서 이 세 부분을 하나씩 줌인한다
 
 <br>
 
@@ -34,7 +34,7 @@ tags:
 
 [앞 글]({% post_url 2026-08-05-AI-LLM-Optimization-02-01-LLM-Transformer-Overview %})에서 트랜스포머의 큰 그림과 용어를 지도로 잡았다. 이제 그 지도를 들고 실제 지형을 밟아 볼 차례다. [Transformer Explainer](https://poloclub.github.io/transformer-explainer/)는 Georgia Tech의 Polo Club of Data Science가 만든 인터랙티브 시각화 도구로, **GPT-2(small) 모델을 브라우저 안에서 실제로 실행하면서** 텍스트가 임베딩되고, attention을 통과하고, 다음 토큰 확률로 바뀌는 전 과정을 눌러 볼 수 있게 해 준다.
 
-![Transformer Explainer 첫 화면: 입력 문장이 임베딩, Multi-head Self Attention, MLP를 거쳐 다음 토큰 확률로 이어지는 전체 흐름 시각화]({{site.url}}/assets/images/llmso-transformer-explainer-introduction.png){: .align-center width="700"}
+![Transformer Explainer 첫 화면: 입력 문장이 임베딩, Multi-Head Self-Attention, MLP를 거쳐 다음 토큰 확률로 이어지는 전체 흐름 시각화]({{site.url}}/assets/images/llmso-transformer-explainer-introduction.png){: .align-center width="700"}
 
 <center><sup>Transformer Explainer 화면 직접 캡처</sup></center>
 
@@ -84,11 +84,11 @@ GPT-2 small의 제원은 다음과 같다.
 원인은 뒤에서 볼 토크나이제이션(tokenization)의 어휘 사전 문제다.
 
 - GPT-2의 어휘 사전은 **영어 중심**이라 한글 토큰이 거의 없다
-- 그래서 한글은 byte-level BPE에 의해 **바이트 단위로 잘게 쪼개진다**. 한글 한 글자는 UTF-8에서 3바이트라, 글자 하나가 토큰 여러 개로 나뉘는 식이다
+- 그래서 한글은 byte-level BPE(Byte Pair Encoding)에 의해 **바이트 단위로 잘게 쪼개진다**. 한글 한 글자는 UTF-8에서 3바이트라, 글자 하나가 토큰 여러 개로 나뉘는 식이다
 
 결과는 세 가지로 이어진다. ① 시퀀스가 불필요하게 길어져 컨텍스트(1,024 토큰)를 낭비하고, ② 한 글자를 만드는 데도 여러 생성 스텝이 필요해 품질과 속도가 떨어지며, ③ 시퀀스가 길어진 만큼 attention 연산량도 늘어난다. 화면에서 임베딩 열이 비정상적으로 길어진 것이 바로 이 현상이다.
 
-참고로 Qwen처럼 어휘 사전이 약 15만 2천 개로 GPT-2의 3배 규모이고 다국어를 포함하는 모델은 사정이 낫지만, 한국어 커버리지는 여전히 제한적인 것으로 알려져 있다. 토크나이저와 어휘 사전이 모델 성능·비용에 미치는 영향은 임베딩 파트를 줌인하는 글에서 제대로 다룬다.
+참고로 Qwen처럼 어휘 사전이 약 15만 2천 개로 GPT-2의 3배 규모이고 다국어를 포함하는 모델은 사정이 낫지만, 한국어 커버리지는 여전히 제한적인 것으로 알려져 있다. 토크나이저와 어휘 사전이 모델 성능·비용에 미치는 영향은 [임베딩 파트를 줌인하는 글]({% post_url 2026-08-05-AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding %})에서 제대로 다룬다.
 
 <br>
 
@@ -102,11 +102,11 @@ GPT-2 small의 제원은 다음과 같다.
 
 - **Embeddings**: 텍스트를 숫자(벡터)로 바꾼다. 토크나이제이션과 위치 정보 주입이 여기서 일어난다
 - **Transformer Blocks**: Self-Attention으로 토큰 사이의 정보를 섞고, MLP로 그 표현을 정제한다. GPT-2 small에서는 동일한 블록이 12번 반복된다
-- **Probabilities**: 마지막 표현을 어휘 사전 크기의 점수로 바꾸고, softmax로 다음 토큰의 확률 분포를 만든다
+- **Probabilities**: 마지막 표현을 어휘 사전 크기의 점수로 바꾸고, softmax(점수들을 합이 1인 확률 분포로 정규화하는 함수)로 다음 토큰의 확률 분포를 만든다
 
 [앞 글]({% post_url 2026-08-05-AI-LLM-Optimization-02-01-LLM-Transformer-Overview %})에서 용어로만 정리했던 Multi-Head Self-Attention과 MLP가 화면 가운데 블록 안에 그대로 보이고, MLP는 [시리즈 1편]({% post_url 2026-08-05-AI-LLM-Optimization-01-AI-Overview %})에서 본 "선형층 + 활성화" 골격 그대로다.
 
-> *참고*: 예문을 바꿔 가며 관찰하다 보면 Q·K·V 행렬의 크기가 예문마다 달라지는 것처럼 보인다. 달라지는 축은 feature 차원이 아니라 **시퀀스 길이**다. GPT-2 small에서 Q·K·V의 차원(헤드당 64)은 고정이고, 예문마다 토큰 수가 달라 (토큰 수 × 차원) 행렬의 세로 크기가 달라 보이는 것이다. Self-Attention을 줌인하는 글에서 행렬 모양을 따라가며 다시 확인한다.
+> *참고*: 예문을 바꿔 가며 관찰하다 보면 Q·K·V 행렬의 크기가 예문마다 달라지는 것처럼 보인다. 달라지는 축은 특징 차원이 아니라 **시퀀스 길이**다. GPT-2 small에서 Q·K·V의 차원(헤드당 64)은 고정이고, 예문마다 토큰 수가 달라 (토큰 수 × 차원) 행렬의 세로 크기가 달라 보이는 것이다. [Self-Attention을 줌인하는 글]({% post_url 2026-08-05-AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer %})에서 행렬 모양을 따라가며 다시 확인한다.
 
 이 시리즈의 이후 글들은 이 세 부분을 순서대로 줌인한다. Embedding(토크나이제이션·위치 인코딩) → Transformer Block(Self-Attention, MLP) → Probabilities(출력층과 샘플링) 순으로, 각 화면을 뜯어 보며 내부 계산을 따라갈 예정이다.
 

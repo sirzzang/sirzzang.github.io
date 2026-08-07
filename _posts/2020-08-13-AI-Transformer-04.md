@@ -64,19 +64,14 @@ last_modified_at: 2026-08-02
 
 * 각 head에 대해 서로 다른 가중치 행렬이 설정된다. 그 shape은 $$(d_{model}, d_k)$$ 이다. 단어 임베딩 행렬이 이 가중치를 통과하면, head 하나가 담당할 $$d_k$$ 차원의 Query, Key, Value가 나온다.
 
-  > *주의* : 위 그림에서 헷갈리기 쉬운 지점
+  > *참고* : head는 임베딩의 일부가 아니라 전체를 본다
   >
-  >  위 그림의 수식($$X \times W_2^Q$$)과 세로로 긴 가중치 블록은 논문 정의 그대로다. 다만 $$X$$ 위에 그어진 head 분할선과 강조 표시가 **임베딩을 잘라서 쓴다**는 인상을 줄 수 있다. 그렇지 않다. 자르지 않은 **$$d_{model}$$ 차원 전체**가 head별로 서로 다른 $$(d_{model}, d_k)$$ 가중치를 통과해 $$d_k$$ 차원으로 사영된다. 분할선은 "몇 번 head의 가중치를 쓰는가"를 표시한 것으로 읽자.
+  >  각 head가 임베딩의 자기 조각만 담당하는 것이 아니다. 자르지 않은 **$$d_{model}$$ 차원 전체**가 head별로 서로 다른 $$(d_{model}, d_k)$$ 가중치를 통과해 $$d_k$$ 차원으로 사영된다. 임베딩 전체를 자기만의 관점으로 압축해서 보기 때문에, head마다 "다른 종류의 관계"를 잡아낼 수 있다.
   >
   > > MultiHead(Q, K, V) = Concat(head_1, ..., head_h)W^O, where head_i = Attention(QW_i^Q, KW_i^K, VW_i^V). Where the projections are parameter matrices W_i^Q ∈ R^(d_model × d_k), W_i^K ∈ R^(d_model × d_k), W_i^V ∈ R^(d_model × d_v) and W^O ∈ R^(h·d_v × d_model).
   >
-  >  차이가 중요한 이유는, 논문 방식에서 **각 head가 임베딩의 일부가 아니라 전체를 본다**는 데 있다. 3번 head가 임베딩의 3번째 조각만 담당하는 것이 아니라, 임베딩 전체를 자기만의 관점으로 압축해서 본다. 그래서 head마다 "다른 종류의 관계"를 잡아낼 수 있는 것이다.
-  >
-  >  실제 구현에서는 $$(d_{model}, d_{model})$$ 가중치 하나로 한 번에 사영한 뒤 결과를 head 개수만큼 reshape으로 나눈다. 이는 head별 $$(d_{model}, d_k)$$ 가중치를 옆으로 이어 붙인 것과 같으므로, 논문 정의와 동일한 연산이다.
+  >  head 구분은 입력 $$X$$가 아니라 가중치에 있다 — 그림 왼쪽 아래 인셋이 이 지점이다. 실제 구현에서는 $$(d_{model}, d_{model})$$ 가중치 하나로 한 번에 사영한 뒤 결과를 head 개수만큼 나누는데, 이는 head별 $$(d_{model}, d_k)$$ 가중치를 옆으로 이어 붙인 것과 같으므로 논문 정의와 동일한 연산이다.
 
-  > *참고* : head와 input의 관계
-  >
-  >  결과적으로 입력 문장은 $$d_k$$차원의 Query와 Key, 그리고 $$d_v$$차원의 Value로 나뉘게 된다. 논문에서는 이를 "The input consists of queries and keys of dimension $$d_k$$, and values of dimension $$d_v$$."와 과 같이 표현했다.
 
 
 
