@@ -59,7 +59,7 @@ RNN 계열은 입력을 한 스텝씩 순차 처리해야 한다. 앞 토큰의 
 
 ```text
 # RNN의 순차 처리: 앞 토큰의 은닉 상태가 있어야 다음 토큰을 계산할 수 있다
-토큰 1 -> 토큰 2 -> 토큰 3   # 순차 계산이라 GPU 병렬화가 어렵다
+토큰 1 → 토큰 2 → 토큰 3   # 순차 계산이라 GPU 병렬화가 어렵다
 ```
 
 [앞 글]({% post_url 2026-08-05-AI-LLM-Optimization-01-AI-Overview %})에서 본 대로 GPU는 서로 독립적인 연산을 대량으로 병렬 처리할 때 강한 장치인데, RNN의 순차 의존성은 그 강점을 살리지 못한다. 병렬화가 어려워 현대 하드웨어에서 확장성과 효율이 떨어졌고, 게이팅으로 개선했다고는 해도 장거리 의존성 처리에도 여전히 취약했다.
@@ -97,7 +97,7 @@ RNN 계열은 입력을 한 스텝씩 순차 처리해야 한다. 앞 토큰의 
 
 <center><sup>출처: 세바스찬 라시카, 밑바닥부터 만들면서 배우는 LLM (그림 1-6)</sup></center>
 
-핵심은 이것이다. 기존 머신러닝에서는 새로운 태스크마다 별도의 학습(파인튜닝)이 필요했지만, GPT-3 같은 대규모 모델은 학습 없이 프롬프트만으로 새로운 태스크에 적응할 수 있음을 보여줬다. 이는 모델과 데이터의 규모를 키운 결과로 나타난 능력(emergent ability)이다. 파라미터 수의 폭발적 증가가 이 흐름을 잘 보여준다.
+핵심은 기존 머신러닝에서는 새로운 태스크마다 별도의 학습(파인튜닝)이 필요했지만, GPT-3 같은 대규모 모델은 **학습 없이 프롬프트만으로 새로운 태스크에 적응할 수 있음**을 보여줬다는 것이다. 이는 모델과 데이터의 규모를 키운 결과로 나타난 능력(emergent ability)이다. 파라미터 수의 폭발적 증가가 이 흐름을 잘 보여준다.
 
 - GPT-1(2018): 약 1억 1,700만 개
 - GPT-3(2020): 약 1,750억 개
@@ -121,7 +121,7 @@ RNN 계열은 입력을 한 스텝씩 순차 처리해야 한다. 앞 토큰의 
 
 ![Attention Is All You Need 논문의 트랜스포머 인코더-디코더 구조 도식]({{site.url}}/assets/images/transformer-architecture-1.png){: .align-center width="550"}
 
-<center><sup>출처: <a href="https://arxiv.org/abs/1706.03762">Attention Is All You Need</a> (Vaswani et al., 2017)</sup></center>
+<center><sup>출처: <a href="https://arxiv.org/abs/1706.03762">Attention Is All You Need</a> (Vaswani et al., 2017) 도식 변형</sup></center>
 
 트랜스포머는 **인코더(encoder)**와 **디코더(decoder)**라는 두 개의 서브모듈로 구성된다.
 
@@ -150,9 +150,7 @@ $$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^\top}{\sqrt{d_k}}\rig
 - **Self-Attention**: Q, K, V가 모두 같은 시퀀스에서 나오는 attention. 문장이 자기 자신을 참조하며 토큰 사이의 관계를 읽는다
 - **Attention Head**: 위 연산 한 벌. 헤드마다 서로 다른 관계(문법적 관계, 의미적 관계 등)를 읽도록 분화된다
 - **Multi-Head Self-Attention 레이어**: 여러 헤드를 병렬로 돌리고 결과를 이어 붙이는(concat) 레이어
-- **Transformer Block**: Multi-Head Self-Attention과 MLP(feed-forward network)를 residual connection·layer normalization과 함께 묶은 단위. 이 블록을 수십 겹 쌓은 것이 트랜스포머 모델이다
-
-블록 안의 MLP는 [앞 글]({% post_url 2026-08-05-AI-LLM-Optimization-01-AI-Overview %})에서 본 "선형층 + 활성화" 골격 그대로다. 앞 글에서 예고한 재등장이 정확히 여기서 일어난다.
+- **Transformer Block**: Multi-Head Self-Attention과 MLP(feed-forward network)를 residual connection·layer normalization과 함께 묶은 단위. 이 블록을 수십 겹 쌓은 것이 트랜스포머 모델이다. 블록 안의 MLP는 [앞 글]({% post_url 2026-08-05-AI-LLM-Optimization-01-AI-Overview %})에서 본 "선형층 + 활성화" 골격 그대로다
 
 ## GPT: 디코더 전용 자기회귀 구조
 
@@ -178,7 +176,7 @@ ChatGPT가 GPT 계열 모델을 쓰는 것은 물론이고, Claude·Gemini·Llam
 
 ## GPT-3의 사전훈련 데이터셋
 
-규모를 체감하기 위해, ChatGPT 초기 버전의 베이스 모델로 사용된 GPT-3의 사전훈련 데이터셋 구성을 보면 다음과 같다.
+규모를 체감하기 위해, ChatGPT 초기 버전의 베이스인 GPT-3.5, 그 GPT-3.5가 파인튜닝으로 갈라져 나온 원본 GPT-3의 사전훈련 데이터셋 구성을 보면 다음과 같다.
 
 | 데이터셋 | 토큰 수 | 학습 데이터 내 비중 |
 |----------|---------|---------------------|
@@ -216,7 +214,7 @@ ChatGPT가 GPT 계열 모델을 쓰는 것은 물론이고, Claude·Gemini·Llam
 
 ChatGPT 이후 상황이 바뀌었다. 수억 명이 동시에 쓰는 생성형 서비스가 등장하면서, 대규모 추론 서빙이 산업의 문제로 부상했다. 구조 자체는 2017년의 트랜스포머에서 크게 벗어나지 않았는데, 던지는 질문이 바뀐 것이다. "어떻게 잘 학습시키나"에서 "학습된 모델을 어떻게 빠르고 효율적으로 굴리나"로. 이 시리즈가 트랜스포머를 다시 꺼내 드는 이유가 여기에 있다.
 
-## 서빙이 아키텍처 이해에서 시작하는 이유
+## 아키텍처 이해가 서빙의 출발점
 
 이렇게 서빙 관점이 부상했지만, 그 서빙도 여전히 트랜스포머 내부 아키텍처에서 시작한다. 왜 서빙을 하려면 트랜스포머 내부를 알아야 하는가. 한 문장으로 답하면, **설정값을 외우는 사람과 유도하는 사람의 차이** 때문이다. 서빙 튜닝의 노브(knob)들은 전부 아키텍처 그 자체에서 유도된다.
 
