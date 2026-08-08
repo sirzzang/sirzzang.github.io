@@ -1,6 +1,6 @@
 ---
 title: "[LLM] LLM 서빙과 최적화 - 2.3. Transformer: 임베딩"
-excerpt: "트랜스포머의 입구인 임베딩 — 토큰화, 토큰 임베딩, 위치 인코딩 — 이 텍스트를 벡터로 바꾸는 과정을 줌인해 보자."
+excerpt: "트랜스포머의 입구인 임베딩이 텍스트를 벡터로 바꾸는 과정을 줌인해 보자."
 categories:
   - AI
 toc: true
