@@ -1,4 +1,631 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-08-08T11:04:53+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[LLM] LLM 서빙과 최적화 - 2.4. Transformer: 트랜스포머 블록과 셀프 어텐션 레이어</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화 - 2.4. Transformer: 트랜스포머 블록과 셀프 어텐션 레이어" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-08-08T11:30:46+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[LLM] LLM 서빙과 최적화 - 2.5. Transformer: 셀프 어텐션 계산 해부</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화 - 2.5. Transformer: 셀프 어텐션 계산 해부" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;셀프 어텐션의 실제 계산은 다섯 단계다. 입력 X &lt;code class=&quot;highlighter-rouge&quot;&gt;(seq_len, 768)&lt;/code&gt; → 융합 사영으로 QKV &lt;code class=&quot;highlighter-rouge&quot;&gt;(seq_len, 2304)&lt;/code&gt; → Q·K·V 3분할과 12헤드 분할 → 헤드별로 $QK^\top/\sqrt{d_{head}}$ + 마스크 + softmax로 어텐션 가중치 &lt;code class=&quot;highlighter-rouge&quot;&gt;(seq_len, seq_len)&lt;/code&gt; → V 가중합 후 concat과 출력 사영 $W^O$로 &lt;code class=&quot;highlighter-rouge&quot;&gt;(seq_len, 768)&lt;/code&gt; 복원&lt;/li&gt;
+  &lt;li&gt;Q·K·V 생성은 선형 변환 한 번이다. GPT-2는 $W^Q, W^K, W^V$를 가로로 이어 붙인 &lt;code class=&quot;highlighter-rouge&quot;&gt;(768, 2304)&lt;/code&gt; 융합 행렬 하나로 곱한 뒤 열을 잘라 나누는데, 이는 세 번 따로 곱하는 것과 수학적으로 동일하고 GPU에서 더 빠르다. 이후의 3분할·헤드 분할·concat은 곱셈이 전혀 없는 열 재해석이다&lt;/li&gt;
+  &lt;li&gt;Query·Key·Value라는 해석은 벡터에 내재된 성질이 아니다. $\text{softmax}(QK^\top/\sqrt{d})V$라는 고정된 수식에서 각 벡터가 꽂히는 위치가 역할을 정하고, 그 위치를 통과해 흐르는 역전파가 실제 기능을 채운다&lt;/li&gt;
+  &lt;li&gt;어텐션 가중치는 행마다 합이 1인 &lt;code class=&quot;highlighter-rouge&quot;&gt;(seq_len, seq_len)&lt;/code&gt; 혼합 비율표다. 스케일링($\div\sqrt{d_k}$)은 내적값의 분산을 1로 되돌리는 정규화이고, causal mask는 softmax 직전에 미래 위치에 $-\infty$를 더해 학습의 병렬 처리에서 정답 누출을 막는 장치다&lt;/li&gt;
+  &lt;li&gt;어텐션 출력은 이 비율표를 실행한 결과 — V 벡터들의 가중 평균 — 다. concat은 12헤드 × 64차원을 768로 복원하는 열 재조립일 뿐이고, 헤드 간 정보가 실제로 섞이는 지점은 그다음의 출력 사영 $W^O$다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;셀프-어텐션-계산-전체-흐름&quot;&gt;셀프 어텐션 계산 전체 흐름&lt;/h1&gt;
+
+&lt;p&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer/&quot;&gt;앞 글&lt;/a&gt;에서 셀프 어텐션의 골격 — Q·K로 어텐션 가중치를 만들고, 그 가중치로 V를 가중합한다 — 을 잡았다. 이번에는 그 골격 위에서 실제 행렬 계산을 수식과 shape 변화로 하나씩 따라간다. 예문은 계속 &lt;code class=&quot;highlighter-rouge&quot;&gt;My hobby&lt;/code&gt; 토큰 2개, 모델은 GPT-2 small($d_{model}=768$, 12헤드) 기준이다.&lt;/p&gt;
+
+&lt;p&gt;시작하기 전에 큰 그림 하나. 아무리 계산이 여러 단계로 나뉘어 있어도, 결국 이 레이어가 하는 일은 &lt;strong&gt;입력 토큰의 표현을 새로운 표현으로 바꾸는 것&lt;/strong&gt; 하나다. 그 사이에 셀프 어텐션을 위한 과정들이 끼어 있을 뿐이다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-big-picture.png&quot; alt=&quot;Transformer Explainer에서 입력 토큰 My, hobby의 표현이 어텐션을 거쳐 같은 토큰의 새 표현으로 이어지는 전체 흐름&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처. 왼쪽의 토큰별 표현(빨강·파랑 박스는 직접 표시)이 오른쪽에서 같은 토큰의 새 표현으로 나온다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;전체 계산을 shape 변화로 먼저 요약해 둔다. 이후부터는 이 표를 위에서 아래로 한 줄씩 살펴 보는 과정이 될 것이다.&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;X (2, 768)                       # 블록에 들어온 현재 표현 (토큰 2개: My, hobby)
+→ X·W + b : QKV (2, 2304)        # 융합 사영 — Q·K·V를 한 번에 얻는 선형 변환
+→ 열 3분할 : Q, K, V 각 (2, 768)
+→ 12헤드 분할 : Q_h, K_h, V_h 각 (2, 64)
+─── 여기부터 헤드별 독립 계산 (12개가 병렬) ───
+→ Q_h·K_hᵀ / √64 + M → softmax : A_h (2, 2)   # 어텐션 가중치
+→ A_h·V_h : (2, 64)                            # 헤드별 어텐션 출력
+─── 헤드별 구간 끝 ───
+→ 12개 concat : (2, 768)
+→ W^O 통과 : (2, 768)            # 멀티헤드 어텐션 출력
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;가운데 구간 — 가중치 계산부터 V 가중합까지 — 은 &lt;strong&gt;헤드마다 독립적으로&lt;/strong&gt; 이루어진다는 점을 미리 표시해 뒀다. 헤드끼리는 서로 결과를 기다릴 필요가 없어서 12개가 병렬로 돈다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;qkv-생성-융합-선형-변환&quot;&gt;Q·K·V 생성: 융합 선형 변환&lt;/h1&gt;
+
+&lt;h2 id=&quot;입력에서-qkv로&quot;&gt;입력에서 Q·K·V로&lt;/h2&gt;
+
+&lt;p&gt;첫 단계는 각 토큰의 표현을 Query, Key, Value라는 세 벡터로 변환하는 것이다. Transformer Explainer의 설명은 이렇다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;To perform self-attention, each token’s embedding is transformed into three new embeddings — Query, Key, Value. This transformation is done by applying different weights and biases to each token embedding. These parameters (weights and biases) are optimized through training.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-token-to-qkv.png&quot; alt=&quot;Transformer Explainer에서 토큰 표현 하나가 Q·K·V로 변환되는 모습&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처. 토큰 하나의 (1, 768) 벡터가 (1, 2304)로 변환되고, 그 2304가 각각 Q·K·V다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;이 문장에서 두 가지를 정확히 해 둘 필요가 있다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;“three new embeddings”의 “임베딩”은 넓은 의미다.&lt;/strong&gt; &lt;a href=&quot;/ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/&quot;&gt;임베딩 글&lt;/a&gt;에서 본 토큰 임베딩은 좁은 의미 — 토큰 ID로 행렬에서 행 하나를 꺼내는 &lt;strong&gt;룩업&lt;/strong&gt; — 였다. 여기서의 임베딩은 그냥 “벡터 표현”이라는 뜻이고, 만드는 방식도 룩업이 아니라 &lt;strong&gt;행렬곱(선형 변환)&lt;/strong&gt;이다. 또한 입력이 셋으로 쪼개지는 것이 아니라, 같은 입력이 세 개의 다른 변환을 통과해 세 벡터가 &lt;strong&gt;생성&lt;/strong&gt;된다. 쪼개지는 것은 입력이 아니라 뒤에서 볼 융합 출력의 열이다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;“each token embedding에 적용”은 첫 번째 블록 기준의 느슨한 표현이다.&lt;/strong&gt; &lt;a href=&quot;/ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer/&quot;&gt;앞 글&lt;/a&gt;에서 봤듯 블록의 입력은 이전 블록의 출력이고, 토큰+위치 임베딩이 그대로 들어오는 것은 블록 1뿐이다. 엄밀히 쓰면 “&lt;strong&gt;그 블록에 들어온 현재 표현&lt;/strong&gt;에 적용한다”가 된다. Explainer 툴팁의 “Embeddings originate from tokens but evolve through blocks”가 이 정정을 담고 있다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;가중치와 편향이 학습 파라미터라는 것 — 사전학습 때 토큰 임베딩 테이블과 같은 루프에서, 같은 다음 토큰 예측 loss로 동시에 역전파되고, 추론 시에는 고정된다는 것 — 은 앞 글의 “학습으로 결정 vs 입력마다 계산” 표 그대로다.&lt;/p&gt;
+
+&lt;h2 id=&quot;융합-가중치-세-사영-행렬의-가로-결합&quot;&gt;융합 가중치: 세 사영 행렬의 가로 결합&lt;/h2&gt;
+
+&lt;p&gt;그런데 Transformer Explainer 화면을 보면 $W^Q, W^K, W^V$가 따로 등장하지 않고, &lt;code class=&quot;highlighter-rouge&quot;&gt;(768, 2304)&lt;/code&gt;짜리 가중치 행렬 &lt;strong&gt;하나&lt;/strong&gt;가 곱해진다. 이 글에서는 Explainer의 배색을 따라 &lt;span style=&quot;color:#6c7fe8&quot;&gt;&lt;strong&gt;Query&lt;/strong&gt;&lt;/span&gt;는 파랑, &lt;span style=&quot;color:#e8706b&quot;&gt;&lt;strong&gt;Key&lt;/strong&gt;&lt;/span&gt;는 빨강, &lt;span style=&quot;color:#2fa87c&quot;&gt;&lt;strong&gt;Value&lt;/strong&gt;&lt;/span&gt;는 초록으로 표기한다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-self-attention-qkv.png&quot; alt=&quot;Transformer Explainer에서 임베딩에 융합 가중치 행렬과 bias가 적용되는 모습&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처. (2, 768) 입력에 (768, 2304) 가중치를 곱하고 (2304,) bias를 더한다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;이 &lt;code class=&quot;highlighter-rouge&quot;&gt;(768, 2304)&lt;/code&gt;는 $W^Q, W^K, W^V$(각 768×768) 세 개를 &lt;strong&gt;가로로 이어 붙인 것&lt;/strong&gt;이고, bias &lt;code class=&quot;highlighter-rouge&quot;&gt;(2304,)&lt;/code&gt;도 $b^Q, b^K, b^V$를 이어 붙인 것이다. 실제 화면에서도 가중치 행렬이 &lt;span style=&quot;color:#6c7fe8&quot;&gt;파랑&lt;/span&gt;/&lt;span style=&quot;color:#e8706b&quot;&gt;빨강&lt;/span&gt;/&lt;span style=&quot;color:#2fa87c&quot;&gt;초록&lt;/span&gt; 세로 띠 3개로 칠해져 있는데, 그 경계가 정확히 $W^Q \mid W^K \mid W^V$의 경계다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;구간&lt;/th&gt;
+      &lt;th&gt;화면&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;span style=&quot;color:#6c7fe8&quot;&gt;Q 구간 (열 1~768)&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-self-attention-qkv-1.png&quot; alt=&quot;Transformer Explainer의 융합 가중치 행렬에서 파란색 Q 구간&quot; /&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;span style=&quot;color:#e8706b&quot;&gt;K 구간 (열 769~1536)&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-self-attention-qkv-2.png&quot; alt=&quot;Transformer Explainer의 융합 가중치 행렬에서 빨간색 K 구간&quot; /&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;span style=&quot;color:#2fa87c&quot;&gt;V 구간 (열 1537~2304)&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-self-attention-qkv-3.png&quot; alt=&quot;Transformer Explainer의 융합 가중치 행렬에서 초록색 V 구간&quot; /&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처. 융합 가중치의 세로 띠 3개가 각각 W^Q, W^K, W^V다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;이렇게 합쳐서 곱해도 되는 이유는 행렬곱의 성질에 있다. 행렬곱에서 출력의 j번 열을 계산할 때 쓰이는 것은 &lt;strong&gt;W의 j번 열과 $b_j$뿐&lt;/strong&gt;이고, 옆 열에 무엇이 붙어 있는지는 결과에 영향이 없다. 그래서 블록 행렬 항등식이 성립한다.&lt;/p&gt;
+
+&lt;script type=&quot;math/tex; mode=display&quot;&gt;X \cdot [\,W^Q \mid W^K \mid W^V\,] = [\,XW^Q \mid XW^K \mid XW^V\,]&lt;/script&gt;
+
+&lt;p&gt;한 번에 곱하고 자르든, 세 번 따로 곱하든 숫자가 자리 하나까지 완전히 같다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-self-attention-qkv.gif&quot; alt=&quot;Transformer Explainer에서 토큰 행 벡터가 융합 가중치의 열들과 차례로 내적되며 출력 행이 채워지는 애니메이션&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;애니메이션으로 보면 My의 768차원 행 벡터 하나가 가중치 행렬의 열들과 차례로 내적되면서 출력 행 &lt;code class=&quot;highlighter-rouge&quot;&gt;(2304,)&lt;/code&gt;를 왼쪽에서 오른쪽으로 채워 간다. 열 1~768 구간을 지날 때는 My의 &lt;span style=&quot;color:#6c7fe8&quot;&gt;&lt;strong&gt;q&lt;/strong&gt;&lt;/span&gt;가, 769~1536 구간은 My의 &lt;span style=&quot;color:#e8706b&quot;&gt;&lt;strong&gt;k&lt;/strong&gt;&lt;/span&gt;가, 1537~2304 구간은 My의 &lt;span style=&quot;color:#2fa87c&quot;&gt;&lt;strong&gt;v&lt;/strong&gt;&lt;/span&gt;가 채워진다. hobby 행도 &lt;strong&gt;같은 가중치, 같은 bias&lt;/strong&gt;로 같은 과정을 반복한다 — 토큰마다 다른 것은 입력 행뿐이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;수식과-shape&quot;&gt;수식과 shape&lt;/h2&gt;
+
+&lt;p&gt;계산 하나를 성분 단위로 쓰면 다음과 같다. Explainer 화면 하단에 표시되는 전개식이 바로 이것이다.&lt;/p&gt;
+
+&lt;script type=&quot;math/tex; mode=display&quot;&gt;\mathit{QKV}_{i,j} = \sum_{d=1}^{768} \mathit{Embedding}_{i,d} \cdot \mathit{Weights}_{d,j} + \mathit{Bias}_{j}&lt;/script&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-qkv-computation.png&quot; alt=&quot;Transformer Explainer에서 (2, 768) 임베딩과 (768, 2304) 가중치의 곱이 성분 전개식으로 표시된 모습&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처. 화면 하단에 성분 전개식이 표시된다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;인덱스 세 개의 역할을 갈라 놓으면 계산을 더 쉽게 이해할 수 있다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;i = 어느 토큰(행)인가&lt;/strong&gt;: 1이면 My, 2면 hobby. i를 바꾸면 입력에서 쓰는 행이 바뀐다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;j = 출력의 어느 성분(열)인가&lt;/strong&gt;: j를 바꾸면 가중치의 열과 bias가 바뀐다. j의 위치가 곧 Q/K/V 소속을 결정한다 — 1~768이면 &lt;span style=&quot;color:#6c7fe8&quot;&gt;Q&lt;/span&gt;, 769~1536이면 &lt;span style=&quot;color:#e8706b&quot;&gt;K&lt;/span&gt;, 1537~2304면 &lt;span style=&quot;color:#2fa87c&quot;&gt;V&lt;/span&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;d = 합산 축&lt;/strong&gt;: 매 계산마다 1부터 768까지 전부 훑고 사라지는 인덱스다. 내적이 768개의 곱을 더해 숫자 하나로 접는 축이다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;(i, j)의 변화에 따른 구분을 몇 개 짚어 보면 다음과 같다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;(i, j)&lt;/th&gt;
+      &lt;th&gt;계산&lt;/th&gt;
+      &lt;th&gt;결과의 의미&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;(1, 1)&lt;/td&gt;
+      &lt;td&gt;My 행 · W의 1열 + Bias₁&lt;/td&gt;
+      &lt;td&gt;My의 q 1번째 성분&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;(2, 1)&lt;/td&gt;
+      &lt;td&gt;hobby 행 · W의 1열 + Bias₁&lt;/td&gt;
+      &lt;td&gt;hobby의 q 1번째 성분 — 가중치 열과 bias는 (1,1)과 동일, 입력 행만 교체&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;(1, 769)&lt;/td&gt;
+      &lt;td&gt;My 행 · W의 769열 + Bias₇₆₉&lt;/td&gt;
+      &lt;td&gt;My의 k 1번째 성분 — 빨간 구간 시작&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;(1, 1537)&lt;/td&gt;
+      &lt;td&gt;My 행 · W의 1537열 + Bias₁₅₃₇&lt;/td&gt;
+      &lt;td&gt;My의 v 1번째 성분 — 초록 구간 시작&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;(2, 2304)&lt;/td&gt;
+      &lt;td&gt;hobby 행 · W의 2304열 + Bias₂₃₀₄&lt;/td&gt;
+      &lt;td&gt;hobby의 v 마지막 성분&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;table&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;구조를 축소해서 실제 산수로도 확인해 보자. 토큰 2개, $d_{model}=2$, 출력 6열(= &lt;span style=&quot;color:#6c7fe8&quot;&gt;Q 2열&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span style=&quot;color:#e8706b&quot;&gt;K 2열&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span style=&quot;color:#2fa87c&quot;&gt;V 2열&lt;/span&gt;)이면 합산이 $\sum_{d=1}^{2}$라 항이 두 개뿐이다. 행렬 형태로 늘어놓으면 다음과 같다.&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-qkv-fused-matmul-toy.png&quot; alt=&quot;축소판 QKV 융합 사영 — Embedding(2×2)에 Weights(2×6)를 곱하고 Bias를 더해 QKV(2×6)를 만드는 행렬곱. 열은 Q·K·V 세 밴드로 나뉘고 각 행은 My·hobby 토큰이다&quot; class=&quot;align-center&quot; width=&quot;780&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;직접 그린 도식. 행은 토큰(My·hobby), 열은 &lt;span style=&quot;color:#6c7fe8&quot;&gt;Q&lt;/span&gt;|&lt;span style=&quot;color:#e8706b&quot;&gt;K&lt;/span&gt;|&lt;span style=&quot;color:#2fa87c&quot;&gt;V&lt;/span&gt; 세 밴드로 나뉜다. 실제 GPT-2는 여기서 2 → 768, 6 → 2304로 커진다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;My 행(i=1)의 여섯 성분을 채우면:&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;j=1: 1·1 + 2·0 + 0.1 =  1.1   # My의 q₁
+j=2: 1·0 + 2·1 + 0.2 =  2.2   # My의 q₂
+j=3: 1·0 + 2·1 + 0.3 =  2.3   # My의 k₁
+j=4: 1·1 + 2·0 + 0.4 =  1.4   # My의 k₂
+j=5: 1·1 + 2·1 + 0.5 =  3.5   # My의 v₁
+j=6: 1·1 + 2·(-1) + 0.6 = -0.4  # My의 v₂
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;hobby 행(i=2)은 같은 W, 같은 Bias에 입력 행만 [3, 4]로 바꿔 반복한다. 전부 계산하면:&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;QKV = [ 1.1  2.2 | 2.3  1.4 | 3.5  -0.4 ]     # My의    q | k | v
+      [ 3.1  4.2 | 4.3  3.4 | 7.5  -0.4 ]     # hobby의 q | k | v
+
+→ Q = [1.1 2.2; 3.1 4.2],  K = [2.3 1.4; 4.3 3.4],  V = [3.5 -0.4; 7.5 -0.4]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;table&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;실제 GPT-2는 이 계산에서 2 → 768, 6 → 2304로 숫자만 커진 것이다. shape으로 정리하면 &lt;code class=&quot;highlighter-rouge&quot;&gt;(seq_len, 768) × (768, 2304) + (2304,) = (seq_len, 2304)&lt;/code&gt; — 출력의 각 행이 그 토큰의 q&lt;/td&gt;
+      &lt;td&gt;k&lt;/td&gt;
+      &lt;td&gt;v를 이어 붙인 것이다.&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h2 id=&quot;융합-곱의-이유&quot;&gt;융합 곱의 이유&lt;/h2&gt;
+
+&lt;p&gt;어차피 나중에 Q·K·V로 다시 잘라야 하는데 왜 하나로 합쳐 곱하는가. 두 방식의 &lt;strong&gt;산술 연산 수(FLOPs, 부동소수점 연산 개수)&lt;/strong&gt;는 완전히 같다 — 융합 곱 &lt;code class=&quot;highlighter-rouge&quot;&gt;(768, 2304)&lt;/code&gt; 한 번의 곱셈·덧셈 수가 &lt;code class=&quot;highlighter-rouge&quot;&gt;(768, 768)&lt;/code&gt; 세 번의 합과 정확히 일치한다(768×768×3 = 768×2304). 이득은 연산량이 아니라 &lt;strong&gt;GPU가 일하는 방식&lt;/strong&gt;에서 나온다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;strong&gt;참고&lt;/strong&gt;: FLOPs 표기 주의&lt;/p&gt;
+
+  &lt;p&gt;방금 쓴 FLOPs(floating-point operations)는 부동소수점 연산의 &lt;strong&gt;개수&lt;/strong&gt;, 즉 해치워야 할 작업량이다. 초당 처리량을 뜻하는 FLOPS(FLOP/s)와는 끝의 s가 다르다(개수 vs 속도). 행렬곱 &lt;code class=&quot;highlighter-rouge&quot;&gt;(m, k)·(k, n)&lt;/code&gt;의 FLOPs는 대략 $2mkn$인데, 출력 원소 하나가 곱 $k$번 + 합 $k{-}1$번 ≈ $2k$ 연산이고 그런 원소가 $mn$개라서다. 융합이든 분리든 이 개수가 같다는 것이 위 등식이고, 그러니 남는 차이는 “같은 개수를 GPU가 얼마나 빨리 처리하느냐”뿐이다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;커널 실행이 3번 → 1번&lt;/strong&gt;: GPU에서 행렬곱 하나는 커널 실행 하나인데, 실행마다 고정 오버헤드가 붙는다. 작은 곱 셋보다 큰 곱 하나가 이 비용을 한 번만 낸다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;입력 X를 메모리에서 1번만 읽는다&lt;/strong&gt;: 따로 곱하면 행렬곱마다 X를 다시 읽어야 한다. 합치면 한 번 읽은 X를 2304개 열 전부에 재사용한다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;큰 행렬곱일수록 GPU 활용률이 좋다&lt;/strong&gt;: GPU는 스레드를 워프(warp) 단위로 묶어 여러 SM(streaming multiprocessor)에 뿌린다. GEMM 라이브러리(cuBLAS 등)는 출력 행렬을 타일로 쪼개 각 타일을 한 스레드 블록에 맡기고, A·B의 부분 타일을 공유 메모리에 올려 재사용한다. 행렬이 클수록 타일이 많아져 모든 SM을 채우고(occupancy↑), 타일 하나가 읽어 온 데이터를 더 많은 곱셈에 재사용해(연산/메모리 비율↑) 커널 실행·타일 로드 같은 고정 비용을 잘 상쇄(amortize)한다. 작으면 타일이 몇 개 안 나와 SM이 놀고 메모리 대역폭에 묶인다. “warp 배정 특성상 잘 먹히나”라는 직관이 맞고, 정확히는 &lt;strong&gt;충분한 타일로 SM을 채우고 데이터 재사용을 높이는&lt;/strong&gt; 문제다 (roofline·타일 크기 선택 같은 정량은 별도 주제다)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Transformer Explainer가 융합된 모습을 보여주는 직접적 이유는, 이 도구가 &lt;strong&gt;실제 GPT-2 가중치 파일을 그대로 돌리기 때문&lt;/strong&gt;이다. GPT-2 체크포인트는 애초에 융합 레이아웃(&lt;code class=&quot;highlighter-rouge&quot;&gt;c_attn&lt;/code&gt;, 768 → 2304)으로 저장돼 있고, Explainer는 개념도가 아니라 그 실물을 시각화한다. 다만 이것은 구현 선택이라 모델마다 다르다 — Llama 계열의 HuggingFace 구현은 &lt;code class=&quot;highlighter-rouge&quot;&gt;q_proj&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;k_proj&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;v_proj&lt;/code&gt; 세 개로 분리돼 있는데, vLLM 같은 서빙 엔진은 로드할 때 다시 하나로 합친다. 이유는 위의 GPU 관점 그대로다.&lt;/p&gt;
+
+&lt;p&gt;여기서 한 가지 갈라 둘 것이 있다. &lt;strong&gt;저장 레이아웃과 계산 레이아웃은 별개다.&lt;/strong&gt; 분리되어 저장된 모델이라고 반드시 세 번 나눠 계산하는 것은 아니다 — HuggingFace의 기본(eager) 구현은 실제로 &lt;code class=&quot;highlighter-rouge&quot;&gt;q_proj&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;k_proj&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;v_proj&lt;/code&gt;를 세 번의 GEMM으로 돌리지만, vLLM은 로드 시 세 가중치를 이어 붙여 하나로 만든 뒤 융합 GEMM 한 번으로 계산하고 결과를 잘라 쓴다. 앞의 블록 행렬 항등식이 두 경로의 결과가 자리 하나까지 같음을 보장하므로, 융합이냐 분리냐는 정확도 문제가 아니라 순전히 커널 효율의 선택이다. 반대로 GPT-2는 저장부터 융합(&lt;code class=&quot;highlighter-rouge&quot;&gt;c_attn&lt;/code&gt;)이라 자연히 융합으로 계산된다.&lt;/p&gt;
+
+&lt;h2 id=&quot;qkv의-위상-아직은-그냥-세-벡터&quot;&gt;Q·K·V의 위상: 아직은 그냥 세 벡터&lt;/h2&gt;
+
+&lt;p&gt;여기까지 보면 세 변환은 구조적으로 완전히 동질적이다 — 똑같이 생긴 선형 변환 세 벌일 뿐이고, 만들어진 직후의 q·k·v에 “질의성”이나 “색인성” 같은 내재적 성질은 없다. 그런데 Explainer는 곧바로 이렇게 서술한다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Once created, Queries compare with Keys to measure relevance, and this relevance is used to weight the Values.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;그냥 똑같이 생긴 선형 변환의 출력일 뿐인데, 어떻게 “Query가 Key와 비교한다”는 해석이 성립하는가. 답부터 말하면 그 근거는 벡터 자체가 아니라 &lt;strong&gt;이 셋이 이후 수식에서 각각 꽂히는 위치&lt;/strong&gt;에 있는데, 그 위치는 $QK^\top$와 softmax·가중합을 계산으로 다 본 뒤에야 드러난다. 그래서 이 해석은 계산을 마친 뒤 Query·Key·Value라 부르는 근거에서 본격적으로 살펴 보도록 하고, 지금 단계에서는 한 가지만 확정하도록 하자 — q·k·v는 아직 그냥 벡터 3개다.&lt;/p&gt;
+
+&lt;p&gt;다만 이 단계에 대한 흔한 오해 하나는 미리 걸러 둘 만하다. 이 단계는 “입력된 단어가 다른 단어들과 의미 관계를 파악하는 행위”가 아니다. 위 수식에서 봤듯 $QKV_{i,j}$ 계산에는 i번 행의 정보만 들어가고 다른 토큰은 등장하지 않는다 — &lt;strong&gt;QKV 변환은 행(토큰)별로 완전히 독립&lt;/strong&gt;이다. 토큰끼리 처음 만나는 지점은 다음의 $QK^\top$이고, 이 단계는 관계 파악이 아니라 관계 파악을 위한 &lt;strong&gt;준비&lt;/strong&gt;(각 토큰을 세 역할의 벡터로 사영)다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;멀티헤드-분할-융합-출력의-열-슬라이스&quot;&gt;멀티헤드 분할: 융합 출력의 열 슬라이스&lt;/h1&gt;
+
+&lt;p&gt;QKV &lt;code class=&quot;highlighter-rouge&quot;&gt;(2, 2304)&lt;/code&gt;를 얻고 나면 쪼개기가 두 번 일어난다. 먼저 Q·K·V 세 덩어리로 나누고, 그 각각을 다시 12개 헤드 몫으로 나눈다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-multihead.gif&quot; alt=&quot;Transformer Explainer에서 QKV가 Q·K·V로, 다시 헤드별 벡터로 쪼개지는 애니메이션&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-multihead-split-in-detail.png&quot; alt=&quot;Transformer Explainer에서 두 번의 쪼개기를 표시한 화면 — QKV 각각 쪼개기, Head 개수만큼 각각 쪼개기&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처(번호·박스는 직접 표시). 768차원 벡터가 헤드당 64차원으로 나뉘고, 툴팁에 &quot;Key, Head 9, vector(64)&quot;처럼 표시된다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;h2 id=&quot;두-번의-분할-계산이-아닌-뷰-재구성&quot;&gt;두 번의 분할: 계산이 아닌 뷰 재구성&lt;/h2&gt;
+
+&lt;p&gt;여기서 잡아 둘 포인트가 하나 있다. &lt;strong&gt;이 두 번의 쪼개기는 계산이 아니다.&lt;/strong&gt; 곱셈·덧셈이 전혀 없고, 이미 계산된 &lt;code class=&quot;highlighter-rouge&quot;&gt;(2, 2304)&lt;/code&gt;의 열들에 “여기부터는 K, 이 64개는 헤드 9 몫”이라고 이름표를 붙이는 재해석일 뿐이다. 산술 연산은 융합 행렬곱 한 번이 모두 수행했고, 그 뒤 단계는 곱셈·덧셈 없이 &lt;strong&gt;텐서의 메모리 레이아웃을 재해석&lt;/strong&gt;하는 뷰 재구성(view/reshape)일 뿐이다 — 스트라이드(stride)만 바꿔 같은 버퍼를 다른 shape으로 보는 것이라 데이터 복사조차 거의 없다.&lt;/p&gt;
+
+&lt;p&gt;GPT-2 구조를 그대로 옮긴 nanoGPT 구현에서 이 부분이 정확히 그렇게 나타난다.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# nanoGPT CausalSelfAttention.forward 발췌 — x: (B, T, C), B=배치, T=토큰 수, C=n_embd=768&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;q&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;v&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;c_attn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n_embd&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dim&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;   &lt;span class=&quot;c&quot;&gt;# 융합 사영(c_attn) 후 2304열을 셋으로 → 각 (B, T, 768)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;k&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;view&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;T&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;C&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;//&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;transpose&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;  &lt;span class=&quot;c&quot;&gt;# (B, T, 768) → (B, nh=12, T, hs=64)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;q&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;q&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;view&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;T&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;C&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;//&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;transpose&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;  &lt;span class=&quot;c&quot;&gt;# view·transpose는 곱셈 없는 재배치&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;v&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;view&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;T&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;C&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;//&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;transpose&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;산술은 &lt;code class=&quot;highlighter-rouge&quot;&gt;self.c_attn(x)&lt;/code&gt;(융합 GEMM) 한 줄이 다 하고, 그 뒤 &lt;code class=&quot;highlighter-rouge&quot;&gt;.split&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;.view&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;.transpose&lt;/code&gt;는 전부 shape을 다시 읽는 연산이다.&lt;/p&gt;
+
+&lt;p&gt;애초에 2304라는 숫자가 그렇게 조직되어 있었다: &lt;strong&gt;2304 = 3(QKV) × 12(헤드) × 64(헤드당 차원)&lt;/strong&gt;. 열 구간으로 보면 Q 블록(1~768) 안에서 헤드 1이 1~64, 헤드 2가 65~128, … 이고, K 블록(769~1536)과 V 블록(1537~2304) 안도 같은 방식이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;동치인-두-관점-큰-행렬-슬라이스--헤드별-사영&quot;&gt;동치인 두 관점: 큰 행렬 슬라이스 = 헤드별 사영&lt;/h2&gt;
+
+&lt;p&gt;이 지점에서 &lt;a href=&quot;/ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer/&quot;&gt;앞 글&lt;/a&gt;의 “동치인 두 관점”이 완전히 하나로 만난다. 큰 W &lt;code class=&quot;highlighter-rouge&quot;&gt;(768, 2304)&lt;/code&gt;를 열 단위로 끝까지 쪼개면 결국 &lt;strong&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;(768, 64)&lt;/code&gt;짜리 사영 행렬 36벌&lt;/strong&gt; — 12헤드 × Q·K·V 3종 — 을 가로로 이어 붙인 것이다. “헤드마다 독립된 &lt;code class=&quot;highlighter-rouge&quot;&gt;[768 × 64]&lt;/code&gt; 사영 가중치”(개념 관점)와 “큰 행렬 하나로 곱한 뒤 슬라이스”(구현 관점)가 같은 물건의 두 읽기라는 것이 열 구조에서 그대로 보인다.&lt;/p&gt;
+
+&lt;p&gt;같은 구조를 &lt;a href=&quot;/ai/AI-Transformer-04/&quot;&gt;2020년에 그린 그림&lt;/a&gt;으로도 확인할 수 있다. 헤드 구분이 입력 X가 아니라 가중치에 있다는 것, 그리고 헤드 h의 가중치가 전체 $W^Q$의 세로(열) 블록이라는 것이 요지다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/self-attention-qkv.png&quot; alt=&quot;입력 문장 임베딩이 3번 헤드의 가중치 행렬을 통과해 헤드별 Q·K·V가 만들어지는 과정을 그린 그림&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;직접 그린 그림. 편의상 3번 head 기준이라 가중치 첨자는 0-based로 W₂다. 왼쪽 아래 인셋처럼 헤드 몫은 전체 가중치의 열 블록이다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;이 표현을 세로로 나눈 이유는 융합 곱에서 본 것과 같은 논리다 — 행렬곱의 출력 열 j는 W의 j열만 사용하므로, 열 방향으로 자른 블록이 곧 “그 헤드의 독립된 가중치”와 동치다.&lt;/p&gt;
+
+&lt;h2 id=&quot;헤드별-독립-진행&quot;&gt;헤드별 독립 진행&lt;/h2&gt;
+
+&lt;p&gt;쪼갠 다음부터는 &lt;strong&gt;헤드별로 독립 진행&lt;/strong&gt;이다. 헤드마다 자기 몫의 $Q_h, K_h$ &lt;code class=&quot;highlighter-rouge&quot;&gt;(2, 64)&lt;/code&gt;로 어텐션 가중치 &lt;code class=&quot;highlighter-rouge&quot;&gt;(2, 2)&lt;/code&gt;를 만들고, $V_h$를 가중합해 &lt;code class=&quot;highlighter-rouge&quot;&gt;(2, 64)&lt;/code&gt;를 얻는다. Transformer Explainer에서 “Head 4 of 12”를 넘길 때마다 어텐션 점수표와 토큰 옆 q·k·v 막대가 바뀌는 것이, 바로 그 헤드 몫의 64차원 조각들이다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-self-attention-6.png&quot; alt=&quot;Transformer Explainer에서 Head 4의 어텐션 화면 — 헤드마다 다른 점수표가 표시된다&quot; class=&quot;align-center&quot; width=&quot;600&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처. 헤드를 넘기면 점수표와 q·k·v 막대가 함께 바뀐다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;어텐션-가중치-내적에서-혼합-비율로&quot;&gt;어텐션 가중치: 내적에서 혼합 비율로&lt;/h1&gt;
+
+&lt;p&gt;이제 헤드 하나 안에서 어텐션 가중치를 계산한다. 결론부터 쓰면 결과물은 다음과 같다.&lt;/p&gt;
+
+&lt;script type=&quot;math/tex; mode=display&quot;&gt;A = \operatorname{softmax}\!\left(\frac{Q K^{\top}}{\sqrt{d_k}} + M\right)&lt;/script&gt;
+
+&lt;p&gt;shape은 &lt;code class=&quot;highlighter-rouge&quot;&gt;(seq_len, seq_len)&lt;/code&gt; — 행도 열도 같은 문장의 토큰이라 &lt;strong&gt;정사각 행렬&lt;/strong&gt;이다. 셀프 어텐션이라서 그렇고, 번역처럼 다른 시퀀스를 참조하는 크로스 어텐션이면 &lt;code class=&quot;highlighter-rouge&quot;&gt;(타깃 길이, 소스 길이)&lt;/code&gt;가 되어 정사각이 아니다. 단, 정사각이라고 대칭은 아니다 — A[i, j]와 A[j, i]는 서로 다른 값이고(Q·K 위치가 뒤바뀌니까), causal mask까지 걸리면 하삼각만 채워진다. 행마다 합이 1인 음수 없는 실수표이고, 정체는 &lt;strong&gt;다음 단계 가중합에서 쓸 혼합 비율표&lt;/strong&gt; — i번 행은 “토큰 i의 출력 벡터를 만들 때 각 토큰의 V를 얼마씩 섞을 것인가”라는 계수 목록이다. Q·K·V를 “그냥 벡터 3개”로 받아들였던 것과 똑같이, 이것은 “그냥 계수표”다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-attention-weight-overview.png&quot; alt=&quot;Transformer Explainer에서 토큰 쌍마다 어텐션 가중치가 표시된 모습 — My와 My 사이가 1.00&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;캐주얼하게 말하면 “각 토큰이 어떤 토큰에 얼마나 주목해야 할지”이고, 엄밀하게 말하면 &lt;strong&gt;A[i,j] = 토큰 i의 새 표현을 만들 때 토큰 j의 V가 기여하는 비율&lt;/strong&gt;이다. “주목한다(attend)”라는 동사의 계산적 실체가 곧 이 혼합 비율이고, 별도의 ‘주목’이라는 연산이 있는 것이 아니다.&lt;/p&gt;
+
+&lt;p&gt;“셀프”라는 이름도 이 행렬에서 눈에 보인다. 이 &lt;code class=&quot;highlighter-rouge&quot;&gt;(n, n)&lt;/code&gt; 행렬은 &lt;strong&gt;행 인덱스도 열 인덱스도 같은 문장의 토큰들&lt;/strong&gt;이다 — 행 쪽(Q)도 열 쪽(K)도 같은 X에서 나왔기 때문이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;My hobby&lt;/code&gt;면 행도 [My, hobby], 열도 [My, hobby]다. 크로스 어텐션이라면 열이 다른 시퀀스(번역 원문 등)의 토큰이 된다.&lt;/p&gt;
+
+&lt;p&gt;화면의 숫자 하나는 정정해 두어야 한다. 첫 행의 My–My 1.00은 My와 My가 특별히 유사해서가 아니다. 뒤에서 볼 causal mask 때문에 &lt;strong&gt;첫 토큰이 볼 수 있는 상대가 자기 자신뿐이라, softmax가 전부를 거기에 몰아준 것&lt;/strong&gt;이다. 선택지가 하나면 비율은 무조건 1.00이다. 학습된 유사도가 실제로 반영된 값은 두 번째 행부터다.&lt;/p&gt;
+
+&lt;p&gt;계산 단계는 Explainer 화면 그대로 셋으로 나뉜다 — Dot product → Scaling · Mask → Softmax.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-attention-weight-detail.png&quot; alt=&quot;Transformer Explainer에서 어텐션 가중치 계산의 세 단계 — Dot product, Scaling·Mask, Softmax와 각 단계의 값 범위&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처. 단계마다 값 범위가 내적값(-14.2~1.5) → 스케일·마스크(-3.0~3.0) → softmax(0.0~1.0)로 바뀐다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;h2 id=&quot;내적-토큰-쌍의-관련도-점수&quot;&gt;내적: 토큰 쌍의 관련도 점수&lt;/h2&gt;
+
+&lt;p&gt;내적(dot product)은 같은 위치의 숫자끼리 곱한 뒤 모두 더하는 연산이다.&lt;/p&gt;
+
+&lt;script type=&quot;math/tex; mode=display&quot;&gt;a \cdot b = \sum_d a_d b_d&lt;/script&gt;
+
+&lt;p&gt;이 연산이 “유사할수록 커지는” 이유는 부호 정렬에 있다. 두 벡터의 같은 차원 성분이 같은 부호면 곱이 양수가 되어 합을 키우고, 부호가 어긋나면 음수가 되어 깎는다.&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[1, 2, -1] · [1, 3, -2] = 1 + 6 + 2 = 9     # 세 차원 모두 부호 일치 — 전부 양의 기여
+[1, 2, -1] · [-1, 1, 2] = -1 + 2 - 2 = -1   # 어긋난 차원들이 깎아먹음
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;기하적으로 정리한 것이 $a \cdot b = \lVert a \rVert \lVert b \rVert \cos\theta$다 — 방향이 같으면(θ≈0) 최대, 직교하면 0, 반대면 음수. &lt;a href=&quot;/ai/AI-CNN-01/&quot;&gt;2020년 CNN 글&lt;/a&gt;에서 합성곱을 “이미지와 필터의 내적 — 겹치는 부분일수록 값이 크다”로 정리했던 것과 같은 원리이고, 재는 대상이 이미지-필터의 닮음에서 토큰-토큰의 관련도로 바뀌었을 뿐이다. 한 가지 주의할 점은 내적이 &lt;strong&gt;방향과 크기가 섞인&lt;/strong&gt; 값이라는 것이다(코사인 유사도와 달리 벡터가 길기만 해도 커진다). 이 “크기” 성분이 바로 다음의 스케일링 이야기로 이어진다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-dot-product-overview.png&quot; alt=&quot;행렬 곱셈에서 행 벡터와 열 벡터의 내적으로 출력 성분 하나가 만들어지는 도식&quot; class=&quot;align-center&quot; width=&quot;600&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;출처: &lt;a href=&quot;https://theaiengineer.substack.com/p/what-is-a-gpu&quot;&gt;The AI Engineer — What is a GPU?&lt;/a&gt;. Transformer의 핵심 연산인 행렬 곱셈&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;수식이 $QK^\top$인 이유 — 왜 K에 전치가 붙는가 — 는 깊은 뜻이 아니라 &lt;strong&gt;모든 쌍의 내적을 행렬곱 한 방에 계산하기 위한 차원 맞추기&lt;/strong&gt;다. Q도 &lt;code class=&quot;highlighter-rouge&quot;&gt;(n, 64)&lt;/code&gt;, K도 &lt;code class=&quot;highlighter-rouge&quot;&gt;(n, 64)&lt;/code&gt;라 그대로는 곱할 수 없고(안쪽 차원 불일치), K를 뒤집어 &lt;code class=&quot;highlighter-rouge&quot;&gt;(64, n)&lt;/code&gt;으로 만들어야 &lt;code class=&quot;highlighter-rouge&quot;&gt;(n, 64) × (64, n) = (n, n)&lt;/code&gt; 점수 행렬이 나온다. 그 (i, j) 셀 하나하나가 $q_i \cdot k_j$다. “작은 연산 여러 번보다 큰 행렬곱 하나”라는, 융합 곱에서 본 것과 같은 논리다.&lt;/p&gt;
+
+&lt;p&gt;(i, j) 셀이 정말 내적 하나인지 실수로 확인해 두자. 앞의 융합 사영 장난감 예제에서 나온 Q·K를 그대로 쓴다 — 헤드 분할 없이 $d_k=2$인 축소판이다.&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Q = [1.1  2.2]  (My)       K = [2.3  1.4]  (My)        Kᵀ = [2.3  4.3]
+    [3.1  4.2]  (hobby)        [4.3  3.4]  (hobby)           [1.4  3.4]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;행렬곱 정의대로 (i, j) 셀은 Q의 i행과 Kᵀ의 j열 — 곧 K의 j행 — 을 &lt;strong&gt;성분끼리 곱해 더한 값&lt;/strong&gt;이다. 그게 바로 $q_i \cdot k_j$다.&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;QKᵀ[My,   My]    = q_My   · k_My    = 1.1×2.3 + 2.2×1.4 =  2.53 +  3.08 =  5.61
+QKᵀ[My,   hobby] = q_My   · k_hobby = 1.1×4.3 + 2.2×3.4 =  4.73 +  7.48 = 12.21
+QKᵀ[hobby,My]    = q_hobby· k_My    = 3.1×2.3 + 4.2×1.4 =  7.13 +  5.88 = 13.01
+QKᵀ[hobby,hobby] = q_hobby· k_hobby = 3.1×4.3 + 4.2×3.4 = 13.33 + 14.28 = 27.61
+
+→ QKᵀ = [ 5.61  12.21]     # (i, j) 셀 = q_i · k_j
+        [13.01  27.61]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;(i, j) 셀에 들어가는 것은 오직 $q_i$와 $k_j$의 성분별 곱-합뿐이다 — 다른 토큰도, feature 축 밖의 무엇도 개입하지 않는다. 이 곱-합이 크다는 것은 두 벡터의 성분이 같은 방향으로 정렬돼 있다는 뜻이고(앞의 부호 정렬 논리 그대로), 그래서 이 값을 “토큰 i와 j의 관련도”로 읽는다. 실제 GPT-2는 여기서 $d_k$만 2 → 64로 커지고, 이 raw 값이 다음의 스케일링·마스킹·softmax를 거친다.&lt;/p&gt;
+
+&lt;p&gt;여기까지의 결과가 &lt;strong&gt;어텐션 스코어(attention score)&lt;/strong&gt; — softmax 전의 날것 내적값이다. 음수도 나온다(화면 기준 -14.2~1.5).&lt;/p&gt;
+
+&lt;h2 id=&quot;스케일링-분산-정규화&quot;&gt;스케일링: 분산 정규화&lt;/h2&gt;
+
+&lt;p&gt;스코어를 그대로 쓰지 않고 $\sqrt{d_k}$로 나눈다. 벡터의 칸 수가 많아질수록 내적값 자체가 커지는 경향이 있기 때문이다 — 숫자 4개를 더한 결과와 64개를 더한 결과의 크기가 다른 것과 같다. 내적값이 너무 커지면 softmax 결과가 극단적으로 쏠리고,&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[0.999999, 0.000001, 0, 0, ...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;이렇게 되면 학습에 필요한 기울기가 매우 작아질 수 있다. 그래서 $\sqrt{d_k}$로 나눠 점수의 크기를 조절한다.&lt;/p&gt;
+
+&lt;p&gt;정량적으로 쓰면 이렇다. q, k의 성분이 평균 0·분산 1로 독립이라 가정하면 $q \cdot k$는 분산 1짜리 곱 $d_k$개의 합이라 &lt;strong&gt;분산이 $d_k$&lt;/strong&gt;가 된다. $\sqrt{d_k}$로 나누면 분산이 다시 1로 정규화된다 — “칸 수가 많을수록 커진다”의 정확한 형태다. 원 논문(Attention Is All You Need)의 각주가 이 정당화를 담고 있다.&lt;/p&gt;
+
+&lt;h2 id=&quot;마스킹-causal-mask&quot;&gt;마스킹: causal mask&lt;/h2&gt;
+
+&lt;p&gt;GPT-2는 다음 토큰을 예측하는 모델이다. 학습 데이터는 완성된 문장이므로, 가만히 두면 위치 i의 계산에 위치 i 뒤의 토큰 — 맞혀야 할 정답 — 이 새어 들어간다. 그래서 각 토큰이 &lt;strong&gt;자기보다 뒤의 토큰을 보지 못하게&lt;/strong&gt; 막는데, 이것이 causal mask다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-masking-overview.png&quot; alt=&quot;도서 도판 — 텍스트 샘플에서 입력 블록과 예측 타깃이 한 칸씩 밀리며 만들어지고, 타깃 이후 단어는 참조하지 못한다는 그림&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;출처: Sebastian Raschka, 《Build a Large Language Model (From Scratch)》(한국어판 《밑바닥부터 만들면서 배우는 LLM》) 그림 2-12. 문장 하나에서 위치별 예측 문제가 동시에 만들어지고, 타깃 이후의 단어는 참조하지 못한다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;왜 이런 장치가 필요한지는 학습의 병렬성과 붙여서 봐야 선명하다. 학습 때는 문장 하나로 “위치 1은 토큰 2를, 위치 2는 토큰 3을, … 맞혀라”라는 문제 전부를 &lt;strong&gt;행렬 연산 한 번으로 동시에&lt;/strong&gt; 푼다(teacher forcing). 마스크가 없으면 위치 i의 계산에 정답(i+1 이후)이 새어 들어와 문제 자체가 붕괴한다. “이전까지 주어진 정보만으로 풀어라”를 행렬 안에서 강제하는 장치가 마스크다.&lt;/p&gt;
+
+&lt;p&gt;구현은 점수표의 상삼각 — 미래 위치 — 을 막는 방식이다. 스코어 행렬은 앞서 봤듯 행도 열도 같은 문장의 토큰이라, 행 i(Query)가 열 j(Key)를 보는 칸에서 $j &amp;gt; i$인 부분이 곧 “미래”다. 그 상삼각을 $-\infty$로 덮는다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-attention-causal-mask-upper-triangle.png&quot; alt=&quot;어텐션 스코어 행렬의 상삼각(j &amp;gt; i, 미래 토큰) 위치에 −∞ 마스크가 더해지는 도식&quot; class=&quot;align-center&quot; width=&quot;600&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;직접 그린 도식. 대각선 아래(과거·현재, j ≤ i)는 내적 스코어를 남기고, 위(미래, j &amp;gt; i)에는 −∞를 더해 softmax 후 0이 되게 한다. 숫자는 예시 값&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;“가린다”는 것이 값을 지운다는 뜻은 아니다. softmax를 취하기 &lt;strong&gt;직전&lt;/strong&gt;의 스코어 행렬에서, 가려야 할 상삼각 위치에 $-\infty$(구현상으로는 -1e9 같은 극단적 음수)를 더한다. softmax는 지수함수 $e^{score}$를 쓰므로 $e^{-\infty} = 0$ — 해당 위치의 가중치가 자연스럽게 0이 되어, V를 가중합할 때 아무 기여도 하지 못한다. 순서가 중요하다. softmax &lt;strong&gt;후에&lt;/strong&gt; 강제로 0으로 지우면 남은 확률의 합이 1이 아니게 되므로, 반드시 softmax 전에 막아야 한다. Transformer Explainer에서도 같은 마스킹이 실제 화면으로 확인된다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-masking.png&quot; alt=&quot;Transformer Explainer에서 마스크가 적용되어 상삼각 위치의 점수가 가려진 화면&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;그럼 추론 때는 마스크가 필요 없지 않은가 — 절반만 맞다. 추론을 두 구간으로 나누면:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Decode(토큰 하나씩 생성)&lt;/strong&gt;: 미래 토큰이 물리적으로 존재하지 않으므로 가릴 것도 없다. 새 토큰의 q를 과거 k들과만 내적하므로 마스킹이 구조적으로 저절로 충족된다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Prefill(프롬프트 전체를 병렬 처리)&lt;/strong&gt;: 여기서는 여전히 마스크가 적용된다. 각 위치의 출력 표현이, 학습 때와 동일하게 “그 위치까지만 본” 결과여야 하기 때문이다 (캐시에 저장되는 K_j·V_j 자체는 토큰 j의 로컬 사영이라 마스크와 무관하게 정해지고, 마스크가 보장하는 것은 각 위치의 출력이 미래를 참조하지 않는다는 점이다)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Explainer의 레이어 이름이 “Masked Self Attention”인 것이 이 장치를 가리킨다. 참고로 &lt;a href=&quot;/ai/AI-Transformer-04/&quot;&gt;2020년 글&lt;/a&gt;에서는 원 논문의 인코더-디코더 구조 기준으로 같은 마스킹을 정리했었다 — 인코더 쪽 셀프 어텐션에는 마스크가 없고, 순차 생성하는 디코더에만 붙는다. GPT-2는 디코더만 쌓은 구조라 모든 블록이 마스크드 셀프 어텐션이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;softmax-행-단위-정규화&quot;&gt;softmax: 행 단위 정규화&lt;/h2&gt;
+
+&lt;p&gt;마스크까지 더한 스코어를 softmax에 통과시키면 제각각인 실숫값이 0~1 사이, 행마다 합이 1인 혼합 비율로 바뀐다.&lt;/p&gt;
+
+&lt;script type=&quot;math/tex; mode=display&quot;&gt;A = \operatorname{softmax}\!\left(\frac{Q K^{\top}}{\sqrt{d_k}} + M\right)&lt;/script&gt;
+
+&lt;p&gt;한 가지 표기 주의: softmax는 셀 하나에 먹이는 함수가 아니라 &lt;strong&gt;행 단위&lt;/strong&gt; 연산이다. $\alpha(i,\cdot) = \operatorname{softmax}_j(\text{score}(i,\cdot))$ — i를 고정하고 모든 j에 걸쳐 정규화한다. GPT-2는 causal이므로 실질 합산 범위는 $j \le i$다. &lt;a href=&quot;/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/&quot;&gt;2.2편&lt;/a&gt;에서 다음 토큰 확률을 만들 때 나온 그 함수가 여기서도 쓰인다.&lt;/p&gt;
+
+&lt;p&gt;여기까지 통과해야 비로소 &lt;strong&gt;어텐션 가중치(attention weight)&lt;/strong&gt; — 처음 스크린샷에서 봤던 1.00, 0.96 같은 0~1 값 — 가 된다.&lt;/p&gt;
+
+&lt;h2 id=&quot;querykeyvalue라-부르는-근거-회로의-위치와-학습&quot;&gt;Query·Key·Value라 부르는 근거: 회로의 위치와 학습&lt;/h2&gt;
+
+&lt;p&gt;이제 $QK^\top$와 softmax를 계산으로 다 봤으니, Q·K·V 생성 절에서 미뤄 둔 질문 — “그냥 똑같이 생긴 선형 변환 셋인데 왜 Query·Key·Value라 부르나” — 을 회수할 수 있다. 답은 벡터 자체가 아니라 &lt;strong&gt;각 벡터가 이 회로에서 꽂히는 위치&lt;/strong&gt;에 있다.&lt;/p&gt;
+
+&lt;script type=&quot;math/tex; mode=display&quot;&gt;A=\operatorname{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}+M\right),\qquad O=AV&lt;/script&gt;
+
+&lt;p&gt;이 회로는 고정돼 있다. Q는 내적의 왼쪽(점수를 구하는 위치), K는 오른쪽(비교당하는 위치), V는 가중합되는 위치(실제로 흘러가는 내용)에 물려 있다. &lt;strong&gt;위치가 역할을 만든다.&lt;/strong&gt; Query/Key/Value라는 이름은 key-value 저장소(검색어/색인/내용)에서 빌린 비유일 뿐이다.&lt;/p&gt;
+
+&lt;p&gt;그렇다면 “쿼리와 키가 얼마나 유사한가를 계산한다”는 서술은 있는 그대로 받아들여도 되는가. 사슬이 세 고리다.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;&lt;strong&gt;내적의 무전제 성질&lt;/strong&gt;(수학적 사실): 두 벡터가 정렬될수록 값이 커진다 — 앞에서 (i, j) 셀이 $q_i \cdot k_j$의 성분별 곱-합임을 실수로 확인한 그대로다. 여기엔 어떤 전제도 필요 없다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;회로의 위치&lt;/strong&gt;(구조적 사실): $q_i \cdot k_j$의 결과가 softmax를 거쳐 “$v_j$가 출력에 섞이는 비율”이 되도록 배선이 고정돼 있다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;학습이 위치를 채움&lt;/strong&gt;: 다음 토큰 예측을 잘하려면 유용한 정보를 가진 j의 V가 많이 섞여야 하고, 그러려면 그런 (i, j) 쌍에서 내적이 커야 하므로, gradient가 $W^Q, W^K$를 정확히 그렇게 조각한다&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;그래서 “유사도”의 엄밀한 정의는 &lt;strong&gt;학습이 만들어낸 매칭 공간에서의 내적값&lt;/strong&gt;이다. 사전에 존재하는 의미적 유사도를 내적이 측정하는 것이 아니라, 내적값이 혼합 비율이 되는 회로가 먼저 있고, 학습이 그 내적을 유용하게 만드는 공간을 형성한 것이다. “쿼리와 키가 의미를 반영한다는 전제만 맞으면 내적이 유사성을 잰다고 받아들이면 되는가”라는 질문은 인과 방향만 뒤집으면 정확해진다 — 전제가 가정으로 주어지는 것이 아니라, &lt;strong&gt;전제가 학습의 결과물로 성립&lt;/strong&gt;하기 때문에 받아들이면 된다.&lt;/p&gt;
+
+&lt;p&gt;즉 “그냥 세 개의 선형 변환이다”(기계적 사실)와 “Query가 Key와 비교해 Value를 가중한다”(회로에서의 역할 + 학습이 부여한 기능)는 둘 다 참이고 동시에 성립한다. &lt;a href=&quot;/ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer/&quot;&gt;앞 글&lt;/a&gt;에서 “비유에 기대지 말고 계산식 안의 역할로 받아들이자”고 했던 입장이 정확히 이 구도다.&lt;/p&gt;
+
+&lt;h2 id=&quot;shape-변화-feature-차원의-소거&quot;&gt;shape 변화: feature 차원의 소거&lt;/h2&gt;
+
+&lt;p&gt;헤드 하나 기준으로 가중치 계산까지의 shape을 쓰면:&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Q_h (2, 64), K_h (2, 64)
+→ K_h 전치       : (64, 2)
+→ Q_h × K_hᵀ     : (2, 2)    # 어텐션 스코어 — 토큰×토큰
+→ ÷√64, + M      : (2, 2)
+→ softmax        : (2, 2)    # 어텐션 가중치 (행 합 1)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;포인트는 $QK^\top$에서 &lt;strong&gt;feature 차원 64가 내적으로 소거&lt;/strong&gt;된다는 것이다. QKV 계산 때 d축(768)이 합산으로 사라졌던 것과 같은 패턴이고, 그래서 어텐션 스코어/가중치는 feature 차원이 없는 &lt;strong&gt;토큰×토큰 정사각 행렬&lt;/strong&gt;이다. 12헤드니까 이런 표가 12장 나온다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;어텐션-출력-v-가중합과-출력-사영&quot;&gt;어텐션 출력: V 가중합과 출력 사영&lt;/h1&gt;
+
+&lt;h2 id=&quot;v-가중합-혼합-비율표의-실행&quot;&gt;V 가중합: 혼합 비율표의 실행&lt;/h2&gt;
+
+&lt;p&gt;Explainer의 설명이다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Each head multiplies its attention scores with the Value embeddings to produce its attention output — a refined representation of each token after considering context.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;(표기를 정확히 하면, 실제로 V에 곱해지는 것은 softmax 전의 score가 아니라 softmax 후의 &lt;strong&gt;weight&lt;/strong&gt;다. 이 절 끝의 용어 표에서 경계를 다시 긋는다.)&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-attention-output.png&quot; alt=&quot;Transformer Explainer에서 어텐션 가중치 (2,2)와 Value (2,64)가 곱해져 헤드별 출력 (2,64)이 만들어지는 모습&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처. 툴팁에 Σ Attention·Value = Out 수식과 shape (2,2)×(2,64)=(2,64)이 표시된다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;이 단계도 지금까지의 프레임 그대로 받아들이면 된다. 기계적 실체는 행렬곱 한 번, $O_h = A_h V_h$다. 다만 $A_h$의 각 행이 “합 1, 음수 없음”이라는 성질 때문에 이 행렬곱에는 특별한 읽기가 가능하다 — &lt;strong&gt;출력 행 i는 V 행들의 가중 평균&lt;/strong&gt;이다.&lt;/p&gt;
+
+&lt;script type=&quot;math/tex; mode=display&quot;&gt;O_i = \sum_{j} A_{ij} \cdot v_j&lt;/script&gt;
+
+&lt;p&gt;앞 단계에서 A를 “혼합 비율표”로 받아들였으니, 이 단계는 새로운 의미가 등장하는 것이 아니라 &lt;strong&gt;그 비율표를 실제로 집행하는 단계&lt;/strong&gt;다. 비율표 × 내용물 = 섞인 내용물. 그 이상은 없다.&lt;/p&gt;
+
+&lt;p&gt;“V를 곱하는 것이 어떻게 토큰에 대한 중요도가 되는가”라는 질문은 전제를 한 칸 옮기면 풀린다. &lt;strong&gt;V 곱이 중요도를 만드는 것이 아니다 — 중요도는 이미 A에 다 들어 있다.&lt;/strong&gt; V 곱은 중요도의 계산이 아니라 중요도에 따른 &lt;strong&gt;인출&lt;/strong&gt;이다. K는 “고르는 데”만 쓰였고, 골라진 비율로 실제 내용을 실어 나르는 것이 V다. 가중치가 큰 토큰 j의 $v_j$가 출력에 더 많이 들어간다, 이것이 전부다.&lt;/p&gt;
+
+&lt;p&gt;이 식이 곧 “문맥을 반영한다”의 실체이기도 하다. 토큰 i의 새 벡터 안에 다른 토큰 j들의 V가 직접 섞여 들어가고, 어떤 V가 많이 들어오는지는 현재 입력 문장에서 계산된 A가 결정한다. 따라서 같은 토큰이라도 주변 문장이 달라지면 다른 출력 벡터가 만들어진다 — &lt;a href=&quot;/ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer/&quot;&gt;앞 글&lt;/a&gt;에서 “문맥 반영 = 토큰 간 정보 혼합”이라고 정리했던 문장의 수식 버전이다.&lt;/p&gt;
+
+&lt;p&gt;shape으로 보면:&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;A_h (2, 2) × V_h (2, 64) = O_h (2, 64)    # O[i,d] = Σ_j A[i,j]·V[j,d]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;$QK^\top$에서는 feature 축이 소거되며 토큰×토큰이 됐는데, 여기서는 반대로 &lt;strong&gt;토큰 축 j가 가중합으로 소거되며 feature 차원으로 복귀&lt;/strong&gt;한다. 대칭 구조다.&lt;/p&gt;
+
+&lt;p&gt;전 과정을 실수 예제로 따라간 그림이 &lt;a href=&quot;/ai/AI-Transformer-04/&quot;&gt;2020년 글&lt;/a&gt;에 있다. $QK^\top$ → 스케일 → softmax → V 가중합까지 실제 숫자로 이어진다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/self-attention-qkv-att.png&quot; alt=&quot;토큰 5개 예제에서 QK 전치 곱, 스케일링, softmax, V 가중합까지 실제 숫자로 따라간 그림&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;직접 그린 그림. 원 논문 인코더 기준이라 마스크 단계가 없다 — GPT-2로 가져오면 스케일링과 softmax 사이에 +M이 끼어 상삼각이 0이 된다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;h2 id=&quot;concat-열-방향-차원-복원&quot;&gt;concat: 열 방향 차원 복원&lt;/h2&gt;
+
+&lt;p&gt;헤드별 출력 $O_h$ &lt;code class=&quot;highlighter-rouge&quot;&gt;(2, 64)&lt;/code&gt; 12개를 이어 붙이면 &lt;code class=&quot;highlighter-rouge&quot;&gt;(2, 768)&lt;/code&gt; — 처음 들어왔던 차원이 복원된다.&lt;/p&gt;
+
+&lt;p&gt;concat이 필요한 이유는 단순하다. 각 헤드 출력은 64차원 조각일 뿐이라, 다음 서브레이어(MLP)와 잔차 연결이 기대하는 768차원을 만들려면 12 × 64를 다시 이어 붙여야 한다. 그리고 이 concat 역시 &lt;strong&gt;계산이 아니다&lt;/strong&gt; — 멀티헤드 분할이 열 슬라이스였듯, concat은 그 역방향의 열 재조립(reshape)이고 곱셈·덧셈이 없다.&lt;/p&gt;
+
+&lt;p&gt;하나 놓치기 쉬운 사실: &lt;strong&gt;concat 자체는 헤드 간 정보를 전혀 섞지 않는다.&lt;/strong&gt; 12개 조각을 열 블록으로 나란히 놓을 뿐이다. 헤드들이 처음으로 서로 섞이는 지점은 그다음의 $W^O$다.&lt;/p&gt;
+
+&lt;h2 id=&quot;출력-사영-wo-헤드-간-정보-혼합&quot;&gt;출력 사영 W^O: 헤드 간 정보 혼합&lt;/h2&gt;
+
+&lt;p&gt;concat된 &lt;code class=&quot;highlighter-rouge&quot;&gt;(2, 768)&lt;/code&gt;에 출력 사영 가중치 $W^O$ &lt;code class=&quot;highlighter-rouge&quot;&gt;(768, 768)&lt;/code&gt;를 곱한다.&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Head 1 output (2, 64) ┐
+Head 2 output (2, 64) ├─ concat (2, 768) → × W^O (768, 768) → (2, 768)
+...                   │
+Head 12 output (2, 64)┘
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;출력의 각 성분은 concat된 768개 열 — 즉 &lt;strong&gt;12개 헤드의 조각 전부&lt;/strong&gt; — 의 선형 결합이다. 헤드마다 따로 계산해 온 결과들이 여기서 처음으로 조합되므로, “concat + $W^O$”를 한 묶음으로 봐야 멀티헤드가 닫힌다. $W^O$ 역시 사전학습으로 결정되는 학습 파라미터이고, 이렇게 만들어진 &lt;code class=&quot;highlighter-rouge&quot;&gt;(seq_len, 768)&lt;/code&gt;이 블록의 두 번째 서브레이어인 MLP로 넘어간다.&lt;/p&gt;
+
+&lt;h2 id=&quot;어텐션-계산을-코드로&quot;&gt;어텐션 계산을 코드로&lt;/h2&gt;
+
+&lt;p&gt;앞의 내적 → 스케일링 → 마스킹 → softmax → V 가중합 → concat → 출력 사영이, 헤드 분할 코드에 이어지는 같은 &lt;code class=&quot;highlighter-rouge&quot;&gt;forward()&lt;/code&gt;에서 다음 몇 줄로 나타난다.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# nanoGPT CausalSelfAttention.forward — q, k, v는 위에서 (B, nh, T, hs)로 분할된 상태&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;att&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;q&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;@&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;transpose&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mf&quot;&gt;1.0&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;/&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;math&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sqrt&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)))&lt;/span&gt;   &lt;span class=&quot;c&quot;&gt;# QKᵀ / √d_head → (B, nh, T, T)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;att&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;att&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;masked_fill&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bias&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[:,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;:,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;T&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;T&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;float&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'-inf'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;  &lt;span class=&quot;c&quot;&gt;# causal mask: 상삼각에 -inf&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;att&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;softmax&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;att&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dim&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;                                       &lt;span class=&quot;c&quot;&gt;# 행 단위 정규화 → 어텐션 가중치&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;y&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;att&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;@&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;                                                        &lt;span class=&quot;c&quot;&gt;# 가중치 × V → (B, nh, T, hs)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;y&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;transpose&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;contiguous&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;view&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;T&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;C&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;                  &lt;span class=&quot;c&quot;&gt;# 헤드 concat: (B, nh, T, hs) → (B, T, 768)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;y&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;c_proj&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;                                                &lt;span class=&quot;c&quot;&gt;# 출력 사영 W^O&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;한 줄씩 이 글의 단계와 그대로 대응한다. &lt;code class=&quot;highlighter-rouge&quot;&gt;q @ k.transpose(-2, -1)&lt;/code&gt;가 $QK^\top$(feature 축 64가 소거되며 &lt;code class=&quot;highlighter-rouge&quot;&gt;(T, T)&lt;/code&gt;), &lt;code class=&quot;highlighter-rouge&quot;&gt;* (1.0 / math.sqrt(...))&lt;/code&gt;가 스케일링, &lt;code class=&quot;highlighter-rouge&quot;&gt;masked_fill(... , -inf)&lt;/code&gt;가 상삼각 마스킹, &lt;code class=&quot;highlighter-rouge&quot;&gt;softmax(dim=-1)&lt;/code&gt;가 행 단위 정규화, &lt;code class=&quot;highlighter-rouge&quot;&gt;att @ v&lt;/code&gt;가 V 가중합, &lt;code class=&quot;highlighter-rouge&quot;&gt;transpose(1, 2)...view(B, T, C)&lt;/code&gt;가 헤드 concat(뷰 재구성), &lt;code class=&quot;highlighter-rouge&quot;&gt;c_proj&lt;/code&gt;가 $W^O$다. &lt;code class=&quot;highlighter-rouge&quot;&gt;self.bias&lt;/code&gt;는 &lt;code class=&quot;highlighter-rouge&quot;&gt;torch.tril&lt;/code&gt;로 만든 하삼각 마스크 버퍼로, 이 글의 상삼각 −∞와 같은 장치다.&lt;/p&gt;
+
+&lt;p&gt;실제 서빙 스택에서는 이 여러 줄(스코어 → 마스크 → softmax → 가중합)이 &lt;code class=&quot;highlighter-rouge&quot;&gt;F.scaled_dot_product_attention&lt;/code&gt; 한 번의 융합 커널(FlashAttention 등)로 대체된다. nanoGPT도 &lt;code class=&quot;highlighter-rouge&quot;&gt;if self.flash:&lt;/code&gt; 분기로 그 경로를 함께 담고 있는데, 결과는 위 수동 경로와 같고 중간의 &lt;code class=&quot;highlighter-rouge&quot;&gt;(T, T)&lt;/code&gt; 점수 행렬을 메모리에 통째로 올리지 않아 더 빠르고 메모리를 덜 쓴다.&lt;/p&gt;
+
+&lt;h2 id=&quot;용어-정리-스코어가중치출력&quot;&gt;용어 정리: 스코어·가중치·출력&lt;/h2&gt;
+
+&lt;p&gt;지금까지 나온 어텐션 관련 용어의 경계를 표로 갈라 둔다. Explainer 본문처럼 score와 weight를 느슨하게 섞어 쓰는 자료가 많아서, 값의 범위와 계산 단계로 구분해 두어야  헷갈리지 않는다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;용어&lt;/th&gt;
+      &lt;th&gt;계산 단계&lt;/th&gt;
+      &lt;th&gt;형태&lt;/th&gt;
+      &lt;th&gt;값의 범위&lt;/th&gt;
+      &lt;th&gt;V와의 관계&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;어텐션 스코어 (attention score)&lt;/td&gt;
+      &lt;td&gt;Q·K 내적 직후 (softmax 전)&lt;/td&gt;
+      &lt;td&gt;토큰 쌍마다 스칼라&lt;/td&gt;
+      &lt;td&gt;실수 — 음수도 가능&lt;/td&gt;
+      &lt;td&gt;V 무관 — 이 시점엔 안 씀&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;어텐션 가중치 (attention weight)&lt;/td&gt;
+      &lt;td&gt;스케일·마스크 후 softmax&lt;/td&gt;
+      &lt;td&gt;softmax(스코어) — 스칼라&lt;/td&gt;
+      &lt;td&gt;0~1, 행 기준 합 1&lt;/td&gt;
+      &lt;td&gt;곧 V를 섞는 비율로 쓰일 값&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;어텐션 출력 (attention output)&lt;/td&gt;
+      &lt;td&gt;가중합 후&lt;/td&gt;
+      &lt;td&gt;Σ (가중치 × V) — 헤드당 64차원 벡터&lt;/td&gt;
+      &lt;td&gt;벡터 (제한 없음)&lt;/td&gt;
+      &lt;td&gt;V를 가중치로 섞은 결과물&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;추론-관점에서의-재사용-kv-cache가-kv를-저장하는-이유&quot;&gt;추론 관점에서의 재사용: KV cache가 K·V를 저장하는 이유&lt;/h1&gt;
+
+&lt;p&gt;글을 다 읽고 나면 자연스러운 의문이 하나 생긴다. 서빙에서 “KV cache는 K·V를 한 번만 계산해 두고 재사용하는데 Q는 매번 새로 계산한다”고들 하는데, 방금까지 Q·K·V 셋 다 입력마다 새로 계산되는 값이라고 했다. 어느 쪽이 맞는가.&lt;/p&gt;
+
+&lt;p&gt;둘 다 맞고, 층위가 다르다. 여기서의 구분은 “학습이냐 추론이냐”가 아니라 &lt;strong&gt;추론 중에서도 토큰을 하나씩 만들어 가는 자기회귀(autoregressive) 디코딩에서 무엇이 재사용되는가&lt;/strong&gt;다. (학습 때는 문장 전체를 한 번의 병렬 forward로 처리하므로 스텝 사이에 무언가를 캐시한다는 개념 자체가 없다. 마스킹 절에서 본 teacher forcing이 그 병렬 처리다.)&lt;/p&gt;
+
+&lt;p&gt;자기회귀 디코딩은 &lt;code class=&quot;highlighter-rouge&quot;&gt;&amp;lt;start&amp;gt;&lt;/code&gt; → 토큰1 → 토큰2 … 로 한 번에 한 토큰씩 이어 붙이며, 스텝 t+1에서는 이미 만든 토큰 1..t를 놓고 다음 토큰을 예측한다. 이때 이 글에서 본 두 사실이 맞물린다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;K·V는 토큰별 로컬 값이다&lt;/strong&gt; (행 독립성): $k_j = x_j W^K$, $v_j = x_j W^V$는 오직 토큰 j 자신의 표현 $x_j$에만 의존한다. QKV 사영이 행별로 완전히 독립이라던 그 성질이다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;과거 토큰의 표현은 새 토큰을 붙여도 바뀌지 않는다&lt;/strong&gt; (causal mask): 토큰 1..t는 미래인 t+1을 보지 못하므로, t+1을 이어 붙여도 1..t의 표현 $x_1..x_t$가 어느 층에서도 변하지 않는다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;이 둘을 합치면 한 번 계산한 $k_j, v_j$는 이후 모든 스텝에서 그대로 유효하다. 그래서 스텝마다 다시 만들지 않고 캐시에 쌓아 두고, 새 토큰의 $k_{t+1}, v_{t+1}$만 계산해 덧붙인다. 이것이 KV cache다.&lt;/p&gt;
+
+&lt;p&gt;Q는 왜 캐시하지 않는가. &lt;strong&gt;재사용 패턴이 정반대이기 때문&lt;/strong&gt;이다. 과거 토큰의 $q_j$는 토큰 j의 출력을 만들 때 딱 한 번 쓰이고 그 뒤로는 어디에도 등장하지 않는다 — 스텝 t+1에서 필요한 것은 오직 새 토큰의 $q_{t+1}$뿐이고, 그 $q_{t+1}$가 캐시된 과거 K들과 내적한다. 미래의 어떤 쿼리도 과거 Q를 다시 부르지 않으니 저장할 이유가 없다. 반대로 과거 K·V는 미래의 모든 쿼리가 계속 참조하므로 저장이 이득이 된다.&lt;/p&gt;
+
+&lt;p&gt;그래서 “가중치가 추론 시 고정”이라는 흔한 학습 vs 추론 프레임은 $k_j, v_j$가 스텝을 넘어 안 변하기 위한 필요조건이긴 하지만, K·V만 캐시되고 Q는 안 되는 진짜 이유는 이 글에서 본 &lt;strong&gt;행 독립성 + causal mask&lt;/strong&gt;가 만든 재사용 비대칭이다. 캐시가 실제로 차지하는 메모리 크기와 그 관리는 &lt;a href=&quot;/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/&quot;&gt;2.1편&lt;/a&gt;에서 다룬 별도 주제다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
+
+&lt;p&gt;셀프 어텐션 한 번의 전체 계산을 다시 한 줄로 압축하면 이렇다.&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;X (2, 768) → QKV (2, 2304) → Q·K·V (2, 768)×3 → 헤드당 (2, 64)
+→ [헤드별] 스코어 (2, 2) → 가중치 (2, 2) → 출력 (2, 64)
+→ concat (2, 768) → W^O (2, 768)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;계산의 실체는 세 종류뿐이다.&lt;/strong&gt; 선형 변환(QKV 사영, $W^O$), 쌍별 내적과 softmax(가중치), 가중합(출력). 나머지 — 3분할, 헤드 분할, concat — 는 곱셈 없는 열 재해석이다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;의미는 위치와 학습에서 온다.&lt;/strong&gt; Q·K·V의 역할도, “유사도”라는 해석도 벡터에 내재된 성질이 아니라, 고정된 수식에서 각 값이 꽂히는 위치와 그 위치를 통과해 온 역전파가 만든 것이다. 기계적 사실(“선형 변환 세 벌”, “계수표”, “가중 평균”)과 의미 부여(“Query가 Key와 비교해 Value를 가중한다”)는 둘 다 참이고 동시에 성립한다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;마스킹은 학습의 병렬성이 만든 요구다.&lt;/strong&gt; 문장 하나로 위치별 예측 문제 전부를 동시에 풀기 때문에 미래 정답의 누출을 상삼각 $-\infty$로 막는다. 추론에서는 decode 구간은 구조적으로 저절로 충족되고, prefill 구간에는 여전히 적용된다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;서빙 관점의 연결 고리도 이제 구체적으로 보인다. &lt;a href=&quot;/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/&quot;&gt;2.1편&lt;/a&gt;의 KV cache에 쌓인다던 K·V가 바로 이 글에서 계산한 그 K·V — 토큰마다 헤드당 64차원씩 12헤드, 블록 12개 분량 — 이고, prefill/decode 구분과 QKV 융합 GEMM(vLLM이 로드 시점에 분리된 사영을 다시 합치는 이유) 같은 최적화 지점들이 전부 이 계산 안의 선택들이다.&lt;/p&gt;
+
+&lt;p&gt;다음 글에서는 블록의 나머지 절반, MLP 서브레이어를 본다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://poloclub.github.io/transformer-explainer/&quot;&gt;Transformer Explainer&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://arxiv.org/abs/1706.03762&quot;&gt;Attention Is All You Need (Vaswani et al., 2017)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf&quot;&gt;Language Models are Unsupervised Multitask Learners (GPT-2 논문)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://theaiengineer.substack.com/p/what-is-a-gpu&quot;&gt;The AI Engineer — What is a GPU?&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/karpathy/nanoGPT/blob/master/model.py&quot;&gt;nanoGPT — Andrej Karpathy (CausalSelfAttention 구현, MIT License)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://velog.io/@victorjo/트랜스포머를-Go로-직접-만들어보며-이해한-것&quot;&gt;트랜스포머를 Go로 직접 만들어보며 이해한 것&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer/&quot;&gt;LLM 서빙과 최적화 - 2.4. 트랜스포머 블록과 셀프 어텐션 레이어&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/&quot;&gt;LLM 서빙과 최적화 - 2.3. Transformer Explainer 임베딩&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/&quot;&gt;LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/&quot;&gt;LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-Transformer-03/&quot;&gt;2020년 트랜스포머 시리즈 3편: Multi-head Attention 1&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-Transformer-04/&quot;&gt;2020년 트랜스포머 시리즈 4편: Multi-head Attention 2&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-CNN-01/&quot;&gt;2020년 CNN 개념(확장) 글&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Transformer" /><category term="Transformer-Explainer" /><category term="GPT-2" /><category term="Self-Attention" /><category term="Attention-Score" /><category term="Scaled-Dot-Product" /><category term="Causal-Mask" /><category term="Softmax" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-1" /><summary type="html">Q·K·V 생성부터 멀티헤드 분할, 스케일링·마스킹·softmax, V 가중합과 출력 사영까지 — 셀프 어텐션의 실제 계산을 수식과 shape 변화로 하나씩 뜯어 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화 - 2.4. Transformer: 트랜스포머 블록과 셀프 어텐션 레이어</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화 - 2.4. Transformer: 트랜스포머 블록과 셀프 어텐션 레이어" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -1512,6 +2139,8 @@ z = Wx + b %]]&gt;&lt;/script&gt;
   &lt;li&gt;뉴런 여러 개가 모인 한 &lt;strong&gt;층&lt;/strong&gt; = &lt;strong&gt;가중치 행렬 하나&lt;/strong&gt; ($n \times m$) + 편향 벡터 하나&lt;/li&gt;
 &lt;/ul&gt;
 
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
 &lt;p&gt;여기서 행렬의 크기 $n \times m$은 이렇게 읽는다. 행 수 $n$은 이 층의 &lt;strong&gt;뉴런 수&lt;/strong&gt;(= 출력 차원 = 이 층의 너비), 열 수 $m$은 &lt;strong&gt;입력 차원&lt;/strong&gt;(= 앞 층의 뉴런 수)이다. 위 예시(뉴런 3개, 입력 2개)의 한 층은 그래서 이미 하나의 &lt;strong&gt;3×2 행렬&lt;/strong&gt;이다 — 층을 쌓지 않아도, 뉴런이 여럿이면 그 자체로 여러 행을 가진 행렬 하나다.&lt;/p&gt;
 
 &lt;p&gt;여기서 헷갈리기 쉬운 지점을 하나 짚고 가자. 데이터를 다룰 때는 흔히 “행 = 데이터(샘플) 개수, 열 = 특징 개수”로 배운다. 이 독법은 &lt;strong&gt;데이터 행렬&lt;/strong&gt; $X$를 해석할 때는 유효하다. 그러나 지금 보고 있는 것은 &lt;strong&gt;가중치 행렬&lt;/strong&gt; $W$다. 서로 다른 행렬이므로 행과 열의 의미도 다르다.&lt;/p&gt;
@@ -1522,6 +2151,8 @@ z = Wx + b %]]&gt;&lt;/script&gt;
 &lt;/ul&gt;
 
 &lt;p&gt;사실 $W$도 양쪽 축이 모두 특징을 센다. 행은 이 층이 새로 만드는 출력 특징의 개수이고, 열은 앞에서 들어오는 입력 특징의 개수다. “열 = 특징 개수”라는 익숙한 독법이 틀리는 게 아니라, 어느 표현의 특징을 세느냐가 행렬마다 다를 뿐이다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
 &lt;p&gt;두 행렬은 곱에서 만난다. 샘플 100개짜리 데이터 $X$(&lt;code class=&quot;highlighter-rouge&quot;&gt;100×2&lt;/code&gt; 행렬)를 위의 뉴런 3개짜리 층(&lt;code class=&quot;highlighter-rouge&quot;&gt;3×2&lt;/code&gt; 행렬)에 통과시키면 출력은 &lt;code class=&quot;highlighter-rouge&quot;&gt;100×3&lt;/code&gt; 행렬이 된다(샘플마다 $z = Wx + b$를 적용한 것이고, 배치로 묶어 쓰면 $XW^\top$ 꼴이 된다 — 전치가 붙는 것은 표기 관례의 차이일 뿐이다). 행(샘플 100개)은 그대로인데 열이 2에서 3으로 바뀌었다. 새로 생긴 세 개의 열이 뉴런 세 개가 각각 뽑아낸 &lt;strong&gt;새 특징&lt;/strong&gt;이다. 즉 한 층의 뉴런 수는 입력 특징 개수가 아니라 그 층이 새로 만들어 내는 &lt;strong&gt;출력 특징 개수&lt;/strong&gt;이고, 이 특징들을 묶은 출력 벡터가 층이 입력을 다시 쓴 새로운 &lt;strong&gt;표현(representation)&lt;/strong&gt;이다. 이 표현이 다음 층에서는 다시 입력 특징이 된다. 앞의 너비 절에서 “입력을 다시 표현한 새로운 특징 벡터”라고 했던 것을, 행렬의 모양과 용어로 확인할 수 있는 것이다.&lt;/p&gt;
 
@@ -3869,609 +4500,4 @@ pytest 9.1.1
   &lt;li&gt;&lt;a href=&quot;https://github.com/sirzzang/sirzzang.github.io/tree/master/_labs/python-module-execution&quot;&gt;실습 코드 — sirzzang.github.io/_labs/python-module-execution&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Python" /><category term="python-m" /><category term="sys.path" /><category term="pytest" /><category term="module" /><category term="import" /><summary type="html">CI 스크립트에서 만난 python3 -m pytest를 계기로, 파이썬 실행 방식에 따라 sys.path와 import, 인터프리터 선택이 어떻게 달라지는지 정리하고 직접 확인해 보자.</summary></entry><entry><title type="html">[GenAI] GenAI on K8s: 11.6 - 도구 비교, Bias·Drift 운영, 평가 메트릭</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-11-06-Tool-Comparison-Bias-and-Drift-Ops/" rel="alternate" type="text/html" title="[GenAI] GenAI on K8s: 11.6 - 도구 비교, Bias·Drift 운영, 평가 메트릭" /><published>2026-06-09T00:00:00+09:00</published><updated>2026-06-09T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-11-06-Tool-Comparison-Bias-and-Drift-Ops</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-GenAI-on-K8s-11-06-Tool-Comparison-Bias-and-Drift-Ops/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions&quot;&gt;Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)&lt;/a&gt; 11장의 학습 내용을 바탕으로 합니다&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-11-01-GenAIOps-Pipeline-and-Monitoring/&quot;&gt;11.1&lt;/a&gt;~&lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-11-05-Ray-KubeRay-and-vLLM-Inference/&quot;&gt;11.5&lt;/a&gt;에서 GenAIOps 도구를 각각 봤다. 이번 글은 &lt;strong&gt;도구 비교&lt;/strong&gt;, &lt;strong&gt;bias·drift 운영&lt;/strong&gt;, &lt;strong&gt;평가 메트릭&lt;/strong&gt;으로 Ch11 이론 파트를 마무리한다. Ch11 hands-on(KubeRay + vLLM 서빙)은 &lt;strong&gt;11.7&lt;/strong&gt;(코드 분석)·&lt;strong&gt;11.8&lt;/strong&gt;(배포 검증)에서 이어질 예정이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Kubeflow = K8s-native end-to-end, MLflow = 실험·레지스트리, Ray = 분산 Python, Argo = 범용 DAG 엔진 — &lt;strong&gt;조합&lt;/strong&gt;이 일반적&lt;/li&gt;
-  &lt;li&gt;bias는 data·algorithm·evaluation 경로로 유입 — AIF360/Fairlearn을 파이프라인 step·fairness gate로 임베드&lt;/li&gt;
-  &lt;li&gt;drift는 covariate/label/concept 등 종류별 대응이 다름 — KS test·KL divergence·chi-square로 정량화&lt;/li&gt;
-  &lt;li&gt;재학습 baseline 비교는 accuracy/F1(분류), LLM은 perplexity·LLM-as-judge가 적합&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;kubeflow--mlflow--ray-비교&quot;&gt;Kubeflow · MLflow · Ray 비교&lt;/h1&gt;
-
-&lt;p&gt;책 Table 11.1 기준 9항목 비교다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;항목&lt;/th&gt;
-      &lt;th&gt;Kubeflow&lt;/th&gt;
-      &lt;th&gt;MLflow&lt;/th&gt;
-      &lt;th&gt;Ray&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Key application&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;End-to-end ML workflow 오케스트레이션·관리&lt;/td&gt;
-      &lt;td&gt;실험 추적·모델 버전·라이프사이클&lt;/td&gt;
-      &lt;td&gt;분산 컴퓨팅·스케일러블 학습·서빙&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Core strength&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;Workflow 오케스트레이션, multi-user&lt;/td&gt;
-      &lt;td&gt;실험 추적, model registry&lt;/td&gt;
-      &lt;td&gt;분산 실행, HPO, 서빙&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;K8s 통합&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;K8s-native, seamless scaling&lt;/td&gt;
-      &lt;td&gt;K8s 배포 가능 (확장성)&lt;/td&gt;
-      &lt;td&gt;KubeRay로 잘 통합&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Model registry&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;metadata·output 기반 기본 추적&lt;/td&gt;
-      &lt;td&gt;중앙 registry + 라이프사이클&lt;/td&gt;
-      &lt;td&gt;native 없음, MLflow 등 외부 연동&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Deployment&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;KServe / custom workflow&lt;/td&gt;
-      &lt;td&gt;cloud·edge·로컬&lt;/td&gt;
-      &lt;td&gt;Ray Serve&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;HPO&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;Katib&lt;/td&gt;
-      &lt;td&gt;제한적 — 외부 라이브러리&lt;/td&gt;
-      &lt;td&gt;Ray Tune native&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Framework&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;TF, PyTorch, XGBoost 등&lt;/td&gt;
-      &lt;td&gt;framework-agnostic&lt;/td&gt;
-      &lt;td&gt;TF, PyTorch, XGBoost, custom Python&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Monitoring&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;Prometheus 등 K8s 도구&lt;/td&gt;
-      &lt;td&gt;배포용 커스텀 필요&lt;/td&gt;
-      &lt;td&gt;Ray Dashboard + 3rd-party&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Ideal for&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;K8s-native MLOps 팀&lt;/td&gt;
-      &lt;td&gt;추적·관리·배포 집중 팀&lt;/td&gt;
-      &lt;td&gt;스케일러블 분산 AI/ML 팀&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;GenAIOps 관점 한 줄 강점:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;Kubeflow&lt;/strong&gt; — ML pipeline을 K8s-native로 streamline (&lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-11-02-Kubeflow-Ecosystem/&quot;&gt;11.2&lt;/a&gt;)&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;MLflow&lt;/strong&gt; — 견고한 실험 추적·모델 관리 (&lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-11-03-MLflow-Tracking-and-Registry/&quot;&gt;11.3&lt;/a&gt;)&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Argo Workflows&lt;/strong&gt; — 자동화된 파이프라인 실행 (&lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-11-04-Argo-Workflows/&quot;&gt;11.4&lt;/a&gt;)&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Ray&lt;/strong&gt; — 강력한 분산 컴퓨팅·서빙 (&lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-11-05-Ray-KubeRay-and-vLLM-Inference/&quot;&gt;11.5&lt;/a&gt;)&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;실무에서는 한 가지만 쓰기보다 &lt;strong&gt;Kubeflow Pipelines + MLflow tracking + Ray Train/Serve&lt;/strong&gt; 조합이 흔하다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;model-bias와-fairness&quot;&gt;Model Bias와 Fairness&lt;/h1&gt;
-
-&lt;p&gt;GenAI 운영에서 &lt;strong&gt;data privacy · model bias · drift monitoring&lt;/strong&gt;은 신뢰할 수 있는 AI의 핵심 축이다. K8s 위 ML pipeline·모니터링·분산 프레임워크와 결합해 자동화한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Model bias&lt;/strong&gt; — 특정 집단(인종·성별·나이·언어·지역 등)에 대해 &lt;em&gt;체계적으로 불공정한&lt;/em&gt; 예측·출력. “가끔 틀린다”가 아니라 “특정 방향으로 &lt;em&gt;일관되게&lt;/em&gt; 다르게 대한다”가 핵심이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;bias 유입 경로&lt;/strong&gt;&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;종류&lt;/th&gt;
-      &lt;th&gt;원인&lt;/th&gt;
-      &lt;th&gt;예시&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Data bias&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;학습 데이터 편향&lt;/td&gt;
-      &lt;td&gt;이력서에 남성 합격자 과대표&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Historical bias&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;과거 차별이 데이터에 내재&lt;/td&gt;
-      &lt;td&gt;역사적 대출 거절 패턴 학습&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Sampling bias&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;그룹 과·과소 표현&lt;/td&gt;
-      &lt;td&gt;의료 영상이 특정 인종 위주&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Algorithmic bias&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;보호 속성 proxy feature&lt;/td&gt;
-      &lt;td&gt;우편번호가 인종 proxy&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Evaluation bias&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;메트릭이 소수 그룹 가림&lt;/td&gt;
-      &lt;td&gt;전체 accuracy만 보면 소수 성능 은폐&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;strong&gt;GenAI/LLM 특유 bias&lt;/strong&gt;&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;Representation bias&lt;/strong&gt; — 코퍼스에 언어·문화 과소 표현&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Stereotyping&lt;/strong&gt; — “doctor”→”he”, “nurse”→”she” 디폴트&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Toxicity&lt;/strong&gt; — 특정 그룹에 offensive 응답&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Fairness in decisions&lt;/strong&gt; — LLM 기반 채용·대출·평가 시 보호 속성별 다른 결과&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;strong&gt;fairness metrics&lt;/strong&gt;&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;지표&lt;/th&gt;
-      &lt;th&gt;의미&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Disparate impact ratio&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;보호/비보호 그룹 긍정 비율 — 0.8 미만이면 차별 (US four-fifths rule)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Demographic parity&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;그룹별 긍정 예측 확률 동일 여부&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Equal opportunity&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;그룹별 TPR 동일 (자격 있는 사람 중 합격률)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Equalized odds&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;TPR + FPR 둘 다 그룹별 동일&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;fairness--explainability-라이브러리&quot;&gt;Fairness · Explainability 라이브러리&lt;/h2&gt;
-
-&lt;p&gt;K8s pipeline에 컨테이너 step으로 통합 가능하다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;도구&lt;/th&gt;
-      &lt;th&gt;역할&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;AIF360&lt;/strong&gt; (IBM)&lt;/td&gt;
-      &lt;td&gt;bias 측정 + mitigation (reweighing, adversarial debiasing 등)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Fairlearn&lt;/strong&gt; (Microsoft)&lt;/td&gt;
-      &lt;td&gt;fairness metric + constraint-based mitigation&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;SHAP&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;feature 의존도 explainability — 보호 속성 proxy 발견&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;strong&gt;AIF360 적용 흐름&lt;/strong&gt; (대출 승인 모델 예시):&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;AIF360을 K8s Pod로 배포&lt;/li&gt;
-  &lt;li&gt;공유 storage에서 예측 결과 + 테스트 데이터 회수&lt;/li&gt;
-  &lt;li&gt;disparate impact·equal opportunity difference 계산&lt;/li&gt;
-  &lt;li&gt;bias 검출 시 mitigation 포함 재학습 잡 트리거&lt;/li&gt;
-  &lt;li&gt;전처리 단계에서 학습 데이터 bias 사전 검출&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;&lt;strong&gt;운영 패턴&lt;/strong&gt;&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;AIF360·Fairlearn → Argo/Kubeflow Pipeline step&lt;/li&gt;
-  &lt;li&gt;배포 전 &lt;strong&gt;fairness gate&lt;/strong&gt; (CI/CD test 위치) — 실패 시 rollback&lt;/li&gt;
-  &lt;li&gt;운영 중 ground truth review로 bias가 drift와 함께 변하는지 모니터링&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;drift-운영&quot;&gt;Drift 운영&lt;/h1&gt;
-
-&lt;p&gt;&lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-11-01-GenAIOps-Pipeline-and-Monitoring/&quot;&gt;11.1&lt;/a&gt;에서 data·concept·label drift 기초를 봤다. 운영에서는 drift를 종류별로 세분화해 통계로 정량화하고, 임계치를 넘으면 자동 재학습으로 잇는다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;모니터링과-통계-측정&quot;&gt;모니터링과 통계 측정&lt;/h2&gt;
-
-&lt;p&gt;운영 관점에서 drift는 더 세분화된다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;종류&lt;/th&gt;
-      &lt;th&gt;정의&lt;/th&gt;
-      &lt;th&gt;예시&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Covariate drift&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;입력 분포 변화, 관계 유지&lt;/td&gt;
-      &lt;td&gt;holiday 시즌 검색어 급증&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Label drift&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;타깃 분포 변화&lt;/td&gt;
-      &lt;td&gt;프리미엄 상품 구매율 상승&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Concept drift&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;입력↔타깃 관계 변화&lt;/td&gt;
-      &lt;td&gt;경쟁자 진입으로 ad-click 패턴 변화&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Temporal drift&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;시간에 따른 점진적 변화&lt;/td&gt;
-      &lt;td&gt;SNS 해시태그 트렌드 변화&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Sampling drift&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;수집 프로세스 변화&lt;/td&gt;
-      &lt;td&gt;설문 방법 변경으로 demographic shift&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Feature interaction drift&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;feature 간 상호작용 변화&lt;/td&gt;
-      &lt;td&gt;프로모션이 보완재에 예기치 않은 영향&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;strong&gt;Target Drift Detection (TDD)&lt;/strong&gt; — 타깃 변수 분포 변화. KL divergence, chi-square로 현재 vs historical 분포 비교.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;측정&lt;/th&gt;
-      &lt;th&gt;비교 대상&lt;/th&gt;
-      &lt;th&gt;직관&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;KL divergence&lt;/strong&gt; D(P‖Q)&lt;/td&gt;
-      &lt;td&gt;두 확률 분포 P(관측), Q(기준)&lt;/td&gt;
-      &lt;td&gt;Q로 P를 설명할 때 정보 손실 — 0=동일, 비대칭&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Chi-square test&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;범주형 관측 vs 기대 빈도&lt;/td&gt;
-      &lt;td&gt;p-value로 유의성 판단&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;strong&gt;Kolmogorov-Smirnov (KS) test&lt;/strong&gt; — 두 분포 CDF(누적분포함수) 최대 차이. covariate drift 검출에 유용. non-parametric이라 분포 가정 불필요.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;함수&lt;/th&gt;
-      &lt;th&gt;표현&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;PDF/PMF&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;각 지점 확률 밀도&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;CDF&lt;/strong&gt; F(x)=P(X≤x)&lt;/td&gt;
-      &lt;td&gt;누적 확률 — KS test가 수직 거리로 비교&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Quantile&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;CDF 역함수 — “상위 95% 지점”&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;strong&gt;Concept Drift Detection (CDD)&lt;/strong&gt; — 입력↔타깃 &lt;em&gt;관계&lt;/em&gt; 변화. 추천·신용 평가처럼 “같은 입력, 다른 정답”이 되는 영역에서 중요.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;감지와-자동-재학습&quot;&gt;감지와 자동 재학습&lt;/h2&gt;
-
-&lt;p&gt;모니터링이 drift 임계치를 넘기면 &lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-11-04-Argo-Workflows/&quot;&gt;Argo Workflows&lt;/a&gt;·Kubeflow로 event-driven 재학습을 트리거한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;재학습 잡&lt;/strong&gt;&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;최신 프로덕션 데이터를 S3 등 data lake에서 pull&lt;/li&gt;
-  &lt;li&gt;컨테이너 이미지 또는 training job CRD로 학습/fine-tuning&lt;/li&gt;
-  &lt;li&gt;AIF360·SHAP·Fairlearn bias 체크 임베드 — 성능 + fairness 양쪽 통과&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;&lt;strong&gt;검증·배포&lt;/strong&gt;&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;established baseline과 비교&lt;/li&gt;
-  &lt;li&gt;accuracy·F1 등 메트릭을 이전 버전과 비교 (아래 분류 메트릭 참조)&lt;/li&gt;
-  &lt;li&gt;acceptance 통과 → container registry push → blue-green / canary rollout&lt;/li&gt;
-  &lt;li&gt;이벤트·artifact는 versioned bucket/DB에 로깅&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/genai-on-k8s-ch11-automated-drift-response-flow.png&quot; alt=&quot;자동화된 drift 응답 흐름&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;Bias, Fairness, Privacy Checks&lt;/strong&gt; — 전처리 직후·학습 전. 실패 시 &lt;strong&gt;Mitigate the Bias&lt;/strong&gt; 경로&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Drift Detected&lt;/strong&gt; — 재학습 루프 진입, 미감지 시 Continuous Monitoring 회귀&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;참고-모델-평가-메트릭&quot;&gt;참고: 모델 평가 메트릭&lt;/h1&gt;
-
-&lt;p&gt;책 p237의 “accuracy and F1 score”는 &lt;strong&gt;분류 모델 재학습 baseline 비교&lt;/strong&gt;용이다. GenAI는 별도 메트릭 카테고리다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;분류-메트릭&quot;&gt;분류 메트릭&lt;/h2&gt;
-
-&lt;p&gt;&lt;strong&gt;Confusion matrix&lt;/strong&gt;에서 파생한다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt; &lt;/th&gt;
-      &lt;th&gt;예측: Positive&lt;/th&gt;
-      &lt;th&gt;예측: Negative&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;실제: Positive&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;strong&gt;TP&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;strong&gt;FN&lt;/strong&gt; (놓침)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;실제: Negative&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;strong&gt;FP&lt;/strong&gt; (잘못 잡음)&lt;/td&gt;
-      &lt;td&gt;&lt;strong&gt;TN&lt;/strong&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;메트릭&lt;/th&gt;
-      &lt;th&gt;공식&lt;/th&gt;
-      &lt;th&gt;한 줄 의미&lt;/th&gt;
-      &lt;th&gt;약점&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Accuracy&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;(TP+TN)/전체&lt;/td&gt;
-      &lt;td&gt;전체 맞춘 비율&lt;/td&gt;
-      &lt;td&gt;불균형에 취약&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Precision&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;TP/(TP+FP)&lt;/td&gt;
-      &lt;td&gt;양성 예측 중 실제 양성&lt;/td&gt;
-      &lt;td&gt;recall 무시&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Recall&lt;/strong&gt; (TPR)&lt;/td&gt;
-      &lt;td&gt;TP/(TP+FN)&lt;/td&gt;
-      &lt;td&gt;실제 양성 중 회수&lt;/td&gt;
-      &lt;td&gt;precision 무시&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;F1&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;2PR/(P+R)&lt;/td&gt;
-      &lt;td&gt;P·R 조화평균&lt;/td&gt;
-      &lt;td&gt;불균형 가중은 F-beta&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;AUC-ROC&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;TPR vs FPR 곡선 면적&lt;/td&gt;
-      &lt;td&gt;threshold-independent ranking&lt;/td&gt;
-      &lt;td&gt;극단 불균형에선 AUC-PR&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;strong&gt;비용으로 메트릭 선택&lt;/strong&gt;&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;시나리오&lt;/th&gt;
-      &lt;th&gt;FP 비용&lt;/th&gt;
-      &lt;th&gt;FN 비용&lt;/th&gt;
-      &lt;th&gt;우선&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;스팸 필터&lt;/td&gt;
-      &lt;td&gt;큼&lt;/td&gt;
-      &lt;td&gt;작음&lt;/td&gt;
-      &lt;td&gt;Precision&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;암 진단&lt;/td&gt;
-      &lt;td&gt;추가 검사&lt;/td&gt;
-      &lt;td&gt;생명 위험&lt;/td&gt;
-      &lt;td&gt;Recall&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;사기 탐지&lt;/td&gt;
-      &lt;td&gt;고객 불만&lt;/td&gt;
-      &lt;td&gt;금전 손실&lt;/td&gt;
-      &lt;td&gt;F1&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;details&gt;
-  &lt;summary&gt;불균형 데이터 예시 (accuracy 함정)&lt;/summary&gt;
-
-  &lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;실제 양성 100명, 음성 900명, 총 1000명
-TP=80, FN=20, FP=50, TN=850
-
-Accuracy  = 93%
-Precision = 61.5%
-Recall    = 80%
-F1        = 69.6%
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;  &lt;/div&gt;
-
-  &lt;p&gt;Accuracy 93%가 좋아 보여도 precision 61.5% — 양성 예측 중 40%가 실제 음성이다.&lt;/p&gt;
-
-&lt;/details&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;genai-평가&quot;&gt;GenAI 평가&lt;/h2&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;태스크&lt;/th&gt;
-      &lt;th&gt;메트릭&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;번역&lt;/td&gt;
-      &lt;td&gt;BLEU&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;요약&lt;/td&gt;
-      &lt;td&gt;ROUGE-1/2/L&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;언어모델&lt;/td&gt;
-      &lt;td&gt;Perplexity (낮을수록 좋음)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;QA (extractive)&lt;/td&gt;
-      &lt;td&gt;Exact Match, token-level F1&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;생성형 LLM&lt;/td&gt;
-      &lt;td&gt;LLM-as-a-judge, HELM, MT-Bench&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Bias&lt;/td&gt;
-      &lt;td&gt;BBQ, StereoSet, ToxiGen + fairness 라이브러리&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;LLM 재학습 baseline 비교에는 &lt;strong&gt;perplexity / LLM-as-judge&lt;/strong&gt;가 classification accuracy보다 적합하다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;ch11-이론-마무리--실습-예고&quot;&gt;Ch11 이론 마무리 · 실습 예고&lt;/h1&gt;
-
-&lt;p&gt;Ch9(보안) → Ch10(GPU 효율) → &lt;strong&gt;Ch11(운영·서빙 오케스트레이션)&lt;/strong&gt; 흐름에서, 이번 장 hands-on은 &lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-11-05-Ray-KubeRay-and-vLLM-Inference/&quot;&gt;11.5&lt;/a&gt;에서 본 &lt;strong&gt;RayService + vLLM&lt;/strong&gt;으로 GenAIOps의 “Ops”를 체험한다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;예정 포스트&lt;/th&gt;
-      &lt;th&gt;내용&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;11.7&lt;/strong&gt; Ch11 실습 코드 분석&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;aiml-addons.tf&lt;/code&gt; KubeRay delta, &lt;code class=&quot;highlighter-rouge&quot;&gt;ray-service-vllm.yaml&lt;/code&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;11.8&lt;/strong&gt; Ch11 실습 배포·검증&lt;/td&gt;
-      &lt;td&gt;terraform apply, 추론 호출, Dashboard, 트러블슈팅&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;영역&lt;/th&gt;
-      &lt;th&gt;핵심&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;도구&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;Kubeflow/MLflow/Ray/Argo — 역할 분리·조합&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Bias&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;fairness gate, AIF360 파이프라인 step&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;Drift&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;종류별 대응, KS/KL/chi-square 정량화&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;재학습&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;event-driven workflow, canary 배포&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;strong&gt;메트릭&lt;/strong&gt;&lt;/td&gt;
-      &lt;td&gt;분류=F1/accuracy, GenAI=perplexity·LLM-judge&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://aif360.readthedocs.io/&quot;&gt;AIF360&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://fairlearn.org/&quot;&gt;Fairlearn&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://shap.readthedocs.io/&quot;&gt;SHAP&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="MLOps" /><category term="Kubernetes" /><category term="GenAI" /><category term="GenAIOps" /><category term="Fairness" /><category term="Drift-Monitoring" /><category term="AIF360" /><category term="Kubeflow" /><category term="MLflow" /><category term="Ray" /><category term="Kubernetes-for-Generative-AI-Solutions" /><category term="Kubernetes-for-Generative-AI-Solutions-Chapter-11" /><summary type="html">Kubeflow·MLflow·Ray 비교표, AIF360 fairness gate, drift 통계 측정, 자동 재학습 흐름, 분류·GenAI 평가 메트릭을 정리해 보자.</summary></entry></feed>
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Python" /><category term="python-m" /><category term="sys.path" /><category term="pytest" /><category term="module" /><category term="import" /><summary type="html">CI 스크립트에서 만난 python3 -m pytest를 계기로, 파이썬 실행 방식에 따라 sys.path와 import, 인터프리터 선택이 어떻게 달라지는지 정리하고 직접 확인해 보자.</summary></entry></feed>
