@@ -1,4 +1,429 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-08-09T20:48:25+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[LLM] LLM 서빙과 최적화 - 2.6. Transformer: MLP와 트랜스포머 블록 마무리</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화 - 2.6. Transformer: MLP와 트랜스포머 블록 마무리" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-08-10T02:23:45+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;12개 블록을 모두 지난 &lt;strong&gt;마지막 토큰의 768차원 벡터&lt;/strong&gt;가 최종 LayerNorm을 거쳐 unembedding 행렬(768 × 50,257)과 곱해지면, 어휘 사전 각 토큰의 점수 — &lt;a href=&quot;/ai/AI-LLM-Optimization-01-AI-Overview/&quot;&gt;1편&lt;/a&gt;에서 정의만 봤던 &lt;strong&gt;로짓&lt;/strong&gt; — 가 된다. GPT-2는 이 행렬을 새로 두지 않고 입력 임베딩 행렬을 전치해 재사용한다(weight tying) — 입구와 출구가 같은 행렬이다&lt;/li&gt;
+  &lt;li&gt;로짓은 softmax로 확률 분포가 되는데, 그 앞에 &lt;strong&gt;temperature·top-k·top-p&lt;/strong&gt;라는 샘플링 파라미터가 붙는다. temperature는 로짓을 T로 나누는 스케일링으로 분포의 퍼짐(엔트로피)을 조절하고, top-k/top-p는 후보 집합을 잘라낸다. temperature는 로짓의 &lt;strong&gt;순위를 바꾸지 않으므로&lt;/strong&gt; top-k로 남는 집합은 temperature와 무관하다&lt;/li&gt;
+  &lt;li&gt;확률이 가장 높은 토큰이 항상 선택되지 않는 이유는 greedy가 아니라 &lt;strong&gt;샘플링&lt;/strong&gt;이기 때문이다 — 허용 집합에서 확률에 비례해 무작위 추출한다. temperature를 0으로 보내는 극한이 greedy다&lt;/li&gt;
+  &lt;li&gt;선택된 토큰은 시퀀스 끝에 붙어 &lt;strong&gt;다시 입력이 된다&lt;/strong&gt;. 이 자기회귀 루프가 곧 서빙의 decode 루프이고, 토큰 하나마다 모델 가중치 전체를 읽는 &lt;a href=&quot;/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/&quot;&gt;2.6편&lt;/a&gt;의 비용 구조가 여기서 나온다&lt;/li&gt;
+  &lt;li&gt;잔차 연결·LayerNorm·dropout은 모두 학습 안정 장치로 도입됐지만, 추론에서의 운명이 갈린다 — 잔차와 LayerNorm은 추론에서도 항상 실행되는 연산이고, &lt;strong&gt;dropout만 추론 시 꺼진다&lt;/strong&gt;&lt;/li&gt;
+  &lt;li&gt;서빙 관점에서 temperature·top-k·top-p는 모델 파라미터가 아니라 &lt;strong&gt;요청 단위의 로짓 후처리 설정값&lt;/strong&gt;이다. 자원 소모 축이 아니라 출력 품질·재현성 축의 설정값이다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;출력층-마지막-벡터에서-로짓까지&quot;&gt;출력층: 마지막 벡터에서 로짓까지&lt;/h1&gt;
+
+&lt;p&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/&quot;&gt;앞 글&lt;/a&gt;에서 트랜스포머 블록의 두 서브레이어를 모두 닫았다. 이 블록이 12개(GPT-2 small 기준) 반복된 뒤, 드디어 다음 토큰을 실제로 고르는 마지막 구간 — &lt;a href=&quot;/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/&quot;&gt;2.2편&lt;/a&gt;에서 확인했던 세 부분 중 마지막, 출력층이다. Transformer Explainer의 소개부터 보자.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;After all Transformer blocks, the last token’s output embedding, enriched with context from all previous tokens, is multiplied by learned weights in a final layer. This produces &lt;strong&gt;logits&lt;/strong&gt;, 50,257 numbers — one for each token in GPT-2’s vocabulary — that indicate how likely each token is to come next.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-output-overview.png&quot; alt=&quot;Transformer Explainer의 출력 구간 개요 — 마지막 블록의 출력이 로짓과 확률로 이어지는 화면&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;h2 id=&quot;최종-layernorm과-unembedding&quot;&gt;최종 LayerNorm과 unembedding&lt;/h2&gt;
+
+&lt;p&gt;마지막 블록을 나온 표현은 여전히 &lt;code class=&quot;highlighter-rouge&quot;&gt;(seq_len, 768)&lt;/code&gt;이다. 여기서 다음 토큰 예측에 쓰이는 것은 이 중 &lt;strong&gt;마지막 토큰의 벡터 하나&lt;/strong&gt;다. &lt;a href=&quot;/ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/&quot;&gt;2.5편&lt;/a&gt;에서 본 causal mask 때문에 각 토큰은 자기보다 앞에 있는 토큰만 어텐션으로 참조할 수 있고, 그래서 위치마다 표현이 담는 문맥의 범위가 다르다 — 첫 토큰의 표현에는 자기 자신뿐, 중간 토큰에는 거기까지의 문맥뿐이고, &lt;strong&gt;시퀀스 전체를 다 본 표현은 마지막 토큰의 것뿐이다.&lt;/strong&gt; 다음 토큰을 예측할 재료로 마지막 토큰의 벡터를 쓰는 이유다. 이 벡터가 로짓이 되기까지 두 단계를 거친다. nanoGPT의 출력 구간을 참고해 보자.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# nanoGPT GPT.forward — 출력층 구간 발췌&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;transformer&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ln_f&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;          &lt;span class=&quot;c&quot;&gt;# 최종 LayerNorm — 블록 밖에서 한 번 더&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;logits&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lm_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[:,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;:])&lt;/span&gt;  &lt;span class=&quot;c&quot;&gt;# 추론 시 마지막 토큰만: (B, 1, 768) → (B, 1, 50257)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;최종 LayerNorm(&lt;code class=&quot;highlighter-rouge&quot;&gt;ln_f&lt;/code&gt;)&lt;/strong&gt;: &lt;a href=&quot;/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/&quot;&gt;2.6편&lt;/a&gt;에서 본 블록 안의 LayerNorm 두 번 외에, GPT-2는 마지막 블록을 나온 뒤 &lt;strong&gt;한 번 더&lt;/strong&gt; LayerNorm을 적용한다. Transformer Explainer의 LayerNorm 설명에 붙어 있는 “applied … once more before the final output”이 바로 이것이다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;unembedding(LM head)&lt;/strong&gt;: 정규화된 768차원 벡터에 &lt;code class=&quot;highlighter-rouge&quot;&gt;(768, 50257)&lt;/code&gt; 행렬을 곱한다(GPT-2의 LM head에는 bias가 없다). 결과는 50,257개의 숫자 — 어휘 사전의 모든 토큰 후보 각각에 대한 점수, 로짓이다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-logit.gif&quot; alt=&quot;Transformer Explainer에서 마지막 토큰의 표현이 로짓으로 변환되는 애니메이션&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;인용문의 “learned weights in a final layer”는 처음 읽었을 때 의미가 바로 잡히지 않았다 — 블록들을 거치며 나온 각 토큰의 표현 벡터로 만들어지는 가중치인가 싶었는데, 확인해 보니 그렇지 않다. 블록들과 &lt;strong&gt;함께 end-to-end 역전파로 학습되는 별도 선형층의 파라미터&lt;/strong&gt;다. 다만 Transformer Explainer 화면에는 이 층이 뚜렷한 박스로 그려져 있지 않다 — 마지막 블록에서 로짓 컬럼으로 넘어가는 화살표 구간이 곧 이 곱셈이라, 층 하나가 통째로 있다는 사실을 놓치기 쉽다.&lt;/p&gt;
+
+&lt;h2 id=&quot;weight-tying-입구와-출구가-같은-행렬&quot;&gt;weight tying: 입구와 출구가 같은 행렬&lt;/h2&gt;
+
+&lt;p&gt;그런데 GPT-2는 이 &lt;code class=&quot;highlighter-rouge&quot;&gt;(768, 50257)&lt;/code&gt; 행렬을 별도로 두지 않는다. &lt;a href=&quot;/ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/&quot;&gt;2.3편&lt;/a&gt;에서 본 &lt;strong&gt;입력 임베딩 행렬 &lt;code class=&quot;highlighter-rouge&quot;&gt;(50257, 768)&lt;/code&gt;을 전치해 그대로 재사용&lt;/strong&gt;한다. 2.3편에서 “임베딩이 입력과 출력을 잇는 다리로 확장된 사례”라고 예고해 뒀던 &lt;strong&gt;weight tying&lt;/strong&gt;이 작동하는 지점이 여기다.&lt;/p&gt;
+
+&lt;p&gt;“재사용”의 의미를 분명히 해 둘 필요가 있다. 학습을 마친 임베딩 행렬을 출력층에 가져다 붙이는 것이 아니다 — &lt;strong&gt;애초에 출력층용 행렬을 따로 만들지 않고, 임베딩과 LM head 두 자리가 처음부터 파라미터 하나를 공유하도록 묶어(tie) 놓고 학습한다.&lt;/strong&gt; 역전파에서 입력 쪽(행 조회)과 출력 쪽(전치 곱) 양쪽의 gradient가 같은 행렬로 흘러들어와 함께 업데이트되므로, 행렬 하나가 두 역할을 동시에 학습하는 셈이다. 추론 시 동작은 방향만 반대다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;입력에서는: 토큰 ID → 행 조회 → 768차원 벡터&lt;/li&gt;
+  &lt;li&gt;출력에서는 반대로: 768차원 벡터 → 전치 행렬과 곱 → 50,257개 토큰 점수&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;공유하지 않고 출력층 행렬을 따로 학습하는 선택(untied)도 물론 가능하다. 그 경우에도 모델은 정상적으로 동작하고, 입력용·출력용 표현을 각자 자유롭게 특화할 수 있는 대신 GPT-2 small 기준 파라미터가 약 3,860만 개(전체의 30% 이상) 늘어난다. weight tying을 제안한 Press &amp;amp; Wolf의 실험은 공유해도 성능 저하 없이 이 몫을 아낄 수 있다고 보고했고 GPT-2가 이 구조를 따랐는데, 임베딩 비중이 전체에서 미미해지는 최근의 큰 모델들은 다시 따로 두는(untied) 경우도 많은 것으로 알려져 있다. 같은 행렬을 양방향으로 쓰면 파라미터 절감 외에 입력 표현 공간과 출력 표현 공간이 같은 좌표계로 묶이는 효과도 있다 — 2.3편에서 임베딩 행렬을 “768차원 표현 벡터 50,257개를 쌓아 놓은 저장소”로 읽었는데, tied 구조의 출력층은 그 저장소를 거꾸로 조회하는 셈이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;로짓의-해석&quot;&gt;로짓의 해석&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-01-AI-Overview/#용어-정리&quot;&gt;1편&lt;/a&gt;에서 로짓을 “모델의 마지막 층이 내놓는, softmax를 통과하기 전의 원시 점수 벡터”로 정의해 뒀다. 이제 그 로짓이 실제로 만들어지는 자리를 봤으니, 값 하나하나의 의미도 읽을 수 있다.&lt;/p&gt;
+
+&lt;p&gt;행렬곱의 정의상, 로짓의 $i$번째 값은 &lt;strong&gt;마지막 토큰의 최종 표현과 토큰 $i$의 임베딩 벡터의 내적&lt;/strong&gt;이다. 바로 앞 절에서 짚었듯, weight tying이므로 unembedding의 각 열이 곧 각 토큰의 임베딩 벡터가 되는 것이다. &lt;a href=&quot;/ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/&quot;&gt;2.5편&lt;/a&gt;에서 어텐션 스코어를 “내적 = 두 벡터의 관련도 점수”로 읽었던 독법이 여기서도 그대로 통한다 — &lt;strong&gt;로짓은 “지금까지의 문맥을 압축한 표현”과 “각 토큰 후보”의 유사도 점수 목록이다.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;이 구조에서 따라 나오는 사실 몇 가지를 정리한다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;출력은 어휘 사전 안의 토큰만 가능하다.&lt;/strong&gt; 로짓이 어휘 사전 크기만큼만 나오니 구조적으로 그렇다. 다만 &lt;a href=&quot;/ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/&quot;&gt;2.3편&lt;/a&gt;에서 본 byte-level BPE 덕분에 이것이 표현력의 제약이 되지는 않는다 — 사전에 없는 단어도 서브워드·바이트 토큰의 조합으로 생성할 수 있다. “OOV가 구조적으로 없다”의 출력 방향 버전이다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;다국어 모델의 사전도 상상만큼 방대하지 않다.&lt;/strong&gt; 서브워드 방식이라 모든 언어의 모든 단어를 담을 필요가 없기 때문이다. GPT-2 50,257개 → Llama 3 약 12만 8천 개 → Qwen2.5 약 15만 2천 개 → GPT-4o 계열 약 20만 개 수준이고(Claude의 토크나이저는 비공개다), 사전 크기가 커질 때의 비용은 &lt;a href=&quot;/ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/#서빙-관점-어휘-사전-크기의-트레이드오프&quot;&gt;2.3편의 “어휘 사전 크기의 트레이드오프”&lt;/a&gt;에서 정리한 그대로다&lt;/li&gt;
+  &lt;li&gt;여담으로, &lt;strong&gt;logit이라는 이름은 log-odds(로그 승산)에서 왔다.&lt;/strong&gt; 로지스틱 회귀에서 확률을 로그 승산으로 펼친 값을 logit이라 불렀고, 그 이름이 “확률로 변환되기 전의 점수”라는 뜻으로 딥러닝에 넘어왔다. 이전에 &lt;a href=&quot;/ai/AI-sigmoid/&quot;&gt;sigmoid 함수를 로그 승산에서 유도하며 정리한 글&lt;/a&gt;이 있는데, 그때 다뤘던 로그 승산이 바로 이 이름의 어원이다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;샘플링-로짓에서-확률로&quot;&gt;샘플링: 로짓에서 확률로&lt;/h1&gt;
+
+&lt;p&gt;로짓은 아직 날것의 점수다. 다음 토큰을 실제로 고르려면 이 점수들을 합이 1인 확률 분포로 바꿔야 한다. Transformer Explainer의 설명을 확인해 보자.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Logits are just raw scores. To make them easier to interpret, we convert them into &lt;strong&gt;probabilities&lt;/strong&gt; between 0 and 1, where all add up to 1. This tells us the likelihood of each token being the next word.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-logit-overview.png&quot; alt=&quot;Transformer Explainer의 로짓-확률 변환 개요 화면&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;인용문은 변환의 이유를 “해석하기 쉽게”라고 설명하는데, 그것이 전부는 아니다. 더 실질적인 이유는 마지막 단계인 샘플링이 &lt;strong&gt;확률에 비례해 토큰을 추첨하는 연산&lt;/strong&gt;이라, 합이 1인 확률 분포가 계산상 필요하다는 것이다(후술: &lt;a href=&quot;#샘플링의-무작위성&quot;&gt;샘플링의 무작위성&lt;/a&gt;). 변환을 담당하는 것은 이번에도 &lt;strong&gt;softmax&lt;/strong&gt;다. &lt;a href=&quot;/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/&quot;&gt;2.2편&lt;/a&gt;에서 처음 만났고 &lt;a href=&quot;/ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/&quot;&gt;2.5편&lt;/a&gt;에서 어텐션 가중치를 만들 때 “행 단위 정규화”로 다시 본 그 함수인데, 이번에는 행이 하나뿐이다 — 50,257개 로짓 한 줄이 합이 1인 확률 분포 한 줄이 된다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-logit-softmax-3blue1brown.png&quot; alt=&quot;3Blue1Brown 영상의 로짓-softmax-확률 변환 도해&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;출처: &lt;a href=&quot;https://www.youtube.com/watch?v=wjZofJX0v4M&quot;&gt;3Blue1Brown — 딥러닝 시리즈 (Transformers 챕터)&lt;/a&gt; 영상 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;실제 화면에서 보면, 입력이 한 토큰씩 늘 때마다 토큰 ID별 로짓 값이 매번 새로 계산되어 변하는 것을 확인할 수 있다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-token-logits.gif&quot; alt=&quot;Transformer Explainer에서 토큰별 로짓 값이 입력에 따라 변하는 애니메이션&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;그런데 이 확률 분포에서 항상 최고 확률 토큰을 고르는 것이 아니다. 그 전에 분포를 &lt;strong&gt;조정하는 손잡이들&lt;/strong&gt;이 있다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Instead of always picking the highest-probability token, we can use different selection strategies to balance safety and creativity in the generated text.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-probability.gif&quot; alt=&quot;Transformer Explainer에서 로짓이 스케일링·필터링을 거쳐 샘플링 확률이 되는 화면&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;각 파라미터를 보기 전에 전체 파이프라인부터 확인해 보자. 로짓에서 다음 토큰까지의 처리 순서는 다음과 같다.&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;로짓 (50,257개)
+→ ÷ temperature        # 스케일링 - 분포의 퍼짐 조절
+→ top-k 필터            # 상위 k개만 남김 (선택)
+→ top-p 필터            # 누적 확률 p까지만 남김 (선택)
+→ softmax              # 남은 후보를 합이 1인 확률로 재정규화
+→ 확률에 비례해 무작위 추출  # 샘플링
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;temperature-분포의-엔트로피-조절&quot;&gt;temperature: 분포의 엔트로피 조절&lt;/h2&gt;
+
+&lt;p&gt;&lt;strong&gt;temperature&lt;/strong&gt;는 softmax에 들어가기 전의 로짓을 T로 나누는 스케일링이다.&lt;/p&gt;
+
+&lt;script type=&quot;math/tex; mode=display&quot;&gt;p_i = \frac{e^{z_i / T}}{\sum_j e^{z_j / T}}&lt;/script&gt;
+
+&lt;p&gt;이 한 줄이 왜 “확실함과 다양함”을 조절하게 되는지는 softmax가 &lt;strong&gt;지수 함수&lt;/strong&gt;라는 데서 나온다. 두 토큰의 로짓 차이가 $\Delta$면 두 확률의 비율은 $e^{\Delta/T}$다. 로짓 차이가 2인 두 토큰을 놓고 계산해 보면,&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;$T = 1$: 확률 비율 $e^2 \approx 7.4$배&lt;/li&gt;
+  &lt;li&gt;$T = 0.5$: $e^4 \approx 55$배 — 차이가 지수적으로 &lt;strong&gt;증폭&lt;/strong&gt;된다. $T \to 0$ 극한에서는 최고 로짓 토큰의 확률이 1로 수렴한다(greedy)&lt;/li&gt;
+  &lt;li&gt;$T = 2$: $e^1 \approx 2.7$배 — 차이가 &lt;strong&gt;압축&lt;/strong&gt;되어 균등 분포 쪽으로 간다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Transformer Explainer의 설명도 같은 내용이다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Temperature works by scaling the logits before turning them into probabilities. A &lt;strong&gt;low&lt;/strong&gt; temperature (e.g., 0.2) makes large logits even larger and small ones smaller, favoring the highest-scoring tokens and leading to more &lt;strong&gt;predictable&lt;/strong&gt; choices. A &lt;strong&gt;high&lt;/strong&gt; temperature (e.g., 1.0 or above) flattens the differences, making less likely tokens more competitive and leading to more &lt;strong&gt;creative&lt;/strong&gt; outputs.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-temperature.gif&quot; alt=&quot;Transformer Explainer에서 temperature를 조절할 때 확률 분포가 변하는 애니메이션&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;화면을 조작해 보면 temperature를 낮출 때 최상위 후보(&lt;code class=&quot;highlighter-rouge&quot;&gt;is&lt;/code&gt;)의 막대가 올라가고 높일 때 다른 후보들의 막대가 올라가는데, 여기서 변하는 것은 &lt;strong&gt;로짓이 아니라 스케일된 로짓과 확률&lt;/strong&gt;이라는 점을 구분해 둘 필요가 있다. 모델이 내놓은 로짓 자체는 그대로이고, 그 위에 씌우는 나눗셈 하나가 분포의 모양을 바꾸는 것이다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-llm-temperature.png&quot; alt=&quot;temperature 값에 따라 같은 로짓이 다른 확률 분포가 되는 과정 도해&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;출처: &lt;a href=&quot;https://medium.com/thinking-sand/mastering-llm-temperature-a-step-by-step-guide-81e9f27fef77&quot;&gt;Mastering LLM Temperature: A Step-by-Step Guide (Medium)&lt;/a&gt;&lt;/sup&gt;&lt;/center&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;em&gt;참고&lt;/em&gt;: Temperature(온도)의 어원&lt;/p&gt;
+
+  &lt;p&gt;물리학(통계역학) 차용이다. softmax 자체가 볼츠만 분포 $p_i \propto e^{-E_i/T}$와 같은 꼴이고, 여기서 $T$가 물리적 온도다. 온도가 높은 계는 입자들이 다양한 에너지 상태에 고르게 퍼지고(분포가 평평해진다), 낮은 계는 최저 에너지 상태에 몰린다. 확률 분포의 언어로 바꾸면 온도는 &lt;strong&gt;분포의 엔트로피를 조절하는 값&lt;/strong&gt;이다 — &lt;a href=&quot;/ai/AI-Information-Theory/&quot;&gt;정보이론&lt;/a&gt;의 엔트로피, “분포가 얼마나 퍼져 있는가”가 정확히 여기에 대응한다. 그래서 “창의성이 뜨거워진다”는 식의 은유보다는, &lt;strong&gt;모델이 학습한 분포의 꼬리를 얼마나 넓게 쓰게 할 것인가&lt;/strong&gt;로 읽는 편이 정확하다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;한 가지 덧붙이면, temperature는 학습되는 파라미터가 아니라 &lt;strong&gt;추론 시점에 사람이 정하는 설정값&lt;/strong&gt;이다. 태스크별로 튜닝 대상이 되기는 한다 — 코드나 수학처럼 정답이 있는 태스크는 낮게, 창작은 높게 잡는 것이 일반적으로 알려진 관행이다(직접 검증한 수치 기준이 있는 것은 아니다).&lt;/p&gt;
+
+&lt;h2 id=&quot;top-k와-top-p&quot;&gt;top-k와 top-p&lt;/h2&gt;
+
+&lt;p&gt;temperature가 분포의 모양을 바꿨다면, top-k와 top-p는 &lt;strong&gt;후보 집합 자체를 잘라낸다&lt;/strong&gt;. 결론부터 정리하면 — 둘은 개념적으로 독립이라 하나만 골라야 하는 것이 아니고(추론 프레임워크들은 둘 다 파라미터로 받아 순차 적용한다), 실무에서는 분포 모양에 적응하는 top-p 쪽이 사실상 표준처럼 쓰이는 것으로 알려져 있다. OpenAI API가 top-k를 아예 노출하지 않고 temperature와 top-p만 받는 것이 그 방증이기도 하다. 다만, Transformer Explainer 사이트에서는 둘 중 하나를 고르게 되어 있는데, 교육용 단순화의 목적이 아닐까 싶다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Finally, we need a strategy to pick the next token. Many exist, but here are common ones: Greedy search picks the top one. Top-k keeps only the k most likely tokens, and top-p keeps the smallest set whose total probability is at least p — trimming unlikely ones early. Then softmax turns the remaining logits into probabilities, and one token is picked at random from the allowed set.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;&lt;strong&gt;top-k&lt;/strong&gt;는 점수가 높은 상위 k개만 남기고 나머지를 버린다. 구현상으로는 k등 밖의 로짓을 큰 음수(사실상 $-\infty$)로 덮어씌워, softmax를 지나면 확률이 0이 되게 만든다 — &lt;a href=&quot;/ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/&quot;&gt;2.5편&lt;/a&gt;에서 본 causal mask와 정확히 같은 수법이다. 화면에서 k를 바꿔 가며 관찰하면 남는 후보 개수가 그대로 따라 변한다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-topk5-temp7.png&quot; alt=&quot;Transformer Explainer — temperature 7, top-k, k=5일 때의 후보 분포&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-topk16-temp7.png&quot; alt=&quot;Transformer Explainer — temperature 7, top-k, k=16일 때의 후보 분포&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-topk16-temp0-8.png&quot; alt=&quot;Transformer Explainer — k=16을 유지한 채 temperature를 0.8로 낮췄을 때의 후보 분포&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처. k를 바꾸면 남는 후보 개수가 변하고, temperature를 낮추면 같은 16개 후보 안에서 확률이 상위로 쏠린다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;&lt;strong&gt;top-p&lt;/strong&gt;(nucleus sampling)는 개수가 아니라 &lt;strong&gt;후보들이 가진 확률의 합(확률 질량, probability mass)&lt;/strong&gt;을 기준으로 자른다. 확률이 높은 후보부터 누적해 가다가, 누적 확률이 p를 넘는 지점까지만 남긴다. 예를 들어 p = 0.8이면,&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;좋다:     35%  → 누적 35%
+춥다:     25%  → 누적 60%
+덥다:     15%  → 누적 75%
+맑다:     10%  → 누적 85%   # 여기서 80%를 넘었다 - 후보는 이 4개까지
+이상하다:  5%  → 누적 90%   # 제거
+자동차:    3%  → 누적 93%   # 제거
+...
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;top-k와의 차이는 &lt;strong&gt;적응성&lt;/strong&gt;이다. top-k는 분포가 아무리 뾰족해도(확실한 상황) 억지로 k개를 유지하고, 아무리 평평해도(애매한 상황) k개로 자른다. top-p는 뾰족한 분포에서는 후보가 저절로 줄고 평평한 분포에서는 늘어난다 — 자르는 기준이 분포 모양을 따라간다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-topp0-5-temp7.png&quot; alt=&quot;Transformer Explainer — temperature 7, top-p, p=0.5일 때의 후보 분포&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-topp1-temp7.png&quot; alt=&quot;Transformer Explainer — temperature 7, top-p, p=1일 때의 후보 분포&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;p = 1 화면에서 모든 토큰이 그대로 남아 있는 것은 top-p가 동작하지 않아서가 아니라, &lt;strong&gt;누적 확률이 100%가 되어야 멈추므로 아무것도 잘리지 않는 것이 맞는 동작&lt;/strong&gt;이기 때문이다. p = 0.5로 내리면 실제로 후보가 잘려 나가는 것을 볼 수 있다. 프레임워크들에서 top_p = 1.0, top_k = 0(또는 -1)이 “비활성”을 뜻하는 관례도 여기서 나온다.&lt;/p&gt;
+
+&lt;h2 id=&quot;적용-순서와-순위-불변성&quot;&gt;적용 순서와 순위 불변성&lt;/h2&gt;
+
+&lt;p&gt;Transformer Explainer의 설명은 temperature를 먼저 소개하는데, 화면에서 temperature를 아무리 바꿔도 top-k로 남는 후보 집합은 그대로 유지된다. 그러면 top-k가 먼저 적용되는 것인가 — 하는 의문이 생기는데, 답은 순서가 아니라 &lt;strong&gt;순위 불변성&lt;/strong&gt;에 있다.&lt;/p&gt;
+
+&lt;p&gt;실제 계산 순서는 설명 순서 그대로다. HuggingFace transformers의 로짓 처리 순서도 temperature → top-k → top-p이고, 앞의 파이프라인 그림과 같다. 그런데 temperature는 모든 로짓을 &lt;strong&gt;같은 양수로 나누는 단조 변환&lt;/strong&gt;이라, 값들의 크기 순서를 절대 바꾸지 않는다. 상위 k개의 집합은 어떤 temperature에서도 동일하고, 변하는 것은 그 집합 안에서의 확률 배분뿐이다. “temperature를 바꿔도 top-k가 먼저 동작하는 것처럼 보이는” 관찰은 착시가 아니라, 단조 변환의 성질을 정확히 본 것이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;샘플링의-무작위성&quot;&gt;샘플링의 무작위성&lt;/h2&gt;
+
+&lt;p&gt;마지막 단계는 남은 후보의 확률 분포에서 &lt;strong&gt;무작위로 하나를 추출&lt;/strong&gt;하는 것이다. 즉 최고 확률 토큰을 “선택”하는 것이 아니라 각 토큰이 자기 확률만큼 당첨 가능성을 갖는 “추첨”이라서, &lt;code class=&quot;highlighter-rouge&quot;&gt;is&lt;/code&gt;가 35%라면 65%의 경우에는 다른 토큰이 뽑힌다. 화면에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;is&lt;/code&gt;의 확률이 가장 높은데도 &lt;code class=&quot;highlighter-rouge&quot;&gt;was&lt;/code&gt;나 &lt;code class=&quot;highlighter-rouge&quot;&gt;as&lt;/code&gt;가 선택되는 경우를 보게 되는 이유가 이것이다. temperature를 높일수록 하위 후보들의 확률이 커져 이 뒤집힘이 더 자주 일어난다.&lt;/p&gt;
+
+&lt;p&gt;항상 최고 확률 토큰만 고르는 방식이 &lt;strong&gt;greedy search&lt;/strong&gt;이고, temperature를 0으로 보내는 극한과 같다. 결정적(deterministic)인 출력이 필요할 때 temperature = 0을 쓰는 근거가 이것인데 — 그래도 완전한 재현성이 보장되지는 않는다는 서빙 쪽 이야기가 있다. &lt;a href=&quot;#서빙-관점-샘플링-파라미터의-위치&quot;&gt;뒤의 서빙 관점&lt;/a&gt;에서 다룬다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;자기회귀-루프&quot;&gt;자기회귀 루프&lt;/h1&gt;
+
+&lt;p&gt;이렇게 다음 토큰 하나가 선택된다. 선택된 토큰은 토큰 ID로, 다시 임베딩 벡터로 바뀌어 &lt;strong&gt;시퀀스 끝에 붙고, 지금까지의 전 과정이 처음부터 다시 돈다.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-token-id.png&quot; alt=&quot;다음 단어 후보들의 확률을 계산해 &amp;quot;the&amp;quot;를 선택하고, 그것을 다시 토큰 ID와 임베딩 벡터로 바꾸어 다음 생성 단계에 사용하는 흐름&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart LR
+    A[&quot;프롬프트 텍스트&quot;] --&amp;gt; B[&quot;토크나이저: 토큰 ID 시퀀스&quot;]
+    B --&amp;gt; C[&quot;임베딩 + 위치 인코딩&quot;]
+    C --&amp;gt; D[&quot;트랜스포머 블록 x 12&quot;]
+    D --&amp;gt; E[&quot;최종 LayerNorm + Unembedding&quot;]
+    E --&amp;gt; F[&quot;로짓 50,257개&quot;]
+    F --&amp;gt; G[&quot;temperature / top-k / top-p / softmax&quot;]
+    G --&amp;gt; H[&quot;다음 토큰 샘플링&quot;]
+    H --&amp;gt;|&quot;선택된 토큰을 시퀀스 끝에 추가&quot;| B
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/&quot;&gt;2.1편&lt;/a&gt;에서 GPT를 “디코더 전용 자기회귀 구조”라고 불렀을 때의 자기회귀(autoregressive)가 바로 이 루프다. 문장 하나를 생성한다는 것은 이 루프를 토큰 수만큼 도는 일이고, 서빙의 언어로 옮기면 &lt;strong&gt;decode 루프&lt;/strong&gt; — 토큰 하나를 만들 때마다 모델 가중치 전체를 VRAM에서 읽는 &lt;a href=&quot;/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/&quot;&gt;2.6편&lt;/a&gt;의 memory-bound 구간 — 그 자체다. LLM API가 토큰 단위로 과금하고 토큰 단위로 지연이 쌓이는 구조적 이유가 이 그림에 다 들어 있다.&lt;/p&gt;
+
+&lt;p&gt;다만 “전 과정이 다시 돈다”가 “전부 다시 계산한다”는 뜻은 아니다. &lt;a href=&quot;/ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/&quot;&gt;2.5편&lt;/a&gt;에서 본 KV cache가 정확히 이 루프의 중복 계산 — 과거 토큰들의 K·V — 을 저장해 두는 장치다. 아키텍처의 자기회귀 루프와 서빙의 KV cache가 왜 한 쌍인지가 여기서 맞물린다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;블록의-보조-구성-요소&quot;&gt;블록의 보조 구성 요소&lt;/h1&gt;
+
+&lt;p&gt;Transformer Explainer는 지금까지의 본 줄기 외에 세 가지 장치를 “auxiliary features”로 묶어 소개한다 — 잔차 연결, LayerNorm, dropout. &lt;a href=&quot;/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/&quot;&gt;2.6편&lt;/a&gt;에서 잔차 연결과 LayerNorm의 위치와 역할은 이미 봤으므로, 여기서는 각각 한 걸음씩만 더 들어가고 dropout을 새로 본다.&lt;/p&gt;
+
+&lt;p&gt;먼저 셋을 관통하는 구분 축부터 — 셋 다 &lt;strong&gt;깊은 네트워크의 학습을 안정시키기 위해 도입된 장치&lt;/strong&gt;지만, 추론에서의 운명이 갈린다. 잔차 연결과 LayerNorm은 학습된 구조의 일부라 &lt;strong&gt;추론 시에도 항상 실행되는 연산&lt;/strong&gt;이고, dropout은 학습 전용이라 &lt;strong&gt;추론 시 꺼진다&lt;/strong&gt;. “아키텍처의 일부인가, 학습 기법인가”를 가르는 실용적인 기준이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;잔차-연결-gradient-소실-방지&quot;&gt;잔차 연결: gradient 소실 방지&lt;/h2&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Transformers have auxiliary features that enhance the model performance. For example, a &lt;strong&gt;residual connection&lt;/strong&gt; adds a layer’s input to its output, keeping information from fading through many blocks. In GPT-2, it’s used twice per block to train deeper stacks effectively.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-residual-connection.png&quot; alt=&quot;Transformer Explainer의 잔차 연결 표시 화면&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/&quot;&gt;2.6편&lt;/a&gt;에서 “서브레이어 출력을 입력에 더한다($x + \text{sublayer}(x)$), 덧셈 경로를 따라 gradient가 곧장 흐른다”까지 정리했는데, 그 “곧장 흐른다”의 수학적 실체는 미분 한 번이면 보인다. $y = x + F(x)$를 $x$로 미분하면,&lt;/p&gt;
+
+&lt;script type=&quot;math/tex; mode=display&quot;&gt;\frac{\partial y}{\partial x} = I + \frac{\partial F(x)}{\partial x}&lt;/script&gt;
+
+&lt;p&gt;항등 행렬 $I$가 항상 남는다. 이것이 왜 중요한지는 역전파의 전달 방식에서 나온다. gradient는 층을 지날 때마다 그 층의 미분이 &lt;strong&gt;곱해지며&lt;/strong&gt; 아래로 내려간다 — 곱의 연쇄라서, 각 층의 미분이 작으면 층을 거듭할수록 작은 수가 거듭 곱해져 신호가 지수적으로 사라질 수밖에 없다(gradient 소실). 그런데 잔차 연결이 있으면 이 전달에 &lt;strong&gt;곱이 아닌 항이 하나 생긴다.&lt;/strong&gt; 위층에서 내려온 gradient를 $g$라 놓고 펼쳐 보면, 아래층으로 전달되는 것은&lt;/p&gt;
+
+&lt;script type=&quot;math/tex; mode=display&quot;&gt;g \cdot \left(I + \frac{\partial F}{\partial x}\right) = g \cdot \frac{\partial F}{\partial x} + g&lt;/script&gt;
+
+&lt;p&gt;서브레이어의 미분이 곱해진 몫 옆에, &lt;strong&gt;$g$ 원본이 아무것도 곱해지지 않은 채 그대로 더해져 내려간다.&lt;/strong&gt; 서브레이어의 미분이 아무리 작아져도 이 원본 항은 죽지 않으므로, 블록 12개를 지나도 오차 신호가 사라지지 않는다. 원래 컴퓨터 비전의 심층 신경망(ResNet, 2015)에서 gradient 소실을 풀기 위해 제안된 장치를 트랜스포머가 가져온 것이고, skip connection, shortcut connection이라는 다른 이름들도 같은 것을 가리킨다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-residual-connection.png&quot; alt=&quot;숏컷 연결이 층을 건너뛰는 gradient 경로를 만드는 도해&quot; class=&quot;align-center&quot; width=&quot;600&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;출처: 세바스찬 라시카, 밑바닥부터 만들면서 배우는 LLM&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;forward 관점의 독법도 유효하다. 블록마다 어텐션과 MLP가 표현을 새로 쓰는데, 그 결과에 원래 입력을 더해 주므로 &lt;strong&gt;블록은 표현을 갈아치우는 것이 아니라 흐르는 표현에 수정분을 얹는다&lt;/strong&gt; — 12개 블록을 지나도 처음의 정보가 완전히 사라지지 않는 이유다. 이 장치 역시 시리즈 내내 본 다른 설계 선택들처럼 경험적으로 검증되어 정착한 것이지만, gradient 소실 완화라는 도입 근거가 수식으로 명확한 편에 속한다. &lt;a href=&quot;/ai/AI-Transformer-05/&quot;&gt;2020년의 네트워크 구조 글&lt;/a&gt;에도 원 논문의 잔차 연결을 정리한 기록이 있다.&lt;/p&gt;
+
+&lt;h2 id=&quot;layernorm-적용-위치의-변천&quot;&gt;LayerNorm: 적용 위치의 변천&lt;/h2&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Layer Normalization helps stabilize both training and inference by adjusting input numbers so their mean and variance stay consistent. This makes the model less sensitive to its starting weights and helps it learn more effectively. In GPT-2, it’s applied before self-attention, before the MLP, and once more before the final output.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-layer-normalization.png&quot; alt=&quot;Transformer Explainer의 Layer Normalization 표시 화면&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;LayerNorm은 &lt;strong&gt;토큰 벡터 하나 안에서&lt;/strong&gt; 768개 값의 평균과 분산을 일정하게 맞추는 정규화다. 어떤 값은 너무 크고 어떤 값은 너무 작아 계산이 흔들리지 않도록, 블록을 거듭 지나도 값의 스케일이 폭주하거나 소멸하지 않게 잡아 준다.&lt;/p&gt;
+
+&lt;p&gt;인용문이 적용 위치를 세 군데로 특정해 설명하는 것을 보고 궁금한 게 있었다 — 트랜스포머라면 LayerNorm은 항상 이 위치에 있는 것인가? &lt;a href=&quot;/ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer/&quot;&gt;2.4편&lt;/a&gt;에서 “Pre-LN 구조의 세부는 접어 둔다”고 미뤄 두기도 했던 지점이다. 결론부터 말하면 항상 같은 위치는 아니고, 변천 과정을 짚어 두면 이 답이 함께 정리된다. 원조는 CNN에서 배치 단위로 정규화하던 BatchNorm(2015)인데, 배치 크기에 의존하는 통계라 시퀀스 모델과 궁합이 나빴고, 그 대안으로 &lt;strong&gt;배치와 무관하게 토큰 하나의 feature 차원 안에서만 정규화하는&lt;/strong&gt; LayerNorm(2016)이 나왔다. 트랜스포머 원 논문과 GPT-1은 이것을 서브레이어 &lt;strong&gt;뒤&lt;/strong&gt;에 두었고(Post-LN), GPT-2부터는 서브레이어 &lt;strong&gt;앞&lt;/strong&gt; + 최종 출력 전 1회(&lt;code class=&quot;highlighter-rouge&quot;&gt;ln_f&lt;/code&gt;)로 옮겼다(Pre-LN) — 깊은 스택에서 학습이 더 안정적이라는 이유였고, 이후 LLM들은 대부분 Pre-LN 계열이다. 요즘 모델(Llama, Qwen 등)은 평균 계산을 생략해 연산을 줄인 변형인 RMSNorm으로 다시 한 번 갈아탔다. 정규화의 종류도 위치도 세대에 따라 움직여 온 설계 선택인 셈이다. &lt;a href=&quot;/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/&quot;&gt;2.6편&lt;/a&gt;에서 범위 밖으로 접어 뒀던 갈래인데, 시리즈를 닫는 김에 변천의 줄기만 여기 남겨 둔다.&lt;/p&gt;
+
+&lt;h2 id=&quot;dropout-학습-전용-정규화&quot;&gt;dropout: 학습 전용 정규화&lt;/h2&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;During training, &lt;strong&gt;dropout&lt;/strong&gt; randomly turns off some connections between numbers so the model doesn’t overfit to specific patterns. This helps it learn features that generalize better. GPT-2 uses it, but newer LLMs often skip it because they train on huge datasets and overfitting is less of a problem. In inference, dropout is turned off.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-transformer-explainer-dropout.png&quot; alt=&quot;Transformer Explainer의 dropout 설명 화면&quot; class=&quot;align-center&quot; width=&quot;700&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;Transformer Explainer 화면 직접 캡처&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;dropout은 학습 중에 일부 연결을 무작위로 잠깐 꺼 버리는 기법이다. 목적은 모델이 특정 뉴런·특정 연결에만 의존하지 못하게 만드는 것 — 시험공부에 비유하면 한 문제 유형만 외우지 못하게 힌트 일부를 가리고 풀게 하는 훈련이다. 어떤 연결이든 언제 꺼질지 모르므로 모델은 여러 특징을 함께 쓰는 방향으로 학습되고, 이것이 과적합(overfitting)을 억제한다.&lt;/p&gt;
+
+&lt;p&gt;앞의 두 장치와 달리 dropout은 &lt;strong&gt;추론 시 꺼진다.&lt;/strong&gt; 이유는 두 갈래다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;켜 두면 출력이 무작위로 흔들린다.&lt;/strong&gt; 같은 입력에 매번 다른 연결이 꺼져 다른 출력이 나온다 — 학습에서는 이 무작위성이 정규화 효과지만, 추론에서는 재현성을 해치는 노이즈일 뿐이다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;끄는 것이 학습된 것의 올바른 사용법이다.&lt;/strong&gt; dropout 학습은 매 스텝 다른 부분 네트워크를 학습시키는 일종의 앙상블인데, 추론에서 전체 뉴런을 켜는 것(스케일 보정 포함)이 그 앙상블의 평균 예측을 근사한다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;인용문의 마지막 문장도 눈여겨 둘 만하다 — &lt;strong&gt;최신 LLM들은 dropout을 아예 생략하는 경우가 많다.&lt;/strong&gt; 거대 코퍼스를 1 epoch(전체 데이터 1회 통과) 남짓만 훑는 사전학습에서는 같은 데이터를 반복해서 외울 기회 자체가 적어 과적합 위험이 낮기 때문이다. GPT-2 시절의 필수 장치가 데이터 스케일의 변화로 선택 장치가 된, “설계는 시대의 제약을 따라 움직인다”의 또 한 사례다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;서빙-관점-샘플링-파라미터의-위치&quot;&gt;서빙 관점: 샘플링 파라미터의 위치&lt;/h1&gt;
+
+&lt;p&gt;이 시리즈의 목적지가 서빙이니, 이번에도 이 글에서 본 것들이 서빙 그림 어디에 놓이는지로 마무리한다.&lt;/p&gt;
+
+&lt;h2 id=&quot;모델-파라미터가-아니라-요청-파라미터&quot;&gt;모델 파라미터가 아니라 요청 파라미터&lt;/h2&gt;
+
+&lt;p&gt;LLM API를 쓰다 보면 만나는 &lt;code class=&quot;highlighter-rouge&quot;&gt;temperature&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;top_p&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;top_k&lt;/code&gt;가 정확히 이 글에서 본 그 샘플링 파라미터들이다. 위치를 분명히 해 두면 — 이들은 학습으로 결정되는 모델 파라미터(가중치)가 아니라, &lt;strong&gt;모델 밖 로짓 후처리 단계의 설정값&lt;/strong&gt;이다. 그래서 모델을 다시 로드할 필요 없이 &lt;strong&gt;요청(request)마다 다르게&lt;/strong&gt; 줄 수 있다. vLLM이 이들을 엔진 설정이 아니라 요청에 실려 오는 &lt;code class=&quot;highlighter-rouge&quot;&gt;SamplingParams&lt;/code&gt;로 받는 것이 이 구조의 반영이고, 같은 배치 안에 temperature가 다른 요청들이 섞여 함께 처리된다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;API&lt;/th&gt;
+      &lt;th&gt;노출하는 샘플링 파라미터&lt;/th&gt;
+      &lt;th&gt;문서상 기본값&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;OpenAI (Chat Completions)&lt;/td&gt;
+      &lt;td&gt;temperature, top_p&lt;/td&gt;
+      &lt;td&gt;temperature 1, top_p 1&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Anthropic (Messages)&lt;/td&gt;
+      &lt;td&gt;temperature, top_k, top_p&lt;/td&gt;
+      &lt;td&gt;temperature 1&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;vLLM (SamplingParams)&lt;/td&gt;
+      &lt;td&gt;temperature, top_k, top_p 외 다수&lt;/td&gt;
+      &lt;td&gt;temperature 1, top_p 1, top_k 무제한&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;ChatGPT·Claude 같은 소비자 앱이 내부적으로 쓰는 값은 공개되어 있지 않으므로, 확인 가능한 것은 API 문서의 기본값까지다.&lt;/p&gt;
+
+&lt;p&gt;비용 관점의 결론은 짧다 — &lt;strong&gt;샘플링 파라미터는 자원 소모 축이 아니다.&lt;/strong&gt; 로짓 후처리는 어휘 사전 크기의 벡터 연산이라, 블록의 거대 행렬곱들에 견주면 비용이 미미하다. temperature를 높인다고 GPU를 더 쓰는 구조가 아니고, 이 파라미터들이 움직이는 축은 &lt;strong&gt;출력 품질(정확성·다양성)과 재현성&lt;/strong&gt;이다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;em&gt;여담&lt;/em&gt;: 프롬프트 엔지니어링과 샘플링 파라미터&lt;/p&gt;
+
+  &lt;p&gt;한때 나는 “프롬프트 엔지니어링의 실체가 알고 보니 top-k, top-p 수치 조정이었나” 하고 오해한 적이 있는데, 둘은 별개다. 프롬프트 엔지니어링은 처음부터 입력 텍스트 설계가 본류였고, 샘플링 파라미터는 출력 설정(output configuration)이라는 다른 층의 이야기다. 혼동의 배경은 실무 가이드들이 둘을 묶어 다루기 때문인 듯한데 — 실제로 &lt;a href=&quot;https://www.kaggle.com/whitepaper-prompt-engineering&quot;&gt;구글의 Prompt Engineering 백서&lt;/a&gt;도 첫 장에서 프롬프트보다 temperature·top-k·top-p 설정을 먼저 다룬다. 프롬프트를 잘 써도 출력 설정이 태스크와 안 맞으면 소용없다는 취지로 읽으면 자연스럽다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;h2 id=&quot;재현성-temperature-0이어도-남는-비결정성&quot;&gt;재현성: temperature 0이어도 남는 비결정성&lt;/h2&gt;
+
+&lt;p&gt;temperature = 0(greedy)로 두면 같은 입력에 같은 출력이 나올 것 같지만, 실제 서빙 환경에서는 &lt;strong&gt;그래도 완전한 결정론이 보장되지 않는 것으로 알려져 있다.&lt;/strong&gt; 서버는 여러 요청을 배치로 묶어 처리하는데, 배치 구성이 달라지면 커널의 부동소수점 연산 순서가 달라지고, 부동소수점 덧셈은 결합법칙이 성립하지 않아 로짓이 미세하게 달라질 수 있다 — 상위 두 후보의 로짓이 근소하면 argmax(최고 로짓 토큰 선택)마저 뒤집힌다. batch invariance를 확보해 이를 해결하려는 시도(Thinking Machines의 분석이 대표적이다)가 있다는 것까지가 조사한 범위이고, 직접 재현해 본 것은 아니라 존재만 기록해 둔다. “temperature 0인데 출력이 왜 다르지”라는 실무 질문의 답이 샘플링이 아니라 이 층에 있다는 점이 포인트다.&lt;/p&gt;
+
+&lt;h2 id=&quot;같은-지점의-다른-로짓-후처리&quot;&gt;같은 지점의 다른 로짓 후처리&lt;/h2&gt;
+
+&lt;p&gt;로짓을 조작해 출력을 제어한다는 아이디어는 샘플링 파라미터에서 끝나지 않는다. 같은 자리 — softmax 직전의 로짓 — 에 개입하는 장치들이 더 있다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;repetition penalty&lt;/strong&gt;: 이미 나온 토큰들의 로짓을 깎아 반복 생성을 억제한다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;structured output(guided decoding)&lt;/strong&gt;: JSON 스키마 등 문법에 맞지 않는 토큰의 로짓을 매 스텝 차단해, 출력이 형식을 벗어날 수 없게 강제한다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;서빙 엔진의 기능표에서 만나게 될 이 항목들이 전부 “로짓 후처리”라는 같은 지점의 변형이라는 것만 알아 두면, 지금은 충분하다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;출력층은 마지막 토큰의 768차원 벡터를 최종 LayerNorm에 통과시킨 뒤 unembedding 행렬과 곱해 어휘 사전 크기의 로짓을 만든다. GPT-2는 weight tying으로 입력 임베딩 행렬을 전치해 재사용한다 — 로짓 하나하나는 “문맥 표현과 각 토큰 임베딩의 내적”, 즉 유사도 점수다&lt;/li&gt;
+  &lt;li&gt;로짓 → temperature 스케일링 → top-k/top-p 필터 → softmax → 확률 비례 추출이 샘플링 파이프라인이다. temperature는 분포의 엔트로피를 조절하고(순위는 불변), top-k는 개수로, top-p는 확률 합으로 후보를 자른다&lt;/li&gt;
+  &lt;li&gt;선택된 토큰이 시퀀스 끝에 붙어 전 과정이 다시 도는 자기회귀 루프가 곧 서빙의 decode 루프다. KV cache는 이 루프의 중복 계산을 저장하는 장치다&lt;/li&gt;
+  &lt;li&gt;잔차 연결(항등 경로로 gradient 보존), LayerNorm(토큰 내 feature 정규화, Post-LN → Pre-LN → RMSNorm으로 이동), dropout(추론 시 꺼지는 학습 전용 정규화)이 블록의 보조 구성 요소다&lt;/li&gt;
+  &lt;li&gt;샘플링 파라미터는 모델 파라미터가 아니라 요청 단위 로짓 후처리 설정이다. 자원이 아니라 품질·재현성의 설정값이고, repetition penalty·guided decoding도 같은 자리의 변형이다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;결론&quot;&gt;결론&lt;/h1&gt;
+
+&lt;p&gt;이것으로 &lt;a href=&quot;/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/&quot;&gt;2.2편&lt;/a&gt;에서 잡았던 세 부분이 모두 닫혔다. 전체를 한 줄로 다시 나타내면 아래와 같다:&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;텍스트 → 토큰 ID → 임베딩 → 트랜스포머 블록 × 12(어텐션 = 통신, MLP = 계산, 잔차·LayerNorm이 안정화) → 최종 LayerNorm → unembedding → 로짓 → 샘플링 → 다음 토큰 → 다시 입력으로.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;입구의 임베딩과 출구의 unembedding이 같은 행렬이라는 weight tying까지 놓고 보면, 이 여정은 시작한 자리로 정확히 돌아와 닫히는 원이다. 그리고 시리즈 내내 반복된 관찰 두 개가 사실은 이 원 위에 그대로 얹혀 있다:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;원을 이루는 계산은 처음부터 끝까지 행렬곱이고, 그래서 &lt;a href=&quot;/ai/AI-LLM-Optimization-01-AI-Overview/&quot;&gt;1편&lt;/a&gt;의 GPU 이야기가 이 아키텍처의 하드웨어 짝이 된다.&lt;/li&gt;
+  &lt;li&gt;어휘 사전 크기, $d_{model}$, 블록 수, 헤드 수 같은 설계 시점의 상수들이 KV cache 크기·decode 병목·임베딩 메모리라는 서빙 시점의 비용으로 흘러내려온다.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;p&gt;다음 토큰 하나를 고르기 위해 수억 개의 파라미터가 얽힌 행렬곱을 12층 통과한다. 새삼스럽지만 — 단어 하나를 잇는 데 이만큼의 과정이 든다는 것이 먼저 놀랍고, 사람의 머릿속에서는 같은 일이 의식할 새도 없이 일어난다는 것이 다음으로 놀랍고, 그렇게 빨리 일어나는 과정을 연산으로 옮겨 사람이 말을 잇는 속도로 실제로 돌아가게 만들었다는 것이 그다음으로 놀랍다. 지금은 그 연산이 코드를 짜고 에이전트가 되어 사람의 일을 대신하는 데까지 와 있으니, 경외라는 단어가 과하지 않다. 그 루프를 더 빠르게, 더 싸게 돌리는 일이 이제부터의 주제다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://poloclub.github.io/transformer-explainer/&quot;&gt;Transformer Explainer&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://arxiv.org/abs/1706.03762&quot;&gt;Attention Is All You Need (Vaswani et al., 2017)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://arxiv.org/abs/1608.05859&quot;&gt;Using the Output Embedding to Improve Language Models (Press &amp;amp; Wolf, 2016 — weight tying)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://arxiv.org/abs/1904.09751&quot;&gt;The Curious Case of Neural Text Degeneration (Holtzman et al., 2019 — nucleus sampling)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://arxiv.org/abs/1512.03385&quot;&gt;Deep Residual Learning for Image Recognition (He et al., 2015 — ResNet)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://arxiv.org/abs/1607.06450&quot;&gt;Layer Normalization (Ba et al., 2016)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://arxiv.org/abs/1910.07467&quot;&gt;Root Mean Square Layer Normalization (Zhang &amp;amp; Sennrich, 2019)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://jmlr.org/papers/v15/srivastava14a.html&quot;&gt;Dropout: A Simple Way to Prevent Neural Networks from Overfitting (Srivastava et al., 2014)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.kaggle.com/whitepaper-prompt-engineering&quot;&gt;Prompt Engineering (Google whitepaper, Lee Boonstra)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/&quot;&gt;Defeating Nondeterminism in LLM Inference (Thinking Machines)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/karpathy/nanoGPT/blob/master/model.py&quot;&gt;nanoGPT — Andrej Karpathy (출력층·블록 구현, MIT License)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;세바스찬 라시카, 밑바닥부터 만들면서 배우는 LLM (&lt;a href=&quot;https://www.manning.com/books/build-a-large-language-model-from-scratch&quot;&gt;Build a Large Language Model (From Scratch)&lt;/a&gt;)&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/&quot;&gt;LLM 서빙과 최적화 - 2.6. Transformer: MLP와 트랜스포머 블록 마무리&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/&quot;&gt;LLM 서빙과 최적화 - 2.5. Transformer: 셀프 어텐션 계산 해부&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/&quot;&gt;LLM 서빙과 최적화 - 2.3. Transformer: 임베딩&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/&quot;&gt;LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/&quot;&gt;LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-LLM-Optimization-01-AI-Overview/&quot;&gt;LLM 서빙과 최적화 - 1. AI 개요&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-Transformer-05/&quot;&gt;2020년 트랜스포머 시리즈: 네트워크 구조 (원 논문의 잔차 연결·FFN)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-Information-Theory/&quot;&gt;2020년 정보이론 기초 (엔트로피)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ai/AI-sigmoid/&quot;&gt;2020년 Sigmoid 함수 (로그 승산 — logit의 어원)&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Transformer" /><category term="Transformer-Explainer" /><category term="GPT-2" /><category term="Logit" /><category term="Softmax" /><category term="Sampling" /><category term="Temperature" /><category term="Top-k" /><category term="Top-p" /><category term="Weight-Tying" /><category term="Residual-Connection" /><category term="LayerNorm" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-1" /><summary type="html">마지막 토큰의 벡터가 로짓이 되고, temperature·top-k·top-p를 거쳐 다음 토큰이 되기까지 — 출력층과 샘플링을 보고 트랜스포머 아키텍처 여정을 닫는다.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화 - 2.6. Transformer: MLP와 트랜스포머 블록 마무리</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화 - 2.6. Transformer: MLP와 트랜스포머 블록 마무리" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -3791,458 +4216,4 @@ journalctl &lt;span class=&quot;nt&quot;&gt;--vacuum-time&lt;/span&gt;&lt;span c
   &lt;li&gt;&lt;a href=&quot;https://docs.nvidia.com/deploy/xid-errors/index.html&quot;&gt;NVIDIA Xid Errors&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Linux" /><category term="Kernel" /><category term="systemd" /><category term="journald" /><category term="journalctl" /><category term="syslog" /><category term="rsyslog" /><category term="Logging" /><summary type="html">커널 메시지를 보관하는 링버퍼의 사본은 누가 어떻게 보존하는지 알아 보자.</summary></entry><entry><title type="html">[Linux] 커널 메시지 - 1. printk와 커널 링버퍼</title><link href="https://sirzzang.github.io//cs/CS-Kernel-Message-01/" rel="alternate" type="text/html" title="[Linux] 커널 메시지 - 1. printk와 커널 링버퍼" /><published>2026-07-29T00:00:00+09:00</published><updated>2026-07-29T00:00:00+09:00</updated><id>https://sirzzang.github.io//cs/CS-Kernel-Message-01</id><content type="html" xml:base="https://sirzzang.github.io//cs/CS-Kernel-Message-01/">&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;p&gt;GPU 노드에서 Xid 에러(NVIDIA GPU 드라이버가 커널 로그로 보고하는 에러 이벤트 코드)를 쫓다 보면 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -k&lt;/code&gt;를 습관처럼 치게 된다. 그런데 이 두 명령이 정확히 &lt;strong&gt;무엇을, 어떤 원리로&lt;/strong&gt; 읽는지는 정리한 적이 없었다. 커널 메시지는 어디서 태어나 어디에 쓰이고, 왜 재부팅하면 사라지며, 저널에는 어떻게 남는가. 이번에 커널 메시지의 여정을 따라가 본다.&lt;/p&gt;
-
-&lt;p&gt;두 편으로 나눈다. 이번 1편은 커널 쪽 절반 — 커널 메시지의 정의, printk와 링버퍼, &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;, 그리고 컨테이너에서의 함의까지 — 로, &lt;strong&gt;어느 배포판이든 동일한 공통 영역&lt;/strong&gt;이다. &lt;a href=&quot;/cs/CS-Kernel-Message-02/&quot;&gt;2편&lt;/a&gt;은 그 위의 유저스페이스 — 시스템 로그 저장소와 저널, 배포판별로 갈리는 영역 — 를 다룬다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;커널 메시지&lt;/strong&gt;는 커널 공간 코드(코어와 모듈 모두)가 &lt;code class=&quot;highlighter-rouge&quot;&gt;printk()&lt;/code&gt;로 기록하는 로그 레코드다. 커널이 직접 쓰는 저장소는 &lt;strong&gt;커널 링버퍼 단 하나&lt;/strong&gt;(원본)이고, 저널 등 나머지는 전부 이 원본의 사본이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;커널 링버퍼&lt;/strong&gt;는 RAM의 고정 크기 버퍼로, 다 차면 앞에서부터 덮어쓰고(wrap-around) 재부팅하면 사라진다. 이 구조는 결함이 아니라 “&lt;strong&gt;실패할 수 있는 어떤 것에도 의존하지 않는다&lt;/strong&gt;“는 설계 제약의 결과다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;&lt;/strong&gt;는 링버퍼를 유저스페이스에 노출하는 파일 인터페이스다. &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;도 journald도 이 인터페이스로 같은 링버퍼를 읽는다. 여기까지는 리눅스 커널 기능이라 배포판 무관 공통이다&lt;/li&gt;
-  &lt;li&gt;링버퍼는 &lt;strong&gt;네임스페이스로 격리되지 않는 전역 단일 자원&lt;/strong&gt;이다. 컨테이너 안에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;가 보인다면 그것은 호스트 전체의 커널 메시지다&lt;/li&gt;
-  &lt;li&gt;커널 메시지는 OOM, 하드웨어 에러, GPU Xid처럼 &lt;strong&gt;애플리케이션 로그에는 절대 남지 않는 사건들&lt;/strong&gt;의 원본 기록이다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;커널-메시지의-여정-전체-그림&quot;&gt;커널 메시지의 여정: 전체 그림&lt;/h1&gt;
-
-&lt;p&gt;전체 구조를 한 문장으로 요약하면 이렇다. &lt;strong&gt;커널이 만든 메시지는 &lt;code class=&quot;highlighter-rouge&quot;&gt;printk()&lt;/code&gt;로 커널 링버퍼(RAM)에 쓰이고, 유저스페이스의 로깅 데몬이 그 링버퍼를 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt; 같은 경계 인터페이스로 읽어 자기 저장소로 복사한다.&lt;/strong&gt; 링버퍼가 원본, 저널이 사본이며, &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;는 링버퍼를, &lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl&lt;/code&gt;은 저널을 읽는다.&lt;/p&gt;
-
-&lt;p&gt;중요한 것은 이 구조가 병렬이 아니라 &lt;strong&gt;직렬&lt;/strong&gt;이라는 점이다. 커널이 두 군데에 나눠 쓰는 것이 아니다. 커널이 쓰는 곳은 링버퍼 하나뿐이고, 나머지는 전부 그 다운스트림 사본이다.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart TB
-    subgraph user[&quot;유저스페이스&quot;]
-        dmesg[&quot;dmesg&amp;lt;br&amp;gt;(일회성 조회)&quot;]
-        journald[&quot;systemd-journald&amp;lt;br&amp;gt;(상주 구독)&quot;]
-        syslogd[&quot;syslog 데몬&amp;lt;br&amp;gt;(rsyslog, busybox syslogd 등)&quot;]
-        journal[(&quot;저널 파일&amp;lt;br&amp;gt;/run 또는 /var/log/journal&quot;)]
-        plain[(&quot;평문 로그 파일&amp;lt;br&amp;gt;/var/log/kern.log 등&quot;)]
-    end
-    subgraph boundary[&quot;경계 인터페이스 - 커널이 유저스페이스에 낸 창구&quot;]
-        kmsg[&quot;/dev/kmsg&quot;]
-        prockmsg[&quot;/proc/kmsg&quot;]
-        syslog2[&quot;syslog(2) 시스템 콜&quot;]
-    end
-    subgraph kernel[&quot;커널 공간&quot;]
-        core[&quot;커널 코어 · 커널 모듈&quot;] --&amp;gt;|&quot;printk()&quot;| ring[&quot;커널 링버퍼&amp;lt;br&amp;gt;(RAM, 원본)&quot;]
-    end
-    ring --&amp;gt; kmsg
-    ring --&amp;gt; prockmsg
-    ring --&amp;gt; syslog2
-    kmsg --&amp;gt;|읽기| dmesg
-    kmsg --&amp;gt;|상주 구독 후 복사| journald
-    prockmsg --&amp;gt;|&quot;직접 구독&amp;lt;br&amp;gt;(rsyslog imklog, klogd 등)&quot;| syslogd
-    journald --&amp;gt; journal
-    journald -.-&amp;gt;|&quot;구성에 따라 전달&amp;lt;br&amp;gt;(RHEL 계열 imjournal)&quot;| syslogd
-    syslogd --&amp;gt; plain
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;이 도식이 두 편의 지도다. 커널 공간과 경계 인터페이스까지는 리눅스 커널의 기능이라 배포판이 무엇이든 동일하고, &lt;strong&gt;1편은 이 영역&lt;/strong&gt;을 다룬다 — 커널 메시지의 정의, 링버퍼, 경계 인터페이스, 그리고 그 인터페이스만 사용하는 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;까지. &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;는 유저스페이스 프로그램이지만 커널이 제공하는 인터페이스만 쓰므로 공통 영역에 속해 1편에서 함께 본다. 유저스페이스의 나머지 — 누가 상주 수집하고, 어떤 포맷으로 어디에 저장하고, 무엇으로 조회하는가 — 는 배포판·구현별로 갈리는 영역이고, &lt;a href=&quot;/cs/CS-Kernel-Message-02/&quot;&gt;2편&lt;/a&gt;에서 다룬다.&lt;/p&gt;
-
-&lt;h2 id=&quot;커널-메시지란&quot;&gt;커널 메시지란&lt;/h2&gt;
-
-&lt;p&gt;커널 메시지는 &lt;strong&gt;커널 공간(kernel space) 코드가 &lt;code class=&quot;highlighter-rouge&quot;&gt;printk()&lt;/code&gt;(및 &lt;code class=&quot;highlighter-rouge&quot;&gt;pr_info&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;pr_err&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;dev_err&lt;/code&gt; 등의 래퍼)로 커널 링버퍼에 기록하는 로그 레코드&lt;/strong&gt;다. 이 정의에서 세 가지를 짚어 둔다 — 발생 주체, 레코드의 형태, 그리고 printk의 성격이다.&lt;/p&gt;
-
-&lt;p&gt;첫째, &lt;strong&gt;발생 주체는 커널 코어와 커널 모듈 모두다.&lt;/strong&gt; “드라이버(모듈)가 만든 로그”로 한정하면 부정확하다. 부팅 초기 하드웨어 초기화, 스케줄러, 메모리 관리, OOM killer 같은 &lt;strong&gt;커널 코어 자체&lt;/strong&gt;도 메시지를 낸다. 모듈은 로드된 이후부터, 코어는 부팅 극초기부터 낸다는 차이가 있을 뿐, 커널 공간에서 printk로 찍혔으면 전부 커널 메시지다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;발생 주체&lt;/th&gt;
-      &lt;th&gt;커널 메시지 예&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;커널 코어&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;Out of memory: Killed process 1234 (python3) ...&lt;/code&gt; (OOM killer), &lt;code class=&quot;highlighter-rouge&quot;&gt;watchdog: BUG: soft lockup - CPU#3 stuck for 22s!&lt;/code&gt; (스케줄러 감시)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;커널 모듈(드라이버)&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NVRM: Xid (PCI:0000:2a:00): 120, ...&lt;/code&gt; (NVIDIA 드라이버), &lt;code class=&quot;highlighter-rouge&quot;&gt;e1000e: eth0 NIC Link is Up 1000 Mbps&lt;/code&gt; (NIC 드라이버)&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;둘째, &lt;strong&gt;형태는 평문 한 줄이 아니라 메타데이터 헤더가 붙은 구조화된 레코드다.&lt;/strong&gt; 각 레코드는 타임스탬프, facility(메시지 출처 분류)·우선순위(level), 시퀀스 번호 등의 헤더와 사람이 읽을 수 있는 텍스트 본문으로 이루어진다. 같은 메시지를 기본 출력과 raw 출력으로 비교해 보면 헤더의 흔적이 보인다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 기본 출력 - 우선순위가 감춰져 있다&lt;/span&gt;
-dmesg | tail &lt;span class=&quot;nt&quot;&gt;-1&lt;/span&gt;
-&lt;span class=&quot;c&quot;&gt;# [ 1234.567890] usb 1-1: new high-speed USB device number 5 using xhci_hcd&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# raw 출력(-r) - 헤더에 든 syslog 우선순위 접두 &amp;lt;6&amp;gt;이 그대로 노출된다&lt;/span&gt;
-dmesg &lt;span class=&quot;nt&quot;&gt;-r&lt;/span&gt; | tail &lt;span class=&quot;nt&quot;&gt;-1&lt;/span&gt;
-&lt;span class=&quot;c&quot;&gt;# &amp;lt;6&amp;gt;[ 1234.567890] usb 1-1: new high-speed USB device number 5 using xhci_hcd&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;이때 &lt;code class=&quot;highlighter-rouge&quot;&gt;&amp;lt;6&amp;gt;&lt;/code&gt;은 level 값 그 자체가 아니라 &lt;strong&gt;syslog 방식으로 인코딩된 우선순위&lt;/strong&gt;(facility × 8 + level)다. 커널이 직접 쓴 메시지는 facility가 0(kern)이라 값이 level(6 = info)과 같아 보일 뿐이다. 실제로 뒤에서 볼 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt; 쓰기 실험처럼 유저스페이스가 접두 없이 주입한 메시지는 facility가 user(1)로 붙어, 기본 메시지 레벨이 4인 시스템이라면 &lt;code class=&quot;highlighter-rouge&quot;&gt;&amp;lt;12&amp;gt;&lt;/code&gt;(1×8+4)로 찍힌다. 인코딩을 풀어서 보고 싶으면 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg -x&lt;/code&gt;가 &lt;code class=&quot;highlighter-rouge&quot;&gt;kern  :info  :&lt;/code&gt;처럼 facility와 level을 이름으로 보여 준다.&lt;/p&gt;
-
-&lt;p&gt;셋째, &lt;strong&gt;printk는 시스템 콜이 아니라 커널 내부 함수다.&lt;/strong&gt; printf와 닮은 이름 때문에 시스템 콜이나 유저스페이스 API처럼 오해하기 쉬운데, printk는 커널 코드가 커널 안에서 부르는 내부 함수(커널판 printf)다. 커널 메시지는 유저스페이스를 경유하지 않고 커널 안에서 태어나 커널 메모리에 직접 적힌다. 시스템 콜이 등장하는 것은 오히려 반대 방향 — 유저스페이스가 링버퍼를 &lt;strong&gt;읽을&lt;/strong&gt; 때 쓰는 &lt;code class=&quot;highlighter-rouge&quot;&gt;syslog(2)&lt;/code&gt; — 이다.&lt;/p&gt;
-
-&lt;h2 id=&quot;공통과-배포판-의존의-경계&quot;&gt;공통과 배포판 의존의 경계&lt;/h2&gt;
-
-&lt;p&gt;이 글 전체를 관통하는 경계선은 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;를 비롯한 경계 인터페이스다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;경계 안쪽 (배포판 무관 공통)&lt;/strong&gt;: &lt;code class=&quot;highlighter-rouge&quot;&gt;printk&lt;/code&gt;, 커널 링버퍼, &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/kmsg&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;syslog(2)&lt;/code&gt; 인터페이스, 그리고 그 인터페이스만 사용하는 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;경계 밖 (배포판·구현 의존)&lt;/strong&gt;: 누가 상주 수집하는가(systemd-journald vs rsyslog 등), 어떤 포맷으로(바이너리 저널 vs 평문), 어디에(&lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/journal&lt;/code&gt; vs &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/messages&lt;/code&gt;), 회전은 누가(내장 vs logrotate), 무엇으로 조회하는가(journalctl vs grep/tail)&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;1편은 경계 안쪽만 다루므로, 여기 나오는 내용은 어느 리눅스에서든 동일하다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;부팅-타임라인-커널-메시지의-시작-시점&quot;&gt;부팅 타임라인: 커널 메시지의 시작 시점&lt;/h1&gt;
-
-&lt;p&gt;“부팅 이후부터 커널 메시지가 쌓인다”는 말을 정확히 하려면 부팅의 어느 마디부터인지 집어야 한다.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart LR
-    A[&quot;전원 on&amp;lt;br&amp;gt;펌웨어 · 부트로더&amp;lt;br&amp;gt;(커널 메시지 없음)&quot;] --&amp;gt; B[&quot;커널 초기화&amp;lt;br&amp;gt;printk 동작 시작&amp;lt;br&amp;gt;링버퍼 기록 개시&quot;] --&amp;gt; C[&quot;initramfs&amp;lt;br&amp;gt;RAM 상의 임시 루트&quot;] --&amp;gt; D[&quot;실제 루트&amp;lt;br&amp;gt;파일시스템 마운트&quot;] --&amp;gt; E[&quot;PID 1(systemd)&amp;lt;br&amp;gt;journald 기동&amp;lt;br&amp;gt;구독 + 소급 복사&quot;] --&amp;gt; F[&quot;저널 flush&amp;lt;br&amp;gt;/run에서 /var로&quot;] --&amp;gt; G[&quot;정상 운영&amp;lt;br&amp;gt;링버퍼 wrap 반복&amp;lt;br&amp;gt;저널 로테이션&quot;] --&amp;gt; H[&quot;재부팅&amp;lt;br&amp;gt;링버퍼 소멸&amp;lt;br&amp;gt;디스크 저널 생존&quot;]
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;각 마디에서 일어나는 일을 주석으로 달면 아래와 같다.&lt;/p&gt;
-
-&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;전원 on
- → 펌웨어(BIOS/UEFI) → 부트로더        # 커널이 없다 = 커널 메시지도, 링버퍼도 없다
- → 커널 로드·초기화 시작                # printk 동작 시작 — 링버퍼 기록 개시
- → initramfs (RAM 상의 임시 루트)       # 스토리지 드라이버 로드 — 아직 디스크 파일시스템 없음
- → 실제 루트 파일시스템 마운트           # 이 시점부터 디스크에 쓸 수 있다
- → PID 1(systemd) → journald 기동      # /dev/kmsg 상주 구독 시작 + 먼저 쌓인 메시지 소급 복사
- → /var 마운트 완료 → 저널 flush        # /run/log/journal → /var/log/journal (영속 구성 시)
- → 정상 운영                            # 링버퍼: wrap-around 반복 / 저널: 로테이션하며 축적
- → 재부팅                               # 링버퍼 소멸 — 디스크의 저널만 생존
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;펌웨어·부트로더 단계에는 커널 메시지가 없다.&lt;/strong&gt; 커널이 아직 없으니 당연하다. 그 단계의 화면 출력은 펌웨어와 부트로더 각자의 것이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;커널이 메모리에 올라와 실행을 시작한 직후부터&lt;/strong&gt; printk가 동작한다. 링버퍼가 부팅 시 정적으로 잡히는 고정 버퍼라서, 파일시스템은커녕 유저스페이스가 아무것도 없는 시점부터 기록할 수 있다&lt;/li&gt;
-  &lt;li&gt;“디스크에 쓸 수 있는 시점”도 명확히 집을 수 있다: &lt;strong&gt;해당 경로가 속한 파일시스템이 마운트 완료된 시점&lt;/strong&gt;이다. 부트로더가 넘겨준 initramfs(RAM 상의 임시 루트)까지는 디스크 파일시스템이 필요 없고, 그 안에서 스토리지 드라이버를 로드해 실제 루트를 마운트한 뒤부터 디스크가 쓰기 대상이 된다&lt;/li&gt;
-  &lt;li&gt;systemd에서 이런 “시점”은 시간이 아니라 &lt;strong&gt;유닛 의존성 그래프로 정의&lt;/strong&gt;된다. 예컨대 저널을 디스크로 옮기는 flush 작업(&lt;code class=&quot;highlighter-rouge&quot;&gt;systemd-journal-flush.service&lt;/code&gt;)은 &lt;code class=&quot;highlighter-rouge&quot;&gt;RequiresMountsFor=/var/log/journal&lt;/code&gt;로 해당 경로의 마운트가 끝난 뒤에 오도록 못 박혀 있다 (상세는 2편)&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;각 마디의 실제 시각은 관찰할 수도 있다. &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;의 타임스탬프(부팅 후 경과 초), &lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -b -o short-monotonic&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;systemd-analyze&lt;/code&gt;가 그 도구다.&lt;/p&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;initramfs 내부 동작(early boot)의 상세는 이 글 범위 밖이다. 이 글에서는 “실제 루트 마운트 전까지 디스크가 필요 없게 해 주는 RAM 상의 임시 루트” 수준의 이해면 충분하다.&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;커널-링버퍼&quot;&gt;커널 링버퍼&lt;/h1&gt;
-
-&lt;p&gt;커널 링버퍼(kernel log buffer, printk ring buffer)는 커널 메시지를 저장하는 &lt;strong&gt;커널 내부의 고정 크기 메모리 영역&lt;/strong&gt;이다. 핵심 특징을 한 줄로 요약하면 이렇다 — &lt;strong&gt;부팅 시 미리 잡아 둔 고정 크기 버퍼에, 포인터 전진만으로 쓴다 (O(1), 할당 없음, 실패 경로 없음).&lt;/strong&gt; 이 구조가 어떻게 생겼는지 먼저 보고, 왜 이런 구조여야 하는지, 그리고 이 구조가 무엇을 감수하는지 순서로 이해하는 것이 중요하다.&lt;/p&gt;
-
-&lt;h2 id=&quot;링-자료구조&quot;&gt;링 자료구조&lt;/h2&gt;
-
-&lt;p&gt;고정 크기의 연속된 배열을 시작과 끝이 이어진 고리처럼 취급하는 원형 버퍼(circular buffer)다. 쓰기 위치(head)를 계속 전진시키다 버퍼 끝에 닿으면 처음으로 돌아와(wrap-around) 가장 오래된 메시지를 덮어쓴다. 이 순환에서 “링(ring)”이라는 이름이 나온다.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart LR
-    head([&quot;쓰기 위치 head&quot;]) -.-&amp;gt; mN
-    m0[&quot;msg 0&amp;lt;br&amp;gt;(가장 오래됨)&quot;] --&amp;gt; m1[&quot;msg 1&quot;] --&amp;gt; m2[&quot;msg 2&quot;] --&amp;gt; md[&quot;...&quot;] --&amp;gt; mN[&quot;msg N&amp;lt;br&amp;gt;(최신)&quot;]
-    mN -.-&amp;gt;|&quot;버퍼 끝에 닿으면 처음으로 돌아가&amp;lt;br&amp;gt;wrap-around 덮어쓰기&quot;| m0
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;메모리를 재할당하지 않는다&lt;/strong&gt;: 고정 크기라 커널이 예측 가능한 메모리만 쓴다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;빠르고 경합이 작다&lt;/strong&gt;: 쓰기 위치 인덱스 하나만 전진시키면 끝이라 링크드리스트 노드 할당이나 배열 재할당·이동 비용이 없다. 현대 커널(5.10+)의 printk 링버퍼는 메타데이터 링과 텍스트 데이터 링을 분리한 lockless 구조로, 이 head 전진을 원자적 연산으로 수행해 여러 CPU가 락 없이 동시에 써도 경합이 작다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;printk의-설계-제약&quot;&gt;printk의 설계 제약&lt;/h2&gt;
-
-&lt;p&gt;왜 이런 구조여야 할까. printk는 “커널이 무언가 잘못됐다고 외치는” 함수라서, &lt;strong&gt;가장 나쁜 순간에도 동작해야 한다.&lt;/strong&gt;&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;파일시스템이 없는 부팅 극초기&lt;/strong&gt;: 앞의 타임라인에서 봤듯 커널은 디스크가 준비되기 한참 전부터 로그를 남겨야 한다 → 파일에 쓸 수 없다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;인터럽트 컨텍스트&lt;/strong&gt;: 잠들(sleep) 수 없는 atomic 컨텍스트에서도 printk는 호출된다. 메모리 할당은 상황에 따라 잠들 수 있으므로, 여기서 할당을 시도하면 시스템이 멈출 수 있다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;OOM 상황&lt;/strong&gt;: “메모리가 없다”고 로그를 남기려는 순간에 그 로그가 메모리 할당을 요구하면 실패하거나, 더 나쁘게는 할당 실패가 다시 printk를 불러 &lt;strong&gt;재귀&lt;/strong&gt;에 빠진다&lt;/li&gt;
-  &lt;li&gt;락을 잡은 채, 크래시·패닉이 진행되는 중에도 호출된다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;참고로 커널 안에는 libc의 malloc이 없고 커널 자체의 동적 할당 함수(&lt;code class=&quot;highlighter-rouge&quot;&gt;kmalloc&lt;/code&gt; 등)가 있는데, 위와 같은 컨텍스트에서는 그것조차 안전하지 않다는 것이 요점이다. 결론적으로 “로그를 남긴다”는 행위는 &lt;strong&gt;실패할 수 있는 어떤 것에도 의존하면 안 된다.&lt;/strong&gt; 그 답이 앞에서 본 구조 — 미리 잡아 둔 고정 버퍼에 포인터 전진만으로 쓰는, 할당 없고 실패 경로 없는 기록 — 다.&lt;/p&gt;
-
-&lt;p&gt;이 관점에서 보면 자주 하는 오해 하나가 풀린다. “디스크보다 메모리가 유실될 일이 없어서 RAM에 쓰는 것 아닌가?” — 반대다. RAM은 전원이 나가면 유실되는 쪽이다. 링버퍼의 목적은 유실 방지가 아니라 &lt;strong&gt;어떤 상황에서도 기록이 가능한 것&lt;/strong&gt;이고, 유실 방지는 링버퍼 밖의 사본(저널)이 맡는 몫이다. 이 역할 분담이 1·2편 전체의 뼈대다.&lt;/p&gt;
-
-&lt;h2 id=&quot;구조가-감수하는-것-소실과-크기&quot;&gt;구조가 감수하는 것: 소실과 크기&lt;/h2&gt;
-
-&lt;p&gt;이 구조는 “어떤 상황에서도 기록 가능”의 대가로 두 가지를 감수한다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;오래된 로그의 소실&lt;/strong&gt;: 버퍼가 가득 차면 가장 오래된 메시지부터 덮어쓴다. 메시지가 폭주하면 옛날 메시지가 밀려난다. 다만 이 소실은 결함이 아니라 &lt;strong&gt;“로깅이 시스템을 죽일 수 있는 위험”과 맞바꾼 의도된 대가&lt;/strong&gt;이고, 그 대가를 밖에서 보완하는 것이 2편의 저널이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;크기의 고정&lt;/strong&gt;: 버퍼 크기는 커널 빌드 옵션(&lt;code class=&quot;highlighter-rouge&quot;&gt;CONFIG_LOG_BUF_SHIFT&lt;/code&gt;, 2의 거듭제곱 바이트 — 기본 128KB, 배포판 커널은 대개 256KB~1MB)으로 정해지고, 부트 파라미터 &lt;code class=&quot;highlighter-rouge&quot;&gt;log_buf_len&lt;/code&gt;으로 조정할 수 있다. SMP(Symmetric Multi-Processing — 여러 CPU 코어가 하나의 메모리를 공유하며 대등하게 동작하는 구성으로, 오늘날 멀티코어 시스템 대부분이 해당) 시스템에서는 CPU 수에 비례한 가산이 붙기도 하는데, 가산분이 기본 버퍼의 절반을 넘을 때만 적용되는 조건부라서 기본 버퍼를 크게 잡는 배포판 커널에서는 CPU가 수십 개여도 안 붙는 경우가 흔하다. 언제 이 크기가 문제가 되고 언제 키우는 것이 의미 있는지는 2편의 실무 섹션에서 다룬다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;로그-레벨과-printk의-다른-출력-경로&quot;&gt;로그 레벨과 printk의 다른 출력 경로&lt;/h2&gt;
-
-&lt;p&gt;각 레코드의 헤더에는 0(emerg)부터 7(debug)까지의 우선순위(level)가 들어 있다. &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg -r&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;&amp;lt;6&amp;gt;&lt;/code&gt;은 앞에서 봤듯 facility까지 인코딩된 값이지만 커널 메시지에서는 level 그대로 읽히고(6 = info), &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg -l err,warn&lt;/code&gt;이나 2편의 &lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -p err&lt;/code&gt; 같은 레벨 필터가 전부 이 공통 축 위에서 동작한다.&lt;/p&gt;
-
-&lt;p&gt;한편 printk의 출력 경로가 링버퍼만은 아니다. 우선순위가 &lt;code class=&quot;highlighter-rouge&quot;&gt;kernel.printk&lt;/code&gt; 커널 파라미터의 콘솔 로그레벨보다 높은(숫자가 작은) 메시지는 &lt;strong&gt;콘솔에도 출력&lt;/strong&gt;되고, 콘솔 출력을 네트워크로 전송하는 netconsole, 크래시 순간의 로그를 비휘발 영역에 남기는 pstore(2편에서 재등장한다) 같은 특수 경로도 있다. &lt;a href=&quot;/cs/CS-Linux-Kernel-Parameter/&quot;&gt;커널 파라미터 글&lt;/a&gt;의 EKS 노드 &lt;code class=&quot;highlighter-rouge&quot;&gt;sysctl --system&lt;/code&gt; 출력에 등장했던 &lt;code class=&quot;highlighter-rouge&quot;&gt;kernel.printk = 8 4 1 7&lt;/code&gt;이 바로 이 설정으로, 네 값은 순서대로 콘솔 로그레벨, 기본 메시지 레벨, 최소 콘솔 로그레벨, 콘솔 로그레벨의 기본값을 뜻한다. 다만 콘솔 출력은 표시 경로이고, &lt;strong&gt;저장소 기준으로는 링버퍼가 유일한 원본&lt;/strong&gt;이라는 그림은 변하지 않는다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;devkmsg-링버퍼의-유저스페이스-인터페이스&quot;&gt;/dev/kmsg: 링버퍼의 유저스페이스 인터페이스&lt;/h1&gt;
-
-&lt;p&gt;링버퍼는 커널 내부 자료구조다. 유저스페이스가 이걸 읽으려면 커널이 창구를 내 줘야 하는데, 그것이 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;다. &lt;a href=&quot;/cs/CS-Everything-is-a-File/&quot;&gt;Everything is a File 철학&lt;/a&gt; 그대로, 커널 내부 자료구조가 파일 인터페이스로 노출되는 것이다.&lt;/p&gt;
-
-&lt;p&gt;역할을 헷갈리기 쉬운데, &lt;strong&gt;printk가 쓰는 대상은 링버퍼(메모리 자료구조)이고, &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;는 저장 영역이 아니라 그 링버퍼를 노출하는 파일 인터페이스다.&lt;/strong&gt; 방향도 헷갈리기 쉽다. 커널이 이 파일에 쓰는 것이 아니라, 유저스페이스가 이 파일을 &lt;strong&gt;통해&lt;/strong&gt; 링버퍼를 읽는다. “링버퍼 = 방, &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt; = 방문”으로 기억하면 된다.&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;의 성질 중 두 가지가 뒤에서 중요해진다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;새로 연 리더는 버퍼의 가장 오래된 레코드부터 읽는다.&lt;/strong&gt; 그래서 부팅 중간에 뒤늦게 뜬 journald도 자기가 뜨기 전에 쌓인 초기 부팅 메시지를 소급해서 가져갈 수 있다 (아직 wrap되지 않았다면)&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;쓰기도 가능하다.&lt;/strong&gt; 유저스페이스가 &lt;code class=&quot;highlighter-rouge&quot;&gt;echo test &amp;gt; /dev/kmsg&lt;/code&gt;로 커널 로그에 메시지를 주입할 수 있다. 커널 메시지 파이프라인이 잘 동작하는지 확인하는 간단한 실험 도구가 된다. 다만 주입된 메시지는 facility 0(kern)으로는 기록될 수 없게 강제되므로, 커널이 직접 쓴 메시지와 언제나 구별된다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;느린 리더는 유실을 감지한다.&lt;/strong&gt; 리더가 다음 레코드를 읽기 전에 그 자리가 wrap으로 덮어써지면, 다음 &lt;code class=&quot;highlighter-rouge&quot;&gt;read()&lt;/code&gt;가 &lt;code class=&quot;highlighter-rouge&quot;&gt;EPIPE&lt;/code&gt;를 반환하고 읽기 위치는 남아 있는 다음 레코드로 점프한다. 놓쳤다는 사실 자체는 알 수 있다는 뜻이고, journald가 이 단절을 만났을 때 남기는 흔적을 2편에서 본다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;devkmsg-vs-prockmsg&quot;&gt;/dev/kmsg vs /proc/kmsg&lt;/h2&gt;
-
-&lt;p&gt;링버퍼를 노출하는 파일 인터페이스는 사실 하나 더 있다. klogd 시절부터 쓰인 더 오래된 &lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/kmsg&lt;/code&gt;다. 같은 링버퍼를 읽는데 왜 journald는 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;를 쓸까. 두 인터페이스의 동작을 비교하면 답이 나온다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt; &lt;/th&gt;
-      &lt;th&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/kmsg&lt;/code&gt;&lt;/th&gt;
-      &lt;th&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;세대&lt;/td&gt;
-      &lt;td&gt;레거시 (klogd 시절)&lt;/td&gt;
-      &lt;td&gt;현대 (journald가 사용)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;읽기 방식&lt;/td&gt;
-      &lt;td&gt;&lt;strong&gt;읽으면 소비됨&lt;/strong&gt; — 커널이 읽기 위치를 전역으로 하나만 관리&lt;/td&gt;
-      &lt;td&gt;&lt;strong&gt;리더마다 독립 오프셋&lt;/strong&gt; — 각자 처음부터 비파괴적으로 읽음&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;동시 리더&lt;/td&gt;
-      &lt;td&gt;사실상 1개 전제 (여럿이 읽으면 메시지를 나눠 가져 서로 유실)&lt;/td&gt;
-      &lt;td&gt;여러 프로세스가 동시 구독 가능&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;단위/형식&lt;/td&gt;
-      &lt;td&gt;텍스트 스트림&lt;/td&gt;
-      &lt;td&gt;레코드 단위, 구조화 (우선순위·시퀀스·타임스탬프 + 본문)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;쓰기&lt;/td&gt;
-      &lt;td&gt;불가&lt;/td&gt;
-      &lt;td&gt;가능 (커널 로그에 메시지 주입)&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;정리하면 &lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/kmsg&lt;/code&gt;는 로그 데몬 하나가 독점해서 퍼 가는 시대의 인터페이스이고, &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;는 여러 리더가 각자 읽는 현대 인터페이스다. “dmesg도 journald도 동시에 같은 링버퍼를 읽는” 현재의 그림이 성립하는 것은 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;의 리더별 독립 오프셋 덕분이다. 다만 &lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/kmsg&lt;/code&gt;가 죽은 인터페이스는 아니어서, 데비안·우분투 기본 구성의 rsyslog(imklog 모듈)가 오늘날에도 이 경로로 링버퍼를 직접 읽는 대표 소비자다 (2편에서 다시 본다).&lt;/p&gt;
-
-&lt;h2 id=&quot;링버퍼의-두-창구-devkmsg와-syslog2&quot;&gt;링버퍼의 두 창구: /dev/kmsg와 syslog(2)&lt;/h2&gt;
-
-&lt;p&gt;경계 인터페이스를 한 층 위에서 묶으면 창구는 두 계열이다. &lt;strong&gt;파일 경로&lt;/strong&gt;(&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;와 레거시 &lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/kmsg&lt;/code&gt;)와 &lt;strong&gt;시스템 콜 경로&lt;/strong&gt;(&lt;code class=&quot;highlighter-rouge&quot;&gt;syslog(2)&lt;/code&gt;, glibc 래퍼 이름은 &lt;code class=&quot;highlighter-rouge&quot;&gt;klogctl&lt;/code&gt;)다. util-linux의 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;는 커널 3.5 이후 환경에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;를 우선 읽고(util-linux 2.22부터), 열지 못하면 &lt;code class=&quot;highlighter-rouge&quot;&gt;syslog(2)&lt;/code&gt;로 자동 폴백한다. 창구가 두 계열이라는 사실은 뒤의 컨테이너 차단 이야기에서 다시 중요해진다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;dmesg&quot;&gt;dmesg&lt;/h1&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;는 커널 링버퍼의 내용을 출력하는 유저스페이스 프로그램이다. 로그를 생성하는 것이 아니라 &lt;strong&gt;읽어서 보여주기만&lt;/strong&gt; 하는 도구이며, 링버퍼가 휘발성이므로 &lt;strong&gt;현재 부팅 세션의 메시지만&lt;/strong&gt; 보인다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;옵션&lt;/th&gt;
-      &lt;th&gt;동작&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;-w&lt;/code&gt; / &lt;code class=&quot;highlighter-rouge&quot;&gt;--follow&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;새 메시지를 계속 출력 (tail -f처럼)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;-H&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;사람이 읽기 좋은 형식 + 페이저&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;-T&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;타임스탬프를 벽시계 시각으로 변환 (아래 주의 참조)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;-l err,warn&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;우선순위 레벨 필터&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;-r&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;raw 출력 — &lt;code class=&quot;highlighter-rouge&quot;&gt;&amp;lt;6&amp;gt;&lt;/code&gt; 우선순위 접두 노출&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;-T&lt;/code&gt;의 벽시계 시각은 정확하지 않을 수 있다. 커널 레코드의 타임스탬프는 부팅 후 경과 시간(monotonic)이고, &lt;code class=&quot;highlighter-rouge&quot;&gt;-T&lt;/code&gt;는 이를 현재 시각 기준으로 역산하므로, 서스펜드나 시계 보정(NTP)이 있었던 시스템에서는 실제 발생 시각과 어긋난다. 2편에서 같은 이벤트의 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg -T&lt;/code&gt; 시각과 저널 기록 시각이 81초 어긋난 실제 사례를 본다.&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;p&gt;실제로 GPU 노드에서 Xid 에러를 찾을 때의 출력은 아래와 같다.&lt;/p&gt;
-
-&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 커널 링버퍼에서 Xid 에러 검색 (-T: 사람이 읽을 수 있는 타임스탬프, 호스트명·계정명은 익명화)&lt;/span&gt;
-user@gpu-node-01:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;sudo &lt;/span&gt;dmesg &lt;span class=&quot;nt&quot;&gt;-T&lt;/span&gt; | &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; xid
-&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;Sat Jul 11 05:52:47 2026] NVRM: Xid &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;PCI:0000:2a:00&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;: 120, GSP kernel exception: load access page fault &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;cause:0xd&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; @ pc:0xffffffff9300188a, partition:4#0
-&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;Sat Jul 11 05:52:47 2026] NVRM: Xid &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;PCI:0000:2a:00&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;: 154, GPU recovery action changed from 0x0 &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;None&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; to 0x1 &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;GPU Reset Required&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NVRM&lt;/code&gt;은 NVIDIA 커널 드라이버(커널 모듈)의 접두어다. 즉 이 메시지의 발생 주체는 커널 모듈이고, 커널 공간에서 printk로 찍혔으므로 커널 메시지로서 링버퍼에 남은 것이다. Xid 코드별 의미는 NVIDIA 공식 Xid 문서에서 번호로 조회할 수 있다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;컨테이너와-링버퍼-격리되지-않는-전역-자원&quot;&gt;컨테이너와 링버퍼: 격리되지 않는 전역 자원&lt;/h1&gt;
-
-&lt;h2 id=&quot;컨테이너에서-dmesg를-치면-보이는-것&quot;&gt;컨테이너에서 dmesg를 치면 보이는 것&lt;/h2&gt;
-
-&lt;p&gt;컨테이너는 호스트 커널 위에서 실행되는 프로세스일 뿐이고, &lt;a href=&quot;/cs/CS-Container-Networking-Namespace/&quot;&gt;네임스페이스로 격리&lt;/a&gt;되는 것은 네트워크·PID·마운트 같은 일부 자원이다. &lt;strong&gt;커널 링버퍼는 네임스페이스화되지 않은 전역 단일 자원&lt;/strong&gt;이다. 따라서 컨테이너 안에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;가 허용된다면, 보이는 것은 “이 컨테이너의 커널 메시지”가 아니라 &lt;strong&gt;호스트 전체의 커널 메시지&lt;/strong&gt;다. &lt;a href=&quot;/cs/CS-Linux-Kernel-Parameter/&quot;&gt;커널 파라미터 글&lt;/a&gt;에서 다룬 namespaced/non-namespaced 커널 파라미터 구분과 같은 축으로, 링버퍼는 non-namespaced인 셈이다.&lt;/p&gt;
-
-&lt;p&gt;호스트 전체가 보이는 것이 당장 무슨 문제인가 싶을 수 있지만, 다음과 같은 이유로 문제가 된다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;테넌트 격리 붕괴&lt;/strong&gt;: OOM killer 덤프에는 호스트 전체의 프로세스 목록과 메모리 상태가, segfault 메시지에는 다른 사용자 바이너리의 이름과 주소가 노출된다. 여러 팀이 공유하는 GPU 서버라면 다른 팀 워크로드의 흔적이 그대로 보인다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;커널 공격의 정찰 재료&lt;/strong&gt;: 커널 메시지에 노출되는 커널 주소는 KASLR(커널 주소 무작위화) 우회의 재료가 된다. 커널 4.15부터 &lt;code class=&quot;highlighter-rouge&quot;&gt;%p&lt;/code&gt;로 찍히는 포인터는 해시된 값으로 출력되는 완화가 있지만, 코드가 해시를 거치지 않는 포맷으로 직접 찍은 값은 그대로 노출된다 — 앞의 Xid 예시 속 &lt;code class=&quot;highlighter-rouge&quot;&gt;pc:0xffffffff9300188a&lt;/code&gt;가 해시되지 않은 커널 주소 형태 그대로 노출된 예다. 보이는 것은 커널 “메시지”이지 커널 메모리가 아니므로 그 자체로 탈출은 아니지만, 탈출 공격을 준비하는 정찰 재료가 된다&lt;/li&gt;
-  &lt;li&gt;하드웨어 구성·토폴로지 정보가 노출된다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;세-겹의-차단과-두-창구&quot;&gt;세 겹의 차단과 두 창구&lt;/h2&gt;
-
-&lt;p&gt;그래서 컨테이너 환경에는 이 접근을 막는 자물쇠가 최대 세 겹 걸린다. 앞에서 본 두 창구 각각에 걸린 자물쇠로 이해하면 구조가 보인다 — 다만 뒤에서 보듯, 세 겹이 전부 걸려 있는지는 런타임과 클러스터 설정에 달렸다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;차단 레이어&lt;/th&gt;
-      &lt;th&gt;차단 대상 창구&lt;/th&gt;
-      &lt;th&gt;동작&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;kernel.dmesg_restrict=1&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;syslog(2)&lt;/code&gt; 모두&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;CAP_SYSLOG&lt;/code&gt; 없는 프로세스의 링버퍼 읽기를 커널이 거부 — &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;는 open 단계에서, &lt;code class=&quot;highlighter-rouge&quot;&gt;syslog(2)&lt;/code&gt;는 호출 단계에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;EPERM&lt;/code&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;런타임 기본 seccomp 프로필&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;syslog(2)&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;시스템 콜 호출 자체를 차단 — Docker 기본 프로필(19.03부터)에 포함. 쿠버네티스는 기본 미적용(아래)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev&lt;/code&gt; 최소 구성&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;컨테이너의 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev&lt;/code&gt;는 호스트 것이 아니라 런타임이 표준 디바이스만 만들어 주는 별도 구성이라 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;가 없고, 목록 밖 디바이스는 디바이스 cgroup(v1은 devices 컨트롤러, cgroup v2에서는 eBPF 프로그램이 같은 역할)이 접근을 차단한다&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;컨테이너 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev&lt;/code&gt;의 기본 구성은 OCI 런타임 스펙(config-linux)에 명시되어 있다. 기본 디바이스는 &lt;code class=&quot;highlighter-rouge&quot;&gt;null&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;zero&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;full&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;random&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;urandom&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;tty&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;console&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;ptmx&lt;/code&gt;뿐이고 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;는 없으며, 스펙은 이 목록과 명시적으로 추가된 디바이스 외의 접근을 금지한다.&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;kernel.dmesg_restrict&lt;/code&gt;는 커널 파라미터(sysctl)로, 멀티유저 시스템에서 위의 정보 노출을 막기 위한 호스트 수준 스위치다. &lt;code class=&quot;highlighter-rouge&quot;&gt;CAP_SYSLOG&lt;/code&gt;는 root 권한을 잘게 쪼갠 capability 조각 중 하나로, 컨테이너 런타임이 기본으로 주는 capability 셋에 포함되지 않는다. 일반 계정에서 보는 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg: read kernel buffer failed: Operation not permitted&lt;/code&gt;는 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt; open이 거부된 뒤 &lt;code class=&quot;highlighter-rouge&quot;&gt;syslog(2)&lt;/code&gt; 폴백까지 실패했을 때 그 폴백 경로가 내는 문구다&lt;/li&gt;
-  &lt;li&gt;seccomp은 프로세스가 호출할 수 있는 시스템 콜을 커널이 필터링하는 기능이다. Docker는 19.03부터 기본 프로필이 &lt;code class=&quot;highlighter-rouge&quot;&gt;CAP_SYSLOG&lt;/code&gt; 없는 컨테이너의 &lt;code class=&quot;highlighter-rouge&quot;&gt;syslog(2)&lt;/code&gt;를 차단한다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;그럼 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;가 없으면 &lt;code class=&quot;highlighter-rouge&quot;&gt;CAP_SYSLOG&lt;/code&gt;를 줘도 못 읽는가 하면, 아니다. 창구가 두 개라는 것을 기억하면 된다. &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;는 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;가 없으면 &lt;code class=&quot;highlighter-rouge&quot;&gt;syslog(2)&lt;/code&gt;로 폴백하므로, seccomp이 그 시스템 콜을 허용하고 &lt;code class=&quot;highlighter-rouge&quot;&gt;CAP_SYSLOG&lt;/code&gt;가 있으면 디바이스 없이도 읽힌다. 즉 세 겹 차단은 “같은 문에 자물쇠 세 개”가 아니라 &lt;strong&gt;“두 창구에 각각 걸린 자물쇠”&lt;/strong&gt; 구조이고, 차단이든 허용이든 창구 단위로 생각해야 한다.&lt;/p&gt;
-
-&lt;p&gt;그리고 세 겹이 모두 걸려 있는 것은 &lt;code class=&quot;highlighter-rouge&quot;&gt;docker run&lt;/code&gt; 기본값 같은 Docker 단독 실행 기준이다. &lt;strong&gt;쿠버네티스는 다르다.&lt;/strong&gt; Pod에 &lt;code class=&quot;highlighter-rouge&quot;&gt;securityContext.seccompProfile&lt;/code&gt;을 지정하지 않으면 기본값이 &lt;code class=&quot;highlighter-rouge&quot;&gt;Unconfined&lt;/code&gt;, 즉 seccomp 미적용이다 (&lt;a href=&quot;https://kubernetes.io/docs/tutorials/security/seccomp/&quot;&gt;Kubernetes 공식 seccomp 튜토리얼&lt;/a&gt;에 명시되어 있다). 런타임 기본 프로필(RuntimeDefault)을 클러스터 기본으로 만들려면 kubelet 설정(&lt;code class=&quot;highlighter-rouge&quot;&gt;seccompDefault: true&lt;/code&gt;)을 명시적으로 켜야 하고, privileged 컨테이너는 설정과 무관하게 항상 Unconfined로 돈다. 그러면 일반 Pod의 방어선은 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev&lt;/code&gt; 구성과 호스트 sysctl인 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg_restrict&lt;/code&gt; 두 겹이 되는데, 후자도 배포판마다 기본값이 갈린다 — 업스트림 커널 기본은 0이고, 우분투는 20.10부터·데비안은 9부터 1로 켜 두지만, Amazon Linux 2는 0이다(AL2023부터 1). 그래서 seccomp 미적용 클러스터에 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg_restrict=0&lt;/code&gt;인 노드(예: Amazon Linux 2 기반 노드) 조합이라면, &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;가 없어도 일반 Pod에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;syslog(2)&lt;/code&gt; 폴백으로 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;가 실제로 읽힌다.&lt;/p&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;seccomp과 capability 자체의 상세(프로필 구조, capability 전체 목록 등)는 이 글 범위 밖이다. 여기서는 “시스템 콜 필터”와 “쪼개진 root 권한 조각” 수준의 이해면 충분하다.&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;h2 id=&quot;일부러-열어-주는-경우&quot;&gt;일부러 열어 주는 경우&lt;/h2&gt;
-
-&lt;p&gt;그렇다고 절대 열면 안 되는 것은 아니다. &lt;strong&gt;노드의 커널 메시지를 읽는 것이 임무인 시스템 컴포넌트&lt;/strong&gt;에는 의도적으로 열어 준다. 대표적으로 Kubernetes의 node-problem-detector(커널 메시지에서 하드웨어·커널 문제를 감지해 노드 상태로 보고하는 DaemonSet)나 노드 로그 수집 에이전트가 그렇다.&lt;/p&gt;
-
-&lt;p&gt;원칙은 이렇게 정리된다: &lt;strong&gt;일반 워크로드 Pod에는 주지 않고, 노드 관측이 임무인 컴포넌트에만 명시적으로&lt;/strong&gt;(&lt;code class=&quot;highlighter-rouge&quot;&gt;securityContext.capabilities.add&lt;/code&gt; 또는 privileged) 연다. 뒤집어 말하면, 일반 Pod에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;가 된다는 것은 누군가 자물쇠를 풀어 놓았거나 애초에 클러스터가 잠그지 않은(seccomp 미적용 + &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg_restrict=0&lt;/code&gt;) 상태라는 뜻이므로, 어느 쪽이든 점검 신호다. GPU Pod에서 Xid를 확인하려면 결국 노드(호스트)에서 봐야 하는 실무 관행이 여기서 나온다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;커널-메시지-조회가-필요한-상황&quot;&gt;커널 메시지 조회가 필요한 상황&lt;/h1&gt;
-
-&lt;p&gt;어떤 상황에서 커널 메시지를 봐야 할까. 커널이 직접 관여하는 사건은 전부 커널 메시지로 오기 때문에, 아래 상황들에서는 커널 메시지 조회가 진단의 출발점이 된다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;사건&lt;/th&gt;
-      &lt;th&gt;커널 메시지 예&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;OOM killer&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;Out of memory: Killed process ...&lt;/code&gt; — Pod가 OOMKilled로 죽었을 때 누가 왜 죽었는지의 원본 기록 (&lt;a href=&quot;/cs/CS-Memory-Page-Swap/&quot;&gt;메모리, 페이지, 스왑&lt;/a&gt; 참조)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;디스크/파일시스템 에러&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;I/O error, dev ...&lt;/code&gt;, 파일시스템 read-only 강제 remount&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;conntrack 테이블 가득 참&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;nf_conntrack: table full, dropping packet&lt;/code&gt; — &lt;a href=&quot;/cs/CS-Linux-Kernel-Parameter/&quot;&gt;커널 파라미터 글&lt;/a&gt;의 트러블슈팅 사례&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;hung task / soft lockup&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;task ... blocked for more than 120 seconds&lt;/code&gt; — 스토리지·GPU 드라이버 문제에서 자주&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;하드웨어 에러&lt;/td&gt;
-      &lt;td&gt;MCE(Machine Check Exception — CPU·메모리 하드웨어 에러 보고), ECC 메모리 오류 정정 기록, PCIe AER(Advanced Error Reporting) — GPU 장애의 전조로 자주 등장&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;GPU Xid&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NVRM: Xid ...&lt;/code&gt; — 앞의 예시&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;기타&lt;/td&gt;
-      &lt;td&gt;NIC 링크 up/down 플래핑, 커널 모듈 로드 실패, 일반 프로세스의 segfault 기록&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;이 목록의 공통점은 &lt;strong&gt;애플리케이션 로그에는 절대 남지 않는 사건들&lt;/strong&gt;이라는 것이다. 앱은 자기가 왜 죽는지 기록할 수 없고(OOM으로 죽는 앱은 유언을 못 남긴다), 하드웨어 사건은 앱보다 아래 층에서 일어난다. 그 층의 기록이 모이는 유일한 원본이 커널 링버퍼이고, 그래서 커널 메시지를 보는 것이다.&lt;/p&gt;
-
-&lt;p&gt;그런데 그 원본에는 두 가지 한계가 있다. &lt;strong&gt;재부팅하면 사라지고, 메시지가 폭주하면 오래된 것부터 밀려난다.&lt;/strong&gt; 위의 Xid 사례에서도 7월 11일의 에러가 조회 시점까지 운 좋게 버퍼에 남아 있었을 뿐, 그 사이 로그가 폭주했다면 덮어써져 사라졌을 것이다. 이 한계를 메우기 위해 링버퍼 밖의 누군가가 메시지를 계속 퍼서 영속 보관해야 하는데, 그 이야기 — 시스템 로그 저장소와 저널 — 가 &lt;a href=&quot;/cs/CS-Kernel-Message-02/&quot;&gt;2편&lt;/a&gt;이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;커널 메시지는 커널 공간 코드(코어·모듈)가 &lt;code class=&quot;highlighter-rouge&quot;&gt;printk()&lt;/code&gt;로 기록하는 구조화된 로그 레코드다. printk는 시스템 콜이 아니라 커널 내부 함수다&lt;/li&gt;
-  &lt;li&gt;커널이 직접 쓰는 저장소는 커널 링버퍼 하나뿐이다. RAM 고정 크기·wrap-around·휘발이라는 성질은 printk 설계 제약의 결과이고, 유실 방지는 링버퍼의 목적이 아니라 사본(저널)의 몫이다&lt;/li&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;는 링버퍼를 유저스페이스에 노출하는 파일 인터페이스로, 리더별 독립 오프셋 덕분에 dmesg와 journald가 동시에 같은 원본을 읽는다. 여기까지가 배포판 무관 공통 영역이다&lt;/li&gt;
-  &lt;li&gt;링버퍼는 네임스페이스 격리가 없는 전역 자원이라, 컨테이너에서의 접근은 두 창구(&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;syslog(2)&lt;/code&gt;)에 걸린 세 겹의 자물쇠(dmesg_restrict, seccomp, /dev 구성)로 차단된다 — 몇 겹이 실제로 걸려 있는지는 런타임·클러스터·호스트 설정에 달렸고, 노드 관측이 임무인 컴포넌트에만 명시적으로 연다&lt;/li&gt;
-  &lt;li&gt;커널 메시지는 앱 로그에 남지 않는 사건들의 원본 기록이지만, 휘발·wrap이라는 한계가 있어 유저스페이스의 영속 보관이 필요하다 — 2편에서 다룬다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://man7.org/linux/man-pages/man1/dmesg.1.html&quot;&gt;man dmesg(1)&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://man7.org/linux/man-pages/man2/syslog.2.html&quot;&gt;man syslog(2)&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.kernel.org/doc/Documentation/ABI/testing/dev-kmsg&quot;&gt;Kernel docs - /dev/kmsg ABI&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.kernel.org/doc/html/latest/core-api/printk-basics.html&quot;&gt;Kernel docs - Message logging with printk&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://lwn.net/Articles/794798/&quot;&gt;LWN - printk: new ringbuffer implementation&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://github.com/opencontainers/runtime-spec/blob/main/config-linux.md#default-devices&quot;&gt;OCI Runtime Specification - Default Devices&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.nvidia.com/deploy/xid-errors/index.html&quot;&gt;NVIDIA Xid Errors&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://github.com/kubernetes/node-problem-detector&quot;&gt;Kubernetes node-problem-detector&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/tutorials/security/seccomp/&quot;&gt;Kubernetes - Restrict a Container’s Syscalls with seccomp&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Linux" /><category term="Kernel" /><category term="printk" /><category term="dmesg" /><category term="kmsg" /><category term="Ring-Buffer" /><category term="Container" /><summary type="html">커널 메시지는 누가 어디에 쓰고, dmesg는 무엇을 읽는지에 대해 알아 보자.</summary></entry></feed>
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Linux" /><category term="Kernel" /><category term="systemd" /><category term="journald" /><category term="journalctl" /><category term="syslog" /><category term="rsyslog" /><category term="Logging" /><summary type="html">커널 메시지를 보관하는 링버퍼의 사본은 누가 어떻게 보존하는지 알아 보자.</summary></entry></feed>

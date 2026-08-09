@@ -1,0 +1,1397 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리 - Eraser’s StudyLog</title>
+<meta name="description" content="마지막 토큰의 벡터가 로짓이 되고, temperature·top-k·top-p를 거쳐 다음 토큰이 되기까지 — 출력층과 샘플링을 보고 트랜스포머 아키텍처 여정을 닫는다. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리">
+<meta property="og:url" content="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/">
+
+
+  <meta property="og:description" content="마지막 토큰의 벡터가 로짓이 되고, temperature·top-k·top-p를 거쳐 다음 토큰이 되기까지 — 출력층과 샘플링을 보고 트랜스포머 아키텍처 여정을 닫는다. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-AI.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-08-05T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리">
+    <meta itemprop="description" content="마지막 토큰의 벡터가 로짓이 되고, temperature·top-k·top-p를 거쳐 다음 토큰이 되기까지 — 출력층과 샘플링을 보고 트랜스포머 아키텍처 여정을 닫는다.">
+    <meta itemprop="datePublished" content="2026-08-05T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-08-05T00:00:00+09:00">2026년 08월 05일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  20 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#출력층-마지막-벡터에서-로짓까지">출력층: 마지막 벡터에서 로짓까지</a>
+    <ul>
+      <li><a href="#최종-layernorm과-unembedding">최종 LayerNorm과 unembedding</a></li>
+      <li><a href="#weight-tying-입구와-출구가-같은-행렬">weight tying: 입구와 출구가 같은 행렬</a></li>
+      <li><a href="#로짓의-해석">로짓의 해석</a></li>
+    </ul>
+  </li>
+  <li><a href="#샘플링-로짓에서-확률로">샘플링: 로짓에서 확률로</a>
+    <ul>
+      <li><a href="#temperature-분포의-엔트로피-조절">temperature: 분포의 엔트로피 조절</a></li>
+      <li><a href="#top-k와-top-p">top-k와 top-p</a></li>
+      <li><a href="#적용-순서와-순위-불변성">적용 순서와 순위 불변성</a></li>
+      <li><a href="#샘플링의-무작위성">샘플링의 무작위성</a></li>
+    </ul>
+  </li>
+  <li><a href="#자기회귀-루프">자기회귀 루프</a></li>
+  <li><a href="#블록의-보조-구성-요소">블록의 보조 구성 요소</a>
+    <ul>
+      <li><a href="#잔차-연결-gradient-소실-방지">잔차 연결: gradient 소실 방지</a></li>
+      <li><a href="#layernorm-적용-위치의-변천">LayerNorm: 적용 위치의 변천</a></li>
+      <li><a href="#dropout-학습-전용-정규화">dropout: 학습 전용 정규화</a></li>
+    </ul>
+  </li>
+  <li><a href="#서빙-관점-샘플링-파라미터의-위치">서빙 관점: 샘플링 파라미터의 위치</a>
+    <ul>
+      <li><a href="#모델-파라미터가-아니라-요청-파라미터">모델 파라미터가 아니라 요청 파라미터</a></li>
+      <li><a href="#재현성-temperature-0이어도-남는-비결정성">재현성: temperature 0이어도 남는 비결정성</a></li>
+      <li><a href="#같은-지점의-다른-로짓-후처리">같은 지점의 다른 로짓 후처리</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#결론">결론</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>12개 블록을 모두 지난 <strong>마지막 토큰의 768차원 벡터</strong>가 최종 LayerNorm을 거쳐 unembedding 행렬(768 × 50,257)과 곱해지면, 어휘 사전 각 토큰의 점수 — <a href="/ai/AI-LLM-Optimization-01-AI-Overview/">1편</a>에서 정의만 봤던 <strong>로짓</strong> — 가 된다. GPT-2는 이 행렬을 새로 두지 않고 입력 임베딩 행렬을 전치해 재사용한다(weight tying) — 입구와 출구가 같은 행렬이다</li>
+  <li>로짓은 softmax로 확률 분포가 되는데, 그 앞에 <strong>temperature·top-k·top-p</strong>라는 샘플링 파라미터가 붙는다. temperature는 로짓을 T로 나누는 스케일링으로 분포의 퍼짐(엔트로피)을 조절하고, top-k/top-p는 후보 집합을 잘라낸다. temperature는 로짓의 <strong>순위를 바꾸지 않으므로</strong> top-k로 남는 집합은 temperature와 무관하다</li>
+  <li>확률이 가장 높은 토큰이 항상 선택되지 않는 이유는 greedy가 아니라 <strong>샘플링</strong>이기 때문이다 — 허용 집합에서 확률에 비례해 무작위 추출한다. temperature를 0으로 보내는 극한이 greedy다</li>
+  <li>선택된 토큰은 시퀀스 끝에 붙어 <strong>다시 입력이 된다</strong>. 이 자기회귀 루프가 곧 서빙의 decode 루프이고, 토큰 하나마다 모델 가중치 전체를 읽는 <a href="/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/">2.6편</a>의 비용 구조가 여기서 나온다</li>
+  <li>잔차 연결·LayerNorm·dropout은 모두 학습 안정 장치로 도입됐지만, 추론에서의 운명이 갈린다 — 잔차와 LayerNorm은 추론에서도 항상 실행되는 연산이고, <strong>dropout만 추론 시 꺼진다</strong></li>
+  <li>서빙 관점에서 temperature·top-k·top-p는 모델 파라미터가 아니라 <strong>요청 단위의 로짓 후처리 설정값</strong>이다. 자원 소모 축이 아니라 출력 품질·재현성 축의 설정값이다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="출력층-마지막-벡터에서-로짓까지">출력층: 마지막 벡터에서 로짓까지</h1>
+
+<p><a href="/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/">앞 글</a>에서 트랜스포머 블록의 두 서브레이어를 모두 닫았다. 이 블록이 12개(GPT-2 small 기준) 반복된 뒤, 드디어 다음 토큰을 실제로 고르는 마지막 구간 — <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/">2.2편</a>에서 확인했던 세 부분 중 마지막, 출력층이다. Transformer Explainer의 소개부터 보자.</p>
+
+<blockquote>
+  <p>After all Transformer blocks, the last token’s output embedding, enriched with context from all previous tokens, is multiplied by learned weights in a final layer. This produces <strong>logits</strong>, 50,257 numbers — one for each token in GPT-2’s vocabulary — that indicate how likely each token is to come next.</p>
+</blockquote>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-explainer-output-overview.png" alt="Transformer Explainer의 출력 구간 개요 — 마지막 블록의 출력이 로짓과 확률로 이어지는 화면" class="align-center" width="700" /></p>
+
+<center><sup>Transformer Explainer 화면 직접 캡처</sup></center>
+
+<h2 id="최종-layernorm과-unembedding">최종 LayerNorm과 unembedding</h2>
+
+<p>마지막 블록을 나온 표현은 여전히 <code class="highlighter-rouge">(seq_len, 768)</code>이다. 여기서 다음 토큰 예측에 쓰이는 것은 이 중 <strong>마지막 토큰의 벡터 하나</strong>다. <a href="/ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/">2.5편</a>에서 본 causal mask 때문에 각 토큰은 자기보다 앞에 있는 토큰만 어텐션으로 참조할 수 있고, 그래서 위치마다 표현이 담는 문맥의 범위가 다르다 — 첫 토큰의 표현에는 자기 자신뿐, 중간 토큰에는 거기까지의 문맥뿐이고, <strong>시퀀스 전체를 다 본 표현은 마지막 토큰의 것뿐이다.</strong> 다음 토큰을 예측할 재료로 마지막 토큰의 벡터를 쓰는 이유다. 이 벡터가 로짓이 되기까지 두 단계를 거친다. nanoGPT의 출력 구간을 참고해 보자.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># nanoGPT GPT.forward — 출력층 구간 발췌</span>
+<span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transformer</span><span class="o">.</span><span class="n">ln_f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>          <span class="c"># 최종 LayerNorm — 블록 밖에서 한 번 더</span>
+<span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lm_head</span><span class="p">(</span><span class="n">x</span><span class="p">[:,</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="p">:])</span>  <span class="c"># 추론 시 마지막 토큰만: (B, 1, 768) → (B, 1, 50257)</span>
+</code></pre></div></div>
+
+<ul>
+  <li><strong>최종 LayerNorm(<code class="highlighter-rouge">ln_f</code>)</strong>: <a href="/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/">2.6편</a>에서 본 블록 안의 LayerNorm 두 번 외에, GPT-2는 마지막 블록을 나온 뒤 <strong>한 번 더</strong> LayerNorm을 적용한다. Transformer Explainer의 LayerNorm 설명에 붙어 있는 “applied … once more before the final output”이 바로 이것이다</li>
+  <li><strong>unembedding(LM head)</strong>: 정규화된 768차원 벡터에 <code class="highlighter-rouge">(768, 50257)</code> 행렬을 곱한다(GPT-2의 LM head에는 bias가 없다). 결과는 50,257개의 숫자 — 어휘 사전의 모든 토큰 후보 각각에 대한 점수, 로짓이다</li>
+</ul>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-explainer-logit.gif" alt="Transformer Explainer에서 마지막 토큰의 표현이 로짓으로 변환되는 애니메이션" class="align-center" width="700" /></p>
+
+<center><sup>Transformer Explainer 화면 직접 캡처</sup></center>
+
+<p>인용문의 “learned weights in a final layer”는 처음 읽었을 때 의미가 바로 잡히지 않았다 — 블록들을 거치며 나온 각 토큰의 표현 벡터로 만들어지는 가중치인가 싶었는데, 확인해 보니 그렇지 않다. 블록들과 <strong>함께 end-to-end 역전파로 학습되는 별도 선형층의 파라미터</strong>다. 다만 Transformer Explainer 화면에는 이 층이 뚜렷한 박스로 그려져 있지 않다 — 마지막 블록에서 로짓 컬럼으로 넘어가는 화살표 구간이 곧 이 곱셈이라, 층 하나가 통째로 있다는 사실을 놓치기 쉽다.</p>
+
+<h2 id="weight-tying-입구와-출구가-같은-행렬">weight tying: 입구와 출구가 같은 행렬</h2>
+
+<p>그런데 GPT-2는 이 <code class="highlighter-rouge">(768, 50257)</code> 행렬을 별도로 두지 않는다. <a href="/ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/">2.3편</a>에서 본 <strong>입력 임베딩 행렬 <code class="highlighter-rouge">(50257, 768)</code>을 전치해 그대로 재사용</strong>한다. 2.3편에서 “임베딩이 입력과 출력을 잇는 다리로 확장된 사례”라고 예고해 뒀던 <strong>weight tying</strong>이 작동하는 지점이 여기다.</p>
+
+<p>“재사용”의 의미를 분명히 해 둘 필요가 있다. 학습을 마친 임베딩 행렬을 출력층에 가져다 붙이는 것이 아니다 — <strong>애초에 출력층용 행렬을 따로 만들지 않고, 임베딩과 LM head 두 자리가 처음부터 파라미터 하나를 공유하도록 묶어(tie) 놓고 학습한다.</strong> 역전파에서 입력 쪽(행 조회)과 출력 쪽(전치 곱) 양쪽의 gradient가 같은 행렬로 흘러들어와 함께 업데이트되므로, 행렬 하나가 두 역할을 동시에 학습하는 셈이다. 추론 시 동작은 방향만 반대다.</p>
+
+<ul>
+  <li>입력에서는: 토큰 ID → 행 조회 → 768차원 벡터</li>
+  <li>출력에서는 반대로: 768차원 벡터 → 전치 행렬과 곱 → 50,257개 토큰 점수</li>
+</ul>
+
+<p>공유하지 않고 출력층 행렬을 따로 학습하는 선택(untied)도 물론 가능하다. 그 경우에도 모델은 정상적으로 동작하고, 입력용·출력용 표현을 각자 자유롭게 특화할 수 있는 대신 GPT-2 small 기준 파라미터가 약 3,860만 개(전체의 30% 이상) 늘어난다. weight tying을 제안한 Press &amp; Wolf의 실험은 공유해도 성능 저하 없이 이 몫을 아낄 수 있다고 보고했고 GPT-2가 이 구조를 따랐는데, 임베딩 비중이 전체에서 미미해지는 최근의 큰 모델들은 다시 따로 두는(untied) 경우도 많은 것으로 알려져 있다. 같은 행렬을 양방향으로 쓰면 파라미터 절감 외에 입력 표현 공간과 출력 표현 공간이 같은 좌표계로 묶이는 효과도 있다 — 2.3편에서 임베딩 행렬을 “768차원 표현 벡터 50,257개를 쌓아 놓은 저장소”로 읽었는데, tied 구조의 출력층은 그 저장소를 거꾸로 조회하는 셈이다.</p>
+
+<h2 id="로짓의-해석">로짓의 해석</h2>
+
+<p><a href="/ai/AI-LLM-Optimization-01-AI-Overview/#용어-정리">1편</a>에서 로짓을 “모델의 마지막 층이 내놓는, softmax를 통과하기 전의 원시 점수 벡터”로 정의해 뒀다. 이제 그 로짓이 실제로 만들어지는 자리를 봤으니, 값 하나하나의 의미도 읽을 수 있다.</p>
+
+<p>행렬곱의 정의상, 로짓의 $i$번째 값은 <strong>마지막 토큰의 최종 표현과 토큰 $i$의 임베딩 벡터의 내적</strong>이다. 바로 앞 절에서 짚었듯, weight tying이므로 unembedding의 각 열이 곧 각 토큰의 임베딩 벡터가 되는 것이다. <a href="/ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/">2.5편</a>에서 어텐션 스코어를 “내적 = 두 벡터의 관련도 점수”로 읽었던 독법이 여기서도 그대로 통한다 — <strong>로짓은 “지금까지의 문맥을 압축한 표현”과 “각 토큰 후보”의 유사도 점수 목록이다.</strong></p>
+
+<p>이 구조에서 따라 나오는 사실 몇 가지를 정리한다.</p>
+
+<ul>
+  <li><strong>출력은 어휘 사전 안의 토큰만 가능하다.</strong> 로짓이 어휘 사전 크기만큼만 나오니 구조적으로 그렇다. 다만 <a href="/ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/">2.3편</a>에서 본 byte-level BPE 덕분에 이것이 표현력의 제약이 되지는 않는다 — 사전에 없는 단어도 서브워드·바이트 토큰의 조합으로 생성할 수 있다. “OOV가 구조적으로 없다”의 출력 방향 버전이다</li>
+  <li><strong>다국어 모델의 사전도 상상만큼 방대하지 않다.</strong> 서브워드 방식이라 모든 언어의 모든 단어를 담을 필요가 없기 때문이다. GPT-2 50,257개 → Llama 3 약 12만 8천 개 → Qwen2.5 약 15만 2천 개 → GPT-4o 계열 약 20만 개 수준이고(Claude의 토크나이저는 비공개다), 사전 크기가 커질 때의 비용은 <a href="/ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/#서빙-관점-어휘-사전-크기의-트레이드오프">2.3편의 “어휘 사전 크기의 트레이드오프”</a>에서 정리한 그대로다</li>
+  <li>여담으로, <strong>logit이라는 이름은 log-odds(로그 승산)에서 왔다.</strong> 로지스틱 회귀에서 확률을 로그 승산으로 펼친 값을 logit이라 불렀고, 그 이름이 “확률로 변환되기 전의 점수”라는 뜻으로 딥러닝에 넘어왔다. 이전에 <a href="/ai/AI-sigmoid/">sigmoid 함수를 로그 승산에서 유도하며 정리한 글</a>이 있는데, 그때 다뤘던 로그 승산이 바로 이 이름의 어원이다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="샘플링-로짓에서-확률로">샘플링: 로짓에서 확률로</h1>
+
+<p>로짓은 아직 날것의 점수다. 다음 토큰을 실제로 고르려면 이 점수들을 합이 1인 확률 분포로 바꿔야 한다. Transformer Explainer의 설명을 확인해 보자.</p>
+
+<blockquote>
+  <p>Logits are just raw scores. To make them easier to interpret, we convert them into <strong>probabilities</strong> between 0 and 1, where all add up to 1. This tells us the likelihood of each token being the next word.</p>
+</blockquote>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-explainer-logit-overview.png" alt="Transformer Explainer의 로짓-확률 변환 개요 화면" class="align-center" width="700" /></p>
+
+<center><sup>Transformer Explainer 화면 직접 캡처</sup></center>
+
+<p>인용문은 변환의 이유를 “해석하기 쉽게”라고 설명하는데, 그것이 전부는 아니다. 더 실질적인 이유는 마지막 단계인 샘플링이 <strong>확률에 비례해 토큰을 추첨하는 연산</strong>이라, 합이 1인 확률 분포가 계산상 필요하다는 것이다(후술: <a href="#샘플링의-무작위성">샘플링의 무작위성</a>). 변환을 담당하는 것은 이번에도 <strong>softmax</strong>다. <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/">2.2편</a>에서 처음 만났고 <a href="/ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/">2.5편</a>에서 어텐션 가중치를 만들 때 “행 단위 정규화”로 다시 본 그 함수인데, 이번에는 행이 하나뿐이다 — 50,257개 로짓 한 줄이 합이 1인 확률 분포 한 줄이 된다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-logit-softmax-3blue1brown.png" alt="3Blue1Brown 영상의 로짓-softmax-확률 변환 도해" class="align-center" width="700" /></p>
+
+<center><sup>출처: <a href="https://www.youtube.com/watch?v=wjZofJX0v4M">3Blue1Brown — 딥러닝 시리즈 (Transformers 챕터)</a> 영상 캡처</sup></center>
+
+<p>실제 화면에서 보면, 입력이 한 토큰씩 늘 때마다 토큰 ID별 로짓 값이 매번 새로 계산되어 변하는 것을 확인할 수 있다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-explainer-token-logits.gif" alt="Transformer Explainer에서 토큰별 로짓 값이 입력에 따라 변하는 애니메이션" class="align-center" width="700" /></p>
+
+<center><sup>Transformer Explainer 화면 직접 캡처</sup></center>
+
+<p>그런데 이 확률 분포에서 항상 최고 확률 토큰을 고르는 것이 아니다. 그 전에 분포를 <strong>조정하는 손잡이들</strong>이 있다.</p>
+
+<blockquote>
+  <p>Instead of always picking the highest-probability token, we can use different selection strategies to balance safety and creativity in the generated text.</p>
+</blockquote>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-explainer-probability.gif" alt="Transformer Explainer에서 로짓이 스케일링·필터링을 거쳐 샘플링 확률이 되는 화면" class="align-center" width="700" /></p>
+
+<center><sup>Transformer Explainer 화면 직접 캡처</sup></center>
+
+<p>각 파라미터를 보기 전에 전체 파이프라인부터 확인해 보자. 로짓에서 다음 토큰까지의 처리 순서는 다음과 같다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>로짓 (50,257개)
+→ ÷ temperature        # 스케일링 - 분포의 퍼짐 조절
+→ top-k 필터            # 상위 k개만 남김 (선택)
+→ top-p 필터            # 누적 확률 p까지만 남김 (선택)
+→ softmax              # 남은 후보를 합이 1인 확률로 재정규화
+→ 확률에 비례해 무작위 추출  # 샘플링
+</code></pre></div></div>
+
+<h2 id="temperature-분포의-엔트로피-조절">temperature: 분포의 엔트로피 조절</h2>
+
+<p><strong>temperature</strong>는 softmax에 들어가기 전의 로짓을 T로 나누는 스케일링이다.</p>
+
+<script type="math/tex; mode=display">p_i = \frac{e^{z_i / T}}{\sum_j e^{z_j / T}}</script>
+
+<p>이 한 줄이 왜 “확실함과 다양함”을 조절하게 되는지는 softmax가 <strong>지수 함수</strong>라는 데서 나온다. 두 토큰의 로짓 차이가 $\Delta$면 두 확률의 비율은 $e^{\Delta/T}$다. 로짓 차이가 2인 두 토큰을 놓고 계산해 보면,</p>
+
+<ul>
+  <li>$T = 1$: 확률 비율 $e^2 \approx 7.4$배</li>
+  <li>$T = 0.5$: $e^4 \approx 55$배 — 차이가 지수적으로 <strong>증폭</strong>된다. $T \to 0$ 극한에서는 최고 로짓 토큰의 확률이 1로 수렴한다(greedy)</li>
+  <li>$T = 2$: $e^1 \approx 2.7$배 — 차이가 <strong>압축</strong>되어 균등 분포 쪽으로 간다</li>
+</ul>
+
+<p>Transformer Explainer의 설명도 같은 내용이다.</p>
+
+<blockquote>
+  <p>Temperature works by scaling the logits before turning them into probabilities. A <strong>low</strong> temperature (e.g., 0.2) makes large logits even larger and small ones smaller, favoring the highest-scoring tokens and leading to more <strong>predictable</strong> choices. A <strong>high</strong> temperature (e.g., 1.0 or above) flattens the differences, making less likely tokens more competitive and leading to more <strong>creative</strong> outputs.</p>
+</blockquote>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-explainer-temperature.gif" alt="Transformer Explainer에서 temperature를 조절할 때 확률 분포가 변하는 애니메이션" class="align-center" width="700" /></p>
+
+<center><sup>Transformer Explainer 화면 직접 캡처</sup></center>
+
+<p>화면을 조작해 보면 temperature를 낮출 때 최상위 후보(<code class="highlighter-rouge">is</code>)의 막대가 올라가고 높일 때 다른 후보들의 막대가 올라가는데, 여기서 변하는 것은 <strong>로짓이 아니라 스케일된 로짓과 확률</strong>이라는 점을 구분해 둘 필요가 있다. 모델이 내놓은 로짓 자체는 그대로이고, 그 위에 씌우는 나눗셈 하나가 분포의 모양을 바꾸는 것이다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-llm-temperature.png" alt="temperature 값에 따라 같은 로짓이 다른 확률 분포가 되는 과정 도해" class="align-center" width="700" /></p>
+
+<center><sup>출처: <a href="https://medium.com/thinking-sand/mastering-llm-temperature-a-step-by-step-guide-81e9f27fef77">Mastering LLM Temperature: A Step-by-Step Guide (Medium)</a></sup></center>
+
+<blockquote>
+  <p><em>참고</em>: Temperature(온도)의 어원</p>
+
+  <p>물리학(통계역학) 차용이다. softmax 자체가 볼츠만 분포 $p_i \propto e^{-E_i/T}$와 같은 꼴이고, 여기서 $T$가 물리적 온도다. 온도가 높은 계는 입자들이 다양한 에너지 상태에 고르게 퍼지고(분포가 평평해진다), 낮은 계는 최저 에너지 상태에 몰린다. 확률 분포의 언어로 바꾸면 온도는 <strong>분포의 엔트로피를 조절하는 값</strong>이다 — <a href="/ai/AI-Information-Theory/">정보이론</a>의 엔트로피, “분포가 얼마나 퍼져 있는가”가 정확히 여기에 대응한다. 그래서 “창의성이 뜨거워진다”는 식의 은유보다는, <strong>모델이 학습한 분포의 꼬리를 얼마나 넓게 쓰게 할 것인가</strong>로 읽는 편이 정확하다.</p>
+</blockquote>
+
+<p>한 가지 덧붙이면, temperature는 학습되는 파라미터가 아니라 <strong>추론 시점에 사람이 정하는 설정값</strong>이다. 태스크별로 튜닝 대상이 되기는 한다 — 코드나 수학처럼 정답이 있는 태스크는 낮게, 창작은 높게 잡는 것이 일반적으로 알려진 관행이다(직접 검증한 수치 기준이 있는 것은 아니다).</p>
+
+<h2 id="top-k와-top-p">top-k와 top-p</h2>
+
+<p>temperature가 분포의 모양을 바꿨다면, top-k와 top-p는 <strong>후보 집합 자체를 잘라낸다</strong>. 결론부터 정리하면 — 둘은 개념적으로 독립이라 하나만 골라야 하는 것이 아니고(추론 프레임워크들은 둘 다 파라미터로 받아 순차 적용한다), 실무에서는 분포 모양에 적응하는 top-p 쪽이 사실상 표준처럼 쓰이는 것으로 알려져 있다. OpenAI API가 top-k를 아예 노출하지 않고 temperature와 top-p만 받는 것이 그 방증이기도 하다. 다만, Transformer Explainer 사이트에서는 둘 중 하나를 고르게 되어 있는데, 교육용 단순화의 목적이 아닐까 싶다.</p>
+
+<blockquote>
+  <p>Finally, we need a strategy to pick the next token. Many exist, but here are common ones: Greedy search picks the top one. Top-k keeps only the k most likely tokens, and top-p keeps the smallest set whose total probability is at least p — trimming unlikely ones early. Then softmax turns the remaining logits into probabilities, and one token is picked at random from the allowed set.</p>
+</blockquote>
+
+<p><strong>top-k</strong>는 점수가 높은 상위 k개만 남기고 나머지를 버린다. 구현상으로는 k등 밖의 로짓을 큰 음수(사실상 $-\infty$)로 덮어씌워, softmax를 지나면 확률이 0이 되게 만든다 — <a href="/ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/">2.5편</a>에서 본 causal mask와 정확히 같은 수법이다. 화면에서 k를 바꿔 가며 관찰하면 남는 후보 개수가 그대로 따라 변한다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-explainer-topk5-temp7.png" alt="Transformer Explainer — temperature 7, top-k, k=5일 때의 후보 분포" class="align-center" width="700" /></p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-explainer-topk16-temp7.png" alt="Transformer Explainer — temperature 7, top-k, k=16일 때의 후보 분포" class="align-center" width="700" /></p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-explainer-topk16-temp0-8.png" alt="Transformer Explainer — k=16을 유지한 채 temperature를 0.8로 낮췄을 때의 후보 분포" class="align-center" width="700" /></p>
+
+<center><sup>Transformer Explainer 화면 직접 캡처. k를 바꾸면 남는 후보 개수가 변하고, temperature를 낮추면 같은 16개 후보 안에서 확률이 상위로 쏠린다</sup></center>
+
+<p><strong>top-p</strong>(nucleus sampling)는 개수가 아니라 <strong>후보들이 가진 확률의 합(확률 질량, probability mass)</strong>을 기준으로 자른다. 확률이 높은 후보부터 누적해 가다가, 누적 확률이 p를 넘는 지점까지만 남긴다. 예를 들어 p = 0.8이면,</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>좋다:     35%  → 누적 35%
+춥다:     25%  → 누적 60%
+덥다:     15%  → 누적 75%
+맑다:     10%  → 누적 85%   # 여기서 80%를 넘었다 - 후보는 이 4개까지
+이상하다:  5%  → 누적 90%   # 제거
+자동차:    3%  → 누적 93%   # 제거
+...
+</code></pre></div></div>
+
+<p>top-k와의 차이는 <strong>적응성</strong>이다. top-k는 분포가 아무리 뾰족해도(확실한 상황) 억지로 k개를 유지하고, 아무리 평평해도(애매한 상황) k개로 자른다. top-p는 뾰족한 분포에서는 후보가 저절로 줄고 평평한 분포에서는 늘어난다 — 자르는 기준이 분포 모양을 따라간다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-explainer-topp0-5-temp7.png" alt="Transformer Explainer — temperature 7, top-p, p=0.5일 때의 후보 분포" class="align-center" width="700" /></p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-explainer-topp1-temp7.png" alt="Transformer Explainer — temperature 7, top-p, p=1일 때의 후보 분포" class="align-center" width="700" /></p>
+
+<center><sup>Transformer Explainer 화면 직접 캡처</sup></center>
+
+<p>p = 1 화면에서 모든 토큰이 그대로 남아 있는 것은 top-p가 동작하지 않아서가 아니라, <strong>누적 확률이 100%가 되어야 멈추므로 아무것도 잘리지 않는 것이 맞는 동작</strong>이기 때문이다. p = 0.5로 내리면 실제로 후보가 잘려 나가는 것을 볼 수 있다. 프레임워크들에서 top_p = 1.0, top_k = 0(또는 -1)이 “비활성”을 뜻하는 관례도 여기서 나온다.</p>
+
+<h2 id="적용-순서와-순위-불변성">적용 순서와 순위 불변성</h2>
+
+<p>Transformer Explainer의 설명은 temperature를 먼저 소개하는데, 화면에서 temperature를 아무리 바꿔도 top-k로 남는 후보 집합은 그대로 유지된다. 그러면 top-k가 먼저 적용되는 것인가 — 하는 의문이 생기는데, 답은 순서가 아니라 <strong>순위 불변성</strong>에 있다.</p>
+
+<p>실제 계산 순서는 설명 순서 그대로다. HuggingFace transformers의 로짓 처리 순서도 temperature → top-k → top-p이고, 앞의 파이프라인 그림과 같다. 그런데 temperature는 모든 로짓을 <strong>같은 양수로 나누는 단조 변환</strong>이라, 값들의 크기 순서를 절대 바꾸지 않는다. 상위 k개의 집합은 어떤 temperature에서도 동일하고, 변하는 것은 그 집합 안에서의 확률 배분뿐이다. “temperature를 바꿔도 top-k가 먼저 동작하는 것처럼 보이는” 관찰은 착시가 아니라, 단조 변환의 성질을 정확히 본 것이다.</p>
+
+<h2 id="샘플링의-무작위성">샘플링의 무작위성</h2>
+
+<p>마지막 단계는 남은 후보의 확률 분포에서 <strong>무작위로 하나를 추출</strong>하는 것이다. 즉 최고 확률 토큰을 “선택”하는 것이 아니라 각 토큰이 자기 확률만큼 당첨 가능성을 갖는 “추첨”이라서, <code class="highlighter-rouge">is</code>가 35%라면 65%의 경우에는 다른 토큰이 뽑힌다. 화면에서 <code class="highlighter-rouge">is</code>의 확률이 가장 높은데도 <code class="highlighter-rouge">was</code>나 <code class="highlighter-rouge">as</code>가 선택되는 경우를 보게 되는 이유가 이것이다. temperature를 높일수록 하위 후보들의 확률이 커져 이 뒤집힘이 더 자주 일어난다.</p>
+
+<p>항상 최고 확률 토큰만 고르는 방식이 <strong>greedy search</strong>이고, temperature를 0으로 보내는 극한과 같다. 결정적(deterministic)인 출력이 필요할 때 temperature = 0을 쓰는 근거가 이것인데 — 그래도 완전한 재현성이 보장되지는 않는다는 서빙 쪽 이야기가 있다. <a href="#서빙-관점-샘플링-파라미터의-위치">뒤의 서빙 관점</a>에서 다룬다.</p>
+
+<p><br /></p>
+
+<h1 id="자기회귀-루프">자기회귀 루프</h1>
+
+<p>이렇게 다음 토큰 하나가 선택된다. 선택된 토큰은 토큰 ID로, 다시 임베딩 벡터로 바뀌어 <strong>시퀀스 끝에 붙고, 지금까지의 전 과정이 처음부터 다시 돈다.</strong></p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-token-id.png" alt="다음 단어 후보들의 확률을 계산해 &quot;the&quot;를 선택하고, 그것을 다시 토큰 ID와 임베딩 벡터로 바꾸어 다음 생성 단계에 사용하는 흐름" class="align-center" width="700" /></p>
+
+<center><sup>Transformer Explainer 화면 직접 캡처</sup></center>
+
+<pre><code class="language-mermaid">flowchart LR
+    A["프롬프트 텍스트"] --&gt; B["토크나이저: 토큰 ID 시퀀스"]
+    B --&gt; C["임베딩 + 위치 인코딩"]
+    C --&gt; D["트랜스포머 블록 x 12"]
+    D --&gt; E["최종 LayerNorm + Unembedding"]
+    E --&gt; F["로짓 50,257개"]
+    F --&gt; G["temperature / top-k / top-p / softmax"]
+    G --&gt; H["다음 토큰 샘플링"]
+    H --&gt;|"선택된 토큰을 시퀀스 끝에 추가"| B
+</code></pre>
+
+<p><a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/">2.1편</a>에서 GPT를 “디코더 전용 자기회귀 구조”라고 불렀을 때의 자기회귀(autoregressive)가 바로 이 루프다. 문장 하나를 생성한다는 것은 이 루프를 토큰 수만큼 도는 일이고, 서빙의 언어로 옮기면 <strong>decode 루프</strong> — 토큰 하나를 만들 때마다 모델 가중치 전체를 VRAM에서 읽는 <a href="/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/">2.6편</a>의 memory-bound 구간 — 그 자체다. LLM API가 토큰 단위로 과금하고 토큰 단위로 지연이 쌓이는 구조적 이유가 이 그림에 다 들어 있다.</p>
+
+<p>다만 “전 과정이 다시 돈다”가 “전부 다시 계산한다”는 뜻은 아니다. <a href="/ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/">2.5편</a>에서 본 KV cache가 정확히 이 루프의 중복 계산 — 과거 토큰들의 K·V — 을 저장해 두는 장치다. 아키텍처의 자기회귀 루프와 서빙의 KV cache가 왜 한 쌍인지가 여기서 맞물린다.</p>
+
+<p><br /></p>
+
+<h1 id="블록의-보조-구성-요소">블록의 보조 구성 요소</h1>
+
+<p>Transformer Explainer는 지금까지의 본 줄기 외에 세 가지 장치를 “auxiliary features”로 묶어 소개한다 — 잔차 연결, LayerNorm, dropout. <a href="/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/">2.6편</a>에서 잔차 연결과 LayerNorm의 위치와 역할은 이미 봤으므로, 여기서는 각각 한 걸음씩만 더 들어가고 dropout을 새로 본다.</p>
+
+<p>먼저 셋을 관통하는 구분 축부터 — 셋 다 <strong>깊은 네트워크의 학습을 안정시키기 위해 도입된 장치</strong>지만, 추론에서의 운명이 갈린다. 잔차 연결과 LayerNorm은 학습된 구조의 일부라 <strong>추론 시에도 항상 실행되는 연산</strong>이고, dropout은 학습 전용이라 <strong>추론 시 꺼진다</strong>. “아키텍처의 일부인가, 학습 기법인가”를 가르는 실용적인 기준이다.</p>
+
+<h2 id="잔차-연결-gradient-소실-방지">잔차 연결: gradient 소실 방지</h2>
+
+<blockquote>
+  <p>Transformers have auxiliary features that enhance the model performance. For example, a <strong>residual connection</strong> adds a layer’s input to its output, keeping information from fading through many blocks. In GPT-2, it’s used twice per block to train deeper stacks effectively.</p>
+</blockquote>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-explainer-residual-connection.png" alt="Transformer Explainer의 잔차 연결 표시 화면" class="align-center" width="700" /></p>
+
+<center><sup>Transformer Explainer 화면 직접 캡처</sup></center>
+
+<p><a href="/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/">2.6편</a>에서 “서브레이어 출력을 입력에 더한다($x + \text{sublayer}(x)$), 덧셈 경로를 따라 gradient가 곧장 흐른다”까지 정리했는데, 그 “곧장 흐른다”의 수학적 실체는 미분 한 번이면 보인다. $y = x + F(x)$를 $x$로 미분하면,</p>
+
+<script type="math/tex; mode=display">\frac{\partial y}{\partial x} = I + \frac{\partial F(x)}{\partial x}</script>
+
+<p>항등 행렬 $I$가 항상 남는다. 이것이 왜 중요한지는 역전파의 전달 방식에서 나온다. gradient는 층을 지날 때마다 그 층의 미분이 <strong>곱해지며</strong> 아래로 내려간다 — 곱의 연쇄라서, 각 층의 미분이 작으면 층을 거듭할수록 작은 수가 거듭 곱해져 신호가 지수적으로 사라질 수밖에 없다(gradient 소실). 그런데 잔차 연결이 있으면 이 전달에 <strong>곱이 아닌 항이 하나 생긴다.</strong> 위층에서 내려온 gradient를 $g$라 놓고 펼쳐 보면, 아래층으로 전달되는 것은</p>
+
+<script type="math/tex; mode=display">g \cdot \left(I + \frac{\partial F}{\partial x}\right) = g \cdot \frac{\partial F}{\partial x} + g</script>
+
+<p>서브레이어의 미분이 곱해진 몫 옆에, <strong>$g$ 원본이 아무것도 곱해지지 않은 채 그대로 더해져 내려간다.</strong> 서브레이어의 미분이 아무리 작아져도 이 원본 항은 죽지 않으므로, 블록 12개를 지나도 오차 신호가 사라지지 않는다. 원래 컴퓨터 비전의 심층 신경망(ResNet, 2015)에서 gradient 소실을 풀기 위해 제안된 장치를 트랜스포머가 가져온 것이고, skip connection, shortcut connection이라는 다른 이름들도 같은 것을 가리킨다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-residual-connection.png" alt="숏컷 연결이 층을 건너뛰는 gradient 경로를 만드는 도해" class="align-center" width="600" /></p>
+
+<center><sup>출처: 세바스찬 라시카, 밑바닥부터 만들면서 배우는 LLM</sup></center>
+
+<p>forward 관점의 독법도 유효하다. 블록마다 어텐션과 MLP가 표현을 새로 쓰는데, 그 결과에 원래 입력을 더해 주므로 <strong>블록은 표현을 갈아치우는 것이 아니라 흐르는 표현에 수정분을 얹는다</strong> — 12개 블록을 지나도 처음의 정보가 완전히 사라지지 않는 이유다. 이 장치 역시 시리즈 내내 본 다른 설계 선택들처럼 경험적으로 검증되어 정착한 것이지만, gradient 소실 완화라는 도입 근거가 수식으로 명확한 편에 속한다. <a href="/ai/AI-Transformer-05/">2020년의 네트워크 구조 글</a>에도 원 논문의 잔차 연결을 정리한 기록이 있다.</p>
+
+<h2 id="layernorm-적용-위치의-변천">LayerNorm: 적용 위치의 변천</h2>
+
+<blockquote>
+  <p>Layer Normalization helps stabilize both training and inference by adjusting input numbers so their mean and variance stay consistent. This makes the model less sensitive to its starting weights and helps it learn more effectively. In GPT-2, it’s applied before self-attention, before the MLP, and once more before the final output.</p>
+</blockquote>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-explainer-layer-normalization.png" alt="Transformer Explainer의 Layer Normalization 표시 화면" class="align-center" width="700" /></p>
+
+<center><sup>Transformer Explainer 화면 직접 캡처</sup></center>
+
+<p>LayerNorm은 <strong>토큰 벡터 하나 안에서</strong> 768개 값의 평균과 분산을 일정하게 맞추는 정규화다. 어떤 값은 너무 크고 어떤 값은 너무 작아 계산이 흔들리지 않도록, 블록을 거듭 지나도 값의 스케일이 폭주하거나 소멸하지 않게 잡아 준다.</p>
+
+<p>인용문이 적용 위치를 세 군데로 특정해 설명하는 것을 보고 궁금한 게 있었다 — 트랜스포머라면 LayerNorm은 항상 이 위치에 있는 것인가? <a href="/ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer/">2.4편</a>에서 “Pre-LN 구조의 세부는 접어 둔다”고 미뤄 두기도 했던 지점이다. 결론부터 말하면 항상 같은 위치는 아니고, 변천 과정을 짚어 두면 이 답이 함께 정리된다. 원조는 CNN에서 배치 단위로 정규화하던 BatchNorm(2015)인데, 배치 크기에 의존하는 통계라 시퀀스 모델과 궁합이 나빴고, 그 대안으로 <strong>배치와 무관하게 토큰 하나의 feature 차원 안에서만 정규화하는</strong> LayerNorm(2016)이 나왔다. 트랜스포머 원 논문과 GPT-1은 이것을 서브레이어 <strong>뒤</strong>에 두었고(Post-LN), GPT-2부터는 서브레이어 <strong>앞</strong> + 최종 출력 전 1회(<code class="highlighter-rouge">ln_f</code>)로 옮겼다(Pre-LN) — 깊은 스택에서 학습이 더 안정적이라는 이유였고, 이후 LLM들은 대부분 Pre-LN 계열이다. 요즘 모델(Llama, Qwen 등)은 평균 계산을 생략해 연산을 줄인 변형인 RMSNorm으로 다시 한 번 갈아탔다. 정규화의 종류도 위치도 세대에 따라 움직여 온 설계 선택인 셈이다. <a href="/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/">2.6편</a>에서 범위 밖으로 접어 뒀던 갈래인데, 시리즈를 닫는 김에 변천의 줄기만 여기 남겨 둔다.</p>
+
+<h2 id="dropout-학습-전용-정규화">dropout: 학습 전용 정규화</h2>
+
+<blockquote>
+  <p>During training, <strong>dropout</strong> randomly turns off some connections between numbers so the model doesn’t overfit to specific patterns. This helps it learn features that generalize better. GPT-2 uses it, but newer LLMs often skip it because they train on huge datasets and overfitting is less of a problem. In inference, dropout is turned off.</p>
+</blockquote>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-transformer-explainer-dropout.png" alt="Transformer Explainer의 dropout 설명 화면" class="align-center" width="700" /></p>
+
+<center><sup>Transformer Explainer 화면 직접 캡처</sup></center>
+
+<p>dropout은 학습 중에 일부 연결을 무작위로 잠깐 꺼 버리는 기법이다. 목적은 모델이 특정 뉴런·특정 연결에만 의존하지 못하게 만드는 것 — 시험공부에 비유하면 한 문제 유형만 외우지 못하게 힌트 일부를 가리고 풀게 하는 훈련이다. 어떤 연결이든 언제 꺼질지 모르므로 모델은 여러 특징을 함께 쓰는 방향으로 학습되고, 이것이 과적합(overfitting)을 억제한다.</p>
+
+<p>앞의 두 장치와 달리 dropout은 <strong>추론 시 꺼진다.</strong> 이유는 두 갈래다.</p>
+
+<ul>
+  <li><strong>켜 두면 출력이 무작위로 흔들린다.</strong> 같은 입력에 매번 다른 연결이 꺼져 다른 출력이 나온다 — 학습에서는 이 무작위성이 정규화 효과지만, 추론에서는 재현성을 해치는 노이즈일 뿐이다</li>
+  <li><strong>끄는 것이 학습된 것의 올바른 사용법이다.</strong> dropout 학습은 매 스텝 다른 부분 네트워크를 학습시키는 일종의 앙상블인데, 추론에서 전체 뉴런을 켜는 것(스케일 보정 포함)이 그 앙상블의 평균 예측을 근사한다</li>
+</ul>
+
+<p>인용문의 마지막 문장도 눈여겨 둘 만하다 — <strong>최신 LLM들은 dropout을 아예 생략하는 경우가 많다.</strong> 거대 코퍼스를 1 epoch(전체 데이터 1회 통과) 남짓만 훑는 사전학습에서는 같은 데이터를 반복해서 외울 기회 자체가 적어 과적합 위험이 낮기 때문이다. GPT-2 시절의 필수 장치가 데이터 스케일의 변화로 선택 장치가 된, “설계는 시대의 제약을 따라 움직인다”의 또 한 사례다.</p>
+
+<p><br /></p>
+
+<h1 id="서빙-관점-샘플링-파라미터의-위치">서빙 관점: 샘플링 파라미터의 위치</h1>
+
+<p>이 시리즈의 목적지가 서빙이니, 이번에도 이 글에서 본 것들이 서빙 그림 어디에 놓이는지로 마무리한다.</p>
+
+<h2 id="모델-파라미터가-아니라-요청-파라미터">모델 파라미터가 아니라 요청 파라미터</h2>
+
+<p>LLM API를 쓰다 보면 만나는 <code class="highlighter-rouge">temperature</code>, <code class="highlighter-rouge">top_p</code>, <code class="highlighter-rouge">top_k</code>가 정확히 이 글에서 본 그 샘플링 파라미터들이다. 위치를 분명히 해 두면 — 이들은 학습으로 결정되는 모델 파라미터(가중치)가 아니라, <strong>모델 밖 로짓 후처리 단계의 설정값</strong>이다. 그래서 모델을 다시 로드할 필요 없이 <strong>요청(request)마다 다르게</strong> 줄 수 있다. vLLM이 이들을 엔진 설정이 아니라 요청에 실려 오는 <code class="highlighter-rouge">SamplingParams</code>로 받는 것이 이 구조의 반영이고, 같은 배치 안에 temperature가 다른 요청들이 섞여 함께 처리된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>API</th>
+      <th>노출하는 샘플링 파라미터</th>
+      <th>문서상 기본값</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>OpenAI (Chat Completions)</td>
+      <td>temperature, top_p</td>
+      <td>temperature 1, top_p 1</td>
+    </tr>
+    <tr>
+      <td>Anthropic (Messages)</td>
+      <td>temperature, top_k, top_p</td>
+      <td>temperature 1</td>
+    </tr>
+    <tr>
+      <td>vLLM (SamplingParams)</td>
+      <td>temperature, top_k, top_p 외 다수</td>
+      <td>temperature 1, top_p 1, top_k 무제한</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>ChatGPT·Claude 같은 소비자 앱이 내부적으로 쓰는 값은 공개되어 있지 않으므로, 확인 가능한 것은 API 문서의 기본값까지다.</p>
+
+<p>비용 관점의 결론은 짧다 — <strong>샘플링 파라미터는 자원 소모 축이 아니다.</strong> 로짓 후처리는 어휘 사전 크기의 벡터 연산이라, 블록의 거대 행렬곱들에 견주면 비용이 미미하다. temperature를 높인다고 GPU를 더 쓰는 구조가 아니고, 이 파라미터들이 움직이는 축은 <strong>출력 품질(정확성·다양성)과 재현성</strong>이다.</p>
+
+<blockquote>
+  <p><em>여담</em>: 프롬프트 엔지니어링과 샘플링 파라미터</p>
+
+  <p>한때 나는 “프롬프트 엔지니어링의 실체가 알고 보니 top-k, top-p 수치 조정이었나” 하고 오해한 적이 있는데, 둘은 별개다. 프롬프트 엔지니어링은 처음부터 입력 텍스트 설계가 본류였고, 샘플링 파라미터는 출력 설정(output configuration)이라는 다른 층의 이야기다. 혼동의 배경은 실무 가이드들이 둘을 묶어 다루기 때문인 듯한데 — 실제로 <a href="https://www.kaggle.com/whitepaper-prompt-engineering">구글의 Prompt Engineering 백서</a>도 첫 장에서 프롬프트보다 temperature·top-k·top-p 설정을 먼저 다룬다. 프롬프트를 잘 써도 출력 설정이 태스크와 안 맞으면 소용없다는 취지로 읽으면 자연스럽다.</p>
+</blockquote>
+
+<h2 id="재현성-temperature-0이어도-남는-비결정성">재현성: temperature 0이어도 남는 비결정성</h2>
+
+<p>temperature = 0(greedy)로 두면 같은 입력에 같은 출력이 나올 것 같지만, 실제 서빙 환경에서는 <strong>그래도 완전한 결정론이 보장되지 않는 것으로 알려져 있다.</strong> 서버는 여러 요청을 배치로 묶어 처리하는데, 배치 구성이 달라지면 커널의 부동소수점 연산 순서가 달라지고, 부동소수점 덧셈은 결합법칙이 성립하지 않아 로짓이 미세하게 달라질 수 있다 — 상위 두 후보의 로짓이 근소하면 argmax(최고 로짓 토큰 선택)마저 뒤집힌다. batch invariance를 확보해 이를 해결하려는 시도(Thinking Machines의 분석이 대표적이다)가 있다는 것까지가 조사한 범위이고, 직접 재현해 본 것은 아니라 존재만 기록해 둔다. “temperature 0인데 출력이 왜 다르지”라는 실무 질문의 답이 샘플링이 아니라 이 층에 있다는 점이 포인트다.</p>
+
+<h2 id="같은-지점의-다른-로짓-후처리">같은 지점의 다른 로짓 후처리</h2>
+
+<p>로짓을 조작해 출력을 제어한다는 아이디어는 샘플링 파라미터에서 끝나지 않는다. 같은 자리 — softmax 직전의 로짓 — 에 개입하는 장치들이 더 있다.</p>
+
+<ul>
+  <li><strong>repetition penalty</strong>: 이미 나온 토큰들의 로짓을 깎아 반복 생성을 억제한다</li>
+  <li><strong>structured output(guided decoding)</strong>: JSON 스키마 등 문법에 맞지 않는 토큰의 로짓을 매 스텝 차단해, 출력이 형식을 벗어날 수 없게 강제한다</li>
+</ul>
+
+<p>서빙 엔진의 기능표에서 만나게 될 이 항목들이 전부 “로짓 후처리”라는 같은 지점의 변형이라는 것만 알아 두면, 지금은 충분하다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<ul>
+  <li>출력층은 마지막 토큰의 768차원 벡터를 최종 LayerNorm에 통과시킨 뒤 unembedding 행렬과 곱해 어휘 사전 크기의 로짓을 만든다. GPT-2는 weight tying으로 입력 임베딩 행렬을 전치해 재사용한다 — 로짓 하나하나는 “문맥 표현과 각 토큰 임베딩의 내적”, 즉 유사도 점수다</li>
+  <li>로짓 → temperature 스케일링 → top-k/top-p 필터 → softmax → 확률 비례 추출이 샘플링 파이프라인이다. temperature는 분포의 엔트로피를 조절하고(순위는 불변), top-k는 개수로, top-p는 확률 합으로 후보를 자른다</li>
+  <li>선택된 토큰이 시퀀스 끝에 붙어 전 과정이 다시 도는 자기회귀 루프가 곧 서빙의 decode 루프다. KV cache는 이 루프의 중복 계산을 저장하는 장치다</li>
+  <li>잔차 연결(항등 경로로 gradient 보존), LayerNorm(토큰 내 feature 정규화, Post-LN → Pre-LN → RMSNorm으로 이동), dropout(추론 시 꺼지는 학습 전용 정규화)이 블록의 보조 구성 요소다</li>
+  <li>샘플링 파라미터는 모델 파라미터가 아니라 요청 단위 로짓 후처리 설정이다. 자원이 아니라 품질·재현성의 설정값이고, repetition penalty·guided decoding도 같은 자리의 변형이다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="결론">결론</h1>
+
+<p>이것으로 <a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/">2.2편</a>에서 잡았던 세 부분이 모두 닫혔다. 전체를 한 줄로 다시 나타내면 아래와 같다:</p>
+
+<p><strong>텍스트 → 토큰 ID → 임베딩 → 트랜스포머 블록 × 12(어텐션 = 통신, MLP = 계산, 잔차·LayerNorm이 안정화) → 최종 LayerNorm → unembedding → 로짓 → 샘플링 → 다음 토큰 → 다시 입력으로.</strong></p>
+
+<p>입구의 임베딩과 출구의 unembedding이 같은 행렬이라는 weight tying까지 놓고 보면, 이 여정은 시작한 자리로 정확히 돌아와 닫히는 원이다. 그리고 시리즈 내내 반복된 관찰 두 개가 사실은 이 원 위에 그대로 얹혀 있다:</p>
+<ol>
+  <li>원을 이루는 계산은 처음부터 끝까지 행렬곱이고, 그래서 <a href="/ai/AI-LLM-Optimization-01-AI-Overview/">1편</a>의 GPU 이야기가 이 아키텍처의 하드웨어 짝이 된다.</li>
+  <li>어휘 사전 크기, $d_{model}$, 블록 수, 헤드 수 같은 설계 시점의 상수들이 KV cache 크기·decode 병목·임베딩 메모리라는 서빙 시점의 비용으로 흘러내려온다.</li>
+</ol>
+
+<p><br /></p>
+
+<p>다음 토큰 하나를 고르기 위해 수억 개의 파라미터가 얽힌 행렬곱을 12층 통과한다. 새삼스럽지만 — 단어 하나를 잇는 데 이만큼의 과정이 든다는 것이 먼저 놀랍고, 사람의 머릿속에서는 같은 일이 의식할 새도 없이 일어난다는 것이 다음으로 놀랍고, 그렇게 빨리 일어나는 과정을 연산으로 옮겨 사람이 말을 잇는 속도로 실제로 돌아가게 만들었다는 것이 그다음으로 놀랍다. 지금은 그 연산이 코드를 짜고 에이전트가 되어 사람의 일을 대신하는 데까지 와 있으니, 경외라는 단어가 과하지 않다. 그 루프를 더 빠르게, 더 싸게 돌리는 일이 이제부터의 주제다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://poloclub.github.io/transformer-explainer/">Transformer Explainer</a></li>
+  <li><a href="https://arxiv.org/abs/1706.03762">Attention Is All You Need (Vaswani et al., 2017)</a></li>
+  <li><a href="https://arxiv.org/abs/1608.05859">Using the Output Embedding to Improve Language Models (Press &amp; Wolf, 2016 — weight tying)</a></li>
+  <li><a href="https://arxiv.org/abs/1904.09751">The Curious Case of Neural Text Degeneration (Holtzman et al., 2019 — nucleus sampling)</a></li>
+  <li><a href="https://arxiv.org/abs/1512.03385">Deep Residual Learning for Image Recognition (He et al., 2015 — ResNet)</a></li>
+  <li><a href="https://arxiv.org/abs/1607.06450">Layer Normalization (Ba et al., 2016)</a></li>
+  <li><a href="https://arxiv.org/abs/1910.07467">Root Mean Square Layer Normalization (Zhang &amp; Sennrich, 2019)</a></li>
+  <li><a href="https://jmlr.org/papers/v15/srivastava14a.html">Dropout: A Simple Way to Prevent Neural Networks from Overfitting (Srivastava et al., 2014)</a></li>
+  <li><a href="https://www.kaggle.com/whitepaper-prompt-engineering">Prompt Engineering (Google whitepaper, Lee Boonstra)</a></li>
+  <li><a href="https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/">Defeating Nondeterminism in LLM Inference (Thinking Machines)</a></li>
+  <li><a href="https://github.com/karpathy/nanoGPT/blob/master/model.py">nanoGPT — Andrej Karpathy (출력층·블록 구현, MIT License)</a></li>
+  <li>세바스찬 라시카, 밑바닥부터 만들면서 배우는 LLM (<a href="https://www.manning.com/books/build-a-large-language-model-from-scratch">Build a Large Language Model (From Scratch)</a>)</li>
+  <li><a href="/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/">LLM 서빙과 최적화 - 2.6. Transformer: MLP와 트랜스포머 블록 마무리</a></li>
+  <li><a href="/ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/">LLM 서빙과 최적화 - 2.5. Transformer: 셀프 어텐션 계산 해부</a></li>
+  <li><a href="/ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/">LLM 서빙과 최적화 - 2.3. Transformer: 임베딩</a></li>
+  <li><a href="/ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/">LLM 서빙과 최적화 - 2.2. Transformer Explainer 개요</a></li>
+  <li><a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/">LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요</a></li>
+  <li><a href="/ai/AI-LLM-Optimization-01-AI-Overview/">LLM 서빙과 최적화 - 1. AI 개요</a></li>
+  <li><a href="/ai/AI-Transformer-05/">2020년 트랜스포머 시리즈: 네트워크 구조 (원 논문의 잔차 연결·FFN)</a></li>
+  <li><a href="/ai/AI-Information-Theory/">2020년 정보이론 기초 (엔트로피)</a></li>
+  <li><a href="/ai/AI-sigmoid/">2020년 Sigmoid 함수 (로그 승산 — logit의 어원)</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#gpt-2" class="page__taxonomy-item" rel="tag">GPT-2</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study-week-1" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study-Week-1</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#layernorm" class="page__taxonomy-item" rel="tag">LayerNorm</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#logit" class="page__taxonomy-item" rel="tag">Logit</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#residual-connection" class="page__taxonomy-item" rel="tag">Residual-Connection</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#sampling" class="page__taxonomy-item" rel="tag">Sampling</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#softmax" class="page__taxonomy-item" rel="tag">Softmax</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#temperature" class="page__taxonomy-item" rel="tag">Temperature</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#top-k" class="page__taxonomy-item" rel="tag">Top-k</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#top-p" class="page__taxonomy-item" rel="tag">Top-p</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#transformer-explainer" class="page__taxonomy-item" rel="tag">Transformer-Explainer</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#transformer" class="page__taxonomy-item" rel="tag">Transformer</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#weight-tying" class="page__taxonomy-item" rel="tag">Weight-Tying</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#ai" class="page__taxonomy-item" rel="tag">AI</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-05T00:00:00+09:00">August 5, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BLLM%5D+LLM+%EC%84%9C%EB%B9%99%EA%B3%BC+%EC%B5%9C%EC%A0%81%ED%99%94+-+2.7.+Transformer%3A+%EC%B6%9C%EB%A0%A5%EC%B8%B5%EA%B3%BC+%EC%83%98%ED%94%8C%EB%A7%81%2C+%EC%95%84%ED%82%A4%ED%85%8D%EC%B2%98+%EB%A7%88%EB%AC%B4%EB%A6%AC%20https%3A%2F%2Fsirzzang.github.io%2F%2Fai%2FAI-LLM-Optimization-02-07-Transformer-Explainer-Output%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fai%2FAI-LLM-Optimization-02-07-Transformer-Explainer-Output%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fai%2FAI-LLM-Optimization-02-07-Transformer-Explainer-Output%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fai%2FAI-LLM-Optimization-02-07-Transformer-Explainer-Output?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/" class="pagination--pager" title="[LLM] LLM 서빙과 최적화 - 2.6. Transformer: MLP와 트랜스포머 블록 마무리
+">이전</a>
+    
+    
+      <a href="#" class="pagination--pager disabled">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.6. Transformer: MLP와 트랜스포머 블록 마무리
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">어텐션이 모아 온 정보를 토큰별로 비선형 가공하는 MLP 서브레이어에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.5. Transformer: 셀프 어텐션 계산 해부
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  27 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Q·K·V 생성부터 멀티헤드 분할, 스케일링·마스킹·softmax, V 가중합과 출력 사영까지 — 셀프 어텐션의 실제 계산을 수식과 shape 변화로 하나씩 뜯어 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.4. Transformer: 트랜스포머 블록과 셀프 어텐션 레이어
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  14 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">트랜스포머 블록의 첫 서브레이어인 멀티헤드 셀프 어텐션에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-AI.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/" rel="permalink">[LLM] LLM 서빙과 최적화 - 2.3. Transformer: 임베딩
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 05일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  17 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">트랜스포머의 입구인 임베딩이 텍스트를 벡터로 바꾸는 과정을 줌인해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>
