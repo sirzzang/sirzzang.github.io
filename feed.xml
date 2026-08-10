@@ -1,4 +1,371 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-08-10T02:23:45+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-08-10T23:27:25+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[CoreDNS] 간헐적 사내 레지스트리 DNS 해석 실패: 노드 편입이 부른 업스트림 DNS 오염</title><link href="https://sirzzang.github.io//dev/Dev-Kubernetes-CoreDNS-Intermittent-Registry-DNS-Failure/" rel="alternate" type="text/html" title="[CoreDNS] 간헐적 사내 레지스트리 DNS 해석 실패: 노드 편입이 부른 업스트림 DNS 오염" /><published>2026-08-10T00:00:00+09:00</published><updated>2026-08-10T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-Kubernetes-CoreDNS-Intermittent-Registry-DNS-Failure</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-Kubernetes-CoreDNS-Intermittent-Registry-DNS-Failure/">&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;문제: Kubernetes 클러스터의 GitHub Actions ARC 러너에서 CI 이미지 푸시가 사내 레지스트리 이름 해석 실패(&lt;code class=&quot;highlighter-rouge&quot;&gt;dial tcp &amp;lt;공용 IP&amp;gt;:443: i/o timeout&lt;/code&gt;)로 간헐적으로 실패했다&lt;/li&gt;
+  &lt;li&gt;원인: 긴급 워크로드용으로 새로 편입된 GPU 노드 2대의 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/resolv.conf&lt;/code&gt;에 공용 DNS(8.8.8.8)가 들어 있었고, 그 노드에 배치된 CoreDNS 레플리카가 질의 일부를 8.8.8.8로 넘겨 사내 도메인의 공용 IP를 반환했다. 12개 레플리카 중 일부만 오염됐기 때문에 실패가 간헐적이었다&lt;/li&gt;
+  &lt;li&gt;해결: 문제 노드에 배제 라벨을 붙이고 HelmChartConfig의 nodeAffinity로 CoreDNS 배치에서 제외(완화). 노드 &lt;code class=&quot;highlighter-rouge&quot;&gt;resolv.conf&lt;/code&gt; 교정은 인프라 팀에 요청(근본 조치)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;문제&quot;&gt;문제&lt;/h1&gt;
+
+&lt;h2 id=&quot;증상-ci-이미지-푸시-간헐-실패&quot;&gt;증상: CI 이미지 푸시 간헐 실패&lt;/h2&gt;
+
+&lt;p&gt;Kubernetes 클러스터에 띄워 둔 GitHub Actions ARC(Actions Runner Controller) 러너에서 학습 이미지 빌드 CI가 돌던 중, 사내 레지스트리(&lt;code class=&quot;highlighter-rouge&quot;&gt;harbor.example.com&lt;/code&gt;)로 이미지를 푸시하는 단계가 실패하기 시작했다.&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;failed to authorize: failed to fetch oauth token: Post &quot;https://harbor.example.com/service/token&quot;: dial tcp 203.0.113.51:443: i/o timeout
+Error: Process completed with exit code 1.
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/coredns-build-job-failed-1.png&quot; alt=&quot;CI 실패 런의 스텝 목록&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;직접 캡처. 조직·저장소명, 런 제목, 사내 도메인·이미지명은 블러 처리했다. Login to Harbor, Build image까지 성공하고 Push image tags에서 실패했다.&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;이상한 점은 세 가지였다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;같은 파이프라인이 점심 무렵까지는 성공했는데, 한 시간쯤 뒤부터 실패했다. 그 사이 코드, CI 설정, Dockerfile, 러너 구성 어느 것도 바뀌지 않았다&lt;/li&gt;
+  &lt;li&gt;실패한 잡을 재실행해도 결과가 같았다. 재실행을 포함한 3회가 연속으로 같은 지점 계열에서 죽었다&lt;/li&gt;
+  &lt;li&gt;그런데 실패한 잡 안에서도 &lt;code class=&quot;highlighter-rouge&quot;&gt;Login to Harbor&lt;/code&gt; 스텝은 성공했다. 같은 이름에 대한 접근이 스텝별로 갈렸다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/coredns-no-problem.png&quot; alt=&quot;두 시간 전 같은 파이프라인의 성공 런&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;직접 캡처. 두 시간 전 같은 파이프라인은 통과했다. 식별 정보는 블러 처리, 하단의 사내 링크 영역은 크롭했다.&lt;/sup&gt;&lt;/center&gt;
+
+&lt;h2 id=&quot;전제-클러스터-dns-질의-경로&quot;&gt;전제: 클러스터 DNS 질의 경로&lt;/h2&gt;
+
+&lt;p&gt;이 글에 필요한 배경은 한 단락이다. 클러스터 안 파드가 도메인 이름을 해석할 때 질의는 kube-dns Service를 거쳐 CoreDNS 파드로 간다. 이 클러스터에는 CoreDNS 레플리카가 12개 떠 있었고, Service 뒤의 레플리카들로 질의가 분산된다. 어느 레플리카가 내 질의를 받는지는 커넥션 단위 랜덤 선택이라 사실상 매번 달라진다. Service가 백엔드 파드로 트래픽을 나누는 원리는 &lt;a href=&quot;/kubernetes/Kubernetes-Networking-Linux-Stack/&quot;&gt;Linux 네트워크 스택 글&lt;/a&gt;에서 kube-dns를 예시로 다룬 적이 있다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;진단&quot;&gt;진단&lt;/h1&gt;
+
+&lt;h2 id=&quot;관측점-대조-같은-이름-두-개의-답&quot;&gt;관측점 대조: 같은 이름, 두 개의 답&lt;/h2&gt;
+
+&lt;p&gt;먼저 여러 위치에서 같은 이름을 해석·접속해 대조했다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;관측점&lt;/th&gt;
+      &lt;th&gt;해석 결과&lt;/th&gt;
+      &lt;th&gt;도달&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;개발 PC(VPN으로 사내망 접속), 관리용 호스트&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;10.0.20.10&lt;/code&gt; (내부)&lt;/td&gt;
+      &lt;td&gt;정상&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;클러스터 파드 (worker-01)&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;10.0.20.10&lt;/code&gt; (내부)&lt;/td&gt;
+      &lt;td&gt;정상&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;CI 러너 빌드 경로&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;203.0.113.51&lt;/code&gt; (공용)&lt;/td&gt;
+      &lt;td&gt;i/o timeout&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;같은 이름 &lt;code class=&quot;highlighter-rouge&quot;&gt;harbor.example.com&lt;/code&gt;에 주소가 두 개 있고, 누구에게 물어보는가에 따라 답이 달라지는 상황이었다. 사내 DNS는 내부 주소를, 인터넷 공용 DNS는 외부 공개용 주소를 주는 split-horizon 구성 자체는 흔한 정상 설계다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;strong&gt;참고: split-horizon DNS&lt;/strong&gt; — 같은 도메인 이름에 대해 질의자가 어디에 있는가에 따라 다른 답을 주는 구성이다. 회사 안에서는 가까운 내부 주소로, 회사 밖에서는 인터넷에 공개한 주소로 오라고 이름 하나에 안팎 다른 답을 준다. 의도된 이원화라서 이 구성 자체는 문제가 아니다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;그렇다면 문제는 둘로 쪼갤 수 있다.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;사내에 있는 CI 러너가 &lt;em&gt;어째서인지&lt;/em&gt; 인터넷용 답을 받았다 — DNS 해석이 잘못 돌아온 측면&lt;/li&gt;
+  &lt;li&gt;그렇게 받은 공용 IP는 사내에서 접속이 안 된다 — hairpin 차단 측면&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;미리 말해 두면, 뒤의 진단에서 2는 정상 정책으로 판명되고 추적 대상은 1로 좁혀진다.&lt;/p&gt;
+
+&lt;p&gt;표의 근거를 밝혀 두면 — 개발 PC·관리용 호스트 행은 아래 재현 섹션의 curl 실측이고, CI 러너 행은 에러 로그의 &lt;code class=&quot;highlighter-rouge&quot;&gt;dial tcp&lt;/code&gt; 줄이다. 클러스터 파드 행은 내부 답을 받는 것까지 확인했으나 당시 커맨드 기록은 남기지 못했다.&lt;/p&gt;
+
+&lt;p&gt;에러 메시지의 &lt;code class=&quot;highlighter-rouge&quot;&gt;dial tcp 203.0.113.51:443&lt;/code&gt; 줄 자체가 “이 IP로 연결을 시도했다”는 영수증이다. 즉 CI 빌드 경로가 공용 답을 받았다는 사실 자체는 확인이 필요한 가설이 아니라 로그에 이미 적혀 있었다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/coredns-build-job-failed-2.png&quot; alt=&quot;실패 런 로그 끝의 에러 라인&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;직접 캡처. 브라우저 상단(URL 바·탭)과 에러 라인의 사내 도메인·공용 IP는 블러 처리했다.&lt;/sup&gt;&lt;/center&gt;
+
+&lt;h2 id=&quot;1차-의심-인프라-정책-변경&quot;&gt;1차 의심: 인프라 정책 변경&lt;/h2&gt;
+
+&lt;p&gt;처음에는 방화벽이나 사내 DNS 서버의 정책 변경을 의심했다.&lt;/p&gt;
+
+&lt;p&gt;근거가 없지는 않았다. 에러가 애플리케이션 계층이 아니라 TCP 계층(&lt;code class=&quot;highlighter-rouge&quot;&gt;i/o timeout&lt;/code&gt;)이었고, 우리 쪽(코드, CI 설정, 러너) 변경은 0이었고, 재실행을 포함한 3회가 전부 같은 지점에서 죽었다. 게다가 같은 날 아침 방화벽의 TLS 검사 도입으로 로컬 kubectl이 차단되는 별개의 사건이 있어서 시간대까지 겹쳐 보였다. “인프라 정책이 일괄로 바뀌고 있다”는 심증을 굳히기 좋은 조합이었다.&lt;/p&gt;
+
+&lt;p&gt;그러나 헛다리였다. 이 의심이 어디서 어긋났는지는 정리 섹션에서 다시 본다.&lt;/p&gt;
+
+&lt;h2 id=&quot;재현-공용-ip-강제-접속과-대조군&quot;&gt;재현: 공용 IP 강제 접속과 대조군&lt;/h2&gt;
+
+&lt;p&gt;CI와 무관하게, 아무 사내 호스트에서 문제를 재현할 수 있었다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# &quot;DNS 묻지 말고 이 이름을 공용 IP로 접속해 봐&quot; → 타임아웃 (문제 재현)&lt;/span&gt;
+~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;curl &lt;span class=&quot;nt&quot;&gt;-k&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-m&lt;/span&gt; 8 &lt;span class=&quot;nt&quot;&gt;--resolve&lt;/span&gt; harbor.example.com:443:203.0.113.51 https://harbor.example.com/v2/
+curl: &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;28&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; Connection timed out after 8003 milliseconds
+
+&lt;span class=&quot;c&quot;&gt;# 그냥 접속 → OS resolver가 사내 DNS에 물어 내부 주소로 접속 → 401 (정상 대조군)&lt;/span&gt;
+~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;curl &lt;span class=&quot;nt&quot;&gt;-k&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-m&lt;/span&gt; 8 https://harbor.example.com/v2/
+&lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;errors&quot;&lt;/span&gt;:[&lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;code&quot;&lt;/span&gt;:&lt;span class=&quot;s2&quot;&gt;&quot;UNAUTHORIZED&quot;&lt;/span&gt;,&lt;span class=&quot;s2&quot;&gt;&quot;message&quot;&lt;/span&gt;:&lt;span class=&quot;s2&quot;&gt;&quot;unauthorized: unauthorized&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;}]}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;--resolve&lt;/code&gt;는 DNS를 우회해 지정한 IP로 강제 접속하는 옵션이다(같은 기법을 &lt;a href=&quot;/kubernetes/Kubernetes-EKS-01-01-07-Public-Public-Endpoint/&quot;&gt;EKS 엔드포인트 분석 글&lt;/a&gt;에서도 썼다). 두 명령의 차이는 정확히 “어느 IP로 가는가”뿐이다.&lt;/p&gt;
+
+&lt;p&gt;여기서 401은 실패가 아니라 중요한 대조군이다. 401은 TCP 연결, TLS 핸드셰이크, HTTP 처리까지 전부 통과한 뒤 애플리케이션이 “인증하라”고 답한 것이다. 응답 자체가 없는 timeout과 질적으로 다르다. 즉 레지스트리 서버는 멀쩡하고, 내부 주소로 가면 아무 문제가 없다.&lt;/p&gt;
+
+&lt;p&gt;한편 공용 IP 쪽은 개발 PC에서도 관리용 호스트에서도 전부 timeout이었다. 사내에서 자사 공개 IP로 나갔다 유턴해 들어오는 경로(hairpin)는 방화벽이 특별히 허용해야 하는데, 그게 막혀 있는 것이다. 이 차단 자체는 흔한 정상 정책이다. 애초에 사내 클라이언트는 내부 주소로 접근하는 것이 설계 전제라(split-horizon이 정확히 그 용도다) 유턴 경로는 정상 상황에서 쓰일 일이 없고, NAT 장비 입장에서도 hairpin은 기본 동작이 아니라 별도로 지원·설정해야 하는 기능이다(&lt;a href=&quot;https://datatracker.ietf.org/doc/html/rfc4787#section-6&quot;&gt;RFC 4787&lt;/a&gt;). 쓸 일 없는 경로를 열어 두면 경계 정책 관리만 복잡해지니 막아 두는 쪽이 보통이다. 클라이언트는 받은 IP가 내부용인지 외부용인지 구분하지 않고 그냥 연결하므로, 오염된 답을 받은 순간 경로는 자동으로 그렇게 정해진다.&lt;/p&gt;
+
+&lt;p&gt;이 재현으로 앞서 쪼갠 두 측면 중 2(hairpin 차단)는 정상 정책으로 닫혔다. 남는 것은 1 — 사내 컴포넌트가 왜 공용 답을 받았는가다.&lt;/p&gt;
+
+&lt;h2 id=&quot;간헐성의-단서-같은-잡-안의-성공과-실패&quot;&gt;간헐성의 단서: 같은 잡 안의 성공과 실패&lt;/h2&gt;
+
+&lt;p&gt;실패한 잡 안에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;Login to Harbor&lt;/code&gt;는 성공하고 &lt;code class=&quot;highlighter-rouge&quot;&gt;Push image tags&lt;/code&gt;는 실패한 게 결정적 단서였다. 두 동작은 같은 이름을 각자 해석한다. 로그인은 러너 파드에서, 푸시 시점의 인증 요청은 빌드 엔진(buildkitd)에서 따로 질의한다. 해석 주체가 다르니 어떤 질의는 내부 답을, 어떤 질의는 공용 답을 받은 것이다. 실제로 빌드 엔진 안에서 같은 이름을 반복 해석해 보니 3회 중 1회꼴로 공용 답이 나왔다 (이 재현은 커맨드 기록을 남기지 못해 결과만 적는다).&lt;/p&gt;
+
+&lt;p&gt;이건 “전부 실패”가 아니라 “질의 단위 복불복”이라는 것을 의미한다. 인프라 정책이 바뀌었다면 일관되게 실패해야 자연스럽다. 복불복이라면, 질의가 분산되는 지점에 이질적인 멤버가 섞여 있다는 신호다.&lt;/p&gt;
+
+&lt;p&gt;그 분산 지점이 어디인지는 관측점 대조가 알려 준다. 복불복이 나타나는 클라이언트(러너 파드, buildkitd)는 전부 클러스터 안에 있고, 전제 섹션에서 본 대로 이들의 질의는 kube-dns Service를 거쳐 CoreDNS 레플리카 12개 중 하나로 흩어진다(사내 레지스트리처럼 클러스터 밖 이름은 그 레플리카가 다시 업스트림(upstream) DNS — 내 resolver가 질의를 넘기는 다음 단계 서버 — 로 넘긴다). 반면 항상 내부 답만 받는 개발 PC의 curl은 OS resolver가 사내 DNS에 직접 묻는 경로라 CoreDNS를 거치지 않는다. 갈리는 관측점과 안 갈리는 관측점의 차이가 정확히 “클러스터 DNS 경로를 지나는가”다. 그렇다면 그 경로에서 답이 달라질 수 있는 분산 지점은 두 층 — CoreDNS 레플리카 12개, 그 뒤의 사내 DNS 2대 — 이고, 다음 두 섹션에서 층을 나눠 하나씩 확인한다.&lt;/p&gt;
+
+&lt;p&gt;앞의 성공 런 스크린샷도 같은 증거다. 실패 두 시간 전의 그 잡 역시 Login과 Push에서 같은 이름을 해석했지만 전부 내부 답을 받아 통과했다. 오염이 시작된 뒤에도 통과하는 런이 있었다는 것은, 잡 단위가 아니라 질의 단위로 갈린다는 뜻이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;업스트림-분리-사내-dns-직접-질의&quot;&gt;업스트림 분리: 사내 DNS 직접 질의&lt;/h2&gt;
+
+&lt;p&gt;의심 경로가 클러스터 DNS로 좁혀졌으니, 두 층을 하나씩 격리했다. 먼저 CoreDNS를 통째로 건너뛰고 업스트림인 사내 DNS 서버에 직접 물었다. 사내 DNS 서버 주소는 정상 노드들의 &lt;code class=&quot;highlighter-rouge&quot;&gt;resolv.conf&lt;/code&gt;에서 역추적했다(모든 정상 노드가 바라보는 서버 = 사내 DNS).&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 서버를 지정해 CoreDNS를 건너뛰고 업스트림에 직접 질의&lt;/span&gt;
+~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;nslookup harbor.example.com 10.0.2.5
+Server:         10.0.2.5
+Address:        10.0.2.5#53
+
+Name:   harbor.example.com
+Address: 10.0.20.10
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;사내 DNS 두 대(&lt;code class=&quot;highlighter-rouge&quot;&gt;10.0.2.5&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;10.0.2.6&lt;/code&gt;)에 총 40회 질의했고 전부 내부 답이었다. 업스트림 서버는 건강하다.&lt;/p&gt;
+
+&lt;p&gt;이렇게 좁혀지는 근거는 해석 경로의 구조다. 파드에서 출발한 질의가 답을 받기까지 거치는 요소 중 답의 내용을 결정하는 지점은 두 곳뿐이다 — 최종적으로 답을 만드는 업스트림 서버, 그리고 어느 업스트림에게 물을지 고르는 CoreDNS의 forward. 중간의 kube-dns Service(kube-proxy)는 질의를 어느 레플리카로 나를지 정할 뿐 답의 내용에는 손대지 않는다. 업스트림 직접 질의가 40번 모두 내부 답을 줬으니 업스트림 서버는 배제되고, 남는 용의자는 forward — 즉 “어떤 레플리카가 누구에게 묻는가”다.&lt;/p&gt;
+
+&lt;h2 id=&quot;레플리카-대조-오염원-특정&quot;&gt;레플리카 대조: 오염원 특정&lt;/h2&gt;
+
+&lt;p&gt;12개 레플리카 파드에 같은 이름을 각각 여러 번 직접 질의했다. 이 실험은 커맨드 기록이 남지 않아 형태만 재구성하면 다음과 같다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 레플리카 파드 IP 확인&lt;/span&gt;
+~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; kube-system get pods &lt;span class=&quot;nt&quot;&gt;-l&lt;/span&gt; k8s-app&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;kube-dns &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; wide
+
+&lt;span class=&quot;c&quot;&gt;# 각 레플리카에 직접 질의 (파드 IP 지정) — 커맨드는 재구성&lt;/span&gt;
+~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;dig +short harbor.example.com @&amp;lt;replica-pod-ip&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;결과: gpu-node-05 노드에 있는 레플리카 1개만 3회 모두 공용 답(&lt;code class=&quot;highlighter-rouge&quot;&gt;203.0.113.51&lt;/code&gt;)을 반환했고, 나머지 11개는 전부 내부 답이었다. 클러스터의 모든 DNS 질의가 12개 레플리카로 분산되므로, 최대 12분의 1 확률로 공용 답이 새어 나오던 것이다(오염 레플리카에 떨어진 질의도 forward가 업스트림 셋 중 무엇을 뽑는지, 무엇이 캐시돼 있는지에 따라 다시 갈린다). 빌드는 한 잡에서 이름 해석을 여러 번 하니, 잡 단위로 보면 러시안룰렛이었다. 직전 런은 운 좋게 통과했고 문제 런은 3판 연속 진 것뿐이다.&lt;/p&gt;
+
+&lt;p&gt;“갑자기 뒤집혔다”는 처음의 인상도 이 시점에 교정됐다. 이 레플리카는 gpu-node-05가 클러스터에 조인한 시점(지난 주 금요일)부터 계속 오염돼 있었고, 그동안 확률에 걸리지 않았을 뿐이었다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;원인&quot;&gt;원인&lt;/h1&gt;
+
+&lt;h2 id=&quot;노드-resolvconf의-세-번째-nameserver&quot;&gt;노드 resolv.conf의 세 번째 nameserver&lt;/h2&gt;
+
+&lt;p&gt;이제 “그 노드의 레플리카만 왜 다른가”만 남았다. 노드에 SSH가 안 되는 상황이었는데(임대 노드라 키가 배포되지 않음), 우회로가 있었다. CoreDNS 파드는 &lt;code class=&quot;highlighter-rouge&quot;&gt;dnsPolicy: Default&lt;/code&gt;라서 자기가 사는 노드의 업스트림 DNS 목록을 그대로 물려받는다. 파드에서 읽은 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/resolv.conf&lt;/code&gt;가 곧 그 노드의 설정이다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 각 노드의 CoreDNS 파드에서 resolv.conf 확인 = 그 노드의 업스트림 목록 확인&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;# (파드명·IP는 익명화, 주석 줄 제외 발췌)&lt;/span&gt;
+~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;k&quot;&gt;for &lt;/span&gt;p &lt;span class=&quot;k&quot;&gt;in&lt;/span&gt; &amp;lt;gpu-node-05-pod&amp;gt; &amp;lt;gpu-node-06-pod&amp;gt; &amp;lt;cp-01-pod&amp;gt; &amp;lt;worker-01-pod&amp;gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;do&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nb&quot;&gt;echo&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;== &lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$p&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt; ==&quot;&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; kube-system &lt;span class=&quot;nb&quot;&gt;exec&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;$p&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;cat&lt;/span&gt; /etc/resolv.conf | &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-v&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'^#'&lt;/span&gt; | head &lt;span class=&quot;nt&quot;&gt;-4&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;done&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &amp;lt;gpu-node-05-pod&amp;gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt;
+nameserver 10.0.2.5
+nameserver 10.0.2.6
+nameserver 8.8.8.8
+&lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &amp;lt;gpu-node-06-pod&amp;gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt;
+nameserver 10.0.2.5
+nameserver 10.0.2.6
+nameserver 8.8.8.8
+&lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &amp;lt;cp-01-pod&amp;gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt;
+nameserver 10.0.2.5
+nameserver 10.0.2.6
+&lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &amp;lt;worker-01-pod&amp;gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt;
+nameserver 10.0.2.5
+nameserver 10.0.2.6
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;정상 노드는 사내 DNS 2대만 바라본다. 새로 편입된 gpu-node-05, gpu-node-06에는 세 번째로 구글 공용 DNS(8.8.8.8)가 들어 있었다. 노드 셋업 때 안전망으로 넣어 두는 흔한 설정이다. 참고로 처음 3회 표본에서 정상으로 보였던 gpu-node-06의 레플리카도 같은 설정이므로 같은 위험원이다. 표본이 운 좋았을 뿐이라, 조치는 두 노드 모두에 했다.&lt;/p&gt;
+
+&lt;h2 id=&quot;coredns-forward와-노드-resolvconf-상속-구조&quot;&gt;CoreDNS forward와 노드 resolv.conf 상속 구조&lt;/h2&gt;
+
+&lt;p&gt;노드의 설정이 클러스터 전체 문제가 되는 경로는 다음과 같다.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart LR
+    P[클라이언트 파드] --&amp;gt; S[kube-dns Service]
+    S --&amp;gt;|11/12| C1[&quot;CoreDNS replica&amp;lt;br/&amp;gt;(정상 노드 11개)&quot;]
+    S --&amp;gt;|1/12| C2[&quot;CoreDNS replica&amp;lt;br/&amp;gt;(gpu-node-05)&quot;]
+    C1 --&amp;gt; U1[&quot;사내 DNS&amp;lt;br/&amp;gt;10.0.2.5 / 10.0.2.6&quot;]
+    C2 --&amp;gt;|forward| U1
+    C2 --&amp;gt;|forward| U2[&quot;8.8.8.8&quot;]
+    U1 --&amp;gt; A1[&quot;10.0.20.10&amp;lt;br/&amp;gt;(내부 주소)&quot;]
+    U2 --&amp;gt; A2[&quot;203.0.113.51&amp;lt;br/&amp;gt;(공용 주소, 사내 도달 불가)&quot;]
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;파드의 질의는 kube-dns Service를 거쳐 12개 레플리카 중 하나에 떨어진다 (어느 레플리카인지는 복불복)&lt;/li&gt;
+  &lt;li&gt;CoreDNS는 &lt;code class=&quot;highlighter-rouge&quot;&gt;cluster.local&lt;/code&gt; 같은 클러스터 존이면 직접 답하고, 그 외(사내 레지스트리 등)는 Corefile의 &lt;code class=&quot;highlighter-rouge&quot;&gt;forward . /etc/resolv.conf&lt;/code&gt; 규칙대로 자기 파드의 &lt;code class=&quot;highlighter-rouge&quot;&gt;resolv.conf&lt;/code&gt;에 적힌 업스트림로 넘긴다&lt;/li&gt;
+  &lt;li&gt;그런데 그 파일은 (kubelet이 넣어 준) 그 레플리카가 사는 노드의 업스트림 목록이다&lt;/li&gt;
+  &lt;li&gt;forward는 업스트림 목록을 고정 순서로 쓰지 않고 그중 하나를 골라 질의를 넘긴다&lt;/li&gt;
+  &lt;li&gt;8.8.8.8로 넘어간 질의에 구글은 사내 존을 모르니 공용 레코드를 답한다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;strong&gt;참고: 구글이 사내 도메인의 주소를 답할 수 있는 원리&lt;/strong&gt; — 구글이 사내 정보를 아는 것이 아니다. 회사 도메인은 인터넷에 등록된 공개 도메인이고, 인터넷 쪽 권위(authoritative) 네임서버에 &lt;code class=&quot;highlighter-rouge&quot;&gt;harbor.example.com → 203.0.113.51&lt;/code&gt; 공개 레코드가 등록돼 있다. 8.8.8.8은 재귀 resolver라서 루트 → TLD → 회사의 공개 권위 서버 순으로 따라 내려가 그 공개 레코드를 받아 돌려줄 뿐이다. 내부 주소(&lt;code class=&quot;highlighter-rouge&quot;&gt;10.0.20.10&lt;/code&gt;)는 사내 DNS에만 존재하므로 구글은 알 수도, 답할 수도 없다. split-horizon의 두 뷰가 서로 다른 서버에 실려 있는 것이고, 8.8.8.8에게 물으면 항상 공개 뷰가 나온다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;그래서 “노드마다 &lt;code class=&quot;highlighter-rouge&quot;&gt;resolv.conf&lt;/code&gt;가 다르면, 어느 노드의 레플리카에 질의가 떨어졌느냐에 따라 답이 달라진다”가 성립한다. 이번 사건 전체가 이 구조 하나로 설명된다. 실제 확인한 Corefile에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;forward . /etc/resolv.conf&lt;/code&gt;와 함께 &lt;code class=&quot;highlighter-rouge&quot;&gt;cache 30&lt;/code&gt;도 있었다. 오염된 답이 30초 캐시로 잠깐 고착되기도 한다는 뜻이다. CoreDNS Corefile의 기본 구성은 &lt;a href=&quot;/kubernetes/Kubernetes-Kubeadm-01-7/&quot;&gt;Kubeadm 클러스터 애드온 글&lt;/a&gt;에서 뜯어본 적이 있다.&lt;/p&gt;
+
+&lt;p&gt;한 가지 퍼즐이 더 있었다. Ubuntu 노드의 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/resolv.conf&lt;/code&gt;는 systemd-resolved의 stub 파일(&lt;code class=&quot;highlighter-rouge&quot;&gt;nameserver 127.0.0.53&lt;/code&gt;)을 가리키는 심볼릭 링크인데, 파드 안에서는 왜 진짜 업스트림 목록이 보였을까. stub 주소를 파드에 그대로 물려주면 파드 안의 127.0.0.53은 아무것도 아니게 되므로(루프), 배포 도구가 이를 처리한다. RKE2(kubeadm 환경이라면 kubeadm)가 kubelet의 &lt;code class=&quot;highlighter-rouge&quot;&gt;--resolv-conf&lt;/code&gt;를 진짜 업스트림 목록이 있는 &lt;code class=&quot;highlighter-rouge&quot;&gt;/run/systemd/resolve/resolv.conf&lt;/code&gt;로 맞춰 두고, kubelet은 그 파일의 내용을 파드에 넣어 준다. gpu-node-05 파드에서 8.8.8.8이 보였다는 건 그 노드의 진짜 업스트림 목록에 8.8.8.8이 있었다는 뜻이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;계기-긴급-노드-대량-편입&quot;&gt;계기: 긴급 노드 대량 편입&lt;/h2&gt;
+
+&lt;p&gt;문제 노드들의 정체는 긴급 워크로드 처리를 위해 다른 곳에서 임대해 급히 클러스터에 붙인 GPU 노드들이었다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get nodes
+NAME          STATUS   AGE     VERSION
+cp-01         Ready    185d    v1.34.3+rke2r3
+worker-01     Ready    80d     v1.34.3+rke2r3
+...
+gpu-node-01   Ready    2d20h   v1.35.7+rke2r1   &lt;span class=&quot;c&quot;&gt;# 금요일 대량 편입&lt;/span&gt;
+gpu-node-05   Ready    2d20h   v1.35.7+rke2r1   &lt;span class=&quot;c&quot;&gt;# 문제 노드&lt;/span&gt;
+gpu-node-06   Ready    2d19h   v1.35.7+rke2r1   &lt;span class=&quot;c&quot;&gt;# 문제 노드&lt;/span&gt;
+...
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;금요일에 노드 여러 대가 한꺼번에 편입됐고(Kubernetes 버전까지 섞여 들어왔다), 그중 2대의 DNS 설정이 이번 사건의 원인이었다. 편입 시점에 CoreDNS 레플리카가 이 노드들에 배치되면서, 노드 하나에는 거의 무해했을 설정이 클러스터 전체의 오염원이 됐다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;해결&quot;&gt;해결&lt;/h1&gt;
+
+&lt;h2 id=&quot;완화-coredns-배치-배제&quot;&gt;완화: CoreDNS 배치 배제&lt;/h2&gt;
+
+&lt;p&gt;가장 깔끔한 건 문제 노드를 cordon(신규 스케줄 차단)하는 것이지만 불가능했다. 애초에 긴급 워크로드 처리를 목적으로 임대해온 노드라 워크로드를 계속 받아야 했기 때문이다. 그래서 노드는 스케줄 가능 상태로 두고, CoreDNS만 그 노드에 뜨지 않도록 배제했다.&lt;/p&gt;
+
+&lt;p&gt;RKE2에서 CoreDNS는 HelmChart로 관리되므로, 정석 경로는 HelmChartConfig로 coredns 차트에 nodeAffinity를 얹는 것이다(RKE2의 애드온 관리 구조는 &lt;a href=&quot;/kubernetes/Kubernetes-RKE2-01-02/&quot;&gt;RKE2 클러스터 구성 글&lt;/a&gt; 참고). 노드에 배제 라벨을 붙이는 방식이라, 향후 같은 문제 노드가 나오면 라벨만 붙이면 된다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 문제 노드 2대에 배제 라벨 부여 (cordon 아님 — 노드는 계속 스케줄 가능)&lt;/span&gt;
+~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl label node gpu-node-05 gpu-node-06 example.com/coredns-exclude&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;true&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--overwrite&lt;/span&gt;
+node/gpu-node-05 labeled
+node/gpu-node-06 labeled
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# coredns-exclude.yaml&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;# 기존 HelmChartConfig가 없는 것을 확인하고 신규 생성 (덮어쓰기 사고 방지)&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;apiVersion&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;helm.cattle.io/v1&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;kind&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;HelmChartConfig&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;metadata&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;rke2-coredns&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;namespace&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;kube-system&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;spec&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;valuesContent&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;|-&lt;/span&gt;
+    &lt;span class=&quot;no&quot;&gt;# 업스트림 DNS가 사내 존을 못 보는 노드를 CoreDNS 배치에서 배제&lt;/span&gt;
+    &lt;span class=&quot;no&quot;&gt;# 배제 대상 = 라벨 coredns-exclude=true 노드. 노드 DNS 교정 후 라벨 제거로 원복&lt;/span&gt;
+    &lt;span class=&quot;no&quot;&gt;affinity:&lt;/span&gt;
+      &lt;span class=&quot;no&quot;&gt;nodeAffinity:&lt;/span&gt;
+        &lt;span class=&quot;no&quot;&gt;requiredDuringSchedulingIgnoredDuringExecution:&lt;/span&gt;
+          &lt;span class=&quot;no&quot;&gt;nodeSelectorTerms:&lt;/span&gt;
+          &lt;span class=&quot;no&quot;&gt;- matchExpressions:&lt;/span&gt;
+            &lt;span class=&quot;no&quot;&gt;- key: example.com/coredns-exclude&lt;/span&gt;
+              &lt;span class=&quot;no&quot;&gt;operator: NotIn&lt;/span&gt;
+              &lt;span class=&quot;no&quot;&gt;values: [&quot;true&quot;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl apply &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; coredns-exclude.yaml
+helmchartconfig.helm.cattle.io/rke2-coredns created
+
+&lt;span class=&quot;c&quot;&gt;# helm 컨트롤러 반영 → 롤아웃 → 배치 확인&lt;/span&gt;
+~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; kube-system rollout status deploy/rke2-coredns-rke2-coredns
+~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; kube-system get pods &lt;span class=&quot;nt&quot;&gt;-l&lt;/span&gt; k8s-app&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;kube-dns &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; wide
+&lt;span class=&quot;c&quot;&gt;# gpu-node-05, gpu-node-06에는 더 이상 CoreDNS가 배치되지 않음&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;표현을 하나 짚고 가면, 이 조치는 “CoreDNS 재기동”이 아니다. 재기동은 같은 설정으로 껐다 켜는 것이라 재발 방지가 없다. 배치 설정에 제외 조건을 추가했고, 그 설정 변경으로 파드들이 롤링 교체된 것이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;검증-ci-재실행&quot;&gt;검증: CI 재실행&lt;/h2&gt;
+
+&lt;p&gt;조치 후 실패했던 CI 잡을 재실행했고, 이미지 푸시까지 정상 통과했다. 이후 같은 파이프라인이 원래대로 돌아갔고 재발은 없었다.&lt;/p&gt;
+
+&lt;h2 id=&quot;근본-조치-노드-dns-교정-요청&quot;&gt;근본 조치: 노드 DNS 교정 요청&lt;/h2&gt;
+
+&lt;p&gt;클러스터 쪽 완화는 우리가 할 수 있지만, 노드의 &lt;code class=&quot;highlighter-rouge&quot;&gt;resolv.conf&lt;/code&gt; 자체는 노드 관리 주체의 영역이라 인프라 팀에 교정을 요청했다. 요지는 다음과 같다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;두 노드의 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/resolv.conf&lt;/code&gt;에서 8.8.8.8을 제거하고 사내 DNS 2대만 남겨 달라 (클러스터의 다른 노드들과 동일하게)&lt;/li&gt;
+  &lt;li&gt;노드 교정이 완료되면 CoreDNS 배제 라벨은 우리가 원복한다&lt;/li&gt;
+  &lt;li&gt;부가 확인: 공용 주소 &lt;code class=&quot;highlighter-rouge&quot;&gt;203.0.113.51:443&lt;/code&gt;이 사내에서 접속 불가한 것이 의도된 정책인지 — 공용 레코드가 정식으로 등록돼 있다는 것은 8.8.8.8 질의로 확인했지만, 외부 노출이 의도인지·유산 레코드인지는 이번에 검증한 범위 밖이다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
+
+&lt;h2 id=&quot;인프라-의심-전에-확인할-것&quot;&gt;인프라 의심 전에 확인할 것&lt;/h2&gt;
+
+&lt;p&gt;처음에 인프라를 의심한 추론 자체가 엉터리는 아니었다. TCP 계층 에러, 우리 쪽 변경 없음, 다른 인프라 사건과의 시간대 겹침 — 심증을 굳히기 좋은 조합이었다. 문제는 더 싸고 결정적인 단서 두 개를 뒤로 미룬 것이다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;간헐성&lt;/strong&gt;. 방화벽·DNS 서버 정책이 바뀌면 보통 일관되게 실패한다. 같은 잡 안에서 성공과 실패가 갈리는 건, 질의가 분산되는 지점(레플리카, 노드, 엔드포인트)에 이질적인 멤버가 섞여 있다는 신호였다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;관측점 대조표가 이미 답을 절반 담고 있었다&lt;/strong&gt;. 클러스터 파드는 정상이고 CI 빌드 경로만 비정상이라면, 실패 경로에만 있는 구성 요소부터 뒤지는 게 순서였다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;이번 사건에서 얻은 판단 순서를 남겨 두면 이렇다 (이 사건 기반의 정리이고, 모든 장애에 일반화할 수는 없다).&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;관측점을 늘려 대조표부터 만든다. 모든 위치에서 실패하면 경계 밖(인프라) 가능성이 높고, 일부 위치·간헐 실패면 내 층의 분산 컴포넌트부터 본다&lt;/li&gt;
+  &lt;li&gt;간헐 실패는 분산 컴포넌트의 균질성 검증으로 직행한다. 이번엔 레플리카별 직접 질의 12번이면 끝나는 일이었다&lt;/li&gt;
+  &lt;li&gt;“갑자기”는 변경 이력과 대조하되, 후보를 정책 변경으로 한정하지 않는다. 노드 편입, 스케일 아웃 같은 이벤트도 “그때부터 확률적으로 앓다가 지금 증상이 나온” 원인일 수 있다&lt;/li&gt;
+  &lt;li&gt;위를 거치고도 남는 것이 인프라 문의 대상이다. 이번에도 최종적으로 인프라 요청이 나갔지만, “DNS 정책이 바뀐 것 같다”가 아니라 “이 노드 2대의 resolv.conf가 원인”이라는 특정된 요청이 됐다&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&quot;8888의-양면성&quot;&gt;8.8.8.8의 양면성&lt;/h2&gt;
+
+&lt;p&gt;흥미로운 역전이 하나 있다. 사내망 DNS 문제가 터지면 &lt;code class=&quot;highlighter-rouge&quot;&gt;resolv.conf&lt;/code&gt;에 8.8.8.8을 추가해 해결한 경험이 실무에 흔하다. 잘 알려진 패턴으로는 DHCP가 내려준 resolver가 죽었을 때의 fallback, 로컬 VM에서 systemd-resolved stub(127.0.0.53)이 업스트림을 못 찾아 정적으로 공용 DNS를 지정하는 경우 등이 있다(후자는 예전에 Vagrant/QEMU 실습 환경에서 직접 겪은 적이 있는 유형이다). 그런데 이번 사건은 정반대로 8.8.8.8을 “제거”하는 것이 해결이다.&lt;/p&gt;
+
+&lt;p&gt;갈림길은 그 &lt;code class=&quot;highlighter-rouge&quot;&gt;resolv.conf&lt;/code&gt;를 읽는 주체가 누구인가다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;그 머신 혼자 쓰는 말단 클라이언트의 fallback이고, 사내 전용 존을 해석할 필요가 없다면 — 8.8.8.8은 안전망이다&lt;/li&gt;
+  &lt;li&gt;split-horizon으로 운영되는 사내 존을 해석해야 하는 클라이언트라면 — 공용 DNS는 틀린 답(공용 뷰)을 주는 업스트림다&lt;/li&gt;
+  &lt;li&gt;나아가 그 목록이 다른 클라이언트들에게 답을 나눠 주는 서버(CoreDNS)의 업스트림가 된다면 — 노드 한 대의 설정이 클러스터 전체의 오염원이 된다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;같은 한 줄의 설정이 위치에 따라 안전망도, 오염원도 된다.&lt;/p&gt;
+
+&lt;h2 id=&quot;노드-편입-체크리스트&quot;&gt;노드 편입 체크리스트&lt;/h2&gt;
+
+&lt;p&gt;이번 사건의 계기가 긴급 노드 대량 편입이었던 만큼, 노드 편입 체크리스트에 DNS 검증(&lt;code class=&quot;highlighter-rouge&quot;&gt;resolv.conf&lt;/code&gt; 업스트림 목록이 클러스터 표준과 일치하는지, systemd-resolved 환경이면 &lt;code class=&quot;highlighter-rouge&quot;&gt;/run/systemd/resolve/resolv.conf&lt;/code&gt; 기준) 항목을 추가하는 것을 후속으로 남겼다. 이 항목은 아직 제안 단계로, 적용·운영해 본 것은 아니다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://coredns.io/plugins/forward/&quot;&gt;CoreDNS forward plugin&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/&quot;&gt;Kubernetes: Customizing DNS Service&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://docs.rke2.io/helm&quot;&gt;RKE2: Helm Integration (HelmChartConfig)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-Networking-Linux-Stack/&quot;&gt;Kubernetes 네트워킹: Linux 네트워크 스택 이해하기&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-Kubeadm-01-7/&quot;&gt;Kubeadm 클러스터: Static Pod 및 애드온 확인&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-RKE2-01-02/&quot;&gt;RKE2 클러스터: 서버 노드 설치 결과 확인&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-EKS-01-01-07-Public-Public-Endpoint/&quot;&gt;EKS: 엔드포인트 액세스 분석&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="CoreDNS" /><category term="DNS" /><category term="Troubleshooting" /><category term="RKE2" /><summary type="html">CoreDNS 레플리카 하나가 반환한 공용 IP, 그로 인한 CI 이미지 푸시 간헐 실패의 진단과 해결 기록</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -423,7 +790,7 @@
   &lt;li&gt;&lt;a href=&quot;/ai/AI-sigmoid/&quot;&gt;2020년 Sigmoid 함수 (로그 승산 — logit의 어원)&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Transformer" /><category term="Transformer-Explainer" /><category term="GPT-2" /><category term="Logit" /><category term="Softmax" /><category term="Sampling" /><category term="Temperature" /><category term="Top-k" /><category term="Top-p" /><category term="Weight-Tying" /><category term="Residual-Connection" /><category term="LayerNorm" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-1" /><summary type="html">마지막 토큰의 벡터가 로짓이 되고, temperature·top-k·top-p를 거쳐 다음 토큰이 되기까지 — 출력층과 샘플링을 보고 트랜스포머 아키텍처 여정을 닫는다.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화 - 2.6. Transformer: MLP와 트랜스포머 블록 마무리</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화 - 2.6. Transformer: MLP와 트랜스포머 블록 마무리" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Transformer" /><category term="Transformer-Explainer" /><category term="GPT-2" /><category term="Logit" /><category term="Softmax" /><category term="Sampling" /><category term="Temperature" /><category term="Top-k" /><category term="Top-p" /><category term="Weight-Tying" /><category term="Residual-Connection" /><category term="LayerNorm" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-1" /><summary type="html">트랜스포머 블록의 출력이 토큰이 되는 과정에 대해 알아 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화 - 2.6. Transformer: MLP와 트랜스포머 블록 마무리</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화 - 2.6. Transformer: MLP와 트랜스포머 블록 마무리" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -3717,503 +4084,4 @@ Parameter
   &lt;li&gt;&lt;a href=&quot;https://arxiv.org/abs/2106.09685&quot;&gt;LoRA: Low-Rank Adaptation of Large Language Models&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Continual-Learning" /><category term="Catastrophic-Forgetting" /><category term="Replay" /><category term="Regularization" /><category term="PEFT" /><category term="Foundation-Model" /><category term="MLOps" /><summary type="html">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.</summary></entry><entry><title type="html">[Linux] 커널 메시지 - 2. 시스템 로그 저장소와 저널</title><link href="https://sirzzang.github.io//cs/CS-Kernel-Message-02/" rel="alternate" type="text/html" title="[Linux] 커널 메시지 - 2. 시스템 로그 저장소와 저널" /><published>2026-07-29T00:00:00+09:00</published><updated>2026-07-29T00:00:00+09:00</updated><id>https://sirzzang.github.io//cs/CS-Kernel-Message-02</id><content type="html" xml:base="https://sirzzang.github.io//cs/CS-Kernel-Message-02/">&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;/cs/CS-Kernel-Message-01/&quot;&gt;1편&lt;/a&gt;에서 커널 메시지가 &lt;code class=&quot;highlighter-rouge&quot;&gt;printk()&lt;/code&gt;로 커널 링버퍼(RAM)에 쓰이는 것까지 봤다. 그리고 그 원본에는 두 가지 한계가 있었다 — &lt;strong&gt;재부팅하면 사라지고, 메시지가 폭주하면 오래된 것부터 밀려난다.&lt;/strong&gt; 커널 메시지처럼 중요한 기록이 이렇게 유실되면 안 되므로, 링버퍼 밖의 누군가가 이걸 계속 읽어서 영속 보관해야 한다. 이번 2편은 그 “누군가” — 시스템 로그 저장소 — 의 이야기다. 1편이 배포판 무관 공통 영역이었다면, 여기서부터는 배포판·구현별로 갈리는 영역이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;시스템 로그 저장소&lt;/strong&gt;는 수집·저장·보존·조회 4가지 역할을 하는 유저스페이스 로깅 시스템의 일반 개념이고, “저널(journal)”은 그 systemd 구현의 이름이다&lt;/li&gt;
-  &lt;li&gt;저널은 커널 메시지 전용이 아니라 &lt;strong&gt;여러 소스(커널·syslog·유닛 stdout·API·audit)를 구독하는 시스템 전체 로그 통합 저장소&lt;/strong&gt;다. 커널 링버퍼는 소스 중 하나일 뿐이다&lt;/li&gt;
-  &lt;li&gt;systemd-journald는 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;를 &lt;strong&gt;이벤트 기반으로 상주 구독&lt;/strong&gt;하고(폴링 간격 없음), 자기가 뜨기 전 메시지도 소급 복사한다. 저장은 &lt;code class=&quot;highlighter-rouge&quot;&gt;/run&lt;/code&gt;(RAM)에서 시작해 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var&lt;/code&gt; 마운트 후 flush되며, 영속 여부는 &lt;code class=&quot;highlighter-rouge&quot;&gt;Storage=&lt;/code&gt; 설정이 결정한다&lt;/li&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -k&lt;/code&gt;는 어긋날 수 있다 — wrap으로 밀린 메시지가 저널에만 남기도 하고(정방향), journald 중단 구간·rotation 역전으로 링버퍼에만 남기도 한다(역방향)&lt;/li&gt;
-  &lt;li&gt;저널의 보존은 무조건이 아니라 &lt;strong&gt;용량 상한 안에서의 보존&lt;/strong&gt;이다. 정말 중요한 기록은 원본→사본 사슬을 한 칸 더 잇는다(중앙 수집, pstore, BMC)&lt;/li&gt;
-  &lt;li&gt;혼자 재부팅된 노드의 원인 추적은 이 사슬을 거슬러 오르는 일이다 — &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;(소멸) → &lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -k -b -1&lt;/code&gt; → 평문 파일 → 중앙 수집 → OS 밖(pstore·BMC) 순서로 뒤진다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;시스템-로그-저장소&quot;&gt;시스템 로그 저장소&lt;/h1&gt;
-
-&lt;h2 id=&quot;네-가지-역할&quot;&gt;네 가지 역할&lt;/h2&gt;
-
-&lt;p&gt;배포판·구현과 무관하게, 유저스페이스 로깅 시스템이 하는 일은 개념적으로 4가지로 추상화된다.&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;&lt;strong&gt;수집(collect)&lt;/strong&gt;: 여러 소스에서 로그를 모은다 — 커널 메시지(&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;), syslog 소켓(&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/log&lt;/code&gt;), 각 서비스의 stdout/stderr 등&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;저장(persist)&lt;/strong&gt;: 디스크 등 영속 매체에 보관한다 — 링버퍼와 달리 재부팅을 넘어 보존&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;보존/회전(retention/rotate)&lt;/strong&gt;: 무한정 쌓을 수 없으니 용량·기간 상한으로 오래된 것을 정리한다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;조회(query)&lt;/strong&gt;: 사용자가 검색·필터해서 본다&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;용어 하나를 짚고 간다. &lt;strong&gt;“저널(journal)”은 사실 systemd 진영의 용어다.&lt;/strong&gt; 일반 개념을 부를 때는 “시스템 로그 저장소” 또는 “로깅 서브시스템”이 정확하고, 이 글에서도 일반 개념은 시스템 로그 저장소, systemd 구현은 저널로 구분해 부른다.&lt;/p&gt;
-
-&lt;h2 id=&quot;유입-소스&quot;&gt;유입 소스&lt;/h2&gt;
-
-&lt;p&gt;시스템 로그 저장소는 커널 메시지 전용이 아니다. 처음 공부할 때 “커널 메시지를 저장하는 곳”으로 오해하기 쉬운데, 정확한 그림은 &lt;strong&gt;여러 소스를 구독하는 수집기의 결과물&lt;/strong&gt;이고 커널 링버퍼는 그 소스 중 하나일 뿐이다. journald 기준으로 들어오는 소스는 아래와 같다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;소스&lt;/th&gt;
-      &lt;th&gt;창구&lt;/th&gt;
-      &lt;th&gt;예시&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;커널 메시지&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;OOM killer, GPU Xid, 디스크 에러&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;syslog API를 쓰는 프로그램&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/log&lt;/code&gt; 소켓&lt;/td&gt;
-      &lt;td&gt;sshd 로그인 실패, cron 실행 기록&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;systemd 유닛의 stdout/stderr&lt;/td&gt;
-      &lt;td&gt;journald가 유닛에 붙여 준 파이프&lt;/td&gt;
-      &lt;td&gt;서비스가 표준출력에 찍는 로그&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;native 저널 API&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;sd_journal_send()&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;구조화 필드를 직접 기록 (systemd 컴포넌트 등)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;audit&lt;/td&gt;
-      &lt;td&gt;커널 audit 서브시스템&lt;/td&gt;
-      &lt;td&gt;보안 감사 이벤트&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;다만 “시스템에서 나온 모든 로그”라고 하면 과장이다 — &lt;strong&gt;위 경로로 들어온 것만&lt;/strong&gt; 저널에 있다. nginx가 access.log 파일에 직접 쓰는 로그처럼, 앱이 자체 파일로만 남기는 로그는 저널 밖이다.&lt;/p&gt;
-
-&lt;h2 id=&quot;구현-계열과-갈리는-축&quot;&gt;구현 계열과 갈리는 축&lt;/h2&gt;
-
-&lt;p&gt;1편에서 그은 경계선(&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;) 밖의 모든 것 — 누가 상주 수집하고, 어떤 포맷으로, 어디에, 회전은 누가, 무엇으로 조회하는가 — 이 구현별로 갈린다.&lt;/p&gt;
-
-&lt;p&gt;계열을 가르는 축은 배포판 이름이 아니라 &lt;strong&gt;systemd 채택 여부&lt;/strong&gt;다. 여기서 오해하기 쉬운 지점이 있는데, systemd는 특정 배포판(예: 우분투) 소속이 아니다. systemd는 init 시스템(PID 1)이자 그 주변 스위트(journald, udevd 등)의 이름으로, &lt;strong&gt;Red Hat 쪽에서 개발&lt;/strong&gt;되어(2010년 공개) Fedora 15(2011)가 처음 채택했고, RHEL 7(2014), Debian 8(2015), Ubuntu 15.04(2015, 그 전까지는 자체 Upstart 사용) 순으로 퍼져 사실상 표준이 됐다. 즉 “systemd는 우분투 계열”이 아니라 “우분투가 systemd 채택 배포판 중 하나”이며, CentOS/RHEL·Rocky도 systemd-journald를 쓴다.&lt;/p&gt;
-
-&lt;p&gt;갈리는 축으로 주요 구현을 나누면:&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;축&lt;/th&gt;
-      &lt;th&gt;systemd-journald&lt;/th&gt;
-      &lt;th&gt;rsyslog&lt;/th&gt;
-      &lt;th&gt;syslog-ng&lt;/th&gt;
-      &lt;th&gt;busybox syslogd(+klogd)&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;커널 메시지 수집 창구&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt; 직접 상주 구독&lt;/td&gt;
-      &lt;td&gt;커널 리더 모듈(imklog)로 &lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/kmsg&lt;/code&gt; 직접 — 데비안·우분투 기본 구성 포함 / RHEL 계열 표준 구성(imjournal)은 journald에서 넘겨받음&lt;/td&gt;
-      &lt;td&gt;커널 리더로 직접&lt;/td&gt;
-      &lt;td&gt;별도 klogd가 &lt;code class=&quot;highlighter-rouge&quot;&gt;syslog(2)&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/kmsg&lt;/code&gt;로 읽어 전달&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;저장 포맷&lt;/td&gt;
-      &lt;td&gt;구조화 바이너리 + 인덱스 (&lt;code class=&quot;highlighter-rouge&quot;&gt;.journal&lt;/code&gt;)&lt;/td&gt;
-      &lt;td&gt;평문 텍스트&lt;/td&gt;
-      &lt;td&gt;평문 텍스트&lt;/td&gt;
-      &lt;td&gt;평문 텍스트&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;저장 위치(관례)&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/run/log/journal&lt;/code&gt; → &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/journal&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/syslog&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;kern.log&lt;/code&gt;(데비안계), &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/messages&lt;/code&gt;(레드햇계)&lt;/td&gt;
-      &lt;td&gt;설정에 따라 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/messages&lt;/code&gt; 등&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/messages&lt;/code&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;회전/보존&lt;/td&gt;
-      &lt;td&gt;내장 (&lt;code class=&quot;highlighter-rouge&quot;&gt;SystemMaxUse=&lt;/code&gt; 등)&lt;/td&gt;
-      &lt;td&gt;logrotate 별도&lt;/td&gt;
-      &lt;td&gt;logrotate 별도&lt;/td&gt;
-      &lt;td&gt;자체 간이 회전 옵션&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;조회&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl&lt;/code&gt; (필드 필터)&lt;/td&gt;
-      &lt;td&gt;grep/tail/less 등 텍스트 도구&lt;/td&gt;
-      &lt;td&gt;동일&lt;/td&gt;
-      &lt;td&gt;동일&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;주로 만나는 곳&lt;/td&gt;
-      &lt;td&gt;systemd 계열 전부&lt;/td&gt;
-      &lt;td&gt;데비안/우분투·RHEL 병행 구성, 원격 전송&lt;/td&gt;
-      &lt;td&gt;일부 배포판·기업 환경&lt;/td&gt;
-      &lt;td&gt;Alpine 등 경량/임베디드&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;non-systemd 배포판(Alpine = OpenRC + busybox syslogd, Devuan, Void 등)에는 journald 자체가 없고 syslog 계열만 쓴다. 이하의 상세는 systemd-journald 기준으로 전개하고, 각 지점에서 syslog 계열과의 차이를 대비한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;systemd-journald&quot;&gt;systemd-journald&lt;/h1&gt;
-
-&lt;h2 id=&quot;구독-방식-간격-없는-실시간-복사&quot;&gt;구독 방식: 간격 없는 실시간 복사&lt;/h2&gt;
-
-&lt;p&gt;journald가 링버퍼를 “언제부터, 어떤 간격으로” 읽는지에 대한 답은 두 가지다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;간격은 없다.&lt;/strong&gt; 폴링이 아니라 이벤트 기반이다. journald는 부팅 중 PID 1(systemd) 직후의 이른 시점에 떠서 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;를 열어 놓고 상주하며, 새 레코드가 생길 때마다 즉시 받아 자기 저널 파일에 append한다. &lt;code class=&quot;highlighter-rouge&quot;&gt;tail -f&lt;/code&gt;에 가까운 동작이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;자기가 뜨기 전 메시지도 가져간다.&lt;/strong&gt; 1편에서 본 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;의 성질 — 새로 연 리더는 버퍼의 가장 오래된 레코드부터 읽는다 — 덕분에, journald가 커널보다 한참 늦게 떠도 그때까지 링버퍼에 남아 있는 부팅 초기 메시지를 소급해서 복사한다. 물론 그 시점에 이미 wrap으로 밀려난 메시지는 가져갈 수 없다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;journald는 자신이 커널 메시지를 어디까지 읽었는지(시퀀스 번호)를 추적하므로, 재시작해도 중복 없이 이어받는다. 이 시퀀스 추적이 뒤의 “어긋나는 순간”에서 다시 등장한다.&lt;/p&gt;
-
-&lt;p&gt;커널 메시지는 이렇게 저널로 복사되면서 &lt;code class=&quot;highlighter-rouge&quot;&gt;_TRANSPORT=kernel&lt;/code&gt; 같은 메타데이터 필드가 붙어 인덱싱된다. &lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -k&lt;/code&gt;의 커널 메시지 필터가 이 필드 위에서 동작한다.&lt;/p&gt;
-
-&lt;h2 id=&quot;저장-위치-run에서-var로&quot;&gt;저장 위치: /run에서 /var로&lt;/h2&gt;
-
-&lt;p&gt;journald의 저장 위치는 부팅 진행에 따라 옮겨 간다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;부팅 초기에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;/run/log/journal&lt;/code&gt;에 쓴다. &lt;code class=&quot;highlighter-rouge&quot;&gt;/run&lt;/code&gt;은 tmpfs — RAM을 파일시스템 인터페이스로 쓰는 것 — 라서 아직 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var&lt;/code&gt;가 마운트되지 않은 시점에도 쓸 수 있다. &lt;code class=&quot;highlighter-rouge&quot;&gt;/run&lt;/code&gt; 디렉토리 자체는 FHS(Filesystem Hierarchy Standard) 표준이지만 &lt;code class=&quot;highlighter-rouge&quot;&gt;/run/log/journal&lt;/code&gt;이라는 경로와 용도는 journald의 것이다&lt;/li&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/var&lt;/code&gt; 마운트가 끝나면 &lt;strong&gt;flush&lt;/strong&gt;가 일어난다: &lt;code class=&quot;highlighter-rouge&quot;&gt;/run/log/journal&lt;/code&gt;의 내용이 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/journal&lt;/code&gt;로 옮겨지고, 이후 새 레코드는 처음부터 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var&lt;/code&gt;에 직접 쓰인다. flush가 끝나면 &lt;code class=&quot;highlighter-rouge&quot;&gt;/run&lt;/code&gt; 쪽 런타임 저널은 정리된다. 이 flush 시점은 “적당히 언젠가”가 아니라 &lt;strong&gt;유닛 순서로 못 박혀 있다&lt;/strong&gt; — flush를 수행하는 &lt;code class=&quot;highlighter-rouge&quot;&gt;systemd-journal-flush.service&lt;/code&gt;가 &lt;code class=&quot;highlighter-rouge&quot;&gt;RequiresMountsFor=/var/log/journal&lt;/code&gt;로 해당 경로의 마운트 유닛 뒤에 오도록 의존성이 정의되어 있다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/run&lt;/code&gt; 단계에서는 같은 커널 메시지가 RAM에 두 번 있는 셈이다(링버퍼의 원본 + tmpfs의 사본). 영속성 관점에서는 이 시점엔 둘 다 휘발이라 차이가 없지만, 그런데도 복사하는 이유는 사본이 사는 것이 영속성만이 아니기 때문이다 — 링버퍼보다 큰 용량(밀림에 강함), 메타데이터 인덱스(필드 필터 조회), 다른 소스와의 통합, 그리고 나중에 flush로 디스크에 넘어갈 대상이 된다는 것.&lt;/p&gt;
-
-&lt;h2 id=&quot;storage-옵션과-영속-여부&quot;&gt;Storage= 옵션과 영속 여부&lt;/h2&gt;
-
-&lt;p&gt;디스크 보관 여부를 결정하는 것은 재부팅 이벤트가 아니라 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/systemd/journald.conf&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;Storage=&lt;/code&gt; 설정이다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;값&lt;/th&gt;
-      &lt;th&gt;동작&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;persistent&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;디스크(&lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/journal&lt;/code&gt;)에 저장. 디렉토리가 없으면 만들고, 부팅 극초기나 디스크에 쓸 수 없을 때는 &lt;code class=&quot;highlighter-rouge&quot;&gt;/run&lt;/code&gt;에 임시 기록 후 옮긴다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;auto&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;현행 배포판 대부분의 기본값 — &lt;strong&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/journal&lt;/code&gt; 디렉토리가 존재하면 디스크, 없으면 RAM(&lt;code class=&quot;highlighter-rouge&quot;&gt;/run&lt;/code&gt;)&lt;/strong&gt; (upstream systemd v259부터는 컴파일 기본이 &lt;code class=&quot;highlighter-rouge&quot;&gt;persistent&lt;/code&gt;로 바뀌었다)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;volatile&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;무조건 RAM(&lt;code class=&quot;highlighter-rouge&quot;&gt;/run/log/journal&lt;/code&gt;)에만 — 재부팅하면 사라짐&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;none&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;아예 저장하지 않음 (수집은 하되 전달만 가능)&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;auto&lt;/code&gt;는 “디렉토리 존재 여부를 관리자 스위치로 쓰겠다”는 설계다. 배포판이 패키징할 때 그 디렉토리를 만들어 두지 않으면 기본 휘발이 되는데, 과거 데비안/우분투가 정확히 이 경우였다 — 평문 영속은 rsyslog가 담당하니 저널은 휘발로 두는 의도된 선택이었고, 관리자가 디렉토리를 만들어 주면 그때부터 영속으로 바뀐다. 이 기본값은 이후 바뀌어서, &lt;strong&gt;우분투는 18.04부터, 데비안은 11부터 패키징이 이 디렉토리를 만들어 두므로 영속이 기본&lt;/strong&gt;이 됐다. 반면 &lt;strong&gt;RHEL 계열은 RHEL 10까지도 기본이 비영속&lt;/strong&gt;이다 — 영속 보관은 rsyslog의 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/messages&lt;/code&gt;가 담당하는 구성이 표준이라, 저널 영속이 필요하면 관리자가 직접 디렉토리를 만든다. “요즘은 저널 영속이 기본”이라는 일반화는 데비안·우분투 계열에서만 성립하는 셈이다.&lt;/p&gt;
-
-&lt;p&gt;“저널 = 영속”이라는 등식도 여기서 깨진다. &lt;code class=&quot;highlighter-rouge&quot;&gt;volatile&lt;/code&gt;을 일부러 선택하는 유스케이스가 있다 — flash 마모를 아끼는 임베디드/IoT, 라이브 부팅 매체, 읽기 전용 루트 시스템, 그리고 로그를 어차피 원격 중앙 수집기로 실시간 전송해서 로컬 보존이 필요 없는 노드. &lt;strong&gt;저널의 본질은 통합 로그 저장소이고, 영속은 옵션이다.&lt;/strong&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;보존과-회전-상한-안에서의-보존&quot;&gt;보존과 회전: 상한 안에서의 보존&lt;/h2&gt;
-
-&lt;p&gt;디스크에 쌓인다고 무한정 쌓이는 것은 아니다. &lt;code class=&quot;highlighter-rouge&quot;&gt;journald.conf&lt;/code&gt;의 용량 상한(&lt;code class=&quot;highlighter-rouge&quot;&gt;SystemMaxUse=&lt;/code&gt; — 기본은 해당 파일시스템의 10%, 단 4G로 캡. 그 외 &lt;code class=&quot;highlighter-rouge&quot;&gt;SystemKeepFree=&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;MaxRetentionSec=&lt;/code&gt; 등)에 걸리면 &lt;strong&gt;오래된 저널 파일을 통째로 지우는(vacuum)&lt;/strong&gt; 방식으로 정리한다. 링버퍼처럼 레코드 단위로 덮어쓰는 순환이 아니라, 파일 단위 로테이션 후 삭제다.&lt;/p&gt;
-
-&lt;p&gt;여기서 중요한 명제 하나가 나온다: &lt;strong&gt;저널의 보존은 무조건이 아니라 용량 상한 안에서의 보존이다.&lt;/strong&gt; 이 성질이 뒤의 “어긋나는 순간”에서 흥미로운 역전을 만든다.&lt;/p&gt;
-
-&lt;h2 id=&quot;rsyslog와의-병행&quot;&gt;rsyslog와의 병행&lt;/h2&gt;
-
-&lt;p&gt;전통적으로 우분투/데비안에는 journald와 rsyslog가 함께 있었고, 그래서 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/syslog&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/kern.log&lt;/code&gt; 같은 평문 파일이 존재한다. “불안해서 두 벌” 두는 것인가 생각할 수 있지만, 우선은 &lt;strong&gt;역할 분담&lt;/strong&gt;이다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;rsyslog는 journald 없이도 완전히 동작하는 독립 소프트웨어다. non-systemd 시스템에서는 자체 입력 모듈로 커널·앱 로그를 직접 수집한다&lt;/li&gt;
-  &lt;li&gt;systemd 위에서 rsyslog가 커널 메시지를 받는 경로는 &lt;strong&gt;배포판 기본 설정에 따라 갈린다.&lt;/strong&gt; 데비안/우분투의 기본 &lt;code class=&quot;highlighter-rouge&quot;&gt;rsyslog.conf&lt;/code&gt;는 imklog 모듈을 로드해 rsyslog가 &lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/kmsg&lt;/code&gt;로 링버퍼를 &lt;strong&gt;직접&lt;/strong&gt; 읽는다 — 이 경우 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/kern.log&lt;/code&gt;는 journald를 거치지 않은 &lt;strong&gt;병렬 사본&lt;/strong&gt;이고, 링버퍼의 구독자는 journald(&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;)와 rsyslog(&lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/kmsg&lt;/code&gt;) 둘이다. 반면 RHEL 계열 표준 구성(imjournal)은 rsyslog가 저널을 입력으로 읽으므로 &lt;code class=&quot;highlighter-rouge&quot;&gt;링버퍼 → journald → 저널 → rsyslog → /var/log/messages&lt;/code&gt;, 즉 &lt;strong&gt;사본의 사본&lt;/strong&gt;이 된다. 참고로 journald→syslog 포워딩(&lt;code class=&quot;highlighter-rouge&quot;&gt;journald.conf&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;ForwardToSyslog=&lt;/code&gt;)은 upstream 기본값이 no이고(데비안·우분투는 패키징 drop-in으로 yes를 실효 기본으로 둔다), 켜져 있더라도 &lt;strong&gt;커널 메시지는 포워딩 대상이 아니다&lt;/strong&gt; — systemd의 SYSLOG 인터페이스 문서가 커널 메시지는 syslog 데몬이 직접 읽으라고 명시한다. 그래서 데비안/우분투 구성에서 두 경로가 중복 기록을 만들지는 않는다&lt;/li&gt;
-  &lt;li&gt;rsyslog가 담당하는 것: grep/fail2ban 등 평문 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/*&lt;/code&gt;에 의존하는 도구 생태계와의 호환, 그리고 원격 로그 전송·중앙 로그 서버 구축(전통적으로 rsyslog가 성숙한 영역). 과거에는 “저널이 휘발이니 영속 담당”이라는 역할도 있었다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;그리고 데비안/우분투처럼 두 데몬이 링버퍼를 각자 직접 구독하는 구성은 결과적으로 &lt;strong&gt;안전장치 효과&lt;/strong&gt;도 낸다 — journald에 공백이 생겨도 rsyslog 쪽 &lt;code class=&quot;highlighter-rouge&quot;&gt;kern.log&lt;/code&gt;는 독립적으로 남는다. 역할 분담이 우선이고, 안전장치는 따라오는 효과다.&lt;/p&gt;
-
-&lt;p&gt;추세는 저널 영속화가 기본이 되면서(우분투 18.04·데비안 11부터) rsyslog 의존이 줄어드는 방향이다 — 데비안은 12부터 rsyslog를 기본 설치하지 않고, 우분투 서버 이미지는 24.04까지 동봉하되 minimal 이미지에는 없다. 결국 이미지별로 다르므로, 운영 중인 노드에서는 추측 대신 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/journal&lt;/code&gt; 존재 여부와 rsyslog 유무를 직접 확인하는 편이 정확하다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;journalctl&quot;&gt;journalctl&lt;/h1&gt;
-
-&lt;h2 id=&quot;커널-메시지-조회&quot;&gt;커널 메시지 조회&lt;/h2&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;명령&lt;/th&gt;
-      &lt;th&gt;동작&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -k&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;커널 메시지만 (&lt;code class=&quot;highlighter-rouge&quot;&gt;_TRANSPORT=kernel&lt;/code&gt; 필터). &lt;strong&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;-b&lt;/code&gt;(현재 부팅)를 함축한다&lt;/strong&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -k -b -1&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;strong&gt;직전&lt;/strong&gt; 부팅 세션의 커널 메시지 — 영속 저장일 때만 결과가 나온다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl --list-boots&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;저널에 남아 있는 부팅 세션 목록&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -u &amp;lt;unit&amp;gt;&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;유닛별 로그 (예: &lt;code class=&quot;highlighter-rouge&quot;&gt;-u kubelet&lt;/code&gt;)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -p err&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;우선순위 필터 — 1편에서 본 0~7 레벨 공통 축&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl --since &quot;1 hour ago&quot;&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;기간 필터&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -b -o short-monotonic&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;부팅 후 경과 시간 형식 출력 — dmesg 타임스탬프와 대조할 때&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;함정 두 개를 짚어 둔다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;-k&lt;/code&gt;는 &lt;code class=&quot;highlighter-rouge&quot;&gt;-b&lt;/code&gt;를 함축한다.&lt;/strong&gt; 즉 &lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -k&lt;/code&gt;는 현재 부팅의 커널 메시지다. 현재 부팅의 저널은 휘발 구성이어도 &lt;code class=&quot;highlighter-rouge&quot;&gt;/run&lt;/code&gt;에 있으므로, “영속이 아니라서 &lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -k&lt;/code&gt;가 빈다”는 일은 없다. 영속이 필요한 것은 &lt;code class=&quot;highlighter-rouge&quot;&gt;-b -1&lt;/code&gt;처럼 재부팅을 넘어 볼 때다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;-b -1&lt;/code&gt;과 &lt;code class=&quot;highlighter-rouge&quot;&gt;-b 1&lt;/code&gt;은 다르다.&lt;/strong&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;-b -1&lt;/code&gt;은 직전 부팅, &lt;code class=&quot;highlighter-rouge&quot;&gt;-b 1&lt;/code&gt;은 저널에 남은 &lt;strong&gt;가장 오래된&lt;/strong&gt; 부팅이다. 오래 산 노드에서 부호를 빠뜨리면 몇 달 전 부팅을 보게 된다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;파이썬 인덱싱과 비슷하게 기억하면 편하다 — 양수는 앞(가장 오래된 부팅)에서부터, 음수는 뒤(최신)에서부터 센다. 다만 0이 첫 요소가 아니라 &lt;strong&gt;현재 부팅&lt;/strong&gt;이라는 점이 파이썬과 다르다.&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;p&gt;권한도 하나 알아 두면 좋다. 일반 사용자는 자기 로그만 보이고, 시스템 전체 저널을 보려면 &lt;code class=&quot;highlighter-rouge&quot;&gt;adm&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;systemd-journal&lt;/code&gt;(배포판에 따라 &lt;code class=&quot;highlighter-rouge&quot;&gt;wheel&lt;/code&gt;도) 그룹에 속해야 한다(또는 sudo). journalctl이 출력 앞머리에 힌트로 알려 준다 — 뒤의 실무 섹션 출력에서 실제로 볼 수 있다.&lt;/p&gt;
-
-&lt;h2 id=&quot;journalctl-말고-저널을-읽는-것들&quot;&gt;journalctl 말고 저널을 읽는 것들&lt;/h2&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl&lt;/code&gt;이 유일한 조회 수단은 아니다. 저널 파일 포맷은 공개되어 있지만 직접 파싱은 비권장이고, 표준 경로는 &lt;strong&gt;sd-journal API&lt;/strong&gt;(libsystemd)다. &lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl&lt;/code&gt; 자체가 이 API의 CLI 프론트엔드다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;언어 바인딩(python-systemd 등), GUI(GNOME Logs, Cockpit)&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;로그 수집기의 journald 입력&lt;/strong&gt;: Fluent Bit의 systemd input, Promtail의 journal 스크레이핑, Filebeat의 journald input 등 — Kubernetes 노드 로깅 파이프라인에서 실제로 만나는 형태다&lt;/li&gt;
-  &lt;li&gt;원격/HTTP: &lt;code class=&quot;highlighter-rouge&quot;&gt;systemd-journal-gatewayd&lt;/code&gt;(HTTP 조회), &lt;code class=&quot;highlighter-rouge&quot;&gt;systemd-journal-remote&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;-upload&lt;/code&gt;(원격 전송)&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;헷갈리기 쉬운 것 하나 — &lt;strong&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;systemctl&lt;/code&gt;은 저널 조회 도구가 아니다.&lt;/strong&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;systemctl status&lt;/code&gt;가 유닛의 최근 로그 몇 줄을 보여주는 것은 내부적으로 저널을 읽어 덧붙이는 부가 기능이다. sysctl은 더더욱 아니다(&lt;a href=&quot;/cs/CS-Linux-Kernel-Parameter/&quot;&gt;커널 파라미터&lt;/a&gt; 도구다). 이름이 비슷한 세 도구(journalctl/systemctl/sysctl)의 역할 구분에 주의한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;dmesg와-journalctl--k가-어긋나는-순간&quot;&gt;dmesg와 journalctl -k가 어긋나는 순간&lt;/h1&gt;
-
-&lt;p&gt;같은 커널 메시지를 보는 두 명령이지만, 읽는 저장소가 다르므로(링버퍼 vs 저널) 내용이 어긋날 수 있다. 이 어긋남의 방향을 이해하면 두 저장소의 관계가 완전히 잡힌다.&lt;/p&gt;
-
-&lt;h2 id=&quot;dmesg에-없고-저널에-있는-경우&quot;&gt;dmesg에 없고 저널에 있는 경우&lt;/h2&gt;
-
-&lt;p&gt;&lt;strong&gt;링버퍼에서는 wrap으로 밀려났지만, journald가 그 전에 이미 복사해 둔&lt;/strong&gt; 경우다. 시퀀스로 보면 아래와 같다.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;sequenceDiagram
-    participant K as 커널
-    participant R as 커널 링버퍼
-    participant J as journald
-    participant F as 저널 파일
-    participant O as 운영자
-    K-&amp;gt;&amp;gt;R: printk() - Xid 120 기록
-    R--&amp;gt;&amp;gt;J: /dev/kmsg 이벤트
-    J-&amp;gt;&amp;gt;F: append (사본 확보)
-    Note over K,R: 이후 에러 폭주 - 버퍼 가득
-    K-&amp;gt;&amp;gt;R: 가장 오래된 레코드부터 덮어쓰기 (wrap)
-    Note over R: Xid 120 원본 소실
-    O-&amp;gt;&amp;gt;R: dmesg
-    R--&amp;gt;&amp;gt;O: Xid 120 없음
-    O-&amp;gt;&amp;gt;F: journalctl -k
-    F--&amp;gt;&amp;gt;O: Xid 120 있음
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;GPU가 죽은 뒤 후속 에러가 초당 수십 줄씩 쏟아지는 Xid 폭주 같은 상황에서 실제로 일어난다. 최초 원인 메시지가 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;에서는 사라졌는데 &lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -k&lt;/code&gt;에는 남아 있다.&lt;/p&gt;
-
-&lt;p&gt;이때 영속 설정은 조건이 아니라는 점에 주의한다. 같은 부팅 세션 안의 조회는 휘발 저널(&lt;code class=&quot;highlighter-rouge&quot;&gt;/run&lt;/code&gt;)로도 되므로, journald가 복사해 뒀다는 사실 자체가 조건이고 그 사본이 RAM에 있든 디스크에 있든 무관하다.&lt;/p&gt;
-
-&lt;h2 id=&quot;dmesg에-있고-저널에-없는-경우&quot;&gt;dmesg에 있고 저널에 없는 경우&lt;/h2&gt;
-
-&lt;p&gt;역방향도 가능하고, 세 가지 경우로 갈린다. 가장 그림이 잘 그려지는 journald 공백 케이스를 시퀀스로 보면 아래와 같다.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;sequenceDiagram
-    participant K as 커널
-    participant R as 커널 링버퍼
-    participant J as journald
-    participant F as 저널 파일
-    participant O as 운영자
-    Note over J: journald 중단 (장애·재시작 중)
-    K-&amp;gt;&amp;gt;R: printk() - 에러 기록
-    Note over R,F: 저널로 복사할 주체가 없음
-    J-&amp;gt;&amp;gt;R: 재기동 - 시퀀스 번호로 이어받기
-    Note over R,J: 그 사이 wrap이 없었다면 소급 복사로 회복
-    O-&amp;gt;&amp;gt;R: dmesg
-    R--&amp;gt;&amp;gt;O: 메시지 있음
-    O-&amp;gt;&amp;gt;F: journalctl -k
-    F--&amp;gt;&amp;gt;O: 공백 구간 (wrap까지 겹쳤다면 영구 결번)
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;Storage=none&lt;/code&gt;&lt;/strong&gt;: journald가 수집만 하고 저장하지 않는 구성이면 저널 쪽이 아예 빈다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;journald가 죽어 있거나 재시작 중인 구간&lt;/strong&gt;: 위 시퀀스의 경우다. 그 사이 도착한 메시지는 링버퍼에는 있지만 저널 파일에는 아직 없다. journald는 시퀀스 추적으로 재기동 시 이어받으므로 보통은 일시적 공백으로 끝나지만, 죽어 있는 동안 버퍼가 wrap해 버리면 그 구간은 저널에서 영구 결번이 된다. 이 유실이 조용히 지나가는 것은 아니다 — 1편에서 본 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/kmsg&lt;/code&gt;의 EPIPE 점프 덕분에 놓친 구간의 존재는 리더에게 전해지고, journald는 시퀀스 번호로 놓친 개수를 세어 &lt;code class=&quot;highlighter-rouge&quot;&gt;Missed N kernel messages&lt;/code&gt;라는 메시지를 저널에 남긴다. 사라진 내용은 복구하지 못해도 공백의 존재 자체는 기록되는 것이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;rotation 역전 — 시끄러운 이웃&lt;/strong&gt;: 링버퍼에는 커널 메시지만 들어가지만, 저널 파일에는 모든 소스가 섞여 들어간다. 어떤 수다스러운 서비스가 저널을 폭주시키면 용량 상한에 걸려 오래된 저널 파일부터 vacuum되는데, 그 파일에 섞여 있던 초기 커널 메시지도 같이 지워진다. 반면 링버퍼는 커널 메시지만 담으니, 커널이 조용한 시스템에서는 부팅 이후 전부를 여전히 들고 있을 수 있다. &lt;strong&gt;다른 소스의 폭주가 저널 쪽 커널 이력을 밀어내는 역전&lt;/strong&gt;이다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;세 번째 경우가 특히 “영속 목적의 저널이 원본보다 먼저 잊어버리는” 직관에 반하는 상황인데, 앞에서 본 명제 — &lt;strong&gt;저널의 보존은 용량 상한 안에서의 보존&lt;/strong&gt; — 을 기억하면 이상할 것이 없다. 1차 대응은 용량 상한(&lt;code class=&quot;highlighter-rouge&quot;&gt;SystemMaxUse=&lt;/code&gt;)을 키우는 것이지만, 상한을 아무리 키워도 “상한 안에서의 보존”이라는 성질 자체는 바뀌지 않는다. 그래서 보존이 정말 중요한 환경은 상한 조정에 그치지 않고, 중앙 로그 수집으로 사슬을 한 칸 더 이어 안전장치를 둔다.&lt;/p&gt;
-
-&lt;h2 id=&quot;타임스탬프의-어긋남&quot;&gt;타임스탬프의 어긋남&lt;/h2&gt;
-
-&lt;p&gt;내용만이 아니라 시각도 어긋날 수 있다. 1편에서 예고한 실제 사례 — 같은 Xid 이벤트를 두 명령으로 본 것이다.&lt;/p&gt;
-
-&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 같은 이벤트, 다른 타임스탬프 (호스트명·계정명은 익명화)&lt;/span&gt;
-user@gpu-node-01:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;sudo &lt;/span&gt;dmesg &lt;span class=&quot;nt&quot;&gt;-T&lt;/span&gt; | &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; xid
-&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;Sat Jul 11 05:52:47 2026] NVRM: Xid &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;PCI:0000:2a:00&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;: 120, GSP kernel exception: ...
-
-user@gpu-node-01:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;sudo &lt;/span&gt;journalctl &lt;span class=&quot;nt&quot;&gt;-k&lt;/span&gt; | &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; xid
-Jul 11 05:51:26 gpu-node-01 kernel: NVRM: Xid &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;PCI:0000:2a:00&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;: 120, GSP kernel exception: ...
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg -T&lt;/code&gt;는 05:52:47, 저널은 05:51:26 — 81초 차이다. 커널 레코드의 타임스탬프는 부팅 후 경과 시간(monotonic)이고 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg -T&lt;/code&gt;는 이를 현재 시각에서 역산하는 반면, journald는 메시지를 받는 순간의 실제 시각(realtime)을 함께 기록한다. 그래서 부팅 후 시계 보정(NTP 등)이 누적된 시스템에서는 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg -T&lt;/code&gt; 쪽이 어긋난다. 이 노드에서 81초가 벌어진 정확한 원인까지 검증하지는 않았지만, 메커니즘상 두 값 중 신뢰할 것은 저널의 realtime 기록이다. 초 단위가 중요한 타임라인 분석에서는 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg -T&lt;/code&gt;를 그대로 믿지 않는 편이 안전하다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;컨테이너와-저널&quot;&gt;컨테이너와 저널&lt;/h1&gt;
-
-&lt;p&gt;1편에서 컨테이너와 링버퍼의 관계를 봤다면, 저널 쪽은 어떨까. &lt;strong&gt;일반 컨테이너에는 systemd도 journald도 없다.&lt;/strong&gt; 컨테이너의 PID 1은 앱 자신이기 때문이다. 그럼 컨테이너의 로그는 누가 수집하는가:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;앱은 &lt;strong&gt;stdout/stderr로 찍고&lt;/strong&gt;, 그걸 &lt;strong&gt;컨테이너 런타임이 받아 호스트 파일로 저장&lt;/strong&gt;한다 — Kubernetes에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/pods/&lt;/code&gt; 아래 파일들이고, &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl logs&lt;/code&gt;가 읽는 것이 이것이다&lt;/li&gt;
-  &lt;li&gt;필요하면 노드의 수집 에이전트(Fluent Bit 등)가 그 파일을 중앙 로그 시스템으로 또 복사한다&lt;/li&gt;
-  &lt;li&gt;호스트의 journald는 호스트 유닛들의 로그를 담는다 — &lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -u kubelet&lt;/code&gt;이 되는 이유&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;구조를 보면, “앱이 stdout에 찍으면 상주 데몬이 받아 저장한다”는 journald가 유닛에게 하던 일을 &lt;strong&gt;컨테이너 세계에서는 런타임+kubelet이 대신하는 것&lt;/strong&gt;이다. 그리고 &lt;code class=&quot;highlighter-rouge&quot;&gt;앱 stdout → 노드 파일 → 중앙 수집&lt;/code&gt;은 &lt;code class=&quot;highlighter-rouge&quot;&gt;링버퍼 → 저널 → 중앙 수집&lt;/code&gt;과 같은 원본→사본 사슬의 반복이다. 층이 바뀌어도 같은 패턴이 다시 나타난다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;실무-gpu-노드에서의-커널-메시지-추적&quot;&gt;실무: GPU 노드에서의 커널 메시지 추적&lt;/h1&gt;
-
-&lt;h2 id=&quot;xid를-링버퍼와-저널에서-교차-확인하기&quot;&gt;Xid를 링버퍼와 저널에서 교차 확인하기&lt;/h2&gt;
-
-&lt;p&gt;실제 GPU 노드에서 Xid 에러를 추적한 기록이다. 1편에서 본 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt; 출력에 이어, 저널로 교차 확인한다.&lt;/p&gt;
-
-&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 커널 링버퍼 확인 (호스트명·계정명은 익명화)&lt;/span&gt;
-user@gpu-node-01:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;sudo &lt;/span&gt;dmesg &lt;span class=&quot;nt&quot;&gt;-T&lt;/span&gt; | &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; xid
-&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;Sat Jul 11 05:52:47 2026] NVRM: Xid &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;PCI:0000:2a:00&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;: 120, GSP kernel exception: load access page fault &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;cause:0xd&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; @ pc:0xffffffff9300188a, partition:4#0
-&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;Sat Jul 11 05:52:47 2026] NVRM: Xid &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;PCI:0000:2a:00&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;: 154, GPU recovery action changed from 0x0 &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;None&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; to 0x1 &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;GPU Reset Required&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# 저널 확인 - 같은 이벤트가 사본으로 남아 있다&lt;/span&gt;
-user@gpu-node-01:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;sudo &lt;/span&gt;journalctl &lt;span class=&quot;nt&quot;&gt;-k&lt;/span&gt; | &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; xid
-Jul 11 05:51:26 gpu-node-01 kernel: NVRM: Xid &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;PCI:0000:2a:00&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;: 120, GSP kernel exception: load access page fault &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;cause:0xd&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; @ pc:0xffffffff9300188a, partition:4#0
-Jul 11 05:51:26 gpu-node-01 kernel: NVRM: Xid &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;PCI:0000:2a:00&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;: 154, GPU recovery action changed from 0x0 &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;None&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; to 0x1 &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;GPU Reset Required&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# 직전 부팅 세션에도 있었는지 확인 - 출력 없음&lt;/span&gt;
-user@gpu-node-01:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;sudo &lt;/span&gt;journalctl &lt;span class=&quot;nt&quot;&gt;-k&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-b&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-1&lt;/span&gt; | &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; xid
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;이 Xid는 7월 11일에 찍혔고 조회 시점은 열흘 뒤였다. 다행히 링버퍼에서 아직 밀리지 않아 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;로도 보였지만, 그 사이 커널 로그가 폭주했다면 링버퍼에서는 사라지고 저널에만 남았을 것이다 — 하드웨어 장애처럼 중요한 기록은 휘발성 링버퍼만 믿지 말고 저널이나 평문 &lt;code class=&quot;highlighter-rouge&quot;&gt;kern.log&lt;/code&gt;로 교차 확인하는 것이 안전하다.&lt;/p&gt;
-
-&lt;p&gt;마지막 명령의 “출력 없음”은 해석이 갈린다. ① 직전 부팅 세션에는 Xid가 없었다, 또는 ② 이 노드가 휘발 저장이라 이전 부팅 로그 자체가 없다. 구분은 &lt;code class=&quot;highlighter-rouge&quot;&gt;--list-boots&lt;/code&gt;로 한다.&lt;/p&gt;
-
-&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 이전 부팅이 목록에 잡히는지 확인 (부팅 ID는 익명화)&lt;/span&gt;
-user@gpu-node-01:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;journalctl &lt;span class=&quot;nt&quot;&gt;--list-boots&lt;/span&gt;
-Hint: You are currently not seeing messages from other users and the system.
-      Users &lt;span class=&quot;k&quot;&gt;in &lt;/span&gt;groups &lt;span class=&quot;s1&quot;&gt;'adm'&lt;/span&gt;, &lt;span class=&quot;s1&quot;&gt;'systemd-journal'&lt;/span&gt; can see all messages.
-      Pass &lt;span class=&quot;nt&quot;&gt;-q&lt;/span&gt; to turn off this notice.
-&lt;span class=&quot;nt&quot;&gt;-1&lt;/span&gt; 3fa81c22d94b4e6f8b07a1c5de930f44 Wed 2026-05-13 07:15:54 UTC—Thu 2026-05-21 14:02:28 UTC
- 0 b7250de1a3c94f0899e2c47d1f6ab8e3 Wed 2026-05-27 07:22:37 UTC—Tue 2026-07-21 09:08:35 UTC
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;직전 부팅(-1)이 목록에 잡히므로 영속 저장이 켜져 있는 노드이고, 따라서 해석 ① — 직전 부팅에는 Xid가 없었고, 이번 부팅에서 처음 발생한 하드웨어 이상 — 이 맞다. 출력 앞머리의 Hint는 앞에서 말한 저널 읽기 권한 그룹 안내인데, 단서가 하나 붙는다. 권한 없는 조회라 이 목록이 시스템 저널 전체를 반영하지 못해 불완전할 수 있다는 점이다. 그래도 “영속” 판정 자체는 흔들리지 않는다 — 휘발 구성이었다면 이전 부팅의 로그가 애초에 존재할 수 없으므로, 직전 부팅이 하나라도 보인다는 사실만으로 충분하다. 다만 부팅 이력의 완전한 목록이 필요한 조사라면 sudo로 다시 확인하는 편이 안전하다.&lt;/p&gt;
-
-&lt;h2 id=&quot;링버퍼-밀림-대응과-log_buf_len&quot;&gt;링버퍼 밀림 대응과 log_buf_len&lt;/h2&gt;
-
-&lt;p&gt;1편에서 링버퍼 크기는 부트 파라미터 &lt;code class=&quot;highlighter-rouge&quot;&gt;log_buf_len&lt;/code&gt;으로 키울 수 있다고 했다. 그렇다면 밀림이 걱정될 때 버퍼를 키우는 것이 답일까. 먼저 언제, 왜 밀리는지부터 보자.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;언제 밀리나&lt;/strong&gt;: 커널 메시지가 폭주할 때다. 하드웨어 에러 스톰(PCIe AER, 디스크 I/O 에러, GPU Xid 반복 발생), OOM killer 연쇄 발동(매번 수십~수백 줄의 메모리 덤프), iptables LOG 타깃이나 드라이버 debug 로깅을 켜 둔 경우&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;밀리면 무엇이 문제인가&lt;/strong&gt;: 장애의 &lt;strong&gt;최초 원인 메시지가 후속 에러 폭주에 밀려나는&lt;/strong&gt; 시나리오다. GPU가 버스에서 떨어진 뒤 후속 에러가 쏟아지면, 정작 첫 Xid나 그 직전의 PCIe 에러가 링버퍼에서 밀려나 &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;만으로는 원인을 못 찾게 된다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;덧붙여 폭주 시나리오에는 wrap 말고 유실 경로가 하나 더 있다. 일부 커널 코드 경로는 같은 메시지가 쏟아질 때 스스로 rate limit을 걸어(&lt;code class=&quot;highlighter-rouge&quot;&gt;printk_ratelimited&lt;/code&gt; 등) &lt;strong&gt;링버퍼에 넣기 전에&lt;/strong&gt; 일부를 버리고, &lt;code class=&quot;highlighter-rouge&quot;&gt;... callbacks suppressed&lt;/code&gt;라는 흔적만 남긴다. 이 유실은 원본 진입 전이므로 dmesg에도 저널에도 남지 않는다 — 로그에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;callbacks suppressed&lt;/code&gt;를 봤다면 “기록된 것이 전부가 아니다”로 읽어야 한다.&lt;/p&gt;
-
-&lt;p&gt;버퍼를 키우는 선택지가 있지만, 우선순위를 정확히 잡아야 한다. &lt;strong&gt;1차 방어선은 링버퍼 크기가 아니라 저널이다.&lt;/strong&gt; journald가 실시간으로 퍼가고 있었다면 링버퍼에서 밀려도 저널에 남는다. &lt;code class=&quot;highlighter-rouge&quot;&gt;log_buf_len&lt;/code&gt;(재부팅 필요)이 의미를 갖는 경우는 따로 있다 — (a) 수집기가 뜨기 전인 부팅 극초기 메시지가 많아 밀리는 대형 서버, (b) 수집기가 없거나 죽은 상황, (c) 크래시 순간의 링버퍼를 그대로 건지는 kdump(크래시 시 메모리 덤프를 뜨는 커널 기능)·pstore 경로에서 버퍼가 클수록 확보되는 이력이 길어지는 경우. 구체적으로 몇 MB로 키울지는 워크로드에 따라 다르므로 여기서 단정하지 않는다.&lt;/p&gt;
-
-&lt;h2 id=&quot;재부팅-원인-추적-사슬을-거슬러-오르기&quot;&gt;재부팅 원인 추적: 사슬을 거슬러 오르기&lt;/h2&gt;
-
-&lt;p&gt;GPU 노드가 새벽에 혼자 재부팅됐다면, 원인 추적은 원본→사본 사슬을 거슬러 오르는 일이 된다.&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;&lt;strong&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;는 쓸모없다&lt;/strong&gt; — 링버퍼는 재부팅과 함께 소멸했다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -k -b -1&lt;/code&gt;&lt;/strong&gt; — 직전 부팅의 커널 메시지. systemd 노드이고 영속 저장(&lt;code class=&quot;highlighter-rouge&quot;&gt;persistent&lt;/code&gt;, 또는 &lt;code class=&quot;highlighter-rouge&quot;&gt;auto&lt;/code&gt; + &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/journal&lt;/code&gt; 존재)일 때만 동작한다. &lt;code class=&quot;highlighter-rouge&quot;&gt;--list-boots&lt;/code&gt;로 먼저 확인&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;평문 파일&lt;/strong&gt; — rsyslog 병행 노드라면 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/kern.log&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;syslog&lt;/code&gt;(데비안계), &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/log/messages&lt;/code&gt;(레드햇계). rotate된 압축본까지 포함해 재부팅을 넘는다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;중앙 로그 수집&lt;/strong&gt; — 노드에 수집 에이전트가 있었다면 중앙 저장소에 사본이 있다. “사슬을 한 칸 더”가 정확히 이 순간을 위한 것이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;OS 밖의 기록&lt;/strong&gt; — 재부팅 원인이 커널 패닉이었다면 pstore(&lt;code class=&quot;highlighter-rouge&quot;&gt;/sys/fs/pstore&lt;/code&gt;)에 마지막 링버퍼 조각이 남았을 수 있고, 물리 서버면 BMC/IPMI(OS와 독립적으로 서버를 관리하는 보드 내장 컨트롤러) 이벤트 로그에 전원·온도·리셋 기록이, 클라우드면 시리얼 콘솔 캡처가 있다. 커널조차 기록 주체가 못 되는 사건은 OS 바깥에만 남는다 (이 단계의 상세는 이 글 범위 밖이라 존재만 짚어 둔다)&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;그리고 &lt;strong&gt;로그의 부재 자체가 정보다.&lt;/strong&gt; 위 어디에도 아무것도 없다면 “커널이 한 글자도 못 남기고 죽었다”는 뜻이고, 전원 단절·하드웨어 리셋 계열을 시사한다. 이번 부팅 초반의 파일시스템 복구 메시지(clean하지 않은 종료의 흔적)가 방증이 된다. GPU 노드가 OS 업데이트로 연쇄 장애를 일으켰던 &lt;a href=&quot;/dev/Dev-Unattended-Upgrades-K8s-GPU-Node-Cascading-Failure/&quot;&gt;Unattended Upgrades 사건&lt;/a&gt;에서도 이런 재부팅 전후 추적이 문제 규명의 핵심이었다.&lt;/p&gt;
-
-&lt;h2 id=&quot;저널-용량-운영&quot;&gt;저널 용량 운영&lt;/h2&gt;
-
-&lt;p&gt;저널이 1차 방어선인 만큼, 얼마나 쌓여 있는지 관리하는 명령도 알아 둔다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 저널 디스크 사용량 확인&lt;/span&gt;
-journalctl &lt;span class=&quot;nt&quot;&gt;--disk-usage&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# 용량 기준으로 오래된 저널 파일 정리&lt;/span&gt;
-journalctl &lt;span class=&quot;nt&quot;&gt;--vacuum-size&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;1G
-
-&lt;span class=&quot;c&quot;&gt;# 기간 기준으로 정리&lt;/span&gt;
-journalctl &lt;span class=&quot;nt&quot;&gt;--vacuum-time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;2weeks
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;vacuum은 파일 단위로 오래된 것부터 지우므로, 앞에서 본 rotation 역전(시끄러운 이웃이 커널 이력을 밀어내는 상황)을 염두에 두고 상한을 잡는다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;정리-원본과-사본의-사슬&quot;&gt;정리: 원본과 사본의 사슬&lt;/h1&gt;
-
-&lt;p&gt;두 편을 관통한 구조를 한 번에 놓으면 이렇다.&lt;/p&gt;
-
-&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;커널 링버퍼(원본, RAM) → 저널/평문 파일(사본, 디스크) → 중앙 로그 수집(사본의 사본)
-앱 stdout(원본)         → 노드 파일(사본)              → 중앙 로그 수집
-크래시 순간의 링버퍼     → pstore / BMC / 시리얼 콘솔    (OS 밖의 사슬)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;원본은 작고 휘발적이다.&lt;/strong&gt; 링버퍼의 고정 크기·wrap-around·휘발성은 “실패할 수 있는 어떤 것에도 의존하지 않는다”는 설계 제약의 대가이고, 그 대가를 보완하는 것이 사본이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;사본의 보존은 상한 안에서만이다.&lt;/strong&gt; 저널도 vacuum으로 잊는다. 정말 중요한 기록은 사슬을 한 칸 더 잇는다 — 그것이 중앙 로그 수집이고, 커널조차 기록하지 못하는 사건을 위해 OS 밖(pstore, BMC)까지 사슬이 이어진다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;사본을 잘 남겨 두는 것 자체가 운영이다.&lt;/strong&gt; 영속 저장 여부(&lt;code class=&quot;highlighter-rouge&quot;&gt;--list-boots&lt;/code&gt;로 확인), 병행 구성, 중앙 수집은 장애가 나기 전에 갖춰 두는 것이고, 트러블슈팅의 성패는 그 시점에 이미 절반쯤 결정된다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;트러블슈팅은 영속된 사본에서 한다.&lt;/strong&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;dmesg&lt;/code&gt;는 빠른 현재 상태 확인용이고, 시간을 거슬러 오르는 조사는 &lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -k -b -1&lt;/code&gt;, 평문 파일, 중앙 저장소의 몫이다. 두 명령이 어긋나는 순간(wrap 밀림, journald 공백, rotation 역전)을 알면 어긋남 자체가 진단 정보가 된다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://man7.org/linux/man-pages/man1/journalctl.1.html&quot;&gt;man journalctl(1)&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://man7.org/linux/man-pages/man5/journald.conf.5.html&quot;&gt;man journald.conf(5)&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://man7.org/linux/man-pages/man8/systemd-journald.service.8.html&quot;&gt;man systemd-journald.service(8)&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://man7.org/linux/man-pages/man7/systemd.journal-fields.7.html&quot;&gt;man systemd.journal-fields(7)&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://systemd.io/JOURNAL_FILE_FORMAT/&quot;&gt;systemd Journal File Format&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://systemd.io/SYSLOG/&quot;&gt;systemd - Syslog Interface&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.rsyslog.com/doc/&quot;&gt;rsyslog documentation&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/concepts/cluster-administration/logging/&quot;&gt;Kubernetes Logging Architecture&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.nvidia.com/deploy/xid-errors/index.html&quot;&gt;NVIDIA Xid Errors&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Linux" /><category term="Kernel" /><category term="systemd" /><category term="journald" /><category term="journalctl" /><category term="syslog" /><category term="rsyslog" /><category term="Logging" /><summary type="html">커널 메시지를 보관하는 링버퍼의 사본은 누가 어떻게 보존하는지 알아 보자.</summary></entry></feed>
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Continual-Learning" /><category term="Catastrophic-Forgetting" /><category term="Replay" /><category term="Regularization" /><category term="PEFT" /><category term="Foundation-Model" /><category term="MLOps" /><summary type="html">Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자.</summary></entry></feed>
