@@ -1,6 +1,6 @@
 ---
 title: "[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리"
-excerpt: "마지막 토큰의 벡터가 로짓이 되고, temperature·top-k·top-p를 거쳐 다음 토큰이 되기까지 — 출력층과 샘플링을 보고 트랜스포머 아키텍처 여정을 닫는다."
+excerpt: "트랜스포머 블록의 출력이 토큰이 되는 과정에 대해 알아 보자."
 categories:
   - AI
 toc: true

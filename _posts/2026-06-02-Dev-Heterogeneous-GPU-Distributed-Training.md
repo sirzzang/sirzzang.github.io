@@ -194,7 +194,7 @@ DDP가 모든 rank에 같은 per-GPU micro-batch를 준다는 제약 때문에, 
 
 그래서 정확히 말하면 **"메모리 용량은 가장 중요한 스펙이 아니라, 이기종 혼재 가능성을 가르는 가장 먼저 걸리는 제약(feasibility gate)"**이다. 5090과 6000 Pro가 "비슷"의 범주에 못 드는 이유도 연산이 달라서가 아니라 용량 3배 차이가 게이트를 통과 못 해서다.
 
-> 참고로 메모리 안에서도 용량(capacity)과 대역폭(bandwidth)은 다른 스펙이다. 용량이 배치를 게이트하고, 대역폭이 throughput에 기여한다. GPU 메모리 자체의 무결성 관점은 [GPU ECC]({% post_url 2026-06-01-Dev-GPU-ECC-Memory-Integrity %}) 글에서 따로 다뤘다.
+> 참고로 메모리 안에서도 용량(capacity)과 대역폭(bandwidth)은 다른 스펙이다. 용량이 배치를 게이트하고, 대역폭이 throughput에 기여한다. GPU 메모리 자체의 무결성 관점은 [GPU ECC]({% post_url 2026-06-01-CS-GPU-ECC-Memory-Integrity %}) 글에서 따로 다뤘다.
 
 ## 이기종이 가능한 경우
 
