@@ -330,7 +330,7 @@
 
 
 
-  13 분 소요
+  14 분 소요
 
 
             
@@ -615,7 +615,7 @@ nameserver 10.0.2.6
 
 <ul>
   <li>파드의 질의는 kube-dns Service를 거쳐 12개 레플리카 중 하나에 떨어진다 (어느 레플리카인지는 복불복)</li>
-  <li>CoreDNS는 <code class="highlighter-rouge">cluster.local</code> 같은 클러스터 존이면 직접 답하고, 그 외(사내 레지스트리 등)는 Corefile의 <code class="highlighter-rouge">forward . /etc/resolv.conf</code> 규칙대로 자기 파드의 <code class="highlighter-rouge">resolv.conf</code>에 적힌 업스트림로 넘긴다</li>
+  <li>CoreDNS는 <code class="highlighter-rouge">cluster.local</code> 같은 클러스터 존이면 직접 답하고, 그 외(사내 레지스트리 등)는 Corefile의 <code class="highlighter-rouge">forward . /etc/resolv.conf</code> 규칙대로 자기 파드의 <code class="highlighter-rouge">resolv.conf</code>에 적힌 업스트림으로 넘긴다</li>
   <li>그런데 그 파일은 (kubelet이 넣어 준) 그 레플리카가 사는 노드의 업스트림 목록이다</li>
   <li>forward는 업스트림 목록을 고정 순서로 쓰지 않고 그중 하나를 골라 질의를 넘긴다</li>
   <li>8.8.8.8로 넘어간 질의에 구글은 사내 존을 모르니 공용 레코드를 답한다</li>
@@ -625,7 +625,54 @@ nameserver 10.0.2.6
   <p><strong>참고: 구글이 사내 도메인의 주소를 답할 수 있는 원리</strong> — 구글이 사내 정보를 아는 것이 아니다. 회사 도메인은 인터넷에 등록된 공개 도메인이고, 인터넷 쪽 권위(authoritative) 네임서버에 <code class="highlighter-rouge">harbor.example.com → 203.0.113.51</code> 공개 레코드가 등록돼 있다. 8.8.8.8은 재귀 resolver라서 루트 → TLD → 회사의 공개 권위 서버 순으로 따라 내려가 그 공개 레코드를 받아 돌려줄 뿐이다. 내부 주소(<code class="highlighter-rouge">10.0.20.10</code>)는 사내 DNS에만 존재하므로 구글은 알 수도, 답할 수도 없다. split-horizon의 두 뷰가 서로 다른 서버에 실려 있는 것이고, 8.8.8.8에게 물으면 항상 공개 뷰가 나온다.</p>
 </blockquote>
 
-<p>그래서 “노드마다 <code class="highlighter-rouge">resolv.conf</code>가 다르면, 어느 노드의 레플리카에 질의가 떨어졌느냐에 따라 답이 달라진다”가 성립한다. 이번 사건 전체가 이 구조 하나로 설명된다. 실제 확인한 Corefile에는 <code class="highlighter-rouge">forward . /etc/resolv.conf</code>와 함께 <code class="highlighter-rouge">cache 30</code>도 있었다. 오염된 답이 30초 캐시로 잠깐 고착되기도 한다는 뜻이다. CoreDNS Corefile의 기본 구성은 <a href="/kubernetes/Kubernetes-Kubeadm-01-7/">Kubeadm 클러스터 애드온 글</a>에서 뜯어본 적이 있다.</p>
+<p>이 구조의 핵심 고리인 forward 규칙은 Corefile에서 실측으로 확인할 수 있다. RKE2에서 CoreDNS 설정은 kube-system의 ConfigMap으로 배포되므로, 먼저 ConfigMap 이름부터 찾는다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># CoreDNS 관련 ConfigMap 확인</span>
+~<span class="nv">$ </span>kubectl <span class="nt">-n</span> kube-system get configmap | <span class="nb">grep</span> <span class="nt">-i</span> coredns
+chart-content-rke2-coredns                             1      185d
+rke2-coredns-rke2-coredns                              1      185d
+rke2-coredns-rke2-coredns-autoscaler                   1      185d
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">rke2-coredns-rke2-coredns</code>처럼 이름이 겹쳐 보이는 것은 RKE2가 애드온을 HelmChart로 관리하면서 리소스명을 “HelmChart 이름 + 차트 이름”으로 이어 붙이기 때문이다. 이 ConfigMap의 <code class="highlighter-rouge">Corefile</code> 키가 배포된 설정 원본이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># ConfigMap의 Corefile 확인 (배포된 설정 원본)</span>
+~<span class="nv">$ </span>kubectl <span class="nt">-n</span> kube-system get configmap rke2-coredns-rke2-coredns <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.data.Corefile}'</span><span class="p">;</span> <span class="nb">echo</span>
+.:53 <span class="o">{</span>
+    errors
+    health <span class="o">{</span>
+        lameduck 10s
+    <span class="o">}</span>
+    ready
+    kubernetes  cluster.local  cluster.local <span class="k">in</span><span class="nt">-addr</span>.arpa ip6.arpa <span class="o">{</span>
+        pods insecure
+        fallthrough <span class="k">in</span><span class="nt">-addr</span>.arpa ip6.arpa
+        ttl 30
+    <span class="o">}</span>
+    prometheus  0.0.0.0:9153
+    forward  <span class="nb">.</span> /etc/resolv.conf
+    cache  30
+    loop
+    reload
+    loadbalance
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">kubernetes</code> 블록이 위에서 말한 “클러스터 존이면 직접 답한다”를, <code class="highlighter-rouge">forward . /etc/resolv.conf</code> 한 줄이 “그 외는 자기 파드의 <code class="highlighter-rouge">resolv.conf</code>에 적힌 업스트림으로 넘긴다”를 담당한다. ConfigMap은 어디까지나 원본이므로, 실행 중인 레플리카에 실제로 마운트된 파일도 대조해 둔다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 임의 레플리카에 마운트된 Corefile 확인 (실제 적용 상태)</span>
+~<span class="nv">$ POD</span><span class="o">=</span><span class="k">$(</span>kubectl <span class="nt">-n</span> kube-system get pods <span class="nt">-l</span> k8s-app<span class="o">=</span>kube-dns <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.items[0].metadata.name}'</span><span class="k">)</span>
+~<span class="nv">$ </span>kubectl <span class="nt">-n</span> kube-system <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$POD</span><span class="s2">"</span> <span class="nt">--</span> <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nb">grep</span> <span class="nt">-E</span> <span class="s1">'forward|cache'</span> /etc/coredns/Corefile
+    forward  <span class="nb">.</span> /etc/resolv.conf
+    cache  30
+</code></pre></div></div>
+
+<p>확인 지점이 세 층인 셈이다. ConfigMap의 Corefile은 배포된 설정 원본, 파드 안의 <code class="highlighter-rouge">/etc/coredns/Corefile</code>은 실제 적용 상태, 그리고 파드 안의 <code class="highlighter-rouge">/etc/resolv.conf</code> — 앞 섹션에서 노드별로 대조한 그 파일 — 가 forward가 실제로 읽는 업스트림 목록이다. 위 두 출력은 조치 후에 실측한 것인데, 완화 조치는 배치(affinity)만 바꿨을 뿐 Corefile은 건드리지 않았으므로 사건 당시 설정 그대로다.</p>
+
+<p>그래서 “노드마다 <code class="highlighter-rouge">resolv.conf</code>가 다르면, 어느 노드의 레플리카에 질의가 떨어졌느냐에 따라 답이 달라진다”가 성립한다. 이번 사건 전체가 이 구조 하나로 설명된다. Corefile의 <code class="highlighter-rouge">cache 30</code>은 오염된 답이 30초 캐시로 잠깐 고착되기도 한다는 뜻이다. CoreDNS Corefile의 기본 구성은 <a href="/kubernetes/Kubernetes-Kubeadm-01-7/">Kubeadm 클러스터 애드온 글</a>에서 뜯어본 적이 있다.</p>
 
 <p>한 가지 퍼즐이 더 있었다. Ubuntu 노드의 <code class="highlighter-rouge">/etc/resolv.conf</code>는 systemd-resolved의 stub 파일(<code class="highlighter-rouge">nameserver 127.0.0.53</code>)을 가리키는 심볼릭 링크인데, 파드 안에서는 왜 진짜 업스트림 목록이 보였을까. stub 주소를 파드에 그대로 물려주면 파드 안의 127.0.0.53은 아무것도 아니게 되므로(루프), 배포 도구가 이를 처리한다. RKE2(kubeadm 환경이라면 kubeadm)가 kubelet의 <code class="highlighter-rouge">--resolv-conf</code>를 진짜 업스트림 목록이 있는 <code class="highlighter-rouge">/run/systemd/resolve/resolv.conf</code>로 맞춰 두고, kubelet은 그 파일의 내용을 파드에 넣어 준다. gpu-node-05 파드에서 8.8.8.8이 보였다는 건 그 노드의 진짜 업스트림 목록에 8.8.8.8이 있었다는 뜻이다.</p>
 
@@ -686,11 +733,22 @@ node/gpu-node-06 labeled
 <div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>kubectl apply <span class="nt">-f</span> coredns-exclude.yaml
 helmchartconfig.helm.cattle.io/rke2-coredns created
 
-<span class="c"># helm 컨트롤러 반영 → 롤아웃 → 배치 확인</span>
+<span class="c"># helm 컨트롤러 반영 → 롤아웃 완료 확인</span>
 ~<span class="nv">$ </span>kubectl <span class="nt">-n</span> kube-system rollout status deploy/rke2-coredns-rke2-coredns
+deployment <span class="s2">"rke2-coredns-rke2-coredns"</span> successfully rolled out
+
+<span class="c"># 배치 재확인 — NODE 열에 gpu-node-05, gpu-node-06이 없어야 한다</span>
+<span class="c"># (파드명은 익명화, 일부 열·행 생략)</span>
 ~<span class="nv">$ </span>kubectl <span class="nt">-n</span> kube-system get pods <span class="nt">-l</span> k8s-app<span class="o">=</span>kube-dns <span class="nt">-o</span> wide
-<span class="c"># gpu-node-05, gpu-node-06에는 더 이상 CoreDNS가 배치되지 않음</span>
+NAME                                         READY   STATUS    ...   NODE
+rke2-coredns-rke2-coredns-6f7d9c4b8d-2xkqv   1/1     Running   ...   cp-01
+rke2-coredns-rke2-coredns-6f7d9c4b8d-8plfm   1/1     Running   ...   cp-02
+rke2-coredns-rke2-coredns-6f7d9c4b8d-b6s9j   1/1     Running   ...   worker-01
+rke2-coredns-rke2-coredns-6f7d9c4b8d-hw4tn   1/1     Running   ...   worker-02
+...<span class="o">(</span>총 12개 레플리카 — 전부 배제 라벨이 없는 노드에 배치<span class="o">)</span>
 </code></pre></div></div>
+
+<p>배치 출력은 이튿날 글을 정리하며 재확인한 실측으로, 롤아웃 이후 배치가 그대로 유지되고 있다는 확인을 겸한다.</p>
 
 <p>표현을 하나 짚고 가면, 이 조치는 “CoreDNS 재기동”이 아니다. 재기동은 같은 설정으로 껐다 켜는 것이라 재발 방지가 없다. 배치 설정에 제외 조건을 추가했고, 그 설정 변경으로 파드들이 롤링 교체된 것이다.</p>
 
@@ -738,8 +796,8 @@ helmchartconfig.helm.cattle.io/rke2-coredns created
 
 <ul>
   <li>그 머신 혼자 쓰는 말단 클라이언트의 fallback이고, 사내 전용 존을 해석할 필요가 없다면 — 8.8.8.8은 안전망이다</li>
-  <li>split-horizon으로 운영되는 사내 존을 해석해야 하는 클라이언트라면 — 공용 DNS는 틀린 답(공용 뷰)을 주는 업스트림다</li>
-  <li>나아가 그 목록이 다른 클라이언트들에게 답을 나눠 주는 서버(CoreDNS)의 업스트림가 된다면 — 노드 한 대의 설정이 클러스터 전체의 오염원이 된다</li>
+  <li>split-horizon으로 운영되는 사내 존을 해석해야 하는 클라이언트라면 — 공용 DNS는 틀린 답(공용 뷰)을 주는 업스트림이다</li>
+  <li>나아가 그 목록이 다른 클라이언트들에게 답을 나눠 주는 서버(CoreDNS)의 업스트림이 된다면 — 노드 한 대의 설정이 클러스터 전체의 오염원이 된다</li>
 </ul>
 
 <p>같은 한 줄의 설정이 위치에 따라 안전망도, 오염원도 된다.</p>
