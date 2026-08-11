@@ -13,15 +13,17 @@ tags:
   - DNS
   - Troubleshooting
   - RKE2
+last_modified_at: 2026-08-11
 ---
 
 <br>
 
 # TL;DR
 
-- 문제: Kubernetes 클러스터의 GitHub Actions ARC 러너에서 CI 이미지 푸시가 사내 레지스트리 이름 해석 실패(`dial tcp <공용 IP>:443: i/o timeout`)로 간헐적으로 실패했다
-- 원인: 긴급 워크로드용으로 새로 편입된 GPU 노드 2대의 `/etc/resolv.conf`에 공용 DNS(8.8.8.8)가 들어 있었고, 그 노드에 배치된 CoreDNS 레플리카가 질의 일부를 8.8.8.8로 넘겨 사내 도메인의 공용 IP를 반환했다. 12개 레플리카 중 일부만 오염됐기 때문에 실패가 간헐적이었다
-- 해결: 문제 노드에 배제 라벨을 붙이고 HelmChartConfig의 nodeAffinity로 CoreDNS 배치에서 제외(완화). 노드 `resolv.conf` 교정은 인프라 팀에 요청(근본 조치). 
+- **문제**: Kubernetes 클러스터의 GitHub Actions ARC 러너에서 CI 이미지 푸시가 사내 레지스트리 이름 해석 실패(`dial tcp <공용 IP>:443: i/o timeout`)로 간헐적으로 실패했다
+- **원인**: 긴급 워크로드용으로 새로 편입된 GPU 노드 2대의 `/etc/resolv.conf`에 공용 DNS(8.8.8.8)가 들어 있었고, 그 노드에 배치된 CoreDNS 레플리카가 질의 일부를 8.8.8.8로 넘겨 사내 도메인의 공용 IP를 반환했다. 12개 레플리카 중 일부만 오염됐기 때문에 실패가 간헐적이었다
+- **해결**: 문제 노드에 배제 라벨을 붙이고 HelmChartConfig의 `nodeAffinity`로 CoreDNS 배치에서 제외(완화). 노드 `resolv.conf` 교정은 인프라 팀에 요청(근본 조치). 
+
 <br>
 
 # 문제
@@ -47,7 +49,7 @@ Error: Process completed with exit code 1.
 
 ![두 시간 전 같은 파이프라인의 성공 런]({{site.url}}/assets/images/coredns-no-problem.png){: .align-center}
 
-<center><sup>두 시간 전 같은 파이프라인은 통과했다. 그리고 그 사이에 변한 것은 단수</sup></center>
+<center><sup>두 시간 전 같은 파이프라인은 통과했다. 그리고 그 사이에 변한 것은 없었다.</sup></center>
 
 ## 전제: 클러스터 DNS 질의 경로
 
@@ -80,13 +82,11 @@ Error: Process completed with exit code 1.
 
 미리 말해 두면, 뒤의 진단에서 2는 사실로 확인되되 우리가 고칠 대상이 아님이 밝혀지고, 추적 대상은 1로 좁혀진다.
 
-표의 근거를 밝혀 두면 — 개발 PC·관리용 호스트 행은 아래 재현 섹션의 curl 실측이고, CI 러너 행은 에러 로그의 `dial tcp` 줄이다. 클러스터 파드 행은 내부 답을 받는 것까지 확인했으나 당시 커맨드 기록은 남기지 못했다.
+표의 근거를 밝혀 두면 — 개발 PC·관리용 호스트 행은 아래 [재현 섹션](#재현-공용-ip-강제-접속과-대조군)의 curl 실측이고, CI 러너 행은 에러 로그의 `dial tcp` 줄이다. 클러스터 파드 행은 내부 답을 받는 것까지 확인했으나 당시 커맨드 기록은 남기지 못했다.
 
 에러 메시지의 `dial tcp 203.0.113.51:443` 줄 자체가 "이 IP로 연결을 시도했다"는 영수증이다. 즉 CI 빌드 경로가 공용 답을 받았다는 사실 자체는 확인이 필요한 가설이 아니라 로그에 이미 적혀 있었다.
 
 ![실패 런 로그 끝의 에러 라인]({{site.url}}/assets/images/coredns-build-job-failed-2.png){: .align-center}
-
-<center><sup>직접 캡처. 브라우저 상단(URL 바·탭)과 에러 라인의 사내 도메인·공용 IP는 블러 처리했다.</sup></center>
 
 ## 1차 의심: 인프라 정책 변경
 
@@ -126,7 +126,7 @@ curl: (28) Connection timed out after 8003 milliseconds
 
 이건 "전부 실패"가 아니라 "질의 단위 복불복"이라는 것을 의미한다. 인프라 정책이 바뀌었다면 일관되게 실패해야 자연스럽다. 복불복이라면, 질의가 분산되는 지점에 이질적인 멤버가 섞여 있다는 신호다.
 
-그 분산 지점이 어디인지는 관측점 대조가 알려 준다. 복불복이 나타나는 클라이언트(러너 파드, buildkitd)는 전부 클러스터 안에 있다. 전제 섹션에서 본 대로 이들의 질의는 kube-dns Service를 거쳐 CoreDNS 레플리카 12개 중 하나로 흩어진다(사내 레지스트리처럼 클러스터 밖 이름은 그 레플리카가 다시 업스트림(upstream) DNS — 내 resolver가 질의를 넘기는 다음 단계 서버 — 로 넘긴다). 반면 항상 내부 답만 받는 개발 PC의 curl은 OS resolver가 사내 DNS에 직접 묻는 경로라 CoreDNS를 거치지 않는다. 갈리는 관측점과 안 갈리는 관측점의 차이가 정확히 "클러스터 DNS 경로를 지나는가"다. 그렇다면 그 경로에서 답이 달라질 수 있는 분산 지점은 두 층 — CoreDNS 레플리카 12개, 그 뒤의 사내 DNS 2대 — 이고, 다음 두 섹션에서 층을 나눠 하나씩 확인한다.
+그 분산 지점이 어디인지는 관측점 대조가 알려 준다. 복불복이 나타나는 클라이언트(러너 파드, buildkitd)는 전부 클러스터 안에 있다. [전제 섹션](#전제-클러스터-dns-질의-경로)에서 본 대로 이들의 질의는 kube-dns Service를 거쳐 CoreDNS 레플리카 12개 중 하나로 흩어진다(사내 레지스트리처럼 클러스터 밖 이름은 그 레플리카가 다시 업스트림(upstream) DNS — 내 resolver가 질의를 넘기는 다음 단계 서버 — 로 넘긴다). 반면 항상 내부 답만 받는 개발 PC의 curl은 OS resolver가 사내 DNS에 직접 묻는 경로라 CoreDNS를 거치지 않는다. 갈리는 관측점과 안 갈리는 관측점의 차이가 정확히 "클러스터 DNS 경로를 지나는가"다. 그렇다면 그 경로에서 답이 달라질 수 있는 분산 지점은 두 층 — CoreDNS 레플리카 12개, 그 뒤의 사내 DNS 2대 — 이고, 다음 두 섹션에서 층을 나눠 하나씩 확인한다.
 
 앞의 성공 런 스크린샷도 같은 증거다. 실패 두 시간 전의 그 잡 역시 Login과 Push에서 같은 이름을 해석했지만 전부 내부 답을 받아 통과했다. 오염이 시작된 뒤에도 통과하는 런이 있었다는 것은, 잡 단위가 아니라 질의 단위로 갈린다는 뜻이다.
 
@@ -269,7 +269,7 @@ rke2-coredns-rke2-coredns-autoscaler                   1      185d
     cache  30
 ```
 
-확인 지점이 세 층인 셈이다. ConfigMap의 Corefile은 배포된 설정 원본, 파드 안의 `/etc/coredns/Corefile`은 실제 적용 상태, 그리고 파드 안의 `/etc/resolv.conf` — 앞 섹션에서 노드별로 대조한 그 파일 — 가 forward가 실제로 읽는 업스트림 목록이다. 위 두 출력은 조치 후에 실측한 것인데, 완화 조치는 배치(affinity)만 바꿨을 뿐 Corefile은 건드리지 않았으므로 사건 당시 설정 그대로다.
+확인 지점이 세 층인 셈이다. ConfigMap의 Corefile은 배포된 설정 원본, 파드 안의 `/etc/coredns/Corefile`은 실제 적용 상태, 그리고 파드 안의 `/etc/resolv.conf` — [앞 섹션](#노드-resolvconf의-세-번째-nameserver)에서 노드별로 대조한 그 파일 — 가 forward가 실제로 읽는 업스트림 목록이다. 위 두 출력은 조치 후에 실측한 것인데, 완화 조치는 배치(affinity)만 바꿨을 뿐 Corefile은 건드리지 않았으므로 사건 당시 설정 그대로다.
 
 그래서 "노드마다 `resolv.conf`가 다르면, 어느 노드의 레플리카에 질의가 떨어졌느냐에 따라 답이 달라진다"가 성립한다. 이번 사건 전체가 이 구조 하나로 설명된다. Corefile의 `cache 30`은 오염된 답이 30초 캐시로 잠깐 고착되기도 한다는 뜻이다. CoreDNS Corefile의 기본 구성은 [Kubeadm 클러스터 애드온 글]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-7 %})에서 뜯어본 적이 있다.
 
@@ -371,7 +371,7 @@ rke2-coredns-rke2-coredns-6f7d9c4b8d-hw4tn   1/1     Running   ...   worker-02
 
 이 요청에는 후속이 있었다. 이튿날 8.8.8.8을 제거했다는 회신을 받았는데, 배제 라벨을 바로 원복하는 대신 원복의 전제 — 쿠버네티스가 보는 층에서 실제로 바뀌었는가 — 부터 실측했다.
 
-검증 방법은 원인 섹션에서 쓴 우회로의 재활용이다. 다만 CoreDNS는 이제 그 노드들에 없으므로, `dnsPolicy: Default`의 일회성 파드를 노드에 고정 배치해서 kubelet이 주입하는 업스트림 목록을 직접 읽었다. 실무 디테일이 두 가지 있었다. 그 사이 두 노드에 GPU 워크로드용 NoSchedule taint가 붙어 있어 toleration을 얹었고, DNS가 의심스러운 노드에서 이미지 풀이라는 또 하나의 이름 해석을 만들지 않도록 노드에 이미 캐시된 이미지를 지정했다.
+검증 방법은 [원인 섹션](#원인)에서 쓴 우회로의 재활용이다. 다만 CoreDNS는 이제 그 노드들에 없으므로, `dnsPolicy: Default`의 일회성 파드를 노드에 고정 배치해서 kubelet이 주입하는 업스트림 목록을 직접 읽었다. 실무 디테일이 두 가지 있었다. 그 사이 두 노드에 GPU 워크로드용 NoSchedule taint가 붙어 있어 toleration을 얹었고, DNS가 의심스러운 노드에서 이미지 풀이라는 또 하나의 이름 해석을 만들지 않도록 노드에 이미 캐시된 이미지를 지정했다.
 
 ```shell
 # 검증용 일회성 파드: 노드 고정 + dnsPolicy Default → 그 노드의 실제 업스트림 목록 실측
@@ -392,7 +392,7 @@ gpu-node-06: nameserver 8.8.8.8
 
 두 노드 모두 세 번째 nameserver가 여전히 남아 있었다. 방금 만든 파드가 읽은 값이므로 캐시나 잔상이 아니라 현재 상태다.
 
-회신과 실측이 어긋난 셈인데, 유력한 원인은 담당자의 누락이라기보다 systemd-resolved 구조가 만드는 전형적인 갈림길이다. 원인 섹션 말미의 퍼즐 그대로, kubelet이 파드에 주입하는 목록의 원천은 `/etc/resolv.conf`(stub 링크)가 아니라 `/run/systemd/resolve/resolv.conf`이고, 이 파일은 netplan 같은 원천 설정을 고치는 것만으로는 바뀌지 않는다. `netplan apply`(또는 `systemctl restart systemd-resolved`)가 실행돼야 재생성된다. 그래서 다음 두 경우 모두 "고쳤지만 쿠버네티스에는 반영 안 됨"이 된다.
+회신과 실측이 어긋난 셈인데, 유력한 원인은 담당자의 누락이라기보다 systemd-resolved 구조가 만드는 전형적인 갈림길이다. [원인 섹션](#원인) 말미의 퍼즐 그대로, kubelet이 파드에 주입하는 목록의 원천은 `/etc/resolv.conf`(stub 링크)가 아니라 `/run/systemd/resolve/resolv.conf`이고, 이 파일은 netplan 같은 원천 설정을 고치는 것만으로는 바뀌지 않는다. `netplan apply`(또는 `systemctl restart systemd-resolved`)가 실행돼야 재생성된다. 그래서 다음 두 경우 모두 "고쳤지만 쿠버네티스에는 반영 안 됨"이 된다.
 
 - stub 링크인 `/etc/resolv.conf`만 직접 고친 경우 — kubelet은 그 파일을 읽지 않고, systemd-resolved가 덮어쓰기도 한다
 - netplan 설정은 고쳤지만 `netplan apply`를 하지 않은 경우 — `/run/systemd/resolve/resolv.conf`에는 옛 목록이 그대로 남는다
