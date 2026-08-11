@@ -1,14 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-08-11T11:11:40+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[CoreDNS] 간헐적 사내 레지스트리 DNS 해석 실패: 노드 편입이 부른 업스트림 DNS 오염</title><link href="https://sirzzang.github.io//dev/Dev-Kubernetes-CoreDNS-Intermittent-Registry-DNS-Failure/" rel="alternate" type="text/html" title="[CoreDNS] 간헐적 사내 레지스트리 DNS 해석 실패: 노드 편입이 부른 업스트림 DNS 오염" /><published>2026-08-10T00:00:00+09:00</published><updated>2026-08-10T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-Kubernetes-CoreDNS-Intermittent-Registry-DNS-Failure</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-Kubernetes-CoreDNS-Intermittent-Registry-DNS-Failure/">&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-08-11T18:07:20+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[Kubernetes] CoreDNS 업스트림 DNS 오염: 노드 편입이 부른 간헐적 이름 해석 실패</title><link href="https://sirzzang.github.io//dev/Dev-Kubernetes-CoreDNS-Intermittent-Registry-DNS-Failure/" rel="alternate" type="text/html" title="[Kubernetes] CoreDNS 업스트림 DNS 오염: 노드 편입이 부른 간헐적 이름 해석 실패" /><published>2026-08-10T00:00:00+09:00</published><updated>2026-08-10T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-Kubernetes-CoreDNS-Intermittent-Registry-DNS-Failure</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-Kubernetes-CoreDNS-Intermittent-Registry-DNS-Failure/">&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
 &lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
 
 &lt;ul&gt;
   &lt;li&gt;문제: Kubernetes 클러스터의 GitHub Actions ARC 러너에서 CI 이미지 푸시가 사내 레지스트리 이름 해석 실패(&lt;code class=&quot;highlighter-rouge&quot;&gt;dial tcp &amp;lt;공용 IP&amp;gt;:443: i/o timeout&lt;/code&gt;)로 간헐적으로 실패했다&lt;/li&gt;
   &lt;li&gt;원인: 긴급 워크로드용으로 새로 편입된 GPU 노드 2대의 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/resolv.conf&lt;/code&gt;에 공용 DNS(8.8.8.8)가 들어 있었고, 그 노드에 배치된 CoreDNS 레플리카가 질의 일부를 8.8.8.8로 넘겨 사내 도메인의 공용 IP를 반환했다. 12개 레플리카 중 일부만 오염됐기 때문에 실패가 간헐적이었다&lt;/li&gt;
-  &lt;li&gt;해결: 문제 노드에 배제 라벨을 붙이고 HelmChartConfig의 nodeAffinity로 CoreDNS 배치에서 제외(완화). 노드 &lt;code class=&quot;highlighter-rouge&quot;&gt;resolv.conf&lt;/code&gt; 교정은 인프라 팀에 요청(근본 조치)&lt;/li&gt;
+  &lt;li&gt;해결: 문제 노드에 배제 라벨을 붙이고 HelmChartConfig의 nodeAffinity로 CoreDNS 배치에서 제외(완화). 노드 &lt;code class=&quot;highlighter-rouge&quot;&gt;resolv.conf&lt;/code&gt; 교정은 인프라 팀에 요청(근본 조치). 
+&lt;br /&gt;&lt;/li&gt;
 &lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
 &lt;h1 id=&quot;문제&quot;&gt;문제&lt;/h1&gt;
 
@@ -22,7 +21,7 @@ Error: Process completed with exit code 1.
 
 &lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/coredns-build-job-failed-1.png&quot; alt=&quot;CI 실패 런의 스텝 목록&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
 
-&lt;center&gt;&lt;sup&gt;직접 캡처. 조직·저장소명, 런 제목, 사내 도메인·이미지명은 블러 처리했다. Login to Harbor, Build image까지 성공하고 Push image tags에서 실패했다.&lt;/sup&gt;&lt;/center&gt;
+&lt;center&gt;&lt;sup&gt; CI 잡 구성에서, Login to Harbor, Build image까지 성공하고 Push image tags에서 실패했다.&lt;/sup&gt;&lt;/center&gt;
 
 &lt;p&gt;이상한 점은 세 가지였다.&lt;/p&gt;
 
@@ -34,7 +33,7 @@ Error: Process completed with exit code 1.
 
 &lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/coredns-no-problem.png&quot; alt=&quot;두 시간 전 같은 파이프라인의 성공 런&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
 
-&lt;center&gt;&lt;sup&gt;직접 캡처. 두 시간 전 같은 파이프라인은 통과했다. 식별 정보는 블러 처리, 하단의 사내 링크 영역은 크롭했다.&lt;/sup&gt;&lt;/center&gt;
+&lt;center&gt;&lt;sup&gt;두 시간 전 같은 파이프라인은 통과했다. 그리고 그 사이에 변한 것은 단수&lt;/sup&gt;&lt;/center&gt;
 
 &lt;h2 id=&quot;전제-클러스터-dns-질의-경로&quot;&gt;전제: 클러스터 DNS 질의 경로&lt;/h2&gt;
 
@@ -81,14 +80,16 @@ Error: Process completed with exit code 1.
   &lt;p&gt;&lt;strong&gt;참고: split-horizon DNS&lt;/strong&gt; — 같은 도메인 이름에 대해 질의자가 어디에 있는가에 따라 다른 답을 주는 구성이다. 회사 안에서는 가까운 내부 주소로, 회사 밖에서는 인터넷에 공개한 주소로 오라고 이름 하나에 안팎 다른 답을 준다. 의도된 이원화라서 이 구성 자체는 문제가 아니다.&lt;/p&gt;
 &lt;/blockquote&gt;
 
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
 &lt;p&gt;그렇다면 문제는 둘로 쪼갤 수 있다.&lt;/p&gt;
 
 &lt;ol&gt;
   &lt;li&gt;사내에 있는 CI 러너가 &lt;em&gt;어째서인지&lt;/em&gt; 인터넷용 답을 받았다 — DNS 해석이 잘못 돌아온 측면&lt;/li&gt;
-  &lt;li&gt;그렇게 받은 공용 IP는 사내에서 접속이 안 된다 — hairpin 차단 측면&lt;/li&gt;
+  &lt;li&gt;그렇게 받은 공용 IP는 사내에서 접속이 안 된다 — 도달성 측면&lt;/li&gt;
 &lt;/ol&gt;
 
-&lt;p&gt;미리 말해 두면, 뒤의 진단에서 2는 정상 정책으로 판명되고 추적 대상은 1로 좁혀진다.&lt;/p&gt;
+&lt;p&gt;미리 말해 두면, 뒤의 진단에서 2는 사실로 확인되되 우리가 고칠 대상이 아님이 밝혀지고, 추적 대상은 1로 좁혀진다.&lt;/p&gt;
 
 &lt;p&gt;표의 근거를 밝혀 두면 — 개발 PC·관리용 호스트 행은 아래 재현 섹션의 curl 실측이고, CI 러너 행은 에러 로그의 &lt;code class=&quot;highlighter-rouge&quot;&gt;dial tcp&lt;/code&gt; 줄이다. 클러스터 파드 행은 내부 답을 받는 것까지 확인했으나 당시 커맨드 기록은 남기지 못했다.&lt;/p&gt;
 
@@ -104,13 +105,13 @@ Error: Process completed with exit code 1.
 
 &lt;p&gt;근거가 없지는 않았다. 에러가 애플리케이션 계층이 아니라 TCP 계층(&lt;code class=&quot;highlighter-rouge&quot;&gt;i/o timeout&lt;/code&gt;)이었고, 우리 쪽(코드, CI 설정, 러너) 변경은 0이었고, 재실행을 포함한 3회가 전부 같은 지점에서 죽었다. 게다가 같은 날 아침 방화벽의 TLS 검사 도입으로 로컬 kubectl이 차단되는 별개의 사건이 있어서 시간대까지 겹쳐 보였다. “인프라 정책이 일괄로 바뀌고 있다”는 심증을 굳히기 좋은 조합이었다.&lt;/p&gt;
 
-&lt;p&gt;그러나 헛다리였다. 이 의심이 어디서 어긋났는지는 정리 섹션에서 다시 본다.&lt;/p&gt;
+&lt;p&gt;그러나 헛다리였다.&lt;/p&gt;
 
 &lt;h2 id=&quot;재현-공용-ip-강제-접속과-대조군&quot;&gt;재현: 공용 IP 강제 접속과 대조군&lt;/h2&gt;
 
-&lt;p&gt;CI와 무관하게, 아무 사내 호스트에서 문제를 재현할 수 있었다.&lt;/p&gt;
+&lt;p&gt;CI와 무관하게, 아무 사내 호스트에서 문제를 재현할 수 있었다. 정확히는 앞서 쪼갠 두 측면 중 2 — 공용 IP는 사내에서 정말 도달 불가인가 — 를 격리해 확인하는 실험이다. DNS를 우회해 공용 IP로 강제 접속하면 이름 해석(측면 1)이 실험에서 제거되므로, “그 IP로 가면 어떻게 되는가”만 남는다.&lt;/p&gt;
 
-&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# &quot;DNS 묻지 말고 이 이름을 공용 IP로 접속해 봐&quot; → 타임아웃 (문제 재현)&lt;/span&gt;
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# &quot;DNS 묻지 말고 이 이름을 공용 IP로 접속해 봐&quot; → 타임아웃 (측면 2 재현)&lt;/span&gt;
 ~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;curl &lt;span class=&quot;nt&quot;&gt;-k&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-m&lt;/span&gt; 8 &lt;span class=&quot;nt&quot;&gt;--resolve&lt;/span&gt; harbor.example.com:443:203.0.113.51 https://harbor.example.com/v2/
 curl: &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;28&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; Connection timed out after 8003 milliseconds
 
@@ -123,9 +124,11 @@ curl: &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;28&lt;span class=&quot;o&quo
 
 &lt;p&gt;여기서 401은 실패가 아니라 중요한 대조군이다. 401은 TCP 연결, TLS 핸드셰이크, HTTP 처리까지 전부 통과한 뒤 애플리케이션이 “인증하라”고 답한 것이다. 응답 자체가 없는 timeout과 질적으로 다르다. 즉 레지스트리 서버는 멀쩡하고, 내부 주소로 가면 아무 문제가 없다.&lt;/p&gt;
 
-&lt;p&gt;한편 공용 IP 쪽은 개발 PC에서도 관리용 호스트에서도 전부 timeout이었다. 사내에서 자사 공개 IP로 나갔다 유턴해 들어오는 경로(hairpin)는 방화벽이 특별히 허용해야 하는데, 그게 막혀 있는 것이다. 이 차단 자체는 흔한 정상 정책이다. 애초에 사내 클라이언트는 내부 주소로 접근하는 것이 설계 전제라(split-horizon이 정확히 그 용도다) 유턴 경로는 정상 상황에서 쓰일 일이 없고, NAT 장비 입장에서도 hairpin은 기본 동작이 아니라 별도로 지원·설정해야 하는 기능이다(&lt;a href=&quot;https://datatracker.ietf.org/doc/html/rfc4787#section-6&quot;&gt;RFC 4787&lt;/a&gt;). 쓸 일 없는 경로를 열어 두면 경계 정책 관리만 복잡해지니 막아 두는 쪽이 보통이다. 클라이언트는 받은 IP가 내부용인지 외부용인지 구분하지 않고 그냥 연결하므로, 오염된 답을 받은 순간 경로는 자동으로 그렇게 정해진다.&lt;/p&gt;
+&lt;p&gt;한편 공용 IP 쪽은 개발 PC에서도 관리용 호스트에서도 전부 timeout이었다. 원인으로 가장 자연스러운 해석은 hairpin 차단이다. 사내에서 자사 공개 IP로 나갔다 유턴해 들어오는 경로(hairpin)는 방화벽이 특별히 허용해야 하는데, 그게 막혀 있다고 보는 것이다. 이 차단은 흔한 정상 정책이기도 하다. 애초에 사내 클라이언트는 내부 주소로 접근하는 것이 설계 전제라(split-horizon이 정확히 그 용도다) 유턴 경로는 정상 상황에서 쓰일 일이 없고, NAT 장비 입장에서도 hairpin은 기본 동작이 아니라 별도로 지원·설정해야 하는 기능이다(&lt;a href=&quot;https://datatracker.ietf.org/doc/html/rfc4787#section-6&quot;&gt;RFC 4787&lt;/a&gt;). 쓸 일 없는 경로를 열어 두면 경계 정책 관리만 복잡해지니 막아 두는 쪽이 보통이다.&lt;/p&gt;
 
-&lt;p&gt;이 재현으로 앞서 쪼갠 두 측면 중 2(hairpin 차단)는 정상 정책으로 닫혔다. 남는 것은 1 — 사내 컴포넌트가 왜 공용 답을 받았는가다.&lt;/p&gt;
+&lt;p&gt;다만 이건 어디까지나 해석이다. 사내에서 본 timeout만으로는 hairpin 차단인지, 공용 엔드포인트 자체가 죽어 있는지 가릴 수 없다. 가르려면 사외 관측점에서 같은 IP에 접속해 봐야 하는데, 그 확인은 이번 범위 밖이라 뒤의 근본 조치에서 부가 확인 항목으로 넘겼다. 다행히 사건 진단에는 이 구분이 필요 없다. 클라이언트는 받은 IP가 내부용인지 외부용인지 구분하지 않고 그냥 연결하므로, 원인이 무엇이든 공용 답을 받은 질의는 사내에서 반드시 실패한다.&lt;/p&gt;
+
+&lt;p&gt;이 재현으로 측면 2는 닫혔다. 확정된 사실은 두 가지 — 공용 IP는 사내 어디서든 도달 불가이고(원인이 hairpin 차단이든 아니든 우리가 고칠 대상이 아니다), 401 대조군이 보여 주듯 레지스트리 서버와 내부 주소 경로는 멀쩡하다. 남는 것은 1 — 사내 컴포넌트가 왜 공용 답을 받았는가다.&lt;/p&gt;
 
 &lt;h2 id=&quot;간헐성의-단서-같은-잡-안의-성공과-실패&quot;&gt;간헐성의 단서: 같은 잡 안의 성공과 실패&lt;/h2&gt;
 
@@ -133,7 +136,7 @@ curl: &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;28&lt;span class=&quot;o&quo
 
 &lt;p&gt;이건 “전부 실패”가 아니라 “질의 단위 복불복”이라는 것을 의미한다. 인프라 정책이 바뀌었다면 일관되게 실패해야 자연스럽다. 복불복이라면, 질의가 분산되는 지점에 이질적인 멤버가 섞여 있다는 신호다.&lt;/p&gt;
 
-&lt;p&gt;그 분산 지점이 어디인지는 관측점 대조가 알려 준다. 복불복이 나타나는 클라이언트(러너 파드, buildkitd)는 전부 클러스터 안에 있고, 전제 섹션에서 본 대로 이들의 질의는 kube-dns Service를 거쳐 CoreDNS 레플리카 12개 중 하나로 흩어진다(사내 레지스트리처럼 클러스터 밖 이름은 그 레플리카가 다시 업스트림(upstream) DNS — 내 resolver가 질의를 넘기는 다음 단계 서버 — 로 넘긴다). 반면 항상 내부 답만 받는 개발 PC의 curl은 OS resolver가 사내 DNS에 직접 묻는 경로라 CoreDNS를 거치지 않는다. 갈리는 관측점과 안 갈리는 관측점의 차이가 정확히 “클러스터 DNS 경로를 지나는가”다. 그렇다면 그 경로에서 답이 달라질 수 있는 분산 지점은 두 층 — CoreDNS 레플리카 12개, 그 뒤의 사내 DNS 2대 — 이고, 다음 두 섹션에서 층을 나눠 하나씩 확인한다.&lt;/p&gt;
+&lt;p&gt;그 분산 지점이 어디인지는 관측점 대조가 알려 준다. 복불복이 나타나는 클라이언트(러너 파드, buildkitd)는 전부 클러스터 안에 있다. 전제 섹션에서 본 대로 이들의 질의는 kube-dns Service를 거쳐 CoreDNS 레플리카 12개 중 하나로 흩어진다(사내 레지스트리처럼 클러스터 밖 이름은 그 레플리카가 다시 업스트림(upstream) DNS — 내 resolver가 질의를 넘기는 다음 단계 서버 — 로 넘긴다). 반면 항상 내부 답만 받는 개발 PC의 curl은 OS resolver가 사내 DNS에 직접 묻는 경로라 CoreDNS를 거치지 않는다. 갈리는 관측점과 안 갈리는 관측점의 차이가 정확히 “클러스터 DNS 경로를 지나는가”다. 그렇다면 그 경로에서 답이 달라질 수 있는 분산 지점은 두 층 — CoreDNS 레플리카 12개, 그 뒤의 사내 DNS 2대 — 이고, 다음 두 섹션에서 층을 나눠 하나씩 확인한다.&lt;/p&gt;
 
 &lt;p&gt;앞의 성공 런 스크린샷도 같은 증거다. 실패 두 시간 전의 그 잡 역시 Login과 Push에서 같은 이름을 해석했지만 전부 내부 답을 받아 통과했다. 오염이 시작된 뒤에도 통과하는 런이 있었다는 것은, 잡 단위가 아니라 질의 단위로 갈린다는 뜻이다.&lt;/p&gt;
 
@@ -165,7 +168,7 @@ Address: 10.0.20.10
 ~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;dig +short harbor.example.com @&amp;lt;replica-pod-ip&amp;gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;결과: gpu-node-05 노드에 있는 레플리카 1개만 3회 모두 공용 답(&lt;code class=&quot;highlighter-rouge&quot;&gt;203.0.113.51&lt;/code&gt;)을 반환했고, 나머지 11개는 전부 내부 답이었다. 클러스터의 모든 DNS 질의가 12개 레플리카로 분산되므로, 최대 12분의 1 확률로 공용 답이 새어 나오던 것이다(오염 레플리카에 떨어진 질의도 forward가 업스트림 셋 중 무엇을 뽑는지, 무엇이 캐시돼 있는지에 따라 다시 갈린다). 빌드는 한 잡에서 이름 해석을 여러 번 하니, 잡 단위로 보면 러시안룰렛이었다. 직전 런은 운 좋게 통과했고 문제 런은 3판 연속 진 것뿐이다.&lt;/p&gt;
+&lt;p&gt;결과적으로, &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-node-05&lt;/code&gt; 노드에 있는 레플리카 1개만 3회 모두 공용 답(&lt;code class=&quot;highlighter-rouge&quot;&gt;203.0.113.51&lt;/code&gt;)을 반환했고, 나머지 11개는 전부 내부 답이었다. 클러스터의 모든 DNS 질의가 12개 레플리카로 분산되므로, 최대 12분의 1 확률로 공용 답이 새어 나오던 것이다(오염 레플리카에 떨어진 질의도 forward가 업스트림 셋 중 무엇을 뽑는지, 무엇이 캐시돼 있는지에 따라 다시 갈린다). 빌드는 한 잡에서 이름 해석을 여러 번 하니, 잡 단위로 보면 러시안룰렛이었다. 직전 런은 운 좋게 통과했고 문제 런은 3판 연속 진 것뿐이다.&lt;/p&gt;
 
 &lt;p&gt;“갑자기 뒤집혔다”는 처음의 인상도 이 시점에 교정됐다. 이 레플리카는 gpu-node-05가 클러스터에 조인한 시점(지난 주 금요일)부터 계속 오염돼 있었고, 그동안 확률에 걸리지 않았을 뿐이었다.&lt;/p&gt;
 
@@ -369,6 +372,49 @@ rke2-coredns-rke2-coredns-6f7d9c4b8d-hw4tn   1/1     Running   ...   worker-02
   &lt;li&gt;부가 확인: 공용 주소 &lt;code class=&quot;highlighter-rouge&quot;&gt;203.0.113.51:443&lt;/code&gt;이 사내에서 접속 불가한 것이 의도된 정책인지 — 공용 레코드가 정식으로 등록돼 있다는 것은 8.8.8.8 질의로 확인했지만, 외부 노출이 의도인지·유산 레코드인지는 이번에 검증한 범위 밖이다&lt;/li&gt;
 &lt;/ul&gt;
 
+&lt;h2 id=&quot;후속-검증-교정-완료-회신과-kubelet이-읽는-층&quot;&gt;후속 검증: “교정 완료” 회신과 kubelet이 읽는 층&lt;/h2&gt;
+
+&lt;p&gt;이 요청에는 후속이 있었다. 이튿날 8.8.8.8을 제거했다는 회신을 받았는데, 배제 라벨을 바로 원복하는 대신 원복의 전제 — 쿠버네티스가 보는 층에서 실제로 바뀌었는가 — 부터 실측했다.&lt;/p&gt;
+
+&lt;p&gt;검증 방법은 원인 섹션에서 쓴 우회로의 재활용이다. 다만 CoreDNS는 이제 그 노드들에 없으므로, &lt;code class=&quot;highlighter-rouge&quot;&gt;dnsPolicy: Default&lt;/code&gt;의 일회성 파드를 노드에 고정 배치해서 kubelet이 주입하는 업스트림 목록을 직접 읽었다. 실무 디테일이 두 가지 있었다. 그 사이 두 노드에 GPU 워크로드용 NoSchedule taint가 붙어 있어 toleration을 얹었고, DNS가 의심스러운 노드에서 이미지 풀이라는 또 하나의 이름 해석을 만들지 않도록 노드에 이미 캐시된 이미지를 지정했다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 검증용 일회성 파드: 노드 고정 + dnsPolicy Default → 그 노드의 실제 업스트림 목록 실측&lt;/span&gt;
+~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;k&quot;&gt;for &lt;/span&gt;n &lt;span class=&quot;k&quot;&gt;in &lt;/span&gt;gpu-node-05 gpu-node-06&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;do&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   kubectl run dns-verify-&lt;span class=&quot;nv&quot;&gt;$n&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--rm&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--restart&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;Never &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;     &lt;span class=&quot;nt&quot;&gt;--image&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&amp;lt;노드에 캐시된 이미지&amp;gt; &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;     &lt;span class=&quot;nt&quot;&gt;--overrides&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'{&quot;spec&quot;:{&quot;nodeName&quot;:&quot;'&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$n&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'&quot;,&quot;dnsPolicy&quot;:&quot;Default&quot;,
+&amp;gt;       &quot;tolerations&quot;:[{&quot;key&quot;:&quot;nvidia.com/gpu&quot;,&quot;operator&quot;:&quot;Exists&quot;,&quot;effect&quot;:&quot;NoSchedule&quot;}]}}'&lt;/span&gt; &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;     &lt;span class=&quot;nt&quot;&gt;--command&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;cat&lt;/span&gt; /etc/resolv.conf | &lt;span class=&quot;nb&quot;&gt;grep &lt;/span&gt;nameserver | sed &lt;span class=&quot;s2&quot;&gt;&quot;s/^/&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$n&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;: /&quot;&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;done
+&lt;/span&gt;gpu-node-05: nameserver 10.0.2.5
+gpu-node-05: nameserver 10.0.2.6
+gpu-node-05: nameserver 8.8.8.8
+gpu-node-06: nameserver 10.0.2.5
+gpu-node-06: nameserver 10.0.2.6
+gpu-node-06: nameserver 8.8.8.8
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;두 노드 모두 세 번째 nameserver가 여전히 남아 있었다. 방금 만든 파드가 읽은 값이므로 캐시나 잔상이 아니라 현재 상태다.&lt;/p&gt;
+
+&lt;p&gt;회신과 실측이 어긋난 셈인데, 유력한 원인은 담당자의 누락이라기보다 systemd-resolved 구조가 만드는 전형적인 갈림길이다. 원인 섹션 말미의 퍼즐 그대로, kubelet이 파드에 주입하는 목록의 원천은 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/resolv.conf&lt;/code&gt;(stub 링크)가 아니라 &lt;code class=&quot;highlighter-rouge&quot;&gt;/run/systemd/resolve/resolv.conf&lt;/code&gt;이고, 이 파일은 netplan 같은 원천 설정을 고치는 것만으로는 바뀌지 않는다. &lt;code class=&quot;highlighter-rouge&quot;&gt;netplan apply&lt;/code&gt;(또는 &lt;code class=&quot;highlighter-rouge&quot;&gt;systemctl restart systemd-resolved&lt;/code&gt;)가 실행돼야 재생성된다. 그래서 다음 두 경우 모두 “고쳤지만 쿠버네티스에는 반영 안 됨”이 된다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;stub 링크인 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/resolv.conf&lt;/code&gt;만 직접 고친 경우 — kubelet은 그 파일을 읽지 않고, systemd-resolved가 덮어쓰기도 한다&lt;/li&gt;
+  &lt;li&gt;netplan 설정은 고쳤지만 &lt;code class=&quot;highlighter-rouge&quot;&gt;netplan apply&lt;/code&gt;를 하지 않은 경우 — &lt;code class=&quot;highlighter-rouge&quot;&gt;/run/systemd/resolve/resolv.conf&lt;/code&gt;에는 옛 목록이 그대로 남는다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;이 상태에서 배제 라벨을 원복하면 CoreDNS 레플리카가 다시 그 노드에 배치되고, 같은 문제가 그대로 재발한다. “교정 완료” 회신과 “원복해도 된다” 사이에는 kubelet이 읽는 층 기준의 검증이 한 번 더 필요한 것이다.&lt;/p&gt;
+
+&lt;p&gt;그래서 원복은 보류했고, 배제 라벨은 그대로 유지 중이다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 배제 라벨 잔존 확인 (원복 보류 상태)&lt;/span&gt;
+~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get node gpu-node-05 gpu-node-06 &lt;span class=&quot;nt&quot;&gt;-L&lt;/span&gt; example.com/coredns-exclude &lt;span class=&quot;nt&quot;&gt;--no-headers&lt;/span&gt;
+gpu-node-05   Ready   3d17h   v1.35.7+rke2r1   &lt;span class=&quot;nb&quot;&gt;true
+&lt;/span&gt;gpu-node-06   Ready   3d17h   v1.35.7+rke2r1   &lt;span class=&quot;nb&quot;&gt;true&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;인프라 팀에는 실측 결과를 공유하면서 &lt;code class=&quot;highlighter-rouge&quot;&gt;/run/systemd/resolve/resolv.conf&lt;/code&gt; 기준으로 반영 확인을 부탁드렸다. 노드 설정을 어떤 도구로 어떻게 관리하는지는 관리 주체의 영역이므로, 요청은 도구를 특정하지 않고 “kubelet이 읽는 이 파일 기준으로 확인되면 알려 달라”까지만 했다. 반영이 확인되면 그때 라벨을 원복한다. 부수적으로, 그 사이 붙은 GPU taint가 CoreDNS 기본 toleration에 없는 종류라 라벨 없이도 배치를 막아 줄 이중 안전망이 되고 있어서 원복을 서두를 이유도 없었다.&lt;/p&gt;
+
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
 &lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
@@ -407,7 +453,7 @@ rke2-coredns-rke2-coredns-6f7d9c4b8d-hw4tn   1/1     Running   ...   worker-02
 
 &lt;h2 id=&quot;노드-편입-체크리스트&quot;&gt;노드 편입 체크리스트&lt;/h2&gt;
 
-&lt;p&gt;이번 사건의 계기가 긴급 노드 대량 편입이었던 만큼, 노드 편입 체크리스트에 DNS 검증(&lt;code class=&quot;highlighter-rouge&quot;&gt;resolv.conf&lt;/code&gt; 업스트림 목록이 클러스터 표준과 일치하는지, systemd-resolved 환경이면 &lt;code class=&quot;highlighter-rouge&quot;&gt;/run/systemd/resolve/resolv.conf&lt;/code&gt; 기준) 항목을 추가하는 것을 후속으로 남겼다. 이 항목은 아직 제안 단계로, 적용·운영해 본 것은 아니다.&lt;/p&gt;
+&lt;p&gt;이번 사건의 계기가 긴급 노드 대량 편입이었던 만큼, 노드 편입 체크리스트에 DNS 검증 항목을 추가하는 것을 후속으로 남겼고, 실제로 반영까지 했다. 팀에서 노드 편입 절차를 표준화해 둔 클러스터 관리 플러그인이 있는데, 그 사전 점검 단계에 “노드의 &lt;code class=&quot;highlighter-rouge&quot;&gt;/run/systemd/resolve/resolv.conf&lt;/code&gt;에 사내 DNS 외 공용 리졸버가 보이면 편입을 중단하고, 교정·재검증 후 진행” 항목을 넣었다. 이 사건에서 얻은 교훈을 계기로, 판정 파일을 stub 링크가 아니라 kubelet이 파드에 주입하는 실제 업스트림 목록으로 못박아 두었다. 이 항목이 실제 편입에서 문제를 걸러 내는 것은 아직 본 적 없으니, 다음 편입이 첫 시험대다.&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -417,13 +463,14 @@ rke2-coredns-rke2-coredns-6f7d9c4b8d-hw4tn   1/1     Running   ...   worker-02
   &lt;li&gt;&lt;a href=&quot;https://coredns.io/plugins/forward/&quot;&gt;CoreDNS forward plugin&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/&quot;&gt;Kubernetes: Customizing DNS Service&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://docs.rke2.io/helm&quot;&gt;RKE2: Helm Integration (HelmChartConfig)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://netplan.readthedocs.io/&quot;&gt;Netplan documentation&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-Networking-Linux-Stack/&quot;&gt;Kubernetes 네트워킹: Linux 네트워크 스택 이해하기&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-Kubeadm-01-7/&quot;&gt;Kubeadm 클러스터: Static Pod 및 애드온 확인&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-RKE2-01-02/&quot;&gt;RKE2 클러스터: 서버 노드 설치 결과 확인&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-EKS-01-01-07-Public-Public-Endpoint/&quot;&gt;EKS: 엔드포인트 액세스 분석&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="CoreDNS" /><category term="DNS" /><category term="Troubleshooting" /><category term="RKE2" /><summary type="html">CoreDNS 레플리카 하나가 반환한 공용 IP, 그로 인한 CI 이미지 푸시 간헐 실패의 진단과 해결 기록</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="CoreDNS" /><category term="DNS" /><category term="Troubleshooting" /><category term="RKE2" /><summary type="html">CoreDNS 레플리카 하나가 반환한 공용 IP, 그 간헐 실패의 진단과 해결 기록</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리</title><link href="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리" /><published>2026-08-05T00:00:00+09:00</published><updated>2026-08-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output</id><content type="html" xml:base="https://sirzzang.github.io//ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -2810,14 +2857,40 @@ Head 12 output┘
   &lt;li&gt;임베딩은 토크나이제이션(텍스트 → 토큰 ID) → 토큰 임베딩(ID → 벡터) → 위치 인코딩(순서 정보 덧셈)의 세 단계이고, 과정과 결과 벡터 모두를 가리키는 용어다&lt;/li&gt;
   &lt;li&gt;임베딩 테이블은 “가까운 단어를 가깝게”라는 loss가 아니라 다음 토큰 예측이라는 프록시 태스크로 학습되고, 의미의 기하 구조는 그 부산물로 나타난다. 2020년 Keras Embedding 레이어와 메커니즘은 같지만, 의미의 최종 산물에서 네트워크의 입구로 역할이 달라졌다&lt;/li&gt;
   &lt;li&gt;RNN은 순차 처리 덕에 위치 정보가 공짜였지만 병렬화를 못 했고, 트랜스포머는 병렬화를 얻은 대가로 위치 정보를 입력에 명시적으로 넣는다. 그 방법이 sinusoidal(함수) → 학습된 위치 임베딩(GPT-2) → RoPE(Qwen 등)로 진화해 왔다&lt;/li&gt;
-  &lt;li&gt;무엇이 학습되고 무엇이 고정인지 갈라 두면 다음과 같다
-| 구성 요소 | 학습 여부 |
-| — | — |
-| 어휘 사전 (BPE 병합 규칙) | 학습 안 됨 — 모델 학습 전에 별도로 구축해 고정 |
-| 토큰 임베딩 테이블 | 학습됨 — LM loss의 역전파로 다듬어짐 |
-| Sinusoidal 위치 인코딩 | 학습 안 됨 — 사람이 설계한 함수 |
-| 학습된 위치 임베딩 (GPT-2) | 학습됨 — 위치별 벡터 테이블 |
-| RoPE | 학습 안 됨 — 회전 함수 (rope_theta는 아키텍처 상수) |&lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;무엇이 학습되고 무엇이 고정인지 갈라 두면 다음과 같다&lt;/p&gt;
+
+    &lt;table&gt;
+      &lt;thead&gt;
+        &lt;tr&gt;
+          &lt;th&gt;구성 요소&lt;/th&gt;
+          &lt;th&gt;학습 여부&lt;/th&gt;
+        &lt;/tr&gt;
+      &lt;/thead&gt;
+      &lt;tbody&gt;
+        &lt;tr&gt;
+          &lt;td&gt;어휘 사전 (BPE 병합 규칙)&lt;/td&gt;
+          &lt;td&gt;학습 안 됨 — 모델 학습 전에 별도로 구축해 고정&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+          &lt;td&gt;토큰 임베딩 테이블&lt;/td&gt;
+          &lt;td&gt;학습됨 — LM loss의 역전파로 다듬어짐&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+          &lt;td&gt;Sinusoidal 위치 인코딩&lt;/td&gt;
+          &lt;td&gt;학습 안 됨 — 사람이 설계한 함수&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+          &lt;td&gt;학습된 위치 임베딩 (GPT-2)&lt;/td&gt;
+          &lt;td&gt;학습됨 — 위치별 벡터 테이블&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+          &lt;td&gt;RoPE&lt;/td&gt;
+          &lt;td&gt;학습 안 됨 — 회전 함수 (rope_theta는 아키텍처 상수)&lt;/td&gt;
+        &lt;/tr&gt;
+      &lt;/tbody&gt;
+    &lt;/table&gt;
+  &lt;/li&gt;
   &lt;li&gt;어휘 사전 크기는 임베딩 메모리 ↔ 시퀀스 길이(토큰 효율)의 트레이드오프이고, 위치 인코딩 방식은 최대 컨텍스트 길이를 결정한다. 둘 다 설계 시점의 선택이 서빙 시점의 상수로 흘러내려오는 사례다&lt;/li&gt;
 &lt;/ul&gt;
 
