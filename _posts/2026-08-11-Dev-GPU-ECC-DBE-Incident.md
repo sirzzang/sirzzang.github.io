@@ -273,6 +273,18 @@ Xid 48이 말하는 DBE(Double-Bit Error)는 한 ECC 워드에서 2비트가 뒤
 - **Xid 48과 DBE는 필요충분이 아니다.** Xid 48의 정의 자체가 "DBE 검출"이므로 Xid 48이 떴다면 DBE가 발생한 것이 맞다. 하지만 역은 성립하지 않는다 — 아키텍처와 검출 경로에 따라 DBE가 Xid 94(contained ECC error)/95(uncontained)로 보고되는 경우도 있다. 그래서 "DBE는 항상 Xid 48"이라는 일반화보다 "이번 사건에서는 DBE가 Xid 48로 보고됐다"가 정확하다
 - **카운터 2는 "2비트여서"가 아니다.** `DRAM Uncorrectable : 2`의 단위는 뒤집힌 비트 수가 아니라 **오류 검출 이벤트 수**다. 2비트짜리 DBE 1건이면 1이 올라가는 것이 원칙이다. 이번에 2가 된 정확한 이유(같은 불량 row를 두 번 읽었는지, 두 검출 경로가 각각 집계됐는지)는 로그만으로 확정하지 못했다 — 남은 궁금증 섹션에 남겨 둔다
 
+Xid 154의 처방에도 일반화 주의가 하나 더 붙는다. **Drain and Reset은 유일한 처방도, ECC 전용 처방도 아니다** — recovery action은 결함의 종류와 심각도에 따라 다음 다섯 값 중에서 결정된다.
+
+| recovery action | 조치 내용 | 대표 상황 |
+| --- | --- | --- |
+| None | 별도 복구 조치 불필요 | GPU 상태에 영향이 없는 오류 |
+| GPU Reset | 해당 GPU만 초기화 | GPU 단독 리셋으로 복구되는 결함 |
+| Drain and Reset | 신규 작업은 차단하고, 기존 작업이 빠져나간 뒤 초기화 | framebuffer 일부 offline, row remap 대기 같은 축소 운전 상태 — 이번 사건의 처방 |
+| Drain P2P | P2P 트래픽만 먼저 걷어내고, 이후 후속 조치 재결정 | NVLink/P2P 경로 결함 |
+| Node Reboot | GPU 단위 조치로는 부족, 노드 전체 재부팅 | GSP(GPU System Processor) 펌웨어 무응답, PCIe/NVML에서 GPU 미조회, reset 반복 실패, 같은 reset domain에 묶인 다중 GPU |
+
+표의 Drain P2P 행이 보여주듯 이 체계는 ECC 전용이 아니다. Xid 154는 **함께 뜬 다른 Xid에 필요한 복구 수준을 요약해 주는 범용 메커니즘**이라 NVLink/P2P 결함 같은 비-ECC 오류에서도 갱신되고, 반대로 GPU 상태를 바꾸지 않는 앱 수준 오류(Xid 13, 31 등)에서는 None에 머물러 Xid 154 자체가 따라붙지 않는다. 다만 어떤 권고든 "하드웨어 정상" 판정은 아니다 — 복구 후 재발 확인이 필요하다는 점은 같다.
+
 ## 오류 전파 경로
 
 이번 사건의 전체 흐름 — GDDR7 셀에서 뒤집힌 비트 하나가 분산 학습 전체를 무너뜨리기까지 — 을 레이어로 그리면 다음과 같다.
@@ -302,13 +314,13 @@ sequenceDiagram
 - **학습 중단은 프레임워크의 선택이 아니라 사실상 강제다.** DBE가 나면 드라이버가 해당 CUDA 컨텍스트를 오류 상태로 무효화하고, 그 컨텍스트로는 이후 어떤 CUDA 호출도 진행할 수 없다. 프레임워크의 재량은 "계속할지"가 아니라 "어떻게 종료하고 전파할지" 수준이다 — PyTorch는 NCCL watchdog이 예외를 던져 프로세스를 abort하는 방식을 택했다. 반대로 SBE였다면 하드웨어가 투명하게 정정하므로 학습은 아무 일 없이 계속됐을 것이다
 - **ECC가 없는 카드였다면 이 경로 전체가 존재하지 않는다.** 검출이 없으니 Xid도, CUDA 에러도, 학습 중단도 없다. 뒤집힌 가중치나 gradient로 조용히 계속 수렴했을 것이다 — 이론 글에서 말한 silent corruption이 정확히 이 시나리오다. 뒤집어 말하면, **이번에 학습이 요란하게 죽은 것 자체가 ECC가 제 역할을 한 증거**다
 
-## 원인 판단: 소프트웨어 문제 가능성 배제
+## 소프트웨어 원인 가설 배제: 물리 주소로 기록된 오류
 
-결론부터 말하면, 이번 건은 소프트웨어 논리 오류가 아니라 GPU 메모리 계층의 물리적 오류로 보는 것이 맞다.
+하드웨어 결함이라는 결론은 사실 앞의 로그들에서 이미 파악할 수 있다. 그럼에도 학습 등 소프트웨어적 이상이 발생했을 가능성은 없을까? 학습 도중 터진 장애는 가장 먼저 코드를 의심하기 마련이고, 학습 로그에도 스택 덤프의 모듈 목록이나 `all_gather` 위치처럼 코드 문제로 읽힐 만한 재료가 꽤 있었다. 결론부터 말하면, 이번 건은 소프트웨어 논리 오류가 아니라 GPU 메모리 계층의 물리적 오류로 보는 것이 맞다.
 
-판단 근거는 오류가 기록된 "좌표계"다. 코드 버그가 만드는 오류 — 잘못된 tensor shape, out-of-bounds 접근, illegal memory access, CUDA kernel assertion, NCCL collective 순서 불일치, OOM — 는 가상 주소 공간과 API 레벨에서 다른 Xid(13, 31 등)로 찍히지, **물리 주소·FBPA·subpartition·row remap이라는 물리 메모리 계층의 좌표로 기록되지 않는다.** 이번 로그는 `physAddr 0xe9b9107e0`, `FBPA 3 subpartition 0`, `GDDR ... DRAM error`, row remap 마킹까지 일관되게 물리 계층을 가리킨다.
+판단 근거는 오류가 기록된 계층이다. 코드 버그가 만드는 오류 — 잘못된 tensor shape, out-of-bounds 접근, illegal memory access, CUDA kernel assertion, NCCL collective 순서 불일치, OOM — 는 가상 주소 공간과 API 레벨에서 다른 Xid(13, 31 등)로 찍히지, **물리 주소·FBPA·subpartition·row remap이라는 물리 메모리 계층의 좌표로 기록되지 않는다.** 이번 로그는 `physAddr 0xe9b9107e0`, `FBPA 3 subpartition 0`, `GDDR ... DRAM error`, row remap 마킹까지 일관되게 물리 계층을 가리킨다.
 
-다만 학습이 오류를 "드러내는 계기"였을 수는 있다. 대규모 학습은 VRAM을 대량으로, 평소 안 쓰던 주소까지, 높은 대역폭과 클럭으로, 장시간 고온·고전력 상태에서 사용한다. idle 상태에서는 보이지 않던 약한 DRAM 셀, 제조상 미세 결함, 노화, 마진 부족이 이 부하에서 노출될 수 있다. 즉 "학습 코드가 결함을 만들었다"가 아니라 **"강한 부하가 이미 존재하던 잠재 결함을 발견하게 했다"**는 해석이 적절하다.
+다만 학습이 오류를 **"드러내는 계기"**였을 수는 있다. 대규모 학습은 VRAM을 대량으로, 평소 안 쓰던 주소까지, 높은 대역폭과 클럭으로, 장시간 고온·고전력 상태에서 사용한다. idle 상태에서는 보이지 않던 약한 DRAM 셀, 제조상 미세 결함, 노화, 마진 부족이 이 부하에서 노출될 수 있다. 즉 "학습 코드가 결함을 만들었다"가 아니라 **"강한 부하가 이미 존재하던 잠재 결함을 발견하게 했다"**는 해석이 적절하다.
 
 그럼 애초에 왜 좋은 카드에서 이런 오류가 날까. RTX PRO 6000 Blackwell은 96GB GDDR7에 Full ECC를 지원하는 카드지만, 메모리 용량이 클수록 셀 수가 많아 단위 시간당 오류 확률은 오히려 올라간다. 고급 카드라서 오류가 안 나는 게 아니라, **오류가 났을 때 탐지·격리된다는 것**이 차이다. 원인 후보는 일시적 soft error(입자 충돌 등), DRAM 셀 열화, 발열·전원 불안정, 메모리 클럭 마진 부족 등이 있는데, 한 번의 사건만으로는 일시적 soft error인지 영구적 hard error인지 확정할 수 없다. 이 판별은 리셋 후 재발 여부로 한다 — soft error였다면 remap·리셋 후 같은 학습을 돌려도 재현되지 않을 것이고, 셀 열화·전원·온도 문제라면 같은 고부하에서 재현되거나 ECC/remapped row가 계속 늘 것이다. 재발한다 해도 "코드가 DBE를 만들었다"가 아니라 "그 부하 패턴이 문제 하드웨어를 다시 노출했다"로 해석해야 한다.
 
@@ -408,7 +420,7 @@ The following GPUs could not be reset:
   GPU 00000000:55:00.0: In use by another client
 ```
 
-> 참고: nvidia-persistenced는 GPU 디바이스 파일을 항상 열어 둬서, 클라이언트가 없어도 드라이버 초기화 상태를 유지하는 데몬이다. 이게 없으면 마지막 클라이언트가 떠날 때 GPU가 deinit되어 다음 CUDA 시작이 느려진다. "항상 핸들을 잡고 있는 것"이 존재 이유라서, 리셋할 때는 정확히 그 이유로 걸림돌이 된다.
+> 참고: nvidia-persistenced **GPU 디바이스 파일을 항상 열어 둬서, 클라이언트가 없어도 드라이버 초기화 상태를 유지하는 데몬**이다. 이게 없으면 마지막 클라이언트가 떠날 때 GPU가 deinit되어 다음 CUDA 시작이 느려진다. "항상 핸들을 잡고 있는 것"이 존재 이유라서, 리셋할 때는 정확히 그 이유로 걸림돌이 된다.
 
 persistenced를 풀어도 리셋이 거부된 것은 GPU Operator의 operand 파드들(dcgm-exporter, device-plugin, gpu-feature-discovery 등)이 NVML 핸들을 쥐고 있기 때문이다. 처음엔 파드를 지웠는데, DaemonSet이라 즉시 되살아나 소용이 없었다. GPU Operator는 이 상황을 위해 노드 라벨 마스터 스위치를 제공한다.
 
@@ -496,7 +508,7 @@ GPU-cd616af2-..., 0, 0, No, No
 - `remapped_rows.uncorrectable`이 계속 느는 경우
 - `Remapping Failure Occurred: Yes`로 바뀌는 경우
 
-이 중 하나라도 발생하면 일시적 soft error 가설을 버리고 특정 메모리 영역의 열화(hard error)로 보아, 격리 후 RMA 라인으로 넘어가야 한다. 반대로 재발이 없다면 입자 충돌 등에 의한 일회성 soft error였을 가능성이 높아진다. 참고로 드라이버의 recovery action이 RMA를 직접 안내하는 구조는 아니다 — 드라이버는 즉시 필요한 복구 동작(None / GPU Reset / Node Reboot / Drain P2P / Drain and Reset)까지만 알려주고, RMA는 remap 실패·Unrepairable Memory·재발 이력·진단 결과를 종합해 운영자가 판단한다. reset 지시와 RMA 판단은 배타적이지 않다 — 노후한 카드도 상태 정리를 위해 reset이 필요할 수 있지만, reset 성공만으로 정상 카드로 판정하지는 않는다.
+이 중 하나라도 발생하면 일시적 soft error 가설을 버리고 특정 메모리 영역의 열화(hard error)로 보아, 격리 후 RMA 라인으로 넘어가야 한다. 반대로 재발이 없다면 입자 충돌 등에 의한 일회성 soft error였을 가능성이 높아진다. 참고로 드라이버의 recovery action이 RMA를 직접 안내하는 구조는 아니다 — 드라이버는 즉시 필요한 복구 동작(앞서 본 recovery action 스펙트럼)까지만 알려주고, RMA는 remap 실패·Unrepairable Memory·재발 이력·진단 결과를 종합해 운영자가 판단한다. reset 지시와 RMA 판단은 배타적이지 않다 — 노후한 카드도 상태 정리를 위해 reset이 필요할 수 있지만, reset 성공만으로 정상 카드로 판정하지는 않는다.
 
 ## MLOps 관점
 
