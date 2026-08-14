@@ -17,7 +17,7 @@ tags:
   - NCCL
   - GPU-Operator
   - MLOps
-last_modified_at: 2026-08-11
+last_modified_at: 2026-08-14
 ---
 
 <br>
@@ -27,7 +27,8 @@ last_modified_at: 2026-08-11
 - 학습이 돌던 노드의 GPU 1 VRAM에서 DBE(Double-Bit Error)가 발생했다. 커널 로그에 Xid 48/171/63/154 연쇄가 찍혔고, 해당 GPU를 쓰던 rank는 `uncorrectable ECC error`로 즉사, 반대편 rank는 NCCL collective를 600초 기다리다 timeout으로 죽으면서 분산 학습 전체가 실패했다
 - DBE는 SECDED의 정정 한계(단일 정정·이중 검출)를 넘은 오류라 하드웨어가 정정을 포기하고 신고만 한 것이다. GPU는 불량 row를 remap 대상으로 마킹했고, 드라이버가 Drain and Reset을 지시했다
 - GPU Operator operand를 노드 라벨 스위치로 걷어내고 `nvidia-smi -i 1 -r`로 리셋해 remap을 활성화했다. 리셋 후 volatile 카운터는 0으로 돌아왔지만 remap 이력은 InfoROM에 남는다 — 카드는 이 사건을 기억한다
-- 단발 이벤트 1건이고 remap 실패도 없어 지금은 RMA가 아니라 관찰 단계다. [이론 글]({% post_url 2026-06-01-CS-GPU-ECC-Memory-Integrity %})에서 공부했던 내용이 처음으로 실제 장애로 발현된 사례이자, 그때 구축한 모니터링이 일한 사례다
+- 단발 이벤트 1건이고 remap 실패도 없어 일단 RMA가 아니라 관찰 단계로 판정했다. [이론 글]({% post_url 2026-06-01-CS-GPU-ECC-Memory-Integrity %})에서 공부했던 내용이 처음으로 실제 장애로 발현된 사례이자, 그때 구축한 모니터링이 일한 사례다
+- (후기) 관찰은 반나절 만에 끝났다. 나흘 새 같은 FBPA·같은 뱅크에서 DBE가 두 차례 더 재발하며 예비 row를 연속 소모했고, soft error 가설을 기각했다. 공식 RMA 임계(remapping failure flag)에는 아직 미달이라, 격리 운용으로 전환하고 보증 범위 확인과 이력 공식 접수를 선제 요청했다
 
 <br>
 
@@ -518,7 +519,7 @@ GPU-cd616af2-..., 0, 0, No, No
 | 실패 양상 | DBE 맞은 rank는 즉사(SIGABRT), 반대 rank는 NCCL timeout으로 10분 뒤 사망 |
 | 격리 | row remap 마킹(Xid 63) + device plugin unhealthy 마킹 |
 | 조치 | operand 정리 → GPU 1 단독 리셋 → remap 활성화 확인 → 원복 |
-| 현재 판정 | 단발 이벤트, remap 성공, 예비 여유 충분 → RMA 아닌 관찰 단계 |
+| 판정 (08-11 당시) | 단발 이벤트, remap 성공, 예비 여유 충분 → RMA 아닌 관찰 단계 — 이후 뒤집힌다 (후기) |
 
 교훈 몇 가지를 남긴다.
 
@@ -547,7 +548,71 @@ GPU-cd616af2-..., 0, 0, No, No
 
 - **카운터가 정확히 왜 2인가.** DBE 1건에 `DRAM Uncorrectable`이 2 오른 이유(같은 row를 두 번 읽었는지, 검출 경로별 집계인지)는 확정하지 못했다
 - **GDDR 메모리 제조사 확인 방법.** 문득 이 카드의 GDDR7이 어느 제조사 것인지 궁금했는데, `nvidia-smi`로는 노출되지 않는다. 서버 환경의 표준 도구로 확인하는 방법은 찾지 못했다
-- **soft error인가 hard error인가.** 앞서 적었듯 단발 사건으로는 판별 불가라, 재발 여부 관찰로만 답할 수 있다. 현재는 관찰 중이다
+- **soft error인가 hard error인가.** 앞서 적었듯 단발 사건으로는 판별 불가라, 재발 여부 관찰로만 답할 수 있다. 현재는 관찰 중이다.
+
+<br>
+
+# 후기: 관찰은 반나절 만에 끝났다
+
+"현재는 관찰 중이다"라고 했는데, 안타깝게도 그 관찰은 오래가지 않았다 — 리셋 복구 5시간 41분 만에 같은 GPU에서 DBE가 재발했고(2차 발생), 다시 복구한 지 약 60시간 만에 한 번 더 재발했다(3차 발생).
+
+## 세 번의 발생, 하나의 위치
+
+| | 1차 (08-10) | 2차 (08-11) | 3차 (08-14) |
+| --- | --- | --- | --- |
+| physAddr | `0xe9b9107e0` | `0xe7574b740` | `0xe93349240` |
+| 위치 | FBPA 3 / subpartition 0 | FBPA 3 / subpartition 0 | FBPA 3 / subpartition 0 |
+| 직전 복구 후 가동 시간 | — | 5시간 41분 | 약 60시간 |
+| `remapped_rows.uncorrectable` | 0 → 1 | 1 → 2 | 2 → 3 |
+| Bank Remap Availability | High 1 bank | Partial 1 bank | Partial 1 bank |
+
+physAddr는 매번 다르다. 그러나 **파티션은 세 번 모두 FBPA 3 / subpartition 0**이고, 히스토그램은 Max 511 / Partial 1을 유지하고 있다 — 512개 뱅크 중 511개는 손도 안 댄 채, 같은 1개 뱅크만 예비 row를 연속으로 소모하고 있다는 뜻이다.
+
+이 국소성이 판정을 가른다. 입자 충돌 같은 무작위 soft error라면 오류 위치가 메모리 전역에 흩어져야 정상이다. 오류가 하나의 물리 영역에 몰리고, 예비 row 소모가 진행되고, 재발 간격이 시간 단위라면 — "운 나쁘게 세 번"이 아니라 **메모리 다이의 특정 영역이 진행성으로 열화되고 있다**는 신호다. 재발 시 판단 기준 세 가지 중 두 가지(같은 FBPA 재발, remapped rows 증가)가 성립했고, soft error 가설은 기각한다.
+
+여담으로 3차 발생은 1차와 똑같이 검출 이벤트 2건(volatile 카운터 2)에 새 remap row 1개였다. 남은 궁금증에 적어 둔 "카운터 2" 미스터리의 재현으로, 같은 불량 row가 두 번 검출된다는 가설 쪽에 무게가 실린다.
+
+## 세 번째 리셋의 복병: 호스트로 옮겨간 핸들
+
+리셋 절차는 세 번 모두 같은 플레이북(operand 라벨 스위치 → persistence 해제 → 단독 리셋 → 원복)이었는데, 3차에서는 다 걷어냈는데도 리셋이 거부됐다. `fuser`로 보유자를 다시 확인하니 이번엔 k8s 파드가 아니었다.
+
+```shell
+my-user@gpu-node-a:~$ sudo fuser -v /dev/nvidia1
+                     USER        PID ACCESS COMMAND
+/dev/nvidia1:        root    1873116 F.... nv-hostengine
+
+my-user@gpu-node-a:~$ cat /proc/1873116/cgroup
+0::/system.slice/nvidia-dcgm.service    # k8s 파드가 아니라 호스트 systemd 서비스
+```
+
+그 사이 호스트에 systemd 서비스로 새로 올라온 DCGM(nv-hostengine)이었다. `gpu.deploy.operands=false`는 **k8s operand 파드만** 걷어낸다 — 같은 역할의 데몬이라도 호스트 systemd로 떠 있으면 라벨 스위치의 영향권 밖이다. 조치는 한 줄 추가로 끝났다.
+
+```shell
+my-user@gpu-node-a:~$ sudo systemctl stop nvidia-dcgm
+my-user@gpu-node-a:~$ sudo nvidia-smi -i 1 -r
+GPU 00000000:55:00.0 was successfully reset.
+my-user@gpu-node-a:~$ sudo systemctl start nvidia-dcgm
+```
+
+본문에서 Drain의 실체가 "관리 데몬들의 핸들 제거"였다고 정리했는데, 여기에 한 줄이 더 붙는다. **핸들 보유자 목록은 고정이 아니다.** 1·2차의 블로커는 operand 파드였고 3차는 호스트 DCGM이었다. 절차를 외울 게 아니라, 리셋 전마다 `fuser -v /dev/nvidia*`로 그 시점의 실제 보유자를 확인하는 것이 정석이다.
+
+## 조치 전환: 격리 운용과 선제 RMA 문의
+
+예비 row가 남아 있으니 리셋-복귀를 반복할 수는 있다. 하지만 이 루프에는 함정이 있다. **리셋하면 device plugin이 GPU를 healthy로 되돌리고, GPU는 다시 학습을 배정받고, 학습은 다시 죽는다.** 재발 간격이 5시간이었다가 60시간이었다가 — 예측이 안 되는 이상, RMA 처리 전까지는 리셋 후에도 풀에 복귀시키지 않는 격리 운용(노드당 3/4장)이 안전하다.
+
+그렇다고 곧바로 RMA가 성립하는 것은 아니다. NVIDIA의 공식 RMA 정책을 찾아보면 기준이 명시되어 있다 — **row remapping failure flag가 세트되고, Field Diagnostic으로 검증되었을 때**다. flag가 서는 조건은 세 가지다.
+
+- 이미 uncorrectable row 8개가 remap된 뱅크에서 추가 remap 시도 발생
+- 이미 remap된 row에서 다시 remap 시도 발생
+- 카드 전체 uncorrectable remap 총합 512개 도달
+
+이번 카드는 remapped row 3개에 `Failure: No`라 어느 조건에도 미달이다. 판정 표에서 이 상태를 "RMA 대상"이 아니라 "RMA 검토"로 적은 이유가 정확히 이 임계다. 부수 소득도 있다 — 리셋 전 점검에서 뱅크당 예비 row 개수는 미공개라고 적었는데, failure 트리거 기준으로 uncorrectable은 뱅크당 8개가 한계임을 이 문서에서 확인했다. 문제의 뱅크는 3/8을 소모한 셈이다 (단, A100 세대 문서 기준이라 아키텍처별로 다를 수 있다).
+
+그래서 요청도 "RMA를 진행해 달라"가 아니라 그 전 단계로 보냈다. 보증 범위 확인, RMA 절차 안내, 필요한 추가 진단(`nvidia-bug-report.sh`, `dcgmi diag` 등) 문의, 그리고 발생 이력·열화 진행 근거·환경 요인 배제 확인(온도·스로틀 정상, PCIe AER/MCE 없음, 동일 모델·동일 드라이버의 다른 노드 전량 정상)의 공식 접수다. 공급사가 "진단 결과를 보자"거나 "failure flag까지 관찰하라"고 회신할 수도 있다. 그래도 보증 기간 안에 이력을 접수해 두면, 이후 진단이 결함을 잡거나 임계에 도달했을 때 처음부터 다시 설명할 필요 없이 진행될 여지가 커진다. 예비 row 소진까지 기다리면 증거는 확실해지겠지만, 그 사이 학습이 죽는 비용과 보증 기간이라는 변수가 쌓인다는 계산도 그대로다.
+
+> 처음에는 들인 지 얼마 되지 않은 새 카드가 왜 벌써 이런 문제가 나타날까 생각했는데, 찾아 보니 오히려 그래서 — 얼마 되지 않은 카드라서 — 라고 한다. 하드웨어 고장률은 시간 축에서 **욕조 곡선(bathtub curve)**을 그리는데, 제조 결함이 있는 개체는 대개 초기 몇 달의 **초기 불량(infant mortality)** 구간에서 드러나고, 보증이 정확히 이 구간을 위해 존재한다. 신품 카드의 진행성 메모리 결함은 운영 실수의 결과가 아니라 교과서적인 RMA 케이스다. 더 파고 싶다면 bathtub curve, infant mortality, MTBF 같은 신뢰성 공학 키워드로 시작하면 된다.
+
+현재 이 카드의 InfoROM에는 remap된 row 3개와 aggregate 카운터 5가 남아 있다. 판정이 어느 쪽으로 나든, 추후에는 발생 기록이 근거 자료가 될 수 있다.
 
 <br>
 
@@ -558,7 +623,7 @@ GPU-cd616af2-..., 0, 0, No, No
 - [NCCL Communicator Lazy Init 디버깅]({% post_url 2026-04-18-Dev-NCCL-Communicator-Lazy-Init-Debugging %})
 - [GPU 팬텀 사용률]({% post_url 2026-05-11-Dev-GPU-Phantom-Utilization %})
 - [커널 메시지 - 1. printk와 커널 링버퍼]({% post_url 2026-07-29-CS-Kernel-Message-01 %})
-- [NVIDIA GPU Memory Error Management](https://docs.nvidia.com/deploy/gpu-memory-error-management/index.html)
+- [NVIDIA GPU Memory Error Management](https://docs.nvidia.com/deploy/a100-gpu-mem-error-mgmt/index.html)
 - [NVIDIA Xid Errors](https://docs.nvidia.com/deploy/xid-errors/index.html)
 - [NVIDIA GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/index.html)
 
