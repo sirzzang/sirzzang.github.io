@@ -1,0 +1,1435 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.1. 기본 생성 요청: 첫 기동과 낮은 처리량 - Eraser’s StudyLog</title>
+<meta name="description" content="서비스를 직접 기동해 프로세스 구조를 관찰하고, 부하 테스트로 단일 워커의 순차 처리 병목을 재현해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.1. 기본 생성 요청: 첫 기동과 낮은 처리량">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/">
+
+
+  <meta property="og:description" content="서비스를 직접 기동해 프로세스 구조를 관찰하고, 부하 테스트로 단일 워커의 순차 처리 병목을 재현해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-08-14T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-08-15T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.1. 기본 생성 요청: 첫 기동과 낮은 처리량">
+    <meta itemprop="description" content="서비스를 직접 기동해 프로세스 구조를 관찰하고, 부하 테스트로 단일 워커의 순차 처리 병목을 재현해 보자.">
+    <meta itemprop="datePublished" content="2026-08-14T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-08-15T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.1. 기본 생성 요청: 첫 기동과 낮은 처리량
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-08-14T00:00:00+09:00">2026년 08월 14일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  14 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#실습-환경">실습 환경</a></li>
+  <li><a href="#서버-기동과-프로세스-관찰">서버 기동과 프로세스 관찰</a>
+    <ul>
+      <li><a href="#기동-로그-해부">기동 로그 해부</a></li>
+      <li><a href="#프로세스-트리-확인">프로세스 트리 확인</a></li>
+    </ul>
+  </li>
+  <li><a href="#실습-기본-생성-요청">실습: 기본 생성 요청</a>
+    <ul>
+      <li><a href="#왜-출력이-책-예제와-똑같은가">왜 출력이 책 예제와 똑같은가</a></li>
+      <li><a href="#테스트-스위트-실행">테스트 스위트 실행</a></li>
+    </ul>
+  </li>
+  <li><a href="#검증-낮은-처리량-재현">검증: 낮은 처리량 재현</a></li>
+  <li><a href="#트러블슈팅">트러블슈팅</a>
+    <ul>
+      <li><a href="#linux-gpu-서버-blackwell-세대와-고정된-버전-핀">Linux GPU 서버: Blackwell 세대와 고정된 버전 핀</a></li>
+      <li><a href="#mac-vllm-소스-빌드-실패와-lazy-import">Mac: vLLM 소스 빌드 실패와 lazy import</a></li>
+      <li><a href="#결정-vllm-실습은-제외">결정: vLLM 실습은 제외</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Hands-On LLM Serving and Optimization Study (LLMSO) 2주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>실습은 Mac(Apple Silicon)에서 진행했다. vLLM은 Mac(공식 wheel 없음)과 Linux GPU 서버(Blackwell 세대 ↔ 실습 고정 버전 핀 불일치) 양쪽에서 손쉽게 뜨지 않아, 시간 제약상 트러블슈팅을 접고 lazy import로 우회해 vLLM 경로 실습은 제외했다</li>
+  <li>기동하면 프로세스가 3개 보인다: FastAPI 부모, multiprocessing resource_tracker, 그리고 ModelWorker 자식. 부모에는 모델이 없다 — <a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">2편</a>에서 코드로 본 프로세스 격리가 프로세스 목록으로 그대로 보인다</li>
+  <li>모델 로딩 로그에서 Hugging Face <code class="highlighter-rouge">from_pretrained()</code>가 받아 오는 파일들(config, 가중치, 토크나이저 3종)을 해부했다. 캐시를 열어 보면 transformers가 .bin 가중치 로드 후 백그라운드로 safetensors 변환본까지 받아 두는 동작도 관찰된다</li>
+  <li><code class="highlighter-rouge">/basic_generate</code>는 잘 동작하고, 생성 결과가 책 예제와 완전히 같다 — 기본값이 greedy decoding이라 출력이 결정적이기 때문이다</li>
+  <li>hey 부하 테스트로 동시성을 1에서 10으로 늘려도 처리량은 약 0.9 req/s로 고정되고 p90 지연만 1.5초에서 11.2초로 늘었다. 단일 워커의 순차 처리 병목이 명확하게 재현됐다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="실습-환경">실습 환경</h1>
+
+<p><a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">2편</a>에서 해부한 코드를 이제 실제로 돌린다. 실습 환경은 Mac(Apple Silicon)이고, Python 3.12 가상 환경을 사용했다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span><span class="nb">cd </span>ch03/single_model_llm_serving
+~<span class="nv">$ </span>python3.12 <span class="nt">-m</span> venv venv
+~<span class="nv">$ </span><span class="nb">source </span>venv/bin/activate
+~<span class="nv">$ </span>pip install <span class="nt">-r</span> requirements.txt
+</code></pre></div></div>
+
+<p>원본 <code class="highlighter-rouge">requirements.txt</code>와 달리 vLLM은 별도 파일로 분리했다. Apple Silicon에는 vLLM 공식 wheel이 없어 설치가 간단치 않고(<a href="#트러블슈팅">트러블슈팅</a> 참고), 4개 엔드포인트 중 vLLM이 필요한 것은 <code class="highlighter-rouge">/generate_vllm</code> 하나뿐이라, 나머지 세 엔드포인트 실습을 위해 vLLM까지 설치하지는 않았다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># requirements.txt — vllm을 분리한 버전</span>
+<span class="c"># vllm 은 CUDA 전제라 macOS(Apple Silicon)에서는 wheel 이 없고 소스 빌드도 실패한다</span>
+<span class="c">#   (cmake --build . --target=_C → exit 134).</span>
+<span class="c"># Linux + NVIDIA GPU 에서 /generate_vllm 까지 하려면: pip install -r requirements-vllm.txt</span>
+<span class="nv">setuptools</span><span class="o">==</span>77.0.3
+<span class="nv">fastapi</span><span class="o">==</span>0.115.12
+<span class="nv">uvicorn</span><span class="o">==</span>0.24.0
+<span class="nv">pydantic</span><span class="o">==</span>2.11.5
+<span class="nv">transformers</span><span class="o">==</span>4.52.4
+<span class="nv">torch</span><span class="o">==</span>2.7.0
+<span class="nv">numpy</span><span class="o">==</span>1.26.4
+<span class="nv">debugpy</span><span class="o">==</span>1.8.0
+<span class="nv">pytest</span><span class="o">==</span>8.4.0
+<span class="nv">httpx</span><span class="o">==</span>0.27.0
+pytest-asyncio<span class="o">==</span>1.0.0
+</code></pre></div></div>
+
+<p>PyTorch가 Apple Silicon의 GPU 백엔드(MPS, Metal Performance Shaders)를 인식하는 것도 확인해 둔다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>python <span class="nt">-c</span> <span class="s2">"import torch; print(torch.backends.mps.is_available())"</span>
+True
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="서버-기동과-프로세스-관찰">서버 기동과 프로세스 관찰</h1>
+
+<h2 id="기동-로그-해부">기동 로그 해부</h2>
+
+<p><code class="highlighter-rouge">python main.py</code>로 서버를 띄우면, 2편에서 코드로 읽었던 초기화 순서가 로그로 흘러나온다. 모델을 처음 받는  단계의 로그다 (경로·호스트명은 정리했다).</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>python main.py
+2026-08-12 00:50:35,918 - llm.model_executor - DEBUG - ModelExecutor initialized with queues
+2026-08-12 00:50:35,918 - llm.model_executor - DEBUG - Setting up worker with model: facebook/opt-125m
+2026-08-12 00:50:35,918 - llm.model_executor - DEBUG - Starting worker process
+2026-08-12 00:50:35,925 - llm.model_executor - DEBUG - Worker process started
+INFO:     Started server process <span class="o">[</span>30553]
+INFO:     Waiting <span class="k">for </span>application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 <span class="o">(</span>Press CTRL+C to quit<span class="o">)</span>
+2026-08-12 00:50:38,341 - llm.model_worker - DEBUG - Waiting <span class="k">for </span>debugger to attach...
+2026-08-12 00:50:38,342 - llm.model_worker - DEBUG - Debugger attached!
+2026-08-12 00:50:38,342 - llm.model_worker - DEBUG - Loading model facebook/opt-125m on device cpu
+config.json: 100%|█████████████| 651/651 <span class="o">[</span>00:00&lt;00:00, 6.44MB/s]
+pytorch_model.bin: 100%|███████| 251M/251M <span class="o">[</span>00:25&lt;00:00, 9.98MB/s]
+generation_config.json: 100%|██| 137/137 <span class="o">[</span>00:00&lt;00:00, 1.80MB/s]
+tokenizer_config.json: 100%|███| 685/685 <span class="o">[</span>00:00&lt;00:00, 9.81MB/s]
+vocab.json: 899kB <span class="o">[</span>00:00, 1.03MB/s]
+merges.txt: 456kB <span class="o">[</span>00:00, 1.21MB/s]
+special_tokens_map.json: 100%|█| 441/441 <span class="o">[</span>00:00&lt;00:00, 7.09MB/s]
+2026-08-12 00:51:13,921 - llm.model_worker - DEBUG - Worker initialized
+2026-08-12 00:51:13,922 - llm.model_worker - DEBUG - Waiting <span class="k">for </span>batch from queue...
+model.safetensors: 100%|███████| 251M/251M <span class="o">[</span>00:21&lt;00:00, 11.6MB/s]
+</code></pre></div></div>
+
+<p>로그 순서대로 살펴 보자.</p>
+
+<ul>
+  <li><strong><code class="highlighter-rouge">model_executor</code> 로그가 먼저 나온다.</strong> 부모 프로세스에서 <code class="highlighter-rouge">LLMEngine.__init__</code> → <code class="highlighter-rouge">ModelExecutor</code> 생성(큐 준비) → <code class="highlighter-rouge">setup_worker()</code>(자식 프로세스 start)가 순서대로 실행되기 때문이다. <code class="highlighter-rouge">Worker process started</code>는 자식 기동을 “요청”한 시점이고, 실제 자식이 임포트를 마치고 살아나는 데는 시간이 걸린다</li>
+  <li><strong>그 사이 uvicorn이 먼저 뜬다.</strong> 자식 프로세스 초기화는 비동기로 진행되므로, 부모는 곧바로 서버 기동 로그(<code class="highlighter-rouge">Uvicorn running...</code>)까지 진행한다. HTTP 포트는 열렸지만 모델은 아직 로딩 중인 구간이 존재한다는 뜻이다 — 프로덕션이라면 readiness 체크가 필요한 지점이다</li>
+  <li><strong>3초 뒤부터 <code class="highlighter-rouge">model_worker</code> 로그가 나온다.</strong> 여기서부터는 자식 프로세스의 출력이다. 모델 로딩과 다운로드가 전부 자식에서 일어난다</li>
+  <li><code class="highlighter-rouge">Waiting for debugger to attach... / Debugger attached!</code>는 실제 debugpy 연결 코드가 없는 <strong>죽은 로그 문구</strong>다(2편에서 코드로 확인). 디버깅 실험의 흔적으로 보인다</li>
+</ul>
+
+<p>다운로드된 파일들은 <code class="highlighter-rouge">from_pretrained()</code> 한 줄이 실제로 무엇을 가져오는지 보여 준다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>파일</th>
+      <th>크기</th>
+      <th>정체</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>config.json</td>
+      <td>651B</td>
+      <td>모델 구조 하이퍼파라미터 — opt-125m은 12 레이어, hidden 768, 헤드 12다. <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/">1주차에 본 KV cache 공식</a>의 상수들이 여기서 온다</td>
+    </tr>
+    <tr>
+      <td>pytorch_model.bin</td>
+      <td>251MB</td>
+      <td>가중치 본체. 1.25억 파라미터 × fp32(4바이트) ≈ 500MB가 아니라 251MB인 것은 저장이 fp16이기 때문이다 (config.json의 <code class="highlighter-rouge">torch_dtype: float16</code>으로 확인)</td>
+    </tr>
+    <tr>
+      <td>generation_config.json</td>
+      <td>137B</td>
+      <td><code class="highlighter-rouge">generate()</code>의 기본 생성 설정 (max_length, 샘플링 여부 등)</td>
+    </tr>
+    <tr>
+      <td>tokenizer_config.json, special_tokens_map.json</td>
+      <td>각 수백 B</td>
+      <td>토크나이저 설정과 특수 토큰 정의</td>
+    </tr>
+    <tr>
+      <td>vocab.json</td>
+      <td>899KB</td>
+      <td>BPE 어휘 사전 — 토큰 문자열 → id 매핑</td>
+    </tr>
+    <tr>
+      <td>merges.txt</td>
+      <td>456KB</td>
+      <td>BPE 병합 규칙 — <a href="/ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/">1주차 임베딩 글</a>에서 본 토큰화가 실제로 이 두 파일로 동작한다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>마지막 줄이 흥미롭다. 워커 초기화가 끝난 <strong>뒤에</strong> <code class="highlighter-rouge">model.safetensors</code> 251MB가 한 번 더 받아진다. 로컬 캐시를 열어 보면 어떤 파일인지 확인할 수 있다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 캐시에 스냅샷(리비전)이 두 개 생겼다</span>
+~<span class="nv">$ </span><span class="nb">ls</span> ~/.cache/huggingface/hub/models--facebook--opt-125m/snapshots/<span class="k">*</span>/
+.../27dcfa74d334bc.../:   <span class="c"># refs/main이 가리키는 리비전 — 실제 로드에 사용</span>
+config.json  generation_config.json  merges.txt  pytorch_model.bin  ...
+.../1f9886ce095904.../:   <span class="c"># 별도 리비전 — 워커 초기화 17초 뒤에 받아짐</span>
+model.safetensors
+</code></pre></div></div>
+
+<p>opt-125m 저장소의 main 리비전에는 safetensors 포맷이 없어서 transformers가 pytorch_model.bin을 받아 로드했고, 그 직후 <strong>백그라운드 스레드로 허브의 safetensors 변환본(별도 리비전)을 미리 받아 둔</strong> 것이다. safetensors는 pickle 기반 .bin의 임의 코드 실행 위험을 제거한 가중치 직렬화 포맷으로, transformers는 가능하면 이쪽을 우선한다. 지금은 “가중치 파일에는 두 포맷이 있고, safetensors가 안전해서 선호된다” 정도면 충분하고, 포맷 내부 구조까지는 이 실습 범위 밖이다.</p>
+
+<h2 id="프로세스-트리-확인">프로세스 트리 확인</h2>
+
+<p>서버가 뜬 상태에서 프로세스를 확인한다. Linux 예시들이 쓰는 <code class="highlighter-rouge">ss</code> 대신 Mac에서는 <code class="highlighter-rouge">lsof</code>를 쓴다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 8000 포트 리슨 확인</span>
+~<span class="nv">$ </span>lsof <span class="nt">-nP</span> <span class="nt">-iTCP</span>:8000 <span class="nt">-sTCP</span>:LISTEN
+COMMAND   PID   USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+Python  30553 my-user  20u  IPv4 0x744d7a9c7af14579      0t0  TCP <span class="k">*</span>:8000 <span class="o">(</span>LISTEN<span class="o">)</span>
+
+<span class="c"># 메인 프로세스와 그 자식들</span>
+~<span class="nv">$ </span>ps <span class="nt">-axo</span> pid,ppid,rss,%cpu,%mem,state,etime,command | awk <span class="nt">-v</span> <span class="nv">pid</span><span class="o">=</span>30553 <span class="s1">'NR==1 || $1==pid || $2==pid'</span>
+  PID  PPID    RSS  %CPU %MEM STAT     ELAPSED COMMAND
+30553 93922  56352   0.0  0.2 S+         11:13 .../Python main.py
+30797 30553   7856   0.0  0.0 S+         10:56 .../Python <span class="nt">-c</span> from multiprocessing.resource_tracker import main<span class="p">;</span>main<span class="o">(</span>4<span class="o">)</span>
+30798 30553  70304   0.0  0.2 S+         10:56 .../Python <span class="nt">-c</span> from multiprocessing.spawn import spawn_main<span class="p">;</span> spawn_main<span class="o">(</span>...<span class="o">)</span> <span class="nt">--multiprocessing-fork</span>
+</code></pre></div></div>
+
+<p>프로세스 세 개의 정체는 다음과 같다.</p>
+
+<ul>
+  <li><strong>30553 — FastAPI 메인 서버 (부모).</strong> 2편에서 본 대로 여기에는 모델이 없다</li>
+  <li><strong>30797 — multiprocessing resource_tracker.</strong> 파이썬 multiprocessing이 공유 자원(세마포어 등)의 누수를 정리하려고 자동으로 띄우는 보조 프로세스다</li>
+  <li><strong>30798 — ModelWorker (자식).</strong> 커맨드라인이 <code class="highlighter-rouge">main.py</code>가 아니라 <code class="highlighter-rouge">spawn_main</code>으로 보이는 이유는 macOS의 기본 프로세스 시작 방식이 <code class="highlighter-rouge">spawn</code>이기 때문이다. spawn은 새 인터프리터를 띄워 필요한 것만 다시 임포트하므로 커맨드라인에 spawn_main이 노출된다. 반면 Linux의 기본값은 <code class="highlighter-rouge">fork</code>라서 자식의 커맨드라인이 부모와 똑같이 <code class="highlighter-rouge">python main.py</code>로 보인다 — 아래 예시와의 차이 중 하나다</li>
+</ul>
+
+<p><code class="highlighter-rouge">STAT</code>의 <code class="highlighter-rouge">S+</code>는 에러가 아니라 요청을 기다리며 잠들어 있다는 뜻이고, RSS가 부모 약 55MB·워커 약 69MB 수준인 것은 이 시점 워커가 아직 요청을 받기 전이기 때문이다(모델 텐서가 실제로 접근되기 전이라 상주 메모리에 다 잡히지 않는다).</p>
+
+<p>스터디 실습 자료의 예시(Linux + NVIDIA GPU, vLLM 포함 원본 코드)와 비교하면 그림이 다르다.</p>
+
+<details>
+  <summary><b>스터디 자료 예시: Linux + GPU 환경의 프로세스와 GPU 메모리</b></summary>
+
+  <div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 스터디 실습 자료 예시 출력 (Linux, RTX 4070 16GB, vLLM 포함)</span>
+~<span class="nv">$ </span>ps auxf | tail <span class="nt">-n</span> 3
+root  30195  ... <span class="se">\_</span> venv/bin/python main.py     <span class="c"># 부모: uvicorn + FastAPI</span>
+root  30237  ...     <span class="se">\_</span> venv/bin/python main.py <span class="c"># 자식 1: ModelWorker (GPU 788MiB)</span>
+root  30323  ...     <span class="se">\_</span> venv/bin/python main.py <span class="c"># 자식 2: vLLM EngineCore (GPU 13,762MiB)</span>
+
+~<span class="nv">$ </span>nvidia-smi
+<span class="c"># Processes:</span>
+<span class="c">#   PID 30237  C  venv/bin/python    788MiB     ← transformers ModelWorker</span>
+<span class="c">#   PID 30323  C  venv/bin/python  13762MiB     ← vLLM EngineCore</span>
+<span class="c"># 부모(30195)는 GPU 미사용</span>
+</code></pre></div>  </div>
+
+  <ul>
+    <li>ModelWorker(788MiB): opt-125m은 1.25억 파라미터짜리 작은 모델이라 GPU 메모리를 많이 쓰지 않는다</li>
+    <li>vLLM EngineCore(13.7GiB): vLLM 0.9(V1 아키텍처)는 단일 GPU여도 모델 실행을 별도 EngineCore 프로세스로 분리한다. 메모리가 큰 이유는 모델이 커서가 아니라(가중치는 0.24GiB), <code class="highlighter-rouge">gpu_memory_utilization</code> 기본값 0.9에 따라 <strong>KV 캐시용으로 GPU 메모리의 90%를 미리 선점</strong>하기 때문이다</li>
+    <li>부모 프로세스는 GPU를 전혀 쓰지 않는다 — CPU 오케스트레이션/GPU 연산 격리가 nvidia-smi에서도 확인된다</li>
+  </ul>
+
+</details>
+
+<p>내 환경과 예시의 차이는 세 가지로 정리된다. 명령어가 다르고(<code class="highlighter-rouge">ss</code> → <code class="highlighter-rouge">lsof</code>, <code class="highlighter-rouge">ps auxf</code> → <code class="highlighter-rouge">ps -axo</code>), 자식 프로세스 이름이 다르게 보이며(fork vs spawn), <strong>vLLM EngineCore 프로세스가 없다</strong>. 마지막 것은 vLLM을 설치하지 않았으니 정상이다.</p>
+
+<p><br /></p>
+
+<h1 id="실습-기본-생성-요청">실습: 기본 생성 요청</h1>
+
+<p>이제 몇 가지 테스트 케이스로 <code class="highlighter-rouge">/basic_generate</code> API가 예상대로 동작하는지 확인한다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>curl <span class="nt">-s</span> <span class="nt">-X</span> POST http://localhost:8000/basic_generate <span class="se">\</span>
+  <span class="nt">-H</span> <span class="s2">"Content-Type: application/json"</span> <span class="se">\</span>
+  <span class="nt">-d</span> <span class="s1">'{"prompt": "Hello, I am"}'</span> | jq
+<span class="o">{</span>
+  <span class="s2">"generated_text"</span>: <span class="s2">"Hello, I am a student at the University of California, Berkeley. I am a"</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>동작한다. 요청 하나가 Sequence로 포장되어 task_queue를 건너 자식 프로세스에서 추론되고, result_queue로 돌아오는 <a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">2편의 경로</a> 그대로다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-single-model-serving-basic-generate-resource-usage.gif" alt="기본 생성 요청 처리 중 리소스 사용 관찰" class="align-center" /></p>
+
+<center><sup>기본 생성 요청을 처리하는 동안의 프로세스 리소스 사용 변화. 직접 캡처</sup></center>
+
+<h2 id="왜-출력이-책-예제와-똑같은가">왜 출력이 책 예제와 똑같은가</h2>
+
+<p>처음 봤을 때 의아했던 점 — 내 Mac에서 생성한 결과가 책 예제의 출력과 <strong>토씨 하나까지 같다</strong>. 답은 디코딩 방식에 있다. 이 서비스의 <code class="highlighter-rouge">model.generate()</code> 호출은 샘플링 옵션을 켜지 않았고, transformers의 기본값은 <code class="highlighter-rouge">do_sample=False</code>, 즉 <strong>greedy decoding</strong>이다. 매 스텝에서 확률이 가장 높은 토큰 하나만 고르므로, 같은 가중치에 같은 프롬프트를 넣으면 언제 어디서 돌려도 같은 토큰열이 나온다.</p>
+
+<p><a href="/ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/">1주차 출력층 글</a>에서 본 temperature나 top-k 같은 샘플링 노브는 <code class="highlighter-rouge">do_sample=True</code>일 때 비로소 개입한다. 반대로 말하면, 서빙 시스템을 검증하는 지금 같은 상황에서는 greedy의 결정론이 오히려 유용하다 — 출력이 달라지면 모델 문제가 아니라 시스템 문제라고 바로 좁힐 수 있기 때문이다.</p>
+
+<p>그렇다면 ChatGPT나 Claude는 왜 같은 질문에도 매번 다르게 답할까. 상용 챗 서비스는 반대로 <strong>샘플링을 켠다.</strong> <code class="highlighter-rouge">temperature</code>를 0보다 크게 두어 확률 분포를 평탄하게 만들고, <code class="highlighter-rouge">top-p</code>(nucleus)·<code class="highlighter-rouge">top-k</code>로 후보를 추린 뒤 그 안에서 무작위로 뽑는다. 매 스텝이 난수 추출이라, <strong>seed를 고정하지 않으면</strong> 같은 프롬프트라도 실행마다 다른 토큰열이 나온다. 이건 버그가 아니라 의도된 설계다 — greedy 출력은 반복적이고 단조로워서, 다양성과 창의성을 위해 일부러 무작위성을 넣는 것이다(일부 API는 재현용 <code class="highlighter-rouge">seed</code> 옵션을 따로 제공한다).</p>
+
+<blockquote>
+  <p>한 가지 더 — <code class="highlighter-rouge">temperature=0</code>(greedy)으로 두어도 프로덕션에서는 완전한 재현이 보장되지 않는다. GPU 커널이 배치 구성·병렬화에 따라 부동소수점 덧셈 순서를 바꾸고, 부동소수점은 결합법칙이 성립하지 않아(<code class="highlighter-rouge">a+b+c ≠ a+c+b</code>) 로짓이 미세하게 흔들리기 때문이다. continuous batching으로 같이 묶이는 다른 요청이 달라지면 내 결과의 argmax가 뒤집힐 수도 있다. 이 batch invariance 문제는 서빙 재현성의 별도 주제라, 여기서는 “greedy도 프로덕션에선 완전 결정론이 아니다”까지만 짚어 둔다.</p>
+</blockquote>
+
+<h2 id="테스트-스위트-실행">테스트 스위트 실행</h2>
+
+<p><a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">2편에서 코드로 읽은 테스트</a>도 실제로 돌려 봤다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>venv/bin/python <span class="nt">-m</span> pytest tests/test_api.py <span class="nt">-v</span>
+<span class="c"># 실행 결과 (핵심 발췌)</span>
+tests/test_api.py::test_generate PASSED                                  <span class="o">[</span> 25%]
+tests/test_api.py::test_generate_batch PASSED                            <span class="o">[</span> 50%]
+tests/test_api.py::test_generate_stream PASSED                           <span class="o">[</span> 75%]
+tests/test_api.py::test_generate_stream_concurrent PASSED                <span class="o">[</span>100%]
+<span class="o">========================</span> 4 passed, 2 warnings <span class="k">in </span>39.01s <span class="o">========================</span>
+</code></pre></div></div>
+
+<p>4개 테스트(기본 생성, 배치, 스트리밍, 동시 스트리밍)가 모두 통과한다. 39초가 걸린 것은 테스트가 모킹 없이 진짜 엔진과 모델을 띄우는 통합 테스트이기 때문이다. 경고 2건은 httpx 0.27의 <code class="highlighter-rouge">AsyncClient(app=...)</code> 문법이 deprecated라는 내용으로, 기능에는 영향이 없다.</p>
+
+<p>다만 부산물이 하나 있었다. <code class="highlighter-rouge">4 passed</code>가 찍힌 뒤에도 <strong>pytest 프로세스가 종료되지 않았다.</strong> 프로세스를 확인해 보니 테스트가 띄운 ModelWorker 자식(spawn_main)과 resource_tracker가 그대로 살아 있었다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>ps <span class="nt">-axo</span> pid,ppid,etime,stat,command | awk <span class="s1">'NR==1 || $2==46024 || $1==46024'</span>
+  PID  PPID  ELAPSED STAT COMMAND
+46024 46023    07:52 S    .../Python <span class="nt">-m</span> pytest tests/test_api.py <span class="nt">-v</span>      <span class="c"># 테스트는 39초에 끝났는데 살아 있음</span>
+46135 46024    07:46 S    .../Python <span class="nt">-c</span> from multiprocessing.resource_tracker import main<span class="p">;</span>main<span class="o">(</span>12<span class="o">)</span>
+46136 46024    07:46 S    .../Python <span class="nt">-c</span> from multiprocessing.spawn import spawn_main<span class="p">;</span> spawn_main<span class="o">(</span>...<span class="o">)</span>
+</code></pre></div></div>
+
+<p>원인은 워커의 구조다. ModelWorker는 <code class="highlighter-rouge">while True</code>로 큐를 기다리는 무한 루프이고 비데몬(mp.Process 기본값) 프로세스라서, 부모 인터프리터가 종료 시점에 자식 join을 기다리며 멈춘다. <code class="highlighter-rouge">python main.py</code>로 직접 실행할 때는 SIGINT/SIGTERM 시그널 핸들러가 cleanup을 호출하지만, pytest 경유 실행에서는 이 정리 경로가 워커를 끝내 주지 못한 것으로 보인다. 자식 프로세스를 만드는 서빙 코드는 <strong>정상 경로만큼 종료 경로가 중요하다</strong>는 것을 테스트가 덤으로 보여 준 셈이다.</p>
+
+<p>vLLM 경로 테스트는 예상대로 임포트 단계에서 실패한다. 환경 제약이 테스트 결과로도 확인된다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>venv/bin/python <span class="nt">-m</span> pytest tests/test_vllm.py <span class="nt">-v</span>
+<span class="c"># 실행 결과 (핵심 발췌)</span>
+E       ModuleNotFoundError: No module named <span class="s1">'vllm'</span>
+<span class="o">=========================</span> 3 failed, 1 passed <span class="k">in </span>2.50s <span class="o">==========================</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="검증-낮은-처리량-재현">검증: 낮은 처리량 재현</h1>
+
+<p>교재는 이 서비스를 그대로 운영하면 <strong>가장 먼저 마주칠 문제가 낮은 처리량</strong>이라고 말한다. 재현해 본다. 간단한 HTTP 부하 테스트 도구 <a href="https://github.com/rakyll/hey">hey</a>를 쓴다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>brew install hey
+
+<span class="c"># 동시 1개씩, 총 5개 요청</span>
+~<span class="nv">$ </span>hey <span class="nt">-n</span> 5 <span class="nt">-c</span> 1 <span class="nt">-t</span> 300 <span class="se">\</span>
+  <span class="nt">-m</span> POST <span class="se">\</span>
+  <span class="nt">-H</span> <span class="s2">"Content-Type: application/json"</span> <span class="se">\</span>
+  <span class="nt">-d</span> <span class="s1">'{"prompt": "Hello, I am"}'</span> <span class="se">\</span>
+  http://localhost:8000/basic_generate
+</code></pre></div></div>
+
+<p>옵션은 <code class="highlighter-rouge">-n</code>(총 요청 수), <code class="highlighter-rouge">-c</code>(동시 요청 수), <code class="highlighter-rouge">-t</code>(요청별 제한 시간)다. 결과를 읽을 때 보는 곳은 네 군데다 — Summary의 <code class="highlighter-rouge">Total</code>(전체 소요)과 <code class="highlighter-rouge">Requests/sec</code>(처리량), Latency distribution의 p50/p90(중앙값과 꼬리 지연), Response time histogram(완료 시각 분포), 그리고 Details의 <code class="highlighter-rouge">resp wait</code>(서버 응답 대기 — 병목이 네트워크인지 서버인지 가른다).</p>
+
+<p>첫 실행 결과의 핵심 부분이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실행 결과 (핵심 발췌)</span>
+Summary:
+  Total:        5.9244 secs
+  Average:      1.1849 secs
+  Requests/sec: 0.8440
+
+Details <span class="o">(</span>average, fastest, slowest<span class="o">)</span>:
+  resp <span class="nb">wait</span>:    1.1838 secs, 1.1013 secs, 1.2608 secs
+
+Status code distribution:
+  <span class="o">[</span>200] 5 responses
+</code></pre></div></div>
+
+<p>요청 하나에 약 1.2초, 처리량 약 0.84 req/s가 이 서비스의 기준선이다. 이제 총 요청을 10개로 고정하고 동시성만 1, 2, 5, 10으로 올려 가며 반복한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>동시 요청</th>
+      <th>총 시간</th>
+      <th>평균 응답</th>
+      <th>p50</th>
+      <th>p90</th>
+      <th>처리량</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>11.26초</td>
+      <td>1.13초</td>
+      <td>1.06초</td>
+      <td>1.54초</td>
+      <td>0.888 req/s</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>10.89초</td>
+      <td>2.07초</td>
+      <td>2.08초</td>
+      <td>2.52초</td>
+      <td>0.919 req/s</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>10.44초</td>
+      <td>4.20초</td>
+      <td>5.10초</td>
+      <td>6.28초</td>
+      <td>0.958 req/s</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>11.21초</td>
+      <td>6.14초</td>
+      <td>6.57초</td>
+      <td>11.21초</td>
+      <td>0.892 req/s</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>숫자가 말하는 것은 네 가지다.</p>
+
+<ul>
+  <li><strong>동시성을 10배 높여도 처리량은 그대로다.</strong> 0.888 → 0.919 → 0.958 → 0.892 req/s. c=5에서의 8% 개선은 측정 편차 수준이고, 유의미한 확장이 아니다</li>
+  <li><strong>처리량 대신 지연만 증가한다.</strong> 평균 응답은 1.13초 → 6.14초로 5.5배, p90은 1.54초 → 11.21초로 7배 이상 늘었다. 동시 요청 10개 중 느린 요청은 11초를 기다렸다</li>
+  <li><strong>총 처리 시간이 항상 10~11초다.</strong> 진짜 병렬 처리가 됐다면 동시성을 높일수록 총 시간이 줄어야 한다. 줄지 않았다는 것은 서버가 약 1초에 하나씩 순서대로 처리하고 있다는 뜻이다</li>
+  <li><strong>네트워크 병목이 아니다.</strong> c=10 기준 연결(DNS+dialup)은 3.4ms인데 <code class="highlighter-rouge">resp wait</code>가 6.14초다. 시간은 전부 서버 안에서 쓰였다</li>
+</ul>
+
+<p>c=10의 히스토그램은 순차 처리를 시각적으로 보여 준다. 10개를 동시에 보냈는데 완료 시각이 약 1초 간격의 계단으로 늘어선다.</p>
+
+<details>
+  <summary><b>c=10 전체 출력 (계단형 완료 패턴)</b></summary>
+
+  <div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>hey <span class="nt">-n</span> 10 <span class="nt">-c</span> 10 <span class="nt">-t</span> 300 <span class="nt">-m</span> POST <span class="se">\</span>
+  <span class="nt">-H</span> <span class="s2">"Content-Type: application/json"</span> <span class="se">\</span>
+  <span class="nt">-d</span> <span class="s1">'{"prompt": "Hello, I am"}'</span> <span class="se">\</span>
+  http://localhost:8000/basic_generate
+
+Summary:
+  Total:        11.2146 secs
+  Slowest:      11.2144 secs
+  Fastest:      1.0574 secs
+  Average:      6.1401 secs
+  Requests/sec: 0.8917
+
+Response <span class="nb">time </span>histogram:
+  1.057 <span class="o">[</span>1]     |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  2.073 <span class="o">[</span>0]     |
+  3.089 <span class="o">[</span>1]     |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  4.104 <span class="o">[</span>1]     |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  5.120 <span class="o">[</span>1]     |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  6.136 <span class="o">[</span>1]     |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  7.152 <span class="o">[</span>1]     |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  8.167 <span class="o">[</span>1]     |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  9.183 <span class="o">[</span>1]     |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  10.199 <span class="o">[</span>1]    |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  11.214 <span class="o">[</span>1]    |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+Latency distribution:
+  10%% <span class="k">in </span>2.1301 secs
+  25%% <span class="k">in </span>4.4392 secs
+  50%% <span class="k">in </span>6.5650 secs
+  75%% <span class="k">in </span>10.1291 secs
+  90%% <span class="k">in </span>11.2144 secs
+
+Details <span class="o">(</span>average, fastest, slowest<span class="o">)</span>:
+  DNS+dialup:   0.0034 secs, 0.0032 secs, 0.0036 secs
+  resp <span class="nb">wait</span>:    6.1365 secs, 1.0537 secs, 11.2108 secs
+
+Status code distribution:
+  <span class="o">[</span>200] 10 responses
+</code></pre></div>  </div>
+
+</details>
+
+<p>FastAPI는 요청 10개를 다 받았지만, 요청들이 ModelWorker 앞에 쌓여 한 번에 하나씩 처리되고, 뒤의 요청은 앞 요청이 끝날 때까지 기다린 것이다. 정리하면 다음과 같다.</p>
+
+<blockquote>
+  <p><code class="highlighter-rouge">/basic_generate</code>는 단일 ModelWorker에서 요청을 사실상 순차 처리한다. 동시 요청 수를 1개에서 10개로 늘려도 처리량은 약 0.9 req/s로 증가하지 않았고, 평균·tail 지연만 크게 증가했다. 부하가 늘면 오류가 아니라 대기 시간 누적으로 문제가 드러난다.</p>
+</blockquote>
+
+<p>용어를 엄밀하게 하면 — 모든 요청이 200으로 성공했으므로 장애는 없다. 측정된 것은 “최대 처리량 약 0.9 req/s”와 “처리량 확장성이 매우 낮음”이고, 0.9 req/s가 절대적으로 낮은지는 모델·출력 토큰 수·하드웨어 목표와 비교해야 할 별개 문제다. 다만 이 실습이 보여 주려는 “낮은 처리량 문제”는 명확하게 재현됐다.</p>
+
+<p>모델 워커가 추론 호출당 하나의 프롬프트만 처리하는 현재 구조에서는, LLM이 잘하는 배치 계산 능력이 놀고 있는 셈이다. <a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/">다음 글</a>에서 배칭 지원으로 이 병목을 공략한다.</p>
+
+<p><br /></p>
+
+<h1 id="트러블슈팅">트러블슈팅</h1>
+
+<p>이번 실습은 서비스 코드보다 환경에서 더 오래 막혔다. 겪은 순서대로 남긴다.</p>
+
+<h2 id="linux-gpu-서버-blackwell-세대와-고정된-버전-핀">Linux GPU 서버: Blackwell 세대와 고정된 버전 핀</h2>
+
+<p>처음에는 Linux GPU 서버에서 시작했다. <code class="highlighter-rouge">pip install -r requirements.txt</code>까지는 순조로웠는데, 서버를 띄우자 torch가 경고를 냈고 vLLM 초기화가 죽었다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># torch 경고 (핵심 발췌)</span>
+NVIDIA RTX PRO 6000 Blackwell Server Edition with CUDA capability sm_120
+is not compatible with the current PyTorch installation.
+
+<span class="c"># vLLM EngineCore 초기화 실패 (핵심 발췌)</span>
+ERROR <span class="o">[</span>core.py:500] RuntimeError: CUDA error: no kernel image is available <span class="k">for </span>execution on the device
+RuntimeError: Engine core initialization failed. See root cause above.
+</code></pre></div></div>
+
+<p>원인은 GPU 세대와 바이너리의 불일치다. 이 GPU(Blackwell)는 compute capability <strong>sm_120</strong>인데, requirements가 고정한 <code class="highlighter-rouge">torch==2.7.0</code>(cu126 휠)이 지원하는 아키텍처 목록은 sm_50~sm_90까지라 sm_120용 커널 이미지가 아예 없다. 더 까다로운 것은 torch만 올려서는 해결되지 않는다는 점이다 — vLLM은 자체 CUDA 커널(<code class="highlighter-rouge">_C.abi3.so</code>)을 컴파일해 배포하는데, <code class="highlighter-rouge">vllm==0.9.0.1</code>의 cu126 휠에도 sm_120 코드가 없어서 <strong>vllm 버전 핀 자체를 올려야</strong> 한다. 교육용 코드의 버전 고정을 전부 흔드는 트러블슈팅이 되기에, 실습의 본질이 아니라고 판단하고 시간 제약상 여기서 중단했다.</p>
+
+<p>뒤집어 말하면 이건 <strong>막힌 게 아니라 접은 것</strong>이다. 실패 원인이 순수하게 버전 핀 불일치라, 핀을 sm_120 지원 버전(CUDA 12.8 계열 torch + 그에 맞는 최신 vLLM)으로 올렸다면 이 GPU에서 정상 기동했을 공산이 크다(미검증). 두 환경 중 성공 가능성도 실익도 사실 이쪽이 가장 컸다 — Mac은 <a href="#mac-vllm-소스-빌드-실패와-lazy-import">뒤에서 보듯</a> CPU로만 돌아 GPU 이점을 볼 수 없는 반면, 여기는 되면 곧바로 실제 GPU 서빙이기 때문이다.</p>
+
+<blockquote>
+  <p>여기서 얻은 일반화 하나 — 재현성을 위한 버전 핀은 시간이 지나면 <strong>새 하드웨어와의 비호환</strong>이라는 형태로 되돌아온다. 특히 vLLM처럼 자체 CUDA 커널을 배포하는 패키지는 torch와 GPU 아키텍처, 자기 자신의 세 축이 맞아야 돈다.</p>
+</blockquote>
+
+<h2 id="mac-vllm-소스-빌드-실패와-lazy-import">Mac: vLLM 소스 빌드 실패와 lazy import</h2>
+
+<p>그래서 Mac으로 옮겼는데, 이번에는 vLLM 설치가 걸렸다. Apple Silicon용 공식 wheel이 없어 <code class="highlighter-rouge">pip install</code>로는 안 되고, 소스 빌드를 기본값 그대로 돌리면 CUDA를 전제한 타깃이라 <code class="highlighter-rouge">cmake --build . --target=_C</code>가 exit 134로 죽었다. vLLM에 CPU 전용 빌드 경로(<code class="highlighter-rouge">VLLM_TARGET_DEVICE=cpu</code>)가 따로 있어 더 파고들면 CPU로는 띄울 수 있었을 것으로 보이지만(미검증), 그렇게 해도 Mac GPU(MPS)는 못 써서 vLLM의 GPU 배칭 이점을 관찰하긴 어렵다. 실습의 본질이 아니라고 보고 시간 제약상 여기서 접었다.</p>
+
+<p>문제는 원본 코드가 <code class="highlighter-rouge">llm/llm.py</code> 최상단에서 <code class="highlighter-rouge">import vllm</code>을 한다는 것이다. vLLM이 없으면 <code class="highlighter-rouge">/generate_vllm</code>만 못 쓰는 게 아니라 <strong>앱 전체가 임포트 단계에서 죽는다</strong>. 그래서 두 군데를 고쳤다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># llm/llm.py — [수정] vllm 최상단 import 제거.</span>
+<span class="c"># 원본은 여기서 vllm 을 import 해서, vllm 이 없으면 /generate_vllm 뿐 아니라</span>
+<span class="c"># 앱 전체가 import 단계에서 죽었다. 실제로 쓰는 generate_vllm() 안으로 옮긴다.</span>
+
+<span class="k">class</span> <span class="nc">LLMEngine</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="o">...</span>
+        <span class="c"># [수정] vLLM 모델을 여기서 만들지 않는다.</span>
+        <span class="c"># 원본은 __init__ 에서 즉시 생성해서, vLLM 을 안 쓰는 엔드포인트만 쓰려 해도</span>
+        <span class="c"># 서버가 기동조차 못 했다. 첫 /generate_vllm 요청 시점에 만든다.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vllm_model</span> <span class="o">=</span> <span class="bp">None</span>
+</code></pre></div></div>
+
+<p>vllm 임포트를 실제 사용 지점(<code class="highlighter-rouge">generate_vllm()</code> 내부)으로 옮기는 lazy import, 그리고 <code class="highlighter-rouge">__init__</code>의 vLLM 엔진 생성을 첫 요청 시점으로 미루는 지연 초기화다. 여기에 requirements에서 vllm을 별도 파일(<code class="highlighter-rouge">requirements-vllm.txt</code>)로 분리해, vLLM 없는 환경에서도 나머지 세 엔드포인트가 온전히 돌게 했다.</p>
+
+<h2 id="결정-vllm-실습은-제외">결정: vLLM 실습은 제외</h2>
+
+<p>두 우회를 거쳐 내린 결정 — 이번 주 실습에서 vLLM 경로(<code class="highlighter-rouge">/generate_vllm</code>)는 제외한다. 기본·배치·스트리밍 실습은 Mac에서 전부 가능하고, vLLM 비교(3.4)는 스터디 내용과 공개 문서 기반의 사고 실험으로 갈음한다. 위의 <a href="#테스트-스위트-실행">test_vllm 실패</a>가 이 결정의 기록이다.</p>
+
+<p>정리하면 vLLM을 못 돌린 게 아니라, 두 환경 모두 기동까지 파고들 실익이 이번 실습 목표(수제 구현으로 원리 체득)에 비해 낮다고 보고 접은 것이다. 나중에 여유가 되면 Blackwell 서버의 버전 핀을 최신으로 올려 <code class="highlighter-rouge">/generate_vllm</code>까지 돌려, 3.4편의 사고 실험을 실측으로 채우는 게 자연스러운 다음 수순이다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<ul>
+  <li>기동 로그와 프로세스 트리에서 2편의 구조가 그대로 관찰됐다: 부모(API)에는 모델이 없고, 모델 로딩·추론은 spawn된 자식(ModelWorker)에서만 일어난다</li>
+  <li><code class="highlighter-rouge">from_pretrained()</code>는 config(구조 상수), 가중치(bin/safetensors), 토크나이저 3종(vocab, merges, config)을 받아 온다 — 1주차에 개념으로 본 것들의 파일 실체다</li>
+  <li>생성 출력이 책 예제와 동일한 것은 greedy decoding의 결정론 때문이고, 시스템 검증 단계에서는 이 결정론이 오히려 도움이 된다</li>
+  <li>통합 테스트 4개는 통과했지만, 비데몬 무한 루프 워커 때문에 pytest가 종료되지 못하는 부산물을 관찰했다 — 자식 프로세스의 종료 경로 설계도 서빙 코드의 일부다</li>
+  <li>부하 테스트로 병목을 재현했다: 동시성을 10배 올려도 처리량은 약 0.9 req/s에 고정되고 지연만 누적된다. 원인은 요청당 프롬프트 하나만 처리하는 단일 워커의 순차 추론이다</li>
+  <li>다음 글에서 배칭으로 이 병목이 얼마나 풀리는지, 그리고 어떤 한계가 남는지 측정한다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://www.oreilly.com/library/view/hands-on-llm-serving/9798341621480/">Hands-On LLM Serving and Optimization (O’Reilly)</a></li>
+  <li><a href="https://github.com/orca3/llm-model-inference/tree/main/ch03/single_model_llm_serving">실습 코드: orca3/llm-model-inference — ch03/single_model_llm_serving</a></li>
+  <li><a href="https://github.com/rakyll/hey">hey — HTTP load generator</a></li>
+  <li><a href="https://huggingface.co/docs/safetensors/index">safetensors (Hugging Face)</a></li>
+  <li><a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">서빙 시스템 직접 만들기 2. 코드 구조</a></li>
+  <li><a href="/ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/">LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#apple-silicon" class="page__taxonomy-item" rel="tag">Apple-Silicon</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study-week-2" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study-Week-2</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hugging-face" class="page__taxonomy-item" rel="tag">Hugging-Face</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#llm-serving" class="page__taxonomy-item" rel="tag">LLM-Serving</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#load-test" class="page__taxonomy-item" rel="tag">Load-Test</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#transformers" class="page__taxonomy-item" rel="tag">Transformers</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#vllm" class="page__taxonomy-item" rel="tag">vLLM</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-15">August 15, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BLLM%5D+LLM+%EC%84%9C%EB%B9%99%EA%B3%BC+%EC%B5%9C%EC%A0%81%ED%99%94%3A+%EB%8B%A8%EC%9D%BC+%EB%AA%A8%EB%8D%B8+%EC%84%9C%EB%B9%99+%EC%8B%9C%EC%8A%A4%ED%85%9C+-+3.1.+%EA%B8%B0%EB%B3%B8+%EC%83%9D%EC%84%B1+%EC%9A%94%EC%B2%AD%3A+%EC%B2%AB+%EA%B8%B0%EB%8F%99%EA%B3%BC+%EB%82%AE%EC%9D%80+%EC%B2%98%EB%A6%AC%EB%9F%89%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/" class="pagination--pager" title="[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 2. 코드 구조: 다섯 컴포넌트 해부
+">이전</a>
+    
+    
+      <a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/" class="pagination--pager" title="[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.2. 배치 요청: 정적 배칭의 효과와 한계
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/" rel="permalink">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.2. 배치 요청: 정적 배칭의 효과와 한계
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 14일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  13 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">배치의 의미를 정리하고, 실습으로 정적 배칭의 처리량 향상과 한계를 측정해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/" rel="permalink">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 2. 코드 구조: 다섯 컴포넌트 해부
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 14일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  12 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">단일 모델 서빙 서비스의 코드를 컴포넌트 단위로 해부하며, 프로세스 분리와 큐 기반 IPC가 어떻게 구현되는지 살펴보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-01-LLM-Serving-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 1. 개요: 트랜스포머에서 서빙 시스템으로
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 14일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  6 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">트랜스포머 학습을 서빙과 잇고, 왜 프레임워크 없이 서빙 시스템을 직접 만드는지 그려 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-GPU-ECC-DBE-Incident/" rel="permalink">[GPU] 사례로 보는 GPU ECC 장애: VRAM DBE부터 row remapping까지
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  29 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">GPU ECC 발생 사례를 통해 VRAM DBE 발생부터 분산 학습 실패, row remapping과 리셋 복구까지 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

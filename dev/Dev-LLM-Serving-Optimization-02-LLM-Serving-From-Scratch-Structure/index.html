@@ -1,0 +1,1372 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 2. 코드 구조: 다섯 컴포넌트 해부 - Eraser’s StudyLog</title>
+<meta name="description" content="단일 모델 서빙 서비스의 코드를 컴포넌트 단위로 해부하며, 프로세스 분리와 큐 기반 IPC가 어떻게 구현되는지 살펴보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 2. 코드 구조: 다섯 컴포넌트 해부">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">
+
+
+  <meta property="og:description" content="단일 모델 서빙 서비스의 코드를 컴포넌트 단위로 해부하며, 프로세스 분리와 큐 기반 IPC가 어떻게 구현되는지 살펴보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-08-14T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-08-15T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 2. 코드 구조: 다섯 컴포넌트 해부">
+    <meta itemprop="description" content="단일 모델 서빙 서비스의 코드를 컴포넌트 단위로 해부하며, 프로세스 분리와 큐 기반 IPC가 어떻게 구현되는지 살펴보자.">
+    <meta itemprop="datePublished" content="2026-08-14T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-08-15T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 2. 코드 구조: 다섯 컴포넌트 해부
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-08-14T00:00:00+09:00">2026년 08월 14일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  12 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#실습-코드-개요">실습 코드 개요</a></li>
+  <li><a href="#컴포넌트-구조">컴포넌트 구조</a>
+    <ul>
+      <li><a href="#mainpy-api-server">main.py: API server</a></li>
+      <li><a href="#llmengine-오케스트레이터">LLMEngine: 오케스트레이터</a></li>
+      <li><a href="#workloadmanager-큐잉과-배칭-상태">WorkloadManager: 큐잉과 배칭 상태</a></li>
+      <li><a href="#modelexecutormodelworker-프로세스-격리와-ipc">ModelExecutor·ModelWorker: 프로세스 격리와 IPC</a></li>
+      <li><a href="#modelmanager-모델-로드">ModelManager: 모델 로드</a></li>
+    </ul>
+  </li>
+  <li><a href="#설계-포인트">설계 포인트</a></li>
+  <li><a href="#테스트-코드로-보는-서빙-검증">테스트 코드로 보는 서빙 검증</a></li>
+  <li><a href="#책-코드와-repo-코드의-차이">책 코드와 repo 코드의 차이</a></li>
+  <li><a href="#상용-llm-서비스는-어떤-모습일까">상용 LLM 서비스는 어떤 모습일까</a></li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Hands-On LLM Serving and Optimization Study (LLMSO) 2주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>서비스는 main.py(FastAPI) 아래에 LLMEngine이 WorkloadManager와 ModelExecutor를 멤버로 합성(composition)하고, ModelExecutor가 별도 프로세스로 ModelWorker를 띄우는 계층 구조다. 추론은 항상 자식 프로세스에서 실행되고, 부모와는 multiprocessing.Queue 두 개로만 통신한다 — <a href="/dev/Dev-LLM-Serving-Optimization-01-LLM-Serving-Overview/">1편</a>에서 개념으로 본 “GPU/CPU 격리”의 코드 레벨 실체다</li>
+  <li>엔드포인트 4개(<code class="highlighter-rouge">/basic_generate</code>, <code class="highlighter-rouge">/generate</code>, <code class="highlighter-rouge">/generate_stream</code>, <code class="highlighter-rouge">/generate_vllm</code>)가 서로 다른 실행 경로를 탄다. 이 대비가 이후 실습(기본 → 배치 → 스트리밍 → vLLM)의 뼈대다</li>
+  <li>배칭은 batch_size=4 고정 폴링의 정적 배칭이고, 스트리밍 경로는 KV 캐시 없이 매 토큰 전체를 다시 forward하는 O(n²) 구현이다</li>
+  <li>ChatGPT·Claude 같은 상용 서비스의 내부 구현은 비공개지만, 구성 요소의 논리적 역할은 이 축소판 아키텍처와 유사할 가능성이 높다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="실습-코드-개요">실습 코드 개요</h1>
+
+<p><a href="/dev/Dev-LLM-Serving-Optimization-01-LLM-Serving-Overview/">1편</a>에서 세운 중심 질문 — 왜 컴포넌트를 별도 프로세스로 분리하는가 — 를 이번에는 코드에서 확인한다. 실습 코드는 책의 공식 repo에 있다.</p>
+
+<ul>
+  <li>실습 코드: <a href="https://github.com/orca3/llm-model-inference/tree/main/ch03/single_model_llm_serving">orca3/llm-model-inference — ch03/single_model_llm_serving</a></li>
+  <li>서빙 대상 모델: <a href="https://huggingface.co/facebook/opt-125m">facebook/opt-125m</a> — GPT-3 계열을 재현한 OPT 패밀리의 가장 작은(1.25억 파라미터) 디코더 전용 모델. GPU 없이 CPU만으로도 돌릴 수 있어 실습용으로 적합하다</li>
+</ul>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>tree ch03/single_model_llm_serving
+<span class="c"># .</span>
+<span class="c"># ├── llm</span>
+<span class="c"># │   ├── __init__.py           # 패키지 선언 + LLMEngine 재수출</span>
+<span class="c"># │   ├── llm.py                # LLMEngine (오케스트레이터)</span>
+<span class="c"># │   ├── model_executor.py     # ModelExecutor (워커 프로세스 관리, IPC)</span>
+<span class="c"># │   ├── model_manager.py      # ModelManager (모델/토크나이저 로드)</span>
+<span class="c"># │   ├── model_worker.py       # ModelWorker (별도 프로세스에서 추론)</span>
+<span class="c"># │   └── workload_manager.py   # WorkloadManager (큐잉/배칭 상태 관리)</span>
+<span class="c"># ├── main.py                   # FastAPI 앱 (API server)</span>
+<span class="c"># ├── pytest.ini</span>
+<span class="c"># ├── README.md</span>
+<span class="c"># ├── requirements.txt</span>
+<span class="c"># └── tests</span>
+<span class="c">#     ├── test_api.py           # HTTP 경계 테스트</span>
+<span class="c">#     ├── test_stream.sh        # curl 기반 스트리밍 수동 테스트</span>
+<span class="c">#     └── test_vllm.py          # vLLM 경로 테스트</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">main.py</code>를 실행하면 아래 계층 구조대로 구성 요소들이 만들어진다. <a href="/dev/Dev-LLM-Serving-Optimization-01-LLM-Serving-Overview/">1편의 아키텍처 그림</a>과 겹쳐 보면, 그림의 박스 하나가 파일 하나에 대응한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>main.py (FastAPI)                        # API server
+  └─ LLMEngine (llm/llm.py)             # 오케스트레이션
+       ├─ WorkloadManager               # 큐잉/배칭 상태 관리
+       └─ ModelExecutor                 # 별도 프로세스와 IPC
+            └─ ModelWorker (별도 process) # 실제 forward pass
+                 └─ ModelManager        # 모델/토크나이저 로드
+</code></pre></div></div>
+
+<p>엔드포인트는 4개이고, 각각 다른 실행 경로를 탄다. 이 표가 이번 주 실습 전체의 지도다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>엔드포인트</th>
+      <th>실행 경로</th>
+      <th>캐싱/배칭</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">/basic_generate</code></td>
+      <td>ModelExecutor → HF <code class="highlighter-rouge">model.generate()</code> (시퀀스 1개)</td>
+      <td>HF 내부 KV 캐시</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">/generate</code></td>
+      <td>WorkloadManager 큐 → 최대 4개 배치 → HF <code class="highlighter-rouge">model.generate()</code></td>
+      <td>HF 내부 KV 캐시</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">/generate_stream</code></td>
+      <td>별도 스레드의 처리 루프 → 토큰 1개씩 forward</td>
+      <td>캐시 없음 (후술)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">/generate_vllm</code></td>
+      <td><code class="highlighter-rouge">vllm.LLM</code> 엔진 직접 호출</td>
+      <td>vLLM의 PagedAttention·continuous batching</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote>
+  <p><em>참고</em>: 표의 “캐싱/배칭” 열에서 말하는 <strong>캐시</strong>는 전부 <strong>KV Cache</strong>다. KV Cache는 이미 생성한 토큰들의 어텐션 Key/Value를 메모리에 저장해 두고 재사용해서, 다음 토큰을 뽑을 때 과거 전체를 다시 계산하지 않게 하는 <strong>런타임 캐시</strong>다(<a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/">1주차에 본 KV cache</a>). <code class="highlighter-rouge">/basic_generate</code>·<code class="highlighter-rouge">/generate</code>는 <code class="highlighter-rouge">model.generate()</code>가 기본값 <code class="highlighter-rouge">use_cache=True</code>로 이 캐시를 내부에서 유지하고, <code class="highlighter-rouge">/generate_stream</code>은 <code class="highlighter-rouge">use_cache=False</code>라 매 토큰 전체를 다시 forward하므로 KV Cache가 없다. 참고로 <a href="/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/">3.1편</a>의 서버 기동 로그에 나오는 <code class="highlighter-rouge">~/.cache/huggingface</code>는 다운로드한 모델 파일을 담는 <strong>디스크 캐시</strong>라, 이름만 같을 뿐 KV Cache와는 전혀 다른 것이다.</p>
+</blockquote>
+
+<p>의존성은 <code class="highlighter-rouge">requirements.txt</code>에 고정되어 있다(<code class="highlighter-rouge">torch==2.7.0</code>, <code class="highlighter-rouge">transformers==4.52.4</code>, vLLM 경로용 <code class="highlighter-rouge">vllm==0.9.0.1</code>). vLLM은 설치 시 자기가 요구하는 버전의 torch를 끌고 오려는 경우가 있어 버전 충돌의 여지가 있는데, 이 조합은 실제로 <a href="/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/#트러블슈팅">문제를 일으켰다</a>.</p>
+
+<p><br /></p>
+
+<h1 id="컴포넌트-구조">컴포넌트 구조</h1>
+
+<p>요청이 흐르는 순서대로 컴포넌트 구조를 살펴 보자. 코드는 핵심만 발췌했고, 전체는 위 repo 링크에서 볼 수 있다.</p>
+
+<h2 id="mainpy-api-server">main.py: API server</h2>
+
+<p>FastAPI 앱이 HTTP 경계를 담당한다. 눈여겨볼 것은 엔드포인트 자체보다 <strong>엔진 초기화 방식</strong>이다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># main.py — LLM 엔진 싱글턴과 정리(cleanup) 등록</span>
+<span class="n">_llm</span> <span class="o">=</span> <span class="bp">None</span>
+<span class="n">_llm_lock</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+
+<span class="k">def</span> <span class="nf">get_llm</span><span class="p">():</span>
+    <span class="k">global</span> <span class="n">_llm</span>
+    <span class="k">with</span> <span class="n">_llm_lock</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">_llm</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">_llm</span> <span class="o">=</span> <span class="n">LLMEngine</span><span class="p">()</span>          <span class="c"># 최초 1회만 생성 (모델 로딩 포함)</span>
+            <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">cleanup</span><span class="p">)</span>    <span class="c"># 프로세스 종료 시 워커 정리</span>
+        <span class="k">return</span> <span class="n">_llm</span>
+
+<span class="c"># 단일 프롬프트 처리</span>
+<span class="nd">@app.post</span><span class="p">(</span><span class="s">"/basic_generate"</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">GenerateResponse</span><span class="p">)</span>
+<span class="n">async</span> <span class="k">def</span> <span class="nf">basic_generate</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">GenerateRequest</span><span class="p">,</span> <span class="n">llm</span><span class="p">:</span> <span class="n">LLMEngine</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_llm</span><span class="p">)):</span>
+    <span class="n">generated_text</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">basic_generate</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">prompt</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">GenerateResponse</span><span class="p">(</span><span class="n">generated_text</span><span class="o">=</span><span class="n">generated_text</span><span class="p">)</span>
+
+<span class="c"># 한 요청에 여러 프롬프트 처리 (배치)</span>
+<span class="nd">@app.post</span><span class="p">(</span><span class="s">"/generate"</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">BatchGenerateResponse</span><span class="p">)</span>
+<span class="n">async</span> <span class="k">def</span> <span class="nf">generate</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">BatchGenerateRequest</span><span class="p">,</span> <span class="n">llm</span><span class="p">:</span> <span class="n">LLMEngine</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_llm</span><span class="p">)):</span>
+    <span class="n">generated_texts</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">prompts</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">BatchGenerateResponse</span><span class="p">(</span><span class="n">generated_texts</span><span class="o">=</span><span class="n">generated_texts</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">get_llm()</code>이 FastAPI의 <code class="highlighter-rouge">Depends</code>로 주입되는 싱글턴 팩토리다. 엔진(그리고 모델 로딩)은 무겁기 때문에 최초 한 번만 만들고, 이후 요청은 같은 인스턴스를 공유한다. <code class="highlighter-rouge">if __name__ == "__main__"</code> 블록에서는 uvicorn 기동 전에 <code class="highlighter-rouge">get_llm()</code>을 미리 호출해, 서버가 뜨는 시점에 모델 로딩까지 끝내 둔다.</p>
+
+<blockquote>
+  <p><em>참고</em>: <code class="highlighter-rouge">llm/__init__.py</code>는 <code class="highlighter-rouge">from .llm import LLMEngine</code> 한 줄로 LLMEngine을 재수출(re-export)한다. 디렉토리를 파이썬 패키지로 만들면서, 사용하는 쪽에서 <code class="highlighter-rouge">from llm import LLMEngine</code>처럼 내부 모듈 경로를 몰라도 되게 하는 관례다.</p>
+</blockquote>
+
+<h2 id="llmengine-오케스트레이터">LLMEngine: 오케스트레이터</h2>
+
+<p>책이 LLMEngine을 “오케스트레이터”라고 부르는데, 여기서 오케스트레이션은 <strong>여러 구성 요소의 생애주기와 요청 흐름을 조율하는 역할</strong>을 뜻한다. 쿠버네티스를 “컨테이너 오케스트레이션”이라 부를 때와 같은 일반 개념이고, 조율 대상이 컨테이너냐 서빙 컴포넌트냐가 다를 뿐이다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># llm/llm.py — 초기화: 컴포넌트 생성과 워커 기동을 지휘</span>
+<span class="k">class</span> <span class="nc">LLMEngine</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_executor</span> <span class="o">=</span> <span class="n">ModelExecutor</span><span class="p">()</span>      <span class="c"># IPC 큐 생성</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">workload_manager</span> <span class="o">=</span> <span class="n">WorkloadManager</span><span class="p">()</span>  <span class="c"># 큐잉/배칭 상태</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_tokens</span> <span class="o">=</span> <span class="mi">20</span>                       <span class="c"># 생성 길이 상한</span>
+
+        <span class="c"># 워커 프로세스 기동 (모델 로딩은 그 프로세스 안에서)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_executor</span><span class="o">.</span><span class="n">setup_worker</span><span class="p">(</span><span class="s">"facebook/opt-125m"</span><span class="p">)</span>
+
+        <span class="c"># 스트리밍 요청 처리 루프를 데몬 스레드로 상시 가동</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">requests_processing_loop</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+</code></pre></div></div>
+
+<p>초기화 시점에 이미 두 가지 상시 실행 흐름이 만들어진다는 점이 중요하다. 하나는 별도 <strong>프로세스</strong>(ModelWorker), 하나는 엔진 내부의 별도 <strong>스레드</strong>(스트리밍 처리 루프)다. 요청이 없어도 이 둘은 각자 큐를 바라보며 대기한다.</p>
+
+<p>역할이 갈린다. <strong>ModelWorker</strong>는 순수 실행기라, <code class="highlighter-rouge">task_queue</code>(프로세스 간 IPC 큐)에서 배치를 받아 모델을 돌리고 결과만 돌려준다. <strong>스트리밍 스레드</strong>는 스케줄러에 가까워서, 스트리밍 요청이 쌓이는 큐를 지켜보다 활성 요청을 모아 한 토큰씩 디코딩을 굴리고 그 토큰을 각 클라이언트로 흘려보낸다. 각자 다른 큐를 보는 건 하나는 “무엇을 계산할지”(실행 입력)를, 다른 하나는 “누구를 스트리밍 중인지”(스케줄링 입력)를 받기 때문이다 — <a href="/dev/Dev-LLM-Serving-Optimization-01-LLM-Serving-Overview/">1편</a>에서 본 스케줄링(Workload manager)과 실행(Model worker)의 분리가 여기서 두 개의 큐로 나타난다. 스트리밍이 왜 배치와 달리 이런 상시 루프로 도는지는 스트리밍 편(3.3, 예정)에서 코드로 확인한다.</p>
+
+<p>원본 코드는 <code class="highlighter-rouge">__init__</code>에서 vLLM 엔진(<code class="highlighter-rouge">vllm.LLM</code>)도 함께 만들어 같은 모델을 두 번째로 로드하는데, 이 부분은 <a href="#설계-포인트">설계 포인트</a>에서 다시 본다.</p>
+
+<h2 id="workloadmanager-큐잉과-배칭-상태">WorkloadManager: 큐잉과 배칭 상태</h2>
+
+<p>요청 하나는 <code class="highlighter-rouge">Sequence</code> 객체로 표현된다. 고유 id, 프롬프트, 지금까지의 출력, 스트리밍용 클라이언트 큐를 들고 다니는 <strong>요청의 신분증</strong>이다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># llm/workload_manager.py — 핵심 발췌</span>
+<span class="k">class</span> <span class="nc">WorkloadManager</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">4</span>                  <span class="c"># 고정 배치 크기</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">incoming_queue</span> <span class="o">=</span> <span class="n">Queue</span><span class="p">()</span>        <span class="c"># 대기 중인 요청</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_sequences</span> <span class="o">=</span> <span class="p">[]</span>           <span class="c"># 현재 배치에서 실행 중인 요청</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_map</span> <span class="o">=</span> <span class="p">{}</span>               <span class="c"># id → Sequence 추적</span>
+
+    <span class="k">def</span> <span class="nf">get_next_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">is_streaming</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="bp">False</span><span class="p">):</span>
+        <span class="c"># 활성 배치에 빈자리가 있으면 대기 큐에서 채워 반환 (기다리지 않음)</span>
+        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active_sequences</span><span class="p">)</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">incoming_queue</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">active_sequences</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">incoming_queue</span><span class="o">.</span><span class="n">get</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_sequences</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">get_next_batch()</code>가 이 시스템의 <strong>배칭 전략이 사는 곳</strong>이다. 지금 전략은 단순하다 — 큐에 쌓인 요청을 최대 4개까지 채워서 반환하고, 배치를 채우려고 기다리지는 않는다. 이 단순함이 만드는 효과와 한계는 <a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/">3.2</a>에서 측정으로 확인한다.</p>
+
+<h2 id="modelexecutormodelworker-프로세스-격리와-ipc">ModelExecutor·ModelWorker: 프로세스 격리와 IPC</h2>
+
+<p>중심 질문의 답이 구현된 곳이다. ModelExecutor는 큐 두 개를 만들고, ModelWorker를 <strong>별도 프로세스</strong>로 띄운다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># llm/model_executor.py — 워커 프로세스 기동과 큐 통신</span>
+<span class="k">class</span> <span class="nc">ModelExecutor</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">task_queue</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>      <span class="c"># 부모 → 자식: 작업 전달</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">result_queue</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>    <span class="c"># 자식 → 부모: 결과 반환</span>
+
+    <span class="k">def</span> <span class="nf">setup_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">worker_process</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Process</span><span class="p">(</span>
+            <span class="n">target</span><span class="o">=</span><span class="n">ModelWorker</span><span class="o">.</span><span class="n">run</span><span class="p">,</span>
+            <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">model_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">task_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">result_queue</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">worker_process</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># llm/model_worker.py — 자식 프로세스의 무한 루프</span>
+<span class="k">class</span> <span class="nc">ModelWorker</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="s">"cuda"</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s">"cpu"</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">ModelManager</span><span class="p">()</span><span class="o">.</span><span class="n">load_model</span><span class="p">(</span><span class="n">model_name</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">task_queue</span><span class="p">:</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">,</span> <span class="n">result_queue</span><span class="p">:</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">):</span>
+        <span class="n">worker</span> <span class="o">=</span> <span class="n">ModelWorker</span><span class="p">(</span><span class="n">model_name</span><span class="p">)</span>       <span class="c"># 이 프로세스 안에서 모델 로드</span>
+        <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">request</span> <span class="o">=</span> <span class="n">task_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>         <span class="c"># 작업이 올 때까지 블로킹 대기</span>
+            <span class="n">result_queue</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="s">"complete"</span><span class="p">,</span> <span class="n">worker</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">request</span><span class="p">)))</span>
+</code></pre></div></div>
+
+<p>별도 프로세스인 부모(API 서버)와 자식(워커)은 서로의 함수를 직접 호출할 수 없다. 그래서 <strong>프로세스 간 통신(IPC, Inter-Process Communication)을 큐 한 쌍으로 구현</strong>했다. 부모는 <code class="highlighter-rouge">task_queue.put()</code>으로 프롬프트를 던지고 <code class="highlighter-rouge">result_queue.get()</code>으로 결과를 기다리며, 자식은 반대 방향으로 같은 큐를 바라본다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-single-model-serving-ai-edited.png" alt="단일 생성 요청의 모델 서빙 워크플로우" class="align-center" /></p>
+
+<center><sup>출처: Hands-On LLM Serving and Optimization (O'Reilly), Figure 3-2를 바탕으로 처리 순서 번호를 덧붙여 편집</sup></center>
+
+<p><code class="highlighter-rouge">/basic_generate</code> 요청 1건의 흐름을 펼치면 다음과 같다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Client
+ → API server: POST /basic_generate {prompt: "..."}
+ → LLMEngine.basic_generate(prompt)
+      → Sequence 객체 생성 (고유 id로 요청 추적)
+      → ModelExecutor
+           → task_queue.put(...)     # 자식 프로세스로 전달
+           → result_queue.get()      # 결과 올 때까지 블로킹 대기
+                (그 사이 자식 프로세스에서:
+                 ModelWorker.run() → task_queue.get()
+                                   → worker.generate()   # model.generate() 실제 추론
+                                   → result_queue.put(('complete', 결과)))
+</code></pre></div></div>
+
+<p>1편에서 “GPU 연산과 CPU 오케스트레이션의 격리”라고 개념으로 정리했던 것의 실체가 이것이다 — <strong>부모 프로세스에는 모델이 아예 없다.</strong> 토크나이징과 추론은 전부 자식에서 일어나고, 부모는 큐에 넣고 기다릴 뿐이다.</p>
+
+<h2 id="modelmanager-모델-로드">ModelManager: 모델 로드</h2>
+
+<p>지금은 가장 단순한 컴포넌트다. Hugging Face에서 모델과 토크나이저를 로드해 돌려준다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># llm/model_manager.py</span>
+<span class="k">class</span> <span class="nc">ModelManager</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">load_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s">"facebook/opt-125m"</span><span class="p">):</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">AutoModelForCausalLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_name</span><span class="p">)</span>   <span class="c"># 가중치 로드</span>
+        <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_name</span><span class="p">)</span>      <span class="c"># 토크나이저 로드</span>
+        <span class="k">return</span> <span class="n">model</span><span class="p">,</span> <span class="n">tokenizer</span>
+</code></pre></div></div>
+
+<p>역할이 “로드”뿐이라 왜 별도 컴포넌트인지 의아할 수 있는데, 이름에 답이 있다. 여러 모델을 로드/언로드하고 캐싱하는 <strong>관리</strong> 기능이 들어올 자리를 미리 분리해 둔 것이고, 멀티 모델 서빙으로 확장할 때 이 컴포넌트가 커진다.</p>
+
+<p><br /></p>
+
+<h1 id="설계-포인트">설계 포인트</h1>
+
+<p>코드를 훑으며 눈에 띈, 의도된 것으로 보이는 설계 다섯 가지다.</p>
+
+<ul>
+  <li><strong>모델이 사실상 두 벌 로드된다.</strong> 원본 <code class="highlighter-rouge">LLMEngine.__init__</code>은 (a) 별도 프로세스의 transformers 모델과 (b) 메인 프로세스의 vLLM 엔진을 둘 다 초기화한다. 같은 opt-125m을 수제 배칭 구현과 vLLM 양쪽에서 나란히 서빙하게 만들어 “직접 만든 것 vs 프레임워크”를 코드 레벨에서 비교 체험하게 한 구조다. 대신 기동 시 메모리(GPU 환경이라면 GPU 메모리)를 이중으로 쓴다</li>
+  <li><strong>스트리밍 경로는 KV 캐시를 쓰지 않는다.</strong> <code class="highlighter-rouge">generate_forward_batch</code>가 매 토큰마다 <code class="highlighter-rouge">use_cache=False</code>로 전체 프롬프트를 처음부터 다시 forward하고, 생성된 토큰을 <code class="highlighter-rouge">sequence.prompt += token</code>으로 이어 붙인다. 토큰이 늘수록 매 스텝 연산량이 커지는 O(n²) 패턴이다. <code class="highlighter-rouge">stream_states</code> 딕셔너리(past_key_values용)가 선언만 되고 쓰이지 않는 걸 보면, 증분 디코딩으로 확장할 자리를 남겨 두고 데모에서는 구현하지 않은 것으로 보인다 — “제대로 만들면 KV 캐시가 왜 필요한지”를 체감시키는 반면교사다</li>
+  <li><strong>워커 프로세스는 하나뿐이고, 배치와 스트리밍이 큐를 공유한다.</strong> <code class="highlighter-rouge">/generate</code>(배치)와 <code class="highlighter-rouge">/generate_stream</code>(스트리밍)이 같은 워커에 순차적으로 작업을 던진다. 두 종류의 요청이 연산 자원을 놓고 직렬로 경쟁하는, 실제 단일 모델 서버의 리소스 경합 문제를 그대로 재현한다</li>
+  <li><strong>배칭은 고정 크기 폴링 방식이다.</strong> batch_size=4 고정에, 활성 배치가 다 끝나야 다음 배치로 넘어간다. 요청이 끝나는 즉시 빈자리를 채우는 vLLM의 continuous batching과 대비되는 <strong>정적 배칭</strong>이다</li>
+  <li><strong>프로세스 격리가 곧 신뢰성이다.</strong> 추론이 mp.Process로 뜬 별도 프로세스에서 돌고 메인 API 프로세스와 큐로만 통신하므로, 모델 쪽 크래시가 API 프로세스를 함께 죽이지 않는다. README가 강조하는 Reliability 포인트다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="테스트-코드로-보는-서빙-검증">테스트 코드로 보는 서빙 검증</h1>
+
+<p>결론부터 — 이 테스트들이 검증하는 것은 “모델이 똑똑한가”가 아니라 <strong>“서빙 계약이 지켜지는가”</strong>다. 상태 코드, 응답 스키마, 프롬프트 수와 결과 수의 일치, 스트림 토큰의 순서와 소속. 모델 품질 평가는 서빙 테스트의 관심사가 아니다.</p>
+
+<p><code class="highlighter-rouge">tests/</code>에는 세 파일이 있고 성격이 다르다.</p>
+
+<ul>
+  <li><strong>test_api.py</strong> — FastAPI의 TestClient/AsyncClient로 HTTP 경계에서 검증한다. <code class="highlighter-rouge">/basic_generate</code>는 200 응답과 비어 있지 않은 문자열을, <code class="highlighter-rouge">/generate</code>는 프롬프트 5개를 넣으면 결과도 정확히 5개인지를, <code class="highlighter-rouge">/generate_stream</code>은 SSE 청크를 파싱해 토큰들과 <code class="highlighter-rouge">sequence_id</code>가 일관되게 오는지를 확인한다. 모킹 없이 진짜 엔진과 모델을 띄우므로, 이름은 API 테스트지만 성격은 <strong>통합 테스트</strong>다 — 이 한 파일이 API server → engine → executor → worker 경로 전체를 관통한다</li>
+  <li><strong>test_vllm.py</strong> — <code class="highlighter-rouge">/generate_vllm</code> 경로 검증. vLLM이 설치된 환경에서만 의미가 있다</li>
+  <li><strong>test_stream.sh</strong> — pytest가 아니라 curl 기반 <strong>수동 스모크 테스트</strong>용 셸 스크립트다. SSE 스트리밍은 “토큰이 실시간으로 흘러나오는 모양”을 눈으로 확인하는 게 빠르기 때문에, 자동화된 검증(test_api.py의 스트림 테스트)과 별개로 수동 확인 도구를 둔 것이다</li>
+</ul>
+
+<p>단위 테스트 관점에서 보면, 이 저장소에는 순수 단위 테스트(예: WorkloadManager의 <code class="highlighter-rouge">get_next_batch</code>만 모델 없이 검증)가 없다. LLM 서빙에서 단위/통합의 경계를 나눈다면 스케줄링·큐잉·id 매핑 로직이 단위 테스트 대상이고, 모델을 포함한 endpoint-to-endpoint 경로가 통합 테스트 대상인데, 이 코드는 후자만 갖춘 셈이다. 통합 테스트는 매 실행마다 모델 로딩을 포함하므로 느리다 — 교육용 코드라 감수한 트레이드오프로 보인다.</p>
+
+<p><code class="highlighter-rouge">pytest.ini</code>는 두 줄이 전부다. <code class="highlighter-rouge">asyncio_mode = auto</code>로 비동기 테스트(스트리밍)를 데코레이터 없이 실행하게 하고, <code class="highlighter-rouge">pythonpath = . llm</code>으로 테스트가 <code class="highlighter-rouge">main</code>과 <code class="highlighter-rouge">llm</code> 패키지를 임포트할 수 있게 한다. 이 테스트들을 실제로 실행한 결과는 <a href="/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/">3.1</a>에 있다.</p>
+
+<p><br /></p>
+
+<h1 id="책-코드와-repo-코드의-차이">책 코드와 repo 코드의 차이</h1>
+
+<p>책을 코드와 대조하며 읽다 보면 둘이 미묘하게 다른 지점들이 나온다. 결론부터 — <strong>책에 실린 코드는 개념 전달용 의사코드에 가깝고, 실행되는 정본은 repo다.</strong> upstream(<code class="highlighter-rouge">80dcd9f</code>, 2026-06-03 기준)과 대조해 확인한 결과다.</p>
+
+<p>책 코드에는 그대로 실행하면 동작하지 않는 지점이 세 곳 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>위치</th>
+      <th>책</th>
+      <th>repo (정본)</th>
+      <th>책대로 하면</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">basic_generate</code></td>
+      <td><code class="highlighter-rouge">model_executor.execute(sequence)</code></td>
+      <td><code class="highlighter-rouge">execute_batch([sequence])</code></td>
+      <td><code class="highlighter-rouge">execute()</code>는 존재하지 않는 메서드</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">basic_generate</code></td>
+      <td><code class="highlighter-rouge">results[0]["generated_text"]</code></td>
+      <td><code class="highlighter-rouge">results[1][0]['generated_text']</code></td>
+      <td>큐에서 <code class="highlighter-rouge">('complete', [...])</code> 튜플이 오므로 <code class="highlighter-rouge">results[0]</code>은 문자열 <code class="highlighter-rouge">'complete'</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">generate</code></td>
+      <td><code class="highlighter-rouge">workload_manager.update(results)</code></td>
+      <td><code class="highlighter-rouge">remove_active_sequence()</code> + <code class="highlighter-rouge">update_sequence_output(is_finished=True)</code></td>
+      <td><code class="highlighter-rouge">update()</code>는 존재하지 않는 메서드. 시퀀스가 영원히 미완료라 while 루프가 끝나지 않음</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>그 외에 책 쪽 <code class="highlighter-rouge">generate</code>에는 빈 배치 가드(<code class="highlighter-rouge">if not sequences: sleep; continue</code>)도 없다. 명명도 다른데(책 <code class="highlighter-rouge">prompt_ids</code>, repo <code class="highlighter-rouge">request_ids</code>), 오타라기보다 의도적 개명으로 보인다. 의미상으로는 오히려 책 쪽이 정확하다 — <code class="highlighter-rouge">/generate</code> 요청 1건에 프롬프트가 여러 개 담기고 id는 프롬프트 하나당 하나씩 발급되므로, 이 id는 “요청 id”가 아니라 “프롬프트 id”다. 다만 워커가 돌려주는 결과 dict의 키가 <code class="highlighter-rouge">request_id</code>라서, 코드를 고칠 거라면 repo 표기를 따르는 쪽이 일관적이다.</p>
+
+<p>대조 과정에서 repo 자체의 잠재 결함도 두 건 발견했다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">ModelWorker.generate(prompts: List[Dict[str, Any]])</code>로 선언돼 있지만 본문은 <code class="highlighter-rouge">p.prompt</code>처럼 속성 접근을 한다 — 실제 인자는 <code class="highlighter-rouge">List[Sequence]</code>다. 같은 클래스의 <code class="highlighter-rouge">generate_forward_batch()</code>는 반대로 dict를 받아서, 두 경로의 인자 타입이 다르다는 게 힌트에 드러나지 않는다</li>
+  <li><code class="highlighter-rouge">execute_batch</code>가 빈 배치면 <code class="highlighter-rouge">[]</code>, 정상이면 <code class="highlighter-rouge">('complete', [...])</code> 튜플을 반환해 형태가 불일치한다. 호출부가 <code class="highlighter-rouge">results[1]</code>로 인덱싱하므로 빈 배치가 들어오면 IndexError인데, 현재는 호출부의 빈 배치 가드에 우연히 가려져 있다</li>
+</ul>
+
+<p>이 대조는 정적 확인(전 파일 컴파일, 임포트 그래프, 호출부 확인) 수준에서 검증한 것이고, repo 코드가 실제로 돌아간다는 것 자체는 <a href="/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/">3.1의 서버 기동</a>에서 런타임으로 확인한다.</p>
+
+<p><br /></p>
+
+<h1 id="상용-llm-서비스는-어떤-모습일까">상용 LLM 서비스는 어떤 모습일까</h1>
+
+<p>구조를 다 봤으니 자연스럽게 궁금해진다 — ChatGPT나 Claude도 vLLM 같은 서빙 엔진을 쓸까, 아니면 사내에서 만들어 쓸까. 그리고 어느 쪽이든 이 기본 아키텍처와 비슷할까.</p>
+
+<p>확인 가능한 사실부터. <strong>양쪽 다 프로덕션 서빙 스택은 비공개다.</strong></p>
+
+<ul>
+  <li>OpenAI는 오픈 모델(gpt-oss)을 사용자가 직접 서빙하는 방법으로 vLLM을 공식 안내하지만, 이것이 ChatGPT 자체가 vLLM으로 서빙된다는 뜻은 아니다</li>
+  <li>Anthropic도 Claude의 모델 서버 구현체를 공개하지 않았다. 공개된 채용 설명에는 Claude 추론 스택이 가속기 커널, 모델 서버, 분산 라우팅, 오토스케일링, 용량 관리까지 긴밀하게 연결된 자체 시스템이라고 설명되어 있다</li>
+</ul>
+
+<p>그러니 실제 서비스 백엔드는 자체 모델·하드웨어·트래픽 규모에 맞춘 사내 전용 서빙 스택일 가능성이 높다. 다만 — 여기부터는 공개 정보에 기반한 추정이다 — <strong>구현체와 프로세스 경계는 달라도, 논리적인 역할 구성은 이번에 본 아키텍처와 유사할 가능성이 높다.</strong></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>이 실습의 구성 요소</th>
+      <th>대규모 상용 서비스에서 대응되는 역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>API Server</td>
+      <td>API Gateway, 인증·인가, Rate Limit, 요청 검증</td>
+    </tr>
+    <tr>
+      <td>LLM Engine</td>
+      <td>요청 전체 흐름을 조율하는 추론 오케스트레이터</td>
+    </tr>
+    <tr>
+      <td>Workload Manager</td>
+      <td>요청 큐, 우선순위, 배칭, 스케줄링</td>
+    </tr>
+    <tr>
+      <td>Model Executor</td>
+      <td>여러 GPU·노드에 실행 계획 전달</td>
+    </tr>
+    <tr>
+      <td>Model Worker</td>
+      <td>모델 가중치를 올리고 실제 GPU 연산 수행</td>
+    </tr>
+    <tr>
+      <td>Model Manager</td>
+      <td>모델 버전, 레플리카, 로딩·언로딩 관리</td>
+    </tr>
+    <tr>
+      <td>Queue</td>
+      <td>프로세스·노드 사이 요청 및 결과 전달</td>
+    </tr>
+    <tr>
+      <td>Streaming Queue</td>
+      <td>생성된 토큰을 해당 사용자 연결로 전송</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>방증도 있다. vLLM 자체가 API server → LLMEngine/AsyncLLMEngine → scheduler → model executor/worker와 유사한 구조를 쓴다고 <a href="https://docs.vllm.ai/en/latest/design/arch_overview.html">공식 문서</a>에 설명되어 있다. 교재의 그림은 결국 이 계열 설계의 최소 공통분모인 셈이다.</p>
+
+<p>그렇다면 엔터프라이즈급 규모에서는 무엇이 더해질까. 교재의 그림이 <strong>서빙 인스턴스 하나의 축소판</strong>이라면, 실제 대규모 서비스에는 그 바깥에 다음 계층들이 붙는다.</p>
+
+<pre><code class="language-mermaid">flowchart TB
+    U["사용자"] --&gt; GW["Global Gateway&lt;br/&gt;인증 · Rate Limit"]
+    GW --&gt; R["Router&lt;br/&gt;모델 · 지역 · 용량 기반"]
+    R --&gt; Q["요청 Queue&lt;br/&gt;Admission Control"]
+    Q --&gt; SCH["Scheduler&lt;br/&gt;Continuous Batching"]
+    SCH --&gt; EX["분산 Model Executor"]
+    EX --&gt; W["GPU Worker&lt;br/&gt;수십~수천 개"]
+    W --&gt; T["토큰 Streaming"]
+</code></pre>
+
+<ul>
+  <li>여러 데이터센터·GPU 클러스터 사이의 글로벌 라우팅</li>
+  <li>요금제·우선순위 기반 스케줄링과 Admission Control</li>
+  <li>Tensor/Pipeline/Expert Parallelism 등 분산 추론</li>
+  <li>KV 캐시 관리와 Prefix Cache 라우팅</li>
+  <li>Prefill과 Decode를 다른 GPU에서 처리하는 분리형(disaggregated) 서빙</li>
+  <li>장애 감지·재시도·헬스체크·오토스케일링, 안전성 필터, 관측 가능성</li>
+</ul>
+
+<p>이 중 “여러 모델·여러 워커를 라우팅하고 관리하는 계층”이 바로 이 시리즈 후반부에서 직접 만들어 볼 <strong>멀티 모델 서빙</strong>의 주제다. 단일 모델 서빙이 끝나면 그 확장으로 넘어간다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<ul>
+  <li>아키텍처 그림의 박스들이 파일 하나씩에 대응한다: main.py(API server) → LLMEngine(오케스트레이터) → WorkloadManager(큐잉·배칭) → ModelExecutor(IPC) → ModelWorker(별도 프로세스의 추론) → ModelManager(로드)</li>
+  <li>중심 질문의 코드 레벨 답: 부모 프로세스에는 모델이 없다. 추론은 mp.Process로 격리된 자식에서만 일어나고, 부모와는 task/result 큐 한 쌍(IPC)으로 통신한다. 격리는 GPU 활용률과 신뢰성(크래시 전파 차단) 둘 다를 위한 설계다</li>
+  <li>의도된 비효율(무캐시 스트리밍, 정적 배칭, 단일 워커)이 곳곳에 있다. 이후 실습에서 이 비효율을 측정으로 확인하고, 그것이 vLLM 같은 프레임워크가 존재하는 이유와 연결된다</li>
+  <li>책 코드는 의사코드로 읽고, 실행은 repo 코드 기준으로 한다</li>
+  <li>다음 글에서 이 서비스를 실제로 기동해 프로세스 구조를 관찰하고, 기본 생성 요청을 보내 본다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://www.oreilly.com/library/view/hands-on-llm-serving/9798341621480/">Hands-On LLM Serving and Optimization (O’Reilly)</a></li>
+  <li><a href="https://github.com/orca3/llm-model-inference/tree/main/ch03/single_model_llm_serving">실습 코드: orca3/llm-model-inference — ch03/single_model_llm_serving</a></li>
+  <li><a href="https://huggingface.co/facebook/opt-125m">facebook/opt-125m (Hugging Face)</a></li>
+  <li><a href="https://docs.vllm.ai/en/latest/design/arch_overview.html">vLLM Architecture Overview</a></li>
+  <li><a href="/dev/Dev-LLM-Serving-Optimization-01-LLM-Serving-Overview/">서빙 시스템 직접 만들기 1. 개요</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#fastapi" class="page__taxonomy-item" rel="tag">FastAPI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study-week-2" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study-Week-2</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#ipc" class="page__taxonomy-item" rel="tag">IPC</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#llm-serving" class="page__taxonomy-item" rel="tag">LLM-Serving</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#multiprocessing" class="page__taxonomy-item" rel="tag">Multiprocessing</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#orchestration" class="page__taxonomy-item" rel="tag">Orchestration</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#process-isolation" class="page__taxonomy-item" rel="tag">Process-Isolation</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-15">August 15, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BLLM%5D+LLM+%EC%84%9C%EB%B9%99%EA%B3%BC+%EC%B5%9C%EC%A0%81%ED%99%94%3A+%EB%8B%A8%EC%9D%BC+%EB%AA%A8%EB%8D%B8+%EC%84%9C%EB%B9%99+%EC%8B%9C%EC%8A%A4%ED%85%9C+-+2.+%EC%BD%94%EB%93%9C+%EA%B5%AC%EC%A1%B0%3A+%EB%8B%A4%EC%84%AF+%EC%BB%B4%ED%8F%AC%EB%84%8C%ED%8A%B8+%ED%95%B4%EB%B6%80%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-LLM-Serving-Optimization-01-LLM-Serving-Overview/" class="pagination--pager" title="[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 1. 개요: 트랜스포머에서 서빙 시스템으로
+">이전</a>
+    
+    
+      <a href="/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/" class="pagination--pager" title="[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.1. 기본 생성 요청: 첫 기동과 낮은 처리량
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/" rel="permalink">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.2. 배치 요청: 정적 배칭의 효과와 한계
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 14일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  13 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">배치의 의미를 정리하고, 실습으로 정적 배칭의 처리량 향상과 한계를 측정해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/" rel="permalink">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.1. 기본 생성 요청: 첫 기동과 낮은 처리량
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 14일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  12 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">서비스를 직접 기동해 프로세스 구조를 관찰하고, 부하 테스트로 단일 워커의 순차 처리 병목을 재현해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-01-LLM-Serving-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 1. 개요: 트랜스포머에서 서빙 시스템으로
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 14일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  6 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">트랜스포머 학습을 서빙과 잇고, 왜 프레임워크 없이 서빙 시스템을 직접 만드는지 그려 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-GPU-ECC-DBE-Incident/" rel="permalink">[GPU] 사례로 보는 GPU ECC 장애: VRAM DBE부터 row remapping까지
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  29 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">GPU ECC 발생 사례를 통해 VRAM DBE 발생부터 분산 학습 실패, row remapping과 리셋 복구까지 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>

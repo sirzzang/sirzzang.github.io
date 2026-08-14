@@ -1,0 +1,1396 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.2. 배치 요청: 정적 배칭의 효과와 한계 - Eraser’s StudyLog</title>
+<meta name="description" content="배치의 의미를 정리하고, 실습으로 정적 배칭의 처리량 향상과 한계를 측정해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.2. 배치 요청: 정적 배칭의 효과와 한계">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/">
+
+
+  <meta property="og:description" content="배치의 의미를 정리하고, 실습으로 정적 배칭의 처리량 향상과 한계를 측정해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-08-14T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-08-15T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.2. 배치 요청: 정적 배칭의 효과와 한계">
+    <meta itemprop="description" content="배치의 의미를 정리하고, 실습으로 정적 배칭의 처리량 향상과 한계를 측정해 보자.">
+    <meta itemprop="datePublished" content="2026-08-14T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-08-15T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.2. 배치 요청: 정적 배칭의 효과와 한계
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-08-14T00:00:00+09:00">2026년 08월 14일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  12 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#전제-배치란-무엇인가">전제: 배치란 무엇인가</a>
+    <ul>
+      <li><a href="#학습추론서빙에서의-배치">학습·추론·서빙에서의 배치</a></li>
+      <li><a href="#llm-서빙의-배치가-더-복잡한-이유">LLM 서빙의 배치가 더 복잡한 이유</a></li>
+      <li><a href="#정적-배칭과-continuous-배칭">정적 배칭과 continuous 배칭</a></li>
+    </ul>
+  </li>
+  <li><a href="#실습-배치-생성-요청">실습: 배치 생성 요청</a>
+    <ul>
+      <li><a href="#다섯-프롬프트-한-번에-보내기">다섯 프롬프트 한 번에 보내기</a></li>
+      <li><a href="#로그로-보는-41-분할">로그로 보는 4+1 분할</a></li>
+      <li><a href="#배치는-기다려-주지-않는다">배치는 기다려 주지 않는다</a></li>
+    </ul>
+  </li>
+  <li><a href="#검증-1-처리량-비교">검증 1: 처리량 비교</a>
+    <ul>
+      <li><a href="#배치-요청-부하-테스트">배치 요청 부하 테스트</a></li>
+      <li><a href="#기본-생성-대비-처리량-약-2배">기본 생성 대비: 처리량 약 2배</a></li>
+      <li><a href="#정적-배칭의-한계">정적 배칭의 한계</a></li>
+    </ul>
+  </li>
+  <li><a href="#검증-2-배치-경계-관찰">검증 2: 배치 경계 관찰</a>
+    <ul>
+      <li><a href="#아이디어-ceilnb의-계단">아이디어: ceil(N/B)의 계단</a></li>
+      <li><a href="#1차-측정-b4로-보인다">1차 측정: B=4로 보인다</a></li>
+      <li><a href="#측정-노이즈와-통계-선택">측정 노이즈와 통계 선택</a></li>
+      <li><a href="#남은-한계">남은 한계</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Hands-On LLM Serving and Optimization Study (LLMSO) 2주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>배치는 학습·추론 어디서나 “독립적인 여러 입력을 한 번의 연산 호출로 묶는 단위”지만, 학습에서는 gradient 업데이트의 통계적 단위이고 LLM 서빙에서는 요청·토큰·KV 캐시를 스케줄링하는 실행 단위다 — 같은 단어, 다른 관심사</li>
+  <li><code class="highlighter-rouge">/generate</code>로 프롬프트 5개를 보내면 batch_size=4 제한에 따라 4개 + 1개의 두 번 실행으로 나뉜다. 로그의 <code class="highlighter-rouge">torch.Size([4, 5])</code>와 request_id 매핑으로 배칭의 실체를 확인했다</li>
+  <li>프롬프트 처리량은 기본 생성 대비 약 2배(0.9 → 1.7~1.9 prompts/s)로 올랐다. 그러나 서로 다른 HTTP 요청 사이의 배칭은 일어나지 않아, 동시 요청을 늘리면 처리량은 정체되고 대기 시간만 폭증한다 — 정적 배칭의 한계</li>
+  <li>프롬프트 개수를 바꿔 가며 총 시간의 계단을 관찰하면 배치 크기를 역산할 수 있다. 실측 결과 <code class="highlighter-rouge">1.05 × ceil(N/4)</code>에 들어맞아 B=4로 동작함을 확인했다. 측정 노이즈는 항상 시간을 늘리는 방향으로만 작용하므로, 이런 실험에서는 중앙값보다 최소값이 좋은 추정치다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="전제-배치란-무엇인가">전제: 배치란 무엇인가</h1>
+
+<p><a href="/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/">지난 글</a>에서 요청당 프롬프트 하나만 처리하는 병목을 재현했고, 이번 글에서 배칭으로 그 병목을 공략한다. 그 전에 짚고 갈 것이 있다 — <strong>배치 사이즈라는 말이 학습할 때와 서빙할 때 미묘하게 다른 의미로 쓰인다.</strong> 기본 의미는 같은데, 맥락마다 연관되는 개념과 주의점이 다르다.</p>
+
+<h2 id="학습추론서빙에서의-배치">학습·추론·서빙에서의 배치</h2>
+
+<p>공통의 기본 의미는 하나다. <strong>배치(batch)는 서로 독립적인 여러 입력을 하나의 텐서로 묶어, 모델의 한 번의 연산 호출에서 함께 처리하는 단위</strong>다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>입력 A ┐
+입력 B ├─ Batch → model(...) 한 번 호출
+입력 C ┘
+</code></pre></div></div>
+
+<p>다른 것은 왜 묶는지, 배치가 끝난 뒤 무엇을 하는지, 어떤 기준으로 크기를 정하는지다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구분</th>
+      <th>학습의 배치</th>
+      <th>추론의 배치</th>
+      <th>온라인 LLM 서빙의 배치</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>묶는 대상</td>
+      <td>학습 샘플</td>
+      <td>추론 입력</td>
+      <td>여러 사용자의 활성 요청·시퀀스</td>
+    </tr>
+    <tr>
+      <td>목적</td>
+      <td>gradient를 안정적·효율적으로 계산</td>
+      <td>처리량과 하드웨어 활용률 향상</td>
+      <td>동시 요청의 처리량·비용 최적화</td>
+    </tr>
+    <tr>
+      <td>배치 처리 후</td>
+      <td>Loss → 역전파 → 파라미터 업데이트</td>
+      <td>예측 결과 반환</td>
+      <td>토큰을 요청별로 분배하고 다음 디코딩 스텝 진행</td>
+    </tr>
+    <tr>
+      <td>주요 고려사항</td>
+      <td>수렴, 일반화, 학습률</td>
+      <td>처리량, 지연, 메모리</td>
+      <td>TTFT·TPOT, 큐 대기, KV 캐시, 가변 길이</td>
+    </tr>
+    <tr>
+      <td>배치 구성</td>
+      <td>대체로 학습 코드가 고정</td>
+      <td>고정 또는 동적</td>
+      <td>요청 도착·종료에 따라 계속 변할 수 있음</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>학습의 <code class="highlighter-rouge">batch_size=32</code>는 “32개 샘플로 gradient 한 번을 계산해 파라미터를 한 번 업데이트한다”는 뜻이고, 그래서 수렴·일반화·학습률과 얽힌다. 추론에는 역전파가 없으므로 배칭의 목적이 <strong>여러 입력을 한 번의 큰 행렬 연산으로 처리해 처리량을 높이는 것</strong>으로 단순해진다. 다만 배치가 커지면 메모리와 대기 시간이 늘고 개별 사용자의 지연이 오히려 나빠질 수 있어서, <strong>추론에서도 배치가 클수록 항상 좋은 것은 아니다</strong>.</p>
+
+<h2 id="llm-서빙의-배치가-더-복잡한-이유">LLM 서빙의 배치가 더 복잡한 이유</h2>
+
+<p>LLM 요청은 입력·출력 길이가 제각각이다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>A: 입력 10토큰    + 출력 20토큰
+B: 입력 2,000토큰 + 출력 5토큰
+C: 입력 100토큰   + 출력 500토큰
+</code></pre></div></div>
+
+<p>그래서 “요청 몇 개”만으로는 메모리와 연산량을 판단하기 어렵고, 실제 서빙 엔진들은 동시 활성 시퀀스 수(vLLM의 <code class="highlighter-rouge">max_num_seqs</code>)와 한 스케줄링 스텝의 전체 토큰 수(<code class="highlighter-rouge">max_num_batched_tokens</code>)를 함께 제한한다. 프롬프트 전체를 한 번에 처리하는 prefill과 토큰을 하나씩 생성하는 decode의 성격이 다르다는 점(<a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/">1주차에 본 비대칭</a>)도 여기에 겹친다. 지금은 “서빙 엔진의 배치는 요청 수가 아니라 토큰 수와 KV 캐시 여유 기준으로 동적으로 구성된다”는 방향만 잡아 두면 충분하고, 상세는 vLLM 편에서 다룬다.</p>
+
+<h2 id="정적-배칭과-continuous-배칭">정적 배칭과 continuous 배칭</h2>
+
+<p>이번 <code class="highlighter-rouge">/generate</code> 실습은 <strong>정적 배칭(static batching)</strong>에 가깝다. 배치를 구성해 시작하면, 그 배치가 다 끝나야 다음 배치가 시작된다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[A, B, C, D] 시작
+→ 네 요청이 모두 끝날 때까지 대기
+→ 그다음 [E] 실행
+</code></pre></div></div>
+
+<p>반면 vLLM의 continuous batching은 디코딩 스텝마다 배치 구성을 바꿀 수 있다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>T0: [A, B, C]
+T1: A 완료
+T2: [B, C, D]   &lt;- 빈자리에 D 즉시 투입
+</code></pre></div></div>
+
+<p>그래서 LLM 서빙에서 말하는 배치 사이즈는 종종 고정된 텐서 크기가 아니라 “현재 디코딩 스텝에서 함께 처리 중인 활성 시퀀스 수”를 뜻한다. 이번 글에서는 정적 배칭의 효과와 한계를 측정하고, continuous batching이 왜 필요한지까지의 빌드업으로 삼는다.</p>
+
+<p><br /></p>
+
+<h1 id="실습-배치-생성-요청">실습: 배치 생성 요청</h1>
+
+<h2 id="다섯-프롬프트-한-번에-보내기">다섯 프롬프트 한 번에 보내기</h2>
+
+<p><code class="highlighter-rouge">/generate</code>는 한 HTTP 요청에 프롬프트 배열을 받는다. <a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">2편</a>에서 봤듯 WorkloadManager의 batch_size가 4이므로, 5개를 보내면 내부적으로 4개 + 1개로 나뉘어 실행될 것이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>curl <span class="nt">-s</span> <span class="nt">-X</span> POST http://localhost:8000/generate <span class="se">\</span>
+  <span class="nt">-H</span> <span class="s2">"Content-Type: application/json"</span> <span class="se">\</span>
+  <span class="nt">-d</span> <span class="s1">'{
+    "prompts": [
+      "Hello, I am",
+      "The weather is",
+      "I want to",
+      "The best way to",
+      "The most efficient way to"
+    ]
+  }'</span> | jq
+<span class="o">{</span>
+  <span class="s2">"generated_texts"</span>: <span class="o">[</span>
+    <span class="s2">"Hello, I am a student at the University of California, Berkeley. I am a graduate student in the Department of Psychology. ..."</span>,
+    <span class="s2">"The weather is, of course, a factor in the weather.</span><span class="se">\n\n</span><span class="s2">The weather is a factor in the weather. ..."</span>,
+    <span class="s2">"I want toand I want to be a part of this.</span><span class="se">\n</span><span class="s2">I want to be a part of this. ..."</span>,
+    <span class="s2">"The best way to get a job is to get a job.                    "</span>,
+    <span class="s2">"The most efficient way to get a job is to get a job.                    "</span>
+  <span class="o">]</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>결과 5개가 요청 순서대로 돌아온다. 출력이 책 예제와 또 완전히 같은데, 이유는 <a href="/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/">지난 글에서 확인한 greedy decoding의 결정론</a> 그대로다. 일부 응답 뒤에 붙은 공백 꼬리는 작은 모델이 문장을 끝낸 뒤에도 생성 길이 상한까지 공백 토큰을 반복 생성한 결과로, 모델의 생성 품질·종료 처리 문제이지 배칭 오류가 아니다. 입력 배치를 맞추기 위한 padding과도 별개이며, 표시용으로는 <code class="highlighter-rouge">strip()</code> 한 번이면 정리된다.</p>
+
+<h2 id="로그로-보는-41-분할">로그로 보는 4+1 분할</h2>
+
+<p>응답만 봐서는 배칭이 됐는지 알 수 없다. 서버 로그가 증거다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>tail <span class="nt">-f</span> server_run.log
+<span class="c"># 실행 결과 (핵심 발췌)</span>
+
+<span class="c"># 1단계 — 첫 배치: batch_size 상한만큼 4개</span>
+llm.model_executor - DEBUG - Sending batch to worker: <span class="o">[</span>Sequence, Sequence, Sequence, Sequence]
+llm.model_worker   - DEBUG - Batch input shape: torch.Size<span class="o">([</span>4, 5]<span class="o">)</span>
+
+<span class="c"># 2단계 — 결과에 request_id가 딸려 나옴</span>
+llm.model_executor - DEBUG - Received results from worker: <span class="o">(</span><span class="s1">'complete'</span>,
+  <span class="o">[{</span><span class="s1">'request_id'</span>: <span class="s1">'8f5c53ca-...'</span>, <span class="s1">'generated_text'</span>: <span class="s1">'Hello, I am a student...'</span><span class="o">}</span>,
+   <span class="o">{</span><span class="s1">'request_id'</span>: <span class="s1">'22bd35ea-...'</span>, <span class="s1">'generated_text'</span>: <span class="s1">'The weather is, of course...'</span><span class="o">}</span>,
+   <span class="o">{</span><span class="s1">'request_id'</span>: <span class="s1">'25a1f857-...'</span>, <span class="s1">'generated_text'</span>: <span class="s1">'I want toand I want to...'</span><span class="o">}</span>,
+   <span class="o">{</span><span class="s1">'request_id'</span>: <span class="s1">'c4ff937b-...'</span>, <span class="s1">'generated_text'</span>: <span class="s1">'The best way to get a job...'</span><span class="o">}])</span>
+
+<span class="c"># 3단계 — 두 번째 배치: 남은 1개</span>
+llm.model_executor - DEBUG - Sending batch to worker: <span class="o">[</span>Sequence]
+llm.model_worker   - DEBUG - Batch input shape: torch.Size<span class="o">([</span>1, 6]<span class="o">)</span>
+</code></pre></div></div>
+
+<p>읽을 지점이 세 곳이다.</p>
+
+<ul>
+  <li><strong><code class="highlighter-rouge">torch.Size([4, 5])</code></strong> — 4는 한 번에 처리하는 시퀀스 수, 5는 배치 내 최장 프롬프트 기준으로 padding해 맞춘 토큰 길이다. 토크나이저가 <code class="highlighter-rouge">padding=True</code>로 프롬프트 4개를 텐서 하나에 묶은 결과이고, 이것이 배칭의 물리적 실체다 — 서로 다른 요청이 하나의 forward pass에 섞여 들어간다. 두 번째 배치가 <code class="highlighter-rouge">[1, 6]</code>인 것도 같은 원리다(남은 프롬프트 1개, 그 길이 기준 6토큰)</li>
+  <li><strong>request_id 매핑</strong> — 워커가 생성 결과에 원래 Sequence의 id를 다시 붙여 돌려준다. 배치로 섞여 들어가도 각 결과가 어느 프롬프트 것인지 잃지 않는 이유이고, 엔진은 이 id로 각 Sequence에 결과를 채워 넣는다. <strong>API 요청의 프롬프트 개수와 실제 모델 실행의 배치 크기는 같지 않을 수 있고</strong>, 원칙적으로는 서로 다른 사용자의 요청도 하나의 실행 배치로 다시 묶일 수 있는 구조다</li>
+  <li><strong>4개가 끝난 뒤에야 1개가 실행된다</strong> — 첫 배치가 모두 끝나 활성 슬롯이 비워진 다음에야 대기 중이던 5번째 프롬프트가 단독 배치로 실행됐다. 앞서 말한 정적 배칭(FIFO + 고정 크기)의 동작이 로그로 증명된 셈이다</li>
+</ul>
+
+<p>흐름을 그림으로 정리하면 다음과 같다.</p>
+
+<pre><code class="language-mermaid">flowchart LR
+    subgraph req["HTTP 요청 1건"]
+        A["prompt A"] &amp; B["prompt B"] &amp; C["prompt C"] &amp; D["prompt D"] &amp; E["prompt E"]
+    end
+    req --&gt; Q["incoming_queue&lt;br/&gt;(Sequence로 포장, id 발급)"]
+    Q --&gt;|"batch_size=4 상한"| B1["배치 1: A B C D&lt;br/&gt;torch.Size([4, 5])"]
+    Q --&gt;|"배치 1 완료 후"| B2["배치 2: E&lt;br/&gt;torch.Size([1, 6])"]
+    B1 --&gt; W["ModelWorker&lt;br/&gt;한 번의 forward로 4개 생성"]
+    B2 --&gt; W
+    W --&gt; M["request_id로 결과 매핑&lt;br/&gt;→ 요청 순서대로 응답 조립"]
+</code></pre>
+
+<h2 id="배치는-기다려-주지-않는다">배치는 기다려 주지 않는다</h2>
+
+<p>글감을 정리하다 생긴 의문 하나 — 프롬프트를 1개만 보내면, 4개가 찰 때까지 기다리느라 오히려 손해를 보는 것 아닌가.</p>
+
+<p>결론은 <strong>기다리지 않는다</strong>. <code class="highlighter-rouge">get_next_batch()</code>는 큐에 쌓여 있는 것만 최대 4개까지 즉시 꺼내 반환할 뿐, 배치를 채우려고 대기하는 로직이 없다. 프롬프트 1개면 크기 1짜리 배치로 바로 실행된다. 뒤의 <a href="#검증-2-배치-경계-관찰">배치 경계 실험</a>에서 N=1이 약 1.03초 — 단일 실행 1회와 같은 시간 — 로 끝나는 것으로도 확인된다.</p>
+
+<p>다만 이것은 이 구현의 선택일 뿐이다. 실제 서빙 시스템에는 “최대 N ms까지 기다렸다가 모인 만큼 배치로 실행”하는 대기 기반(dynamic) 배칭도 흔하고, 그 대기 시간이 지연과 처리량을 맞바꾸는 튜닝 노브가 된다. 기다리지 않으면 첫 요청의 지연은 최소가 되지만 배치가 덜 차서 처리량 기회를 잃고, 기다리면 그 반대다.</p>
+
+<p><br /></p>
+
+<h1 id="검증-1-처리량-비교">검증 1: 처리량 비교</h1>
+
+<h2 id="배치-요청-부하-테스트">배치 요청 부하 테스트</h2>
+
+<p><a href="/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/">지난 글과 같은 방식</a>으로 hey를 쓰되, 이번에는 요청 하나에 프롬프트 5개를 담아 <code class="highlighter-rouge">/generate</code>로 보낸다. 주의할 점 — <code class="highlighter-rouge">/basic_generate</code>는 요청 1개 = 프롬프트 1개지만 <code class="highlighter-rouge">/generate</code>는 요청 1개 = 프롬프트 5개이므로, Requests/sec를 그대로 비교하면 안 되고 프롬프트 처리량으로 환산해야 한다.</p>
+
+<blockquote>
+  <p>배치 프롬프트 처리량 = Requests/sec × 요청당 프롬프트 수</p>
+</blockquote>
+
+<p>총 10개 요청(= 프롬프트 50개)을 동시성 1, 2, 5, 10으로 보낸 결과다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>동시 요청</th>
+      <th>Total</th>
+      <th>Average</th>
+      <th>p50</th>
+      <th>p90</th>
+      <th>Requests/sec</th>
+      <th>Prompts/sec</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>26.99초</td>
+      <td>2.70초</td>
+      <td>2.69초</td>
+      <td>2.97초</td>
+      <td>0.371</td>
+      <td><strong>1.85</strong></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>28.88초</td>
+      <td>5.46초</td>
+      <td>5.81초</td>
+      <td>6.13초</td>
+      <td>0.346</td>
+      <td><strong>1.73</strong></td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>27.49초</td>
+      <td>11.20초</td>
+      <td>13.49초</td>
+      <td>14.51초</td>
+      <td>0.364</td>
+      <td><strong>1.82</strong></td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>26.04초</td>
+      <td>14.36초</td>
+      <td>15.70초</td>
+      <td>26.04초</td>
+      <td>0.384</td>
+      <td><strong>1.92</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>모든 요청이 200으로 성공했고, 요청 유실은 없다.</p>
+
+<h2 id="기본-생성-대비-처리량-약-2배">기본 생성 대비: 처리량 약 2배</h2>
+
+<p>지난 글의 <code class="highlighter-rouge">/basic_generate</code> 결과(요청 1개 = 프롬프트 1개라 Requests/sec가 곧 Prompts/sec)와 나란히 놓으면 배칭의 효과가 보인다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>동시 요청</th>
+      <th>기본 생성 Prompts/sec</th>
+      <th>배치 Prompts/sec</th>
+      <th>향상</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>0.888</td>
+      <td>1.853</td>
+      <td>2.09배</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>0.919</td>
+      <td>1.732</td>
+      <td>1.88배</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>0.958</td>
+      <td>1.819</td>
+      <td>1.90배</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>0.892</td>
+      <td>1.920</td>
+      <td>2.15배</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>c=1 기준으로 계산을 펼치면 이렇다. 기본 생성은 프롬프트당 평균 1.13초였으므로 5개를 순차 실행하면 약 5.6초가 예상되는데, 배치 요청 하나는 평균 2.70초에 끝났다. 프롬프트 5개가 <code class="highlighter-rouge">4 + 1</code>의 모델 실행 2회로 처리되면서, 개별 실행 5회가 2회로 줄어든 만큼(약 2.1배)의 개선이 나온 것이다. 프롬프트 하나를 처리하는 평균 비용으로 보면 약 1.1초 → 0.52~0.58초로 절반이 됐다.</p>
+
+<p>주의할 점 하나 — 이 “프롬프트당 비용”은 처리량 계산용 평균이다. 실제 사용자는 배치 전체가 끝나야 응답을 받으므로, 사용자 관점의 지연은 Average 값(2.70초)을 그대로 봐야 한다. <strong>배칭은 처리량을 사는 대신 개별 응답 지연을 지불하는 거래</strong>다.</p>
+
+<h2 id="정적-배칭의-한계">정적 배칭의 한계</h2>
+
+<p>효과를 확인했으니 한계를 보자. 동시 요청 수를 늘렸을 때의 패턴이 지난 글과 판박이다.</p>
+
+<ul>
+  <li><strong>처리량이 늘지 않는다.</strong> 동시성을 1 → 10으로 10배 올렸는데 프롬프트 처리량은 1.85 → 1.92 prompts/s로 약 4% 변화, 측정 편차 수준이다. 총 처리 시간도 약 26~29초로 일정하다</li>
+  <li><strong>지연만 폭증한다.</strong> 평균 응답은 2.70초 → 14.36초(5.3배), p90은 2.97초 → 26.04초(8.8배). c=10 히스토그램에서는 요청이 약 2~3초 간격으로 하나씩 완료되는 계단이 다시 나타난다</li>
+  <li><strong>네트워크 병목이 아니다.</strong> c=10 기준 연결 시간은 4.1ms, resp wait가 14.4초다</li>
+</ul>
+
+<p>즉 <strong>요청 내부의 프롬프트들은 배칭되지만, 서로 다른 HTTP 요청을 묶는 배칭은 일어나지 않는다.</strong> 각 배치 요청이 단일 ModelWorker 앞에서 줄을 서고, 워커는 한 번에 한 요청의 배치만 순차 처리한다. 정리하면 다음과 같다.</p>
+
+<blockquote>
+  <p>정적 배칭으로 프롬프트 처리량은 약 2배 향상됐지만, 동시 HTTP 요청 간 동적 배칭은 이루어지지 않아 부하가 증가하면 처리량은 정체되고 응답 대기 시간만 크게 증가했다.</p>
+</blockquote>
+
+<p>앞의 <a href="#로그로-보는-41-분할">로그 관찰</a>에서 “원칙적으로는 다른 사용자의 요청도 하나의 배치로 묶일 수 있는 구조”라고 했는데, 그 가능성이 실현되려면 요청 경계를 넘어 디코딩 스텝 단위로 배치를 재구성하는 스케줄링이 필요하다 — continuous batching이 하는 일이고, 이 시스템에서는 스트리밍 경로(3.3 예정)가 그 방향의 첫걸음이다.</p>
+
+<p><br /></p>
+
+<h1 id="검증-2-배치-경계-관찰">검증 2: 배치 경계 관찰</h1>
+
+<h2 id="아이디어-ceilnb의-계단">아이디어: ceil(N/B)의 계단</h2>
+
+<p>처리량 비교와 별개로, 배치 크기 4가 정말 경계로 동작하는지 직접 확인하고 싶었다. hey는 같은 요청을 반복하는 부하 도구라 “프롬프트 개수를 바꿔 가며 경계를 본다”는 목적에는 맞지 않는다. 대신 이런 아이디어를 쓴다 — 배치 크기가 B라면 프롬프트 N개는 <code class="highlighter-rouge">ceil(N/B)</code>번의 모델 실행으로 처리되므로, <strong>총 시간은 N에 비례하지 않고 계단식으로 증가</strong>해야 한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>배치 크기 4 가정 시 예상:
+N=1  → 실행 1회         N=5  → 실행 2회 (4+1)
+N=4  → 실행 1회         N=8  → 실행 2회 (4+4)
+                        N=9  → 실행 3회 (4+4+1)
+</code></pre></div></div>
+
+<p>배칭이 동작한다면 N=1과 N=4의 시간이 4배 차이 나지 않아야 하고, 4 → 5와 8 → 9에서 시간이 계단식으로 뛰어야 한다. 이 로직을 측정 스크립트로 만들었다. N을 바꿔 가며 워밍업 후 여러 번 측정하고, <code class="highlighter-rouge">총시간 ≈ a + b·ceil(N/B)</code> 모델을 B 후보 전부에 대해 최소제곱 적합해 결정계수가 가장 높은 B를 고르는 방식이다.</p>
+
+<h2 id="1차-측정-b4로-보인다">1차 측정: B=4로 보인다</h2>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ EXTRA_JSON</span><span class="o">=</span><span class="s1">'"max_tokens": 32'</span> ./test_batch.sh
+<span class="c"># 실행 결과 (핵심 발췌)</span>
+  N   중앙값<span class="o">(</span>s<span class="o">)</span>   최소<span class="o">(</span>s<span class="o">)</span>   프롬프트당<span class="o">(</span>s<span class="o">)</span>  처리량<span class="o">(</span>p/s<span class="o">)</span>   vs <span class="nv">N</span><span class="o">=</span>1   직전 대비
+  ─────────────────────────────────────────────────────────────────────────
+  1       1.064     1.030        1.0641        0.94     1.00x   —
+  2       1.396     1.298        0.6981        1.43     1.31x   +31%  ← 계단
+  3       1.335     1.248        0.4451        2.25     1.25x   <span class="nt">-4</span>%
+  4       1.220     1.152        0.3049        3.28     1.15x   <span class="nt">-9</span>%
+  5       2.268     2.196        0.4537        2.20     2.13x   +86%  ← 계단
+  8       2.438     2.337        0.3047        3.28     2.29x   +7%
+  9       4.687     3.329        0.5208        1.92     4.40x   +92%  ← 계단
+
+  ── 배치 크기 추정 <span class="o">(</span>모델: 총시간 ≈ a + b·ceil<span class="o">(</span>N/B<span class="o">))</span> ──
+  1위  <span class="nv">B</span><span class="o">=</span>4    R²<span class="o">=</span>0.944   실행 1회당 1.574s
+  ── 판정 ──
+  <span class="o">[</span>O] <span class="nv">N</span><span class="o">=</span>1→4 시간이 1.15배 <span class="o">(</span>4배보다 훨씬 작음<span class="o">)</span> → 한 번에 묶여 처리됨
+  <span class="o">[</span>O] <span class="nv">N</span><span class="o">=</span>4→5 에서 +86% 계단 상승 → 두 번째 배치가 생김 <span class="o">(</span>경계 <span class="o">=</span> 4<span class="o">)</span>
+  <span class="o">[</span>O] <span class="nv">N</span><span class="o">=</span>8→9 에서 +92% 계단 상승 → 세 번째 배치가 생김
+</code></pre></div></div>
+
+<p>세 가지 시그니처가 모두 나왔다. 특히 결정적인 두 지점 —</p>
+
+<ul>
+  <li><strong>N=4와 N=8의 프롬프트당 시간이 0.3049초 / 0.3047초로 사실상 같다.</strong> 꽉 찬 배치는 몇 번을 돌리든 효율이 동일하다는 뜻이다</li>
+  <li><strong>N=1 → 4는 일이 4배인데 시간은 1.15배</strong>다. 처리량은 0.94 → 3.28 prompts/s로 3.5배 뛰었다</li>
+  <li>반대로 N=5와 N=9의 “꼬리 배치”는 비싸다. 5번째 프롬프트 하나 때문에 실행 1회분(약 1.1초)이 통째로 추가된다 — 4개짜리 배치를 돌리는 비용과 거의 같다. 배칭의 핵심 트레이드오프가 숫자로 보인다</li>
+</ul>
+
+<h2 id="측정-노이즈와-통계-선택">측정 노이즈와 통계 선택</h2>
+
+<p>다만 표를 그대로 믿으면 안 되는 지점이 있다. N=2의 <code class="highlighter-rouge">+31% ← 계단</code>은 오탐이다 — N=2 중앙값(1.396초)이 N=4(1.220초)보다 큰데, 실행 횟수가 같은 두 지점에서 이 순서는 물리적으로 어색하다. 3회 측정의 중앙값이 노이즈에 끌려간 것이다.</p>
+
+<p>범위를 넓힌 2차 측정(<code class="highlighter-rouge">SIZES="4 8 12 13 16"</code>)에서는 이 문제가 추정 자체를 틀리게 만들었다. 중앙값 기준으로는 N=12(5.29초)가 N=13(4.08초)보다 커지는 역전이 생겼고 — 12는 3회, 13은 4회 실행이니 불가능한 순서다 — 추정기는 이 오염된 순서를 설명하려고 B≈5라는 답을 내놨다. 그런데 <strong>최소값 기준으로 보면 그림이 완벽하게 맞는다.</strong></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>N</th>
+      <th>최소(s)</th>
+      <th>ceil(N/4)</th>
+      <th>실행 1회당</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>4</td>
+      <td>1.016</td>
+      <td>1</td>
+      <td>1.02초</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>2.144</td>
+      <td>2</td>
+      <td>1.07초</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>3.166</td>
+      <td>3</td>
+      <td>1.06초</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td>4.077</td>
+      <td>4</td>
+      <td>1.02초</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>4.599</td>
+      <td>4</td>
+      <td>1.15초</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>총 시간이 <code class="highlighter-rouge">1.05 × ceil(N/4)</code>에 거의 정확히 붙는다. 12 → 13에서 계단(3회 → 4회)이 예측대로 나타나고, 13과 16이 같은 층(4회)인 것도 맞다. <strong>배치 크기 4가 의도대로 동작하고 있다.</strong></p>
+
+<p>여기서 얻은 측정 방법론 하나 — 로컬 머신의 측정 노이즈(다른 프로세스와의 경합, 스로틀링)는 언제나 시간을 <strong>늘리는 방향으로만</strong> 작용한다. 다른 프로세스가 CPU를 보태 줘서 요청이 빨라지는 일은 없다. 이런 단방향 오염에서는 대칭 노이즈를 가정하는 중앙값보다 “방해 없는 순수 실행 시간”의 추정치인 <strong>최소값</strong>이 낫다. 스크립트도 기본 통계를 min으로 바꾸고, N이 커졌는데 시간이 줄어드는 물리적으로 불가능한 구간을 경고하도록 고쳤다.</p>
+
+<h2 id="남은-한계">남은 한계</h2>
+
+<p>이 실험에서 정리하지 못한 것도 명시해 둔다. 출력 길이를 고정하려고 요청 본문에 <code class="highlighter-rouge">"max_tokens": 32</code>를 넣었지만, 서버의 요청 모델(<code class="highlighter-rouge">BatchGenerateRequest</code>)에는 <code class="highlighter-rouge">prompts</code> 필드만 정의되어 있어 <strong>모르는 필드는 조용히 무시된 것으로 보인다</strong>(응답 길이가 줄지 않았다). pydantic은 기본적으로 스키마에 없는 필드를 에러 없이 버리기 때문에, 클라이언트는 파라미터가 적용됐다고 착각하기 쉽다. 생성 길이가 실행마다 흔들리면 시간 차이가 배칭이 아니라 출력 길이 탓일 수 있으므로, 위 계단 판정은 min 통계와 <code class="highlighter-rouge">ceil(N/B)</code> 적합의 일관성에 근거한 것으로 한정한다. 또 이 실험은 <strong>요청 하나 안의 프롬프트 리스트</strong>에 대한 정적 배칭을 잰 것이고, 동시 요청을 묶는 continuous batching의 검증은 별도 실험이 필요하다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<ul>
+  <li>배치의 공통 정의는 “독립 입력들을 한 번의 연산 호출로 묶는 단위”이고, 학습·추론·서빙은 묶는 목적과 사후 처리, 크기 결정 기준이 다르다. LLM 서빙에서는 가변 길이와 KV 캐시 때문에 요청 수가 아니라 토큰 수 기준의 동적 구성이 필요해진다</li>
+  <li><code class="highlighter-rouge">/generate</code>의 프롬프트 5개는 batch_size=4 제한에 따라 4+1 두 번의 실행으로 나뉘었고, <code class="highlighter-rouge">torch.Size([4, 5])</code>(시퀀스 4개 × padding 5토큰)와 request_id 매핑으로 배칭의 실체를 확인했다</li>
+  <li>이 구현의 배칭은 큐에 있는 만큼만 즉시 실행하며 배치를 채우려 기다리지 않는다. 대기 기반 배칭은 지연과 처리량을 맞바꾸는 별도의 설계 선택이다</li>
+  <li>정적 배칭으로 프롬프트 처리량이 약 2배(0.9 → 1.7~1.9 prompts/s) 올랐지만, HTTP 요청 사이의 배칭은 없어서 동시 부하에서는 처리량이 정체되고 지연만 누적된다</li>
+  <li>프롬프트 개수를 바꿔 총 시간의 계단을 관찰하는 방법으로 배치 크기 B=4를 역산해 확인했다. 단방향 측정 노이즈 아래에서는 중앙값보다 최소값이 좋은 추정치라는 방법론도 얻었다</li>
+  <li>남은 문제 — 배치 전체가 끝나야 응답이 돌아오는 구조에서는 사용자가 첫 토큰을 보기까지의 시간도 배치에 묶인다. 토큰을 생성되는 대로 흘려보내는 스트리밍(3.3 예정)이 다음 주제다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://www.oreilly.com/library/view/hands-on-llm-serving/9798341621480/">Hands-On LLM Serving and Optimization (O’Reilly)</a></li>
+  <li><a href="https://github.com/orca3/llm-model-inference/tree/main/ch03/single_model_llm_serving">실습 코드: orca3/llm-model-inference — ch03/single_model_llm_serving</a></li>
+  <li><a href="https://docs.vllm.ai/en/latest/configuration/optimization.html">vLLM: Optimization and Tuning (max_num_seqs, max_num_batched_tokens)</a></li>
+  <li><a href="/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/">서빙 시스템 직접 만들기 3.1. 기본 생성 요청</a></li>
+  <li><a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">서빙 시스템 직접 만들기 2. 코드 구조</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#batching" class="page__taxonomy-item" rel="tag">Batching</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study-week-2" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study-Week-2</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#latency" class="page__taxonomy-item" rel="tag">Latency</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#llm-serving" class="page__taxonomy-item" rel="tag">LLM-Serving</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#load-test" class="page__taxonomy-item" rel="tag">Load-Test</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#static-batching" class="page__taxonomy-item" rel="tag">Static-Batching</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#throughput" class="page__taxonomy-item" rel="tag">Throughput</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-15">August 15, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BLLM%5D+LLM+%EC%84%9C%EB%B9%99%EA%B3%BC+%EC%B5%9C%EC%A0%81%ED%99%94%3A+%EB%8B%A8%EC%9D%BC+%EB%AA%A8%EB%8D%B8+%EC%84%9C%EB%B9%99+%EC%8B%9C%EC%8A%A4%ED%85%9C+-+3.2.+%EB%B0%B0%EC%B9%98+%EC%9A%94%EC%B2%AD%3A+%EC%A0%95%EC%A0%81+%EB%B0%B0%EC%B9%AD%EC%9D%98+%ED%9A%A8%EA%B3%BC%EC%99%80+%ED%95%9C%EA%B3%84%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/" class="pagination--pager" title="[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.1. 기본 생성 요청: 첫 기동과 낮은 처리량
+">이전</a>
+    
+    
+      <a href="#" class="pagination--pager disabled">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/" rel="permalink">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.1. 기본 생성 요청: 첫 기동과 낮은 처리량
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 14일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  14 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">서비스를 직접 기동해 프로세스 구조를 관찰하고, 부하 테스트로 단일 워커의 순차 처리 병목을 재현해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/" rel="permalink">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 2. 코드 구조: 다섯 컴포넌트 해부
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 14일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  12 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">단일 모델 서빙 서비스의 코드를 컴포넌트 단위로 해부하며, 프로세스 분리와 큐 기반 IPC가 어떻게 구현되는지 살펴보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-01-LLM-Serving-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 1. 개요: 트랜스포머에서 서빙 시스템으로
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 14일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  6 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">트랜스포머 학습을 서빙과 잇고, 왜 프레임워크 없이 서빙 시스템을 직접 만드는지 그려 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-GPU-ECC-DBE-Incident/" rel="permalink">[GPU] 사례로 보는 GPU ECC 장애: VRAM DBE부터 row remapping까지
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  29 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">GPU ECC 발생 사례를 통해 VRAM DBE 발생부터 분산 학습 실패, row remapping과 리셋 복구까지 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>
