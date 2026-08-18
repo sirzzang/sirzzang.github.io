@@ -552,11 +552,11 @@ GPU-cd616af2-..., 0, 0, No, No
 
 <br>
 
-# 후기: 관찰은 반나절 만에 끝났다
+# 후기
 
 "현재는 관찰 중이다"라고 했는데, 안타깝게도 그 관찰은 오래가지 않았다 — 리셋 복구 5시간 41분 만에 같은 GPU에서 DBE가 재발했고(2차 발생), 다시 복구한 지 약 60시간 만에 한 번 더 재발했다(3차 발생).
 
-## 세 번의 발생, 하나의 위치
+## 발생 이력: 세 번의 발생, 같은 위치
 
 | | 1차 (08-10) | 2차 (08-11) | 3차 (08-14) |
 | --- | --- | --- | --- |
@@ -572,7 +572,7 @@ physAddr는 매번 다르다. 그러나 **파티션은 세 번 모두 FBPA 3 / s
 
 여담으로 3차 발생은 1차와 똑같이 검출 이벤트 2건(volatile 카운터 2)에 새 remap row 1개였다. 남은 궁금증에 적어 둔 "카운터 2" 미스터리의 재현으로, 같은 불량 row가 두 번 검출된다는 가설 쪽에 무게가 실린다.
 
-## 세 번째 리셋의 복병: 호스트로 옮겨간 핸들
+## 세 번째 리셋 트러블슈팅
 
 리셋 절차는 세 번 모두 같은 플레이북(operand 라벨 스위치 → persistence 해제 → 단독 리셋 → 원복)이었는데, 3차에서는 다 걷어냈는데도 리셋이 거부됐다. `fuser`로 보유자를 다시 확인하니 이번엔 k8s 파드가 아니었다.
 
@@ -585,7 +585,7 @@ my-user@gpu-node-a:~$ cat /proc/1873116/cgroup
 0::/system.slice/nvidia-dcgm.service    # k8s 파드가 아니라 호스트 systemd 서비스
 ```
 
-그 사이 호스트에 systemd 서비스로 새로 올라온 DCGM(nv-hostengine)이었다. `gpu.deploy.operands=false`는 **k8s operand 파드만** 걷어낸다 — 같은 역할의 데몬이라도 호스트 systemd로 떠 있으면 라벨 스위치의 영향권 밖이다. 조치는 한 줄 추가로 끝났다.
+그 사이 호스트에 systemd 서비스로 새로 올라온 DCGM(nv-hostengine)이었다. 확인해 보니 전날 RMA 진단 준비 과정에서 설치·enable된 것이었다. `gpu.deploy.operands=false`는 **k8s operand 파드만** 걷어낸다 — 같은 역할의 데몬이라도 호스트 systemd로 떠 있으면 라벨 스위치의 영향권 밖이다. 조치는 한 줄 추가로 끝났다.
 
 ```shell
 my-user@gpu-node-a:~$ sudo systemctl stop nvidia-dcgm
@@ -600,7 +600,7 @@ my-user@gpu-node-a:~$ sudo systemctl start nvidia-dcgm
 
 예비 row가 남아 있으니 리셋-복귀를 반복할 수는 있다. 하지만 이 루프에는 함정이 있다. **리셋하면 device plugin이 GPU를 healthy로 되돌리고, GPU는 다시 학습을 배정받고, 학습은 다시 죽는다.** 재발 간격이 5시간이었다가 60시간이었다가 — 예측이 안 되는 이상, RMA 처리 전까지는 리셋 후에도 풀에 복귀시키지 않는 격리 운용(노드당 3/4장)이 안전하다.
 
-그렇다고 곧바로 RMA가 성립하는 것은 아니다. NVIDIA의 공식 RMA 정책을 찾아보면 기준이 명시되어 있다 — **row remapping failure flag가 세트되고, Field Diagnostic으로 검증되었을 때**다. flag가 서는 조건은 세 가지다.
+그렇다고 곧바로 RMA가 성립하는 것은 아니다. [NVIDIA의 공식 RMA 정책](https://docs.nvidia.com/deploy/a100-gpu-mem-error-mgmt/rma-policy-thresholds-for-row-remapping.html)을 찾아보면 기준이 명시되어 있다 — **row remapping failure flag가 세트되고, Field Diagnostic으로 검증되었을 때**다. flag가 서는 조건은 세 가지다.
 
 - 이미 uncorrectable row 8개가 remap된 뱅크에서 추가 remap 시도 발생
 - 이미 remap된 row에서 다시 remap 시도 발생
