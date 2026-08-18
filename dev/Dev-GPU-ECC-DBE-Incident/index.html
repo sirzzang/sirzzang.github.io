@@ -519,10 +519,10 @@ window.MathJax = {
       <li><a href="#남은-궁금증">남은 궁금증</a></li>
     </ul>
   </li>
-  <li><a href="#후기-관찰은-반나절-만에-끝났다">후기: 관찰은 반나절 만에 끝났다</a>
+  <li><a href="#후기">후기</a>
     <ul>
-      <li><a href="#세-번의-발생-하나의-위치">세 번의 발생, 하나의 위치</a></li>
-      <li><a href="#세-번째-리셋의-복병-호스트로-옮겨간-핸들">세 번째 리셋의 복병: 호스트로 옮겨간 핸들</a></li>
+      <li><a href="#발생-이력-세-번의-발생-같은-위치">발생 이력: 세 번의 발생, 같은 위치</a></li>
+      <li><a href="#세-번째-리셋-트러블슈팅">세 번째 리셋 트러블슈팅</a></li>
       <li><a href="#조치-전환-격리-운용과-선제-rma-문의">조치 전환: 격리 운용과 선제 RMA 문의</a></li>
     </ul>
   </li>
@@ -1245,11 +1245,11 @@ GPU-cd616af2-..., 0, 0, No, No
 
 <p><br /></p>
 
-<h1 id="후기-관찰은-반나절-만에-끝났다">후기: 관찰은 반나절 만에 끝났다</h1>
+<h1 id="후기">후기</h1>
 
 <p>“현재는 관찰 중이다”라고 했는데, 안타깝게도 그 관찰은 오래가지 않았다 — 리셋 복구 5시간 41분 만에 같은 GPU에서 DBE가 재발했고(2차 발생), 다시 복구한 지 약 60시간 만에 한 번 더 재발했다(3차 발생).</p>
 
-<h2 id="세-번의-발생-하나의-위치">세 번의 발생, 하나의 위치</h2>
+<h2 id="발생-이력-세-번의-발생-같은-위치">발생 이력: 세 번의 발생, 같은 위치</h2>
 
 <table>
   <thead>
@@ -1300,7 +1300,7 @@ GPU-cd616af2-..., 0, 0, No, No
 
 <p>여담으로 3차 발생은 1차와 똑같이 검출 이벤트 2건(volatile 카운터 2)에 새 remap row 1개였다. 남은 궁금증에 적어 둔 “카운터 2” 미스터리의 재현으로, 같은 불량 row가 두 번 검출된다는 가설 쪽에 무게가 실린다.</p>
 
-<h2 id="세-번째-리셋의-복병-호스트로-옮겨간-핸들">세 번째 리셋의 복병: 호스트로 옮겨간 핸들</h2>
+<h2 id="세-번째-리셋-트러블슈팅">세 번째 리셋 트러블슈팅</h2>
 
 <p>리셋 절차는 세 번 모두 같은 플레이북(operand 라벨 스위치 → persistence 해제 → 단독 리셋 → 원복)이었는데, 3차에서는 다 걷어냈는데도 리셋이 거부됐다. <code class="highlighter-rouge">fuser</code>로 보유자를 다시 확인하니 이번엔 k8s 파드가 아니었다.</p>
 
@@ -1312,7 +1312,7 @@ my-user@gpu-node-a:~<span class="nv">$ </span><span class="nb">cat</span> /proc/
 0::/system.slice/nvidia-dcgm.service    <span class="c"># k8s 파드가 아니라 호스트 systemd 서비스</span>
 </code></pre></div></div>
 
-<p>그 사이 호스트에 systemd 서비스로 새로 올라온 DCGM(nv-hostengine)이었다. <code class="highlighter-rouge">gpu.deploy.operands=false</code>는 <strong>k8s operand 파드만</strong> 걷어낸다 — 같은 역할의 데몬이라도 호스트 systemd로 떠 있으면 라벨 스위치의 영향권 밖이다. 조치는 한 줄 추가로 끝났다.</p>
+<p>그 사이 호스트에 systemd 서비스로 새로 올라온 DCGM(nv-hostengine)이었다. 확인해 보니 전날 RMA 진단 준비 과정에서 설치·enable된 것이었다. <code class="highlighter-rouge">gpu.deploy.operands=false</code>는 <strong>k8s operand 파드만</strong> 걷어낸다 — 같은 역할의 데몬이라도 호스트 systemd로 떠 있으면 라벨 스위치의 영향권 밖이다. 조치는 한 줄 추가로 끝났다.</p>
 
 <div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>my-user@gpu-node-a:~<span class="nv">$ </span><span class="nb">sudo </span>systemctl stop nvidia-dcgm
 my-user@gpu-node-a:~<span class="nv">$ </span><span class="nb">sudo </span>nvidia-smi <span class="nt">-i</span> 1 <span class="nt">-r</span>
@@ -1326,7 +1326,7 @@ my-user@gpu-node-a:~<span class="nv">$ </span><span class="nb">sudo </span>syste
 
 <p>예비 row가 남아 있으니 리셋-복귀를 반복할 수는 있다. 하지만 이 루프에는 함정이 있다. <strong>리셋하면 device plugin이 GPU를 healthy로 되돌리고, GPU는 다시 학습을 배정받고, 학습은 다시 죽는다.</strong> 재발 간격이 5시간이었다가 60시간이었다가 — 예측이 안 되는 이상, RMA 처리 전까지는 리셋 후에도 풀에 복귀시키지 않는 격리 운용(노드당 3/4장)이 안전하다.</p>
 
-<p>그렇다고 곧바로 RMA가 성립하는 것은 아니다. NVIDIA의 공식 RMA 정책을 찾아보면 기준이 명시되어 있다 — <strong>row remapping failure flag가 세트되고, Field Diagnostic으로 검증되었을 때</strong>다. flag가 서는 조건은 세 가지다.</p>
+<p>그렇다고 곧바로 RMA가 성립하는 것은 아니다. <a href="https://docs.nvidia.com/deploy/a100-gpu-mem-error-mgmt/rma-policy-thresholds-for-row-remapping.html">NVIDIA의 공식 RMA 정책</a>을 찾아보면 기준이 명시되어 있다 — <strong>row remapping failure flag가 세트되고, Field Diagnostic으로 검증되었을 때</strong>다. flag가 서는 조건은 세 가지다.</p>
 
 <ul>
   <li>이미 uncorrectable row 8개가 remap된 뱅크에서 추가 remap 시도 발생</li>
