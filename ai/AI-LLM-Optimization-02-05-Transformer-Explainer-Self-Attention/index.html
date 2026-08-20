@@ -37,6 +37,8 @@
 
 
 
+  <meta property="article:modified_time" content="2026-08-20T00:00:00+09:00">
+
 
 
   
@@ -440,7 +442,7 @@ window.MathJax = {
     <meta itemprop="headline" content="[LLM] LLM 서빙과 최적화 - 2.5. Transformer: 셀프 어텐션 계산 해부">
     <meta itemprop="description" content="Q·K·V 생성부터 멀티헤드 분할, 스케일링·마스킹·softmax, V 가중합과 출력 사영까지 — 셀프 어텐션의 실제 계산을 수식과 shape 변화로 하나씩 뜯어 보자.">
     <meta itemprop="datePublished" content="2026-08-05T00:00:00+09:00">
-    
+    <meta itemprop="dateModified" content="2026-08-20T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
@@ -460,7 +462,7 @@ window.MathJax = {
 
 
 
-  27 분 소요
+  29 분 소요
 
 
             
@@ -732,9 +734,16 @@ j=6: 1·1 + 2·(-1) + 0.6 = -0.4  # My의 v₂
 <p>어차피 나중에 Q·K·V로 다시 잘라야 하는데 왜 하나로 합쳐 곱하는가. 두 방식의 <strong>산술 연산 수(FLOPs, 부동소수점 연산 개수)</strong>는 완전히 같다 — 융합 곱 <code class="highlighter-rouge">(768, 2304)</code> 한 번의 곱셈·덧셈 수가 <code class="highlighter-rouge">(768, 768)</code> 세 번의 합과 정확히 일치한다(768×768×3 = 768×2304). 이득은 연산량이 아니라 <strong>GPU가 일하는 방식</strong>에서 나온다.</p>
 
 <blockquote>
-  <p><strong>참고</strong>: FLOPs 표기 주의</p>
+  <p><strong>참고</strong>: FLOPs vs. FLOPS</p>
 
-  <p>방금 쓴 FLOPs(floating-point operations)는 부동소수점 연산의 <strong>개수</strong>, 즉 해치워야 할 작업량이다. 초당 처리량을 뜻하는 FLOPS(FLOP/s)와는 끝의 s가 다르다(개수 vs 속도). 행렬곱 <code class="highlighter-rouge">(m, k)·(k, n)</code>의 FLOPs는 대략 $2mkn$인데, 출력 원소 하나가 곱 $k$번 + 합 $k{-}1$번 ≈ $2k$ 연산이고 그런 원소가 $mn$개라서다. 융합이든 분리든 이 개수가 같다는 것이 위 등식이고, 그러니 남는 차이는 “같은 개수를 GPU가 얼마나 빨리 처리하느냐”뿐이다.</p>
+  <p>철자 하나 차이지만 가리키는 물리량이 다르다. FLOPs의 소문자 <code class="highlighter-rouge">s</code>는 복수형 어미(operation<strong>s</strong>)고, FLOPS의 대문자 <code class="highlighter-rouge">S</code>는 per <strong>s</strong>econd다.</p>
+
+  <ul>
+    <li><strong>FLOPs</strong>(floating-point operations): 부동소수점 연산의 <strong>개수</strong>. 어떤 계산을 끝내는 데 필요한 총 작업량으로, 하드웨어와 무관하게 수식 모양만으로 정해진다. 행렬곱 <code class="highlighter-rouge">(m, k)·(k, n)</code>의 FLOPs가 대략 $2mkn$인 이유 — 출력 원소 하나가 곱 $k$번 + 합 $k{-}1$번 ≈ $2k$ 연산이고, 그런 원소가 $mn$개다</li>
+    <li><strong>FLOPS</strong>(FLOP/s, floating-point operations per second): 초당 처리하는 부동소수점 연산 수, 즉 하드웨어의 <strong>속도</strong>. GPU 스펙표에서 보는 “A100 BF16 312 TFLOPS” 같은 수치가 이것인데, 카탈로그의 피크 FLOPS는 이상적 조건의 상한이고 실제 워크로드의 실효 FLOPS는 그보다 낮다</li>
+  </ul>
+
+  <p>둘을 나누면 시간이 나온다: 이론상 실행 시간 ≈ FLOPs(작업량) ÷ 실효 FLOPS(속도). 위 등식이 말하는 것은 융합이든 분리든 분자(FLOPs)가 같다는 것이고, 따라서 두 방식의 차이는 전부 분모 — 같은 작업량을 GPU가 얼마나 빠른 실효 속도로 처리하느냐 — 에서 나온다.</p>
 </blockquote>
 
 <ul>
@@ -919,6 +928,36 @@ QKᵀ[hobby,hobby] = q_hobby· k_hobby = 3.1×4.3 + 4.2×3.4 = 13.33 + 14.28 = 2
 
 <p>Explainer의 레이어 이름이 “Masked Self Attention”인 것이 이 장치를 가리킨다. 참고로 <a href="/ai/AI-Transformer-04/">2020년 글</a>에서는 원 논문의 인코더-디코더 구조 기준으로 같은 마스킹을 정리했었다 — 인코더 쪽 셀프 어텐션에는 마스크가 없고, 순차 생성하는 디코더에만 붙는다. GPT-2는 디코더만 쌓은 구조라 모든 블록이 마스크드 셀프 어텐션이다.</p>
 
+<blockquote>
+  <p><em>참고</em>: “마스크”라는 용어의 구분</p>
+
+  <p>“마스크”라는 이름이 붙은 장치가 셋이라 구분해 둔다. 이 절의 <strong>causal mask</strong>는 입력에서 아무것도 지우지 않는다 — 모든 토큰이 그대로 들어가고, 점수 행렬의 미래 칸만 차단된다. 반면 <a href="/ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/">2.1편</a>에서 본 <strong>BERT의 <code class="highlighter-rouge">[MASK]</code></strong>는 학습 입력의 토큰 자체를 가리는 특수 토큰이다.</p>
+
+  <p>계열로 가르면 — 이 시리즈가 해부해 온 GPT-2 같은 <strong>디코더 계열</strong>은 causal mask 위에서 모든 위치의 “다음 토큰 예측”을 위의 teacher forcing 방식으로 병렬 학습하고, <strong>인코더 계열</strong>인 BERT는 causal mask 없이 양방향 어텐션을 유지한 채 입력 토큰의 약 15%를 골라 가린 뒤(대부분 <code class="highlighter-rouge">[MASK]</code>로 치환) 그 자리를 복원하게 학습한다(masked language modeling). 계보로 보면 causal mask는 원 논문(2017) 디코더의 장치를 물려받은 것이고, <code class="highlighter-rouge">[MASK]</code>는 BERT(2018)가 새로 도입한 것이다. 같은 병렬 학습이지만 가리는 대상(점수 행렬 vs 입력 토큰)과 문제 형태(다음 토큰 예측 vs 빈칸 복원)가 다르다. 마지막으로 HF 코드에 자주 보이는 <strong><code class="highlighter-rouge">attention_mask</code></strong>는 배치 길이를 맞추려 채운 padding 토큰을 참조 대상에서 빼는 장치로, 앞의 둘과 또 별개다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<p>구현에는 절충이 하나 더 있다. 상삼각은 이론적으로 계산할 필요가 없는 값인데, 위 구현은 전부 곱한 뒤 −∞로 덮는다. 이 방식이 정의이자 오랜 기본 구현이 된 데는 세 가지 이유가 있다.</p>
+
+<ul>
+  <li><strong>GPU는 일을 덜 하는 것보다 균일하게 하는 것이 빠르다.</strong> 하삼각 칸만 원소 단위로 골라 계산하면 칸마다 “미래인가?” 분기가 생기고 행마다 계산량이 달라져, <a href="#융합-곱의-이유">융합 곱의 이유</a>에서 본 GEMM 타일의 균일성이 깨진다. 절반을 버리는 걸 알면서도 정사각형을 통째로 곱하고 덧셈 한 번으로 무력화하는 쪽이 단순하고 빨랐다</li>
+  <li><strong>덧셈 마스크는 범용 인터페이스다.</strong> causal만이 아니라 padding 무시, sliding window 같은 어텐션 패턴 전부가 더하는 행렬 M만 바꾸면 같은 코드 경로(점수 + M → softmax)로 표현된다. 패턴마다 전용 커널을 짜는 대신 수식 하나로 통일된다</li>
+  <li><strong>낭비의 크기도 오랫동안 참을 만했다.</strong> 점수·가중합 계산은 $O(n^2 d)$, Q·K·V 사영이나 MLP 같은 선형층은 $O(n d^2)$ 스케일이라, 시퀀스가 짧던 시절에는 선형층이 전체 FLOPs를 지배해 상삼각 낭비의 비중이 작았다. 컨텍스트가 수만 토큰 이상으로 길어지며 $n^2$ 항이 지배하기 시작하자 비로소 진짜 비용이 됐다</li>
+</ul>
+
+<p>그래서 나온 것이 FlashAttention류 커널의 <strong>블록 단위 스킵</strong>이다 — 점수 행렬을 타일로 나눠, 전부 미래인 블록은 계산 자체를 건너뛰고 대각선에 걸친 블록만 계산 후 블록 안에서 마스킹한다. 블록 안은 여전히 균일한 dense 곱이라 첫 번째 제약을 지키면서 블록 사이의 낭비만 건너뛰는 절충이고, 결과는 “전부 계산 + 마스킹”과 같으며 causal 어텐션의 점수 계산량이 절반 가까이 준다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># causal 어텐션의 블록 단위 처리 — 결과는 "전부 계산 + 마스킹"과 동일하다
+┌────────────┬────────────┬────────────┐
+│ 계산 + 마스크 │    skip    │    skip    │   skip        : 블록 전체가 미래 → 계산하지 않음
+├────────────┼────────────┼────────────┤   계산 + 마스크 : 대각선에 걸침 → 블록 안에서만 마스킹
+│    계산     │ 계산 + 마스크 │    skip    │   계산        : 블록 전체가 과거 → 마스크 불필요
+├────────────┼────────────┼────────────┤
+│    계산     │    계산     │ 계산 + 마스크 │
+└────────────┴────────────┴────────────┘
+</code></pre></div></div>
+
 <h2 id="softmax-행-단위-정규화">softmax: 행 단위 정규화</h2>
 
 <p>마스크까지 더한 스코어를 softmax에 통과시키면 제각각인 실숫값이 0~1 사이, 행마다 합이 1인 혼합 비율로 바뀐다.</p>
@@ -1040,7 +1079,7 @@ Head 12 output (2, 64)┘
 
 <p>한 줄씩 이 글의 단계와 그대로 대응한다. <code class="highlighter-rouge">q @ k.transpose(-2, -1)</code>가 $QK^\top$(feature 축 64가 소거되며 <code class="highlighter-rouge">(T, T)</code>), <code class="highlighter-rouge">* (1.0 / math.sqrt(...))</code>가 스케일링, <code class="highlighter-rouge">masked_fill(... , -inf)</code>가 상삼각 마스킹, <code class="highlighter-rouge">softmax(dim=-1)</code>가 행 단위 정규화, <code class="highlighter-rouge">att @ v</code>가 V 가중합, <code class="highlighter-rouge">transpose(1, 2)...view(B, T, C)</code>가 헤드 concat(뷰 재구성), <code class="highlighter-rouge">c_proj</code>가 $W^O$다. <code class="highlighter-rouge">self.bias</code>는 <code class="highlighter-rouge">torch.tril</code>로 만든 하삼각 마스크 버퍼로, 이 글의 상삼각 −∞와 같은 장치다.</p>
 
-<p>실제 서빙 스택에서는 이 여러 줄(스코어 → 마스크 → softmax → 가중합)이 <code class="highlighter-rouge">F.scaled_dot_product_attention</code> 한 번의 융합 커널(FlashAttention 등)로 대체된다. nanoGPT도 <code class="highlighter-rouge">if self.flash:</code> 분기로 그 경로를 함께 담고 있는데, 결과는 위 수동 경로와 같고 중간의 <code class="highlighter-rouge">(T, T)</code> 점수 행렬을 메모리에 통째로 올리지 않아 더 빠르고 메모리를 덜 쓴다.</p>
+<p>실제 서빙 스택에서는 이 여러 줄(스코어 → 마스크 → softmax → 가중합)이 <code class="highlighter-rouge">F.scaled_dot_product_attention</code> 한 번의 융합 커널(FlashAttention 등)로 대체된다. nanoGPT도 <code class="highlighter-rouge">if self.flash:</code> 분기로 그 경로를 함께 담고 있는데, 결과는 위 수동 경로와 같고 중간의 <code class="highlighter-rouge">(T, T)</code> 점수 행렬을 메모리에 통째로 올리지 않아 더 빠르고 메모리를 덜 쓴다. <a href="#마스킹-causal-mask">마스킹 절 말미</a>에서 본 상삼각 블록 스킵도 이 융합 커널 안에서 함께 일어난다.</p>
 
 <h2 id="용어-정리-스코어가중치출력">용어 정리: 스코어·가중치·출력</h2>
 
@@ -1232,7 +1271,7 @@ Head 12 output (2, 64)┘
 
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-05T00:00:00+09:00">August 5, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-20">August 20, 2026</time></p>
         
       </footer>
 
@@ -1301,7 +1340,7 @@ Head 12 output (2, 64)┘
     
     <h2 class="archive__item-title" itemprop="headline">
       
-        <a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/" rel="permalink">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.2. 배치 요청: 정적 배칭의 효과와 한계
+        <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/" rel="permalink">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.3. prefill과 decode: 생성 추론의 두 단계
 </a>
       
     </h2>
@@ -1319,6 +1358,51 @@ Head 12 output (2, 64)┘
 
 
   13 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">prefill과 decode 개념에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/" rel="permalink">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.2. 배치 요청: 정적 배칭의 효과와 한계
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 14일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  14 분 소요
 
 
       
@@ -1414,51 +1498,6 @@ Head 12 output (2, 64)┘
       
     </p>
     <p class="archive__item-excerpt" itemprop="description">단일 모델 서빙 서비스의 코드를 컴포넌트 단위로 해부하며, 프로세스 분리와 큐 기반 IPC가 어떻게 구현되는지 살펴보자.
-</p>
-  </article>
-</div>
-
-        
-          
-
-
-
-<div class="grid__item">
-  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
-    
-      <div class="archive__item-teaser">
-        <img src=
-          
-            "/assets/images/blog-Dev.jpg"
-          
-          alt="">
-      </div>
-    
-    <h2 class="archive__item-title" itemprop="headline">
-      
-        <a href="/dev/Dev-LLM-Serving-Optimization-01-LLM-Serving-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 1. 개요: 트랜스포머에서 서빙 시스템으로
-</a>
-      
-    </h2>
-    <p class="page__meta">
-      
-        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 14일
-        
-          <span class="page__meta-sep"> · </span>
-        
-      
-      
-        <i class="far fa-clock" aria-hidden="true"></i> 
-
-
-
-
-  7 분 소요
-
-
-      
-    </p>
-    <p class="archive__item-excerpt" itemprop="description">트랜스포머 학습을 서빙과 잇고, 왜 프레임워크 없이 서빙 시스템을 직접 만드는지 그려 보자.
 </p>
   </article>
 </div>
