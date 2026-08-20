@@ -14,7 +14,7 @@ tags:
   - Inference
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-2
-last_modified_at: 2026-08-15
+last_modified_at: 2026-08-20
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 2주차 학습 내용을 기반으로 합니다.*
@@ -54,7 +54,7 @@ outputs = model.generate(input_ids)                                # 프롬프�
 
 결론부터 말하면, 트랜스포머 지식을 서빙과 연결할 때 고려할 것은 두 층위다.
 
-첫째는 **모델 구조에서 유도되는 실행 특성**이다. KV cache 크기가 아키텍처 상수로 계산되고, prefill과 decode의 성격이 비대칭이라는 것 — 이건 [지난주 글의 말미]({% post_url 2026-08-05-AI-LLM-Optimization-02-01-LLM-Transformer-Overview %})에서 이미 짚었다. 서빙 튜닝의 노브들이 어디서 오는지에 대한 답이다.
+첫째는 **모델 구조에서 유도되는 실행 특성**이다. KV cache 크기가 아키텍처 상수로 계산되고, prefill과 decode의 성격이 비대칭이라는 것 — 이건 [지난주 글의 말미]({% post_url 2026-08-05-AI-LLM-Optimization-02-01-LLM-Transformer-Overview %})에서 이미 짚었고, 두 개념의 정의는 [3.3편]({% post_url 2026-08-14-Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode %})에서 따로 정리한다. 서빙 튜닝의 노브들이 어디서 오는지에 대한 답이다.
 
 둘째는 **모델 바깥의 시스템 설계**다. 그리고 이번 챕터의 답은 여기에 있다. 아키텍처 지식만으로는 다음 질문에 답할 수 없기 때문이다.
 
