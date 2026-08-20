@@ -15,7 +15,7 @@ tags:
   - Orchestration
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-2
-last_modified_at: 2026-08-15
+last_modified_at: 2026-08-20
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 2주차 학습 내용을 기반으로 합니다.*
@@ -144,7 +144,7 @@ class LLMEngine:
 
 초기화 시점에 이미 두 가지 상시 실행 흐름이 만들어진다는 점이 중요하다. 하나는 별도 **프로세스**(ModelWorker), 하나는 엔진 내부의 별도 **스레드**(스트리밍 처리 루프)다. 요청이 없어도 이 둘은 각자 큐를 바라보며 대기한다.
 
-역할이 갈린다. **ModelWorker**는 순수 실행기라, `task_queue`(프로세스 간 IPC 큐)에서 배치를 받아 모델을 돌리고 결과만 돌려준다. **스트리밍 스레드**는 스케줄러에 가까워서, 스트리밍 요청이 쌓이는 큐를 지켜보다 활성 요청을 모아 한 토큰씩 디코딩을 굴리고 그 토큰을 각 클라이언트로 흘려보낸다. 각자 다른 큐를 보는 건 하나는 "무엇을 계산할지"(실행 입력)를, 다른 하나는 "누구를 스트리밍 중인지"(스케줄링 입력)를 받기 때문이다 — [1편]({% post_url 2026-08-14-Dev-LLM-Serving-Optimization-01-LLM-Serving-Overview %})에서 본 스케줄링(Workload manager)과 실행(Model worker)의 분리가 여기서 두 개의 큐로 나타난다. 스트리밍이 왜 배치와 달리 이런 상시 루프로 도는지는 스트리밍 편(3.3, 예정)에서 코드로 확인한다.
+역할이 갈린다. **ModelWorker**는 순수 실행기라, `task_queue`(프로세스 간 IPC 큐)에서 배치를 받아 모델을 돌리고 결과만 돌려준다. **스트리밍 스레드**는 스케줄러에 가까워서, 스트리밍 요청이 쌓이는 큐를 지켜보다 활성 요청을 모아 한 토큰씩 디코딩을 굴리고 그 토큰을 각 클라이언트로 흘려보낸다. 각자 다른 큐를 보는 건 하나는 "무엇을 계산할지"(실행 입력)를, 다른 하나는 "누구를 스트리밍 중인지"(스케줄링 입력)를 받기 때문이다 — [1편]({% post_url 2026-08-14-Dev-LLM-Serving-Optimization-01-LLM-Serving-Overview %})에서 본 스케줄링(Workload manager)과 실행(Model worker)의 분리가 여기서 두 개의 큐로 나타난다. 스트리밍이 왜 배치와 달리 이런 상시 루프로 도는지는 스트리밍을 살펴 보며 코드로 확인한다.
 
 원본 코드는 `__init__`에서 vLLM 엔진(`vllm.LLM`)도 함께 만들어 같은 모델을 두 번째로 로드하는데, 이 부분은 [설계 포인트](#설계-포인트)에서 다시 본다.
 
@@ -337,7 +337,7 @@ flowchart TB
 - 요금제·우선순위 기반 스케줄링과 Admission Control
 - Tensor/Pipeline/Expert Parallelism 등 분산 추론
 - KV 캐시 관리와 Prefix Cache 라우팅
-- Prefill과 Decode를 다른 GPU에서 처리하는 분리형(disaggregated) 서빙
+- [Prefill과 Decode]({% post_url 2026-08-14-Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode %})를 다른 GPU에서 처리하는 분리형(disaggregated) 서빙
 - 장애 감지·재시도·헬스체크·오토스케일링, 안전성 필터, 관측 가능성
 
 이 중 "여러 모델·여러 워커를 라우팅하고 관리하는 계층"이 바로 이 시리즈 후반부에서 직접 만들어 볼 **멀티 모델 서빙**의 주제다. 단일 모델 서빙이 끝나면 그 확장으로 넘어간다.

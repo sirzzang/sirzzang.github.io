@@ -16,6 +16,7 @@ tags:
   - KV-Cache
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-1
+last_modified_at: 2026-08-20
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.*
@@ -239,7 +240,9 @@ KV cache bytes = 2 x num_layers x num_kv_heads x head_dim x seq_len x dtype_byte
 
 ### prefill과 decode의 비대칭
 
-같은 모델, 같은 GPU인데 프롬프트를 한꺼번에 처리하는 prefill은 compute-bound, 토큰을 하나씩 생성하는 decode는 memory-bandwidth-bound 성격을 가진다. continuous batching, chunked prefill, disaggregated serving은 전부 이 비대칭 위에 세워진 기법인데, 왜 비대칭이 생기는지가 attention 연산의 형태에서 나온다. 아키텍처를 모르면 기법들의 이름만 남고, 알면 각 기법이 어느 병목을 공략하는지가 보인다.
+같은 모델, 같은 GPU인데 프롬프트를 한꺼번에 처리하는 prefill은 compute-bound, 토큰을 하나씩 생성하는 decode는 memory-bandwidth-bound 성격을 가진다. continuous batching, chunked prefill, disaggregated serving은 전부 이 비대칭 위에 세워진 기법인데, 왜 비대칭이 생기는지가 attention 연산의 형태에서 나온다. 아키텍처를 모르면 기법들의 이름만 남고, 알면 각 기법이 어느 병목을 공략하는지가 보인다. 
+
+> 두 개념의 정의와 비대칭이 생기는 이유는 [2주차 3.3편]({% post_url 2026-08-14-Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode %})을 참고한다.
 
 ### 병렬화 축과 모델 구조
 

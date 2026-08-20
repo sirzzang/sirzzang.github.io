@@ -15,6 +15,7 @@ tags:
   - BPE
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-1
+last_modified_at: 2026-08-20
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.*
@@ -50,6 +51,8 @@ GPT-2 small의 제원은 다음과 같다.
 - 어휘 사전 50,257개, 컨텍스트 길이 1,024 토큰
 
 요즘 기준으로는 아주 작은 모델이다. 하지만 앞 글에서 본 대로 최신 생성형 LLM들도 디코더 전용 트랜스포머라는 골격을 공유하고, 달라지는 것은 주로 블록 수·차원·어휘 크기 같은 규모와 세부 변형이다. 골격을 배우는 데는 작은 모델이 오히려 낫다. 브라우저에서 즉시 돌고, 모든 중간 계산을 눈으로 따라갈 수 있기 때문이다.
+
+한 가지를 분명히 해 두면, 이 해부 시리즈(2.2~2.7)는 **디코더 계열(GPT) 기준**이다. Transformer Explainer가 GPT-2를 시각화하는 도구라서이기도 하고, 생성형 LLM의 주류가 디코더 계열이라서이기도 하다. 같은 Transformer 아키텍처를 기반으로 하고 있음에도 BERT 같은 인코더 계열과 구조가 갈리는 지점(마스킹)은 [2.5편 마스킹 절]({% post_url 2026-08-05-AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention %}#마스킹-causal-mask)에서 살펴 본다.
 
 <br>
 
