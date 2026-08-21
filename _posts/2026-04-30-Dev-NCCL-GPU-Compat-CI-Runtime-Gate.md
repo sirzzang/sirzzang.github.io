@@ -15,6 +15,7 @@ tags:
   - Kubernetes
   - CI-CD
   - Init-Container
+last_modified_at: 2026-08-21
 ---
 
 <br>
@@ -22,7 +23,7 @@ tags:
 # TL;DR
 
 - NCCL `.so` 바이너리 안에는 GPU 아키텍처별로 미리 컴파일된 SASS 커널과 forward compatibility용 PTX가 fatbin으로 묶여 있다. `cuobjdump`로 이 목록을 추출하면 "이 NCCL이 어떤 GPU를 지원하는가"를 정적으로 판정할 수 있다
-- **CI 게이트**(빌드 타임): 이미지 빌드 후, push 전에 `docker run` + `cuobjdump`로 SASS/PTX 아키텍처를 대조한다. GPU 없이도 검증 가능하고, 호환되지 않는 이미지가 레지스트리에 올라가는 것 자체를 차단한다
+- **CI 게이트**(빌드 타임): 이미지 빌드 후, push 전에 대상 이미지에서 `.so` 파일만 꺼내 **별도 검사 컨테이너**의 `cuobjdump`로 SASS/PTX 아키텍처를 대조한다. GPU 없이도 검증 가능하고, 호환되지 않는 이미지가 레지스트리에 올라가는 것 자체를 차단한다
 - **런타임 게이트**(배포 타임): K8s init container로 실제 GPU의 compute capability에서 SM 표기를 도출하고, NCCL fatbin의 SASS 목록과 대조한 뒤, 동적으로 NCCL init까지 확인한다. 학습 컨테이너 진입 전에 초 단위로 판정한다
 - 두 게이트 모두 ML 엔지니어의 학습 코드를 수정하지 않는다. 빌드 타임은 "배포 전 차단", 배포 타임은 "실제 GPU 기반 정밀 감지"로 역할이 다르다
 
@@ -167,7 +168,7 @@ NCCL의 빌드 대상 아키텍처는 [빌드 시스템](https://github.com/NVID
 | PyTorch wheel (`torch+cu12x`) | X |
 | pip `nvidia-nccl-cu12` wheel | X |
 
-호환성 게이트를 사용하려면 학습 이미지가 `-devel` variant 기반이거나, `cuda-cuobjdump-12-x` 패키지가 별도 설치되어 있어야 한다. ML 학습 이미지는 보통 `-devel` 기반이므로 대부분 바로 사용 가능하다.
+이 표는 게이트를 설계할 때 중요한 제약이 된다. **검사 대상이 될 이미지에 `cuobjdump`가 있으리라고 기대할 수 없다**는 뜻이기 때문이다. 이 제약을 어떻게 다루느냐가 CI 게이트 구조를 결정하는데, 자세한 내용은 [왜 검사 도구를 이미지 밖에 두는가](#왜-검사-도구를-이미지-밖에-두는가) 절에서 다룬다.
 
 ### 핵심 옵션
 
@@ -216,50 +217,71 @@ ML 학습 이미지는 보통 NVIDIA base 이미지(CUDA user-space libraries �
 
 ```text
 Git tag push → CI 트리거 → 이미지 빌드 완료
-  → GPU 호환성 게이트 (cuobjdump 분석)
+  → GPU 호환성 게이트 (.so 추출 → 검사 컨테이너에서 cuobjdump 분석)
     → PASS → 이미지 push
     → FAIL → push 차단, 빌드 실패
 ```
 
+## 왜 검사 도구를 이미지 밖에 두는가
+
+게이트를 만들 때 가장 먼저 떠오르는 방법은 대상 이미지를 `docker run`으로 띄우고 그 안의 `cuobjdump`를 호출하는 것이다. 구현은 간단하지만, 이 방식은 **검사 대상과 검사 도구를 같은 이미지에 묶어 버린다**. 그 결과 게이트는 대상 이미지에 두 가지를 요구하게 된다. `cuobjdump`가 있을 것, 그리고 `.so` 경로 탐색 스크립트를 돌릴 `python3`이 있을 것.
+
+이 요구는 생각보다 자주 깨진다. 앞의 표에서 봤듯 `-runtime` variant에는 `cuobjdump`가 없고, 이미지 크기를 줄이기 위해 CUDA toolkit을 **의도적으로** 제외한 베이스 이미지를 플랫폼이 함께 제공하는 경우도 있다. 실제로 그런 런타임 전용 베이스 위에서 빌드된 학습 이미지가 CI 게이트에서 실패하는 일이 있었다. 이미지의 NCCL이 GPU와 호환되지 않아서가 아니라, **검사 도구가 없어서** 실패한 것이다.
+
+이런 실패는 게이트로서 성질이 나쁘다. 게이트의 목적은 "이 이미지가 클러스터 GPU에서 도는가"를 판정하는 것인데, 판정 결과가 "이미지가 어떤 베이스에서 빌드되었는가"에 좌우된다. 게다가 어느 쪽으로 처리해도 곤란하다.
+
+- **FAIL로 처리하면**: 문제 없는 런타임 전용 이미지가 배포를 못 한다. 플랫폼이 스스로 제공한 베이스 이미지를 쓴 사용자가 차단되는 셈이다
+- **WARNING으로 넘기면**: 정작 막아야 할 NCCL 다운그레이드가 조용히 통과한다. 게이트가 있으나 마나 해진다
+
+문제의 뿌리는 둘을 묶는 것 자체다. **검사 대상은 소비자 이미지 안의 `libnccl.so`가 맞지만, 검사 도구까지 그 이미지에서 조달할 이유는 없다.** 대상 이미지에서는 `.so` 파일만 꺼내고 분석은 밖에서 하면, 베이스 이미지 종류와 무관하게 동일한 게이트가 돌고 `python3` 전제도 함께 사라진다.
+
+이렇게 하면 대상 이미지에 남는 요구사항은 "`.so` 파일이 그 안에 존재한다" 하나뿐이다. 대신 **검사 컨테이너 이미지를 CI 러너가 pull 할 수 있어야 한다**는 새 전제가 생기는데, 이건 성질이 다르다. 소비자가 무엇을 빌드하든 영향받지 않고 플랫폼이 통제하는 값이므로, 워크플로 input의 기본값으로 고정해 두면 된다.
+
 ## 패턴
 
-CI 러너에서 빌드된 이미지를 `docker run`으로 띄우고, 이미지 내부의 `cuobjdump`로 NCCL `.so`를 분석한다.
+위 원칙에 따라 게이트는 세 단계로 나뉜다. **경로 탐색**과 **파일 추출**은 대상 이미지에서, **fatbin 분석**은 검사 컨테이너에서 수행한다.
 
 ```bash
 # CI 게이트 핵심 로직 (간략화)
 IMAGE="registry.example.com/myorg/train-image:latest"
+CHECKER_IMAGE="registry.example.com/myorg/cuda-devel:12.8"  # cuobjdump 제공, 플랫폼 고정값
 REQUIRED_GPU_ARCHS="sm_120 sm_80"  # 클러스터에 있는 GPU들의 base SM
+LIB="libnccl"
+WORKDIR=$(mktemp -d)
 
-docker run --rm --entrypoint="" "$IMAGE" python3 -c "
-import subprocess, re, glob, sys
+# 1. 대상 이미지 안에서 .so 경로만 찾는다 (심볼릭 링크 제외)
+CANDIDATES=$(docker run --rm --entrypoint="" "$IMAGE" \
+    find / -xdev -type f -name "${LIB}.so*" 2>/dev/null)
+echo "candidates: $CANDIDATES"
 
-# 1. NCCL .so 경로 탐지 (환경에 따라 후보 경로를 조정)
-search_patterns = [
-    '/usr/lib/x86_64-linux-gnu/libnccl.so*',           # system NCCL
-    '/usr/local/lib/python*/dist-packages/nvidia/nccl/lib/libnccl.so*',  # pip wheel
-    '/opt/conda/lib/python*/site-packages/nvidia/nccl/lib/libnccl.so*',  # conda
-]
-nccl_paths = []
-for pat in search_patterns:
-    nccl_paths.extend(glob.glob(pat))
-if not nccl_paths:
-    print('NCCL_NOT_FOUND'); sys.exit(2)
-nccl_so = nccl_paths[0]
+# site-packages/dist-packages 를 1순위, 시스템 경로를 2순위로 고른다
+SO_PATH=$(echo "$CANDIDATES" | grep -E '/site-packages/|/dist-packages/' | head -n1)
+[[ -z "$SO_PATH" ]] && SO_PATH=$(echo "$CANDIDATES" | grep -E '^/usr/(local/)?lib' | head -n1)
+[[ -z "$SO_PATH" ]] && SO_PATH=$(echo "$CANDIDATES" | head -n1)
 
-# 2. cuobjdump로 SASS/PTX 추출
-sass_out = subprocess.run(['cuobjdump', '-lelf', nccl_so], capture_output=True, text=True)
-sass_archs = sorted(set(re.findall(r'sm_\d+', sass_out.stdout)))
+# 2. .so 파일만 호스트로 꺼낸다 (-L: 심볼릭 링크면 실체를 복사)
+CID=$(docker create --entrypoint="" "$IMAGE" true)
+docker cp -L "${CID}:${SO_PATH}" "${WORKDIR}/${LIB}.so"
+docker rm -f "$CID" >/dev/null
 
-ptx_out = subprocess.run(['cuobjdump', '-lptx', nccl_so], capture_output=True, text=True)
-ptx_archs = sorted(set(re.findall(r'sm_\d+', ptx_out.stdout)))
-
-print(f'SO_PATH={nccl_so}')
-print(f'SASS={\" \".join(sass_archs)}')
-print(f'PTX={\" \".join(ptx_archs)}')
-"
+# 3. 검사 컨테이너에 마운트해서 cuobjdump 실행
+SASS=$(docker run --rm --entrypoint="" -v "${WORKDIR}:/check:ro" "$CHECKER_IMAGE" \
+    cuobjdump -lelf "/check/${LIB}.so" | grep -F '.cubin' | grep -oE 'sm_[0-9]+' | sort -u)
+PTX=$(docker run --rm --entrypoint="" -v "${WORKDIR}:/check:ro" "$CHECKER_IMAGE" \
+    cuobjdump -lptx "/check/${LIB}.so" | grep -F '.ptx' | grep -oE 'sm_[0-9]+' | sort -u)
 ```
 
-> 이 스크립트는 이미지 내부에 `python3`이 있어야 동작한다. ML 학습 이미지는 PyTorch 등 Python 기반 프레임워크가 기본이므로 거의 문제 없지만, 외부 벤더의 runtime-only 이미지처럼 Python이 없는 경우를 대비해 스크립트 진입 전에 `python3 --version` probe를 넣어 두는 것이 좋다. probe 실패 시 "python3 미존재" 명시적 에러로 분리하면, "SASS가 없어서 실패한 건지" "분석 자체가 안 된 건지" 모호함을 방지할 수 있다.
+여기서 놓치기 쉬운 지점이 세 개 있다.
+
+1. **`docker cp -L`의 `-L`은 선택이 아니다.** `libnccl.so.2`는 보통 실제 파일이 아니라 `libnccl.so.2.29.7` 같은 실체를 가리키는 심볼릭 링크다. `-L` 없이 복사하면 링크 자체만 꺼내지고, `cuobjdump`는 그 파일에서 아무 fatbin도 찾지 못한다. 그러면 게이트는 "SASS 없음"으로 읽어서 **멀쩡한 이미지를 FAIL로 오판**한다. 검사 도구를 밖으로 빼면서 새로 생기는 함정이므로, 파일을 꺼내는 방식으로 전환할 때 반드시 같이 챙겨야 한다.
+2. **`.so` 후보가 여러 개일 수 있다.** CUDA 베이스 이미지의 시스템 NCCL(`/usr/lib/...`)과 pip로 설치된 NCCL(`site-packages/nvidia/nccl/lib/...`)이 한 이미지 안에 공존하는 일이 흔하다. 두 버전이 다를 수 있는데, PyTorch가 실제로 로드하는 것은 pip 쪽이다. 따라서 site-packages 계열을 1순위로 고르고, **후보 목록 전체를 로그에 남긴다**. 나중에 "왜 이 버전이 검사됐는가"를 되짚을 수 있어야 하기 때문이다.
+3. **`find`조차 없는 이미지가 있다.** distroless 계열처럼 셸 유틸리티가 없는 이미지에서는 1단계가 실패한다. 이 경우 `docker export`로 파일 시스템을 통째로 스트리밍해서 `tar -t` 목록으로 경로를 찾는 대체 경로가 필요하다. 전체 레이어를 읽어야 해서 느리지만, 이 fallback이 있어야 "어떤 베이스든 검사 가능하다"가 수사가 아니라 사실이 된다.
+
+## 검사 대상 라이브러리
+
+게이트가 검사하는 라이브러리는 고정값이 아니라 입력으로 받는다(기본값 `libnccl`). NCCL이 이 글의 주제이긴 하지만, 판정 로직 자체는 "fatbin을 가진 `.so`"라면 무엇에나 적용되기 때문이다. 예를 들어 PyTorch가 번들한 CUDA 라이브러리를 함께 검사 대상에 넣을 수 있다.
+
+검사 대상을 늘릴수록 `.so` 추출과 `cuobjdump` 실행이 라이브러리 수만큼 반복되므로 게이트 시간도 그만큼 늘어난다. 기본값은 실제 사고가 났던 NCCL 하나로 두고, 필요할 때 추가하는 편이 낫다.
 
 ## Major 호환성 판정
 
@@ -284,15 +306,29 @@ extract_major() {
 
 ## PASS/FAIL 출력 예시
 
-sm_80이 정확히 일치하여 PASS하는 경우다.
+CUDA toolkit을 포함하지 않는 **런타임 전용 베이스**로 빌드된 이미지를 검사한 실제 CI 로그다. 이미지 안의 `cuobjdump`를 호출하는 방식이었다면 "cuobjdump not found"로 멈췄을 이미지인데, 검사 도구를 밖에서 조달하므로 게이트가 정상적으로 판정까지 간다.
 
 ```text
-[gpu-compat-check]   .so path: /path/to/libnccl.so.2
-[gpu-compat-check]   SASS architectures: sm_50 sm_60 sm_61 sm_70 sm_80 sm_90
-[gpu-compat-check]   PTX architectures:  none
+[gpu-compat-check] Starting GPU compatibility check
+[gpu-compat-check]   Image: registry.example.com/myorg/train-image:v1.2.3
+[gpu-compat-check]   Required architectures: sm_120 sm_80
+[gpu-compat-check]   Libraries to check: libnccl
+[gpu-compat-check]   Checker image (cuobjdump): registry.example.com/myorg/cuda-devel:12.8
+
+[gpu-compat-check] Checking libnccl in registry.example.com/myorg/train-image:v1.2.3...
+[gpu-compat-check]   candidates: /usr/lib/x86_64-linux-gnu/libnccl.so.2.25.1 /usr/local/lib/python3.10/dist-packages/nvidia/nccl/lib/libnccl.so.2
+[gpu-compat-check]   .so path: /usr/local/lib/python3.10/dist-packages/nvidia/nccl/lib/libnccl.so.2
+[gpu-compat-check]   SASS architectures: sm_100 sm_120 sm_60 sm_61 sm_70 sm_80 sm_90
+[gpu-compat-check]   PTX architectures:  sm_120
 [gpu-compat-check]   RESULT: PASS
 [gpu-compat-check] All GPU compatibility checks passed.
 ```
+
+`candidates` 줄을 눈여겨보자. 한 이미지 안에 NCCL이 **두 벌** 들어 있다. 하나는 CUDA 베이스 이미지가 들고 온 시스템 NCCL `libnccl.so.2.25.1`이고, 다른 하나는 PyTorch 의존성으로 설치된 pip NCCL이다. 게이트는 site-packages/dist-packages 계열을 1순위로 골라 pip 쪽을 검사했고, 그 결과 sm_120이 있어 PASS했다.
+
+만약 우선순위를 반대로 두어 시스템 NCCL을 검사했다면 어떻게 됐을까. 2.25.1은 CUDA 12.8 이전에 빌드된 버전이라 sm_120 SASS가 없다. 게이트는 **멀쩡히 동작할 이미지를 FAIL로 판정**했을 것이다. 앞서 "후보 목록 전체를 로그에 남긴다"고 한 이유가 여기 있다. 판정 자체는 한 줄로 끝나지만, 그 한 줄이 어느 후보를 근거로 나왔는지는 로그에만 남는다.
+
+한편 이 게이트 스텝은 전체 100초 남짓 걸렸다. 그중 경로 탐색이 약 4초, 나머지가 `.so` 추출부터 `cuobjdump` 결과까지다. 후자에는 검사 컨테이너 이미지를 pull 하는 시간이 포함되므로, 러너에 이미지가 캐시되어 있는지에 따라 편차가 크다.
 
 sm_86을 sm_80의 major 호환으로 통과하는 경우다.
 
@@ -317,8 +353,13 @@ sm_120이 누락되어 NCCL 구버전이 Blackwell을 지원하지 못해 FAIL�
 
   Action:  Upgrade the GPU library to a version built with a
            CUDA toolkit that supports the missing architectures.
+           (pip가 torch 의존을 재해석해 베이스의 nvidia-nccl-cu12를
+           되돌렸다면 해당 패키지를 --no-deps로 설치하세요.)
+
 ========================================
 ```
+
+`Action`의 두 번째 안내는 실제로 자주 걸리는 경로라 메시지에 넣어 두었다. base 이미지에 sm_120을 지원하는 NCCL을 넣어 뒀더라도, 이후 `pip install`이 torch의 의존성을 재해석하면서 `nvidia-nccl-cu12`를 구버전으로 되돌리는 일이 있다. 이미지를 만든 사람은 "분명히 최신 NCCL을 넣었는데"라고 생각하므로, 원인을 짚어 주지 않으면 헤매기 쉽다.
 
 이 FAIL이 걸리면 이미지 push 단계가 실행되지 않으므로, 호환되지 않는 이미지가 레지스트리에 올라가는 것 자체를 차단한다.
 
@@ -338,6 +379,8 @@ jobs:
         env:
           IMAGE: ${{ steps.meta.outputs.image_tag }}
           REQUIRED_GPU_ARCHS: "sm_120 sm_80"
+          CHECK_LIBS: ${{ inputs.check_libs }}         # 소비자가 지정, 기본값 libnccl
+          CHECKER_IMAGE: ${{ inputs.checker_image }}   # 플랫폼이 고정, 기본값 변경은 한 곳에서
         run: |
           bash gpu-compat-check.sh
 
@@ -346,7 +389,9 @@ jobs:
 ```
 {% endraw %}
 
-`skip_gpu_check` input은 긴급 우회용이다. 게이트 자체에 문제가 있거나, 의도적으로 호환되지 않는 이미지를 push해야 할 때 사용한다.
+`checker_image`는 워크플로 input의 기본값으로 플랫폼이 고정한다. 소비자가 신경 쓸 값이 아니고, CUDA 버전 갱신 같은 이유로 바꿔야 할 때 한 곳만 고치면 되기 때문이다. 다만 이 값이 게이트의 유일한 외부 의존이므로, 이미지 pull이 가능한 단계(레지스트리 로그인 이후)에 게이트를 배치해야 한다.
+
+`skip_gpu_check` input은 긴급 우회용이다. 게이트 자체에 문제가 있거나, 의도적으로 호환되지 않는 이미지를 push해야 할 때 사용한다. 검사 도구를 이미지 밖으로 빼면서 "베이스 이미지에 도구가 없다"는 우회 사유는 사라졌으므로, 이제 이 input이 정당한 경우는 NCCL을 아예 쓰지 않는 이미지 정도로 좁아진다.
 
 <br>
 
@@ -392,6 +437,8 @@ PTX=$(cuobjdump -lptx "$NCCL_SO" 2>&1 | grep -oP 'sm_\d+' | sort -u | tr '\n' ' 
 ```
 
 `cuobjdump`이나 `libnccl.so`가 없는 경우 WARNING만 출력하고 Stage 3으로 넘어간다(graceful degradation).
+
+> CI 게이트에서는 [검사 도구를 이미지 밖으로 뺐는데](#왜-검사-도구를-이미지-밖에-두는가), 런타임 게이트는 이미지 안의 `cuobjdump`를 그대로 쓴다. 일부러 그렇게 둔 것이다. init container의 목적은 "실제로 할당된 GPU와 이 이미지의 정합성"을 보는 것이라 어차피 학습 이미지와 같은 이미지로 떠야 하고, Pod 안에서 다른 이미지를 마운트해 오는 것은 CI 러너에서 `docker cp`를 하는 것보다 훨씬 번거롭다. 대신 도구가 없으면 FAIL이 아니라 WARNING으로 흘려보내고, 뒤이은 Stage 3의 동적 검사가 판정을 대신한다. 런타임 전용 이미지에서는 Stage 2가 사실상 건너뛰어지지만, 게이트가 멈추지는 않는다는 뜻이다.
 
 ### Stage 3: NCCL Init Dynamic Test
 
@@ -538,7 +585,7 @@ workerGroupSpecs:
 설계 시 고려한 포인트는 다음과 같다.
 
 - **head/cpu-workers에는 추가하지 않는다**: NCCL을 사용하지 않는 노드에 불필요
-- **학습과 동일 이미지를 사용한다**: cuobjdump, NCCL `.so` 경로가 동일해야 정확한 검사가 가능
+- **학습과 동일 이미지를 사용한다**: 학습 시 실제로 로드될 NCCL `.so`를 그대로 검사해야 하기 때문. `cuobjdump`가 없는 이미지라면 Stage 2는 건너뛰고 Stage 3이 판정을 대신한다
 - **GPU 리소스를 동일하게 요청한다**: K8s는 `max(init, main)` 기준으로 스케줄링하므로 추가 GPU를 소비하지 않음
 - **NODE_NAME을 fieldRef로 주입한다**: 에러 메시지에 노드 식별 정보를 포함, 이종 GPU 환경에서 어떤 노드가 문제인지 즉시 파악 가능
 
@@ -558,6 +605,7 @@ workerGroupSpecs:
 | GPU 점유 | 없음 | 수 초 |
 | 이종 GPU 대응 | 클러스터 known GPU set으로 정의 | 자동 (실제 GPU compute cap 감지) |
 | 검증 깊이 | SASS/PTX 존재 여부만 | + driver/runtime/PyTorch binding |
+| 베이스 이미지 의존 | 없음 (검사 도구를 이미지 밖에서 조달) | 있음 (도구 부재 시 Stage 2 skip) |
 | 우회 방법 | `skip_gpu_check=true` | `gpuCompatCheck.enabled=false` |
 
 ## 권장 조합
@@ -580,10 +628,12 @@ workerGroupSpecs:
 NCCL lazy init 환경에서 GPU 호환성 문제는 "학습이 한참 진행된 뒤에야" 발견되고, 에러 메시지는 root cause를 가리키지 않는다. 이 문제를 ML 엔지니어의 학습 코드를 건드리지 않고 플랫폼 레벨에서 해결하는 방법을 세 가지로 정리할 수 있다.
 
 1. **원리**: `cuobjdump`로 NCCL `.so`의 SASS/PTX 아키텍처를 추출하고, GPU의 compute capability와 major 호환성 기준으로 대조한다
-2. **빌드 타임**: CI 파이프라인에서 이미지 push 전에 정적 분석으로 차단한다. GPU 없이 실행 가능
+2. **빌드 타임**: CI 파이프라인에서 이미지 push 전에 정적 분석으로 차단한다. GPU 없이 실행 가능하고, 검사 도구를 대상 이미지 밖에서 조달하므로 베이스 이미지 종류를 가리지 않는다
 3. **배포 타임**: K8s init container로 실제 GPU와 NCCL의 정합성을 확인한다. 학습 진입 전 초 단위로 판정
 
 GPU 종류가 바뀌거나 NCCL 버전이 올라가도, 게이트 로직은 수정 없이 동작한다. cuobjdump가 매번 실제 바이너리를 분석하기 때문이다.
+
+한편 게이트를 설계할 때는 "무엇을 검사하는가"만큼 "무엇에 의존해서 검사하는가"도 중요하다. 판정 근거가 검사 대상의 내부 사정에 묶여 있으면, 게이트는 막아야 할 것을 막는 대신 엉뚱한 것을 막는다. 검사 대상과 검사 도구를 분리한 것은 그 의존을 끊기 위한 선택이었다.
 
 <br>
 
