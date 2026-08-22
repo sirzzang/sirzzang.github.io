@@ -33,7 +33,7 @@
 
 
 
-  <meta property="article:published_time" content="2026-08-22T00:00:00+09:00">
+  <meta property="article:published_time" content="2026-08-21T00:00:00+09:00">
 
 
 
@@ -441,7 +441,7 @@ window.MathJax = {
   <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
     <meta itemprop="headline" content="[Performance] Roofline 모델: 연산 강도로 판별하는 성능 병목">
     <meta itemprop="description" content="Roofline 모델에 대해 알아 보자.">
-    <meta itemprop="datePublished" content="2026-08-22T00:00:00+09:00">
+    <meta itemprop="datePublished" content="2026-08-21T00:00:00+09:00">
     <meta itemprop="dateModified" content="2026-08-22T00:00:00+09:00">
 
     <div class="page__inner-wrap">
@@ -453,7 +453,7 @@ window.MathJax = {
           
           <p class="page__meta">
             
-            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-08-22T00:00:00+09:00">2026년 08월 22일</time></span>
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-08-21T00:00:00+09:00">2026년 08월 21일</time></span>
             
             
               <span class="page__meta-sep"> · </span>
@@ -462,7 +462,7 @@ window.MathJax = {
 
 
 
-  41 분 소요
+  39 분 소요
 
 
             
@@ -524,8 +524,6 @@ window.MathJax = {
   <li><a href="#적용">적용</a>
     <ul>
       <li><a href="#성립-조건">성립 조건</a></li>
-      <li><a href="#llm-서빙의-세-점">LLM 서빙의 세 점</a></li>
-      <li><a href="#최적화-기법">최적화 기법</a></li>
     </ul>
   </li>
   <li><a href="#정리">정리</a></li>
@@ -549,7 +547,6 @@ window.MathJax = {
   <li>X축인 연산 강도 $I = W/Q$는 DRAM에서 가져온 1바이트당 연산 횟수, 곧 데이터 재사용 횟수다. 시간이 들어가지 않는 값이고, 문제 크기와 무관하다</li>
   <li>그래프 상에 표현된 점은 두 단계로 해석한다. 먼저 지붕(하드웨어 상한)에 붙었는지(남은 여유), 붙었다면 어느 지붕인지(병목의 정체)를 본다. 지붕에서 멀면 하드웨어가 아니라 돌리는 방식이 문제다</li>
   <li>판별 결과에 따라 처방이 반대가 된다. 사선(메모리 바운드)에 붙었으면 $Q$를 줄여 점을 오른쪽으로 밀고(양자화·커널 퓨전·타일링·배칭), 수평(연산 바운드)에 붙었으면 $W$를 줄이거나 더 높은 지붕의 연산 유닛으로 옮겨야 한다</li>
-  <li>LLM 서빙에서는 워크로드를 최소 세 점으로 나눠 찍어야 한다. prefill은 연산 바운드, decode-FFN은 $I \approx B$라 배칭으로 사선을 벗어날 수 있지만, decode-attention은 KV 캐시가 요청마다 달라 배칭으로도 움직이지 않는다</li>
 </ul>
 
 <p><br /></p>
@@ -557,8 +554,6 @@ window.MathJax = {
 <h1 id="배경">배경</h1>
 
 <p>MLOps 플랫폼 위에서 돌아가는 3D Object Detection 모델 학습을 관찰하던 중, <code class="highlighter-rouge">GPU_UTIL</code>은 96~100%인데 <code class="highlighter-rouge">PIPE_TENSOR_ACTIVE</code>는 약 1%, 전력은 명판 600W급 GPU에서 156W, <code class="highlighter-rouge">DRAM_ACTIVE</code>는 6%인 현상을 발견했다. MLOps에서는 보통 GPU utilization을 올리기 위해 노력하지만, 막상 GPU util이 100%에 가깝게 유지되는 것을 보니 정말 GPU를 잘 쓰고 있는 것인가 싶었다. 그렇게 파 보니 util은 “그 시간 동안 커널이 하나라도 돌고 있었는가”를 재는 <strong>시간 지표</strong>이고, FLOP/s는 <strong>처리율 지표</strong>라서, 시간이 꽉 차도 처리율은 낮을 수 있다는 답에 도달했다. util이 시간 기반 지표라는 정의 자체는 <a href="/dev/Dev-GPU-Phantom-Utilization/#gpu-utilization의-정의-nvidia-smi와-nvml">Phantom GPU Utilization 사례 분석</a>에서 NVML 문서 기준으로 짚은 적이 있다.</p>
-
-<p><br /></p>
 
 <p>그렇다면 다음 질문이 남는다. <strong>이 워크로드의 성능은 무엇이 가로막고 있나 — 연산기인가, 메모리 대역폭인가, 아니면 아직 어느 쪽도 아닌가.</strong> 이걸 판별해 주는 도구가 Roofline 모델이다. LLM 서빙 최적화 스터디 3주차에서 산술 강도(arithmetic intensity)와 함께 이 키워드를 다시 만난 김에, 미루지 않고 정리해 보고자 한다.</p>
 
@@ -581,6 +576,8 @@ window.MathJax = {
 <p>위 그림에서 두 선을 왜 <strong>지붕</strong>이라 부르는지 보인다. 하드웨어 상한을 그린 이 선들 위로는 어떤 점도 올라갈 수 없다 — 성능을 위에서 덮어 누르는 한계다. 게다가 수평선과 사선이 꺾여 이어진 모양이 집 지붕을 그대로 닮았다. 그래서 모델 이름부터가 roofline(지붕선)이다. 이제부터 이 글에서는 이 상한선을 <strong>지붕</strong>으로 부른다 (수평 지붕 = 연산 한계, 사선 지붕 = 대역폭 한계).</p>
 
 <p>자세한 내용은 차례로 알아 볼 예정이다. 지금은 그래프가 <strong>점이 어디에 찍히는지를 보고 성능 상한을 올리기 위해 어떤 접근을 취해야 할지 판단하게 해 주는 시각화 도구</strong>라는 감만 잡아 두면 된다.</p>
+
+<p>분량이 꽤 길어서 읽는 경로를 먼저 적어 둔다. 순서대로 다 따라갈 필요는 없고, <a href="#구성-요소">구성 요소</a>에서 기호와 연산 강도까지만 잡은 뒤 <a href="#해석">해석</a>·<a href="#적용">적용</a>으로 건너뛰어도 병목 판별이라는 실용 목적에는 충분하다. <a href="#유도">유도</a>는 지붕이 왜 그 모양인지, <a href="#측정">측정</a>은 점을 실제로 어떻게 찍는지가 궁금할 때 돌아와 읽으면 된다. 중간중간의 영어 인용문도 원문 자체보다 바로 아래 해석 위주로 보면 된다.</p>
 
 <p>특히 이 글 내내 쓰는 판정 규칙 두 개를 미리 봐 두면 좋다.</p>
 <ol>
@@ -677,9 +674,14 @@ window.MathJax = {
   <p>— <a href="https://en.wikipedia.org/wiki/Roofline_model">Wikipedia — Roofline model</a></p>
 </blockquote>
 
-<blockquote>
-  <p><strong>“partially”의 뜻</strong>: 먼저 위키의 <em>platform</em>은 MLOps 플랫폼 같은 소프트웨어가 아니라 <strong>하드웨어</strong>(칩·캐시 계층·메모리)를 가리킨다. $W$ 자체는 코드를 보고 세면 나오는 값이라 하드웨어와 거의 무관하다. 하드웨어가 개입하는 통로는 두 가지뿐이다 — FMA(곱셈-덧셈 융합)를 2 FLOP으로 셀 것인가 1로 셀 것인가, 그리고 컴파일러가 연산을 지우거나 늘리는가. 반면 $Q$는 위 인용대로 캐시 계층에 <strong>강하게</strong> 의존한다. $Q$는 “프로그램이 읽는 바이트”가 아니라 <strong>DRAM과 칩 사이를 실제로 오간 바이트</strong>라서, 같은 코드라도 캐시가 크면 한 번 가져온 데이터를 재사용해 $Q$가 줄고, 캐시가 작으면 같은 데이터를 여러 번 다시 가져와 $Q$가 는다. 그래서 $Q$는 <strong>알고리즘이 정하는 하한이 있고, 실제 값은 그 하한 이상에서 하드웨어가 결정</strong>한다. 분자는 거의 하드웨어 무관, 분모는 하드웨어 의존 — 그 비율인 $I$가 “부분적으로만” 하드웨어에 의존한다는 뜻이다. 상세는 <a href="#이론-i-vs-실측-i">이론 I vs 실측 I</a>에서 다시 살펴 본다.</p>
-</blockquote>
+<p>요지는 이렇다. 여기서 <em>platform</em>은 MLOps 플랫폼 같은 소프트웨어가 아니라 <strong>하드웨어</strong>(칩·캐시 계층·메모리)를 가리킨다. $W$는 코드를 보고 세면 나오는 값이라 하드웨어와 거의 무관한 반면, $Q$는 “프로그램이 읽는 바이트”가 아니라 <strong>DRAM과 칩 사이를 실제로 오간 바이트</strong>라서 캐시 계층에 강하게 의존한다. 분자는 거의 하드웨어 무관, 분모는 하드웨어 의존 — 그 비율인 $I$가 “부분적으로만(partially)” 하드웨어에 의존한다는 뜻이다. 상세는 <a href="#이론-i-vs-실측-i">이론 I vs 실측 I</a>에서 다시 살펴 본다.</p>
+
+<details>
+  <summary><b>참고: $W$와 $Q$에 하드웨어가 개입하는 방식</b></summary>
+
+  <p>$W$에 하드웨어가 개입하는 통로는 두 가지뿐이다 — FMA(곱셈-덧셈 융합)를 2 FLOP으로 셀 것인가 1로 셀 것인가, 그리고 컴파일러가 연산을 지우거나 늘리는가. 반면 $Q$는 같은 코드라도 캐시가 크면 한 번 가져온 데이터를 재사용해 줄고, 캐시가 작으면 같은 데이터를 여러 번 다시 가져와 늘어난다. 그래서 $Q$는 <strong>알고리즘이 정하는 하한이 있고, 실제 값은 그 하한 이상에서 하드웨어가 결정</strong>한다.</p>
+
+</details>
 
 <h2 id="표기-flops-vs-flops">표기: FLOPs vs FLOP/s</h2>
 
@@ -799,8 +801,6 @@ Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
 
 </details>
 
-<p><br /></p>
-
 <p>이 글의 표기는 아래로 고정한다.</p>
 
 <table>
@@ -901,11 +901,11 @@ Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
 
 </details>
 
-<p><br /></p>
-
 <h2 id="연산-강도">연산 강도</h2>
 
-<p>일곱 개의 구성 요소 중 연산 강도에 대해 더 자세히 알아 본다. 사실 위 구성 요소 중 $\pi$·$\beta$는 하드웨어가 준 상수, $W$·$T$·$P$는 세거나 나누면 바로 나오는 값이라 정의로 끝난다. $Q$도 단순하진 않다 — 실측 DRAM 트래픽이라 캐시에 따라 변한다. 다만 $W$가 거의 고정이라 $I = W/Q$의 미묘함은 사실상 전부 $Q$에서 오므로, $Q$는 따로 절을 두지 않고 <a href="#이론-i-vs-실측-i">이론 I vs 실측 I</a>에서 $I$와 함께 다룬다. 그래서 남는 하나, <strong>$I$만 따로 파고들 이유</strong>가 있다 — 그래프에서 유일하게 ‘고를 수 있는’ 값이기 때문이다.</p>
+<p>일곱 개의 구성 요소 중 연산 강도에 대해 더 자세히 알아 본다. 사실 위 구성 요소 중 $\pi$·$\beta$는 하드웨어가 준 상수, $W$·$T$·$P$는 세거나 나누면 바로 나오는 값이라 정의로 끝난다. $Q$도 단순하진 않다 — 실측 DRAM 트래픽이라 캐시에 따라 변한다. 다만 $W$가 거의 고정이라 $I = W/Q$의 미묘함은 사실상 전부 $Q$에서 오므로, $Q$는 따로 절을 두지 않고 <a href="#이론-i-vs-실측-i">이론 I vs 실측 I</a>에서 $I$와 함께 다룬다.</p>
+
+<p>그래서 남는 하나, <strong>$I$만 따로 파고들 이유</strong>가 있다 — 그래프에서 유일하게 ‘고를 수 있는’ 값이기 때문이다.</p>
 
 <ul>
   <li>하드웨어를 고정하면 지붕($\pi$·$\beta$)은 정해지고, 점이 어디 서는지는 오직 $I$가 정한다 — <strong>유일한 자유변수</strong>다</li>
@@ -958,10 +958,12 @@ Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
   </tbody>
 </table>
 
+<p><br /></p>
+
 <p>양 극단인 SAXPY(벡터 연산)와 GEMM(행렬 곱) 둘만 결과를 보면 이렇다.</p>
 
 <ul>
-  <li><strong>SAXPY</strong> (<code class="highlighter-rouge">y = a*x + y</code>): 원소당 곱 1 + 합 1이라 $W = 2N$, 오가는 byte는 x 읽기·y 읽기·y 쓰기로 $Q = 12N$ → $I \approx 0.17$. $N$이 약분되니 <strong>연산 강도는 문제 크기와 무관</strong>하다(<a href="#변수-i">변수 I</a> 절에서 결정적으로 쓰인다). FP32를 FP16으로 바꾸면 $Q$가 절반이라 $I$는 2배 — 저정밀도가 대역폭 병목의 해법인 이유가 여기서 이미 보인다</li>
+  <li><strong>SAXPY</strong> (<code class="highlighter-rouge">y = a*x + y</code>): 원소당 곱 1 + 합 1이라 $W = 2N$, 오가는 byte는 x 읽기·y 읽기·y 쓰기로 원소당 접근 3회 × FP32 원소 하나 4 byte라 $Q = 12N$ → $I \approx 0.17$. $N$이 약분되니 <strong>연산 강도는 문제 크기와 무관</strong>하다(<a href="#변수-i">변수 I</a> 절에서 결정적으로 쓰인다). FP32를 FP16으로 바꾸면 $Q$가 절반이라 $I$는 2배가 되는데, 저정밀도가 대역폭 병목의 해법인 이유가 여기 있다</li>
   <li><strong>GEMM</strong> (<code class="highlighter-rouge">C = A × B</code>): $W = 2N^3$, 각 행렬(A·B·C)을 DRAM에서 한 번씩만 옮기면 $Q = 3N^2 \times 4 = 12N^2$ → $I = N/6$ ($N=1024$면 약 170)</li>
 </ul>
 
@@ -974,7 +976,7 @@ Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
 
   <p><em>본문 이해엔 필수가 아니다. 찾아본 자료를 정리한 심화 내용이다.</em></p>
 
-  <p>이 중 연산 강도 스펙트럼의 양 극단에 있는 두 함수를 계산해 본다.</p>
+  <p>위의 BLAS 연산 중 연산 강도 스펙트럼의 양 극단에 있는 두 함수를 계산해 본다.</p>
 
   <table>
     <thead>
@@ -1201,17 +1203,17 @@ Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
 
 </details>
 
-<p><br /></p>
-
 <p>결국 공식이라고 부를 만한 것은 아래 두 개가 전부이고, 나머지는 코드를 보고 세는 일이다.</p>
 
 <script type="math/tex; mode=display">W = (\text{반복 1회당 FLOP 수}) \times (\text{반복 횟수})</script>
 
-<script type="math/tex; mode=display">Q = (\text{한 번만 가져와야 하는 서로 다른 원소 수}) \times (\text{원소 1개 byte})</script>
+<script type="math/tex; mode=display">Q = (\text{꼭 한 번씩은 발생해야 하는 읽기·쓰기 전송 횟수}) \times (\text{원소 1개 byte})</script>
+
+<p>세는 규칙은 두 가지다. <strong>같은 원소라도 읽기와 쓰기는 별개 트래픽으로 센다</strong> — SAXPY의 y를 두 번 센 이유다. 반대로 <strong>레지스터에 한 번 올려두고 재사용하는 스칼라는 세지 않는다</strong> — SAXPY의 a를 0번 센 이유다.</p>
 
 <h3 id="이론-i-vs-실측-i">이론 I vs 실측 I</h3>
 
-<p>연산 강도 $I = W/Q$에는 사실 <strong>두 가지 값</strong>이 있다. <strong>손으로 셀 때</strong>는 “캐시가 충분해서 데이터를 딱 한 번만 가져온다”고 가정하고 세므로 알고리즘만으로 정해지는 <strong>이론값</strong>이 나오고, <strong>프로파일러로 잴 때</strong>는 실제로 오간 DRAM 트래픽 기준이라 캐시 히트율에 따라 달라지는 <strong>실측값</strong>이 나온다. “연산 강도는 하드웨어와 무관하다”와 “캐시에 따라 변한다”는 상반된 설명이 둘 다 도는 건 이 서로 다른 두 $I$를 각각 가리키기 때문이고, 이 구분을 안 해 두면 뒤의 해석이 흔들린다. 표로 대조하면 이렇다.</p>
+<p>연산 강도 $I = W/Q$에는 사실 <strong>두 가지 값</strong>이 있다. <strong>손으로 셀 때</strong>는 “캐시가 충분해서 데이터를 딱 한 번만 가져온다”고 가정하고 세므로 알고리즘만으로 정해지는 <strong>이론값</strong>이 나오고, <strong>프로파일러로 잴 때</strong>는 실제로 오간 DRAM 트래픽 기준이라 캐시 히트율에 따라 달라지는 <strong>실측값</strong>이 나온다. “연산 강도는 하드웨어와 무관하다”와 “캐시에 따라 변한다”는 상반된 설명이 둘 다 도는 건 이 서로 다른 두 $I$를 각각 가리키기 때문이고, 이 구분을 안 해 두면 뒤의 해석이 흔들린다. 이론값 쪽은 <strong>compulsory</strong>라 부른다 — 아무리 캐시가 좋아도 처음 한 번은 반드시 가져와야 하는 전송(cold miss)만 있다고 가정한 값이라는 뜻이다. 표로 대조하면 이렇다.</p>
 
 <table>
   <thead>
@@ -1253,7 +1255,7 @@ Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
 <p>항상 $Q_{\text{실측}} \geq Q_{\text{compulsory}}$이므로 $I_{\text{실측}} \leq I_{\text{이론}}$이고, <strong>그 격차가 곧 최적화 여유분</strong>이다. 그래서 <strong>최적화란 실측 $Q$를 이론 하한까지 끌어내려 실측 $I$를 이론값에 붙이는 일</strong>이다 — 대표적인 게 <strong>타일링</strong>(캐시에 맞게 데이터를 잘라, 한 번 가져온 것을 최대한 재사용하도록 접근 순서를 바꾸는 것)이다. 실측값이 이론 상한보다 많이 낮으면 캐시 재사용에 실패했다는 신호다. 여기서 캐시의 역할을 정확히 말하면 이렇다. <strong>캐시는 성능을 만들어내지 않는다. 알고리즘에 이미 있는 재사용을 실현시켜 줄 뿐이다.</strong> 그래서 재사용이 있는 연산은 타일링으로 이론값에 다가갈 수 있지만, 재사용이 0인 연산은 캐시를 아무리 키워도 두 $I$가 같다 — 앞의 SAXPY(0.17)가 어느 하드웨어에서도 그대로인 이유다.</p>
 
 <details>
-  <summary><b>그 재사용을 실현하는 건 프로그래머인가 하드웨어인가</b></summary>
+  <summary><b>참고: 메모리 재사용을 실현하는 건 프로그래머인가 하드웨어인가</b></summary>
 
   <p><em>본문 이해엔 필수가 아니다. 찾아본 자료를 정리한 심화 내용이다.</em></p>
 
@@ -1269,7 +1271,7 @@ Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
 </details>
 
 <details>
-  <summary><b>이론 상한의 경계 조건, 그리고 원논문이 operational intensity를 새로 만든 이유</b></summary>
+  <summary><b>참고: 이론 상한의 경계 조건 및 operational intensity 용어</b></summary>
 
   <p><em>본문 이해엔 필수가 아니다. 찾아본 자료를 정리한 심화 내용이다.</em></p>
 
@@ -1318,10 +1320,10 @@ Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
 
 <ul>
   <li><strong>LLM decode, batch=1</strong>: 7B 모델, FP16, 배치 1에서 토큰 1개를 생성하려면 <strong>가중치 전체를 한 번 읽어야</strong> 한다. $Q = 7\times10^9 \times 2 \text{ byte} = 14$ GB. 가중치 원소 하나당 곱 1 + 합 1이니 $W = 7\times10^9 \times 2 = 1.4\times10^{10}$ FLOP. 따라서 $I \approx 1$ FLOP/byte — 가중치 읽는 시간이 거의 전부라 메모리 바운드다</li>
-  <li><strong>LLM decode, batch=B</strong>: 배치를 $B$로 늘리면 가중치를 <strong>한 번 읽어 $B$개 토큰이 나눠 쓰므로</strong> $Q$는 그대로인데 $W$만 $B$배가 된다 → $I \approx B$. 이것이 “<strong>배칭이 곧 재사용</strong>“의 뜻 — 한 번 가져온 가중치를 $B$개 토큰이 나눠 재사용하는 것이다. 그리고 <strong>$I$가 이렇게 커지는 게 바로 노리는 바다</strong>: batch=1은 $I \approx 1$로 사선(메모리 바운드)에 딱 붙어 연산기를 거의 못 쓰는데, $I$를 키우면 점이 오른쪽으로 이동해 사선을 벗어나 연산 지붕 쪽으로 올라간다. decode에서 $I$를 올릴 길은 배칭뿐이라(가중치 바이트도, 토큰당 연산량도 줄일 수 없으니) <strong>유일한 탈출구</strong>라 부른 것이다 — “배칭하면 $I$가 세지는 것 아닌가?”가 맞고, 그게 정확히 원하는 결과다</li>
+  <li><strong>LLM decode, batch=B</strong>: 배치를 $B$로 늘리면 가중치를 <strong>한 번 읽어 $B$개 토큰이 나눠 쓰므로</strong> $Q$는 그대로인데 $W$만 $B$배가 된다 → $I \approx B$. 이것이 “<strong>배칭이 곧 재사용</strong>“의 뜻 — 한 번 가져온 가중치를 $B$개 토큰이 나눠 재사용하는 것이다. 그리고 <strong>$I$가 이렇게 커지는 게 바로 노리는 바다</strong>: batch=1은 $I \approx 1$로 사선(메모리 바운드)에 딱 붙어 연산기를 거의 못 쓰는데, $I$를 키우면 점이 오른쪽으로 이동해 사선을 벗어나 연산 지붕 쪽으로 올라간다. decode에서 $I$를 올릴 길은 배칭뿐이라(가중치 바이트도, 토큰당 연산량도 줄일 수 없으니) 배칭이 <strong>유일한 탈출구</strong>다 — “배칭하면 $I$가 세지는 것 아닌가?”가 맞고, 그게 정확히 원하는 결과다</li>
 </ul>
 
-<p>단, 여기의 decode 계산은 가중치 트래픽만 센 것이다. KV 캐시 트래픽까지 넣은 보정은 <a href="#llm-서빙의-세-점">LLM 서빙의 세 점</a>에서 다룬다.</p>
+<p>단, 여기의 decode 계산은 가중치 트래픽만 센 것이다. KV 캐시 트래픽까지 넣은 보정은 <a href="/dev/Dev-Roofline-Model-LLM-Serving/#평가-지표">2편의 평가 지표</a>에서 다룬다.</p>
 
 <p>그리고 위의 BLAS Level 표가 곧 <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/">prefill/decode</a>의 설명이다. 관건은 <strong>연산 횟수가 데이터 크기와 같은 속도로 느는가, 더 빨리 느는가</strong>다. Level 1·2는 둘이 같은 속도라($O(N)$:$O(N)$, $O(N^2)$:$O(N^2)$) 각 데이터를 사실상 한 번만 써서 $I$가 낮게 고정된다. 오직 Level 3(행렬×행렬)만 연산이 $O(N^3)$으로 데이터 $O(N^2)$보다 빨리 늘어나는데, 각 데이터를 $N$번 재사용하기 때문이고 그래서 $I$가 $N$에 비례해 커진다. <strong>$I$가 커지면</strong> 점이 ridge 오른쪽(수평 지붕)으로 올라 <strong>연산 바운드</strong>가 되고, <strong>$I$가 낮게 고정되면</strong> 점이 ridge 왼쪽(사선)에 머물러 <strong>메모리 바운드</strong>다 — 크기를 키워도 $I$가 그대로라 벗어나지 못한다. 그래서 GEMM(Level 3)만 연산 바운드가 될 수 있다.</p>
 
@@ -1356,7 +1358,7 @@ Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
   </tbody>
 </table>
 
-<p><strong>같은 가중치, 같은 코드다.</strong> 다른 것은 한 번에 몇 개의 토큰을 곱하는가 하나뿐이고, 그 하나가 BLAS Level 2와 3의 차이를 만든다. “prefill이 compute bound인 이유가 결국 GEMM이라서인가”에 대한 답은 그렇다이다. 가중치를 한 번 DRAM에서 읽어 $S$개 토큰에 재사용하므로 $I$가 $S$배로 커진다. decode는 $S=1$이라 재사용이 없다. 다만 <strong>어텐션은 따로 봐야 한다.</strong> prefill 어텐션은 $S^2$에 비례해 역시 연산 집약적이지만, decode 어텐션은 <strong>KV 캐시</strong>(요청마다 다르고 컨텍스트에 비례해 커지는 데이터) 전체를 읽어야 해 메모리 바운드다. 이쪽은 배칭으로도 잘 안 풀리는데, 그 이유와 처방(PagedAttention 등)은 <a href="#llm-서빙의-세-점">LLM 서빙의 세 점</a>에서 다룬다.</p>
+<p><strong>같은 가중치, 같은 코드다.</strong> 다른 것은 한 번에 몇 개의 토큰을 곱하는가 하나뿐이고, 그 하나가 BLAS Level 2와 3의 차이를 만든다. “prefill이 compute bound인 이유가 결국 GEMM이라서인가”에 대한 답은 그렇다이다. 가중치를 한 번 DRAM에서 읽어 $S$개 토큰에 재사용하므로 $I$가 $S$배로 커진다. decode는 $S=1$이라 재사용이 없다. 다만 <strong>어텐션은 따로 봐야 한다.</strong> prefill 어텐션은 $S^2$에 비례해 역시 연산 집약적이지만, decode 어텐션은 <strong>KV 캐시</strong>(요청마다 다르고 컨텍스트에 비례해 커지는 데이터) 전체를 읽어야 해 메모리 바운드다. 이쪽은 배칭으로도 잘 안 풀리는데, 그 이유와 처방(PagedAttention 등)은 <a href="/dev/Dev-Roofline-Model-LLM-Serving/#세-점으로-나누기">2편의 세 점 구분</a>에서 다룬다.</p>
 
 <p><br /></p>
 
@@ -1413,15 +1415,21 @@ Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
 
 <script type="math/tex; mode=display">P = \frac{W}{T} \leq \frac{W}{\max\left(\dfrac{W}{\pi},\ \dfrac{Q}{\beta}\right)} = \min\left(\underbrace{\frac{W}{W/\pi}}_{\text{연산 쪽}},\ \underbrace{\frac{W}{Q/\beta}}_{\text{메모리 쪽}}\right)</script>
 
-<p>분모의 $T$에 $\max$가 들어가 있으니, 역수를 취하면서 $\min$으로 바뀐다. 두 항을 각각 정리하면 연산 쪽은 $\frac{W}{W/\pi} = \pi$, 메모리 쪽은 다음과 같다.</p>
+<p>분모의 $T$에 $\max$가 들어가 있으니, 역수를 취하면서 $\min$으로 바뀐다.</p>
+
+<p><br /></p>
+
+<p>두 항을 각각 정리하면 연산 쪽은 $\frac{W}{W/\pi} = \pi$, 메모리 쪽은 다음과 같다.</p>
 
 <script type="math/tex; mode=display">\frac{W}{Q/\beta} = \frac{W\beta}{Q} = \beta \cdot \underbrace{\frac{W}{Q}}_{= I} = \beta I</script>
 
 <script type="math/tex; mode=display">P = \min(\pi,\ \beta I)</script>
 
-<blockquote>
-  <p><strong>왜 갑자기 $\beta$가 $I$에 곱해지는가.</strong> $\beta$가 새로 붙은 게 아니다. $\dfrac{W}{Q/\beta}$ 안에 <strong>이미 있던</strong> $\beta$가 분자로 올라온 것이다. 그 과정에서 $W/Q$라는 덩어리가 남았고, 그 덩어리에 “연산 강도”라는 이름을 붙인 것이다. 즉 <strong>$I$는 정의가 먼저 있었던 게 아니라, 이 나눗셈에서 살아남은 좌표다.</strong> 원논문이 굳이 $W/Q$라는 비율에 이름을 붙인 이유가 여기 있다 — 성능 식을 쓰면 반드시 이 형태로만 남기 때문이다.</p>
-</blockquote>
+<p>왜 갑자기 $\beta$가 $I$에 곱해지는가 당황할 수 있지만, $\beta$가 새로 붙은 게 아니다. $\dfrac{W}{Q/\beta}$ 안에 <strong>이미 있던</strong> $\beta$가 분자로 올라온 것이다. 그 과정에서 $W/Q$라는 덩어리가 남았고, 그 덩어리에 “연산 강도”라는 이름을 붙인 것이다.</p>
+
+<p><br /></p>
+
+<p>결과적으로 <strong>$I$는 정의가 먼저 있었던 게 아니라, 이 나눗셈에서 살아남은 좌표다.</strong> 원 논문이 굳이 $W/Q$라는 비율에 이름을 붙인 이유가 여기 있다 — 성능 식을 쓰면 반드시 이 형태로만 남기 때문이다.</p>
 
 <p>단위를 붙여 다시 쓰면 좌우변이 맞는지 확인할 수 있다.</p>
 
@@ -1596,47 +1604,58 @@ Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
 
 <h2 id="ridge-point">ridge point</h2>
 
+<p>그래프에서 수평선과 사선이 만나는 지점을 <strong>ridge point</strong>라고 한다. ridge point의 x좌표는 $I^{*} = \pi/\beta$이고, <strong>machine balance</strong>라고도 불린다. 이 점이 <strong>이 기계에서 peak에 도달하기가 얼마나 어려운가를 나타내는 숫자</strong>이기 때문이다. ridge가 오른쪽에 있을수록, peak 성능을 보려면 더 높은 재사용을 가진 커널만 자격이 있다는 뜻이다.</p>
+
+<p>원논문이 ridge point를 정의하는 대목을 그대로 옮기면 아래와 같은데, 그 요지 역시 <strong>ridge point의 x좌표는 peak 성능에 도달하는 데 필요한 최소 연산 강도</strong>라는 것이다.</p>
+
 <blockquote>
   <p>Note that the <em>ridge point</em>, where the diagonal and horizontal roofs meet, offers an insight into the overall performance of the computer. The x-coordinate of the ridge point is the <strong>minimum operational intensity required to achieve maximum performance</strong>. If the ridge point is far to the right, then only kernels with very high operational intensity can achieve the maximum performance…</p>
+
+  <p>— Williams, Waterman, Patterson, <a href="https://escholarship.org/content/qt78h8v7mr/qt78h8v7mr.pdf">“Roofline: An Insightful Visual Performance Model for Multicore Architectures”, CACM 2009</a></p>
 </blockquote>
 
-<p>ridge point의 x좌표는 $I^{*} = \pi/\beta$이고, <strong>machine balance</strong>라고도 불린다. 왜 이 한 점이 기계 전체의 성격을 요약하는가. <strong>이 기계에서 peak에 도달하기가 얼마나 어려운가를 나타내는 숫자</strong>이기 때문이다. ridge가 오른쪽에 있을수록, peak 성능을 보려면 더 높은 재사용을 가진 커널만 자격이 있다는 뜻이다. 원논문의 실측 ridge point를 보면 이 해석이 그대로 확인된다.</p>
+<p>원논문의 실측에서도 이 해석이 그대로 확인된다. <strong>ridge point가 clock rate나 peak performance보다 성능을 더 잘 예측했고</strong>, 측정된 커널 대부분이 ridge 왼쪽(메모리 바운드)이었다. 실무에서 만나는 대부분의 커널이 왼쪽에 있다는 이 사실이 루프라인이 유용한 이유다.</p>
 
-<table>
-  <thead>
-    <tr>
-      <th>기계</th>
-      <th>ridge point (FLOP/byte)</th>
-      <th>성격</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Intel Xeon</td>
-      <td><strong>6.7</strong></td>
-      <td>DP peak은 가장 높지만 도달이 가장 어렵다</td>
-    </tr>
-    <tr>
-      <td>Opteron X4</td>
-      <td>4.4</td>
-      <td> </td>
-    </tr>
-    <tr>
-      <td>IBM Cell</td>
-      <td>0.65</td>
-      <td> </td>
-    </tr>
-    <tr>
-      <td>Sun T2+</td>
-      <td><strong>0.33</strong></td>
-      <td>peak은 낮지만 도달이 가장 쉽다</td>
-    </tr>
-  </tbody>
-</table>
+<details>
+  <summary><b>참고: 원논문의 기계별 실측 ridge point (2009)</b></summary>
 
-<p>논문은 <em>“Cell offered the highest performance on these kernels, but T2+ was the easiest computer on which to achieve its highest performance. One reason is because ridge point of the Roofline model for T2+ was the lowest.”</em>라고 쓰고, <strong>ridge point가 clock rate나 peak performance보다 성능을 더 잘 예측했다</strong>고 보고한다. 논문이 측정한 16개(커널×기계) 조합의 연산 강도는 0.25~1.64, 중간값 0.60이었다. ridge point가 0.33~6.7이므로 거의 전부가 사선 쪽(메모리 바운드)이다. 실무에서 만나는 대부분의 커널이 왼쪽에 있다는 이 사실이 루프라인이 유용한 이유다.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>기계</th>
+        <th>ridge point (FLOP/byte)</th>
+        <th>성격</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Intel Xeon</td>
+        <td><strong>6.7</strong></td>
+        <td>DP peak은 가장 높지만 도달이 가장 어렵다</td>
+      </tr>
+      <tr>
+        <td>Opteron X4</td>
+        <td>4.4</td>
+        <td> </td>
+      </tr>
+      <tr>
+        <td>IBM Cell</td>
+        <td>0.65</td>
+        <td> </td>
+      </tr>
+      <tr>
+        <td>Sun T2+</td>
+        <td><strong>0.33</strong></td>
+        <td>peak은 낮지만 도달이 가장 쉽다</td>
+      </tr>
+    </tbody>
+  </table>
 
-<p><strong>memory wall이 여기서 숫자로 보인다.</strong> ridge point가 세대마다 오른쪽으로 밀린다.</p>
+  <p>논문은 <em>“Cell offered the highest performance on these kernels, but T2+ was the easiest computer on which to achieve its highest performance. One reason is because ridge point of the Roofline model for T2+ was the lowest.”</em>라고 쓴다. 논문이 측정한 16개(커널×기계) 조합의 연산 강도는 0.25~1.64, 중간값 0.60이었다. ridge point가 0.33~6.7이므로 거의 전부가 사선 쪽(메모리 바운드)이다.</p>
+
+</details>
+
+<p><strong>ridge point는 하드웨어 세대가 바뀔 때마다 오른쪽으로 밀려 왔다.</strong> 연산 성능($\pi$)이 메모리 대역폭($\beta$)보다 빨리 늘어 둘의 격차가 계속 벌어진다는 컴퓨터 구조의 오래된 관찰을 <strong>memory wall</strong>이라 부르는데, ridge point가 정확히 그 두 값의 비율($I^{*} = \pi/\beta$)이라서 그 추세가 루프라인 위에서는 “ridge point의 우측 이동”이라는 숫자 하나로 나타난다. 실제 값의 궤적이 그렇다.</p>
 
 <table>
   <thead>
@@ -1669,35 +1688,19 @@ Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
   </tbody>
 </table>
 
-<p>값은 각 SKU 명판 스펙으로 계산한 대략치다(A100은 $\beta \approx 2.0$ TB/s 기준). 연산 능력이 대역폭보다 훨씬 빠르게 늘어났기 때문에 이렇게 되고, <strong>peak이 올라갈수록 그 peak에 도달할 자격을 갖춘 커널은 줄어든다.</strong> 원논문의 Opteron X2 → X4가 이미 그랬다(ridge 1.0 → 4.4). 뒤집어 보면 <strong>ridge가 낮은 기계는 “균형 잡힌” 것일 수도 있고 “연산이 빈약한” 것일 수도 있다.</strong> 낮은 peak의 높은 비율을 달성하는 것은 쉽다. 그래서 ridge point는 단독으로 좋고 나쁨을 말하지 않고, peak 높이와 함께 읽어야 한다.</p>
+<p>값은 각 SKU 명판 스펙으로 계산한 대략치다(A100은 $\beta \approx 2.0$ TB/s 기준). <strong>peak이 올라갈수록 그 peak에 도달할 자격을 갖춘 커널은 줄어든다.</strong> 원논문의 Opteron X2 → X4가 이미 그랬다(ridge 1.0 → 4.4). 뒤집어 보면 <strong>ridge가 낮은 기계는 “균형 잡힌” 것일 수도 있고 “연산이 빈약한” 것일 수도 있다.</strong> 낮은 peak의 높은 비율을 달성하는 것은 쉽다. 그래서 ridge point는 단독으로 좋고 나쁨을 말하지 않고, peak 높이와 함께 읽어야 한다.</p>
 
 <h2 id="π와-β의-출처">π와 β의 출처</h2>
 
+<p>여기까지의 유도에서 $\pi$와 $\beta$는 하드웨어가 주는 상수로 두고 기호로만 썼다. 실제 하드웨어의 루프라인을 그리려면 이제 이 두 값을 어디서 얻는지가 남는다.</p>
+
+<p>이 값의 출처에 대한 위키피디아의 서술을 그대로 옮기면 아래와 같다. 앞 반절(two parameters, one variable) — $\pi$·$\beta$는 그리기 전에 <strong>고정</strong>되어 <strong>지붕의 모양을 결정</strong>하는 파라미터고, $I$만 <strong>변수</strong>로 남아 점이 지붕 위 어디에 서는지를 정한다는 역할 구분 — 은 <a href="#변수-i">변수 I</a>에서 이미 뜯었다. 이 절의 관심은 뒷반절이다 — <strong>$\pi$는 벤치마킹으로, $\beta$는 아키텍처 매뉴얼로 얻는다는 출처의 비대칭.</strong></p>
+
 <blockquote>
   <p>The naive roofline is obtained by applying simple bound and bottleneck analysis. In this formulation of the roofline model, there are only <strong>two parameters</strong>, peak performance and peak bandwidth, and <strong>one variable</strong>, arithmetic intensity. The peak performance, in general expressed as GFLOPS, can be usually derived from benchmarking, while the peak bandwidth, that references to peak DRAM bandwidth to be specific, is instead obtained via architectural manuals</p>
-</blockquote>
 
-<table>
-  <thead>
-    <tr>
-      <th>역할</th>
-      <th>무엇</th>
-      <th>그래프에서</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>parameter</strong> ($\pi, \beta$)</td>
-      <td>그래프를 그리기 <strong>전에</strong> 고정</td>
-      <td>지붕의 모양을 결정</td>
-    </tr>
-    <tr>
-      <td><strong>variable</strong> ($I$)</td>
-      <td>그래프의 가로축 그 자체</td>
-      <td>지붕 위 어디에 서는지 결정</td>
-    </tr>
-  </tbody>
-</table>
+  <p>— <a href="https://en.wikipedia.org/wiki/Roofline_model">Wikipedia — Roofline model</a></p>
+</blockquote>
 
 <p>위키피디아가 두 파라미터의 출처를 다르게 적어 놓은 것($\pi$는 benchmarking, $\beta$는 architectural manuals)이 헷갈리는 지점인데, 모순이 아니라 둘의 성질이 다르다는 얘기다.</p>
 
@@ -1736,9 +1739,15 @@ Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
 
 <h2 id="2단-판단">2단 판단</h2>
 
+<p>이제 그려진 그래프를 읽는 법이다. 위키피디아가 이 그래프를 정의하는 문장을 그대로 옮기면 아래와 같다. 그래프의 구성 요소 두 가지를 명확히 알려준다.</p>
+
 <blockquote>
   <p>The most basic roofline model can be visualized by plotting floating-point performance as a function of machine peak performance, machine peak bandwidth, and arithmetic intensity. The relevant curve is effectively a <strong>performance bound</strong> under which <strong>kernel or application performance</strong> exists, and includes two <strong>platform-specific performance ceilings</strong>: a ceiling derived from the memory bandwidth and one derived from the processor’s peak performance</p>
+
+  <p>— <a href="https://en.wikipedia.org/wiki/Roofline_model">Wikipedia — Roofline model</a></p>
 </blockquote>
+
+<p><strong>선은 하드웨어가 정하는 상한 두 개</strong>(two platform-specific performance ceilings)이고, <strong>그 아래에 찍히는 점이 워크로드의 실측 성능</strong>(kernel or application performance)이다.</p>
 
 <p><img src="https://sirzzang.github.io//assets/images/roofline-model-example.png" alt="Roofline 모델 예시 - Wikipedia" class="align-center" /></p>
 
@@ -2090,146 +2099,7 @@ ncu <span class="nt">--set</span> roofline <span class="nt">-o</span> report ./m
   </tbody>
 </table>
 
-<h2 id="llm-서빙의-세-점">LLM 서빙의 세 점</h2>
-
-<p>H100 기준으로 옮겨 보면($\pi \approx 990$ TFLOP/s BF16, $\beta \approx 3.35$ TB/s → $I^{*} \approx 295$ FLOP/byte) 이렇게 된다.</p>
-
-<p><strong>decode, batch=1</strong>: $I \approx 1$. ridge($\approx 295$)에서 한참 왼쪽이므로 완전한 메모리 바운드다. 상한을 대역폭으로 직접 계산할 수 있다.</p>
-
-<script type="math/tex; mode=display">\text{tok/s} \lesssim \frac{\beta}{\text{모델 바이트}} = \frac{3.35\times10^{12}}{1.4\times10^{10}} \approx 240</script>
-
-<p>7B FP16이면 단일 GPU에서 초당 대략 240토큰이 이론 상한이다(KV 캐시·오버헤드 무시). 커널을 아무리 잘 짜도 이 값을 넘을 수 없다. 넘었다면 가중치가 캐시에 남아 있거나 계산이 틀렸다.</p>
-
-<p><strong>decode, batch=B</strong>: $I \approx B$. ridge가 $\approx 295$이므로 <strong>배치가 수백 규모가 되어야 비로소 사선을 벗어난다.</strong> 이것이 <a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/">continuous batching</a>이 LLM 서빙의 핵심 기법인 이유다 — 처리량을 늘리는 트릭이 아니라, 점을 사선에서 떼어내는 사실상 유일한 수단이다. 다만 배칭은 공짜가 아니다. 루프라인은 처리량 모델이라 지연을 말하지 않는데, 배치를 키우면 토큰당 지연(TPOT)은 나빠진다. 사선 탈출은 처리량 관점의 처방이고, 지연 SLO가 있는 서빙에서는 그 트레이드오프 위에서 배치 크기를 고른다.</p>
-
-<p><strong>prefill</strong>: $I$가 프롬프트 길이 $S$에 비례해 수백까지 올라가므로 ridge 오른쪽, 연산 바운드다.</p>
-
-<p>그래서 <strong>prefill과 decode는 애초에 다른 지표로 평가해야 한다.</strong></p>
-
-<table>
-  <thead>
-    <tr>
-      <th> </th>
-      <th>병목</th>
-      <th>어느 지붕</th>
-      <th>무엇을 봐야 하나</th>
-      <th>처방</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>prefill</strong></td>
-      <td>연산기</td>
-      <td>수평</td>
-      <td>텐서코어 활용률, MFU</td>
-      <td>저정밀도, 텐서코어, 커널 튜닝</td>
-    </tr>
-    <tr>
-      <td><strong>decode</strong></td>
-      <td>대역폭</td>
-      <td>사선</td>
-      <td>달성 대역폭 (<code class="highlighter-rouge">DRAM_ACTIVE</code>)</td>
-      <td>배칭, 양자화, KV 캐시 관리</td>
-    </tr>
-  </tbody>
-</table>
-
-<p>같은 MFU(Model FLOPs Utilization — 하드웨어 연산 peak의 몇 %를 실제 모델 연산에 쓰고 있나) 숫자로 둘을 나란히 평가하면 decode는 항상 낮게 나오는데, 그것은 커널이 나쁜 게 아니라 <strong>애초에 도달 가능한 지붕이 낮기 때문</strong>이다. decode의 성적표는 MFU가 아니라 “대역폭을 몇 % 썼는가”다. 한 가지 보정도 필요하다. decode의 $Q$는 가중치만이 아니라 <strong>가중치 + KV 캐시</strong>다. 컨텍스트가 길어지면 KV 쪽이 트래픽을 지배하기 시작하고, KV는 요청마다 다르므로 배칭으로 공유되지 않는다. 즉 컨텍스트가 길어질수록 배칭의 효과가 줄어든다. 위의 $\approx 240$ tok/s 계산도 KV를 무시한 낙관적 상한이다.</p>
-
-<p>루프라인이 LLM 서빙에서 유독 많이 언급되는 데는 이유가 있다. 첫째, <strong>decode가 있을 수 있는 가장 심한 정도로 메모리 바운드</strong>($I \approx 1$, ridge에서 한참 왼쪽)라 성능이 왜 낮은지 util·FLOP/s만 봐서는 진단되지 않는다. 둘째, <strong>prefill과 decode의 자원 성격이 정반대</strong>(연산 바운드 vs 메모리 바운드)라 무엇을 손봐야 할지가 갈리는데, 그 판별을 해 주는 것이 정확히 루프라인이다. 셋째, 세대마다 연산이 대역폭보다 빨리 늘어 <strong>ridge가 오른쪽으로 밀리므로</strong> decode는 점점 더 왼쪽에 갇히고, 그것을 모르면 최적화 방향을 정반대로 잡기 쉽다. 그리고 그 진단을 제대로 하려면 배칭이 듣는 부분과 안 듣는 부분을 나눠야 한다. <strong>워크로드를 한 덩어리로 보면 안 되고, 최소 세 점으로 나눠 찍어야 한다.</strong></p>
-
-<table>
-  <thead>
-    <tr>
-      <th>점</th>
-      <th>$I$</th>
-      <th>배치 $B$를 키우면</th>
-      <th>이유</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>prefill</strong> (FFN·projection)</td>
-      <td>$S$에 비례, 수백</td>
-      <td>이미 연산 바운드</td>
-      <td>가중치를 $S$개 토큰이 공유</td>
-    </tr>
-    <tr>
-      <td><strong>decode-FFN·projection</strong></td>
-      <td>$\approx B$</td>
-      <td><strong>오른쪽으로 이동</strong></td>
-      <td>가중치를 $B$개 요청이 공유</td>
-    </tr>
-    <tr>
-      <td><strong>decode-attention</strong></td>
-      <td>$\approx 1$에서 사실상 고정</td>
-      <td><strong>움직이지 않는다</strong></td>
-      <td>KV 캐시는 요청마다 별개 → $W$와 $Q$가 같이 $B$배</td>
-    </tr>
-  </tbody>
-</table>
-
-<ul>
-  <li><strong>decode-FFN의 강도가 배치 크기와 같아지는 이유</strong>: FP16 가중치 원소 하나(2 byte)에 곱 1 + 합 1 = 2 FLOP이므로 배치 1에서 $I = 2/2 = 1$ FLOP/byte다. 배치가 $B$면 그 원소를 $B$번 재사용하니 $I \approx B$로 올라간다. 즉 배치 크기가 그대로 연산 강도가 된다</li>
-  <li>그런데 ridge는 A100 $\approx 156$, H100 $\approx 295$다. <strong>배치가 300 근처가 되어야 겨우 연산 바운드로 넘어간다.</strong> 배치 1이면 H100 지붕의 $1/295 \approx 0.3\%$밖에 못 쓴다. “H100인데 왜 이렇게 느린가”의 답이 이 한 줄에 전부 있다</li>
-  <li><strong>decode-attention은 배칭으로 나아지지 않는다.</strong> 요청이 $B$개면 KV도 $B$세트를 읽어야 하므로 $W$와 $Q$가 나란히 $B$배가 되고, 비율은 그대로다. GQA/MQA(KV 헤드 수를 줄여 KV 트래픽을 낮추는 어텐션 변형), KV 양자화, paged KV가 배칭과 <strong>별개로</strong> 필요한 이유가 여기에 있다</li>
-  <li>그래서 프로파일할 때도 커널을 한 점으로 뭉치지 말고 세 점으로 나눠 찍어야 한다. 한 덩어리로 보면 FFN의 개선이 attention의 정체를 가리거나 그 반대가 된다</li>
-</ul>
-
-<h2 id="최적화-기법">최적화 기법</h2>
-
-<p>기법을 나열하는 것이 아니라 <strong>점을 어느 방향으로 옮기는가 / 지붕을 어떻게 바꾸는가</strong>로 정리하면, 어떤 상황에서 무엇을 골라야 하는지가 보인다.</p>
-
-<table>
-  <thead>
-    <tr>
-      <th>기법</th>
-      <th>roofline 상 동작</th>
-      <th>언제 듣나</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Continuous batching</td>
-      <td>점을 오른쪽으로 ($I \approx B$)</td>
-      <td>decode-FFN이 사선에 붙어 있는 동안</td>
-    </tr>
-    <tr>
-      <td>Weight-only INT4</td>
-      <td>$Q$를 $1/4$로 → $I$ 4배</td>
-      <td><strong>저배치에서만</strong></td>
-    </tr>
-    <tr>
-      <td>FlashAttention</td>
-      <td>$S^2$ 중간 행렬을 HBM에 안 적어 $Q$ 감소 → 점 오른쪽</td>
-      <td>prefill attention</td>
-    </tr>
-    <tr>
-      <td>GQA/MQA, KV 양자화, paged KV</td>
-      <td>KV 트래픽 감소 → attention 점 오른쪽</td>
-      <td>decode-attention</td>
-    </tr>
-    <tr>
-      <td>Speculative decoding</td>
-      <td>가중치 1회 읽고 $k$토큰 검증 → $I$를 최대 $k$배</td>
-      <td>저배치·저지연</td>
-    </tr>
-    <tr>
-      <td>Chunked prefill</td>
-      <td>연산 바운드 작업과 메모리 바운드 작업을 섞어 두 지붕을 동시에 사용</td>
-      <td>prefill·decode 혼재</td>
-    </tr>
-    <tr>
-      <td>AMP / FP8</td>
-      <td><strong>지붕 자체를 위로</strong> (동시에 ridge도 오른쪽으로) + $Q$ 감소로 점도 오른쪽</td>
-      <td>전 구간</td>
-    </tr>
-  </tbody>
-</table>
-
-<blockquote>
-  <p><strong>자주 나는 오판: INT4가 처리량을 올려 줄 것이라고 기대하는 것.</strong> 고배치에서는 이미 점이 수평 지붕 쪽으로 넘어가 있으므로 $Q$를 줄여도 상한이 오르지 않고, dequant 오버헤드($W$ 증가)만 붙어서 오히려 느려질 수 있다. <strong>저지연(저배치) 최적화와 고처리량(고배치) 최적화는 서로 다른 지붕을 상대하는 작업이다.</strong> <a href="#2단-판단">2단 판단</a>의 순서를 그대로 쓰면 된다 — 지금 점이 어떤 지붕에 붙었는지를 밝힌 다음에야 기법을 고를 수 있다.</p>
-</blockquote>
+<p>이 틀을 LLM 서빙 워크로드에 실제로 적용하는 것은 <a href="/dev/Dev-Roofline-Model-LLM-Serving/">2편 — Roofline 모델로 보는 LLM 서빙</a>에서 다룬다. 워크로드를 최소 세 점(prefill·decode-FFN·decode-attention)으로 나눠 찍어야 하는 이유와 기법별 처방을 거기서 정리한다.</p>
 
 <p><br /></p>
 
@@ -2389,7 +2259,7 @@ ncu <span class="nt">--set</span> roofline <span class="nt">-o</span> report ./m
   <li><a href="https://dl.acm.org/doi/10.1145/800076.802486">Hong, Kung, “I/O Complexity: The Red-Blue Pebble Game”, STOC 1981</a></li>
   <li><a href="https://dl.acm.org/doi/10.1145/17356.17362">Kung, “Memory Requirements for Balanced Computer Architectures”, ISCA 1986</a></li>
   <li><a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/">LLM 서빙과 최적화 3.3편 — prefill과 decode</a></li>
-  <li><a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/">LLM 서빙과 최적화 3.2편 — 배치 요청</a></li>
+  <li><a href="/dev/Dev-Roofline-Model-LLM-Serving/">2편 — Roofline 모델로 보는 LLM 서빙: 세 점으로 나눠 찍는 병목</a></li>
 </ul>
 
 <p><br /></p>
@@ -2500,7 +2370,8 @@ ncu <span class="nt">--set</span> roofline <span class="nt">-o</span> report ./m
 ">이전</a>
     
     
-      <a href="#" class="pagination--pager disabled">다음</a>
+      <a href="/dev/Dev-Roofline-Model-LLM-Serving/" class="pagination--pager" title="[Performance] Roofline 모델로 보는 LLM 서빙: 세 점으로 나눠 찍는 병목
+">다음</a>
     
   </nav>
 
@@ -2523,6 +2394,51 @@ ncu <span class="nt">--set</span> roofline <span class="nt">-o</span> report ./m
     <div class="page__related">
       <h4 class="page__related-title">참고</h4>
       <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-Roofline-Model-LLM-Serving/" rel="permalink">[Performance] Roofline 모델로 보는 LLM 서빙: 세 점으로 나눠 찍는 병목
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 21일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  5 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Roofline 모델을 LLM 서빙 워크로드에 적용해 보자.
+</p>
+  </article>
+</div>
+
         
           
 
@@ -2654,51 +2570,6 @@ ncu <span class="nt">--set</span> roofline <span class="nt">-o</span> report ./m
       
     </p>
     <p class="archive__item-excerpt" itemprop="description">서비스를 직접 기동해 프로세스 구조를 관찰하고, 부하 테스트로 단일 워커의 순차 처리 병목을 재현해 보자.
-</p>
-  </article>
-</div>
-
-        
-          
-
-
-
-<div class="grid__item">
-  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
-    
-      <div class="archive__item-teaser">
-        <img src=
-          
-            "/assets/images/blog-Dev.jpg"
-          
-          alt="">
-      </div>
-    
-    <h2 class="archive__item-title" itemprop="headline">
-      
-        <a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/" rel="permalink">[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 2. 코드 구조: 다섯 컴포넌트 해부
-</a>
-      
-    </h2>
-    <p class="page__meta">
-      
-        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 14일
-        
-          <span class="page__meta-sep"> · </span>
-        
-      
-      
-        <i class="far fa-clock" aria-hidden="true"></i> 
-
-
-
-
-  12 분 소요
-
-
-      
-    </p>
-    <p class="archive__item-excerpt" itemprop="description">단일 모델 서빙 서비스의 코드를 컴포넌트 단위로 해부하며, 프로세스 분리와 큐 기반 IPC가 어떻게 구현되는지 살펴보자.
 </p>
   </article>
 </div>
