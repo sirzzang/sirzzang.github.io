@@ -150,7 +150,7 @@ $$
 
 ![축소판 QKV 융합 사영 — Embedding(2×2)에 Weights(2×6)를 곱하고 Bias를 더해 QKV(2×6)를 만드는 행렬곱. 열은 Q·K·V 세 밴드로 나뉘고 각 행은 My·hobby 토큰이다]({{site.url}}/assets/images/llmso-qkv-fused-matmul-toy.png){: .align-center width="780"}
 
-<center><sup>직접 그린 도식. 행은 토큰(My·hobby), 열은 <span style="color:#6c7fe8">Q</span>|<span style="color:#e8706b">K</span>|<span style="color:#2fa87c">V</span> 세 밴드로 나뉜다. 실제 GPT-2는 여기서 2 → 768, 6 → 2304로 커진다</sup></center>
+<center><sup>AI를 이용해 직접 그린 도식. 행은 토큰(My·hobby), 열은 <span style="color:#6c7fe8">Q</span>|<span style="color:#e8706b">K</span>|<span style="color:#2fa87c">V</span> 세 밴드로 나뉜다. 실제 GPT-2는 여기서 2 → 768, 6 → 2304로 커진다</sup></center>
 
 <br>
 
@@ -352,7 +352,7 @@ GPT-2는 다음 토큰을 예측하는 모델이다. 학습 데이터는 완성�
 
 ![어텐션 스코어 행렬의 상삼각(j > i, 미래 토큰) 위치에 −∞ 마스크가 더해지는 도식]({{site.url}}/assets/images/llmso-attention-causal-mask-upper-triangle.png){: .align-center width="600"}
 
-<center><sup>직접 그린 도식. 대각선 아래(과거·현재, j ≤ i)는 내적 스코어를 남기고, 위(미래, j > i)에는 −∞를 더해 softmax 후 0이 되게 한다. 숫자는 예시 값</sup></center>
+<center><sup>AI를 이용해 직접 그린 도식. 대각선 아래(과거·현재, j ≤ i)는 내적 스코어를 남기고, 위(미래, j > i)에는 −∞를 더해 softmax 후 0이 되게 한다. 숫자는 예시 값</sup></center>
 
 "가린다"는 것이 값을 지운다는 뜻은 아니다. softmax를 취하기 **직전**의 스코어 행렬에서, 가려야 할 상삼각 위치에 $-\infty$(구현상으로는 -1e9 같은 극단적 음수)를 더한다. softmax는 지수함수 $e^{score}$를 쓰므로 $e^{-\infty} = 0$ — 해당 위치의 가중치가 자연스럽게 0이 되어, V를 가중합할 때 아무 기여도 하지 못한다. 순서가 중요하다. softmax **후에** 강제로 0으로 지우면 남은 확률의 합이 1이 아니게 되므로, 반드시 softmax 전에 막아야 한다. Transformer Explainer에서도 같은 마스킹이 실제 화면으로 확인된다.
 

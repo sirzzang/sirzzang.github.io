@@ -18,7 +18,7 @@ tags:
 last_modified_at: 2026-08-22
 ---
 
-*[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 내용을 기반으로 합니다.*
+*[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 중 딥다이브한 내용입니다.*
 
 <br>
 
@@ -57,11 +57,11 @@ Roofline 모델은 **주어진 하드웨어에서 어떤 연산의 성능 상한
 
 자세한 내용은 차례로 알아 볼 예정이다. 지금은 그래프가 **점이 어디에 찍히는지를 보고 성능 상한을 올리기 위해 어떤 접근을 취해야 할지 판단하게 해 주는 시각화 도구**라는 감만 잡아 두면 된다.
 
-분량이 꽤 길어서 읽는 경로를 먼저 적어 둔다. 순서대로 다 따라갈 필요는 없고, [구성 요소](#구성-요소)에서 기호와 연산 강도까지만 잡은 뒤 [해석](#해석)·[적용](#적용)으로 건너뛰어도 병목 판별이라는 실용 목적에는 충분하다. [유도](#유도)는 지붕이 왜 그 모양인지, [측정](#측정)은 점을 실제로 어떻게 찍는지가 궁금할 때 돌아와 읽으면 된다. 중간중간의 영어 인용문도 원문 자체보다 바로 아래 해석 위주로 보면 된다.
-
 특히 이 글 내내 쓰는 판정 규칙 두 개를 미리 봐 두면 좋다.
-1. 두 지붕이 꺾여 만나는 점을 **ridge point**라 하고, **점이 그 왼쪽이면 메모리 대역폭에, 오른쪽이면 연산 능력에 걸린다**(왜 그런지는 [유도](#변수-i)·[해석](#2단-판단)에서 따진다).
+1. 두 지붕이 꺾여 만나는 점을 **ridge point**라 하고(x좌표는 $I^{*} = \pi/\beta$), **점이 그 왼쪽이면 메모리 대역폭에, 오른쪽이면 연산 능력에 걸린다**(판정에 쓰는 법은 [해석](#2단-판단)에서, 왜 그런지는 뒤의 [유도](#변수-i)에서 따진다).
 2. 이 그래프는 보통 **두 축이 로그 눈금**이라, 점과 지붕의 거리는 대각선이 아니라 **수직으로** 읽어야 한다([수평선과 사선](#수평선과-사선)).
+
+> 이하 본문은 다 읽을 필요는 없다. [구성 요소](#구성-요소)에서 기호와 연산 강도를 잡으면 [해석](#해석)·[적용](#적용)에서 병목 판별까지 완결된다. 그 뒤의 [유도](#유도)는 지붕이 왜 그 모양인지, [측정](#측정)은 점을 실제로 어떻게 찍는지가 궁금할 때 읽는 딥다이브다. 중간중간의 영어 인용문도 원문 자체보다 바로 아래 해석 위주로 보면 된다.
 
 <br>
 
@@ -81,7 +81,7 @@ Roofline 모델을 이루는 값은 일곱 개다.
 | $P$ | performance | FLOP/s | 달성 성능 $= W/T$, 그래프의 **Y축** | 측정값 |
 | $I$ | intensity | FLOP/byte | $I = W/Q$, 바이트당 연산 밀도, 그래프의 **X축** | 알고리즘 + 캐시 |
 
-단위 칸의 FLOP·FLOP/s·FLOP/byte는 부동소수점 연산 기준의 관습 표기다. 정수 연산이 주력인 하드웨어(엣지 NPU 등)라면 OP·OP/s·OP/byte로 그대로 바꿔 읽으면 되고, 모델 논리는 바뀌지 않는다 — 자세한 구분은 [작업량 단위 절](#작업량-단위-flop과-op)에서 다룬다.
+단위 칸의 FLOP·FLOP/s·FLOP/byte는 부동소수점 연산 기준의 관습 표기다. 정수 연산이 주력인 하드웨어(엣지 NPU 등)라면 OP·OP/s·OP/byte로 그대로 바꿔 읽으면 되고, 모델 논리는 바뀌지 않는다 — 자세한 구분은 뒤의 [작업량 단위 절](#작업량-단위-flop과-op)에서 다룬다.
 
 - **Work $W$**: 주어진 커널 혹은 애플리케이션이 수행하는 연산의 수. 배열 원소 갱신 수, 정수 연산 수 등 어떤 종류의 연산이든 셀 수 있지만, 보통은 부동소수점 연산 수(FLOPs)를 센다
 - **Memory traffic $Q$**: 커널 실행 중 발생한 메모리 전송 바이트 수
@@ -101,101 +101,6 @@ Roofline 모델을 이루는 값은 일곱 개다.
 <summary><b>참고: $W$와 $Q$에 하드웨어가 개입하는 방식</b></summary>
 
 $W$에 하드웨어가 개입하는 통로는 두 가지뿐이다 — FMA(곱셈-덧셈 융합)를 2 FLOP으로 셀 것인가 1로 셀 것인가, 그리고 컴파일러가 연산을 지우거나 늘리는가. 반면 $Q$는 같은 코드라도 캐시가 크면 한 번 가져온 데이터를 재사용해 줄고, 캐시가 작으면 같은 데이터를 여러 번 다시 가져와 늘어난다. 그래서 $Q$는 **알고리즘이 정하는 하한이 있고, 실제 값은 그 하한 이상에서 하드웨어가 결정**한다.
-
-</details>
-
-## 표기: FLOPs vs FLOP/s
-
-앞의 [기호와 정의](#기호와-정의) 표에서 $P$(Y축)를 FLOP/s, $I$(X축)를 FLOP/byte로 적었다. 그런데 FLOP·FLOPs·FLOPS는 한 글자 차이로 뜻이 갈리는데도 실무에서 자주 섞여 쓰인다. 축이 왜 그 단위인지는 [유도](#유도)에서 따지고, 여기서는 **단위 표기 자체**만 정리한다.
-
-대표적인 오표기가 위에 첨부한 위키피디아 그림에 있다. x축 라벨이 `Operational Intensity [FLOPS/byte]`인데 엄밀히는 **FLOP/byte가 맞다.** FLOPS/byte로 읽으면 "초당 연산을 바이트로 나눈 것"이 되어 의미가 없다 — **연산 강도에는 시간이 들어가지 않는다**는 x축의 핵심 성질이 지워지기 때문이다. 그림은 원본 그대로 인용하고, 본문에서는 FLOP/byte로 쓴다.
-
-| 축 | 정확한 단위 | 의미 |
-| --- | --- | --- |
-| y축 | **FLOP/s** | 처리율 (시간 있음) |
-| x축 | **FLOP/byte** | 작업량 ÷ 데이터량 (시간 없음) |
-
-혼동을 피하기 위해서는 FLOPs와 FLOPS의 표기를 명확히 알아 둬야 한다.
-
-$$
-\text{FLOPS}(\text{초당 처리율}) = \frac{\text{FLOPs}(\text{작업량})}{\text{시간(초)}}
-$$
-
-|  | 확장 | 의미 | 단위 | Roofline에서 |
-| --- | --- | --- | --- | --- |
-| **FLOPs** | **FL**oating-point **OP**eration**s** | 부동소수점 연산의 **개수** — 작업량 | 개수 (무차원) | x축·y축의 분자 ($W$) |
-| **FLOPS** | **FL**oating-point **O**perations **P**er **S**econd | 초당 연산 횟수 — **처리율** | 1/초 | y축 ($P$) |
-
-<br>
-
-<details markdown="1">
-<summary><b>참고: 실무에서 '작업량'과 '처리율'을 구분하는 법 (대소문자·자릿수 신호, MFU)</b></summary>
-
-*본문 이해엔 필수가 아니다. 찾아본 자료를 정리한 심화 내용이다.*
-
-표기 관습상 대문자 S는 second, 소문자 s는 복수형인데, 실무에서는 거의 지켜지지 않는다. 소문자 s가 복수형인지 second인지 글자만 보고 구분이 안 되고, 논문·블로그·프로파일러가 제각각이라 같은 문서 안에서도 섞인다. 그래서 결과적으로 정착한 방식은 **대소문자에 의존하지 않고 슬래시로 명시**하는 것이다. 버클리랩 자료가 정확히 이런 식으로 쓴다.
-
-```text
-AI = Flops / Bytes presented to DRAM
-Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
-```
-
-`Flops`는 작업량, `Flop/s`는 처리율이다. 문서를 읽을 때 둘을 구분하는 신호는 이렇다.
-
-| 신호 | 판정 |
-| --- | --- |
-| `/s`, "초당", "per second"가 붙었다 | 처리율 |
-| "총", "누적", "이 커널이 수행한" | 작업량 |
-| 문맥이 하드웨어 스펙 (A100 312 TFLOPS) | 처리율 |
-| 문맥이 모델·학습 비용 (GPT-3 학습 $\approx 3\times10^{23}$ FLOP) | 작업량 |
-| 자릿수 $10^{12} \sim 10^{18}$ | 처리율일 가능성 |
-| 자릿수 $10^{20} \sim 10^{25}$ | 작업량 (누적이라 훨씬 큼) |
-
-두 의미가 한 수식에 동시에 나오는 예가 MFU(Model FLOPs Utilization)다.
-
-$$
-\text{MFU} = \frac{\text{토큰당 model FLOPs} \times \text{토큰 처리율}}{\text{peak FLOP/s}}
-$$
-
-분자의 앞항은 작업량(FLOPs), 전체 분자와 분모는 처리율(FLOP/s)이다. 여기서 단위를 헷갈리면 MFU가 몇 자리씩 틀어진다.
-
-</details>
-
-이 글의 표기는 아래로 고정한다.
-
-| 쓸 것 | 뜻 | 안 쓸 것 |
-| --- | --- | --- |
-| **FLOP** | 연산 1회 (작업량의 단위) | — |
-| **FLOP/s** | 처리율 | FLOPS, FLOPs/s |
-| **FLOP/byte** | 연산 강도 | FLOPS/byte |
-| **OP / OP/s / OP/byte** | 정수 포함 일반형 | — |
-
-## 작업량 단위: FLOP과 OP
-
-지금까지 단위를 FLOP으로 써 왔는데, 왜 대부분 부동소수점 연산량으로 세는가. FLOP은 특정 ISA나 벤더에 종속되지 않는 **하드웨어 중립적인 작업량 단위**라서 CPU·GPU·TPU·NPU·DSP·FPGA 어디서든 정의된다. 다만 정수 연산이 주력인 하드웨어에서는 일반형 OP를 쓴다.
-
-| 표기 | 대상 | 주로 쓰는 하드웨어 |
-| --- | --- | --- |
-| **FLOP** | 부동소수점 (FP64/FP32/BF16/FP8 등) | CPU, GPU, TPU, HPC |
-| **OP / TOP** | 정수 (INT8/INT4) 포함 일반 연산 | 모바일·엣지 NPU |
-
-부동소수점 연산이 주력이 아닌 하드웨어(정수 전용 NPU 등)에서도 루프라인은 그대로 그려진다. **단위만 OP/s·OP/byte로 바꾸면 되고, 두 지붕과 ridge point 논리는 전혀 변하지 않는다.**
-
-<br>
-
-<details markdown="1">
-<summary><b>참고: 정수 하드웨어의 TOPS 표기와 OP 일반형, 혼합 정밀도 주의</b></summary>
-
-*본문 이해엔 필수가 아니다. 찾아본 자료를 정리한 심화 내용이다.*
-
-엣지 NPU 스펙 시트가 "45 TOPS"처럼 정수 연산 처리율 위주로 표기하는 것은 INT8 파이프라인이 주력이고 FP 유닛이 없거나 약해서 FLOPS 표기가 부정확하기 때문이다. 엄밀히 말하면 연산기라면 OP/s가 적용되고, 그중 부동소수점을 다루는 연산기에 FLOP/s가 적용된다. 그래서 45 TOPS는 45 TOP/s, 즉 $4.5\times10^{13}$ OP/s를 뜻한다. 따라서 **y축이 FLOP/s인 것은 관습일 뿐 본질이 아니다.**
-
-|  | 일반형 | 부동소수점 관습 | INT8 NPU에서 |
-| --- | --- | --- | --- |
-| y축 | 작업 처리율 OP/s | FLOP/s | INT8 OP/s |
-| x축 (연산 강도) | OP/byte | FLOP/byte | OP/byte |
-
-혼합 정밀도 커널을 분석할 때만 주의가 필요한데, FP16 GEMM과 FP32 누산이 섞이면 어느 지붕을 기준으로 그릴지가 애매해져서 보통 지배적인 유닛 기준으로 여러 층의 지붕을 겹쳐 그린다([정밀도·유닛](#정밀도유닛) 참고).
 
 </details>
 
@@ -231,7 +136,7 @@ $$
 
 양 극단인 SAXPY(벡터 연산)와 GEMM(행렬 곱) 둘만 결과를 보면 이렇다.
 
-- **SAXPY** (`y = a*x + y`): 원소당 곱 1 + 합 1이라 $W = 2N$, 오가는 byte는 x 읽기·y 읽기·y 쓰기로 원소당 접근 3회 × FP32 원소 하나 4 byte라 $Q = 12N$ → $I \approx 0.17$. $N$이 약분되니 **연산 강도는 문제 크기와 무관**하다([변수 I](#변수-i) 절에서 결정적으로 쓰인다). FP32를 FP16으로 바꾸면 $Q$가 절반이라 $I$는 2배가 되는데, 저정밀도가 대역폭 병목의 해법인 이유가 여기 있다
+- **SAXPY** (`y = a*x + y`): 원소당 곱 1 + 합 1이라 $W = 2N$, 오가는 byte는 x 읽기·y 읽기·y 쓰기로 원소당 접근 3회 × FP32 원소 하나 4 byte라 $Q = 12N$ → $I \approx 0.17$. $N$이 약분되니 **연산 강도는 문제 크기와 무관**하다(뒤의 [변수 I](#변수-i) 절에서 결정적으로 쓰인다). FP32를 FP16으로 바꾸면 $Q$가 절반이라 $I$는 2배가 되는데, 저정밀도가 대역폭 병목의 해법인 이유가 여기 있다
 - **GEMM** (`C = A × B`): $W = 2N^3$, 각 행렬(A·B·C)을 DRAM에서 한 번씩만 옮기면 $Q = 3N^2 \times 4 = 12N^2$ → $I = N/6$ ($N=1024$면 약 170)
 
 두 결과를 가르는 것은 **재사용**이다. GEMM은 서로 다른 데이터 $N^2$개를 $N^3$번 계산하니 같은 원소를 $N$번씩 다시 본다 — 이 $N$이 그대로 연산 강도의 $N$이다. 즉 **연산 강도 = 재사용 횟수의 다른 이름**이고, 강도를 가르는 건 "곱셈이냐 덧셈이냐"가 아니라 **같은 원소가 다시 등장하는가**다. SAXPY는 재사용이 0이라 강도가 낮게 고정된다.
@@ -438,9 +343,155 @@ $$
 
 <br>
 
+# 해석
+
+## 2단 판단
+
+이제 그래프를 읽는 법이다. 위키피디아가 이 그래프를 정의하는 문장을 그대로 옮기면 아래와 같다. 그래프의 구성 요소 두 가지를 명확히 알려준다. 
+
+> The most basic roofline model can be visualized by plotting floating-point performance as a function of machine peak performance, machine peak bandwidth, and arithmetic intensity. The relevant curve is effectively a **performance bound** under which **kernel or application performance** exists, and includes two **platform-specific performance ceilings**: a ceiling derived from the memory bandwidth and one derived from the processor's peak performance
+>
+> — [Wikipedia — Roofline model](https://en.wikipedia.org/wiki/Roofline_model)
+
+**선은 하드웨어가 정하는 상한 두 개**(two platform-specific performance ceilings)이고, **그 아래에 찍히는 점이 워크로드의 실측 성능**(kernel or application performance)이다. 
+
+![Roofline 모델 예시 - Wikipedia]({{site.url}}/assets/images/roofline-model-example.png){: .align-center}
+
+<center><sup><a href="#개념">개념 절</a>에서 본 그림을 다시 가져왔다. 출처: <a href="https://en.wikipedia.org/wiki/Roofline_model">Wikipedia — Roofline model</a></sup></center>
+
+**선은 하드웨어 스펙이 결정하는 상한**, 즉 지붕(platform-specific performance ceilings)이고 두 가지가 있다.
+
+| 지붕 | 그래프에서 모양 | 무엇으로 유도하나 |
+| --- | --- | --- |
+| processor's peak performance에서 유도한 지붕 | 수평선 (기울기 0) | SM/코어 수 × 클럭 × 코어당 FLOP, FMA·텐서코어 유무 |
+| memory bandwidth에서 유도한 지붕 | 기울기 1의 사선 | HBM/DDR 대역폭(byte/s)에 $I$를 곱해 환산 |
+
+**점은 워크로드의 실측점**이다(*performance estimates of a given compute kernel or application*). **(FLOP, byte, time) 세 값이 하나로 정의되는 측정 단위**라면 무엇이든 점이 된다. 커널일 수도, 루프일 수도, 애플리케이션 전체일 수도 있다.
+
+| 구분 | 영어 | 비고 |
+| --- | --- | --- |
+| 점의 **주체**(측정 단위) | workload (중립) / kernel, loop nest, function, application | kernel은 CUDA 어감이 강해 GPU 한정으로 읽히기 쉽다. CPU 쪽은 보통 loop nest |
+| 점의 **y좌표** | attained performance | 원논문 용어. achieved performance도 통용 |
+| 점의 **x좌표** | operational intensity | 원논문 용어 (arithmetic intensity는 관습적 별칭) |
+| 점 **자체** | achieved value / dot | Nsight Compute는 "Achieved Value" 라벨, Intel Advisor는 "dot"이라 부르며 "each dot = a loop or function"이라고 설명한다 |
+
+**지붕 위쪽에 점이 찍히는 경우는 없다.** 지붕은 하드웨어의 상한을 그려 놓은 곳이므로 물리적으로 불가능하다. 그렇게 나왔다면 측정이나 지붕이 틀렸다는 신호이고, 의심할 원인은 다음과 같다.
+
+- FLOP을 세는 기준이 다름 (FMA를 2로 안 셌거나, model FLOPs와 hardware FLOPs 혼용)
+- 정밀도 불일치 (FP16으로 돌린 것을 FP32 지붕에 그림)
+- 대역폭 지붕을 HBM 기준으로 그렸는데 실제로는 캐시에서 재사용된 경우 (x축이 과소평가된 것)
+
+**읽는 순서는 2단이다.** 순서를 바꾸면 오진한다.
+
+1. **점이 지붕에 붙었나?** = 아직 남은 여유가 있나
+2. **붙었다면 어느 쪽 지붕인가?** = 무엇이 지붕인가 → 무엇을 바꿔야 하나
+
+![Roofline 읽는 순서 - 2단 판단 도해]({{site.url}}/assets/images/roofline-model-reading-order.png){: .align-center}
+
+<center><sup>AI를 이용해 직접 그린 도식</sup></center>
+
+> **좌우 구분은 지붕에 붙은 다음에야 의미가 생긴다.** 지붕에서 떨어져 있을 때는 왼쪽이든 오른쪽이든 진단이 같다 — "아직 하드웨어 지붕이 원인이 아니다, 돌리는 방식이 문제다." 대역폭 지붕에도 연산 지붕에도 닿지 못했으니 어느 쪽을 탓할 근거가 없다. 도입에서 본 전력 156W 케이스가 정확히 여기에 해당한다.
+
+| 점의 위치 | 진단 | 무엇을 해야 하나 |
+| --- | --- | --- |
+| 지붕에서 떨어져 있다 | 아직 하드웨어 지붕이 원인이 아니다. **이때는 좌우 위치가 의미 없다** | 돌리는 방식을 점검 — 메모리 접근 패턴, 병렬성 부족, 커널 실행·동기화 오버헤드, 데이터 공급 지연 |
+| 사선 지붕에 붙었다 (ridge 왼쪽) | 데이터 이동이 지붕 | 오가는 데이터를 줄여 점을 **오른쪽으로** 밀기 — 연산 합치기, 재사용·타일링, 데이터를 작게 표현, 배치 늘리기 |
+| 수평 지붕에 붙었다 (ridge 오른쪽) | 계산이 지붕 | 계산의 양 자체를 줄이거나 더 빠른 연산 유닛으로 — 알고리즘 교체, 전용 유닛 사용 |
+| 지붕 위에 있다 | 일어날 수 없는 일 | 측정값이나 지붕 설정이 틀렸다는 신호 — 세는 기준, 정밀도, 어느 지붕을 그렸는지 확인 |
+
+## 점의 이동 방향
+
+점을 움직일 수 있는 방향은 두 가지뿐이다.
+
+- **위로** = 성능 자체를 올리기. 지붕에서 떨어져 있을 때만 가능하다
+- **오른쪽으로** = 연산 강도를 키우기. $W$를 늘리는 게 아니라 **$Q$를 줄이는 것**이 정석이다. 사선에 붙었을 때 유일한 탈출구다. 오른쪽으로 가면 사선이 높아지니 점도 따라 올라간다
+
+거리는 **수직으로** 봐야 한다. 로그 축이라 눈대중으로 대각선 거리를 재면 틀린다. 어느 지붕에 붙었을 때 무엇을 손대는지(처방)는 [2단 판단](#2단-판단) 표에 이미 정리돼 있다. 한 가지만 덧붙이면 — 사선(메모리)에 붙었을 때 데이터를 작게 표현하는 것(저정밀도·양자화)은 같은 연산에 $Q$를 줄여 $I$를 키우는 일이라, **양자화가 "메모리 절약"이 아니라 "연산 강도를 올리는 수단"으로 보이는 것이 루프라인 관점**이다.
+
+## 중첩 지붕
+
+실제 자료에서 만나는 루프라인은 지붕이 여러 겹인 경우가 많다. 겹치는 대상은 세 종류이고, 각각 읽는 법이 다르다.
+
+| 종류 | 무엇을 겹치나 | 대표 예 |
+| --- | --- | --- |
+| **서로 다른 하드웨어** | 기계 A의 지붕 vs 기계 B의 지붕 | 아래 그림 — TPU·K80·Haswell 비교 |
+| **같은 칩의 메모리 계층** | L1 / L2 / HBM 사선 여러 개 | 아래 그림 — L1/L2/HBM 사선 |
+| **같은 칩의 정밀도·유닛** | FP64/FP32/FP16/FP8 수평선, FMA 유무, CUDA core/Tensor core | 아래 그림 — FP32/FP16/FP8 지붕 |
+
+### 하드웨어 비교
+
+내 워크로드의 $I$ 위치에서 **수직선을 하나 긋는다.** 그 수직선이 각 지붕과 만나는 **높이의 비**가 곧 하드웨어를 바꿔서 얻을 수 있는 상한의 배수다. 여기서 두 가지가 바로 보인다.
+
+- 내 $I$가 두 기계의 ridge point보다 **왼쪽**이면, 두 지붕의 높이 비 = **대역폭의 비**다. 연산 능력이 몇 배 좋아졌든 의미가 없다
+- 내 $I$가 둘 다보다 **오른쪽**이면, 높이 비 = **peak 연산 능력의 비**다
+- 덧붙여 [ridge point](#ridge-point)끼리 비교하면 "이 기계에서 peak에 도달하기가 얼마나 어려운가"가 나온다
+
+![서로 다른 하드웨어의 roofline 비교]({{site.url}}/assets/images/roofline-model-different-hw.png){: .align-center}
+
+<center><sup>출처: <a href="https://community.cadence.com/cadence_blogs_8/b/breakfast-bytes/posts/neural-nets-hit-the-roofline-memory-for-ai">Cadence Breakfast Bytes</a>. 원 그림은 TPU v1 논문(Jouppi et al., ISCA 2017)의 roofline이다. x축이 전체 트래픽이 아니라 가중치 바이트만 세는 Ops/weight byte 변형이라는 점에 주의.</sup></center>
+
+### 메모리 계층
+
+사선이 여러 개(L1/L2/HBM)다. 여기서 가장 중요한 주의점은, 계층을 바꾸면 트래픽의 기준이 바뀌므로 **지붕만이 아니라 점의 x좌표도 함께 움직인다**는 것이다. 지붕만 겹쳐 놓고 점을 그대로 두면 틀린 그림이 된다. 제대로 그렸다면 이렇게 읽는다.
+
+- HBM 사선에는 붙었는데 L2 사선에는 여유가 있다 → DRAM 대역폭은 다 썼지만 캐시 재사용을 더 짜낼 수 있다. 타일링 여지가 있다
+- L2 사선에 붙었다 → 캐시 대역폭이 병목. 데이터를 더 안쪽(레지스터·shared memory)에서 돌려야 한다
+
+![메모리 계층별 roofline]({{site.url}}/assets/images/roofline-model-memory-hierarchical.png){: .align-center}
+
+<center><sup>출처: <a href="https://www.scientific-computing.com/hpc2018-19/the-roofline-model">Scientific Computing World — The Roofline Model</a></sup></center>
+
+### 정밀도·유닛
+
+수평선이 여러 개다. 점이 낮은 수평선에 붙어 있고 그 위에 더 높은 수평선이 비어 있다면, **그 간격이 정밀도 변경이나 텐서코어 활용으로 얻을 수 있는 여유**다. FP32 코어 지붕에 붙어 있고 텐서코어 지붕이 훨씬 위에 있다면 답이 명확하다.
+
+![정밀도·유닛을 겹쳐 그린 지붕]({{site.url}}/assets/images/roofline-model-precision-units.png){: .align-center}
+
+<center><sup>AI를 이용해 직접 그린 도식. 실제 사례로는 [LLM Inference Unveiled](https://arxiv.org/abs/2402.16363)이 A6000의 유닛별 지붕을 겹쳐 그린 그림이 이 유형이다.</sup></center>
+
+이 외에 에너지 roofline(J 기준), instruction roofline(FLOP 대신 인스트럭션) 같은 변종도 있는데, 전부 같은 뼈대다.
+
+<br>
+
+# 적용
+
+## 성립 조건
+
+GPU 관련 계기로 알게 되었지만 GPU 전용으로 성립하는 모델이 아니다. Roofline 모델을 처음 제시한 원논문(Williams, Waterman, Patterson, CACM 2009)부터가 **멀티코어 CPU**를 대상으로 나왔다.
+
+![원논문 Figure 1 - Opteron X2 roofline과 X2 vs X4 비교]({{site.url}}/assets/images/roofline-model-paper-figure-1.png){: .align-center}
+
+<center><sup>출처: <a href="https://escholarship.org/content/qt78h8v7mr/qt78h8v7mr.pdf">원논문(Williams et al., 2009)</a> Figure 1 — AMD Opteron X2의 roofline(왼쪽)과 X2 vs X4 비교(오른쪽)</sup></center>
+
+위키피디아의 roofline 정의는 이렇게 시작한다.
+
+> ...performance estimates of a given *compute kernel or application* running on multi-core, many-core, or accelerator processor architectures...
+>
+> — [Wikipedia — Roofline model](https://en.wikipedia.org/wiki/Roofline_model)
+
+여기서 *compute kernel*이라는 단어 때문에 가속기 한정으로 읽히기 쉬운데, 위키피디아의 별도 compute kernel 문서는 GPU·DSP·FPGA 문맥의 좁은 정의를 설명하지만, roofline 문서의 *"compute kernel or application"*은 그 좁은 뜻이 아니라 **측정 단위**라는 뜻이다. 근거는 세 가지다.
+
+- 원논문의 대상 기계는 멀티코어 CPU 넷이고, 커널은 SpMV(희소 행렬-벡터 곱) 같은 CPU 루프다
+- 논문은 *"Note that these limits are created once per multicore computer, not once per kernel."*이라고 쓴다. 커널을 가속기 코드로 한정하지 않는다
+- Intel Advisor는 CPU 루프를 점으로 그리며 "each dot = a loop or function"이라고 설명한다
+
+결국 필요한 조건은 하나뿐이다 — **$(W, Q, T)$ 세 값이 하나로 정의되는 실행 단위인가.** 그래서 모델의 성립 조건도 둘로 요약된다. **처리량 상한이 있는 자원 두 개**, 그리고 **둘 사이의 작업량 비율**. 이 틀을 다른 자원 쌍에 대입해 보면 아래처럼 된다. 분산학습처럼 실제로 쓰이는 확장도 있지만, DB·웹서비스 행은 모델이 정립되어 있다기보다 같은 뼈대를 이식해 본 유추에 가깝다.
+
+| 도메인 | X축 (강도) | 사선 | 수평 |
+| --- | --- | --- | --- |
+| GPU/CPU | FLOP/byte | HBM 대역폭 | peak FLOP/s |
+| 분산학습 | FLOP/전송 byte | NVLink/IB 대역폭 | 노드 연산력 |
+| DB 쿼리 | 튜플당 CPU 작업 | 디스크 IOPS | 코어 처리량 |
+| 웹서비스 | 요청당 CPU | NIC 대역폭 | CPU 코어 |
+| FPGA/ASIC | 연산/DRAM byte | 외부 메모리 | MAC 수 |
+
+이 틀을 LLM 서빙 워크로드에 실제로 적용하는 것은 [2편 — Roofline 모델로 보는 LLM 서빙]({% post_url 2026-08-21-Dev-Roofline-Model-LLM-Serving %})에서 다룬다. 워크로드를 최소 세 점(prefill·decode-FFN·decode-attention)으로 나눠 찍어야 하는 이유와 기법별 처방을 거기서 정리한다.
+
+<br>
+
 # 유도
 
-Roofline의 결론은 아래 한 줄이다.
+여기부터는 딥다이브다. 앞의 [해석](#해석)·[적용](#적용)은 아래 식을 결과로만 썼는데, 이 절은 이 식이 왜 성립하는지를 유도한다. Roofline의 결론은 아래 한 줄이다.
 
 $$
 \text{Attainable FLOP/s} = \min(\pi,\ \beta \times I)
@@ -596,7 +647,7 @@ $$
 
 <center><sup>출처: <a href="https://en.wikipedia.org/wiki/Roofline_model">Wikipedia — Roofline model</a>의 naive roofline 그림을 편집했다. x축 라벨을 FLOP/byte로 수정하고 ridge point 표시를 추가했다.</sup></center>
 
-**왜 로그 눈금인가.** 반드시는 아니지만 거의 항상 그렇게 그린다. 이유는 두 가지다. 첫째, $I$가 DAXPY 0.083부터 GEMM 수백까지 네 자릿수를 오간다. 선형 축에서는 왼쪽 끝에 다 뭉친다. 둘째, 로그로 그리면 $\beta$가 무엇이든 사선의 기울기가 정확히 1이 되어 여러 기계를 겹쳐 놓고 눈으로 비교할 수 있다. 대가로 거리 감각이 왜곡되므로 점과 지붕의 간격은 항상 **수직으로** 읽어야 한다([해석](#해석)에서 다시 본다).
+**왜 로그 눈금인가.** 반드시는 아니지만 거의 항상 그렇게 그린다. 이유는 두 가지다. 첫째, $I$가 DAXPY 0.083부터 GEMM 수백까지 네 자릿수를 오간다. 선형 축에서는 왼쪽 끝에 다 뭉친다. 둘째, 로그로 그리면 $\beta$가 무엇이든 사선의 기울기가 정확히 1이 되어 여러 기계를 겹쳐 놓고 눈으로 비교할 수 있다. 대가로 거리 감각이 왜곡되므로 점과 지붕의 간격은 항상 **수직으로** 읽어야 한다 — 앞의 [해석](#해석)에서 쓴 규칙이 바로 이것이다.
 
 ## ridge point
 
@@ -660,116 +711,6 @@ $$
 
 <br>
 
-# 해석
-
-## 2단 판단
-
-이제 그려진 그래프를 읽는 법이다. 위키피디아가 이 그래프를 정의하는 문장을 그대로 옮기면 아래와 같다. 그래프의 구성 요소 두 가지를 명확히 알려준다. 
-
-> The most basic roofline model can be visualized by plotting floating-point performance as a function of machine peak performance, machine peak bandwidth, and arithmetic intensity. The relevant curve is effectively a **performance bound** under which **kernel or application performance** exists, and includes two **platform-specific performance ceilings**: a ceiling derived from the memory bandwidth and one derived from the processor's peak performance
->
-> — [Wikipedia — Roofline model](https://en.wikipedia.org/wiki/Roofline_model)
-
-**선은 하드웨어가 정하는 상한 두 개**(two platform-specific performance ceilings)이고, **그 아래에 찍히는 점이 워크로드의 실측 성능**(kernel or application performance)이다. 
-
-![Roofline 모델 예시 - Wikipedia]({{site.url}}/assets/images/roofline-model-example.png){: .align-center}
-
-<center><sup><a href="#개념">개념 절</a>에서 본 그림을 다시 가져왔다. 출처: <a href="https://en.wikipedia.org/wiki/Roofline_model">Wikipedia — Roofline model</a></sup></center>
-
-**선은 하드웨어 스펙이 결정하는 상한**, 즉 지붕(platform-specific performance ceilings)이고 두 가지가 있다.
-
-| 지붕 | 그래프에서 모양 | 무엇으로 유도하나 |
-| --- | --- | --- |
-| processor's peak performance에서 유도한 지붕 | 수평선 (기울기 0) | SM/코어 수 × 클럭 × 코어당 FLOP, FMA·텐서코어 유무 |
-| memory bandwidth에서 유도한 지붕 | 기울기 1의 사선 | HBM/DDR 대역폭(byte/s)에 $I$를 곱해 환산 |
-
-**점은 워크로드의 실측점**이다(*performance estimates of a given compute kernel or application*). **(FLOP, byte, time) 세 값이 하나로 정의되는 측정 단위**라면 무엇이든 점이 된다. 커널일 수도, 루프일 수도, 애플리케이션 전체일 수도 있다.
-
-| 구분 | 영어 | 비고 |
-| --- | --- | --- |
-| 점의 **주체**(측정 단위) | workload (중립) / kernel, loop nest, function, application | kernel은 CUDA 어감이 강해 GPU 한정으로 읽히기 쉽다. CPU 쪽은 보통 loop nest |
-| 점의 **y좌표** | attained performance | 원논문 용어. achieved performance도 통용 |
-| 점의 **x좌표** | operational intensity | 원논문 용어 (arithmetic intensity는 관습적 별칭) |
-| 점 **자체** | achieved value / dot | Nsight Compute는 "Achieved Value" 라벨, Intel Advisor는 "dot"이라 부르며 "each dot = a loop or function"이라고 설명한다 |
-
-**지붕 위쪽에 점이 찍히는 경우는 없다.** 지붕은 하드웨어의 상한을 그려 놓은 곳이므로 물리적으로 불가능하다. 그렇게 나왔다면 측정이나 지붕이 틀렸다는 신호이고, 의심할 원인은 다음과 같다.
-
-- FLOP을 세는 기준이 다름 (FMA를 2로 안 셌거나, model FLOPs와 hardware FLOPs 혼용)
-- 정밀도 불일치 (FP16으로 돌린 것을 FP32 지붕에 그림)
-- 대역폭 지붕을 HBM 기준으로 그렸는데 실제로는 캐시에서 재사용된 경우 (x축이 과소평가된 것)
-
-**읽는 순서는 2단이다.** 순서를 바꾸면 오진한다.
-
-1. **점이 지붕에 붙었나?** = 아직 남은 여유가 있나
-2. **붙었다면 어느 쪽 지붕인가?** = 무엇이 지붕인가 → 무엇을 바꿔야 하나
-
-![Roofline 읽는 순서 - 2단 판단 도해]({{site.url}}/assets/images/roofline-model-reading-order.png){: .align-center}
-
-<center><sup>직접 제작한 그림</sup></center>
-
-> **좌우 구분은 지붕에 붙은 다음에야 의미가 생긴다.** 지붕에서 떨어져 있을 때는 왼쪽이든 오른쪽이든 진단이 같다 — "아직 하드웨어 지붕이 원인이 아니다, 돌리는 방식이 문제다." 대역폭 지붕에도 연산 지붕에도 닿지 못했으니 어느 쪽을 탓할 근거가 없다. 도입에서 본 전력 156W 케이스가 정확히 여기에 해당한다.
-
-| 점의 위치 | 진단 | 무엇을 해야 하나 |
-| --- | --- | --- |
-| 지붕에서 떨어져 있다 | 아직 하드웨어 지붕이 원인이 아니다. **이때는 좌우 위치가 의미 없다** | 돌리는 방식을 점검 — 메모리 접근 패턴, 병렬성 부족, 커널 실행·동기화 오버헤드, 데이터 공급 지연 |
-| 사선 지붕에 붙었다 (ridge 왼쪽) | 데이터 이동이 지붕 | 오가는 데이터를 줄여 점을 **오른쪽으로** 밀기 — 연산 합치기, 재사용·타일링, 데이터를 작게 표현, 배치 늘리기 |
-| 수평 지붕에 붙었다 (ridge 오른쪽) | 계산이 지붕 | 계산의 양 자체를 줄이거나 더 빠른 연산 유닛으로 — 알고리즘 교체, 전용 유닛 사용 |
-| 지붕 위에 있다 | 일어날 수 없는 일 | 측정값이나 지붕 설정이 틀렸다는 신호 — 세는 기준, 정밀도, 어느 지붕을 그렸는지 확인 |
-
-## 점의 이동 방향
-
-점을 움직일 수 있는 방향은 두 가지뿐이다.
-
-- **위로** = 성능 자체를 올리기. 지붕에서 떨어져 있을 때만 가능하다
-- **오른쪽으로** = 연산 강도를 키우기. $W$를 늘리는 게 아니라 **$Q$를 줄이는 것**이 정석이다. 사선에 붙었을 때 유일한 탈출구다. 오른쪽으로 가면 사선이 높아지니 점도 따라 올라간다
-
-거리는 **수직으로** 봐야 한다. 로그 축이라 눈대중으로 대각선 거리를 재면 틀린다. 어느 지붕에 붙었을 때 무엇을 손대는지(처방)는 [2단 판단](#2단-판단) 표에 이미 정리돼 있다. 한 가지만 덧붙이면 — 사선(메모리)에 붙었을 때 데이터를 작게 표현하는 것(저정밀도·양자화)은 같은 연산에 $Q$를 줄여 $I$를 키우는 일이라, **양자화가 "메모리 절약"이 아니라 "연산 강도를 올리는 수단"으로 보이는 것이 루프라인 관점**이다.
-
-## 중첩 지붕
-
-실제 자료에서 만나는 루프라인은 지붕이 여러 겹인 경우가 많다. 겹치는 대상은 세 종류이고, 각각 읽는 법이 다르다.
-
-| 종류 | 무엇을 겹치나 | 대표 예 |
-| --- | --- | --- |
-| **서로 다른 하드웨어** | 기계 A의 지붕 vs 기계 B의 지붕 | 아래 그림 — TPU·K80·Haswell 비교 |
-| **같은 칩의 메모리 계층** | L1 / L2 / HBM 사선 여러 개 | 아래 그림 — L1/L2/HBM 사선 |
-| **같은 칩의 정밀도·유닛** | FP64/FP32/FP16/FP8 수평선, FMA 유무, CUDA core/Tensor core | 아래 그림 — FP32/FP16/FP8 지붕 |
-
-### 하드웨어 비교
-
-내 워크로드의 $I$ 위치에서 **수직선을 하나 긋는다.** 그 수직선이 각 지붕과 만나는 **높이의 비**가 곧 하드웨어를 바꿔서 얻을 수 있는 상한의 배수다. 여기서 두 가지가 바로 보인다.
-
-- 내 $I$가 두 기계의 ridge point보다 **왼쪽**이면, 두 지붕의 높이 비 = **대역폭의 비**다. 연산 능력이 몇 배 좋아졌든 의미가 없다
-- 내 $I$가 둘 다보다 **오른쪽**이면, 높이 비 = **peak 연산 능력의 비**다
-- 덧붙여 [ridge point](#ridge-point)끼리 비교하면 "이 기계에서 peak에 도달하기가 얼마나 어려운가"가 나온다
-
-![서로 다른 하드웨어의 roofline 비교]({{site.url}}/assets/images/roofline-model-different-hw.png){: .align-center}
-
-<center><sup>출처: <a href="https://community.cadence.com/cadence_blogs_8/b/breakfast-bytes/posts/neural-nets-hit-the-roofline-memory-for-ai">Cadence Breakfast Bytes</a>. 원 그림은 TPU v1 논문(Jouppi et al., ISCA 2017)의 roofline이다. x축이 전체 트래픽이 아니라 가중치 바이트만 세는 Ops/weight byte 변형이라는 점에 주의.</sup></center>
-
-### 메모리 계층
-
-사선이 여러 개(L1/L2/HBM)다. 여기서 가장 중요한 주의점은, 계층을 바꾸면 트래픽의 기준이 바뀌므로 **지붕만이 아니라 점의 x좌표도 함께 움직인다**는 것이다. 지붕만 겹쳐 놓고 점을 그대로 두면 틀린 그림이 된다. 제대로 그렸다면 이렇게 읽는다.
-
-- HBM 사선에는 붙었는데 L2 사선에는 여유가 있다 → DRAM 대역폭은 다 썼지만 캐시 재사용을 더 짜낼 수 있다. 타일링 여지가 있다
-- L2 사선에 붙었다 → 캐시 대역폭이 병목. 데이터를 더 안쪽(레지스터·shared memory)에서 돌려야 한다
-
-![메모리 계층별 roofline]({{site.url}}/assets/images/roofline-model-memory-hierarchical.png){: .align-center}
-
-<center><sup>출처: <a href="https://www.scientific-computing.com/hpc2018-19/the-roofline-model">Scientific Computing World — The Roofline Model</a></sup></center>
-
-### 정밀도·유닛
-
-수평선이 여러 개다. 점이 낮은 수평선에 붙어 있고 그 위에 더 높은 수평선이 비어 있다면, **그 간격이 정밀도 변경이나 텐서코어 활용으로 얻을 수 있는 여유**다. FP32 코어 지붕에 붙어 있고 텐서코어 지붕이 훨씬 위에 있다면 답이 명확하다.
-
-![정밀도·유닛을 겹쳐 그린 지붕]({{site.url}}/assets/images/roofline-model-precision-units.png){: .align-center}
-
-<center><sup>직접 그린 도식. 실제 사례로는 [LLM Inference Unveiled](https://arxiv.org/abs/2402.16363)이 A6000의 유닛별 지붕을 겹쳐 그린 그림이 이 유형이다.</sup></center>
-
-이 외에 에너지 roofline(J 기준), instruction roofline(FLOP 대신 인스트럭션) 같은 변종도 있는데, 전부 같은 뼈대다.
-
-<br>
-
 # 측정
 
 필요한 값은 $W$, $Q$, $T$ 세 개뿐이고, 나머지는 다 이 셋의 조합이다. 이 셋만 있으면 커널이나 애플리케이션의 성능 점을 잡을 수 있다. 원리적으로는 손으로 세어 볼 수도 있지만 — 손계산은 "이 커널이 어디쯤 있어야 하는가"를 가늠하는 용도다 — 실무에서는 프로파일러로 내 커널·애플리케이션의 실제 값을 측정해 점을 찍는다.
@@ -824,39 +765,104 @@ CPU는 Intel Advisor(`advisor --collect=roofline -- ./app`)가 루프마다 점�
 
 <br>
 
-# 적용
+# 표기와 단위
 
-## 성립 조건
+본문에서 미뤄 둔 표기·단위 문제를 여기서 정리한다.
 
-GPU 관련 계기로 알게 되었지만 GPU 전용으로 성립하는 모델이 아니다. Roofline 모델을 처음 제시한 원논문(Williams, Waterman, Patterson, CACM 2009)부터가 **멀티코어 CPU**를 대상으로 나왔다.
+## 표기: FLOPs vs FLOP/s
 
-![원논문 Figure 1 - Opteron X2 roofline과 X2 vs X4 비교]({{site.url}}/assets/images/roofline-model-paper-figure-1.png){: .align-center}
+앞의 [기호와 정의](#기호와-정의) 표에서 $P$(Y축)를 FLOP/s, $I$(X축)를 FLOP/byte로 적었다. 그런데 FLOP·FLOPs·FLOPS는 한 글자 차이로 뜻이 갈리는데도 실무에서 자주 섞여 쓰인다. 축이 왜 그 단위인지는 앞의 [유도](#유도)에서 따졌고, 여기서는 **단위 표기 자체**만 정리한다.
 
-<center><sup>출처: <a href="https://escholarship.org/content/qt78h8v7mr/qt78h8v7mr.pdf">원논문(Williams et al., 2009)</a> Figure 1 — AMD Opteron X2의 roofline(왼쪽)과 X2 vs X4 비교(오른쪽)</sup></center>
+대표적인 오표기가 [개념 절](#개념)에 첨부한 위키피디아 그림에 있다. x축 라벨이 `Operational Intensity [FLOPS/byte]`인데 엄밀히는 **FLOP/byte가 맞다.** FLOPS/byte로 읽으면 "초당 연산을 바이트로 나눈 것"이 되어 의미가 없다 — **연산 강도에는 시간이 들어가지 않는다**는 x축의 핵심 성질이 지워지기 때문이다. 그림은 원본 그대로 인용하고, 본문에서는 FLOP/byte로 쓴다.
 
-위키피디아의 roofline 정의는 이렇게 시작한다.
+| 축 | 정확한 단위 | 의미 |
+| --- | --- | --- |
+| y축 | **FLOP/s** | 처리율 (시간 있음) |
+| x축 | **FLOP/byte** | 작업량 ÷ 데이터량 (시간 없음) |
 
-> ...performance estimates of a given *compute kernel or application* running on multi-core, many-core, or accelerator processor architectures...
->
-> — [Wikipedia — Roofline model](https://en.wikipedia.org/wiki/Roofline_model)
+혼동을 피하기 위해서는 FLOPs와 FLOPS의 표기를 명확히 알아 둬야 한다.
 
-여기서 *compute kernel*이라는 단어 때문에 가속기 한정으로 읽히기 쉬운데, 위키피디아의 별도 compute kernel 문서는 GPU·DSP·FPGA 문맥의 좁은 정의를 설명하지만, roofline 문서의 *"compute kernel or application"*은 그 좁은 뜻이 아니라 **측정 단위**라는 뜻이다. 근거는 세 가지다.
+$$
+\text{FLOPS}(\text{초당 처리율}) = \frac{\text{FLOPs}(\text{작업량})}{\text{시간(초)}}
+$$
 
-- 원논문의 대상 기계는 멀티코어 CPU 넷이고, 커널은 SpMV(희소 행렬-벡터 곱) 같은 CPU 루프다
-- 논문은 *"Note that these limits are created once per multicore computer, not once per kernel."*이라고 쓴다. 커널을 가속기 코드로 한정하지 않는다
-- Intel Advisor는 CPU 루프를 점으로 그리며 "each dot = a loop or function"이라고 설명한다
+|  | 확장 | 의미 | 단위 | Roofline에서 |
+| --- | --- | --- | --- | --- |
+| **FLOPs** | **FL**oating-point **OP**eration**s** | 부동소수점 연산의 **개수** — 작업량 | 개수 (무차원) | x축·y축의 분자 ($W$) |
+| **FLOPS** | **FL**oating-point **O**perations **P**er **S**econd | 초당 연산 횟수 — **처리율** | 1/초 | y축 ($P$) |
 
-결국 필요한 조건은 하나뿐이다 — **$(W, Q, T)$ 세 값이 하나로 정의되는 실행 단위인가.** 그래서 모델의 성립 조건도 둘로 요약된다. **처리량 상한이 있는 자원 두 개**, 그리고 **둘 사이의 작업량 비율**. 이 틀을 다른 자원 쌍에 대입해 보면 아래처럼 된다. 분산학습처럼 실제로 쓰이는 확장도 있지만, DB·웹서비스 행은 모델이 정립되어 있다기보다 같은 뼈대를 이식해 본 유추에 가깝다.
+<br>
 
-| 도메인 | X축 (강도) | 사선 | 수평 |
+<details markdown="1">
+<summary><b>참고: 실무에서 '작업량'과 '처리율'을 구분하는 법 (대소문자·자릿수 신호, MFU)</b></summary>
+
+*본문 이해엔 필수가 아니다. 찾아본 자료를 정리한 심화 내용이다.*
+
+표기 관습상 대문자 S는 second, 소문자 s는 복수형인데, 실무에서는 거의 지켜지지 않는다. 소문자 s가 복수형인지 second인지 글자만 보고 구분이 안 되고, 논문·블로그·프로파일러가 제각각이라 같은 문서 안에서도 섞인다. 그래서 결과적으로 정착한 방식은 **대소문자에 의존하지 않고 슬래시로 명시**하는 것이다. 버클리랩 자료가 정확히 이런 식으로 쓴다.
+
+```text
+AI = Flops / Bytes presented to DRAM
+Attainable Flop/s = min( peak Flop/s, AI * peak GB/s )
+```
+
+`Flops`는 작업량, `Flop/s`는 처리율이다. 문서를 읽을 때 둘을 구분하는 신호는 이렇다.
+
+| 신호 | 판정 |
+| --- | --- |
+| `/s`, "초당", "per second"가 붙었다 | 처리율 |
+| "총", "누적", "이 커널이 수행한" | 작업량 |
+| 문맥이 하드웨어 스펙 (A100 312 TFLOPS) | 처리율 |
+| 문맥이 모델·학습 비용 (GPT-3 학습 $\approx 3\times10^{23}$ FLOP) | 작업량 |
+| 자릿수 $10^{12} \sim 10^{18}$ | 처리율일 가능성 |
+| 자릿수 $10^{20} \sim 10^{25}$ | 작업량 (누적이라 훨씬 큼) |
+
+두 의미가 한 수식에 동시에 나오는 예가 MFU(Model FLOPs Utilization)다.
+
+$$
+\text{MFU} = \frac{\text{토큰당 model FLOPs} \times \text{토큰 처리율}}{\text{peak FLOP/s}}
+$$
+
+분자의 앞항은 작업량(FLOPs), 전체 분자와 분모는 처리율(FLOP/s)이다. 여기서 단위를 헷갈리면 MFU가 몇 자리씩 틀어진다.
+
+</details>
+
+이 글의 표기는 아래로 고정한다.
+
+| 쓸 것 | 뜻 | 안 쓸 것 |
+| --- | --- | --- |
+| **FLOP** | 연산 1회 (작업량의 단위) | — |
+| **FLOP/s** | 처리율 | FLOPS, FLOPs/s |
+| **FLOP/byte** | 연산 강도 | FLOPS/byte |
+| **OP / OP/s / OP/byte** | 정수 포함 일반형 | — |
+
+## 작업량 단위: FLOP과 OP
+
+지금까지 단위를 FLOP으로 써 왔는데, 왜 대부분 부동소수점 연산량으로 세는가. FLOP은 특정 ISA나 벤더에 종속되지 않는 **하드웨어 중립적인 작업량 단위**라서 CPU·GPU·TPU·NPU·DSP·FPGA 어디서든 정의된다. 다만 정수 연산이 주력인 하드웨어에서는 일반형 OP를 쓴다.
+
+| 표기 | 대상 | 주로 쓰는 하드웨어 |
+| --- | --- | --- |
+| **FLOP** | 부동소수점 (FP64/FP32/BF16/FP8 등) | CPU, GPU, TPU, HPC |
+| **OP / TOP** | 정수 (INT8/INT4) 포함 일반 연산 | 모바일·엣지 NPU |
+
+부동소수점 연산이 주력이 아닌 하드웨어(정수 전용 NPU 등)에서도 루프라인은 그대로 그려진다. **단위만 OP/s·OP/byte로 바꾸면 되고, 두 지붕과 ridge point 논리는 전혀 변하지 않는다.**
+
+<br>
+
+<details markdown="1">
+<summary><b>참고: 정수 하드웨어의 TOPS 표기와 OP 일반형, 혼합 정밀도 주의</b></summary>
+
+*본문 이해엔 필수가 아니다. 찾아본 자료를 정리한 심화 내용이다.*
+
+엣지 NPU 스펙 시트가 "45 TOPS"처럼 정수 연산 처리율 위주로 표기하는 것은 INT8 파이프라인이 주력이고 FP 유닛이 없거나 약해서 FLOPS 표기가 부정확하기 때문이다. 엄밀히 말하면 연산기라면 OP/s가 적용되고, 그중 부동소수점을 다루는 연산기에 FLOP/s가 적용된다. 그래서 45 TOPS는 45 TOP/s, 즉 $4.5\times10^{13}$ OP/s를 뜻한다. 따라서 **y축이 FLOP/s인 것은 관습일 뿐 본질이 아니다.**
+
+|  | 일반형 | 부동소수점 관습 | INT8 NPU에서 |
 | --- | --- | --- | --- |
-| GPU/CPU | FLOP/byte | HBM 대역폭 | peak FLOP/s |
-| 분산학습 | FLOP/전송 byte | NVLink/IB 대역폭 | 노드 연산력 |
-| DB 쿼리 | 튜플당 CPU 작업 | 디스크 IOPS | 코어 처리량 |
-| 웹서비스 | 요청당 CPU | NIC 대역폭 | CPU 코어 |
-| FPGA/ASIC | 연산/DRAM byte | 외부 메모리 | MAC 수 |
+| y축 | 작업 처리율 OP/s | FLOP/s | INT8 OP/s |
+| x축 (연산 강도) | OP/byte | FLOP/byte | OP/byte |
 
-이 틀을 LLM 서빙 워크로드에 실제로 적용하는 것은 [2편 — Roofline 모델로 보는 LLM 서빙]({% post_url 2026-08-21-Dev-Roofline-Model-LLM-Serving %})에서 다룬다. 워크로드를 최소 세 점(prefill·decode-FFN·decode-attention)으로 나눠 찍어야 하는 이유와 기법별 처방을 거기서 정리한다.
+혼합 정밀도 커널을 분석할 때만 주의가 필요한데, FP16 GEMM과 FP32 누산이 섞이면 어느 지붕을 기준으로 그릴지가 애매해져서 보통 지배적인 유닛 기준으로 여러 층의 지붕을 겹쳐 그린다([정밀도·유닛](#정밀도유닛) 참고).
+
+</details>
 
 <br>
 
