@@ -3,6 +3,7 @@ title: "[LLM] LLM 서빙과 최적화 - 2.4. Transformer: 트랜스포머 블록
 excerpt: "트랜스포머 블록의 첫 서브레이어인 멀티헤드 셀프 어텐션에 대해 알아 보자."
 categories:
   - AI
+hidden: true
 toc: true
 header:
   teaser: /assets/images/blog-AI.jpg
@@ -16,6 +17,7 @@ tags:
   - Attention-Weight
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-1
+last_modified_at: 2026-08-22
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.*

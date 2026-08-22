@@ -3,6 +3,7 @@ title: "[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 2. 코�
 excerpt: "단일 모델 서빙 서비스의 코드를 컴포넌트 단위로 해부하며, 프로세스 분리와 큐 기반 IPC가 어떻게 구현되는지 살펴보자."
 categories:
   - Dev
+hidden: true
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -15,7 +16,7 @@ tags:
   - Orchestration
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-2
-last_modified_at: 2026-08-20
+last_modified_at: 2026-08-22
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 2주차 학습 내용을 기반으로 합니다.*
