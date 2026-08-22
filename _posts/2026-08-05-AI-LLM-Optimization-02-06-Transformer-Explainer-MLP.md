@@ -3,6 +3,7 @@ title: "[LLM] LLM 서빙과 최적화 - 2.6. Transformer: MLP와 트랜스포머
 excerpt: "어텐션이 모아 온 정보를 토큰별로 비선형 가공하는 MLP 서브레이어에 대해 알아 보자."
 categories:
   - AI
+hidden: true
 toc: true
 header:
   teaser: /assets/images/blog-AI.jpg
@@ -17,6 +18,7 @@ tags:
   - Down-Projection
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-1
+last_modified_at: 2026-08-22
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.*

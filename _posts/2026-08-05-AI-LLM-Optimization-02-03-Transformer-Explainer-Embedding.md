@@ -3,6 +3,7 @@ title: "[LLM] LLM 서빙과 최적화 - 2.3. Transformer: 임베딩"
 excerpt: "트랜스포머의 입구인 임베딩이 텍스트를 벡터로 바꾸는 과정을 줌인해 보자."
 categories:
   - AI
+hidden: true
 toc: true
 header:
   teaser: /assets/images/blog-AI.jpg
@@ -17,6 +18,7 @@ tags:
   - RoPE
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-1
+last_modified_at: 2026-08-22
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.*

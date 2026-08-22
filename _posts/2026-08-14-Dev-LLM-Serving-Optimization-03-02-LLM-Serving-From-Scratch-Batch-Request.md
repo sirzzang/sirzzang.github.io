@@ -3,6 +3,7 @@ title: "[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.2. 배
 excerpt: "배치의 의미를 정리하고, 실습으로 정적 배칭의 처리량 향상과 한계를 측정해 보자."
 categories:
   - Dev
+hidden: true
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -15,7 +16,7 @@ tags:
   - Load-Test
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-2
-last_modified_at: 2026-08-20
+last_modified_at: 2026-08-22
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 2주차 학습 내용을 기반으로 합니다.*

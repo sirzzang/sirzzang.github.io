@@ -3,6 +3,7 @@ title: "[LLM] LLM 서빙과 최적화 - 2.5. Transformer: 셀프 어텐션 계�
 excerpt: "Q·K·V 생성부터 멀티헤드 분할, 스케일링·마스킹·softmax, V 가중합과 출력 사영까지 — 셀프 어텐션의 실제 계산을 수식과 shape 변화로 하나씩 뜯어 보자."
 categories:
   - AI
+hidden: true
 toc: true
 header:
   teaser: /assets/images/blog-AI.jpg
