@@ -1,0 +1,1349 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.4. 모델 로딩·실행 병목: 메모리 용량과 산술 강도 - Eraser’s StudyLog</title>
+<meta name="description" content="모델 로딩의 메모리 용량 제약과 실행 단계의 병목을 산술 강도로 분석해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.4. 모델 로딩·실행 병목: 메모리 용량과 산술 강도">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/">
+
+
+  <meta property="og:description" content="모델 로딩의 메모리 용량 제약과 실행 단계의 병목을 산술 강도로 분석해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-08-22T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-08-22T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.4. 모델 로딩·실행 병목: 메모리 용량과 산술 강도">
+    <meta itemprop="description" content="모델 로딩의 메모리 용량 제약과 실행 단계의 병목을 산술 강도로 분석해 보자.">
+    <meta itemprop="datePublished" content="2026-08-22T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-08-22T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.4. 모델 로딩·실행 병목: 메모리 용량과 산술 강도
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-08-22T00:00:00+09:00">2026년 08월 22일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  9 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#모델-로딩-병목">모델 로딩 병목</a>
+    <ul>
+      <li><a href="#로딩-경로와-병목-지점">로딩 경로와 병목 지점</a></li>
+      <li><a href="#모델-크기-추정">모델 크기 추정</a></li>
+      <li><a href="#kv-캐시-크기-추정">KV 캐시 크기 추정</a></li>
+      <li><a href="#gpu-메모리-계획-a10-vs-l40s">GPU 메모리 계획: A10 vs L40S</a></li>
+    </ul>
+  </li>
+  <li><a href="#모델-실행-병목">모델 실행 병목</a>
+    <ul>
+      <li><a href="#산술-강도와-루프라인">산술 강도와 루프라인</a></li>
+      <li><a href="#행렬-곱셈의-산술-강도">행렬 곱셈의 산술 강도</a></li>
+      <li><a href="#prefill과-decode의-산술-강도">prefill과 decode의 산술 강도</a></li>
+      <li><a href="#병목-판정과-최적화-방향">병목 판정과 최적화 방향</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>로딩 병목은 용량 문제다. 모델 가중치는 반드시 GPU 메모리(HBM)에 상주해야 하고, 그 옆에 KV 캐시 공간까지 있어야 배치·컨텍스트가 산다. Llama-2-7b 기준 가중치 14GB에 KV 캐시(배치 16 × 시퀀스 4096)가 32GB로, 캐시가 모델보다 크다</li>
+  <li>모델 크기는 “파라미터 수 × 정밀도 바이트”, 토큰당 KV 캐시는 “2 × 레이어 수 × 헤드 수 × 헤드 차원 × 정밀도 바이트”로 손계산할 수 있다</li>
+  <li>실행 병목은 산술 강도(FLOPS/Byte)로 판별한다. 행렬 곱은 행렬이 클수록 산술 강도가 올라가는데, prefill은 시퀀스 길이만큼 행이 커져 compute-bound가 될 수 있고, decode는 행이 1로 고정이라 항상 memory bandwidth-bound다</li>
+  <li>판정이 갈리면 처방도 갈린다. compute-bound는 연산량 절감, memory-bound는 데이터 이동 최소화 방향으로 최적화한다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="모델-로딩-병목">모델 로딩 병목</h1>
+
+<p><a href="/dev/Dev-LLM-Serving-Optimization-05-02-LLM-Serving-Challenge-GPU-Compute-Memory/">5.2편</a>·<a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/">5.3편</a>에서 GPU 스펙을 읽었으니, 이제 그 위에 LLM을 실제로 올리고 돌릴 때 무슨 일이 생기는지 볼 차례다. 책은 이를 모델 로딩과 모델 실행 두 단계로 나눈다. 이 절은 로딩 — 모델이 왜 GPU 메모리에 상주해야 하는지, GPU 메모리를 무엇이 소비하는지, 요구량을 어떻게 추정하는지다.</p>
+
+<h2 id="로딩-경로와-병목-지점">로딩 경로와 병목 지점</h2>
+
+<p>모델 로딩은 스토리지에서 모델 가중치를 읽어 CPU 메모리를 거쳐 GPU 메모리에 복사하고, 런타임이 실행 가능한 형태로 준비하는 과정이다.</p>
+
+<pre><code class="language-mermaid">graph LR
+    R["원격 스토리지&lt;br&gt;(모델 저장소)"] --&gt;|다운로드| D["로컬 디스크&lt;br&gt;(SSD)"]
+    D --&gt;|"디스크 I/O"| C["CPU 메모리&lt;br&gt;(DRAM)"]
+    C --&gt;|"PCIe 전송"| G["GPU 메모리&lt;br&gt;(HBM)"]
+    G --&gt;|"초기화·워밍업"| S["서빙 준비 완료"]
+</code></pre>
+
+<center><sup>책 Figure 5-8의 데이터 흐름을 재구성한 도식. 각 화살표 구간(다운로드, 디스크 I/O, CPU 메모리 복사, CPU→GPU 전송, GPU 메모리 할당, 초기화·컴파일)이 모두 병목 후보다</sup></center>
+
+<p>한 번 로드되면 가중치는 GPU 메모리에 캐싱된 상태로 유지되어 들어오는 요청을 즉시 처리한다. 그래서 모델 가중치 전부를 담을 만큼의 GPU 메모리가 반드시 필요하다.</p>
+
+<p>“CPU 메모리에 캐싱해 두고 요청이 올 때마다 가져오면 안 되나”라는 질문에 대한 답은 전송 속도에 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>저장 계층</th>
+      <th>대역폭</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>하드디스크(SSD)</td>
+      <td>0.5 ~ 14 GB/s</td>
+    </tr>
+    <tr>
+      <td>CPU 메모리</td>
+      <td>50 ~ 200 GB/s</td>
+    </tr>
+    <tr>
+      <td>GPU 메모리</td>
+      <td>300 GB/s ~ 3 TB/s</td>
+    </tr>
+  </tbody>
+</table>
+
+<center><sup>출처: Hands-On LLM Serving and Optimization (O'Reilly), Table 5-5</sup></center>
+
+<p>CPU 메모리는 용량과 범용 접근성에 최적화된 일반 DRAM이고, GPU 메모리는 대규모 병렬 데이터 이동에 최적화된 HBM이다. 가중치가 CPU 메모리에만 있으면 요청마다 GPU로 옮기는 단계가 끼어들고, 이는 실시간 추론에서 용납하기 어려운 지연을 만든다. <strong>가중치는 GPU 메모리에 상주해야 GPU 연산을 쓸 수 있다</strong> — 이것이 GPU 메모리 용량이 그토록 중요한 제약인 이유다.</p>
+
+<h2 id="모델-크기-추정">모델 크기 추정</h2>
+
+<p>그러면 얼마나 필요한가. 모델의 메모리 사용량을 정하는 변수는 두 가지다.</p>
+
+<ol>
+  <li><strong>파라미터 개수</strong> — Hugging Face 모델은 이름에 드러나는 경우가 많다. Llama-2-7b는 약 70억(7B) 개</li>
+  <li><strong>파라미터의 데이터 타입(정밀도)</strong> — 저장소의 <code class="highlighter-rouge">config.json</code>에서 확인한다. <code class="highlighter-rouge">torch_dtype</code> 속성이 가중치 정밀도를 알려 준다</li>
+</ol>
+
+<div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+  </span><span class="s2">"_name_or_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"meta-llama/Llama-2-7b-chat-hf"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"hidden_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">4096</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"num_attention_heads"</span><span class="p">:</span><span class="w"> </span><span class="mi">32</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"num_hidden_layers"</span><span class="p">:</span><span class="w"> </span><span class="mi">32</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"num_key_value_heads"</span><span class="p">:</span><span class="w"> </span><span class="mi">32</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"torch_dtype"</span><span class="p">:</span><span class="w"> </span><span class="s2">"float16"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"vocab_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">32000</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div></div>
+
+<center><sup>Llama-2-7b-chat-hf의 config.json 발췌. torch_dtype이 float16이므로 파라미터당 2바이트다</sup></center>
+
+<p>정밀도는 파라미터 하나를 저장하는 데 필요한 비트 수이고, 모델 크기와 성능 모두에 직결된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>정밀도</th>
+      <th>비트 수</th>
+      <th>바이트</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>FP32 (단정밀도)</td>
+      <td>32</td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <td>FP16 (반정밀도) / BF16</td>
+      <td>16</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <td>INT8 / FP8</td>
+      <td>8</td>
+      <td>1</td>
+    </tr>
+  </tbody>
+</table>
+
+<center><sup>출처: Hands-On LLM Serving and Optimization (O'Reilly), Table 5-6</sup></center>
+
+<p>계산은 곱셈 하나다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>모델 크기 ≈ 파라미터 수 × 파라미터당 바이트
+Llama-2-7b (BF16) ≈ 7 × 10^9 × 2 B = 14 GB
+</code></pre></div></div>
+
+<p>실제 모델 파일 크기를 확인하면 약 13GB(9.98 + 3.5GB)로 추정치와 거의 일치한다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-huggingface-llama-2-7b-files.png" alt="Hugging Face 저장소의 Llama-2-7b 모델 파일 목록과 크기" class="align-center" width="680" /></p>
+
+<center><sup>출처: <a href="https://huggingface.co/meta-llama/Llama-2-7b-chat-hf/tree/main">Hugging Face — meta-llama/Llama-2-7b-chat-hf</a> (책 Figure 5-9)</sup></center>
+
+<h2 id="kv-캐시-크기-추정">KV 캐시 크기 추정</h2>
+
+<p>모델만 담기면 충분할까. 14GB 모델에 16GB GPU면 로딩은 되고, 짧은 요청 하나 정도는 돌아간다. 하지만 모델을 겨우 담을 정도의 메모리는 이상적이지 않다. <strong>KV 캐시(KV cache)</strong> 때문이다.</p>
+
+<p>KV 캐시는 GPU 메모리 일부를 내주고 훨씬 빠른 서빙 성능을 얻는 최적화다. 어텐션의 중간 계산 결과(K·V)를 캐싱해 두면 다음 토큰을 decode할 때 재계산 없이 재사용한다 — 동작 원리는 <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#kv-cache-두-단계의-연결">3.3편의 KV cache 절</a>에서 정리했다. 여기서 중요한 것은 크기다. KV 캐시용 여유 공간이 작으면 배치 크기와 컨텍스트 길이가 심하게 제한된다.</p>
+
+<p>토큰 하나가 차지하는 KV 캐시는 다음처럼 계산한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>토큰당 KV 캐시 = 2 × 레이어 수 × 어텐션 헤드 수 × 헤드 차원 × 정밀도 바이트
+                (2는 K와 V 두 벌)
+
+Llama-2-7b (MHA, 반정밀도):
+  2 × 32 × 32 × 128 × 2 B = 524,288 B = 0.5 MB
+</code></pre></div></div>
+
+<p>토큰당 0.5MB다. 다음 질문은 토큰이 몇 개 필요한가이고, 이는 배치 크기와 시퀀스 길이가 정한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>전체 KV 캐시 = 토큰당 KV 캐시 × (최대 배치 크기 × 최대 시퀀스 길이)
+
+배치 16, 시퀀스 4096:
+  0.5 MB × 16 × 4096 = 32 GB
+</code></pre></div></div>
+
+<p><strong>모델 자체(14GB)보다 KV 캐시(32GB)가 크다.</strong> 긴 문단 요약처럼 시퀀스가 긴 워크로드에서 동시 요청을 받으면 캐시가 이렇게 누적된다. 참고로 이 계산은 기본 멀티헤드 어텐션(MHA) 기준이고, KV 캐시를 줄이는 MQA·GQA·MLA 같은 어텐션 변형은 책 후반부에서 다룬다 (MLA는 DeepSeek V2에서 도입되어 V3·R1에 쓰인다).</p>
+
+<h2 id="gpu-메모리-계획-a10-vs-l40s">GPU 메모리 계획: A10 vs L40S</h2>
+
+<p>이 계산을 GPU 선택에 적용해 보자. 시퀀스 길이 4096으로 고정하고, 24GB(A10)와 48GB(L40S)를 비교한다. 전체 메모리에서 모델 크기 14GB를 빼면 KV 캐시에 쓸 수 있는 메모리가 나오고, 이를 요청당 캐시(0.5MB × 4096)로 나누면 최대 배치 크기가 나온다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>GPU</th>
+      <th>모델 로드 후 남은 메모리</th>
+      <th>최대 배치 크기</th>
+      <th>시간당 비용 (AWS 온디맨드)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>A10 24GB</td>
+      <td>10 GB</td>
+      <td>4 (계산상 10×1024÷2048 = 5)</td>
+      <td>약 2달러</td>
+    </tr>
+    <tr>
+      <td>L40S 48GB</td>
+      <td>34 GB</td>
+      <td>16 (계산상 34×1024÷2048 = 17)</td>
+      <td>약 3.75달러</td>
+    </tr>
+  </tbody>
+</table>
+
+<center><sup>출처: Hands-On LLM Serving and Optimization (O'Reilly), Table 5-7</sup></center>
+
+<p>A10은 병렬 요청 4개, L40S는 16개다. L40S가 더 비싸지만 비용 효율은 더 좋다 — 동시 처리량이 4배 늘어나는 동안 비용은 약 2배만 늘었다.</p>
+
+<blockquote>
+  <p>계산상 최대치(5, 17)를 실전에서 온전히 쓸 수 없다는 점에 주의한다. 중간 계산 텐서(activation)를 위한 공간을 GPU 안에 따로 확보해야 하기 때문이다.</p>
+</blockquote>
+
+<p>실행 중 메모리 사용량은 고정이 아니다. 유휴(idle) 상태에서는 모델 가중치가 대부분을 차지하지만, 실행이 시작되면 시퀀스가 길어질수록 KV 캐시가 계속 자라고 activation·임시 버퍼가 더해진다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-gpu-memory-idle-to-execution.png" alt="유휴 상태에서 실행 상태로 갈 때 GPU 메모리 사용량이 증가하는 과정" class="align-center" width="680" /></p>
+
+<center><sup>출처: Hands-On LLM Serving and Optimization (O'Reilly), Figure 5-11</sup></center>
+
+<p>생성이 끝나는 시점의 피크 사용량을 넘는 여유가 있어야 OOM(out-of-memory)을 피한다. 서빙에서 흔한 사고가 가중치는 올라갔는데 높은 동시성·긴 컨텍스트에서 KV 캐시가 메모리를 넘는 상황이고, vLLM 계열 엔진의 <code class="highlighter-rouge">max_num_seqs</code>, <code class="highlighter-rouge">max_model_len</code>, <code class="highlighter-rouge">max_num_batched_tokens</code>, GPU 메모리 사용률 같은 설정이 전부 이 지점을 다룬다. 책은 경험칙으로 <strong>모델 크기의 약 2배 GPU 메모리에서 시작하는 것</strong>을 권장한다 — 이후 장에서 다룰 prefix caching처럼 TTFT를 당기는 기법들이 메모리를 더 요구하기도 하므로, 어디까지나 시작점으로 두는 값이다.</p>
+
+<p><br /></p>
+
+<h1 id="모델-실행-병목">모델 실행 병목</h1>
+
+<p>모델이 GPU 메모리에 올라갔다면, 다음 질문은 이것이다. <strong>모델 서빙은 GPU 연산(FLOPS)에 제한되는가, 메모리 대역폭에 제한되는가?</strong> 이 판별 도구가 산술 강도와 루프라인 모델이다.</p>
+
+<h2 id="산술-강도와-루프라인">산술 강도와 루프라인</h2>
+
+<p><strong>산술 강도(arithmetic intensity)</strong> 는 워크로드가 수행하는 연산 횟수와 접근한 바이트 수의 비율이다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>산술 강도 (FLOPS/B) = 연산 횟수 / 데이터 이동량(바이트)
+</code></pre></div></div>
+
+<p>데이터는 적게 읽고 그 위에서 계산을 많이 하면 산술 강도가 높고, 계산은 적은데 읽고 쓰는 데이터가 많으면 낮다. 여기서 데이터 이동은 모델 로딩이 아니라 <strong>실행 시점의 이동</strong>이다. 가중치가 이미 GPU 메모리(off-chip HBM)에 있는 상태에서, 계산을 위해 연산 유닛까지 올라오는 경로를 말한다.</p>
+
+<pre><code class="language-mermaid">graph LR
+    H["HBM&lt;br&gt;(off-chip GPU 메모리)"] --&gt; L2["L2 캐시"] --&gt; L1["L1 / 공유 메모리&lt;br&gt;(SRAM)"] --&gt; R["레지스터"] --&gt; CU["연산 유닛"]
+</code></pre>
+
+<center><sup>책 Figure 5-12의 경로를 재구성한 도식. 서빙 중 가중치와 중간 결과가 이 경로로 계속 읽혀 들어간다</sup></center>
+
+<p>이 경로에서 가장 느린 구간이 HBM이라, 데이터 이동의 기준 지표는 GPU 메모리 대역폭이 된다 (가중치·출력이 온칩 SRAM에 영리하게 담기는 FlashAttention 같은 예외는 책 6장에서 다룬다). 그래서 GPU 스펙만으로 칩의 이론적 산술 강도 경계를 계산할 수 있다. <a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/">5.3편</a>에서 본 L40S로 계산하면:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>L40S: FP16 텐서 코어 362 TFLOPS, 메모리 대역폭 864 GB/s
+
+이론적 경계 = (362 × 10^12 FLOPS) / (864 × 10^9 B/s) ≈ 419 FLOPS/B
+</code></pre></div></div>
+
+<p>워크로드의 산술 강도가 419 FLOPS/B보다 낮으면 최대 362 TFLOPS를 다 쓰지 못하고 메모리 대역폭에 막힌다(memory bandwidth-bound). 419보다 높으면 연산 쪽이 상한이 된다(compute-bound). 이 경계를 x축(산술 강도) · y축(달성 가능 성능)에 그린 것이 루프라인(roofline) 모델이다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-l40s-roofline.png" alt="L40S 칩의 루프라인 모델. 419 FLOPS/B를 경계로 사선(메모리 대역폭 제한)과 수평선(연산 제한)이 나뉜다" class="align-center" width="680" /></p>
+
+<center><sup>출처: Hands-On LLM Serving and Optimization (O'Reilly), Figure 5-13</sup></center>
+
+<p>예를 들어 산술 강도 약 210 FLOPS/B인 워크로드는 경계(419)의 절반 지점이라 memory-bound다 — 연산력은 남는데 데이터 공급이 못 따라간다. 반대로 1,000 FLOPS/B라면 compute-bound다 — 데이터는 빨리 공급되지만 연산 용량이 이미 꽉 찼고, 그게 이 칩의 최대 속도다.</p>
+
+<p>루프라인 모델 자체의 유도(왜 min(π, βI)인가), ridge point 해석, ncu로 실측하는 방법은 <a href="/cs/CS-Roofline-Model/">Roofline 모델</a> 글에서 이미 정리했다. 이 글에서는 책의 전개를 따라 LLM 워크로드의 산술 강도를 직접 계산하는 데 집중한다.</p>
+
+<h2 id="행렬-곱셈의-산술-강도">행렬 곱셈의 산술 강도</h2>
+
+<p>LLM 서빙 워크로드가 어느 쪽인지 알려면 LLM 내부 레이어의 산술 강도를 계산해야 한다. LLM은 대부분 트랜스포머 블록(셀프 어텐션 + 피드포워드)으로 구성되고, 두 레이어 모두 계산의 대부분이 행렬 곱셈(matmul)이다. element-wise·reduction 연산도 있지만 로드하는 데이터 대비 연산량이 적어 산술 강도가 낮고 전체 비중도 작다. 그래서 행렬 곱셈부터 추정한다.</p>
+
+<p>입력 행렬 [M, K]와 가중치 행렬 [K, N]을 곱해 출력 [M, N]을 만드는 단순 구현은 삼중 루프다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># naive matmul: Inputs[M,K] × Weights[K,N] → Outputs[M,N]</span>
+<span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">M</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">K</span><span class="p">):</span>
+            <span class="n">Outputs</span><span class="p">[</span><span class="n">m</span><span class="p">][</span><span class="n">n</span><span class="p">]</span> <span class="o">+=</span> <span class="n">Inputs</span><span class="p">[</span><span class="n">m</span><span class="p">][</span><span class="n">k</span><span class="p">]</span> <span class="o">*</span> <span class="n">Weights</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="n">n</span><span class="p">]</span>
+</code></pre></div></div>
+
+<p>분자(연산 횟수)와 분모(데이터 이동량)를 각각 세면 다음과 같다. 정밀도는 2바이트(FP16)로 가정한다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>연산 횟수    = M×N×K번의 곱셈 + M×N×(K−1)번의 덧셈 ≈ 2 × M × N × K
+데이터 이동  = 2 × (입력 M×K + 가중치 K×N + 출력 M×N)
+
+산술 강도 = 2MNK / 2(MK + KN + MN) = MNK / (MK + KN + MN)
+</code></pre></div></div>
+
+<p>행렬 크기가 커지면 어떻게 되는지 M = N = K로 두고 계산해 보면, 분자는 세제곱으로 늘고 분모는 제곱으로 늘어 산술 강도가 크기에 비례해 커진다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>행렬 크기 (M=N=K)</th>
+      <th>산술 강도 (FLOPS/B)</th>
+      <th>L40S(경계 419) 기준 판정</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>64</td>
+      <td>21</td>
+      <td>memory bandwidth-bound</td>
+    </tr>
+    <tr>
+      <td>512</td>
+      <td>170</td>
+      <td>memory bandwidth-bound</td>
+    </tr>
+    <tr>
+      <td>4096</td>
+      <td>1365</td>
+      <td>compute-bound</td>
+    </tr>
+  </tbody>
+</table>
+
+<center><sup>출처: Hands-On LLM Serving and Optimization (O'Reilly), Table 5-9</sup></center>
+
+<p>행렬이 충분히 크면 compute-bound로 전환될 수 있다. 그러면 남는 질문은 하나다. LLM 서빙에서 실제로 등장하는 행렬은 충분히 큰가? 모델이 크니 당연히 그럴 것 같지만, 항상 그렇지는 않다.</p>
+
+<h2 id="prefill과-decode의-산술-강도">prefill과 decode의 산술 강도</h2>
+
+<p>모델에 들어가는 입력 텐서의 형태(shape)는 [배치 크기, 시퀀스 길이, 히든 차원] 3차원이다. 배치 크기 1(요청 하나만 처리)로 두면 [시퀀스 길이 s, 히든 차원 h] 2차원 행렬로 단순해진다. <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/">3.3편</a>에서 본 두 단계를 이 shape로 다시 쓰면:</p>
+
+<ul>
+  <li><strong>prefill</strong>: 입력 프롬프트의 모든 토큰을 한꺼번에 처리한다 → 행렬의 행 수가 시퀀스 길이 s</li>
+  <li><strong>decode</strong>: 토큰을 한 번에 하나씩 생성한다 → 행 수가 1로 고정</li>
+</ul>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-prefill-decode-matmul-input-size.png" alt="prefill과 decode 단계에서 행렬 곱셈 입력 크기가 달라지는 모습. prefill은 s×h 행렬, decode는 1×h 벡터다" class="align-center" width="680" /></p>
+
+<center><sup>출처: Hands-On LLM Serving and Optimization (O'Reilly), Figure 5-16</sup></center>
+
+<p>앞의 산술 강도 공식에 M = s(prefill) 또는 1(decode), N = K = h를 대입하면 표가 완성된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>시퀀스 길이 s</th>
+      <th>히든 차원 h</th>
+      <th>prefill 산술 강도</th>
+      <th>decode 산술 강도</th>
+      <th>L40S(419) 기준 판정</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>64</td>
+      <td>4096</td>
+      <td>62.06</td>
+      <td>약 1.0</td>
+      <td>둘 다 memory bandwidth-bound</td>
+    </tr>
+    <tr>
+      <td>512</td>
+      <td>4096</td>
+      <td>409.60</td>
+      <td>약 1.0</td>
+      <td>둘 다 memory bandwidth-bound</td>
+    </tr>
+    <tr>
+      <td>4096</td>
+      <td>4096</td>
+      <td>1365.33</td>
+      <td>약 1.0</td>
+      <td>prefill은 compute-bound, decode는 memory bandwidth-bound</td>
+    </tr>
+  </tbody>
+</table>
+
+<center><sup>출처: Hands-On LLM Serving and Optimization (O'Reilly), Table 5-10</sup></center>
+
+<p>결론이 표에 그대로 있다.</p>
+
+<ul>
+  <li><strong>prefill</strong>: 시퀀스가 충분히 길면 산술 강도가 크게 올라가 GPU 연산력을 포화시킨다 → compute-bound가 될 수 있다</li>
+  <li><strong>decode</strong>: s = 1이 고정이라 산술 강도가 항상 약 1.0이다 → <strong>시퀀스가 아무리 길어도 항상 memory bandwidth-bound다</strong></li>
+</ul>
+
+<p>이 계산은 배치 크기를 의도적으로 1로 고정한 것이고, 배치를 키우면 decode의 산술 강도가 배치 크기에 비례해 올라간다. 그것이 continuous batching이 LLM 서빙의 핵심 기법인 이유인데, 배칭으로도 풀리지 않는 decode-attention의 KV 캐시 트래픽까지 포함한 정밀한 그림은 <a href="/dev/Dev-Roofline-Model-LLM-Serving/#llm-서빙의-세-점">Roofline 모델로 보는 LLM 서빙</a>에 정리되어 있다.</p>
+
+<h2 id="병목-판정과-최적화-방향">병목 판정과 최적화 방향</h2>
+
+<p>이 분석과 계산의 목적은 서빙 단계별 병목에 대한 직관이다. 판정이 갈리면 처방이 갈린다.</p>
+
+<ul>
+  <li><strong>compute-bound 워크로드</strong> → 수학적 연산 최적화, FLOPS 절감 방향의 기법을 찾는다</li>
+  <li><strong>memory bandwidth-bound 워크로드</strong> → 불필요한 데이터 이동을 최소화하는 방향으로 최적화한다</li>
+</ul>
+
+<p>prefill과 decode는 같은 가중치·같은 코드를 쓰지만 병목의 성격이 정반대다. 이 직관이 있어야 이후 장에서 등장하는 최적화 기법들이 각각 왜 효과가 있는지, 어떤 상황에서 어떤 기법을 골라야 하는지 판단할 수 있다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>단계</th>
+      <th>병목</th>
+      <th>판별 도구</th>
+      <th>핵심 숫자 (Llama-2-7b, L40S 예시)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>로딩</td>
+      <td>GPU 메모리 용량</td>
+      <td>모델 크기 + KV 캐시 손계산</td>
+      <td>가중치 14GB, KV 캐시 32GB(배치 16×4096)</td>
+    </tr>
+    <tr>
+      <td>실행 (prefill)</td>
+      <td>시퀀스가 길면 연산</td>
+      <td>산술 강도 vs 경계(419)</td>
+      <td>s=4096일 때 1365 FLOPS/B → compute-bound</td>
+    </tr>
+    <tr>
+      <td>실행 (decode)</td>
+      <td>항상 메모리 대역폭</td>
+      <td>산술 강도 vs 경계(419)</td>
+      <td>s와 무관하게 약 1.0 FLOPS/B</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>다음 글 <a href="/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/">5.5편</a>은 NVIDIA 밖의 가속기 지형과, 이 memory-bound 문제의 배경인 메모리 벽(memory wall) 트렌드를 보고 5장을 정리한다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://www.oreilly.com/library/view/hands-on-llm-serving/9798341621480/">Hands-On LLM Serving and Optimization (O’Reilly)</a></li>
+  <li><a href="https://huggingface.co/meta-llama/Llama-2-7b-chat-hf">Hugging Face — meta-llama/Llama-2-7b-chat-hf</a></li>
+  <li><a href="/cs/CS-Roofline-Model/">Roofline 모델: 연산 강도로 판별하는 성능 병목</a></li>
+  <li><a href="/dev/Dev-Roofline-Model-LLM-Serving/">Roofline 모델로 보는 LLM 서빙: 세 점으로 나눠 찍는 병목</a></li>
+  <li><a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/">단일 모델 서빙 시스템 - 3.2. 배치 요청</a></li>
+  <li><a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/">단일 모델 서빙 시스템 - 3.3. prefill과 decode: 생성 추론의 두 단계</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#arithmetic-intensity" class="page__taxonomy-item" rel="tag">Arithmetic-Intensity</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#decode" class="page__taxonomy-item" rel="tag">Decode</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu-memory" class="page__taxonomy-item" rel="tag">GPU-Memory</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study-week-3" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study-Week-3</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kv-cache" class="page__taxonomy-item" rel="tag">KV-Cache</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#llm-serving" class="page__taxonomy-item" rel="tag">LLM-Serving</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#prefill" class="page__taxonomy-item" rel="tag">Prefill</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-22">August 22, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BLLM%5D+LLM+%EC%84%9C%EB%B9%99%EA%B3%BC+%EC%B5%9C%EC%A0%81%ED%99%94%3A+LLM+%EC%84%9C%EB%B9%99%EC%9D%98+%EB%8F%84%EC%A0%84+%EA%B3%BC%EC%A0%9C+-+5.4.+%EB%AA%A8%EB%8D%B8+%EB%A1%9C%EB%94%A9%C2%B7%EC%8B%A4%ED%96%89+%EB%B3%91%EB%AA%A9%3A+%EB%A9%94%EB%AA%A8%EB%A6%AC+%EC%9A%A9%EB%9F%89%EA%B3%BC+%EC%82%B0%EC%88%A0+%EA%B0%95%EB%8F%84%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/" class="pagination--pager" title="[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.3. GPU 인터커넥트: 대역폭 계층과 GPU 선택
+">이전</a>
+    
+    
+      <a href="/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/" class="pagination--pager" title="[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.5. AI 가속기 지형과 메모리 벽
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/" rel="permalink">[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.5. AI 가속기 지형과 메모리 벽
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 22일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">NVIDIA 밖 AI 가속기 지형과 메모리 벽 완화 트렌드를 살펴보고 5장을 정리해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/" rel="permalink">[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.3. GPU 인터커넥트: 대역폭 계층과 GPU 선택
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 22일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  10 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">GPU 인터커넥트의 대역폭 계층을 이해하고 모델 크기별 GPU 선택 기준을 세워 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-05-02-LLM-Serving-Challenge-GPU-Compute-Memory/" rel="permalink">[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.2. GPU 스펙 읽기: 연산과 메모리
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 22일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  7 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">GPU 스펙의 연산·메모리 속성을 읽고 H100 SXM과 NVL을 비교해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/Dev-LLM-Serving-Optimization-05-01-LLM-Serving-Challenge-Overview/" rel="permalink">Dev Llm Serving Optimization 05 01 Llm Serving Challenge Overview
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 22일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  32 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">
+  챕터 5 소개
+    
+      핵심 내용
+        
+          지금까지 다룬 일반적인 모델 서빙 개념에서 벗어나, 이 장부터는 LLM 서빙 최적화라는 빠르게 성장하는 분야를 본격적으로 다룹니다.
+        
+      
+      배경
+        
+  ...</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>
