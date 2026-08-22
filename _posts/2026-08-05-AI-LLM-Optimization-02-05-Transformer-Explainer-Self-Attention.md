@@ -17,7 +17,7 @@ tags:
   - Softmax
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-1
-last_modified_at: 2026-08-20
+last_modified_at: 2026-08-22
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 1주차 학습 내용을 기반으로 합니다.*
@@ -179,14 +179,7 @@ QKV = [ 1.1  2.2 | 2.3  1.4 | 3.5  -0.4 ]     # My의    q | k | v
 
 어차피 나중에 Q·K·V로 다시 잘라야 하는데 왜 하나로 합쳐 곱하는가. 두 방식의 **산술 연산 수(FLOPs, 부동소수점 연산 개수)**는 완전히 같다 — 융합 곱 `(768, 2304)` 한 번의 곱셈·덧셈 수가 `(768, 768)` 세 번의 합과 정확히 일치한다(768×768×3 = 768×2304). 이득은 연산량이 아니라 **GPU가 일하는 방식**에서 나온다.
 
-> **참고**: FLOPs vs. FLOPS
->
-> 철자 하나 차이지만 가리키는 물리량이 다르다. FLOPs의 소문자 `s`는 복수형 어미(operation**s**)고, FLOPS의 대문자 `S`는 per **s**econd다.
->
-> - **FLOPs**(floating-point operations): 부동소수점 연산의 **개수**. 어떤 계산을 끝내는 데 필요한 총 작업량으로, 하드웨어와 무관하게 수식 모양만으로 정해진다. 행렬곱 `(m, k)·(k, n)`의 FLOPs가 대략 $2mkn$인 이유 — 출력 원소 하나가 곱 $k$번 + 합 $k{-}1$번 ≈ $2k$ 연산이고, 그런 원소가 $mn$개다
-> - **FLOPS**(FLOP/s, floating-point operations per second): 초당 처리하는 부동소수점 연산 수, 즉 하드웨어의 **속도**. GPU 스펙표에서 보는 "A100 BF16 312 TFLOPS" 같은 수치가 이것인데, 카탈로그의 피크 FLOPS는 이상적 조건의 상한이고 실제 워크로드의 실효 FLOPS는 그보다 낮다
->
-> 둘을 나누면 시간이 나온다: 이론상 실행 시간 ≈ FLOPs(작업량) ÷ 실효 FLOPS(속도). 위 등식이 말하는 것은 융합이든 분리든 분자(FLOPs)가 같다는 것이고, 따라서 두 방식의 차이는 전부 분모 — 같은 작업량을 GPU가 얼마나 빠른 실효 속도로 처리하느냐 — 에서 나온다.
+> **참고**: FLOPs(작업량, 연산 개수)와 FLOPS(처리율, 초당 연산 수)의 구분, 행렬곱의 $2mkn$ 유도, "실행 시간 ≈ FLOPs ÷ 실효 FLOPS" 관계는 [Roofline 모델]({% post_url 2026-08-21-CS-Roofline-Model %}#표기-flops-vs-flops)에서 정리했다. 트랜스포머 계산 맥락에서 요지는 융합이든 분리든 분자(FLOPs)는 같고, 차이는 전부 분모(같은 작업량을 GPU가 얼마나 빠른 실효 속도로 처리하느냐)에서 난다는 점이다.
 
 - **커널 실행이 3번 → 1번**: GPU에서 행렬곱 하나는 커널 실행 하나인데, 실행마다 고정 오버헤드가 붙는다. 작은 곱 셋보다 큰 곱 하나가 이 비용을 한 번만 낸다
 - **입력 X를 메모리에서 1번만 읽는다**: 따로 곱하면 행렬곱마다 X를 다시 읽어야 한다. 합치면 한 번 읽은 X를 2304개 열 전부에 재사용한다
