@@ -18,7 +18,7 @@ tags:
 last_modified_at: 2026-08-22
 ---
 
-*[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 내용을 기반으로 합니다.*
+*[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 중 딥다이브한 내용입니다.*
 
 <br>
 

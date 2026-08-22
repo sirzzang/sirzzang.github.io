@@ -15,7 +15,7 @@ tags:
   - TPOT
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-2
-last_modified_at: 2026-08-20
+last_modified_at: 2026-08-22
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 2주차 학습 내용을 기반으로 합니다.*
@@ -76,7 +76,7 @@ prefill이 끝나는 시점이 곧 첫 토큰이 나오는 시점이고, 그 뒤
 
 ![prefill과 decode의 시간 순서를 보여주는 어텐션 하삼각 도식]({{site.url}}/assets/images/llmso-prefill-decode-triangle-timeline.svg){: .align-center width="760"}
 
-<center><sup>직접 그린 도식. 프롬프트 세 행은 prefill의 forward 1회로 한꺼번에 계산되고, 그 출력 t4가 새 행으로 추가되며 decode 스텝이 하나씩 이어진다</sup></center>
+<center><sup>AI를 이용해 직접 그린 도식. 프롬프트 세 행은 prefill의 forward 1회로 한꺼번에 계산되고, 그 출력 t4가 새 행으로 추가되며 decode 스텝이 하나씩 이어진다</sup></center>
 
 ## 프롬프트 병렬 처리: prefill의 기원
 
@@ -88,7 +88,7 @@ prefill이 끝나는 시점이 곧 첫 토큰이 나오는 시점이고, 그 뒤
 
 ![prefill에서 하삼각은 계산되어 유지되고 상삼각은 계산 후 마스크로 차단되는 모습]({{site.url}}/assets/images/llmso-prefill-attention-mask-parallel.svg){: .align-center width="620"}
 
-<center><sup>직접 그린 도식. 세 행이 한 번의 행렬 곱으로 동시에 계산된다. 상삼각 칸도 계산되지만 causal mask가 softmax 후 가중치를 0으로 만든다</sup></center>
+<center><sup>AI를 이용해 직접 그린 도식. 세 행이 한 번의 행렬 곱으로 동시에 계산된다. 상삼각 칸도 계산되지만 causal mask가 softmax 후 가중치를 0으로 만든다</sup></center>
 
 ### prefill: RNN vs. 트랜스포머
 
@@ -114,7 +114,7 @@ prefill이 끝나는 시점이 곧 첫 토큰이 나오는 시점이고, 그 뒤
 
 ![decode 스텝마다 새 토큰의 행 하나만 계산되고 이전 행들은 KV cache에서 읽히는 모습]({{site.url}}/assets/images/llmso-decode-attention-row-append.svg){: .align-center width="760"}
 
-<center><sup>직접 그린 도식. 각 decode 스텝은 새 토큰의 행 하나만 계산하고, 이전 행들의 K·V는 KV cache에서 읽는다</sup></center>
+<center><sup>AI를 이용해 직접 그린 도식. 각 decode 스텝은 새 토큰의 행 하나만 계산하고, 이전 행들의 K·V는 KV cache에서 읽는다</sup></center>
 
 ## KV cache: 두 단계의 연결
 
