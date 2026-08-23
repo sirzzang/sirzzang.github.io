@@ -19,6 +19,7 @@ tags:
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
 hidden: true
+last_modified_at: 2026-08-24
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 7주차 학습 내용을 기반으로 합니다.*
@@ -105,7 +106,7 @@ Non-terminated Pods 섹션을 보면, `kube-system` 파드와 함께 **orders �
 
 `base.tf`에 `green-mng`을 추가한다. `blue-mng`과 동일한 label, taint, subnet 설정이지만, `cluster_version`을 명시하지 않아 `eks_managed_node_group_defaults`의 값(1.31)을 따른다.
 
-```hcl
+```ruby
 green-mng = {
   instance_types = ["m5.large", "m6a.large", "m6i.large"]
   subnet_ids     = [module.vpc.private_subnets[0]]

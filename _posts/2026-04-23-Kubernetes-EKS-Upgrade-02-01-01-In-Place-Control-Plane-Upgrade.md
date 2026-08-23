@@ -15,6 +15,7 @@ tags:
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
 hidden: true
+last_modified_at: 2026-08-24
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 7주차 학습 내용을 기반으로 합니다.*
@@ -135,7 +136,7 @@ Control Plane 업그레이드를 시작하는 방법은 4가지가 있다.
 
 `variables.tf`에서 `cluster_version`을 `"1.30"`에서 `"1.31"`로 변경한다.
 
-```hcl
+```ruby
 variable "cluster_version" {
   description = "EKS cluster version."
   type        = string
@@ -263,7 +264,7 @@ EKS는 **다운그레이드를 지원하지 않는다**. 클러스터의 Control
 
 `terraform/variables.tf`에서 `cluster_version`을 현재 클러스터 버전 이상으로 맞춰야 한다.
 
-```hcl
+```ruby
 variable "cluster_version" {
   description = "EKS cluster version."
   type        = string

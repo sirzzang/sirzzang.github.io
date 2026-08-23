@@ -16,6 +16,7 @@ tags:
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-1
 
+last_modified_at: 2026-08-24
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 1주차 학습 내용을 기반으로 합니다.*
@@ -71,7 +72,7 @@ Terraform에서는 역할별로 `.tf` 파일을 분리하는 것이 일반적인
 
 `var.tf`는 전체 인프라에서 사용할 변수를 선언하는 파일이다. 여기서 하는 일은 **"이런 변수가 있다"를 선언하고 모아 놓는 것**이다. 실제 값을 넣는 것이 아니라, 어떤 값들이 파라미터로 들어오는지 전체 그림을 파악할 수 있게 해준다.
 
-```hcl
+```ruby
 variable "KeyName" {
   description = "Name of an existing EC2 KeyPair to enable SSH access to the instances."
   type        = string
@@ -199,7 +200,7 @@ AWS는 리전별로 사용 가능한 AZ 목록을 공개하고 있고(`ap-northe
 
 `vpc.tf`는 EKS가 올라갈 네트워크 기반을 정의한다. VPC CIDR, 퍼블릭 서브넷 3개(AZ별), IGW, DNS 설정 등이 포함된다.
 
-```hcl
+```ruby
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~>6.5"
@@ -312,7 +313,7 @@ EKS에서는 이 두 설정이 **필수**다. 없으면 API 서버 엔드포인�
 
 ### IGW 태그
 
-```hcl
+```ruby
 igw_tags = {
   "Name" = "${var.ClusterBaseName}-IGW"
 }
@@ -322,7 +323,7 @@ Internet Gateway에 붙일 태그다. `{ }` 블록인 이유는 Terraform에서 
 
 ### 퍼블릭 서브넷 태그
 
-```hcl
+```ruby
 public_subnet_tags = {
   "Name"                     = "${var.ClusterBaseName}-PublicSubnet"
   "kubernetes.io/role/elb"   = "1"
@@ -343,7 +344,7 @@ ELB가 배치되면 외부 트래픽이 ELB를 거쳐 워커 노드의 Pod로 �
 
 ### 공통 태그
 
-```hcl
+```ruby
 tags = {
   "Environment" = "cloudneta-lab"
 }
@@ -386,7 +387,7 @@ VPC 모듈이 만드는 **모든 리소스**에 공통으로 붙는 태그다. `
 
 ## Provider
 
-```hcl
+```ruby
 provider "aws" {
   region = var.TargetRegion
 }
@@ -397,7 +398,7 @@ AWS Provider 사용을 선언하는 블록이다. Provider 플러그인(실제 �
 코드 어디에도 `access_key`나 `secret_key`가 없는데, Terraform의 AWS Provider는 인증 정보가 명시적으로 없으면 아래 순서대로 자격증명을 자동 탐색한다.
 
 1. **Provider 블록 내 직접 지정** (코드에 하드코딩 — 비권장)
-   ```hcl
+   ```ruby
    provider "aws" {
      access_key = "AKIA..."
      secret_key = "wJalr..."
@@ -416,7 +417,7 @@ AWS Provider 사용을 선언하는 블록이다. Provider 플러그인(실제 �
 
 ## 보안그룹
 
-```hcl
+```ruby
 resource "aws_security_group" "node_group_sg" {
   name        = "${var.ClusterBaseName}-node-group-sg"
   description = "Security group for EKS Node Group"
@@ -460,7 +461,7 @@ resource "aws_security_group_rule" "allow_ssh" {
 
 > 참고로, SSH(22번 포트)만 허용하려면 다음과 같이 설정한다.
 >
-> ```hcl
+> ```ruby
 > from_port = 22
 > to_port   = 22
 > protocol  = "tcp"
@@ -496,7 +497,7 @@ Terraform의 리소스 간 참조 추적 기능이 동작하는 방식은 다음
 
 ## EKS 모듈
 
-```hcl
+```ruby
 module "eks" {
   
   source  = "terraform-aws-modules/eks/aws"
@@ -579,7 +580,7 @@ module "eks" {
 
 ### VPC 연결
 
-```hcl
+```ruby
 vpc_id = module.vpc.vpc_id
 subnet_ids = module.vpc.public_subnets
 ```
@@ -588,7 +589,7 @@ subnet_ids = module.vpc.public_subnets
 
 `subnet_ids`에는 서브넷 ID가 들어간다. VPC 모듈의 `outputs.tf`를 보면 이름이 비슷한 항목들이 있다.
 
-```hcl
+```ruby
 # .terraform/modules/vpc/outputs.tf
 ...
 
@@ -650,7 +651,7 @@ output "public_subnet_arns" {
 
 ### API 서버 엔드포인트 접근
 
-```hcl
+```ruby
 endpoint_public_access = true
 endpoint_private_access = false
 ```
@@ -668,7 +669,7 @@ endpoint_private_access = false
 
 ### Control Plane 로그
 
-```hcl
+```ruby
 enabled_log_types = []
 ```
 
@@ -687,7 +688,7 @@ EKS Control Plane 로그 타입은 아래와 같이 5가지가 있다.
 
 프로덕션에서는 최소 `["api", "audit"]` 정도는 켜두고, 비용이 괜찮다면 아래와 같이 전부 켜두는 것이 좋다. 
 
-```hcl
+```ruby
 enabled_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 ```
 
@@ -698,7 +699,7 @@ enabled_log_types = ["api", "audit", "authenticator", "controllerManager", "sche
 
 ### 클러스터 생성자 권한
 
-```hcl
+```ruby
 enable_cluster_creator_admin_permissions = true
 ```
 
@@ -710,7 +711,7 @@ enable_cluster_creator_admin_permissions = true
 
 ### Managed Node Group
 
-```hcl
+```ruby
 eks_managed_node_groups = {
   default = {
     ...
@@ -726,7 +727,7 @@ eks_managed_node_groups = {
 
 > **참고**: 다른 노드 그룹 유형을 사용하고 싶다면, EKS 모듈 안에 해당 키만 추가하면 된다.
 >
-> ```hcl
+> ```ruby
 > module "eks" {
 >   ...
 >   eks_managed_node_groups = { ... }   # 관리형 (이 실습)
@@ -765,7 +766,7 @@ eks_managed_node_groups = {
 
 #### 커스텀 초기화 스크립트
 
-```hcl
+```ruby
 cloudinit_pre_nodeadm = [
   {
     content_type = "text/x-shellscript"
@@ -790,7 +791,7 @@ AL2023(Amazon Linux 2023, AWS가 만든 리눅스 배포판으로 EKS 노드의 
 
 ### EKS 애드온
 
-```hcl
+```ruby
 addons = {
   coredns = {
     most_recent = true

@@ -21,6 +21,7 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions-Chapter-10
 use_math: false
 hidden: true
+last_modified_at: 2026-08-24
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 10장의 학습 내용을 바탕으로 합니다*
@@ -228,7 +229,7 @@ kubectl patch clusterpolicies.nvidia.com/cluster-policy \
 
 **경로 3: Terraform으로 연결**
 
-```hcl
+```ruby
 resource "helm_release" "nvidia_gpu_operator" {
   name       = "nvidia-gpu-operator"
   repository = "https://helm.ngc.nvidia.com/nvidia"

@@ -18,6 +18,7 @@ tags:
   - OIDC
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-2
+last_modified_at: 2026-08-24
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 2주차 학습 내용을 기반으로 합니다.*
@@ -43,7 +44,7 @@ tags:
 
 > **참고**: AWS VPC 서브넷의 사용 가능 IP 수는 `2^(32 - 프리픽스 길이) - 5`로 계산된다. AWS가 각 서브넷에서 [5개의 IP를 예약](https://docs.aws.amazon.com/vpc/latest/userguide/subnet-sizing.html)하기 때문이다 — 네트워크 주소(`.0`), VPC 라우터(`.1`), DNS 서버(`.2`), 예비(`.3`), 브로드캐스트(마지막 주소). `/24`는 `256 - 5 = 251`, `/22`는 `1,024 - 5 = 1,019`개다.
 
-```hcl
+```ruby
 variable "public_subnet_blocks" {
   type    = list(string)
   default = ["192.168.0.0/22", "192.168.4.0/22", "192.168.8.0/22"] # 1주차: /24 → 2주차: /22
@@ -61,7 +62,7 @@ VPC CNI는 파드에게 VPC의 실제 IP를 부여하므로, ENI와 Secondary IP
 
 1주차에서는 VPC CNI를 기본 설정으로 배포했지만, 2주차에서는 `configuration_values`를 통해 환경 변수를 직접 지정한다.
 
-```hcl
+```ruby
 addons = {
   vpc-cni = {
     most_recent = true
@@ -81,7 +82,7 @@ addons = {
 
 ## IRSA 활성화
 
-```hcl
+```ruby
 module "eks" {
   # ...
   enable_irsa = true  # 1주차에는 없던 설정
@@ -210,7 +211,7 @@ commands will detect it and remind you to do so if necessary.
 
 **var.tf**
 
-```hcl
+```ruby
 variable "KeyName" {
   description = "Name of an existing EC2 KeyPair to enable SSH access to the instances."
   type        = string
@@ -284,7 +285,7 @@ variable "private_subnet_blocks" {
 
 **vpc.tf**
 
-```hcl
+```ruby
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~>6.5"
@@ -325,7 +326,7 @@ module "vpc" {
 
 **eks.tf**
 
-```hcl
+```ruby
 provider "aws" {
   region = var.TargetRegion
 }
@@ -415,7 +416,7 @@ module "eks" {
 
 **output.tf**
 
-```hcl
+```ruby
 output "configure_kubectl" {
   description = "Configure kubectl: run this command to update your kubeconfig"
   value       = "aws eks --region ${var.TargetRegion} update-kubeconfig --name ${var.ClusterBaseName}"

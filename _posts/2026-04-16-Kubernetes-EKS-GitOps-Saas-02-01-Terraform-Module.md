@@ -17,6 +17,7 @@ tags:
   - IRSA
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-6
+last_modified_at: 2026-08-24
 ---
 
 *[최영락](https://www.linkedin.com/in/ianychoi/)님의 AWS EKS Workshop Study(AEWS) 6주차 학습 내용을 기반으로 합니다.*
@@ -39,7 +40,7 @@ tags:
 
 테스트를 위해 `gitops-gitea-repo` 디렉토리에 테스트용 Terraform 파일을 생성한다. `tenant_id`를 `test`로 설정하고, `enable_producer`와 `enable_consumer`를 모두 `true`로 지정한다.
 
-```hcl
+```ruby
 # terraform_test.tf
 terraform {
   required_providers {
@@ -103,7 +104,7 @@ terraform/modules/
 
 **전용 모드** (`enable_producer = true && enable_consumer = true`): 전용 Producer IRSA Role을 생성한다.
 
-```hcl
+```ruby
 # 전용 Producer IRSA Role 생성 조건
 module "producer_irsa_role" {
   count   = var.enable_producer == true && var.enable_consumer == true ? 1 : 0
@@ -127,7 +128,7 @@ module "producer_irsa_role" {
 
 **공유 모드** (`enable_producer = false && enable_consumer = true`): 전용 Role을 만들지 않고, 기존 공유 풀의 `producer-role-pool-1`에 Policy만 연결한다.
 
-```hcl
+```ruby
 # 공유 풀 Role에 Policy 연결 조건
 resource "aws_iam_role_policy_attachment" "sto-readonly-role-policy-attach" {
   count      = var.enable_producer == false && var.enable_consumer == true ? 1 : 0
@@ -140,7 +141,7 @@ resource "aws_iam_role_policy_attachment" "sto-readonly-role-policy-attach" {
 
 한편, Producer IAM Policy 자체의 생성 조건은 `enable_consumer == true`다.
 
-```hcl
+```ruby
 resource "aws_iam_policy" "producer-iampolicy" {
   count = var.enable_consumer == true ? 1 : 0
   name  = "producer-policy-${var.tenant_id}"
@@ -448,7 +449,7 @@ Plan: 11 to add, 0 to change, 0 to destroy.
 
 이번에는 `enable_producer`를 `false`로 변경하고 다시 plan을 실행한다.
 
-```hcl
+```ruby
 # terraform_test.tf (수정)
 module "test_tenant_apps" {
   source          = "./terraform/modules/tenant-apps"
@@ -477,7 +478,7 @@ Plan: 10 to add, 0 to change, 0 to destroy.
 
 공유 모드에서 추가되는 리소스의 plan 출력을 보면, `role` 필드가 `producer-role-pool-1`로 지정되어 있다.
 
-```hcl
+```ruby
 # 공유 풀의 기존 Role에 이 테넌트의 Producer Policy를 연결
 + resource "aws_iam_role_policy_attachment" "sto-readonly-role-policy-attach" {
     + id         = (known after apply)

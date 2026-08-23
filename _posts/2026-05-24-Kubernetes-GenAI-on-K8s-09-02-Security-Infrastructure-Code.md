@@ -20,6 +20,7 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions-Chapter-9
 use_math: false
 hidden: true
+last_modified_at: 2026-08-24
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 9장의 학습 내용을 바탕으로 합니다*
@@ -44,7 +45,7 @@ hidden: true
 
 # `eks.tf` — 클러스터 토대 + host 보안
 
-```hcl
+```ruby
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.36"
@@ -84,7 +85,7 @@ module "eks" {
 
 컨테이너 → 노드 IMDS까지 막으려면 노드그룹에 `metadata_options`를 명시해 hop을 1로 내린다:
 
-```hcl
+```ruby
 eks-mng = {
   instance_types   = ["m5.large", ...]
   ami_type         = "BOTTLEROCKET_x86_64"
@@ -113,7 +114,7 @@ eks-mng = {
 
 # `addons.tf` — Secret 주입 백본 + 클러스터 애드온
 
-```hcl
+```ruby
 module "eks_blueprints_addons" {
   enable_aws_load_balancer_controller          = true
   enable_secrets_store_csi_driver              = true   # secret 전용 CSI driver
@@ -197,7 +198,7 @@ EKS가 자동 생성한 gp2 StorageClass의 `is-default-class`를 `false`로, �
 
 # `iam.tf` — Pod Identity + 최소권한 Secret 정책
 
-```hcl
+```ruby
 # trust policy — Pod Identity의 표식
 data "aws_iam_policy_document" "my_llama_app_trust_policy" {
   statement {
@@ -246,7 +247,7 @@ trust의 principal이 `pods.eks.amazonaws.com`인 것이 Pod Identity의 표식�
 
 # `ecr.tf` — 공급망 보안 (암호화·immutable·스캔)
 
-```hcl
+```ruby
 resource "aws_ecr_repository" "my-llama"           { image_tag_mutability = "MUTABLE" }
 resource "aws_ecr_repository" "my-llama-finetuned" { image_tag_mutability = "IMMUTABLE" }
 resource "aws_ecr_repository" "rag-app"            { }   # default MUTABLE

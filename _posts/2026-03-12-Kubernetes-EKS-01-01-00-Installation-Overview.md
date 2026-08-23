@@ -17,6 +17,7 @@ tags:
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-1
 
+last_modified_at: 2026-08-24
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 1주차 학습 내용을 기반으로 합니다.*
@@ -207,7 +208,7 @@ Module은 **재사용 가능한 Terraform 코드 묶음**이다. 여러 `resourc
 
 예를 들어 VPC를 만들려면 서브넷, 라우팅 테이블, IGW 등 수십 개 리소스를 일일이 `resource` 블록으로 정의해야 하는데, 커뮤니티가 이를 **모듈로 패키징**해 놓았다. 파라미터만 넘기면 된다.
 
-```hcl
+```ruby
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"   # 가져올 모듈 위치
   version = "~>6.5"                            # 모듈 버전
@@ -223,7 +224,7 @@ module "vpc" {
 
 Resource는 Terraform의 핵심 블록으로, **실제 인프라 리소스 1개를 만들겠다는 선언**이다. 리소스 타입과 로컬 이름으로 구성된다.
 
-```hcl
+```ruby
 resource "aws_security_group" "node_group_sg" {
   ...
 }
@@ -282,7 +283,7 @@ Terraform은 `apply`로 생성한 리소스의 현재 상태를 **state 파일**
 
 이를 해결하기 위해 **remote backend**를 설정한다. AWS에서는 S3(state 저장) + DynamoDB(state locking)를 조합하는 것이 일반적이다.
 
-```hcl
+```ruby
 terraform {
   backend "s3" {
     bucket         = "my-terraform-state"

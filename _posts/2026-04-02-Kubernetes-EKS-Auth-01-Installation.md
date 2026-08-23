@@ -62,7 +62,7 @@ SSH 키 페어 관련 변수(`KeyName`, `ssh_access_cidr`)는 정의되어 있�
 
 ## Kubernetes 버전과 노드 수
 
-```hcl
+```ruby
 variable "KubernetesVersion" {
   type    = string
   default = "1.35"
@@ -84,7 +84,7 @@ Kubernetes 1.35를 사용하고, 워커 노드는 2대로 구성한다. 인증/�
 
 퍼블릭 서브넷 3개와 **프라이빗 서브넷 3개**를 함께 구성하고, NAT Gateway를 활성화했다.
 
-```hcl
+```ruby
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~>6.5"
@@ -121,7 +121,7 @@ module "vpc" {
 
 ## 보안 그룹
 
-```hcl
+```ruby
 resource "aws_security_group_rule" "allow_ssh" {
   type      = "ingress"
   from_port = 0
@@ -138,7 +138,7 @@ resource "aws_security_group_rule" "allow_ssh" {
 
 ## EKS 클러스터 모듈
 
-```hcl
+```ruby
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 21.0"
@@ -190,7 +190,7 @@ API 서버 엔드포인트는 `endpoint_public_access = true`와 `endpoint_priva
 
 ## 노드 그룹
 
-```hcl
+```ruby
 eks_managed_node_groups = {
   primary = {
     name            = "${var.ClusterBaseName}-ng-1"
@@ -248,7 +248,7 @@ eks_managed_node_groups = {
 
 ### IMDS hop limit
 
-```hcl
+```ruby
 metadata_options = {
   http_endpoint               = "enabled"
   http_tokens                 = "required"   # IMDSv2 강제
@@ -264,7 +264,7 @@ EC2 Instance Metadata Service(IMDS)의 hop limit을 2로 설정했다. 기본값
 
 addon 구성을 살펴보자.
 
-```hcl
+```ruby
 addons = {
   coredns    = { most_recent = true }
   kube-proxy = { most_recent = true }
@@ -300,7 +300,7 @@ addons = {
 
 ## outputs.tf
 
-```hcl
+```ruby
 output "configure_kubectl" {
   description = "Configure kubectl: run this command to update your kubeconfig"
   value       = "aws eks --region ${var.TargetRegion} update-kubeconfig --name ${var.ClusterBaseName}"
@@ -332,7 +332,7 @@ SSH 관련 변수가 없으므로 별도의 환경 변수 설정 없이 바로 `
 
 **var.tf**
 
-```hcl
+```ruby
 variable "ClusterBaseName" {
   description = "Base name of the cluster."
   type        = string
@@ -396,7 +396,7 @@ variable "private_subnet_blocks" {
 
 **vpc.tf**
 
-```hcl
+```ruby
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~>6.5"
@@ -437,7 +437,7 @@ module "vpc" {
 
 **eks.tf**
 
-```hcl
+```ruby
 provider "aws" {
   region = var.TargetRegion
 }
@@ -557,7 +557,7 @@ module "eks" {
 
 **outputs.tf**
 
-```hcl
+```ruby
 output "configure_kubectl" {
   description = "Configure kubectl: run this command to update your kubeconfig"
   value       = "aws eks --region ${var.TargetRegion} update-kubeconfig --name ${var.ClusterBaseName}"

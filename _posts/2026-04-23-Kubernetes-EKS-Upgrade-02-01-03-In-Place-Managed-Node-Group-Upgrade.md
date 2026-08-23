@@ -16,6 +16,7 @@ tags:
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
 hidden: true
+last_modified_at: 2026-08-24
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 7주차 학습 내용을 기반으로 합니다.*
@@ -135,7 +136,7 @@ Terraform에서는 노드 그룹의 AMI 버전이나 Launch Template이 변경�
 
 현재 클러스터에는 두 개의 Managed Node Group이 있다. Terraform `base.tf`의 EKS 모듈에서 확인할 수 있다.
 
-```hcl
+```ruby
 eks_managed_node_group_defaults = {
   cluster_version = var.mng_cluster_version
 }
@@ -212,7 +213,7 @@ ami-0c42b1f4678fc81d1
 
 ### variables.tf에 ami_id 추가
 
-```hcl
+```ruby
 variable "ami_id" {
   description = "EKS AMI ID for node groups"
   type        = string
@@ -226,7 +227,7 @@ variable "ami_id" {
 
 ### base.tf에 custom 노드 그룹 추가
 
-```hcl
+```ruby
 custom = {
   instance_types = ["t3.medium"]
   min_size     = 1
@@ -276,7 +277,7 @@ Apply complete! Resources: 10 added, 2 changed, 3 destroyed.
 
 `mng_cluster_version`만 1.31로 변경하고 `terraform plan`을 실행하면 어떻게 되는지 살펴보자.
 
-```hcl
+```ruby
 variable "mng_cluster_version" {
   description = "EKS cluster mng version."
   type        = string
@@ -309,7 +310,7 @@ ami-0c4dea04571b1b508
 
 ### variables.tf 변경
 
-```hcl
+```ruby
 variable "mng_cluster_version" {
   description = "EKS cluster mng version."
   type        = string

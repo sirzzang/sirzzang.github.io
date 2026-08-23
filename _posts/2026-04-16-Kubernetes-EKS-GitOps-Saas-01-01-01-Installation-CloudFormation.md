@@ -17,6 +17,7 @@ tags:
   - IaC
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-6
+last_modified_at: 2026-08-24
 ---
 
 *[최영락](https://www.linkedin.com/in/ianychoi/)님의 AWS EKS Workshop Study(AEWS) 6주차 학습 내용을 기반으로 합니다.*
@@ -76,7 +77,7 @@ PublicSubnet:
 
 같은 구성을 Terraform으로 나타내 보자.
 
-```hcl
+```ruby
 data "aws_availability_zones" "available" {}
 
 resource "aws_subnet" "public" {

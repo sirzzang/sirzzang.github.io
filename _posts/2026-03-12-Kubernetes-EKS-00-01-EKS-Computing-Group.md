@@ -17,6 +17,7 @@ tags:
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-1
 
+last_modified_at: 2026-08-24
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 1주차 학습 내용을 기반으로 합니다.*
@@ -194,7 +195,7 @@ Pod의 `nodeSelector`나 `nodeAffinity`에서 이 레이블을 지정하면, 해
 
 관리형 노드 그룹 내에서 스팟 인스턴스를 사용하려면 용량 유형을 `spot`으로 설정하여 노드 그룹을 생성한다.
 
-```hcl
+```ruby
 resource "aws_eks_node_group" "spot" {
   # ...
   capacity_type  = "SPOT"

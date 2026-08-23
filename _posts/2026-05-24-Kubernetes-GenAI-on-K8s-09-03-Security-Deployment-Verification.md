@@ -22,6 +22,7 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions-Chapter-9
 use_math: false
 hidden: true
+last_modified_at: 2026-08-24
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 9장의 학습 내용을 바탕으로 합니다*
@@ -319,7 +320,7 @@ Bottlerocket은 볼륨이 둘이다:
 
 ### 수정 — 데이터 볼륨(xvdb)을 키워야 한다
 
-```hcl
+```ruby
 eks-gpu-mng = {
   # ...
   block_device_mappings = {
