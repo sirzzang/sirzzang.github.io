@@ -10,7 +10,7 @@
     <meta charset="utf-8">
 
 <!-- begin _includes/seo.html --><title>[Performance] Roofline 모델로 보는 LLM 서빙: 세 점으로 나눠 찍는 병목 - Eraser’s StudyLog</title>
-<meta name="description" content="Roofline 모델을 LLM 서빙 워크로드에 적용해 보자. ">
+<meta name="description" content="Roofline 모델을 LLM 서빙 워크로드에 세 점으로 나눠 찍고, 실제 서빙에 적용해 그래프를 그려 보자. ">
 
 
   <meta name="author" content="Eraser">
@@ -23,7 +23,7 @@
 <meta property="og:url" content="https://sirzzang.github.io//dev/Dev-Roofline-Model-LLM-Serving/">
 
 
-  <meta property="og:description" content="Roofline 모델을 LLM 서빙 워크로드에 적용해 보자. ">
+  <meta property="og:description" content="Roofline 모델을 LLM 서빙 워크로드에 세 점으로 나눠 찍고, 실제 서빙에 적용해 그래프를 그려 보자. ">
 
 
 
@@ -37,7 +37,7 @@
 
 
 
-  <meta property="article:modified_time" content="2026-08-22T00:00:00+09:00">
+  <meta property="article:modified_time" content="2026-08-24T00:00:00+09:00">
 
 
 
@@ -440,9 +440,9 @@ window.MathJax = {
 
   <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
     <meta itemprop="headline" content="[Performance] Roofline 모델로 보는 LLM 서빙: 세 점으로 나눠 찍는 병목">
-    <meta itemprop="description" content="Roofline 모델을 LLM 서빙 워크로드에 적용해 보자.">
+    <meta itemprop="description" content="Roofline 모델을 LLM 서빙 워크로드에 세 점으로 나눠 찍고, 실제 서빙에 적용해 그래프를 그려 보자.">
     <meta itemprop="datePublished" content="2026-08-21T00:00:00+09:00">
-    <meta itemprop="dateModified" content="2026-08-22T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-08-24T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
@@ -462,7 +462,7 @@ window.MathJax = {
 
 
 
-  5 분 소요
+  14 분 소요
 
 
             
@@ -490,6 +490,14 @@ window.MathJax = {
     </ul>
   </li>
   <li><a href="#최적화-기법">최적화 기법</a></li>
+  <li><a href="#실측">실측</a>
+    <ul>
+      <li><a href="#측정-방법">측정 방법</a></li>
+      <li><a href="#지붕과-좌표">지붕과 좌표</a></li>
+      <li><a href="#배치와-강도">배치와 강도</a></li>
+      <li><a href="#ridge-오른쪽과-실제-성능">ridge 오른쪽과 실제 성능</a></li>
+    </ul>
+  </li>
   <li><a href="#정리">정리</a></li>
   <li><a href="#참고-링크">참고 링크</a></li>
 </ul>
@@ -511,13 +519,15 @@ window.MathJax = {
   <li>decode-FFN의 연산 강도는 배치 크기와 같다($I \approx B$). H100의 ridge point가 $\approx 295$ FLOP/byte이므로 배치가 수백 규모가 되어야 연산 바운드로 넘어가고, batch=1이면 7B FP16 기준 이론 상한이 $\approx 240$ tok/s로 대역폭이 직접 결정한다</li>
   <li>prefill과 decode는 다른 지표로 평가해야 한다. prefill의 성적표는 MFU·텐서코어 활용률, decode의 성적표는 달성 대역폭이다</li>
   <li>최적화 기법은 “점을 어느 방향으로 옮기는가 / 지붕을 어떻게 바꾸는가”로 정리된다. INT4 같은 $Q$ 절감은 저배치(메모리 바운드)에서만 듣고, 고배치에서는 오히려 느려질 수 있다</li>
+  <li>실제 서빙 워크로드에 적용해 보면 두 점은 정말 반대편에 찍힌다. decode는 배치를 키울수록 대역폭 지붕에 붙어 지붕의 39% → 88%로 올라가고, prefill은 ridge 오른쪽에 놓인다</li>
+  <li>다만 교과서 값이 그대로 나오지는 않는다. MoE 모델에서는 $I \approx B$가 성립하지 않고(배치 16배에 강도 3.4배), ridge 오른쪽이라고 빠른 것도 아니다 — 실측 prefill은 연산 지붕의 12%만 쓴다</li>
 </ul>
 
 <p><br /></p>
 
 <h1 id="배경">배경</h1>
 
-<p><a href="/cs/CS-Roofline-Model/">Roofline 모델 편</a>에서 모델 자체를 정리했다 — 성능 상한 $P = \min(\pi, \beta I)$, 연산 강도 $I = W/Q$, 그리고 점이 <a href="/cs/CS-Roofline-Model/#ridge-point">ridge point</a> 왼쪽이면 메모리 바운드, 오른쪽이면 연산 바운드라는 판정 규칙까지. 이 글은 그 틀을 LLM 서빙 워크로드에 실제로 적용한다. prefill/decode의 실행 구조 자체는 <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/">LLM 서빙과 최적화 3.3편</a>에서 다뤘다.</p>
+<p><a href="/cs/CS-Roofline-Model/">Roofline 모델</a>에서 모델 자체를 정리했다 — 성능 상한 $P = \min(\pi, \beta I)$, 연산 강도 $I = W/Q$, 그리고 점이 <a href="/cs/CS-Roofline-Model/#ridge-point">ridge point</a> 왼쪽이면 메모리 바운드, 오른쪽이면 연산 바운드라는 판정 규칙까지. 이 글은 그 틀을 LLM 서빙 워크로드에 실제로 적용한다. prefill/decode의 실행 구조 자체는 <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/">LLM 서빙과 최적화 3.3편</a>에서 다뤘다.</p>
 
 <p><br /></p>
 
@@ -566,15 +576,15 @@ window.MathJax = {
 </table>
 
 <ul>
-  <li><strong>decode-FFN의 강도가 배치 크기와 같아지는 이유</strong>: FP16 가중치 원소 하나(2 byte)에 곱 1 + 합 1 = 2 FLOP이므로 배치 1에서 $I = 2/2 = 1$ FLOP/byte다. 배치가 $B$면 그 원소를 $B$번 재사용하니 $I \approx B$로 올라간다. 즉 배치 크기가 그대로 연산 강도가 된다</li>
-  <li>그런데 ridge는 A100 $\approx 156$, H100 $\approx 295$다. <strong>배치가 300 근처가 되어야 겨우 연산 바운드로 넘어간다.</strong> 배치 1이면 H100 지붕의 $1/295 \approx 0.3\%$밖에 못 쓴다. “H100인데 왜 이렇게 느린가”의 답이 이 한 줄에 전부 있다</li>
+  <li><strong>decode-FFN의 강도가 배치 크기와 같아지는 이유</strong>: FP16 가중치 원소 하나(2 byte)에 곱 1 + 합 1 = 2 FLOP이므로 배치 1에서 $I = 2/2 = 1$ FLOP/byte다. 배치가 $B$면 그 원소를 $B$번 재사용하니 $I \approx B$로 올라간다. 즉 배치 크기가 그대로 연산 강도가 된다. 다만 이 값은 <strong>가중치 한 벌을 배치 전체가 나눠 쓴다</strong>는 전제 위에 있다 — MoE에서 그 전제가 어떻게 깨지는지는 <a href="#배치와-강도">실측</a>에서 확인한다</li>
+  <li>그런데 ridge는 A100 $\approx 153$, H100 $\approx 295$다(둘 다 SXM·sparsity 미적용 기준). <strong>배치가 300 근처가 되어야 겨우 연산 바운드로 넘어간다.</strong> 배치 1이면 H100 지붕의 $1/295 \approx 0.3\%$밖에 못 쓴다. “H100인데 왜 이렇게 느린가”의 답이 이 한 줄에 전부 있다</li>
   <li><strong>decode-attention은 배칭으로 나아지지 않는다.</strong> 요청이 $B$개면 KV도 $B$세트를 읽어야 하므로 $W$와 $Q$가 나란히 $B$배가 되고, 비율은 그대로다. GQA/MQA(KV 헤드 수를 줄여 KV 트래픽을 낮추는 어텐션 변형), KV 양자화, paged KV가 배칭과 <strong>별개로</strong> 필요한 이유가 여기에 있다</li>
   <li>그래서 프로파일할 때도 커널을 한 점으로 뭉치지 말고 세 점으로 나눠 찍어야 한다. 한 덩어리로 보면 FFN의 개선이 attention의 정체를 가리거나 그 반대가 된다</li>
 </ul>
 
 <h2 id="h100-숫자로-확인">H100 숫자로 확인</h2>
 
-<p>이 구도를 H100 숫자로 직접 확인해 보면($\pi \approx 990$ TFLOP/s BF16, $\beta \approx 3.35$ TB/s → $I^{*} \approx 295$ FLOP/byte) 이렇게 된다.</p>
+<p>이 구도를 H100 숫자로 직접 확인해 보면($\pi \approx 990$ TFLOP/s BF16(SXM, sparsity 미적용), $\beta \approx 3.35$ TB/s → $I^{*} \approx 295$ FLOP/byte) 이렇게 된다.</p>
 
 <p><strong>decode, batch=1</strong>: $I \approx 1$. ridge($\approx 295$)에서 한참 왼쪽이므로 완전한 메모리 바운드다. 상한을 대역폭으로 직접 계산할 수 있다.</p>
 
@@ -612,7 +622,7 @@ window.MathJax = {
       <td><strong>decode</strong></td>
       <td>대역폭</td>
       <td>사선</td>
-      <td>달성 대역폭 (<code class="highlighter-rouge">DRAM_ACTIVE</code>)</td>
+      <td>달성 대역폭 (<code class="highlighter-rouge">dram__bytes_*</code>, 프록시로 <code class="highlighter-rouge">DRAM_ACTIVE</code>)</td>
       <td>배칭, 양자화, KV 캐시 관리</td>
     </tr>
   </tbody>
@@ -674,14 +684,307 @@ window.MathJax = {
 </table>
 
 <blockquote>
-  <p><strong>자주 나는 오판: INT4가 처리량을 올려 줄 것이라고 기대하는 것.</strong> 고배치에서는 이미 점이 수평 지붕 쪽으로 넘어가 있으므로 $Q$를 줄여도 상한이 오르지 않고, dequant 오버헤드($W$ 증가)만 붙어서 오히려 느려질 수 있다. <strong>저지연(저배치) 최적화와 고처리량(고배치) 최적화는 서로 다른 지붕을 상대하는 작업이다.</strong> <a href="/cs/CS-Roofline-Model/#2단-판단">1편의 2단 판단</a>의 순서를 그대로 쓰면 된다 — 지금 점이 어떤 지붕에 붙었는지를 밝힌 다음에야 기법을 고를 수 있다.</p>
+  <p><strong>자주 나는 오판: INT4가 처리량을 올려 줄 것이라고 기대하는 것.</strong> 고배치에서는 이미 점이 수평 지붕 쪽으로 넘어가 있으므로 $Q$를 줄여도 상한이 오르지 않고, dequant 오버헤드($W$ 증가)만 붙어서 오히려 느려질 수 있다. <strong>저지연(저배치) 최적화와 고처리량(고배치) 최적화는 서로 다른 지붕을 상대하는 작업이다.</strong> <a href="/cs/CS-Roofline-Model/#2단-판단">Roofline 모델의 2단 판단</a>의 순서를 그대로 쓰면 된다 — 지금 점이 어떤 지붕에 붙었는지를 밝힌 다음에야 기법을 고를 수 있다.</p>
 </blockquote>
+
+<p><br /></p>
+
+<h1 id="실측">실측</h1>
+
+<p>여기까지가 틀이고, 이제 실제 워크로드에 적용해 본 결과다. 대상은 본문 예시와 다른 조합이다 — H100·7B dense FP16이 아니라 <strong>RTX 5090 1장 위의 MoE(Mixture of Experts — 토큰마다 전체 가중치 중 일부 전문가만 골라 쓰는 구조) 모델</strong>(Qwen3.6-35B-A3B의 NVFP4 양자화본, vLLM 서빙)이다. 선형 어텐션과 full attention을 섞은 구조라 요청마다 별개인 항에 KV 캐시 말고 recurrent state도 있다. 조합이 다른 쪽이 오히려 세 점 틀이 그대로 쓰이는지를 보기에 낫다.</p>
+
+<h2 id="측정-방법">측정 방법</h2>
+
+<p>프로파일러로 잰 값이 아니다. Nsight Compute는 가동 중인 서빙 프로세스에 붙이기 어렵고, DCGM의 프로파일링 지표(<code class="highlighter-rouge">DCGM_FI_PROF_*</code>)는 GeForce 계열이 대상 밖이라 <a href="/cs/CS-Roofline-Model/#측정">Roofline 모델</a>에서 정리한 <code class="highlighter-rouge">dram__bytes_*</code> · <code class="highlighter-rouge">DRAM_ACTIVE</code> 경로를 쓸 수 없었다.</p>
+
+<p>그래서 <strong>실측한 것은 넷뿐</strong>이다 — 엔진 카운터에서 읽은 step 수와 토큰 수, 창의 벽시계 시간, 그리고 마이크로벤치마크로 잰 지붕. 강도와 달성 성능은 모델 config로 계산한 FLOP·바이트에 그 step 수를 곱해 냈다. 따라오는 한계가 셋 있다.</p>
+
+<ul>
+  <li><strong>$I$는 이론 $I$다.</strong> <a href="/cs/CS-Roofline-Model/#이론-i-vs-실측-i">Roofline 모델의 두 $I$ 구분</a>에서 손으로 세는 쪽, 즉 캐시 재사용을 가정한 compulsory 값에 가깝다. 실측 DRAM 트래픽이 아니다</li>
+  <li><strong>달성 대역폭은 계산한 바이트를 실측 step 시간으로 나눈 값이다.</strong> 바이트 계산이 틀리면 좌표도 같이 틀린다</li>
+  <li><strong>decode를 FFN과 attention으로 쪼개지 않고 한 점으로 찍었다.</strong> <a href="#세-점으로-나누기">세 점</a> 중 둘을 합친 셈이다</li>
+</ul>
+
+<p>즉 이 좌표는 정밀 측정이 아니라 <strong>자릿수를 가리는 스케치</strong>로 두는 편이 적절하다. 아래 판정은 그 해상도에서 성립하는 것들이다.</p>
+
+<p>부하 자체는 기존 부하 테스트 하네스(locust)로 걸었다. 출력 길이(<code class="highlighter-rouge">ignore_eos</code>로 고정)·입력 길이·동시성을 고정하고, decode 창과 prefill 창이 섞이지 않도록 두 런으로 나눴다 — decode는 짧은 프롬프트에 출력 4,096 토큰, prefill은 긴 프롬프트에 출력 1 토큰이다.</p>
+
+<details>
+  <summary><b>참고: 실측·작도 코드</b></summary>
+
+  <p><em>본문 이해엔 필수가 아니다. 위 좌표를 어떻게 냈는지의 실제 코드다.</em></p>
+
+  <p><strong>① 지붕 측정.</strong> 사선(대역폭)은 STREAM scale을 1버퍼 in-place로 변형한 것, 수평(연산)은 정사각 GEMM으로 잰다. 여기서 제일 중요한 것은 <strong>버퍼 크기</strong>다 — L2보다 작으면 DRAM이 아니라 캐시 대역폭이 찍혀 지붕이 몇 배로 부푼다. <a href="https://www.cs.virginia.edu/stream/ref.html">STREAM 런 규칙</a>이 배열을 마지막 레벨 캐시 합의 <strong>4배 이상</strong>으로 잡으라고 하는 이유가 이것이고, 그 문턱을 넉넉히 넘기려고 2 GiB로 잡았다.</p>
+
+  <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="n">WORKSET_MIB</span> <span class="o">=</span> <span class="mi">2048</span>   <span class="c"># 버퍼 1개. 문턱은 LLC 의 4배 — RTX 5090 L2(96 MiB) 기준 21배로 넉넉하다</span>
+<span class="n">GEMM_N</span> <span class="o">=</span> <span class="mi">4096</span>        <span class="c"># 4096^3 GEMM 의 FLOP 은 2*N^3 으로 확정적이다</span>
+
+
+<span class="k">def</span> <span class="nf">timed</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">warmup</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">iters</span><span class="o">=</span><span class="mi">20</span><span class="p">):</span>
+    <span class="c"># 커널 하나가 아니라 반복 구간 전체를 동기화 후 벽시계로 잰다</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">warmup</span><span class="p">):</span>
+        <span class="n">fn</span><span class="p">()</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+    <span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">iters</span><span class="p">):</span>
+        <span class="n">fn</span><span class="p">()</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">t0</span><span class="p">)</span> <span class="o">/</span> <span class="n">iters</span>
+
+
+<span class="k">def</span> <span class="nf">bandwidth_gbs</span><span class="p">():</span>
+    <span class="c"># STREAM scale 변형(1버퍼 in-place) — 하나를 읽어 같은 자리에 쓴다. 이동 바이트는 2 x size 인데</span>
+    <span class="c"># VRAM 은 size 만 쓴다. mul_(1.0) 은 항등이라 구현이 건너뛸 여지가 있어 add_ 를 쓴다</span>
+    <span class="n">a</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">WORKSET_MIB</span> <span class="o">*</span> <span class="mi">1024</span><span class="o">**</span><span class="mi">2</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s">"cuda"</span><span class="p">)</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="n">timed</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">a</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="mf">1.0</span><span class="p">))</span>
+    <span class="k">return</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">a</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">*</span> <span class="n">a</span><span class="o">.</span><span class="n">element_size</span><span class="p">()</span> <span class="o">/</span> <span class="n">dt</span> <span class="o">/</span> <span class="mf">1e9</span>
+
+
+<span class="k">def</span> <span class="nf">gemm_tflops</span><span class="p">(</span><span class="n">dtype</span><span class="p">):</span>
+    <span class="c"># BF16 전용. torch.matmul 은 fp8 을 못 받아서 FP8 은 torch._scaled_mm 로 따로 쟀다</span>
+    <span class="c"># (그 호출의 use_fast_accum 이 FP32 누산이냐 FP16 누산이냐를 가른다)</span>
+    <span class="n">a</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">GEMM_N</span><span class="p">,</span> <span class="n">GEMM_N</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s">"cuda"</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="n">b</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">GEMM_N</span><span class="p">,</span> <span class="n">GEMM_N</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s">"cuda"</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="n">timed</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">))</span>
+    <span class="k">return</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">GEMM_N</span><span class="o">**</span><span class="mi">3</span> <span class="o">/</span> <span class="n">dt</span> <span class="o">/</span> <span class="mf">1e12</span>
+</code></pre></div>  </div>
+
+  <p>가동 중인 GPU에서는 이 측정이 안 된다. 서빙 엔진이 KV 캐시를 미리 잡아 여유 VRAM이 수십 MiB뿐이라 2 GiB 버퍼를 못 잡고, 억지로 줄이면 그 버퍼가 L2 안에 들어앉는다. 대상 GPU를 잠깐 내리고 쟀다.</p>
+
+  <p><strong>② 좌표 계산.</strong> 엔진 카운터를 창 단위로 잘라 step 수와 배치를 얻고, 거기에 config로 계산한 바이트·FLOP을 곱한다.</p>
+
+  <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># ── 창 단위 델타 → step 수 · 배치 · prefill 비율 ────────────────────────</span>
+<span class="c"># iteration_tokens_total_count 의 증분이 engine step 수 원본이라,</span>
+<span class="c"># 배치를 "tok/s 를 무언가로 나눠" 추정할 필요가 없다</span>
+<span class="n">d_iter</span> <span class="o">=</span> <span class="n">b</span><span class="p">[</span><span class="s">"iter_count"</span><span class="p">]</span> <span class="o">-</span> <span class="n">a</span><span class="p">[</span><span class="s">"iter_count"</span><span class="p">]</span>            <span class="c"># 창 안의 step 수</span>
+<span class="n">d_gen</span> <span class="o">=</span> <span class="n">b</span><span class="p">[</span><span class="s">"gen_tokens"</span><span class="p">]</span> <span class="o">-</span> <span class="n">a</span><span class="p">[</span><span class="s">"gen_tokens"</span><span class="p">]</span>             <span class="c"># 생성(decode) 토큰</span>
+<span class="n">d_prompt</span> <span class="o">=</span> <span class="n">b</span><span class="p">[</span><span class="s">"prompt_tokens"</span><span class="p">]</span> <span class="o">-</span> <span class="n">a</span><span class="p">[</span><span class="s">"prompt_tokens"</span><span class="p">]</span>    <span class="c"># 프롬프트(prefill) 토큰</span>
+
+<span class="n">batch</span> <span class="o">=</span> <span class="n">d_gen</span> <span class="o">/</span> <span class="n">d_iter</span>                                <span class="c"># step 당 배치 — 실측값이다</span>
+<span class="n">steps_s</span> <span class="o">=</span> <span class="n">d_iter</span> <span class="o">/</span> <span class="n">dt</span>
+<span class="n">prefill_frac</span> <span class="o">=</span> <span class="n">d_prompt</span> <span class="o">/</span> <span class="p">(</span><span class="n">d_prompt</span> <span class="o">+</span> <span class="n">d_gen</span><span class="p">)</span>          <span class="c"># 0.05 미만이면 decode 창으로 채택</span>
+
+
+<span class="c"># ── step 당 이동 바이트 — 항별로 낸다 ──────────────────────────────────</span>
+<span class="k">def</span> <span class="nf">expert_touch_fraction</span><span class="p">(</span><span class="n">n_tok</span><span class="p">):</span>
+    <span class="s">"""step 당 실제로 읽히는 routed expert 비율.
+
+    토큰마다 독립적으로 top-k 를 고른다고 보고 충돌을 센다. dense 모델이면
+    이 항 자체가 없고(항상 전량 읽는다), 그래서 I ~= B 가 성립한다.
+    """</span>
+    <span class="k">return</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">TOPK</span> <span class="o">/</span> <span class="n">N_EXPERT</span><span class="p">)</span> <span class="o">**</span> <span class="n">n_tok</span>
+
+
+<span class="k">def</span> <span class="nf">bytes_per_step</span><span class="p">(</span><span class="n">n_tok</span><span class="p">,</span> <span class="n">n_req</span><span class="p">,</span> <span class="n">ctx_len</span><span class="p">):</span>
+    <span class="c"># 총합만 맞추면 반대 방향 오차 둘이 상쇄돼도 모른다. 그래서 항을 쪼개 둔다</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s">"routed_experts"</span><span class="p">:</span> <span class="n">EXPERT_BYTES</span> <span class="o">*</span> <span class="n">expert_touch_fraction</span><span class="p">(</span><span class="n">n_tok</span><span class="p">),</span>  <span class="c"># 배치 의존</span>
+        <span class="s">"kv_read"</span><span class="p">:</span> <span class="n">n_req</span> <span class="o">*</span> <span class="n">ctx_len</span> <span class="o">*</span> <span class="n">KV_BYTES_PER_TOKEN</span><span class="p">,</span>                <span class="c"># 요청 수 의존</span>
+        <span class="s">"lm_head"</span><span class="p">:</span> <span class="n">VOCAB</span> <span class="o">*</span> <span class="n">D_MODEL</span> <span class="o">*</span> <span class="n">BYTES_PER_PARAM</span><span class="p">,</span>                   <span class="c"># 매 step 전량</span>
+        <span class="c"># attention/projection 등 상주 가중치 항이 이어진다</span>
+    <span class="p">}</span>
+
+
+<span class="c"># ── 좌표 ───────────────────────────────────────────────────────────────</span>
+<span class="n">intensity</span> <span class="o">=</span> <span class="n">flops_step</span> <span class="o">/</span> <span class="n">bytes_step</span>        <span class="c"># x축. 둘 다 계산값이라 이것이 "이론 I" 다</span>
+<span class="n">achieved_tflops</span> <span class="o">=</span> <span class="n">flops_step</span> <span class="o">*</span> <span class="n">steps_s</span> <span class="o">/</span> <span class="mf">1e12</span>   <span class="c"># y축</span>
+<span class="n">achieved_gbs</span> <span class="o">=</span> <span class="n">bytes_step</span> <span class="o">*</span> <span class="n">steps_s</span> <span class="o">/</span> <span class="mf">1e9</span>       <span class="c"># 달성 대역폭</span>
+</code></pre></div>  </div>
+
+  <p><strong>③ 자체 점검.</strong> 계산이 깨졌으면 좌표를 보기 전에 멈춰야 한다. 앵커는 전부 독립 출처와 대조되는 값으로 골랐다.</p>
+
+  <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 토큰당 FLOP 이 2 x 활성 파라미터(A3B 이므로 약 6 GFLOP)와 맞아야 한다</span>
+<span class="k">assert</span> <span class="mf">5.0</span> <span class="o">&lt;</span> <span class="n">per_token_gflop</span> <span class="o">&lt;</span> <span class="mf">7.0</span>
+<span class="c"># 상주 가중치 합이 실측 VRAM 점유(23.25 GiB) 아래여야 한다</span>
+<span class="k">assert</span> <span class="mf">20.0</span> <span class="o">&lt;</span> <span class="n">weight_gib</span> <span class="o">&lt;</span> <span class="mf">23.25</span>
+<span class="c"># recurrent state 크기가 KV 예산에서 역산한 값과 같은 자릿수여야 한다</span>
+<span class="k">assert</span> <span class="mi">50</span> <span class="o">&lt;</span> <span class="n">state_mb_per_req</span> <span class="o">&lt;</span> <span class="mi">100</span>
+<span class="c"># 강도가 배치에 대해 증가하되, f(B) 포화 때문에 선형이면 안 된다</span>
+<span class="k">assert</span> <span class="n">i_b8</span> <span class="o">&lt;</span> <span class="n">i_b16</span> <span class="ow">and</span> <span class="n">i_b16</span> <span class="o">/</span> <span class="n">i_b8</span> <span class="o">&lt;</span> <span class="mf">2.0</span>
+<span class="c"># 두 단계가 반대편에 찍히는지 — 이게 무너지면 부하 설정이 잘못된 것이다</span>
+<span class="k">assert</span> <span class="n">i_prefill</span> <span class="o">&gt;</span> <span class="mi">10</span> <span class="o">*</span> <span class="n">i_b16</span>
+</code></pre></div>  </div>
+
+  <p><strong>④ 작도.</strong> 사선과 수평을 <code class="highlighter-rouge">min()</code>으로 잇는 한 줄이 곧 $P = \min(\pi, \beta I)$다.</p>
+
+  <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 사선(대역폭 x 강도)과 수평(연산 peak) 중 낮은 쪽이 그대로 지붕이 된다</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xs</span><span class="p">,</span> <span class="p">[</span><span class="nb">min</span><span class="p">(</span><span class="n">BW_ROOF</span> <span class="o">/</span> <span class="mi">1000</span> <span class="o">*</span> <span class="n">x</span><span class="p">,</span> <span class="n">TOP_ROOF</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">xs</span><span class="p">],</span> <span class="s">"k-"</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mf">1.5</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">ROOFS</span><span class="p">:</span>                      <span class="c"># 정밀도별 수평 지붕을 점선으로 겹쳐 그린다</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">ls</span><span class="o">=</span><span class="s">"--"</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">)</span>
+
+<span class="c"># 마커 크기에 배치를 실어 "배치를 키우면 점이 어디로 가나"를 한 장에 담는다</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">intensities</span><span class="p">,</span> <span class="n">tflops</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="p">[</span><span class="mi">8</span> <span class="o">+</span> <span class="mi">4</span> <span class="o">*</span> <span class="n">b</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">],</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xscale</span><span class="p">(</span><span class="s">"log"</span><span class="p">)</span>   <span class="c"># 양축 로그라야 사선이 직선으로 보이고 자릿수 비교가 된다</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_yscale</span><span class="p">(</span><span class="s">"log"</span><span class="p">)</span>
+</code></pre></div>  </div>
+
+</details>
+
+<h2 id="지붕과-좌표">지붕과 좌표</h2>
+
+<p>두 점이 반대편에 찍혔다.</p>
+
+<p>지붕부터 실측하면 이렇다. <a href="/cs/CS-Roofline-Model/#π와-β의-출처">명판은 이론 최대치라 실제로는 80~90%만 나온다</a>고 했던 그 범위 안이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>지붕</th>
+      <th>스펙</th>
+      <th>실측</th>
+      <th>스펙 대비</th>
+      <th>ridge point</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>HBM 대역폭</td>
+      <td>1,792 GB/s</td>
+      <td><strong>1,525 GB/s</strong></td>
+      <td>85%</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>BF16 텐서 (FP32 누산)</td>
+      <td>209.5 TFLOP/s</td>
+      <td><strong>210.4 TFLOP/s</strong></td>
+      <td>100%</td>
+      <td>138 FLOP/byte</td>
+    </tr>
+    <tr>
+      <td>FP8 텐서</td>
+      <td>419 (FP32 누산) / 838 (FP16 누산)</td>
+      <td><strong>498.0 TFLOP/s</strong></td>
+      <td>59% (FP16 누산 기준)</td>
+      <td>327 FLOP/byte</td>
+    </tr>
+    <tr>
+      <td>FP4 텐서</td>
+      <td>1,676 TFLOP/s</td>
+      <td>996 (FP8 실측 × 2 <strong>유도값</strong>)</td>
+      <td>59%</td>
+      <td>653 FLOP/byte</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>스펙은 <a href="https://images.nvidia.com/aem-dam/Solutions/geforce/blackwell/nvidia-rtx-blackwell-gpu-architecture.pdf">NVIDIA RTX Blackwell GPU Architecture 백서</a> Appendix A의 GB202(RTX 5090) 열이고, 전부 sparsity를 쓰지 않은 dense 값이다. ridge point는 스펙이 아니라 실측 지붕끼리 나눈 값이다.</p>
+
+<p><strong>BF16 실측이 스펙과 오차 범위 안에서 겹쳤다</strong> — 타이밍이나 FLOP 계산이 크게 틀렸으면 여기서 어긋난다. 다만 명판의 100%가 나왔다는 것은 클럭이 명판 부스트 위에서 돌았다는 뜻이기도 해서, 계산이 대충 맞다는 확인이지 지붕 값이 정확하다는 보증은 아니다.</p>
+
+<p>FP8은 읽는 법이 하나 더 있다. 백서가 FP8 텐서 성능을 <strong>누산 정밀도에 따라 둘로 나눠</strong> 적는데(FP32 누산 419, FP16 누산 838), 실측 498이 그 사이에 떨어졌다. FP32 누산 열을 상한으로 보면 나올 수 없는 값이므로, <code class="highlighter-rouge">torch._scaled_mm</code>이 FP16 누산 경로로 붙었다고 보는 편이 앞뒤가 맞는다 — 그러면 498은 838의 59%다. 두 경로를 가르는 것은 그 호출의 <code class="highlighter-rouge">use_fast_accum</code> 플래그인데, 이번 측정에서는 확인하지 않았다.</p>
+
+<p><strong>FP4 지붕 996은 그 위에 얹힌 유도값이다.</strong> FP16 누산 FP8(838)에서 FP4(1,676)로 가는 백서 배율이 2배라 실측을 2배 했고, 결과가 스펙 1,676의 59%로 FP8 쪽과 같은 비율이 나온다. 가정이 어긋나지 않았다는 방증이지 검증은 아니다. 그래서 뒤에서 “연산 지붕의 몇 %”를 읽을 때는 이 값을 분모로 쓰지 않고 실측이 확인된 BF16 지붕을 쓴다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/roofline-measured-vllm-rtx5090.png" alt="RTX 5090 위 vLLM MoE 모델의 roofline 실측 차트" class="align-center" /></p>
+
+<center><sup>직접 측정. 원자료는 <a href="https://sirzzang.github.io//assets/data/roofline-points.csv">roofline-points.csv</a> — 목표 배치에서 벗어난 창은 작도·집계에서 뺐다</sup></center>
+
+<p>그림에서 읽는 것은 넷이다.</p>
+
+<ul>
+  <li><strong>decode(파란 원)는 사선을 따라 오른쪽 위로 간다.</strong> 마커가 커질수록(배치가 커질수록) 강도와 성능이 같이 오르는데, 그 이동이 사선 위에서 일어난다. 사선까지의 세로 거리가 못 쓴 대역폭이다 — B=1은 눈에 띄게 아래고(지붕의 39%), B=16은 거의 붙는다(88%)</li>
+  <li><strong>prefill(주황 세모)은 ridge 오른쪽인데 수평 지붕에서 한참 아래다.</strong> 사선에도 수평선에도 닿지 않은 점이라, 두 축 어느 쪽도 병목이 아니라는 뜻이다</li>
+  <li><strong>꺾임(ridge 653)이 두 무리 사이에 놓인다.</strong> 같은 모델·같은 가중치·같은 코드인데 x축으로 두 자릿수 넘게 벌어져 있다. prefill과 decode를 한 점으로 뭉치면 안 되는 이유가 그림 하나로 보인다</li>
+  <li><strong>y축만 보면 prefill이 더 높다</strong> (25 vs 10 TFLOP/s 수준). 그런데 지붕 대비로는 decode가 88%, prefill이 12%다. 상대하는 지붕이 다르기 때문이고, <a href="#평가-지표">평가 지표</a>에서 두 단계를 같은 숫자로 나란히 놓지 말라고 한 것이 이 모양이다</li>
+</ul>
+
+<p>숫자로는 이렇다. GPU 1장, 문맥 약 2,200 토큰 기준이고, $B$는 반올림 라벨이라 실측 평균 배치와 소수점에서 조금 다르다(B=2 행이 2.05라 <code class="highlighter-rouge">tok/s = B / step ms</code>로 재현하면 이 행만 어긋난다).</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>$B$</th>
+      <th>출력 tok/s</th>
+      <th>step ms</th>
+      <th>강도</th>
+      <th>달성 대역폭</th>
+      <th>지붕 대비</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>221</td>
+      <td>4.52</td>
+      <td>2.2</td>
+      <td>588 GB/s</td>
+      <td>39%</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>366</td>
+      <td>5.61</td>
+      <td>3.4</td>
+      <td>628 GB/s</td>
+      <td>41%</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>649</td>
+      <td>6.16</td>
+      <td>4.7</td>
+      <td>816 GB/s</td>
+      <td>53%</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>1,093</td>
+      <td>7.31</td>
+      <td>5.9</td>
+      <td>1,078 GB/s</td>
+      <td>71%</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>1,299</td>
+      <td>9.23</td>
+      <td>6.7</td>
+      <td>1,137 GB/s</td>
+      <td>75%</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>1,696</td>
+      <td>9.44</td>
+      <td>7.4</td>
+      <td>1,338 GB/s</td>
+      <td>88%</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>prefill은 프롬프트 9,649 토큰 기준으로 강도 <strong>1,677</strong>, 달성 연산 25 TFLOP/s, 달성 대역폭 15 GB/s다.</p>
+
+<h2 id="배치와-강도">배치와 강도</h2>
+
+<p>강도가 배치만큼 오르지 않았다. 배치는 16배인데 강도는 2.2 → 7.4로 <strong>3.4배</strong>뿐이다.</p>
+
+<p><a href="#세-점으로-나누기">세 점 표</a>의 $I \approx B$는 가중치 한 벌을 배치 전체가 나눠 쓴다는 전제 위의 값인데, MoE에서는 그 전제가 성립하지 않는다. 토큰마다 고르는 전문가가 다르므로 <strong>배치가 커지면 읽어야 할 전문가 수도 같이 는다.</strong> 전문가 256개에서 토큰마다 8개를 고른다고 보면 step 당 읽히는 전문가 비율은 $1 - (1 - 8/256)^B$이고, $B=1$에 3.1%, $B=16$에 39.8%다. $Q$가 상수로 남지 않고 함께 커지니 비율의 상승이 꺾인다.</p>
+
+<p>이 식은 토큰마다 라우팅이 독립이고 전문가가 고르게 뽑힌다는 가정 위에 있고, 그 가정에서 접촉 비율의 <strong>상한</strong>이다. 실제 라우팅이 한쪽으로 몰리면 읽히는 전문가는 이보다 적어지므로 실제 강도는 더 높고, 앞의 “지붕의 88%”는 그만큼 낙관값이다. $B=1$에서는 식이 정확하고 배치가 커질수록 벌어진다.</p>
+
+<p>그러니 $I \approx B$는 dense 모델 이야기로 읽어야 한다. <strong>처방의 방향은 그대로다</strong> — 배칭이 점을 오른쪽으로 민다는 것도, ridge를 넘으려면 배치가 수백은 되어야 한다는 것도 여전하다. 다만 MoE에서는 같은 배치로 얻는 이동 폭이 작고, 그만큼 배칭만으로 사선을 벗어나기가 dense보다 어렵다.</p>
+
+<h2 id="ridge-오른쪽과-실제-성능">ridge 오른쪽과 실제 성능</h2>
+
+<p>prefill은 ridge 오른쪽인데 연산 지붕의 12%만 쓴다. 강도 1,677은 ridge 653의 2.6배 오른쪽이라 분류상 연산 바운드 영역인데, 달성은 25 TFLOP/s로 BF16 실측 지붕(210.4)의 12%다. 유도 FP4 지붕이 분모면 2.5%지만 그쪽은 앞서 적은 불확실성이 있으므로 실측 지붕 기준으로 읽는 편이 안전하다. 대역폭 쪽도 15 GB/s로 지붕의 1%다.</p>
+
+<p>다만 “2.6배 오른쪽”의 ridge 653과 “12%”의 분모 210.4는 서로 다른 지붕에서 나온 값이다. BF16 지붕으로 통일하면 ridge는 138이고 prefill은 12배 오른쪽이 되는데, 어느 쪽으로 그리든 ridge 오른쪽이라는 판정도 지붕에 못 닿았다는 판정도 바뀌지 않는다.</p>
+
+<p><strong>어느 지붕에도 닿지 않았다.</strong> roofline이 말해 주는 것은 <em>어느 지붕을 상대하는가</em>이지 <em>그 지붕에 닿았는가</em>가 아니다. <a href="/cs/CS-Roofline-Model/#2단-판단">Roofline 모델의 2단 판단</a>에서 1단(점이 지붕에 붙었나)에 걸리는 사례이고, 이때 roofline이 해 주는 일은 처방이 아니라 <strong>배제</strong>다 — 양자화도 배칭도 답이 아니라는 것까지가 이 그림이 말할 수 있는 전부다. 왜 12%인지는 이 측정으로 알 수 없고, 커널 단위 프로파일이 따로 필요하다.</p>
 
 <p><br /></p>
 
 <h1 id="정리">정리</h1>
 
 <p>LLM 서빙 워크로드는 한 덩어리가 아니다. prefill(연산 바운드), decode-FFN($I \approx B$, 배칭으로 이동 가능), decode-attention(KV 캐시 탓에 배칭으로도 고정) — 이 세 점을 나눠 찍어야 배칭이 듣는 부분과 안 듣는 부분이 구분되고, 그다음에야 기법을 고를 수 있다. 판단 순서는 루프라인의 일반 규칙 그대로다: 점이 지붕에 붙었는지 먼저, 붙었다면 어느 지붕인지 — 그 답이 처방을 결정한다.</p>
+
+<p>실제로 찍어 보면 두 점은 정말 반대편에 놓인다. 다만 교과서 값이 그대로 나오지는 않는다 — MoE에서는 $I \approx B$가 무너지고, ridge 오른쪽에 있으면서도 지붕에 닿지 못하는 점이 생긴다. 판정 규칙 자체는 그대로 쓰이되, 그 규칙이 답해 주는 범위는 어느 지붕을 상대하는가까지다.</p>
 
 <p><br /></p>
 
@@ -744,11 +1047,19 @@ window.MathJax = {
     
       
       
+      <a href="/tags/#moe" class="page__taxonomy-item" rel="tag">MoE</a><span class="sep">, </span>
+    
+      
+      
       <a href="/tags/#performance" class="page__taxonomy-item" rel="tag">Performance</a><span class="sep">, </span>
     
       
       
-      <a href="/tags/#roofline-model" class="page__taxonomy-item" rel="tag">Roofline-Model</a>
+      <a href="/tags/#roofline-model" class="page__taxonomy-item" rel="tag">Roofline-Model</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#vllm" class="page__taxonomy-item" rel="tag">vLLM</a>
     
     </span>
   </p>
@@ -776,7 +1087,7 @@ window.MathJax = {
 
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-22">August 22, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-24">August 24, 2026</time></p>
         
       </footer>
 
