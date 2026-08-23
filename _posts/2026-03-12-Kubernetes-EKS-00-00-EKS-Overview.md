@@ -13,6 +13,7 @@ tags:
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-1
 
+last_modified_at: 2026-08-24
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 1주차 학습 내용을 기반으로 합니다.*
@@ -150,7 +151,7 @@ OUTPUT:
 
 코드 기반으로 Amazon EKS 클러스터를 정의하고 배포한다. AWS CDK, AWS CloudFormation, Terraform 등이 있다.
 
-```hcl
+```ruby
 # Terraform 예시
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"

@@ -97,7 +97,7 @@ GPU 트러블슈팅 실습 환경의 핵심 구성을 정리한다.
 
 기존 실습에서는 Provider 버전을 별도 파일로 분리하지 않았다. 이번에는 `versions.tf`를 두어 Terraform 버전과 Provider 버전을 명시적으로 관리한다.
 
-```hcl
+```ruby
 terraform {
   required_version = ">= 1.5.0"
 
@@ -123,7 +123,7 @@ terraform {
 <details markdown="1">
 <summary><b>versions.tf 전체 코드</b></summary>
 
-```hcl
+```ruby
 terraform {
   required_version = ">= 1.5.0"
 
@@ -170,7 +170,7 @@ terraform {
 
 ## GPU 노드 그룹 변수
 
-```hcl
+```ruby
 # 비용 가드: NG 최초 생성 시 초기값을 결정한다.
 # 이미 존재하는 NG의 스케일링은 lifecycle.ignore_changes로 인해
 # TF 경로로 반영되지 않으므로 AWS CLI로 수행한다.
@@ -220,7 +220,7 @@ variable "gpu_az_index" {
 
 원인은 `terraform-aws-modules/eks` v21의 managed node group submodule에 있다. 이 모듈은 `aws_eks_node_group` 리소스에 다음과 같은 lifecycle 블록을 포함한다.
 
-```hcl
+```ruby
 lifecycle {
   create_before_destroy = true
   ignore_changes = [
@@ -268,7 +268,7 @@ aws eks update-nodegroup-config \
 
 ## GPU Operator 변수
 
-```hcl
+```ruby
 variable "enable_gpu_operator" {
   description = "NVIDIA GPU Operator helm_release 생성 여부. 기본 true(운영 상태). 최초 클러스터 부트스트랩 시에만 -var enable_gpu_operator=false 로 명시적 override."
   type        = bool
@@ -310,7 +310,7 @@ variable "gpu_operator_chart_version" {
 
 ## 보안그룹 실험 토글
 
-```hcl
+```ruby
 variable "enable_aux_sg_vpc_allow" {
   description = "보조 SG에 VPC 대역 all-traffic ingress 규칙을 둘지 여부."
   type        = bool
@@ -343,7 +343,7 @@ terraform apply \
 <details markdown="1">
 <summary><b>var.tf 전체 코드</b></summary>
 
-```hcl
+```ruby
 ########################
 # Cluster basics
 ########################
@@ -516,7 +516,7 @@ VPC 구성은 [4주차 실습 환경]({% post_url 2026-04-02-Kubernetes-EKS-Auth
 <details markdown="1">
 <summary><b>vpc.tf 전체 코드</b></summary>
 
-```hcl
+```ruby
 ########################
 # VPC
 ########################
@@ -577,7 +577,7 @@ module "vpc" {
 
 ## EKS 최적화 AMI
 
-```hcl
+```ruby
 # 시스템 노드 — AL2023 x86_64 standard
 data "aws_ssm_parameter" "eks_ami_al2023_std" {
   name = "/aws/service/eks/optimized-ami/${var.KubernetesVersion}/amazon-linux-2023/x86_64/standard/recommended/image_id"
@@ -597,7 +597,7 @@ AWS는 EKS 최적화 AMI ID를 SSM Parameter Store로 제공한다. `standard`�
 
 기존에는 보조 보안그룹에 VPC 대역 all-traffic ingress를 무조건 열어뒀다. 이번에는 **변수 토글로 on/off 가능**하게 변경했다.
 
-```hcl
+```ruby
 resource "aws_security_group" "node_group_sg" {
   name        = "${var.ClusterBaseName}-node-group-sg"
   description = "Auxiliary security group for EKS Node Group (shared by system & GPU NG)"
@@ -625,7 +625,7 @@ resource "aws_security_group_rule" "allow_vpc_all" {
 
 추가로 **egress 안전망**을 별도로 둔다.
 
-```hcl
+```ruby
 resource "aws_security_group_rule" "aux_egress_all" {
   type              = "egress"
   from_port         = 0
@@ -643,7 +643,7 @@ resource "aws_security_group_rule" "aux_egress_all" {
 
 기존 LB Controller, ExternalDNS 정책에 더해 **Cluster Autoscaler(CAS) 정책**이 새로 추가되었다.
 
-```hcl
+```ruby
 resource "aws_iam_policy" "aws_cas_autoscaler_policy" {
   name        = "${var.ClusterBaseName}CasAutoScalerPolicy"
   description = "Policy for allowing CAS to management AWS AutoScaling"
@@ -655,7 +655,7 @@ CAS는 파드가 리소스 부족으로 Pending 상태에 빠지면 ASG를 스�
 
 ## 입력 검증
 
-```hcl
+```ruby
 resource "terraform_data" "validate_inputs" {
   lifecycle {
     precondition {
@@ -674,7 +674,7 @@ resource "terraform_data" "validate_inputs" {
 
 ## GPU 단일 AZ 서브넷
 
-```hcl
+```ruby
 locals {
   gpu_subnet_ids = [module.vpc.private_subnets[var.gpu_az_index]]
   gpu_subnet_az  = var.availability_zones[var.gpu_az_index]
@@ -687,7 +687,7 @@ VPC 모듈은 `azs` 순서대로 `private_subnets`를 반환하므로, `gpu_az_i
 
 ### 노드 보안그룹 설정
 
-```hcl
+```ruby
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 21.0"
@@ -707,7 +707,7 @@ EKS 모듈 v21의 recommended rules에는 ephemeral 포트(1025-65535/tcp) self-
 
 기존과 대부분 동일하되, **NodeConfig로 maxPods를 50으로 설정**하고 **CAS 정책을 추가**한 점이 다르다. CAS 정책은 시스템 노드 그룹에도 부여해야 한다. Cluster Autoscaler 컨트롤러 파드는 시스템 노드에서 실행되면서 **모든** 노드 그룹(시스템 + GPU)의 ASG를 조회·조정하는데, 이 때 파드가 실행되는 노드의 Instance Profile 권한을 사용하기 때문이다.
 
-```hcl
+```ruby
 primary = {
   # ... (기존과 동일한 설정)
 
@@ -749,7 +749,7 @@ primary = {
 
 이번 실습의 핵심이다.
 
-```hcl
+```ruby
 gpu = {
   name            = "${var.ClusterBaseName}-ng-gpu"
   use_name_prefix = false
@@ -856,7 +856,7 @@ taint/label/tag 세 가지가 맞물려 "GPU 노드에는 GPU 워크로드만, G
 
 ### Addon
 
-```hcl
+```ruby
 addons = {
   coredns                = { most_recent = true }
   kube-proxy             = { most_recent = true }
@@ -872,7 +872,7 @@ addons = {
 
 ### Control Plane 로깅
 
-```hcl
+```ruby
 enabled_log_types = [
   "api",
   "scheduler"
@@ -884,7 +884,7 @@ enabled_log_types = [
 <details markdown="1">
 <summary><b>eks.tf 전체 코드</b></summary>
 
-```hcl
+```ruby
 ########################
 # Provider Definitions #
 ########################
@@ -1193,7 +1193,7 @@ NVIDIA GPU Operator를 Helm으로 배포하는 파일이다. `var.enable_gpu_ope
 
 ## Helm Provider 설정
 
-```hcl
+```ruby
 provider "helm" {
   kubernetes {
     host                   = module.eks.cluster_endpoint
@@ -1215,7 +1215,7 @@ Helm Provider가 EKS 클러스터에 인증하는 방식이다. `exec` 블록으
 
 ## GPU Operator Helm Release
 
-```hcl
+```ruby
 resource "helm_release" "gpu_operator" {
   count = var.enable_gpu_operator ? 1 : 0
 
@@ -1308,7 +1308,7 @@ GPU 노드에 `nvidia.com/gpu=true:NoSchedule` taint을 걸어뒀으므로, GPU 
 <details markdown="1">
 <summary><b>gpu_operator.tf 전체 코드</b></summary>
 
-```hcl
+```ruby
 ########################
 # NVIDIA GPU Operator (Helm) — 기본 비활성
 ########################
@@ -1973,7 +1973,7 @@ node-feature-discovery:
 
 기존 output(`configure_kubectl`, `cluster_name`, `cluster_endpoint`)에 GPU 관련 output이 추가되었다.
 
-```hcl
+```ruby
 output "node_security_group_id" {
   description = "EKS 모듈이 생성한 노드 SG. NCCL 차단 실험 시 확인 대상."
   value       = module.eks.node_security_group_id
@@ -1999,7 +1999,7 @@ output "ami_al2023_nvidia" {
 <details markdown="1">
 <summary><b>outputs.tf 전체 코드</b></summary>
 
-```hcl
+```ruby
 output "configure_kubectl" {
   description = "kubeconfig 업데이트 명령어"
   value       = "aws eks --region ${var.TargetRegion} update-kubeconfig --name ${var.ClusterBaseName}"

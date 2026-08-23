@@ -18,6 +18,7 @@ tags:
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
 hidden: true
+last_modified_at: 2026-08-24
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 7주차 학습 내용을 기반으로 합니다.*
@@ -180,7 +181,7 @@ module.eks.aws_eks_cluster.this[0]: Modifying... [id=eksworkshop-eksctl]
 
 `terraform/variables.tf`에서 `cluster_version`을 현재 클러스터 버전 이상으로 맞춘다.
 
-```hcl
+```ruby
 variable "cluster_version" {
   description = "EKS cluster version."
   type        = string

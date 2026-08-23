@@ -20,6 +20,7 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions-Chapter-10
 use_math: false
 hidden: true
+last_modified_at: 2026-08-24
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 10장의 학습 내용을 바탕으로 합니다*
@@ -171,7 +172,7 @@ EKS에서 NVIDIA device plugin과 GPU 노드 그룹을 프로비저닝하는 Ter
 
 NVIDIA device plugin을 EKS addon으로 배포한다.
 
-```hcl
+```ruby
 resource "aws_eks_addon" "nvidia_device_plugin" {
   cluster_name = module.eks.cluster_name
   addon_name   = "nvidia-device-plugin"
@@ -180,7 +181,7 @@ resource "aws_eks_addon" "nvidia_device_plugin" {
 
 GPU 워커 노드 그룹에는 taint와 label을 설정한다.
 
-```hcl
+```ruby
 gpu_node_group = {
   ami_type       = "AL2_x86_64_GPU"
   instance_types = ["g5.xlarge"]

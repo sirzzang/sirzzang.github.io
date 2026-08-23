@@ -15,6 +15,7 @@ tags:
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-1
 
+last_modified_at: 2026-08-24
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 1주차 학습 내용을 기반으로 합니다.*
@@ -147,7 +148,7 @@ cat .terraform/modules/modules.json | jq '.Modules[] | select(.Key == "eks" or .
 
 실제 파일을 발췌하면 다음과 같다.
 
-```hcl
+```ruby
 # This file is maintained automatically by "terraform init".
 # Manual edits may be lost in future updates.
 
@@ -658,7 +659,7 @@ CI/CD, 모니터링 등 ──── 인터넷 ──── EKS API Server
 
 관련 주요 설정은 아래와 같았다.
 
-```hcl
+```ruby
 endpoint_public_access = true
 endpoint_private_access = false
 enable_nat_gateway = false
@@ -696,7 +697,7 @@ Public-Public 구성은 **보안적으로 권장되지 않는 구조**다.
 
 다음에는 `endpoint_private_access = true`로 변경하여 **Public + Private 구성**으로 전환한다.
 
-```hcl
+```ruby
 endpoint_public_access = true
 endpoint_private_access = true   # false → true
 ```

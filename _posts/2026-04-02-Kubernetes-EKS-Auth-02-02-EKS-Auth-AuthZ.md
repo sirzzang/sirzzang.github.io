@@ -562,7 +562,7 @@ Webhook의 응답에 따라 분기한다.
 
 Access Entry가 AWS API 리소스이므로 Terraform `aws` provider로 직접 관리할 수 있다.
 
-```hcl
+```ruby
 resource "aws_eks_access_entry" "dev" {
   cluster_name  = aws_eks_cluster.main.name
   principal_arn = aws_iam_role.dev.arn
