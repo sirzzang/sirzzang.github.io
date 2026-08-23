@@ -37,6 +37,8 @@
 
 
 
+  <meta property="article:modified_time" content="2026-08-24T00:00:00+09:00">
+
 
 
   
@@ -310,7 +312,7 @@
     <meta itemprop="headline" content="[GenAI] GenAI on K8s: 9.2 - 보안 인프라 코드 분석: EKS + Secret 주입 흐름">
     <meta itemprop="description" content="Ch9 Terraform 코드를 따라가며 EKS 보안 설계(Bottlerocket, IMDSv2, Pod Identity, ECR 공급망)와 Secrets Store CSI Driver의 secret 주입 흐름을 분석해 보자.">
     <meta itemprop="datePublished" content="2026-05-24T00:00:00+09:00">
-    
+    <meta itemprop="dateModified" content="2026-08-24T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
@@ -425,25 +427,25 @@
 
 <h1 id="ekstf--클러스터-토대--host-보안"><code class="highlighter-rouge">eks.tf</code> — 클러스터 토대 + host 보안</h1>
 
-<pre><code class="language-hcl">module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "~&gt; 20.36"
-  cluster_name    = local.name       # "eks-demo"
-  cluster_version = "1.32"
-  enable_cluster_creator_admin_permissions = true
-  cluster_endpoint_public_access           = true
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">module</span> <span class="s2">"eks"</span> <span class="p">{</span>
+  <span class="n">source</span>  <span class="o">=</span> <span class="s2">"terraform-aws-modules/eks/aws"</span>
+  <span class="n">version</span> <span class="o">=</span> <span class="s2">"~&gt; 20.36"</span>
+  <span class="n">cluster_name</span>    <span class="o">=</span> <span class="n">local</span><span class="p">.</span><span class="nf">name</span>       <span class="c1"># "eks-demo"</span>
+  <span class="n">cluster_version</span> <span class="o">=</span> <span class="s2">"1.32"</span>
+  <span class="n">enable_cluster_creator_admin_permissions</span> <span class="o">=</span> <span class="kp">true</span>
+  <span class="n">cluster_endpoint_public_access</span>           <span class="o">=</span> <span class="kp">true</span>
 
-  eks_managed_node_groups = {
-    eks-mng = {
-      instance_types = ["m5.large", "m6i.large", "m7i.large"]
-      ami_type       = "BOTTLEROCKET_x86_64"   # host 보안
-      max_size = 3; desired_size = 3
-      capacity_type = "SPOT"
-    }
-    # eks-gpu-mng = { ... }   # 보안 데모는 GPU 불필요 → 주석 처리
-  }
-}
-</code></pre>
+  <span class="n">eks_managed_node_groups</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">eks</span><span class="o">-</span><span class="n">mng</span> <span class="o">=</span> <span class="p">{</span>
+      <span class="n">instance_types</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"m5.large"</span><span class="p">,</span> <span class="s2">"m6i.large"</span><span class="p">,</span> <span class="s2">"m7i.large"</span><span class="p">]</span>
+      <span class="n">ami_type</span>       <span class="o">=</span> <span class="s2">"BOTTLEROCKET_x86_64"</span>   <span class="c1"># host 보안</span>
+      <span class="n">max_size</span> <span class="o">=</span> <span class="mi">3</span><span class="p">;</span> <span class="n">desired_size</span> <span class="o">=</span> <span class="mi">3</span>
+      <span class="n">capacity_type</span> <span class="o">=</span> <span class="s2">"SPOT"</span>
+    <span class="p">}</span>
+    <span class="c1"># eks-gpu-mng = { ... }   # 보안 데모는 GPU 불필요 → 주석 처리</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
 
 <p>보안 챕터의 주제(secret 주입, Pod Identity, 공급망 스캔)는 워크로드 종류와 무관하다. GPU 없이 CPU 노드만으로 모든 개념을 보여줄 수 있어, GPU 노드그룹은 주석 처리되어 있다.</p>
 
@@ -489,17 +491,17 @@
 
 <p>컨테이너 → 노드 IMDS까지 막으려면 노드그룹에 <code class="highlighter-rouge">metadata_options</code>를 명시해 hop을 1로 내린다:</p>
 
-<pre><code class="language-hcl">eks-mng = {
-  instance_types   = ["m5.large", ...]
-  ami_type         = "BOTTLEROCKET_x86_64"
-  metadata_options = {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required"   # IMDSv2 강제
-    http_put_response_hop_limit = 1            # 컨테이너에서 IMDS 접근 차단
-    instance_metadata_tags      = "enabled"
-  }
-}
-</code></pre>
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">eks</span><span class="o">-</span><span class="n">mng</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="n">instance_types</span>   <span class="o">=</span> <span class="p">[</span><span class="s2">"m5.large"</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+  <span class="n">ami_type</span>         <span class="o">=</span> <span class="s2">"BOTTLEROCKET_x86_64"</span>
+  <span class="n">metadata_options</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">http_endpoint</span>               <span class="o">=</span> <span class="s2">"enabled"</span>
+    <span class="n">http_tokens</span>                 <span class="o">=</span> <span class="s2">"required"</span>   <span class="c1"># IMDSv2 강제</span>
+    <span class="n">http_put_response_hop_limit</span> <span class="o">=</span> <span class="mi">1</span>            <span class="c1"># 컨테이너에서 IMDS 접근 차단</span>
+    <span class="n">instance_metadata_tags</span>      <span class="o">=</span> <span class="s2">"enabled"</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
 
 <h2 id="실습-편의를-위해-보안을-양보한-설정들">실습 편의를 위해 보안을 양보한 설정들</h2>
 
@@ -538,25 +540,25 @@
 
 <h1 id="addonstf--secret-주입-백본--클러스터-애드온"><code class="highlighter-rouge">addons.tf</code> — Secret 주입 백본 + 클러스터 애드온</h1>
 
-<pre><code class="language-hcl">module "eks_blueprints_addons" {
-  enable_aws_load_balancer_controller          = true
-  enable_secrets_store_csi_driver              = true   # secret 전용 CSI driver
-  enable_secrets_store_csi_driver_provider_aws = true   # AWS provider
-  secrets_store_csi_driver = {
-    values = ["syncSecret:\n  enabled: true"]            # K8s Secret 미러링
-  }
-  secrets_store_csi_driver_provider_aws = {
-    values = ["tolerations:\n  - operator: Exists"]      # 전 노드 배포
-  }
-  eks_addons = {
-    aws-ebs-csi-driver = {
-      service_account_role_arn = module.ebs_csi_driver_irsa.iam_role_arn  # IRSA
-    }
-    eks-pod-identity-agent = {}   # Pod Identity 전제
-    metrics-server = {}; coredns = {}; kube-proxy = {}; vpc-cni = {}
-  }
-}
-</code></pre>
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">module</span> <span class="s2">"eks_blueprints_addons"</span> <span class="p">{</span>
+  <span class="n">enable_aws_load_balancer_controller</span>          <span class="o">=</span> <span class="kp">true</span>
+  <span class="n">enable_secrets_store_csi_driver</span>              <span class="o">=</span> <span class="kp">true</span>   <span class="c1"># secret 전용 CSI driver</span>
+  <span class="n">enable_secrets_store_csi_driver_provider_aws</span> <span class="o">=</span> <span class="kp">true</span>   <span class="c1"># AWS provider</span>
+  <span class="n">secrets_store_csi_driver</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"syncSecret:</span><span class="se">\n</span><span class="s2">  enabled: true"</span><span class="p">]</span>            <span class="c1"># K8s Secret 미러링</span>
+  <span class="p">}</span>
+  <span class="n">secrets_store_csi_driver_provider_aws</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"tolerations:</span><span class="se">\n</span><span class="s2">  - operator: Exists"</span><span class="p">]</span>      <span class="c1"># 전 노드 배포</span>
+  <span class="p">}</span>
+  <span class="n">eks_addons</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">aws</span><span class="o">-</span><span class="n">ebs</span><span class="o">-</span><span class="n">csi</span><span class="o">-</span><span class="n">driver</span> <span class="o">=</span> <span class="p">{</span>
+      <span class="n">service_account_role_arn</span> <span class="o">=</span> <span class="n">module</span><span class="p">.</span><span class="nf">ebs_csi_driver_irsa</span><span class="p">.</span><span class="nf">iam_role_arn</span>  <span class="c1"># IRSA</span>
+    <span class="p">}</span>
+    <span class="n">eks</span><span class="o">-</span><span class="n">pod</span><span class="o">-</span><span class="n">identity</span><span class="o">-</span><span class="n">agent</span> <span class="o">=</span> <span class="p">{}</span>   <span class="c1"># Pod Identity 전제</span>
+    <span class="n">metrics</span><span class="o">-</span><span class="n">server</span> <span class="o">=</span> <span class="p">{};</span> <span class="n">coredns</span> <span class="o">=</span> <span class="p">{};</span> <span class="n">kube</span><span class="o">-</span><span class="n">proxy</span> <span class="o">=</span> <span class="p">{};</span> <span class="n">vpc</span><span class="o">-</span><span class="n">cni</span> <span class="o">=</span> <span class="p">{}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
 
 <h2 id="두-가지-secret-주입-경로--네이티브-vs-csi">두 가지 secret 주입 경로 — 네이티브 vs CSI</h2>
 
@@ -700,30 +702,30 @@
 
 <h1 id="iamtf--pod-identity--최소권한-secret-정책"><code class="highlighter-rouge">iam.tf</code> — Pod Identity + 최소권한 Secret 정책</h1>
 
-<pre><code class="language-hcl"># trust policy — Pod Identity의 표식
-data "aws_iam_policy_document" "my_llama_app_trust_policy" {
-  statement {
-    actions    = ["sts:AssumeRole", "sts:TagSession"]
-    principals {
-      type        = "Service"
-      identifiers = ["pods.eks.amazonaws.com"]   # Pod Identity
-    }
-  }
-}
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># trust policy — Pod Identity의 표식</span>
+<span class="n">data</span> <span class="s2">"aws_iam_policy_document"</span> <span class="s2">"my_llama_app_trust_policy"</span> <span class="p">{</span>
+  <span class="n">statement</span> <span class="p">{</span>
+    <span class="n">actions</span>    <span class="o">=</span> <span class="p">[</span><span class="s2">"sts:AssumeRole"</span><span class="p">,</span> <span class="s2">"sts:TagSession"</span><span class="p">]</span>
+    <span class="n">principals</span> <span class="p">{</span>
+      <span class="n">type</span>        <span class="o">=</span> <span class="s2">"Service"</span>
+      <span class="n">identifiers</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"pods.eks.amazonaws.com"</span><span class="p">]</span>   <span class="c1"># Pod Identity</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
 
-# 최소권한: hugging-face-secret 하나에만 GetSecretValue/DescribeSecret
-resource "aws_iam_policy" "hf_secrets_access_policy" {
-  # Resource = "secret:hugging-face-secret*"
-}
+<span class="c1"># 최소권한: hugging-face-secret 하나에만 GetSecretValue/DescribeSecret</span>
+<span class="n">resource</span> <span class="s2">"aws_iam_policy"</span> <span class="s2">"hf_secrets_access_policy"</span> <span class="p">{</span>
+  <span class="c1"># Resource = "secret:hugging-face-secret*"</span>
+<span class="p">}</span>
 
-# association: ns=default의 SA my-llama-sa에 이 Role을 연결
-resource "aws_eks_pod_identity_association" "my_llama_sa_pod_identity" {
-  cluster_name    = module.eks.cluster_name
-  namespace       = "default"
-  service_account = "my-llama-sa"
-  role_arn        = aws_iam_role.my_llama_app_role.arn
-}
-</code></pre>
+<span class="c1"># association: ns=default의 SA my-llama-sa에 이 Role을 연결</span>
+<span class="n">resource</span> <span class="s2">"aws_eks_pod_identity_association"</span> <span class="s2">"my_llama_sa_pod_identity"</span> <span class="p">{</span>
+  <span class="n">cluster_name</span>    <span class="o">=</span> <span class="n">module</span><span class="p">.</span><span class="nf">eks</span><span class="p">.</span><span class="nf">cluster_name</span>
+  <span class="n">namespace</span>       <span class="o">=</span> <span class="s2">"default"</span>
+  <span class="n">service_account</span> <span class="o">=</span> <span class="s2">"my-llama-sa"</span>
+  <span class="n">role_arn</span>        <span class="o">=</span> <span class="n">aws_iam_role</span><span class="p">.</span><span class="nf">my_llama_app_role</span><span class="p">.</span><span class="nf">arn</span>
+<span class="p">}</span>
+</code></pre></div></div>
 
 <h2 id="irsa-vs-pod-identity--한-클러스터에-공존">IRSA vs Pod Identity — 한 클러스터에 공존</h2>
 
@@ -775,22 +777,22 @@ resource "aws_eks_pod_identity_association" "my_llama_sa_pod_identity" {
 
 <h1 id="ecrtf--공급망-보안-암호화immutable스캔"><code class="highlighter-rouge">ecr.tf</code> — 공급망 보안 (암호화·immutable·스캔)</h1>
 
-<pre><code class="language-hcl">resource "aws_ecr_repository" "my-llama"           { image_tag_mutability = "MUTABLE" }
-resource "aws_ecr_repository" "my-llama-finetuned" { image_tag_mutability = "IMMUTABLE" }
-resource "aws_ecr_repository" "rag-app"            { }   # default MUTABLE
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">resource</span> <span class="s2">"aws_ecr_repository"</span> <span class="s2">"my-llama"</span>           <span class="p">{</span> <span class="n">image_tag_mutability</span> <span class="o">=</span> <span class="s2">"MUTABLE"</span> <span class="p">}</span>
+<span class="n">resource</span> <span class="s2">"aws_ecr_repository"</span> <span class="s2">"my-llama-finetuned"</span> <span class="p">{</span> <span class="n">image_tag_mutability</span> <span class="o">=</span> <span class="s2">"IMMUTABLE"</span> <span class="p">}</span>
+<span class="n">resource</span> <span class="s2">"aws_ecr_repository"</span> <span class="s2">"rag-app"</span>            <span class="p">{</span> <span class="p">}</span>   <span class="c1"># default MUTABLE</span>
 
-resource "aws_ecr_registry_scanning_configuration" "ecr_scanning_configuration" {
-  scan_type = "ENHANCED"
-  rule {
-    scan_frequency    = "CONTINUOUS_SCAN"
-    repository_filter { filter = "my-llama-finetuned" }
-  }
-  rule {
-    scan_frequency    = "SCAN_ON_PUSH"
-    repository_filter { filter = "my-llama-finetuned" }
-  }
-}
-</code></pre>
+<span class="n">resource</span> <span class="s2">"aws_ecr_registry_scanning_configuration"</span> <span class="s2">"ecr_scanning_configuration"</span> <span class="p">{</span>
+  <span class="n">scan_type</span> <span class="o">=</span> <span class="s2">"ENHANCED"</span>
+  <span class="n">rule</span> <span class="p">{</span>
+    <span class="n">scan_frequency</span>    <span class="o">=</span> <span class="s2">"CONTINUOUS_SCAN"</span>
+    <span class="n">repository_filter</span> <span class="p">{</span> <span class="n">filter</span> <span class="o">=</span> <span class="s2">"my-llama-finetuned"</span> <span class="p">}</span>
+  <span class="p">}</span>
+  <span class="n">rule</span> <span class="p">{</span>
+    <span class="n">scan_frequency</span>    <span class="o">=</span> <span class="s2">"SCAN_ON_PUSH"</span>
+    <span class="n">repository_filter</span> <span class="p">{</span> <span class="n">filter</span> <span class="o">=</span> <span class="s2">"my-llama-finetuned"</span> <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
 
 <h2 id="이미지-암호화">이미지 암호화</h2>
 
@@ -1129,7 +1131,7 @@ CSI Driver + provider-aws (노드 DaemonSet)
 
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-05-24T00:00:00+09:00">May 24, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-24">August 24, 2026</time></p>
         
       </footer>
 
