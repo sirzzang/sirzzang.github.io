@@ -1,0 +1,1626 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[LLM] LLM 서빙과 최적화: 서빙 최적화 기법 - 6.1. 개요: iteration에서 continuous batching까지 - Eraser’s StudyLog</title>
+<meta name="description" content="서빙 최적화 기법의 출발점인 배칭의 큰 흐름을 실행 단위, 동기, 구조, 재구성 시점 순으로 잡아 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[LLM] LLM 서빙과 최적화: 서빙 최적화 기법 - 6.1. 개요: iteration에서 continuous batching까지">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/">
+
+
+  <meta property="og:description" content="서빙 최적화 기법의 출발점인 배칭의 큰 흐름을 실행 단위, 동기, 구조, 재구성 시점 순으로 잡아 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-08-22T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-08-27T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[LLM] LLM 서빙과 최적화: 서빙 최적화 기법 - 6.1. 개요: iteration에서 continuous batching까지">
+    <meta itemprop="description" content="서빙 최적화 기법의 출발점인 배칭의 큰 흐름을 실행 단위, 동기, 구조, 재구성 시점 순으로 잡아 보자.">
+    <meta itemprop="datePublished" content="2026-08-22T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-08-27T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[LLM] LLM 서빙과 최적화: 서빙 최적화 기법 - 6.1. 개요: iteration에서 continuous batching까지
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-08-22T00:00:00+09:00">2026년 08월 22일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#전제-지금까지-만든-서빙-시스템">전제: 지금까지 만든 서빙 시스템</a>
+    <ul>
+      <li><a href="#요청-단위-실행-모델">요청 단위 실행 모델</a></li>
+      <li><a href="#병목의-언어-산술-강도와-roofline">병목의 언어: 산술 강도와 roofline</a></li>
+      <li><a href="#6장의-지도-하나의-분수-세-방향의-공략">6장의 지도: 하나의 분수, 세 방향의 공략</a></li>
+    </ul>
+  </li>
+  <li><a href="#실행-단위-iteration">실행 단위: iteration</a>
+    <ul>
+      <li><a href="#요청-단위의-문제">요청 단위의 문제</a></li>
+      <li><a href="#엔진-루프의-한-스텝">엔진 루프의 한 스텝</a></li>
+      <li><a href="#스케줄러의-위치-cpu와-gpu의-분업">스케줄러의 위치: CPU와 GPU의 분업</a></li>
+      <li><a href="#원자성과-스케줄링-단위">원자성과 스케줄링 단위</a></li>
+    </ul>
+  </li>
+  <li><a href="#배칭-한-번-읽은-가중치로-여러-요청">배칭: 한 번 읽은 가중치로 여러 요청</a>
+    <ul>
+      <li><a href="#처리량-이득의-원리">처리량 이득의 원리</a></li>
+      <li><a href="#선택으로서의-배칭과-지연의-거래">선택으로서의 배칭과 지연의 거래</a></li>
+    </ul>
+  </li>
+  <li><a href="#배치의-구조-prefill과-decode">배치의 구조: prefill과 decode</a>
+    <ul>
+      <li><a href="#세-축으로-읽는-입력-텐서">세 축으로 읽는 입력 텐서</a></li>
+      <li><a href="#prefill-배치-길이가-다른-시퀀스와-패딩">prefill 배치: 길이가 다른 시퀀스와 패딩</a></li>
+      <li><a href="#decode-배치-lockstep과-종료-시점">decode 배치: lockstep과 종료 시점</a></li>
+    </ul>
+  </li>
+  <li><a href="#배칭-방식-배치를-다시-짜는-시점">배칭 방식: 배치를 다시 짜는 시점</a>
+    <ul>
+      <li><a href="#세-가지-방식">세 가지 방식</a>
+        <ul>
+          <li><a href="#static-batching">static batching</a></li>
+          <li><a href="#dynamic-batching">dynamic batching</a></li>
+          <li><a href="#continuous-batching">continuous batching</a></li>
+        </ul>
+      </li>
+      <li><a href="#continuous-batching이-남기는-문제">continuous batching이 남기는 문제</a>
+        <ul>
+          <li><a href="#방안-1-prefill과-decode를-함께-배칭하지-않음">방안 1: prefill과 decode를 함께 배칭하지 않음</a></li>
+          <li><a href="#방안-2-prefill과-decode를-함께-배칭">방안 2: prefill과 decode를 함께 배칭</a></li>
+          <li><a href="#남는-질문-6장의-나머지">남는 질문: 6장의 나머지</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>6장의 기법들은 산술 강도(FLOPs/byte)라는 분수 하나를 서로 다른 항에서 공략한다: 분자를 키우는 배칭·스케줄링, 분모를 줄이는 어텐션 최적화·모델 압축, 계산 자체를 피하는 프리픽스 캐싱</li>
+  <li>서빙 엔진의 실행 단위는 요청이 아니라 모델 forward 1회, 즉 iteration이다. forward는 원자적이라 스케줄러(CPU)가 개입할 수 있는 지점은 iteration 경계뿐이다</li>
+  <li>배칭의 이득은 <strong>한 번 읽은 가중치를 여러 요청이 나눠 쓰는 데서</strong> 온다. memory-bound인 decode에서는 스텝 시간이 거의 그대로인 채 처리량이 배치 크기만큼 늘어난다. 단, 배칭이 상각하는 것은 공유되는 가중치 읽기뿐이고, 요청마다 따로 쌓이는 KV cache 읽기는 줄지 않는다</li>
+  <li>prefill은 <code class="highlighter-rouge">[B, 1000, H]</code>처럼 넓은 텐서, decode는 <code class="highlighter-rouge">[B, 1, H]</code>의 좁은 텐서다. prefill 배치는 길이 차이(패딩), decode 배치는 종료 시점 분산이라는 문제를 남긴다</li>
+  <li>static·dynamic·continuous 배칭 모두 텐서 쌓기는 같다. 차이는 배치 멤버십을 다시 정하는 시점 하나다: 배치 전체가 끝난 뒤 vs 매 iteration</li>
+  <li>continuous batching에서는 prefill과 decode가 같은 스텝에서 만나면서 새로운 문제가 생긴다. 섞지 않으면 진행 중인 decode가 멎고, 섞어도 긴 prefill이 스텝 길이를 지배한다. chunked prefill·selective batching·KV cache 관리가 여기서 출발한다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="전제-지금까지-만든-서빙-시스템">전제: 지금까지 만든 서빙 시스템</h1>
+
+<p>6장은 continuous batching을 비롯한 서빙 최적화 기법들을 다룬다. 기법 하나하나로 들어가기 전에, 이 글에서 전체를 관통하는 흐름을 먼저 잡는다.</p>
+
+<p>개인적으로 이해하는 데 도움이 되었던 <strong>단위 → 동기 → 구조 → 시점</strong>의 순서를 이용해 보고자 한다. 실행의 단위가 무엇인지, 그 단위에 여러 요청을 넣는 게 왜 이득인지, 넣으면 어떤 모양이 되는지, 그 구성을 언제 다시 정하는지 순서로 따라가다 보면, 각 항목이 남기는 질문이 다음 항목의 출발점이 된다는 것을 알 수 있다.</p>
+
+<p>그 출발점을 놓기 위해 지금까지 내용부터 복기해 보자.</p>
+
+<h2 id="요청-단위-실행-모델">요청 단위 실행 모델</h2>
+
+<p><a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">2편</a>에서 해부한 단일 모델 서빙 시스템은 API server가 요청을 받아 큐에 넣고, WorkloadManager가 배치 상한만큼 묶어 내주면, 별도 프로세스의 워커가 <code class="highlighter-rouge">generate()</code>를 호출해 완성된 텍스트를 돌려주는 구조였다. <a href="/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/">3.1편</a>에서 한 번에 한 요청씩 처리할 때의 낮은 처리량을 재현했고, <a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/">3.2편</a>에서 정적 배칭으로 처리량이 약 2배가 되는 것과 그 한계를 측정했다.</p>
+
+<p>이 시스템에서 실행의 단위는 <strong>요청</strong>(정확히는 요청 묶음)이었다. <code class="highlighter-rouge">generate()</code> 호출이 한 번 시작되면 끝날 때까지 블랙박스다. 큐잉·프로세스 분리·IPC 같은 시스템 바깥 구조는 그대로 두고, 6장의 시선은 그 블랙박스 안쪽 — GPU가 실제로 도는 루프 — 으로 내려간다. 실서비스 엔진은 요청이 끊임없이 유입되는 <strong>온라인</strong> 상황에서 돌고, 일반적으로 생성 중간중간 토큰을 곧바로 내보내는 <strong>스트리밍</strong> 형태의 응답을 내놓는다. 이후의 배칭 논의는 이 온라인·토큰 단위 관점을 전제한다.</p>
+
+<h2 id="병목의-언어-산술-강도와-roofline">병목의 언어: 산술 강도와 roofline</h2>
+
+<p>병목을 판정하는 도구는 <a href="/dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/">5.4편</a>과 <a href="/dev/Dev-Roofline-Model-LLM-Serving/">roofline 실측 글</a>에서 정리했다. 산술 강도(FLOPs/byte)가 ridge point보다 낮으면 memory-bound, 높으면 compute-bound이고, LLM 추론에서 prefill은 compute-bound 쪽에, decode는 memory-bound 쪽에 찍힌다.</p>
+
+<p>5장 전체를 관통하는 요점은 결국 한 문장으로 모인다. decode는 토큰 하나를 만들려고 가중치 전체를 HBM에서 훑는다. 만들 토큰이 하나뿐이니 FLOPs는 작은데 그 계산을 위해 메모리에서 옮기는 바이트는 최대치라, 산술 강도의 분수는 바닥이고 GPU 연산 유닛은 논다. <strong>하드웨어가 부족한 게 아니라, 하드웨어에 일을 못 먹이고 있는 것이다.</strong></p>
+
+<h2 id="6장의-지도-하나의-분수-세-방향의-공략">6장의 지도: 하나의 분수, 세 방향의 공략</h2>
+
+<p>6장의 모든 기법은 결국 “바이트 하나를 옮길 때 최대한 많은 토큰을 뽑아내라”는 하나의 명령을 서로 다른 층위에서 실행한 것이다. 그 명령을 분수로 쓰면 5장에서 정리한 산술 강도 그대로다.</p>
+
+<script type="math/tex; mode=display">\text{산술 강도} = \frac{\text{FLOPs (수행한 계산)}}{\text{bytes (이동한 데이터)}}</script>
+
+<p>이 분수를 기준으로 놓고 보면, 산술 강도를 증가시키기 위한 공략 방향은 원리적으로 셋이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>방향</th>
+      <th>무엇을 하는가</th>
+      <th>6장의 기법</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>① 분자(FLOPs)를 키운다</td>
+      <td>같은 한 번의 읽기로 더 많은 일을 시킨다</td>
+      <td>배칭·스케줄링 (static → dynamic → continuous → chunked prefill)</td>
+    </tr>
+    <tr>
+      <td>② 분모(bytes)를 줄인다</td>
+      <td>옮겨야 할 바이트 자체를 줄인다</td>
+      <td>어텐션 최적화 (GQA/MLA, FlashAttention, PagedAttention), 모델 압축 (양자화)</td>
+    </tr>
+    <tr>
+      <td>③ 아예 안 한다</td>
+      <td>이미 한 계산을 다시 하지 않는다</td>
+      <td>프리픽스 캐싱 (RadixAttention, cache-aware routing)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>하나의 분수를 각자 다른 항에서 공략하는 체계다. 이 글은 그중 첫 번째 축 — 배칭 — 을 따라 continuous batching까지의 큰 흐름만 잡고, 거기서 드러나는 새 문제들을 확인하는 데서 멈춘다. 나머지 축의 기법들은 이후 글에서 하나씩 다룬다.</p>
+
+<p><br /></p>
+
+<h1 id="실행-단위-iteration">실행 단위: iteration</h1>
+
+<h2 id="요청-단위의-문제">요청 단위의 문제</h2>
+
+<p>자기회귀 생성의 구조는 <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/">3.3편</a>에서 정리했다. 요청 하나는 프롬프트 전체를 한 번에 처리하는 prefill 1회와, 토큰을 하나씩 이어 붙이는 decode의 반복으로 이루어진다. 토큰 N개를 생성하면 모델 forward가 N회 돈다.</p>
+
+<p>전통적인 ML 서빙에서는 이 구분이 필요 없었다. 요청 1개 = forward 1회 = 응답 1회라서 “요청”과 “실행 스텝”이 같은 말이었고, 그 안을 더 쪼개서 부를 단어 자체가 필요 없었다. 그런데 LLM 서빙에서는 하나의 요청이 토큰 N개를 생성하면서 이 등식이 요청 1개 = forward N회로 바뀐다. 여기에 와서야 처음으로 두 개념이 분리됐고, 비로소 그 스텝을 가리킬 이름이 필요해진 것이다. 그렇게 자리 잡은 용어가 <strong>iteration</strong>(또는 step)이다 — 모델 전체를 처음부터 끝까지 한 번 통과시키는 forward pass 1회를 가리킨다.</p>
+
+<p>요청 단위로 스케줄링하면 이 forward N회짜리 반복이 통째로 하나의 작업 덩어리가 된다. 반복이 도는 동안 스케줄러가 끼어들어 내릴 수 있는 결정이 없다 — 새 요청을 넣을지, 먼저 끝난 요청을 뺄지는 실행 중인 묶음이 전부 끝난 뒤에야 정할 수 있다. 그래서 긴 생성 하나가 GPU를 붙잡고 있는 동안 짧은 요청은 큐에서 기다린다. <a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/">3.2편</a>에서 관찰한 정적 배칭의 꼬리 대기가 정확히 이 문제였다.</p>
+
+<h2 id="엔진-루프의-한-스텝">엔진 루프의 한 스텝</h2>
+
+<p>그럼 이 iteration이 엔진 안에서 실제로 어떻게 도는지 보자. LLM 서빙 엔진이 GPU에 일을 시키는 방법은 하나뿐이다 — 입력 텐서를 만들어서 모델 전체를 한 번 통과시키고 출력을 받는 것, 즉 iteration 한 번이다. 엔진의 실체는 이 스텝을 도는 무한 루프고, vLLM 코드에서는 실제로 <code class="highlighter-rouge">engine.step()</code>이다 (버전에 따라 클래스 이름이나 경로는 바뀔 수 있다).</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 엔진 바깥의 루프</span>
+<span class="k">while</span> <span class="n">engine</span><span class="o">.</span><span class="n">has_unfinished_requests</span><span class="p">():</span>
+    <span class="n">request_outputs</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+
+<span class="c"># step() 내부 (개념적으로)</span>
+<span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="n">scheduler_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scheduler</span><span class="o">.</span><span class="n">schedule</span><span class="p">()</span>   <span class="c"># CPU. 이번 forward에 태울 요청 결정</span>
+    <span class="n">model_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_executor</span><span class="o">.</span><span class="n">execute_model</span><span class="p">(</span><span class="n">scheduler_output</span><span class="p">)</span>  <span class="c"># GPU</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">scheduler</span><span class="o">.</span><span class="n">update_from_output</span><span class="p">(</span><span class="n">model_output</span><span class="p">)</span>  <span class="c"># CPU. EOS 판정, 슬롯 회수</span>
+</code></pre></div></div>
+
+<p>이 루프는 특정 요청의 것이 아니라 엔진의 것이다. 요청 하나의 눈으로 보면 이 루프에서 자기 몫은 prefill iteration 1회와 decode iteration N−1회지만, 루프 자체는 요청들이 들어오고 나가는 동안 멈추지 않고 돈다. 각 스텝에 어느 요청의 어떤 작업을 실을지는 아직 정하지 않았다.</p>
+
+<p>흔히 “iteration = 토큰 1개 생성 스텝”이라고 말한다. 이 등식은 decode만의 것이 아니다 — prefill의 forward도 마지막 위치에서 새 토큰 1개를 내놓고, 그 토큰이 곧 TTFT(Time To First Token, <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#서빙-지표-ttft와-tpot">3.3편의 서빙 지표</a> 참고)의 첫 토큰이다. 둘이 갈리는 지점은 나온 토큰 수가 아니라, 그 1개를 만들기 위해 <strong>한 번의 forward 안에서 계산한 위치의 수</strong>다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구분</th>
+      <th>계산한 위치 수</th>
+      <th>나온 새 토큰</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>prefill (프롬프트 1000토큰)</td>
+      <td>1000</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td>decode</td>
+      <td>1</td>
+      <td>1</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>그런데도 이 등식이 decode의 표현으로 통용되는 이유는, 방금 본 스텝 하나의 크기가 아니라 <strong>스텝의 횟수</strong>에 있다. 요청 하나의 생애에서 prefill iteration은 1회뿐이고 decode iteration은 나머지 토큰 수만큼(N−1회) 반복되니, 엔진이 도는 iteration의 대부분은 토큰 1개를 만드는 decode 스텝이다. 물론 “forward 1회 = 새 토큰 1개”가 항상 지켜지는 등식도 아니다. prefill을 여러 스텝에 나눠 실으면 새 토큰 없이 끝나는 iteration도 생기는데, 이 예외는 <a href="#남는-질문-6장의-나머지">후술</a>하는 기법에서 등장한다.</p>
+
+<h2 id="스케줄러의-위치-cpu와-gpu의-분업">스케줄러의 위치: CPU와 GPU의 분업</h2>
+
+<p>그렇다면 위 코드의 <code class="highlighter-rouge">schedule()</code> — 이번 forward에 태울 요청을 정하는 일 — 은 누가 하는가. GPU는 아니다. GPU는 받은 텐서를 계산하는 장치일 뿐, “다음에 누구를 넣을지”를 판단할 능력이 없다. 그런 정책 판단은 전부 CPU 몫이고, 그 판단을 내리는 CPU 쪽 코드가 곧 서빙 엔진의 스케줄러다. <a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">2편</a>에서 본 시스템의 구도 — 요청 큐와 배처는 CPU, 모델 실행만 GPU — 의 직계 연장이다.</p>
+
+<p>이름이 겹쳐서 헷갈리기 쉬운데, GPU 주변에는 층위가 완전히 다른 스케줄러 셋이 있다. 6장에서 말하는 스케줄러는 첫 번째이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>스케줄러</th>
+      <th>무엇을 정하나</th>
+      <th>어디서</th>
+      <th>시간 스케일</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>서빙 스케줄러</td>
+      <td>이번 forward에 어느 요청을 넣을까</td>
+      <td>CPU (엔진 코드)</td>
+      <td>ms</td>
+    </tr>
+    <tr>
+      <td>GPU 드라이버/스트림</td>
+      <td>큐에 쌓인 커널을 어느 순서로</td>
+      <td>CPU 드라이버 + GPU 커맨드 프로세서</td>
+      <td>µs</td>
+    </tr>
+    <tr>
+      <td>warp 스케줄러</td>
+      <td>SM 안에서 어느 warp를 이번 사이클에</td>
+      <td>GPU 하드웨어</td>
+      <td>ns</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="원자성과-스케줄링-단위">원자성과 스케줄링 단위</h2>
+
+<p>그런데 이 CPU 스케줄러가 아무 때나 끼어들 수 있는 것은 아니다. forward는 <strong>원자적(atomic)</strong>이다. 한 번 GPU에 던지면 중간에 끼어들 수도, 일부만 빼낼 수도 없고, forward가 끝나야 CPU가 다시 개입할 수 있다.</p>
+
+<blockquote>
+  <p>참고: 이 원자성을 DB 트랜잭션에 비유하면 all-or-nothing과 중간 상태 관찰 불가라는 점에서는 같지만 롤백이 없다는 점에서 다른, 일종의 “롤백 없는 원자적 커밋”이라고 이해할 수 있다. 클라이언트가 연결을 끊어도 이미 launch된 스텝은 끝까지 돌고, 그 요청은 다음 스케줄에서 빠질 뿐이다. 실행 중인 요청을 미루는 preemption류의 동작도 iteration 도중 중단이 아니라 다음 iteration에서 제외하는 방식으로 일어난다.</p>
+</blockquote>
+
+<p>그래서 <strong>스케줄링 단위</strong>라는 말이 나온다. 스케줄러가 개입할 수 있는 지점은 오직 iteration 경계뿐이고, 그 경계에서 다음 forward에 누구를 넣을지 정하는 것이다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">CPU</span><span class="p">:</span> <span class="n">schedule</span><span class="p">()</span> <span class="err">→</span> <span class="err">텐서</span> <span class="err">조립</span> <span class="err">→</span> <span class="err">커널들을</span> <span class="n">GPU</span> <span class="err">큐에</span> <span class="n">enqueue</span> <span class="p">(</span><span class="err">비동기</span><span class="p">,</span> <span class="err">바로</span> <span class="err">리턴</span><span class="p">)</span>
+<span class="n">GPU</span><span class="p">:</span>                          <span class="o">...</span> <span class="err">실제</span> <span class="err">실행</span> <span class="o">...</span>
+<span class="n">CPU</span><span class="p">:</span> <span class="err">결과</span> <span class="err">동기화</span> <span class="err">→</span> <span class="n">EOS</span> <span class="err">판정</span> <span class="err">→</span> <span class="err">슬롯</span> <span class="err">회수</span> <span class="err">→</span> <span class="err">다시</span> <span class="n">schedule</span><span class="p">()</span>
+     <span class="c"># 여기가 iteration 경계. 개입할 수 있는 유일한 틈</span>
+</code></pre></div></div>
+
+<p>단위를 iteration으로 잘게 쪼개면 얻는 것은 <strong>결정 지점의 수</strong>다. 요청 단위에서는 스케줄링 결정의 기회가 요청 묶음당 1회지만, iteration 단위에서는 forward마다 돌아온다. 이 결정 기회를 실제로 언제 쓰는지는 <a href="#배칭-방식-배치를-다시-짜는-시점">배칭 방식</a>에서 갈린다 — 여기서는 단위만 바꿔 두었다.</p>
+
+<p>단위를 정했으니 질문이 남는다. 그 한 스텝에 무엇을 넣나.</p>
+
+<p><br /></p>
+
+<h1 id="배칭-한-번-읽은-가중치로-여러-요청">배칭: 한 번 읽은 가중치로 여러 요청</h1>
+
+<h2 id="처리량-이득의-원리">처리량 이득의 원리</h2>
+
+<p>hidden size 4096, 가중치 14GB인 모델에서 요청 하나를 decode하는 상황을 보자.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>입력  <span class="o">[</span>1, 4096]   <span class="c"># 요청 1개, 토큰 1개</span>
+가중치 W: 14GB 전체를 HBM에서 읽어 옴
+출력  <span class="o">[</span>1, 4096]   <span class="c"># 토큰 1개</span>
+</code></pre></div></div>
+
+<p>decode 한 스텝의 forward는 모든 레이어의 attention projection과 FFN, embedding/lm_head까지 가중치를 전부 읽는다. 그 총합이 14GB다. 연산량은 이에 비해 매우 작고, 시간 대부분을 메모리에서 가중치를 퍼 오는 데 쓴다 — memory-bound다.</p>
+
+<p>여기서 요청 3개를 배칭해 보자.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>입력  <span class="o">[</span>3, 4096]   <span class="c"># 요청 3개, 각각 토큰 1개</span>
+가중치 W: 14GB ... 똑같이 한 번만 읽음
+출력  <span class="o">[</span>3, 4096]   <span class="c"># 토큰 3개</span>
+</code></pre></div></div>
+
+<p>행렬 곱셈은 <code class="highlighter-rouge">[3, 4096] × [4096, 4096]</code>으로 왼쪽 행렬의 행이 3개가 된 것뿐이고, 가중치 읽기는 그대로다. 3개 요청 모두 같은 가중치를 곱하기 때문에 가중치를 3번 읽을 필요가 없다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구분</th>
+      <th>요청 1개씩 3번</th>
+      <th>3개 배칭해서 1번</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>가중치 읽기</td>
+      <td>14GB × 3 = 42GB</td>
+      <td>14GB</td>
+    </tr>
+    <tr>
+      <td>생성 토큰</td>
+      <td>3</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>FLOPs</td>
+      <td>3배</td>
+      <td>3배 (같음)</td>
+    </tr>
+    <tr>
+      <td>산술 강도 (FLOPs/byte)</td>
+      <td>기준</td>
+      <td>3배</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>같은 계산량에 바이트 이동이 1/3이니 산술 강도가 3배다. “배칭이 산술 강도를 인위적으로 올린다”는 말의 문자 그대로의 의미가 이것이고, roofline 위에서는 memory-bound 사선 구간의 점이 오른쪽으로 이동하는 것으로 나타난다. <a href="/dev/Dev-Roofline-Model-LLM-Serving/">roofline 실측 글</a>에서 배치를 실어 찍은 점들이 실제로 이렇게 움직이는 것을 확인했다. 처리량으로 옮기면:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">throughput</span> <span class="o">=</span> <span class="p">(</span><span class="err">스텝당</span> <span class="err">산출</span> <span class="err">토큰</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="err">스텝</span> <span class="err">시간</span><span class="p">)</span>
+<span class="c">#              ↑ B배로 늘어남     ↑ memory-bound 구간에선 거의 그대로</span>
+<span class="c"># → 거의 B배</span>
+</code></pre></div></div>
+
+<blockquote>
+  <p>참고: 정확히 하면 decode 한 스텝의 HBM 읽기는 가중치 항 하나가 아니라 가중치 항 + KV cache 항의 합이다. 배칭이 상각하는 것은 모든 요청이 <strong>공유</strong>하는 가중치 항뿐이고, 요청마다 따로 쌓이는 KV cache 항은 배칭으로 줄지 않는다 — 오히려 배치를 키우는 만큼 늘어난다. 위 계산은 가중치 항이 지배하는 구간의 이야기이고, 미뤄 둔 이 항은 <a href="#남는-질문-6장의-나머지">남는 질문</a>에서 다시 만난다.</p>
+</blockquote>
+
+<h2 id="선택으로서의-배칭과-지연의-거래">선택으로서의 배칭과 지연의 거래</h2>
+
+<p>그런데 이렇게 배치로 같이 처리해야 한다는 법이 있는 건 아니다. <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/">3.3편</a>에서 prefill의 병렬 처리를 두고 “그렇게 해야만 해서가 아니라 가능해서 한다”고 정리한 것과 같은 구도다. 요청 3개를 따로따로 3번 forward 돌려도 결과는 같다 — 가중치를 3번 읽을 뿐이다. 배칭은 법이 아니라 <strong>선택</strong>이고, 그 선택의 동기는 “가중치를 한 번만 읽는다”다.</p>
+
+<p>선택의 대가는 지연시간이다. 큐잉 이론(queueing theory)의 기본 분해를 빌리면, 어느 시스템에서든 요청 하나가 겪는 지연(latency)은 두 항의 합이다.</p>
+
+<script type="math/tex; mode=display">\text{latency} = \underbrace{\text{queueing time}}_{\text{대기 시간: 내 차례가 오기까지}} + \underbrace{\text{service time}}_{\text{서비스 시간: 실제 처리되는 동안}}</script>
+
+<p>“여러 요청을 같은 텐서에 쌓아서 한 forward에 넣는다”는 배칭의 정의만으로 이 두 항이 모두 영향을 받는다.</p>
+
+<ul>
+  <li><strong>대기 시간</strong>: 혼자면 도착 즉시 출발할 수 있었는데, 같은 텐서에 쌓으려면 누구와 쌓을지가 먼저 확정돼야 한다. 같이 탈 요청이 정해질 때까지 기다리는 시간이 이 항에 더해진다</li>
+  <li><strong>서비스 시간</strong>: 텐서의 행이 B개가 되니 한 스텝이 짊어지는 일의 양이 B배가 된다. 일이 B배면 스텝 시간도 늘어날 수 있다 — 실제로 얼마나 늘어나는지는 워크로드의 병목에 달렸다</li>
+</ul>
+
+<p>여기까지는 LLM이 아니어도, 어떤 시스템의 배칭이든 성립하는 일반론이다. LLM decode에 오면 두 번째 항의 사정이 특별해진다. decode는 memory-bound라 스텝 시간의 대부분이 계산이 아니라 가중치 읽기인데, 가중치 읽기는 행이 1개든 B개든 한 번이다. 그래서 일의 양이 B배가 되어도 스텝 시간은 거의 변하지 않는다 — 서비스 시간 증가가 거의 0인, 배칭의 이득이 사실상 추가 비용 없이 나오는 구간이다. 그런데 <a href="#처리량-이득의-원리">처리량 이득의 원리</a>에서 본 대로 배치를 키우는 것은 곧 산술 강도를 올리는 것이다. 읽기는 그대로인데 계산만 B배로 쌓이니, 배치를 계속 키우면 어느 순간 ridge point를 넘어 compute-bound 구간에 들어선다. 그때부터는 병목이 읽기에서 계산으로 바뀌어 스텝 시간이 배치 크기에 비례해 늘고, KV cache 메모리 압박도 커진다. 그래서 배치 크기와 처리량의 곡선에는 무릎(knee)이 있고, 서빙 엔진들이 배치 상한 파라미터(vLLM의 <code class="highlighter-rouge">max_num_seqs</code> 등)를 두는 이유가 이것이다. 참고로 이 값을 1로 두면 배치 차원을 1로 강제해 배칭이 무력화된다.</p>
+
+<p>처리량은 시스템의 지표고 지연은 요청 하나의 지표다. 배칭은 내 완료 시각을 남의 요청 상태에 종속시켜 처리량을 사는 거래이며, 두 항의 비중은 배칭 방식마다 달라진다 — <a href="#배칭-방식-배치를-다시-짜는-시점">배칭 방식</a>에서 다시 본다.</p>
+
+<p>그 전에 짚어야 할 것이 있다. iteration에 넣을 작업들이 전부 같은 모양이 아니라는 점이다.</p>
+
+<p><br /></p>
+
+<h1 id="배치의-구조-prefill과-decode">배치의 구조: prefill과 decode</h1>
+
+<h2 id="세-축으로-읽는-입력-텐서">세 축으로 읽는 입력 텐서</h2>
+
+<p>prefill과 decode의 개념과 기원은 <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/">3.3편</a>에서 정리했다. 여기서는 배칭에 필요한 관점 하나만 얹는다 — 두 단계는 forward에 들어가는 <strong>텐서의 모양</strong>이 다르다. 입력 텐서 <code class="highlighter-rouge">[B, S, H]</code>에서 원소 하나는 “b번째 요청의, s번째 토큰의, h번째 특징값”이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>축</th>
+      <th>이름</th>
+      <th>뜻</th>
+      <th>예시 값</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>B</td>
+      <td>batch</td>
+      <td>이번 forward의 요청 개수</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>S</td>
+      <td>sequence</td>
+      <td>요청당 이번 forward에서 계산할 토큰 수</td>
+      <td>prefill 1000 / decode 1</td>
+    </tr>
+    <tr>
+      <td>H</td>
+      <td>hidden</td>
+      <td>토큰 1개를 표현하는 벡터 길이 (모델 상수)</td>
+      <td>4096</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>두 단계의 차이는 S 축에 몇 개가 들어가는가다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Prefill <span class="o">(</span>프롬프트 1000토큰<span class="o">)</span>:
+  입력 <span class="o">[</span>1, 1000, 4096]  <span class="c"># 1000개 토큰을 한 forward에 전부</span>
+
+Decode <span class="o">(</span>그 다음부터<span class="o">)</span>:
+  입력 <span class="o">[</span>1, 1, 4096]     <span class="c"># 매 forward마다 딱 1개</span>
+  입력 <span class="o">[</span>1, 1, 4096]
+  ...
+</code></pre></div></div>
+
+<p>여기에 배치까지 얹어(B=3) 그림으로 보면, 두 단계의 텐서는 S 축의 폭만 다른 같은 구조다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-ch06-input-tensor-shapes.svg" alt="B=3일 때 prefill과 decode의 입력 텐서 shape 비교" class="align-center" /></p>
+
+<center><sup>AI를 이용해 직접 그린 도식. prefill은 요청마다 프롬프트 전체(S=1000)가, decode는 직전 생성 토큰 1개(S=1)가 실린다 — B와 H는 같고 S만 다르다</sup></center>
+
+<p>prefill이 1000개를 한 번에 넣을 수 있는 이유는 프롬프트 토큰을 이미 다 알고 있고, causal mask 덕분에 동시에 넣어도 각 토큰이 자기 앞만 보기 때문이다. decode가 1개씩인 이유는 다음 토큰을 모르기 때문이다 — 501번째 토큰을 계산하려면 500번째 결과가 있어야 하는 자기회귀 구조라 원리적으로 병렬화가 안 된다.</p>
+
+<blockquote>
+  <p>참고: 서빙 엔진의 튜닝 파라미터가 정확히 이 두 축을 제한한다. vLLM 기준으로 <code class="highlighter-rouge">--max-num-seqs</code>는 B(이번 forward의 요청 개수), <code class="highlighter-rouge">--max-num-batched-tokens</code>는 B × S의 총합(이번 forward에 넣는 토큰 수)의 상한이다.</p>
+</blockquote>
+
+<h2 id="prefill-배치-길이가-다른-시퀀스와-패딩">prefill 배치: 길이가 다른 시퀀스와 패딩</h2>
+
+<p>여러 요청이 “다 같이 prefill한다”는 말의 정확한 의미는 물리적으로 <strong>같은 forward pass 안에 들어간다</strong>는 것이다. 시각이 같다는 뜻이 아니라 스케줄러가 그것들을 하나의 실행 단위로 묶었다는 뜻이고, forward 1회를 이루는 수백 개의 커널 호출(레이어마다 QKV projection, attention, FFN 등) 각각이 요청들을 하나의 텐서로 함께 받는다는 뜻이다. 요청들은 같은 텐서의 서로 다른 행이 되고, 결과는 iteration이 끝날 때 함께 나온다.</p>
+
+<p>문제는 길이가 다르면 그냥 쌓을 수 없다는 것이다. 텐서는 직사각형이어야 한다. 이 문제를 해결하기 위한 가장 전통적 해법이 패딩(padding)이다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-ch06-prefill-batch-padding.svg" alt="패딩으로 직사각형 텐서 만들기" class="align-center" /></p>
+
+<center><sup>AI를 이용해 직접 그린 도식. 가장 긴 요청(1000토큰)에 맞춰 직사각형을 만들면 짧은 요청의 남는 칸이 전부 pad가 된다</sup></center>
+
+<p>pad 토큰은 mask로 결과에서 무효화되지만 메모리 자리와 연산은 그대로 소모한다. 길이 편차가 클수록 직사각형의 빈 구석, 즉 낭비가 커진다. 그래서 요즘 엔진(vLLM, FlashAttention의 varlen 커널)은 패딩 대신 토큰을 일렬로 이어 붙이고 경계만 따로 알려 주는 방식을 쓴다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-ch06-prefill-batch-varlen.svg" alt="varlen 이어붙이기" class="align-center" /></p>
+
+<center><sup>AI를 이용해 직접 그린 도식. 세 요청의 토큰을 일렬로 이어 붙이고 cu_seqlens로 경계만 표시한다 — pad가 사라진다</sup></center>
+
+<p>길이 차이 때문에 패딩으로 생기던 낭비는 없어지되 “같은 forward pass 안에서 처리한다”는 성질은 동일하다. 개념적으로 달라진 것은 없다.</p>
+
+<h2 id="decode-배치-lockstep과-종료-시점">decode 배치: lockstep과 종료 시점</h2>
+
+<p>decode를 배칭하면 배치 안 요청들 사이에 시점 차이가 물리적으로 존재할 수 없다. 같은 커널 호출의 출력 텐서에서 서로 다른 행일 뿐이기 때문이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>iteration 5:  입력 <span class="o">[</span>3, 1, 4096] → GEMM<span class="o">(</span>행렬 곱<span class="o">)</span> → 출력 <span class="o">[</span>3, 1, 4096]
+<span class="c"># A의 5번째 토큰, B의 5번째 토큰, C의 5번째 토큰이</span>
+<span class="c"># 같은 행렬 곱셈의 3개 행으로 한꺼번에 나옴</span>
+</code></pre></div></div>
+
+<p>A가 먼저 나오고 B가 0.1ms 뒤에 나오는 일은 없다. iteration 자체가 원자적이라 그 안에서는 순서라는 개념이 없다 — 발맞춰 행진하는 lockstep이다.</p>
+
+<p>진짜 차이가 나는 것은 <strong>언제 끝나는가</strong>뿐이다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-ch06-decode-eos-timing.svg" alt="decode 배치의 흩어지는 종료 시점" class="align-center" /></p>
+
+<center><sup>AI를 이용해 직접 그린 도식. lockstep으로 함께 돌던 요청들도 EOS를 뱉는 iteration은 제각각이다</sup></center>
+
+<p>출력 길이는 미리 알 수 없으므로 각 요청이 EOS를 뱉는 시점은 제각각이다. 바로 이 지점에서 세 가지 배칭 방식이 갈라진다.</p>
+
+<p><br /></p>
+
+<h1 id="배칭-방식-배치를-다시-짜는-시점">배칭 방식: 배치를 다시 짜는 시점</h1>
+
+<h2 id="세-가지-방식">세 가지 방식</h2>
+
+<p>결론부터 말하면, 세 방식 모두 지금까지 본 텐서 쌓기를 똑같이 한다. 다른 것은 이번 forward의 텐서에 어떤 요청들이 행으로 실려 있는가 — 이 요청 집합을 <strong>배치 멤버십</strong>(batch membership)이라고 부르자 — 를 <strong>언제 다시 정하느냐</strong> 하나뿐이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>방식</th>
+      <th>배치 확정 시점</th>
+      <th>멤버십이 바뀌는 시점</th>
+      <th>짧은 요청이 끝나면</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>static</td>
+      <td>요청 N개가 다 모이면</td>
+      <td>배치 전체가 끝난 뒤</td>
+      <td>슬롯이 빈 채로 끝까지 유지</td>
+    </tr>
+    <tr>
+      <td>dynamic</td>
+      <td>N개 차거나 max delay 지나면</td>
+      <td>배치 전체가 끝난 뒤 (static과 동일)</td>
+      <td>동일</td>
+    </tr>
+    <tr>
+      <td>continuous</td>
+      <td>매 스텝</td>
+      <td>매 iteration</td>
+      <td>그 자리에 대기 중인 새 요청이 들어옴</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="static-batching">static batching</h3>
+
+<p>배치 구성을 실행 시작 전에 한 번 정하고 끝까지 유지한다. <a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/">3.2편</a>에서 실습한 방식이다 — 배치 상한 4로 잘라 실행했고, <code class="highlighter-rouge">ceil(N/B)</code> 계단이 처리 시간에 그대로 드러났다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-ch06-static-batching.svg" alt="static batching: 정원이 차야 출발, 전원이 끝나야 해산" class="align-center" /></p>
+
+<center><sup>AI를 이용해 직접 그린 도식. 요청 셋이 모두 모여야 출발하고, 먼저 끝난 슬롯은 C가 끝나는 300번째 iteration까지 빈 채로 낭비된다</sup></center>
+
+<h3 id="dynamic-batching">dynamic batching</h3>
+
+<p>static과의 차이는 출발 조건뿐이다. 합승에 비유하면 정원이 다 차야 출발하는 쪽(static)과, 정원이 안 찼어도 시간이 되면 출발하는 쪽(dynamic)이다. 출발한 뒤의 동작은 완전히 동일하다 — 배치가 통째로 끝나야 해산한다.</p>
+
+<p>문제는 출발한 뒤다. 위의 종료 시점 그림에서 A는 iteration 4에 끝났는데도 C가 300번째 iteration을 돌 때까지 슬롯이 빈 채로 유지된다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-ch06-dynamic-batching.svg" alt="dynamic batching: 시간이 되면 미달인 채로 출발" class="align-center" /></p>
+
+<center><sup>AI를 이용해 직접 그린 도식. max delay가 지나면 정원이 안 찼어도 출발하지만, 출발한 뒤의 낭비 구조는 static과 같다</sup></center>
+
+<p>배치에 묶인 요청들이 함께 끝나야 하는 구조 — 가장 오래 걸리는 요청까지 모두가 기다리는 구조다. 배치 경계를 요청 단위로 정했기 때문에 생기는 일이다.</p>
+
+<h3 id="continuous-batching">continuous batching</h3>
+
+<p>이것을 개선한 것이 continuous batching이다. 매 iteration 경계(forward 한 번이 끝날 때마다)에서 다음 forward에 넣을 텐서를 새로 조립한다. 끝난 요청은 그 스텝에서 즉시 빠지고, 큐에서 기다리던 요청은 다음 스텝에 바로 들어온다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-ch06-continuous-batching.svg" alt="continuous batching: 매 iteration 경계에서 재구성" class="align-center" /></p>
+
+<center><sup>AI를 이용해 직접 그린 도식. 먼저 끝난 슬롯이 다음 iteration에서 큐의 새 요청(prefill부터)으로 즉시 채워져 빈 슬롯이 없다</sup></center>
+
+<p>알고리즘적으로 대단한 것을 새로 만든 게 아니다. 스케줄러가 개입하는 단위를 요청에서 iteration으로 내린 것이고, <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#직접-만든-서빙-시스템-속의-두-단계">3.3편</a>에서 예고한 그대로다. 위의 <code class="highlighter-rouge">engine.step()</code> 코드로 보면 <code class="highlighter-rouge">schedule()</code>이 매 루프마다 호출되는 것이 continuous batching이고, static/dynamic에서는 배치가 끝날 때까지 <code class="highlighter-rouge">schedule()</code>이 다시 불리지 않는 것이다. <a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">2편</a>의 시스템과 비교하면 새 컴포넌트가 생긴 게 아니라 <strong>기존 배처의 호출 주기가 요청당 1회에서 스텝당 1회로 바뀐 것</strong>이다.</p>
+
+<p>이 방식을 iteration-level scheduling이라는 이름으로 처음 정식화한 것이 Orca(OSDI ‘22) 논문이다. 굳이 <em>iteration-level</em>이라고 부른 것은 기존 방식이 암묵적으로 <em>request-level</em>이었기 때문이고, 이후 vLLM을 비롯한 현대 서빙 엔진의 표준이 됐다.</p>
+
+<p>성립 전제도 짚어 둘 만하다. iteration-level scheduling이 가능하려면 두 가지가 필요하고, 둘 다 prefill/decode 구분에서 나온다.</p>
+
+<ul>
+  <li>요청이 여러 iteration에 걸쳐 살아 있어야 한다 → 스텝 사이에 넘겨줄 상태(KV cache)가 있어야 하고, 그 상태를 만드는 단계(prefill)와 이어가는 단계(decode)가 갈린다. 전통 ML 서빙은 요청 = forward 1회라 넘길 상태가 없고, iteration-level scheduling이라는 말 자체가 무의미하다</li>
+  <li>스케줄러가 “이 요청은 이번 스텝에 몇 토큰을 기여하나”를 계산할 수 있어야 한다 → decode면 1, prefill이면 남은 프롬프트 길이다. 이 값을 모르면 스텝의 토큰 예산을 짤 수 없다</li>
+</ul>
+
+<h2 id="continuous-batching이-남기는-문제">continuous batching이 남기는 문제</h2>
+
+<p><a href="#선택으로서의-배칭과-지연의-거래">앞</a>에서 배칭의 지연 비용을 대기와 서비스 두 항으로 분해했는데, 방식에 따라 주범이 달라진다. continuous batching에서는 새 항이 하나 생긴다 — <strong>남의 요청과의 간섭</strong>이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>지연 요인</th>
+      <th>static/dynamic</th>
+      <th>continuous</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>대기 (배치가 찰 때까지)</td>
+      <td>주범 (최대 max delay)</td>
+      <td>거의 없음 (다음 iteration 경계까지만)</td>
+    </tr>
+    <tr>
+      <td>스텝 자체가 무거워짐</td>
+      <td>있음</td>
+      <td>있음</td>
+    </tr>
+    <tr>
+      <td>남의 요청과의 간섭</td>
+      <td>없음 (배치 고정)</td>
+      <td>주범</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 간섭은 어디서 오는가. static/dynamic에서는 배치 안 요청들의 단계가 항상 같다 — 다 같이 출발했으니 다 같이 prefill을 하고, 그 다음부터 다 같이 decode를 한다. 단계가 섞일 일 자체가 구조적으로 없다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-non-continuous-batching-happy-path.svg" alt="static batching의 happy path: 전원 같이 prefill한 뒤 전원 같이 decode한다" class="align-center" /></p>
+
+<center><sup>AI를 이용해 직접 그린 도식. 요청 셋이 iteration 1에서 한 배치로 prefill을 하고, 이후 전원이 lockstep으로 decode를 반복한다 — 단계가 섞일 일이 구조적으로 없다</sup></center>
+
+<p>반면 continuous batching에서 새로 합류하는 요청은 prefill부터 시작해야 하는데, 배치에는 이미 decode 중인 요청들이 있다. <a href="#continuous-batching">위 continuous batching 그림</a>에서 초록 decode 셀들 사이에 파란 prefill 셀이 끼어들던 장면이 바로 이것이다. <a href="#배치의-구조-prefill과-decode">배치의 구조</a>의 용어로, S=1인 요청들 옆에 S=8000짜리 요청이 오는 것이다. 얄궂게도 prefill/decode 구분은 continuous batching의 성립 전제이면서 동시에 이 문제의 원천이다 — 배치를 자유롭게 재구성할 수 있는 근거가 “decode는 전부 S=1이라 아무나 같은 모양으로 쌓인다”였는데, 새로 합류하는 요청은 S=8000의 prefill이기 때문이다.</p>
+
+<p>선택지는 둘인데, 결론부터 말하면 어느 쪽도 만족스럽지 않다. 섞지 않으면 진행 중인 decode가 멎고, 섞어도 긴 prefill이 스텝 길이를 지배한다.</p>
+
+<h3 id="방안-1-prefill과-decode를-함께-배칭하지-않음">방안 1: prefill과 decode를 함께 배칭하지 않음</h3>
+
+<p>prefill과 decode를 섞은 하이브리드 배치는 더 복잡한 GPU 커널이 필요하다. 그러니 우선 섞지 않는 쪽부터 보자.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-ch06-cb-prefill-priority.svg" alt="prefill을 우선하고 decode와 함께 배칭하지 않는 continuous batching" class="align-center" /></p>
+
+<center><sup>출처: Hands-On LLM Serving and Optimization (O'Reilly) 그림 6-7. AI를 이용해 재구성했다</sup></center>
+
+<p>요청 1이 prefill(iteration 1)을 거쳐 decode(iteration 2)를 진행하던 중 요청 2·3이 도착했다. 이때 보통 prefill을 우선한다. prefill이 첫 토큰까지의 시간, 즉 TTFT를 결정하고, 챗봇 같은 대화형 서비스에서 TTFT가 중요한 지연 지표이기 때문이다.</p>
+
+<p>대가는 그림의 iteration 3에 그대로 보인다. 요청 2·3의 prefill이 도는 동안 <strong>요청 1은 완전히 유휴 상태로 멎는다.</strong> 새 요청의 프롬프트가 길수록 이 공백이 길어지고, 요청 1의 종단 지연(end-to-end latency)과 토큰 간 지연(inter-token latency)이 그만큼 타격을 입는다. 스트리밍으로 토큰을 받아 보던 사용자 입장에서는 잘 나오던 글자가 갑자기 멈추는 것이다.</p>
+
+<h3 id="방안-2-prefill과-decode를-함께-배칭">방안 2: prefill과 decode를 함께 배칭</h3>
+
+<p>그럼 섞어 보자. 요청 1의 decode 스텝을 요청 2·3의 prefill과 같은 iteration에 넣어 함께 실행한다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-ch06-cb-prefill-decode-mixed.svg" alt="decode와 prefill을 함께 배칭하는 continuous batching" class="align-center" /></p>
+
+<center><sup>출처: Hands-On LLM Serving and Optimization (O'Reilly) 그림 6-8. AI를 이용해 재구성했다</sup></center>
+
+<p>그런데 “S=1과 S=8000을 한 텐서에 같이 담는다”는 게 그냥 되는 일인가? 층위를 나눠서 보자.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>층위</th>
+      <th>S=1과 S=8000 같이 담기</th>
+      <th>왜</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>GEMM / FFN</td>
+      <td>된다</td>
+      <td>토큰끼리 독립이라 8001개 행으로 이어 붙이면 된다</td>
+    </tr>
+    <tr>
+      <td>attention</td>
+      <td>순수 batched 커널로는 안 된다</td>
+      <td>요청마다 Q 길이도 참조할 KV 길이도 달라 직사각형이 안 된다</td>
+    </tr>
+    <tr>
+      <td>실무 관점</td>
+      <td>담아도 손해다</td>
+      <td>그 스텝의 소요 시간이 8000토큰 prefill에 지배된다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>진짜 문제는 마지막 줄이다. 토큰 하나를 디코딩하는 것은 prefill을 끝내는 것보다 훨씬 빠르기 때문에, 한 스텝의 길이는 그 스텝에서 가장 무거운 작업 — prefill — 이 결정한다. 담을 수는 있어도, 담는 순간 decode 중이던 요청의 그 스텝이 prefill 시간만큼 늘어나 토큰 간 지연이 튄다. 그림에서 요청 2·3의 prefill이 이어지는 동안 요청 1의 decode 토큰들이 그 긴 스텝의 박자에 묶이는 것이 보인다. 입력 프롬프트가 길수록 지연은 여전히 두드러진다.</p>
+
+<h3 id="남는-질문-6장의-나머지">남는 질문: 6장의 나머지</h3>
+
+<p>두 방안의 실패가 다음 질문들을 만든다. 이것이 6장 나머지의 지도이고, 여기서는 방향만 확인하고 상세는 이후 글에서 다룬다.</p>
+
+<p><strong>prefill을 쪼갤 수는 없나.</strong> 쪼개는 축이 두 개 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구분</th>
+      <th>selective batching</th>
+      <th>chunked prefill</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>무엇을 쪼개나</td>
+      <td>연산 종류 (GEMM은 묶고 attention은 요청별로)</td>
+      <td>작업을 시간축으로 (prefill을 여러 iteration에 분산)</td>
+    </tr>
+    <tr>
+      <td>층위</td>
+      <td>커널 / 텐서 조립</td>
+      <td>스케줄링</td>
+    </tr>
+    <tr>
+      <td>출처</td>
+      <td>Orca (OSDI ‘22)</td>
+      <td>Sarathi (2023) → vLLM</td>
+    </tr>
+    <tr>
+      <td>노리는 것</td>
+      <td>혼재 배치가 성립하게 만들기</td>
+      <td>토큰 간 지연 안정화 (대가는 TTFT)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>selective batching의 아이디어는 위 표의 첫 두 줄 대비가 전부다 — 소속이 무관한 연산(GEMM)은 묶고, 소속이 본질인 연산(attention)은 따로 돈다. chunked prefill은 긴 prefill을 한 스텝에 다 하지 않고 청크로 나눠 여러 스텝에 싣는 방식이다. 앞 청크의 KV cache가 남아 있어 다음 청크가 이어서 계산할 수 있기 때문에 가능하고 — decode를 이어갈 수 있는 것과 같은 원리다 — 이때 <a href="#엔진-루프의-한-스텝">앞</a>에서 말한 “새 토큰 없이 끝나는 iteration”(마지막이 아닌 중간 청크)이 실제로 생긴다.</p>
+
+<p><strong>매 스텝 배치를 다시 짜는 CPU 비용은 공짜인가.</strong> 스케줄링은 CPU 몫이므로, 모델이 작아 GPU 스텝이 짧으면 CPU 스케줄링 시간이 상대적으로 커져 GPU가 CPU를 기다리는 상황이 생긴다. vLLM의 엔진 재작성(V1)이나 CUDA graph 같은 작업들이 이 CPU 구간을 줄이거나 GPU 실행 뒤로 숨기려는 시도다.</p>
+
+<p><strong>KV cache는 어떻게 하나.</strong> decode 한 스텝의 HBM 읽기는 가중치 항과 KV cache 항의 합인데(<a href="#처리량-이득의-원리">처리량 이득의 원리</a>에서 미뤄 둔 항이다), 배칭이 절약하는 것은 앞 항뿐이다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">decode</span> <span class="mi">1</span><span class="err">스텝의</span> <span class="n">HBM</span> <span class="err">읽기</span> <span class="o">=</span> <span class="err">가중치</span> <span class="mi">14</span><span class="n">GB</span>        <span class="c"># 모든 요청이 공유. 배칭해도 1번</span>
+                        <span class="o">+</span> <span class="n">KV</span> <span class="n">cache</span> <span class="p">(</span><span class="err">요청별</span><span class="p">)</span>   <span class="c"># 요청마다 각자. 배칭하면 B배</span>
+</code></pre></div></div>
+
+<p>배치를 키우다 보면 어느 순간 KV 읽기가 지배하기 시작하고, 그때부터는 배칭이 아니라 <a href="#6장의-지도-하나의-분수-세-방향의-공략">6장 지도</a>의 두 번째 축 — 옮길 바이트를 줄이는 GQA·KV cache 양자화·PagedAttention — 이 답이 된다. 요청이 매 스텝 들고나는 배치에서 요청별로 자라나는 KV cache 메모리를 어떻게 관리하느냐의 문제도 같은 축에서 만난다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>이 글의 흐름을 질문 사슬로 압축하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>순서</th>
+      <th>질문</th>
+      <th>답</th>
+      <th>다음 질문</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>단위</td>
+      <td>실행 단위는 무엇인가</td>
+      <td>요청이 아니라 forward 1회, iteration. 원자적이라 개입 지점은 경계뿐</td>
+      <td>그 스텝에 무엇을 넣나</td>
+    </tr>
+    <tr>
+      <td>동기</td>
+      <td>여러 개 넣는 게 왜 이득인가</td>
+      <td>한 번 읽은 가중치의 상각 — 산술 강도 상승</td>
+      <td>넣을 작업의 모양이 같은가</td>
+    </tr>
+    <tr>
+      <td>구조</td>
+      <td>어떤 모양으로 쌓이나</td>
+      <td>prefill은 S가 크고 decode는 S=1 — 패딩 낭비와 종료 시점 분산</td>
+      <td>빈 슬롯을 누가 언제 다시 채우나</td>
+    </tr>
+    <tr>
+      <td>시점</td>
+      <td>배치를 언제 다시 짜나</td>
+      <td>static·dynamic·continuous — 매 iteration 재구성이 continuous</td>
+      <td>prefill과 decode가 한 스텝에서 만나면</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이후 기법들을 읽을 때 길을 잃지 않기 위한 핵심 개념을 다시 정리하면:</p>
+
+<ul>
+  <li><strong>iteration</strong> = 모델을 처음부터 끝까지 한 번 통과시키는 것. decode에서는 토큰 1개 생성. 원자적이며, 스케줄러의 개입 지점은 iteration 경계뿐이다</li>
+  <li><strong>배칭</strong> = 여러 요청의 입력을 같은 텐서에 쌓아 한 forward에 넣는 것. 목적은 오직 가중치를 한 번만 읽기다</li>
+  <li><strong>다 같이 prefill/decode</strong> = 시간적 동시가 아니라 같은 forward pass 안이라는 뜻. 길이가 다르면 패딩 또는 varlen 이어붙이기로 맞춘다</li>
+  <li><strong>decode 배치에 시점 차이는 없다</strong> — 같은 GEMM의 다른 행, lockstep이다. 차이가 나는 것은 오로지 끝나는 시점이다</li>
+  <li><strong>세 방식의 차이</strong> = 텐서 쌓기는 동일하고, 배치 멤버십을 언제 다시 정하느냐뿐이다</li>
+  <li><strong>continuous batching의 대가</strong> = prefill과 decode의 혼합. selective batching과 chunked prefill이 필요해진 이유다</li>
+</ul>
+
+<p>continuous batching은 종착점이 아니라 새 문제의 시작점이다. 6장의 나머지 기법들은 전부 <a href="#남는-질문-6장의-나머지">이 지도</a> 위의 좌표로 읽을 수 있다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://www.oreilly.com/library/view/hands-on-llm-serving/9798341621480/">Hands-On LLM Serving and Optimization (O’Reilly)</a></li>
+  <li><a href="https://www.usenix.org/conference/osdi22/presentation/yu">Orca: A Distributed Serving System for Transformer-Based Generative Models (OSDI ‘22)</a></li>
+  <li><a href="https://arxiv.org/abs/2308.16369">SARATHI: Efficient LLM Inference by Piggybacking Decodes with Chunked Prefills</a></li>
+  <li><a href="https://www.anyscale.com/blog/continuous-batching-llm-inference">Anyscale — How continuous batching enables 23x throughput in LLM inference</a></li>
+  <li><a href="https://www.youtube.com/watch?v=9gmHwe5-j0E&amp;t=611s">The Engineering Behind LLM Inference: Serving in Production (YouTube)</a></li>
+  <li><a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/">LLM 서빙과 최적화 - 3.2. 배치 요청: 정적 배칭의 효과와 한계</a></li>
+  <li><a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/">LLM 서빙과 최적화 - 3.3. prefill과 decode: 생성 추론의 두 단계</a></li>
+  <li><a href="/dev/Dev-Roofline-Model-LLM-Serving/">Roofline 모델로 보는 LLM 서빙</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#batching" class="page__taxonomy-item" rel="tag">Batching</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#continuous-batching" class="page__taxonomy-item" rel="tag">Continuous-Batching</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study-week-3" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study-Week-3</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#iteration-level-scheduling" class="page__taxonomy-item" rel="tag">Iteration-Level-Scheduling</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#llm-serving" class="page__taxonomy-item" rel="tag">LLM-Serving</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#prefill-decode" class="page__taxonomy-item" rel="tag">Prefill-Decode</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#vllm" class="page__taxonomy-item" rel="tag">vLLM</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-27">August 27, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BLLM%5D+LLM+%EC%84%9C%EB%B9%99%EA%B3%BC+%EC%B5%9C%EC%A0%81%ED%99%94%3A+%EC%84%9C%EB%B9%99+%EC%B5%9C%EC%A0%81%ED%99%94+%EA%B8%B0%EB%B2%95+-+6.1.+%EA%B0%9C%EC%9A%94%3A+iteration%EC%97%90%EC%84%9C+continuous+batching%EA%B9%8C%EC%A7%80%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/" class="pagination--pager" title="[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.5. AI 가속기 지형과 메모리 벽
+">이전</a>
+    
+    
+      <a href="#" class="pagination--pager disabled">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/" rel="permalink">[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.5. AI 가속기 지형과 메모리 벽
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 22일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  4 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">NVIDIA 밖 AI 가속기 지형과 메모리 벽 완화 트렌드를 살펴보고 5장을 정리해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/" rel="permalink">[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.4. 모델 로딩·실행 병목: 메모리 용량과 산술 강도
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 22일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  9 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">모델 로딩의 메모리 용량 제약과 실행 단계의 병목을 산술 강도로 분석해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/" rel="permalink">[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.3. GPU 인터커넥트: 대역폭 계층과 GPU 선택
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 22일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  10 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">GPU 인터커넥트의 대역폭 계층을 이해하고 모델 크기별 GPU 선택 기준을 세워 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-05-02-LLM-Serving-Challenge-GPU-Compute-Memory/" rel="permalink">[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.2. GPU 스펙 읽기: 연산과 메모리
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 22일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  7 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">GPU 스펙의 연산·메모리 속성을 읽고 H100 SXM과 NVL을 비교해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>
