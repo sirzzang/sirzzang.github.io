@@ -462,7 +462,7 @@ window.MathJax = {
 
 
 
-  19 분 소요
+  21 분 소요
 
 
             
@@ -491,6 +491,7 @@ window.MathJax = {
   <li><a href="#실행-단위-iteration">실행 단위: iteration</a>
     <ul>
       <li><a href="#요청-단위의-문제">요청 단위의 문제</a></li>
+      <li><a href="#토큰-1개-생성-스텝이라는-통칭">토큰 1개 생성 스텝이라는 통칭</a></li>
       <li><a href="#엔진-루프의-한-스텝">엔진 루프의 한 스텝</a></li>
       <li><a href="#스케줄러의-위치-cpu와-gpu의-분업">스케줄러의 위치: CPU와 GPU의 분업</a></li>
       <li><a href="#원자성과-스케줄링-단위">원자성과 스케줄링 단위</a></li>
@@ -522,9 +523,15 @@ window.MathJax = {
         <ul>
           <li><a href="#방안-1-prefill과-decode를-함께-배칭하지-않음">방안 1: prefill과 decode를 함께 배칭하지 않음</a></li>
           <li><a href="#방안-2-prefill과-decode를-함께-배칭">방안 2: prefill과 decode를 함께 배칭</a></li>
-          <li><a href="#남는-질문-6장의-나머지">남는 질문: 6장의 나머지</a></li>
         </ul>
       </li>
+    </ul>
+  </li>
+  <li><a href="#남는-질문-6장의-나머지">남는 질문: 6장의 나머지</a>
+    <ul>
+      <li><a href="#prefill-쪼개기-selective-batching과-chunked-prefill">prefill 쪼개기: selective batching과 chunked prefill</a></li>
+      <li><a href="#스케줄링의-cpu-비용">스케줄링의 CPU 비용</a></li>
+      <li><a href="#kv-cache-항">KV cache 항</a></li>
     </ul>
   </li>
   <li><a href="#정리">정리</a></li>
@@ -599,7 +606,7 @@ window.MathJax = {
     <tr>
       <td>② 분모(bytes)를 줄인다</td>
       <td>옮겨야 할 바이트 자체를 줄인다</td>
-      <td>어텐션 최적화 (GQA/MLA, FlashAttention, PagedAttention), 모델 압축 (양자화)</td>
+      <td>어텐션 최적화 (GQA/MLA, FlashAttention), 모델 압축 (양자화)</td>
     </tr>
     <tr>
       <td>③ 아예 안 한다</td>
@@ -609,11 +616,13 @@ window.MathJax = {
   </tbody>
 </table>
 
-<p>하나의 분수를 각자 다른 항에서 공략하는 체계다. 이 글은 그중 첫 번째 축 — 배칭 — 을 따라 continuous batching까지의 큰 흐름만 잡고, 거기서 드러나는 새 문제들을 확인하는 데서 멈춘다. 나머지 축의 기법들은 이후 글에서 하나씩 다룬다.</p>
+<p>하나의 분수를 각자 다른 항에서 공략하는 체계다. 한 가지, 6장의 대표 기법인 PagedAttention은 이 분수의 어느 항도 직접 건드리지 않는다 — KV cache 메모리의 단편화 낭비를 회수해 같은 용량으로 더 큰 배치(①)를 가능하게 하는 기반 기법이라, 지도에서는 별도 자리로 둔다. 이 글은 그중 첫 번째 축 — 배칭 — 을 따라 continuous batching까지의 큰 흐름만 잡고, 거기서 드러나는 새 문제들을 확인하는 데서 멈춘다. 나머지 축의 기법들은 이후 글에서 하나씩 다룬다.</p>
 
 <p><br /></p>
 
 <h1 id="실행-단위-iteration">실행 단위: iteration</h1>
+
+<p>첫 번째 질문은 단위다. 지금까지의 서빙 시스템은 요청을 실행 단위로 삼았다 — 이 단위가 어떤 문제를 만드는지, 무엇으로 바꿔야 하는지부터 보자.</p>
 
 <h2 id="요청-단위의-문제">요청 단위의 문제</h2>
 
@@ -623,24 +632,9 @@ window.MathJax = {
 
 <p>요청 단위로 스케줄링하면 이 forward N회짜리 반복이 통째로 하나의 작업 덩어리가 된다. 반복이 도는 동안 스케줄러가 끼어들어 내릴 수 있는 결정이 없다 — 새 요청을 넣을지, 먼저 끝난 요청을 뺄지는 실행 중인 묶음이 전부 끝난 뒤에야 정할 수 있다. 그래서 긴 생성 하나가 GPU를 붙잡고 있는 동안 짧은 요청은 큐에서 기다린다. <a href="/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/">3.2편</a>에서 관찰한 정적 배칭의 꼬리 대기가 정확히 이 문제였다.</p>
 
-<h2 id="엔진-루프의-한-스텝">엔진 루프의 한 스텝</h2>
+<h2 id="토큰-1개-생성-스텝이라는-통칭">토큰 1개 생성 스텝이라는 통칭</h2>
 
-<p>그럼 이 iteration이 엔진 안에서 실제로 어떻게 도는지 보자. LLM 서빙 엔진이 GPU에 일을 시키는 방법은 하나뿐이다 — 입력 텐서를 만들어서 모델 전체를 한 번 통과시키고 출력을 받는 것, 즉 iteration 한 번이다. 엔진의 실체는 이 스텝을 도는 무한 루프고, vLLM 코드에서는 실제로 <code class="highlighter-rouge">engine.step()</code>이다 (버전에 따라 클래스 이름이나 경로는 바뀔 수 있다).</p>
-
-<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 엔진 바깥의 루프</span>
-<span class="k">while</span> <span class="n">engine</span><span class="o">.</span><span class="n">has_unfinished_requests</span><span class="p">():</span>
-    <span class="n">request_outputs</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
-
-<span class="c"># step() 내부 (개념적으로)</span>
-<span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-    <span class="n">scheduler_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scheduler</span><span class="o">.</span><span class="n">schedule</span><span class="p">()</span>   <span class="c"># CPU. 이번 forward에 태울 요청 결정</span>
-    <span class="n">model_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_executor</span><span class="o">.</span><span class="n">execute_model</span><span class="p">(</span><span class="n">scheduler_output</span><span class="p">)</span>  <span class="c"># GPU</span>
-    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">scheduler</span><span class="o">.</span><span class="n">update_from_output</span><span class="p">(</span><span class="n">model_output</span><span class="p">)</span>  <span class="c"># CPU. EOS 판정, 슬롯 회수</span>
-</code></pre></div></div>
-
-<p>이 루프는 특정 요청의 것이 아니라 엔진의 것이다. 요청 하나의 눈으로 보면 이 루프에서 자기 몫은 prefill iteration 1회와 decode iteration N−1회지만, 루프 자체는 요청들이 들어오고 나가는 동안 멈추지 않고 돈다. 각 스텝에 어느 요청의 어떤 작업을 실을지는 아직 정하지 않았다.</p>
-
-<p>흔히 “iteration = 토큰 1개 생성 스텝”이라고 말한다. 이 등식은 decode만의 것이 아니다 — prefill의 forward도 마지막 위치에서 새 토큰 1개를 내놓고, 그 토큰이 곧 TTFT(Time To First Token, <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#서빙-지표-ttft와-tpot">3.3편의 서빙 지표</a> 참고)의 첫 토큰이다. 둘이 갈리는 지점은 나온 토큰 수가 아니라, 그 1개를 만들기 위해 <strong>한 번의 forward 안에서 계산한 위치의 수</strong>다.</p>
+<p>방금 iteration을 forward pass 1회로 정의했지만, 실무에서는 흔히 “iteration = 토큰 1개 생성 스텝”이라고도 말한다. 토큰을 하나씩 만드는 단계는 decode니, 언뜻 decode에 대한 말로 들린다. 그러나 이 등식은 decode만의 것이 아니다 — prefill의 forward도 마지막 위치에서 새 토큰 1개를 내놓고, 그 토큰이 곧 TTFT(Time To First Token, <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#서빙-지표-ttft와-tpot">3.3편의 서빙 지표</a> 참고)의 첫 토큰이다. 둘이 갈리는 지점은 나온 토큰 수가 아니라, 그 1개를 만들기 위해 <strong>한 번의 forward 안에서 계산한 위치의 수</strong>다.</p>
 
 <table>
   <thead>
@@ -664,11 +658,32 @@ window.MathJax = {
   </tbody>
 </table>
 
-<p>그런데도 이 등식이 decode의 표현으로 통용되는 이유는, 방금 본 스텝 하나의 크기가 아니라 <strong>스텝의 횟수</strong>에 있다. 요청 하나의 생애에서 prefill iteration은 1회뿐이고 decode iteration은 나머지 토큰 수만큼(N−1회) 반복되니, 엔진이 도는 iteration의 대부분은 토큰 1개를 만드는 decode 스텝이다. 물론 “forward 1회 = 새 토큰 1개”가 항상 지켜지는 등식도 아니다. prefill을 여러 스텝에 나눠 실으면 새 토큰 없이 끝나는 iteration도 생기는데, 이 예외는 <a href="#남는-질문-6장의-나머지">후술</a>하는 기법에서 등장한다.</p>
+<p>그럼에도 이 등식은 대개 decode의 표현으로 통용된다. 이유는 방금 본 스텝 하나의 크기가 아니라 <strong>스텝의 횟수</strong>에 있다. 요청 하나의 생애에서 prefill iteration은 1회뿐이고 decode iteration은 나머지 토큰 수만큼(N−1회) 반복되니, 엔진이 도는 iteration의 대부분은 토큰 1개를 만드는 decode 스텝이다. 물론 “forward 1회 = 새 토큰 1개”가 항상 지켜지는 등식도 아니다. prefill을 여러 스텝에 나눠 실으면 새 토큰 없이 끝나는 iteration도 생기는데, 이 예외는 <a href="#남는-질문-6장의-나머지">후술</a>하는 기법에서 등장한다.</p>
+
+<h2 id="엔진-루프의-한-스텝">엔진 루프의 한 스텝</h2>
+
+<p>그럼 이 iteration이 엔진 안에서 실제로 어떻게 도는지 보자. LLM 서빙 엔진이 GPU에 일을 시키는 방법은 하나뿐이다 — 입력 텐서를 만들어서 모델 전체를 한 번 통과시키고 출력을 받는 것, 즉 iteration 한 번이다. 엔진의 실체는 이 스텝을 도는 무한 루프고, vLLM 코드에서는 실제로 <code class="highlighter-rouge">engine.step()</code>이다 (버전에 따라 클래스 이름이나 경로는 바뀔 수 있다).</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 엔진 바깥의 루프</span>
+<span class="k">while</span> <span class="n">engine</span><span class="o">.</span><span class="n">has_unfinished_requests</span><span class="p">():</span>
+    <span class="n">request_outputs</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+
+<span class="c"># step() 내부 (개념적으로)</span>
+<span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="n">scheduler_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scheduler</span><span class="o">.</span><span class="n">schedule</span><span class="p">()</span>   <span class="c"># CPU. 이번 forward에 태울 요청 결정</span>
+    <span class="n">model_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_executor</span><span class="o">.</span><span class="n">execute_model</span><span class="p">(</span><span class="n">scheduler_output</span><span class="p">)</span>  <span class="c"># GPU</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">scheduler</span><span class="o">.</span><span class="n">update_from_output</span><span class="p">(</span><span class="n">model_output</span><span class="p">)</span>  <span class="c"># CPU. EOS 판정, 슬롯 회수</span>
+</code></pre></div></div>
+
+<p>이 루프는 특정 요청의 것이 아니라 엔진의 것이다. 요청 하나의 눈으로 보면 이 루프에서 자기 몫은 prefill iteration 1회와 decode iteration N−1회지만, 루프 자체는 요청들이 들어오고 나가는 동안 멈추지 않고 돈다. 각 스텝에 어느 요청의 어떤 작업을 실을지는 아직 정하지 않았다.</p>
 
 <h2 id="스케줄러의-위치-cpu와-gpu의-분업">스케줄러의 위치: CPU와 GPU의 분업</h2>
 
-<p>그렇다면 위 코드의 <code class="highlighter-rouge">schedule()</code> — 이번 forward에 태울 요청을 정하는 일 — 은 누가 하는가. GPU는 아니다. GPU는 받은 텐서를 계산하는 장치일 뿐, “다음에 누구를 넣을지”를 판단할 능력이 없다. 그런 정책 판단은 전부 CPU 몫이고, 그 판단을 내리는 CPU 쪽 코드가 곧 서빙 엔진의 스케줄러다. <a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">2편</a>에서 본 시스템의 구도 — 요청 큐와 배처는 CPU, 모델 실행만 GPU — 의 직계 연장이다.</p>
+<p>그렇다면 이번 forward에서 처리할 요청을 정하는 일 — 위 코드의 <code class="highlighter-rouge">schedule()</code> — 은 누가 하는가.</p>
+
+<p>GPU는 아니다. 판단할 지능이 없어서가 아니라 구조가 그렇다. GPU는 CPU가 큐에 넣어 준 커널을 실행하는 코프로세서(co-processor)라 스스로 다음 작업을 고르는 제어 주체가 아니고, 무엇보다 “다음에 누구를 넣을지”를 정하는 데 필요한 정보 — 요청 큐, 대기 중인 요청, 메모리 현황 — 가 전부 호스트(CPU) 쪽에 있다. 커널은 launch될 때 받은 텐서와 인자만 보고 돈다.</p>
+
+<p>그래서 정책 판단은 전부 CPU 몫이고, 그 판단을 내리는 CPU 쪽 코드가 곧 서빙 엔진의 스케줄러다. <a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">2편</a>에서 본 시스템의 구도 — 요청 큐와 배처는 CPU, 모델 실행만 GPU — 의 직계 연장이다.</p>
 
 <p>이름이 겹쳐서 헷갈리기 쉬운데, GPU 주변에는 층위가 완전히 다른 스케줄러 셋이 있다. 6장에서 말하는 스케줄러는 첫 번째이다.</p>
 
@@ -683,19 +698,19 @@ window.MathJax = {
   </thead>
   <tbody>
     <tr>
-      <td>서빙 스케줄러</td>
+      <td>① 서빙 스케줄러</td>
       <td>이번 forward에 어느 요청을 넣을까</td>
       <td>CPU (엔진 코드)</td>
       <td>ms</td>
     </tr>
     <tr>
-      <td>GPU 드라이버/스트림</td>
+      <td>② GPU 드라이버/스트림</td>
       <td>큐에 쌓인 커널을 어느 순서로</td>
       <td>CPU 드라이버 + GPU 커맨드 프로세서</td>
       <td>µs</td>
     </tr>
     <tr>
-      <td>warp 스케줄러</td>
+      <td>③ warp 스케줄러</td>
       <td>SM 안에서 어느 warp를 이번 사이클에</td>
       <td>GPU 하드웨어</td>
       <td>ns</td>
@@ -711,7 +726,7 @@ window.MathJax = {
   <p>참고: 이 원자성을 DB 트랜잭션에 비유하면 all-or-nothing과 중간 상태 관찰 불가라는 점에서는 같지만 롤백이 없다는 점에서 다른, 일종의 “롤백 없는 원자적 커밋”이라고 이해할 수 있다. 클라이언트가 연결을 끊어도 이미 launch된 스텝은 끝까지 돌고, 그 요청은 다음 스케줄에서 빠질 뿐이다. 실행 중인 요청을 미루는 preemption류의 동작도 iteration 도중 중단이 아니라 다음 iteration에서 제외하는 방식으로 일어난다.</p>
 </blockquote>
 
-<p>그래서 <strong>스케줄링 단위</strong>라는 말이 나온다. 스케줄러가 개입할 수 있는 지점은 오직 iteration 경계뿐이고, 그 경계에서 다음 forward에 누구를 넣을지 정하는 것이다.</p>
+<p>그래서 <strong>스케줄링 단위</strong>라는 말이 나온다. 스케줄러가 개입할 수 있는 지점은 오직 <strong>iteration 경계뿐이고</strong>, 그 경계에서 다음 forward에 무엇을 넣어서 처리할지 정하는 것이다.</p>
 
 <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">CPU</span><span class="p">:</span> <span class="n">schedule</span><span class="p">()</span> <span class="err">→</span> <span class="err">텐서</span> <span class="err">조립</span> <span class="err">→</span> <span class="err">커널들을</span> <span class="n">GPU</span> <span class="err">큐에</span> <span class="n">enqueue</span> <span class="p">(</span><span class="err">비동기</span><span class="p">,</span> <span class="err">바로</span> <span class="err">리턴</span><span class="p">)</span>
 <span class="n">GPU</span><span class="p">:</span>                          <span class="o">...</span> <span class="err">실제</span> <span class="err">실행</span> <span class="o">...</span>
@@ -721,22 +736,22 @@ window.MathJax = {
 
 <p>단위를 iteration으로 잘게 쪼개면 얻는 것은 <strong>결정 지점의 수</strong>다. 요청 단위에서는 스케줄링 결정의 기회가 요청 묶음당 1회지만, iteration 단위에서는 forward마다 돌아온다. 이 결정 기회를 실제로 언제 쓰는지는 <a href="#배칭-방식-배치를-다시-짜는-시점">배칭 방식</a>에서 갈린다 — 여기서는 단위만 바꿔 두었다.</p>
 
-<p>단위를 정했으니 질문이 남는다. 그 한 스텝에 무엇을 넣나.</p>
-
 <p><br /></p>
 
 <h1 id="배칭-한-번-읽은-가중치로-여러-요청">배칭: 한 번 읽은 가중치로 여러 요청</h1>
 
+<p>실행 단위는 iteration으로 잡았다. 다음 질문은 하나다 — 그 한 스텝에 무엇을 넣나.</p>
+
 <h2 id="처리량-이득의-원리">처리량 이득의 원리</h2>
 
-<p>hidden size 4096, 가중치 14GB인 모델에서 요청 하나를 decode하는 상황을 보자.</p>
+<p>hidden size 4096, 가중치 14GB인 모델에서 요청 하나를 decode하는 상황을 보자. 아래 shape은 행렬 곱에 들어가는 2차원 모양(행 × hidden)으로 <strong>단순화해</strong> 적은 것이다 — 입력 텐서의 정확한 축 구조는 <a href="#세-축으로-읽는-입력-텐서">배치의 구조</a>에서 후술한다.</p>
 
 <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>입력  <span class="o">[</span>1, 4096]   <span class="c"># 요청 1개, 토큰 1개</span>
 가중치 W: 14GB 전체를 HBM에서 읽어 옴
 출력  <span class="o">[</span>1, 4096]   <span class="c"># 토큰 1개</span>
 </code></pre></div></div>
 
-<p>decode 한 스텝의 forward는 모든 레이어의 attention projection과 FFN, embedding/lm_head까지 가중치를 전부 읽는다. 그 총합이 14GB다. 연산량은 이에 비해 매우 작고, 시간 대부분을 메모리에서 가중치를 퍼 오는 데 쓴다 — memory-bound다.</p>
+<p>decode 한 스텝의 forward는 모든 레이어의 attention projection과 FFN 가중치, 그리고 lm_head까지 전부 읽는다 — 입력 embedding만 lookup이라 해당 토큰의 행만 읽는다. 그 총합이 14GB다. 연산량은 이에 비해 매우 작고, 시간 대부분을 메모리에서 가중치를 퍼 오는 데 쓴다 — memory-bound다.</p>
 
 <p>여기서 요청 3개를 배칭해 보자.</p>
 
@@ -809,11 +824,11 @@ window.MathJax = {
 
 <p>처리량은 시스템의 지표고 지연은 요청 하나의 지표다. 배칭은 내 완료 시각을 남의 요청 상태에 종속시켜 처리량을 사는 거래이며, 두 항의 비중은 배칭 방식마다 달라진다 — <a href="#배칭-방식-배치를-다시-짜는-시점">배칭 방식</a>에서 다시 본다.</p>
 
-<p>그 전에 짚어야 할 것이 있다. iteration에 넣을 작업들이 전부 같은 모양이 아니라는 점이다.</p>
-
 <p><br /></p>
 
 <h1 id="배치의-구조-prefill과-decode">배치의 구조: prefill과 decode</h1>
+
+<p>배칭의 동기까지 확인했다. 그런데 iteration에 넣을 작업들이 전부 같은 모양은 아니다 — 이번에는 그 작업들이 텐서로 어떻게 쌓이는지, 그 모양이 어떤 문제를 남기는지 본다.</p>
 
 <h2 id="세-축으로-읽는-입력-텐서">세 축으로 읽는 입력 텐서</h2>
 
@@ -850,7 +865,7 @@ window.MathJax = {
   </tbody>
 </table>
 
-<p>두 단계의 차이는 S 축에 몇 개가 들어가는가다.</p>
+<p>앞서 <a href="#처리량-이득의-원리">배칭</a>에서 쓴 <code class="highlighter-rouge">[1, 4096]</code>·<code class="highlighter-rouge">[3, 4096]</code>은 이 표기로 각각 <code class="highlighter-rouge">[1, 1, 4096]</code>·<code class="highlighter-rouge">[3, 1, 4096]</code>이다 — decode는 S=1이라 그 축을 접고, 행렬 곱에 들어가는 2차원 모양으로 적은 것이었다. 두 단계의 차이는 S 축에 몇 개가 들어가는가다.</p>
 
 <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Prefill <span class="o">(</span>프롬프트 1000토큰<span class="o">)</span>:
   입력 <span class="o">[</span>1, 1000, 4096]  <span class="c"># 1000개 토큰을 한 forward에 전부</span>
@@ -870,7 +885,7 @@ Decode <span class="o">(</span>그 다음부터<span class="o">)</span>:
 <p>prefill이 1000개를 한 번에 넣을 수 있는 이유는 프롬프트 토큰을 이미 다 알고 있고, causal mask 덕분에 동시에 넣어도 각 토큰이 자기 앞만 보기 때문이다. decode가 1개씩인 이유는 다음 토큰을 모르기 때문이다 — 501번째 토큰을 계산하려면 500번째 결과가 있어야 하는 자기회귀 구조라 원리적으로 병렬화가 안 된다.</p>
 
 <blockquote>
-  <p>참고: 서빙 엔진의 튜닝 파라미터가 정확히 이 두 축을 제한한다. vLLM 기준으로 <code class="highlighter-rouge">--max-num-seqs</code>는 B(이번 forward의 요청 개수), <code class="highlighter-rouge">--max-num-batched-tokens</code>는 B × S의 총합(이번 forward에 넣는 토큰 수)의 상한이다.</p>
+  <p>참고: 서빙 엔진의 튜닝 파라미터가 정확히 이 두 축을 제한한다. vLLM 기준으로 <code class="highlighter-rouge">--max-num-seqs</code>는 B(이번 forward의 요청 개수), <code class="highlighter-rouge">--max-num-batched-tokens</code>는 이번 forward에 넣는 토큰 총수(요청별 S의 합)의 상한이다.</p>
 </blockquote>
 
 <h2 id="prefill-배치-길이가-다른-시퀀스와-패딩">prefill 배치: 길이가 다른 시퀀스와 패딩</h2>
@@ -908,11 +923,15 @@ Decode <span class="o">(</span>그 다음부터<span class="o">)</span>:
 
 <center><sup>AI를 이용해 직접 그린 도식. lockstep으로 함께 돌던 요청들도 EOS를 뱉는 iteration은 제각각이다</sup></center>
 
-<p>출력 길이는 미리 알 수 없으므로 각 요청이 EOS를 뱉는 시점은 제각각이다. 바로 이 지점에서 세 가지 배칭 방식이 갈라진다.</p>
+<p>출력 길이는 미리 알 수 없으므로 각 요청이 EOS를 뱉는 시점은 제각각이다.</p>
 
 <p><br /></p>
 
 <h1 id="배칭-방식-배치를-다시-짜는-시점">배칭 방식: 배치를 다시 짜는 시점</h1>
+
+<p><a href="#배치의-구조-prefill과-decode">배치의 구조</a> 마지막에서 본 것은 종료 시점의 분산이었다. lockstep으로 돌던 배치에서 어떤 요청이 먼저 끝나면, 그 요청이 차지하던 배치 텐서의 행은 더 계산할 것이 없어진다. 이 자리를 어떻게 할 것인가 — 배치가 통째로 끝날 때까지 빈 채로 둘 수도 있고, 곧바로 새 요청으로 채울 수도 있다.</p>
+
+<p>결국 배치 구성을 다시 정하는 시점의 문제고, 이 시점에 대한 서로 다른 답이 세 가지 배칭 방식이다.</p>
 
 <h2 id="세-가지-방식">세 가지 방식</h2>
 
@@ -961,7 +980,7 @@ Decode <span class="o">(</span>그 다음부터<span class="o">)</span>:
 
 <p>static과의 차이는 출발 조건뿐이다. 합승에 비유하면 정원이 다 차야 출발하는 쪽(static)과, 정원이 안 찼어도 시간이 되면 출발하는 쪽(dynamic)이다. 출발한 뒤의 동작은 완전히 동일하다 — 배치가 통째로 끝나야 해산한다.</p>
 
-<p>문제는 출발한 뒤다. 위의 종료 시점 그림에서 A는 iteration 4에 끝났는데도 C가 300번째 iteration을 돌 때까지 슬롯이 빈 채로 유지된다.</p>
+<p>문제는 출발한 뒤다. <a href="#decode-배치-lockstep과-종료-시점">위의 종료 시점 그림</a>에서 A는 iteration 4에 끝났는데도 C가 300번째 iteration을 돌 때까지 슬롯이 빈 채로 유지된다.</p>
 
 <p><img src="https://sirzzang.github.io//assets/images/llmso-ch06-dynamic-batching.svg" alt="dynamic batching: 시간이 되면 미달인 채로 출발" class="align-center" /></p>
 
@@ -1003,7 +1022,7 @@ Decode <span class="o">(</span>그 다음부터<span class="o">)</span>:
   <tbody>
     <tr>
       <td>대기 (배치가 찰 때까지)</td>
-      <td>주범 (최대 max delay)</td>
+      <td>주범 (static은 정원이 찰 때까지, dynamic은 최대 max delay)</td>
       <td>거의 없음 (다음 iteration 경계까지만)</td>
     </tr>
     <tr>
@@ -1025,7 +1044,7 @@ Decode <span class="o">(</span>그 다음부터<span class="o">)</span>:
 
 <center><sup>AI를 이용해 직접 그린 도식. 요청 셋이 iteration 1에서 한 배치로 prefill을 하고, 이후 전원이 lockstep으로 decode를 반복한다 — 단계가 섞일 일이 구조적으로 없다</sup></center>
 
-<p>반면 continuous batching에서 새로 합류하는 요청은 prefill부터 시작해야 하는데, 배치에는 이미 decode 중인 요청들이 있다. <a href="#continuous-batching">위 continuous batching 그림</a>에서 초록 decode 셀들 사이에 파란 prefill 셀이 끼어들던 장면이 바로 이것이다. <a href="#배치의-구조-prefill과-decode">배치의 구조</a>의 용어로, S=1인 요청들 옆에 S=8000짜리 요청이 오는 것이다. 얄궂게도 prefill/decode 구분은 continuous batching의 성립 전제이면서 동시에 이 문제의 원천이다 — 배치를 자유롭게 재구성할 수 있는 근거가 “decode는 전부 S=1이라 아무나 같은 모양으로 쌓인다”였는데, 새로 합류하는 요청은 S=8000의 prefill이기 때문이다.</p>
+<p>반면 continuous batching에서 새로 합류하는 요청은 prefill부터 시작해야 하는데, 배치에는 이미 decode 중인 요청들이 있다. <a href="#continuous-batching">위 continuous batching 그림</a>에서 초록 decode 셀들 사이에 파란 prefill 셀이 끼어들던 장면이 바로 이것이다. <a href="#배치의-구조-prefill과-decode">배치의 구조</a>의 용어로, S=1인 요청들 옆에 — 예컨대 긴 문서가 프롬프트로 들어와 — S=8000짜리 요청이 오는 것이다. 공교롭게도 prefill/decode 구분은 continuous batching의 성립 전제이면서 동시에 이 문제의 원천이다 — 배치를 자유롭게 재구성할 수 있는 근거가 “decode는 전부 S=1이라 아무나 같은 모양으로 쌓인다”였는데, 새로 합류하는 요청은 S=8000의 prefill이기 때문이다.</p>
 
 <p>선택지는 둘인데, 결론부터 말하면 어느 쪽도 만족스럽지 않다. 섞지 않으면 진행 중인 decode가 멎고, 섞어도 긴 prefill이 스텝 길이를 지배한다.</p>
 
@@ -1080,11 +1099,15 @@ Decode <span class="o">(</span>그 다음부터<span class="o">)</span>:
 
 <p>진짜 문제는 마지막 줄이다. 토큰 하나를 디코딩하는 것은 prefill을 끝내는 것보다 훨씬 빠르기 때문에, 한 스텝의 길이는 그 스텝에서 가장 무거운 작업 — prefill — 이 결정한다. 담을 수는 있어도, 담는 순간 decode 중이던 요청의 그 스텝이 prefill 시간만큼 늘어나 토큰 간 지연이 튄다. 그림에서 요청 2·3의 prefill이 이어지는 동안 요청 1의 decode 토큰들이 그 긴 스텝의 박자에 묶이는 것이 보인다. 입력 프롬프트가 길수록 지연은 여전히 두드러진다.</p>
 
-<h3 id="남는-질문-6장의-나머지">남는 질문: 6장의 나머지</h3>
+<p><br /></p>
 
-<p>두 방안의 실패가 다음 질문들을 만든다. 이것이 6장 나머지의 지도이고, 여기서는 방향만 확인하고 상세는 이후 글에서 다룬다.</p>
+<h1 id="남는-질문-6장의-나머지">남는 질문: 6장의 나머지</h1>
 
-<p><strong>prefill을 쪼갤 수는 없나.</strong> 쪼개는 축이 두 개 있다.</p>
+<p>continuous batching은 빈 슬롯 문제를 풀었지만, prefill과 decode가 한 스텝에서 만나는 새 문제를 남겼다. 두 방안 모두 만족스럽지 않다는 결론이 다음 질문들을 만든다. 이것이 6장 나머지의 지도다. 여기서는 방향만 확인하고 상세는 이후 글에서 다룬다.</p>
+
+<h2 id="prefill-쪼개기-selective-batching과-chunked-prefill">prefill 쪼개기: selective batching과 chunked prefill</h2>
+
+<p>방안 1과 2가 모두 만족스럽지 않았던 원인은 긴 prefill이 한 스텝에 통째로 실린다는 데 있었다. 그렇다면 prefill을 쪼갤 수는 없나 — <strong>쪼갤 수 있다.</strong> 쪼개는 축이 두 개 있다.</p>
 
 <table>
   <thead>
@@ -1118,17 +1141,21 @@ Decode <span class="o">(</span>그 다음부터<span class="o">)</span>:
   </tbody>
 </table>
 
-<p>selective batching의 아이디어는 위 표의 첫 두 줄 대비가 전부다 — 소속이 무관한 연산(GEMM)은 묶고, 소속이 본질인 연산(attention)은 따로 돈다. chunked prefill은 긴 prefill을 한 스텝에 다 하지 않고 청크로 나눠 여러 스텝에 싣는 방식이다. 앞 청크의 KV cache가 남아 있어 다음 청크가 이어서 계산할 수 있기 때문에 가능하고 — decode를 이어갈 수 있는 것과 같은 원리다 — 이때 <a href="#엔진-루프의-한-스텝">앞</a>에서 말한 “새 토큰 없이 끝나는 iteration”(마지막이 아닌 중간 청크)이 실제로 생긴다.</p>
+<p>selective batching의 아이디어는 위 표의 첫 두 줄 대비가 전부다 — 소속이 무관한 연산(GEMM)은 묶고, 소속이 본질인 연산(attention)은 따로 돈다. chunked prefill은 긴 prefill을 한 스텝에 다 하지 않고 청크로 나눠 여러 스텝에 싣는 방식이다. 앞 청크의 KV cache가 남아 있어 다음 청크가 이어서 계산할 수 있기 때문에 가능하고 — decode를 이어갈 수 있는 것과 같은 원리다 — 이때 <a href="#토큰-1개-생성-스텝이라는-통칭">앞</a>에서 말한 “새 토큰 없이 끝나는 iteration”(마지막이 아닌 중간 청크)이 실제로 생긴다.</p>
 
-<p><strong>매 스텝 배치를 다시 짜는 CPU 비용은 공짜인가.</strong> 스케줄링은 CPU 몫이므로, 모델이 작아 GPU 스텝이 짧으면 CPU 스케줄링 시간이 상대적으로 커져 GPU가 CPU를 기다리는 상황이 생긴다. vLLM의 엔진 재작성(V1)이나 CUDA graph 같은 작업들이 이 CPU 구간을 줄이거나 GPU 실행 뒤로 숨기려는 시도다.</p>
+<h2 id="스케줄링의-cpu-비용">스케줄링의 CPU 비용</h2>
 
-<p><strong>KV cache는 어떻게 하나.</strong> decode 한 스텝의 HBM 읽기는 가중치 항과 KV cache 항의 합인데(<a href="#처리량-이득의-원리">처리량 이득의 원리</a>에서 미뤄 둔 항이다), 배칭이 절약하는 것은 앞 항뿐이다.</p>
+<p><strong>매 스텝 배치를 다시 짜는 CPU 비용도 공짜가 아니다.</strong> 스케줄링은 CPU 몫이므로, 모델이 작아 GPU 스텝이 짧으면 CPU 스케줄링 시간이 상대적으로 커져 GPU가 CPU를 기다리는 상황이 생긴다. vLLM의 엔진 재작성(V1)이나 CUDA graph 같은 작업들이 이 CPU 구간을 줄이거나 GPU 실행 뒤로 숨기려는 시도다.</p>
+
+<h2 id="kv-cache-항">KV cache 항</h2>
+
+<p><strong>KV cache를 절약할 수는 없을까.</strong> decode 한 스텝의 HBM 읽기는 가중치 항과 KV cache 항의 합인데(<a href="#처리량-이득의-원리">처리량 이득의 원리</a>에서 미뤄 둔 항이다), 배칭이 절약하는 것은 앞 항뿐이다.</p>
 
 <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">decode</span> <span class="mi">1</span><span class="err">스텝의</span> <span class="n">HBM</span> <span class="err">읽기</span> <span class="o">=</span> <span class="err">가중치</span> <span class="mi">14</span><span class="n">GB</span>        <span class="c"># 모든 요청이 공유. 배칭해도 1번</span>
                         <span class="o">+</span> <span class="n">KV</span> <span class="n">cache</span> <span class="p">(</span><span class="err">요청별</span><span class="p">)</span>   <span class="c"># 요청마다 각자. 배칭하면 B배</span>
 </code></pre></div></div>
 
-<p>배치를 키우다 보면 어느 순간 KV 읽기가 지배하기 시작하고, 그때부터는 배칭이 아니라 <a href="#6장의-지도-하나의-분수-세-방향의-공략">6장 지도</a>의 두 번째 축 — 옮길 바이트를 줄이는 GQA·KV cache 양자화·PagedAttention — 이 답이 된다. 요청이 매 스텝 들고나는 배치에서 요청별로 자라나는 KV cache 메모리를 어떻게 관리하느냐의 문제도 같은 축에서 만난다.</p>
+<p>배치를 키우다 보면 어느 순간 KV 읽기가 지배하기 시작하고, 그때부터는 배칭이 아니라 <a href="#6장의-지도-하나의-분수-세-방향의-공략">6장 지도</a>의 두 번째 축 — 옮길 바이트를 줄이는 GQA·KV cache 양자화 — 이 답이 된다. 요청이 매 스텝 들고나는 배치에서 요청별로 자라나는 KV cache 메모리를 어떻게 관리하느냐의 문제도 여기서 함께 만나는데, PagedAttention이 다루는 단편화 낭비가 바로 그것이다.</p>
 
 <p><br /></p>
 
