@@ -17,7 +17,7 @@ tags:
   - MoE
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-3
-last_modified_at: 2026-08-24
+last_modified_at: 2026-08-27
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 중 딥다이브한 내용입니다.*
@@ -60,7 +60,7 @@ LLM 서빙에서 루프라인을 활용하기 위해서는 **워크로드를 한
 
 - **decode-FFN의 강도가 배치 크기와 같아지는 이유**: FP16 가중치 원소 하나(2 byte)에 곱 1 + 합 1 = 2 FLOP이므로 배치 1에서 $I = 2/2 = 1$ FLOP/byte다. 배치가 $B$면 그 원소를 $B$번 재사용하니 $I \approx B$로 올라간다. 즉 배치 크기가 그대로 연산 강도가 된다. 다만 이 값은 **가중치 한 벌을 배치 전체가 나눠 쓴다**는 전제 위에 있다 — MoE에서 그 전제가 어떻게 깨지는지는 [실측](#배치와-강도)에서 확인한다
 - 그런데 ridge는 A100 $\approx 153$, H100 $\approx 295$다(둘 다 SXM·sparsity 미적용 기준). **배치가 300 근처가 되어야 겨우 연산 바운드로 넘어간다.** 배치 1이면 H100 지붕의 $1/295 \approx 0.3\%$밖에 못 쓴다. "H100인데 왜 이렇게 느린가"의 답이 이 한 줄에 전부 있다
-- **decode-attention은 배칭으로 나아지지 않는다.** 요청이 $B$개면 KV도 $B$세트를 읽어야 하므로 $W$와 $Q$가 나란히 $B$배가 되고, 비율은 그대로다. GQA/MQA(KV 헤드 수를 줄여 KV 트래픽을 낮추는 어텐션 변형), KV 양자화, paged KV가 배칭과 **별개로** 필요한 이유가 여기에 있다
+- **decode-attention은 배칭으로 나아지지 않는다.** 요청이 $B$개면 KV도 $B$세트를 읽어야 하므로 $W$와 $Q$가 나란히 $B$배가 되고, 비율은 그대로다. GQA/MQA(KV 헤드 수를 줄여 KV 트래픽을 낮추는 어텐션 변형)와 KV 양자화가 배칭과 **별개로** 필요한 이유가 여기에 있다 (paged KV는 트래픽이 아니라 KV 메모리의 단편화 낭비를 없애는 용량 기법이라 결이 다르다)
 - 그래서 프로파일할 때도 커널을 한 점으로 뭉치지 말고 세 점으로 나눠 찍어야 한다. 한 덩어리로 보면 FFN의 개선이 attention의 정체를 가리거나 그 반대가 된다
 
 ## H100 숫자로 확인
@@ -101,7 +101,8 @@ Roofline Model을 기준으로 **점을 어느 방향으로 옮기는가 / 지�
 | Continuous batching | 점을 오른쪽으로 ($I \approx B$) | decode-FFN이 사선에 붙어 있는 동안 |
 | Weight-only INT4 | $Q$를 $1/4$로 → $I$ 4배 | **저배치에서만** |
 | FlashAttention | $S^2$ 중간 행렬을 HBM에 안 적어 $Q$ 감소 → 점 오른쪽 | prefill attention |
-| GQA/MQA, KV 양자화, paged KV | KV 트래픽 감소 → attention 점 오른쪽 | decode-attention |
+| GQA/MQA, KV 양자화 | KV 트래픽 감소 → attention 점 오른쪽 | decode-attention |
+| paged KV | 트래픽이 아니라 KV 메모리의 단편화 해소 — 더 큰 배치를 가능하게 해 간접적으로 점 이동 | decode-attention |
 | Speculative decoding | 가중치 1회 읽고 $k$토큰 검증 → $I$를 최대 $k$배 | 저배치·저지연 |
 | Chunked prefill | 연산 바운드 작업과 메모리 바운드 작업을 섞어 두 지붕을 동시에 사용 | prefill·decode 혼재 |
 | AMP / FP8 | **지붕 자체를 위로** (동시에 ridge도 오른쪽으로) + $Q$ 감소로 점도 오른쪽 | 전 구간 |
