@@ -634,7 +634,7 @@ window.MathJax = {
 
 <h2 id="토큰-1개-생성-스텝이라는-통칭">토큰 1개 생성 스텝이라는 통칭</h2>
 
-<p>방금 iteration을 forward pass 1회로 정의했지만, 실무에서는 흔히 “iteration = 토큰 1개 생성 스텝”이라고도 말한다. 토큰을 하나씩 만드는 단계는 decode니, 언뜻 decode에 대한 말로 들린다. 그러나 이 등식은 decode만의 것이 아니다 — prefill의 forward도 마지막 위치에서 새 토큰 1개를 내놓고, 그 토큰이 곧 TTFT(Time To First Token, <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#서빙-지표-ttft와-tpot">3.3편의 서빙 지표</a> 참고)의 첫 토큰이다. 둘이 갈리는 지점은 나온 토큰 수가 아니라, 그 1개를 만들기 위해 <strong>한 번의 forward 안에서 계산한 위치의 수</strong>다.</p>
+<p>방금 iteration을 forward pass 1회로 정의했지만, 실무에서는 흔히 “iteration = 토큰 1개 생성 스텝”이라고도 말한다. 토큰을 하나씩 만드는 단계는 decode니, 언뜻 decode에 대한 말로 들린다. 그러나 이 등식은 decode만의 것이 아니다 — <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#경계-첫-토큰">3.3편에서 정리했듯</a> prefill의 forward도 마지막 위치에서 새 토큰 1개를 내놓고, 그 토큰이 곧 TTFT(Time To First Token, <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#서빙-지표-ttft와-tpot">3.3편의 서빙 지표</a> 참고)의 첫 토큰이다. 둘이 갈리는 지점은 나온 토큰 수가 아니라, 그 1개를 만들기 위해 <strong>한 번의 forward 안에서 계산한 위치의 수</strong>다.</p>
 
 <table>
   <thead>
@@ -794,7 +794,7 @@ window.MathJax = {
   </tbody>
 </table>
 
-<p>같은 계산량에 바이트 이동이 1/3이니 산술 강도가 3배다. “배칭이 산술 강도를 인위적으로 올린다”는 말의 문자 그대로의 의미가 이것이고, roofline 위에서는 memory-bound 사선 구간의 점이 오른쪽으로 이동하는 것으로 나타난다. <a href="/dev/Dev-Roofline-Model-LLM-Serving/">roofline 실측 글</a>에서 배치를 실어 찍은 점들이 실제로 이렇게 움직이는 것을 확인했다. 처리량으로 옮기면:</p>
+<p>같은 계산량에 바이트 이동이 1/3이니 산술 강도가 3배다. “배칭이 산술 강도를 인위적으로 올린다”는 말의 문자 그대로의 의미가 이것이고, roofline 위에서는 memory-bound 사선 구간의 점이 오른쪽으로 이동하는 것으로 나타난다. <a href="/dev/Dev-Roofline-Model-LLM-Serving/">roofline 실측 글</a>에서 배치를 실어 찍은 점들이 실제로 이렇게 움직이는 것을 확인했다. 이 이득을 처리량의 식으로 옮기면 다음과 같다.</p>
 
 <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">throughput</span> <span class="o">=</span> <span class="p">(</span><span class="err">스텝당</span> <span class="err">산출</span> <span class="err">토큰</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="err">스텝</span> <span class="err">시간</span><span class="p">)</span>
 <span class="c">#              ↑ B배로 늘어남     ↑ memory-bound 구간에선 거의 그대로</span>
@@ -811,7 +811,7 @@ window.MathJax = {
 
 <p>선택의 대가는 지연시간이다. 큐잉 이론(queueing theory)의 기본 분해를 빌리면, 어느 시스템에서든 요청 하나가 겪는 지연(latency)은 두 항의 합이다.</p>
 
-<script type="math/tex; mode=display">\text{latency} = \underbrace{\text{queueing time}}_{\text{대기 시간: 내 차례가 오기까지}} + \underbrace{\text{service time}}_{\text{서비스 시간: 실제 처리되는 동안}}</script>
+<script type="math/tex; mode=display">\text{latency} = \text{queueing time (대기 시간)} + \text{service time (서비스 시간)}</script>
 
 <p>“여러 요청을 같은 텐서에 쌓아서 한 forward에 넣는다”는 배칭의 정의만으로 이 두 항이 모두 영향을 받는다.</p>
 
@@ -820,9 +820,18 @@ window.MathJax = {
   <li><strong>서비스 시간</strong>: 텐서의 행이 B개가 되니 한 스텝이 짊어지는 일의 양이 B배가 된다. 일이 B배면 스텝 시간도 늘어날 수 있다 — 실제로 얼마나 늘어나는지는 워크로드의 병목에 달렸다</li>
 </ul>
 
-<p>여기까지는 LLM이 아니어도, 어떤 시스템의 배칭이든 성립하는 일반론이다. LLM decode에 오면 두 번째 항의 사정이 특별해진다. decode는 memory-bound라 스텝 시간의 대부분이 계산이 아니라 가중치 읽기인데, 가중치 읽기는 행이 1개든 B개든 한 번이다. 그래서 일의 양이 B배가 되어도 스텝 시간은 거의 변하지 않는다 — 서비스 시간 증가가 거의 0인, 배칭의 이득이 사실상 추가 비용 없이 나오는 구간이다. 그런데 <a href="#처리량-이득의-원리">처리량 이득의 원리</a>에서 본 대로 배치를 키우는 것은 곧 산술 강도를 올리는 것이다. 읽기는 그대로인데 계산만 B배로 쌓이니, 배치를 계속 키우면 어느 순간 ridge point를 넘어 compute-bound 구간에 들어선다. 그때부터는 병목이 읽기에서 계산으로 바뀌어 스텝 시간이 배치 크기에 비례해 늘고, KV cache 메모리 압박도 커진다. 그래서 배치 크기와 처리량의 곡선에는 무릎(knee)이 있고, 서빙 엔진들이 배치 상한 파라미터(vLLM의 <code class="highlighter-rouge">max_num_seqs</code> 등)를 두는 이유가 이것이다. 참고로 이 값을 1로 두면 배치 차원을 1로 강제해 배칭이 무력화된다.</p>
+<p>여기까지는 LLM이 아니어도, 어떤 시스템의 배칭이든 성립하는 일반론이다.</p>
 
-<p>처리량은 시스템의 지표고 지연은 요청 하나의 지표다. 배칭은 내 완료 시각을 남의 요청 상태에 종속시켜 처리량을 사는 거래이며, 두 항의 비중은 배칭 방식마다 달라진다 — <a href="#배칭-방식-배치를-다시-짜는-시점">배칭 방식</a>에서 다시 본다.</p>
+<p>LLM decode에 오면 두 번째 항의 사정이 특별해진다.</p>
+
+<ul>
+  <li><strong>배치가 작을 때 — memory-bound 구간</strong>: decode는 스텝 시간의 대부분이 계산이 아니라 가중치 읽기인데, 가중치 읽기는 행이 1개든 B개든 한 번이다. 일의 양이 B배가 되어도 스텝 시간은 거의 변하지 않는다 — 서비스 시간 증가가 거의 0인, 배칭의 이득이 사실상 추가 비용 없이 나오는 구간이다</li>
+  <li><strong>배치를 계속 키우면 — compute-bound 전환</strong>: <a href="#처리량-이득의-원리">처리량 이득의 원리</a>에서 본 대로 배치를 키우는 것은 곧 산술 강도를 올리는 것이라, 읽기는 그대로인데 계산만 B배로 쌓이다 어느 순간 ridge point를 넘는다. 그때부터는 병목이 읽기에서 계산으로 바뀌어 스텝 시간이 배치 크기에 비례해 늘고, KV cache 메모리 압박도 커진다</li>
+</ul>
+
+<p>그래서 배치 크기와 처리량의 곡선에는 무릎(knee)이 있고, 서빙 엔진들이 배치 상한 파라미터(vLLM의 <code class="highlighter-rouge">max_num_seqs</code> 등)를 두는 이유가 이것이다. 참고로 이 값을 1로 두면 배치 차원을 1로 강제해 배칭이 무력화된다.</p>
+
+<p>정리하면, 배칭은 요청 하나의 지표(지연)를 내주고 시스템의 지표(처리량)를 사는 거래다 — 내 완료 시각이 남의 요청 상태에 종속되는 대신, 같은 시간에 시스템이 처리하는 토큰이 늘어난다. 이 거래의 대가가 대기 항과 서비스 항 중 어디에 얼마나 실리는지는 배칭 방식마다 다른데, <a href="#배칭-방식-배치를-다시-짜는-시점">배칭 방식</a>에서 다시 본다.</p>
 
 <p><br /></p>
 
@@ -998,7 +1007,7 @@ Decode <span class="o">(</span>그 다음부터<span class="o">)</span>:
 
 <p>알고리즘적으로 대단한 것을 새로 만든 게 아니다. 스케줄러가 개입하는 단위를 요청에서 iteration으로 내린 것이고, <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#직접-만든-서빙-시스템-속의-두-단계">3.3편</a>에서 예고한 그대로다. 위의 <code class="highlighter-rouge">engine.step()</code> 코드로 보면 <code class="highlighter-rouge">schedule()</code>이 매 루프마다 호출되는 것이 continuous batching이고, static/dynamic에서는 배치가 끝날 때까지 <code class="highlighter-rouge">schedule()</code>이 다시 불리지 않는 것이다. <a href="/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/">2편</a>의 시스템과 비교하면 새 컴포넌트가 생긴 게 아니라 <strong>기존 배처의 호출 주기가 요청당 1회에서 스텝당 1회로 바뀐 것</strong>이다.</p>
 
-<p>이 방식을 iteration-level scheduling이라는 이름으로 처음 정식화한 것이 Orca(OSDI ‘22) 논문이다. 굳이 <em>iteration-level</em>이라고 부른 것은 기존 방식이 암묵적으로 <em>request-level</em>이었기 때문이고, 이후 vLLM을 비롯한 현대 서빙 엔진의 표준이 됐다.</p>
+<p>이 방식을 iteration-level scheduling이라는 이름으로 처음 정식화한 것이 <a href="https://www.usenix.org/conference/osdi22/presentation/yu">Orca(OSDI ‘22)</a> 논문이다. 굳이 <em>iteration-level</em>이라고 부른 것은 기존 방식이 암묵적으로 <em>request-level</em>이었기 때문이고, 이후 vLLM을 비롯한 현대 서빙 엔진의 표준이 됐다.</p>
 
 <p>성립 전제도 짚어 둘 만하다. iteration-level scheduling이 가능하려면 두 가지가 필요하고, 둘 다 prefill/decode 구분에서 나온다.</p>
 
@@ -1040,9 +1049,9 @@ Decode <span class="o">(</span>그 다음부터<span class="o">)</span>:
 
 <p>이 간섭은 어디서 오는가. static/dynamic에서는 배치 안 요청들의 단계가 항상 같다 — 다 같이 출발했으니 다 같이 prefill을 하고, 그 다음부터 다 같이 decode를 한다. 단계가 섞일 일 자체가 구조적으로 없다.</p>
 
-<p><img src="https://sirzzang.github.io//assets/images/llmso-non-continuous-batching-happy-path.svg" alt="static batching의 happy path: 전원 같이 prefill한 뒤 전원 같이 decode한다" class="align-center" /></p>
+<p><img src="https://sirzzang.github.io//assets/images/llmso-non-continuous-batching-happy-path.svg" alt="static/dynamic의 단계 정렬: 전원 같이 prefill한 뒤 전원 같이 decode한다" class="align-center" /></p>
 
-<center><sup>AI를 이용해 직접 그린 도식. 요청 셋이 iteration 1에서 한 배치로 prefill을 하고, 이후 전원이 lockstep으로 decode를 반복한다 — 단계가 섞일 일이 구조적으로 없다</sup></center>
+<center><sup>AI를 이용해 직접 그린 도식. 요청 셋이 iteration 1에서 한 배치로 prefill을 하고, 이후 전원이 lockstep으로 decode를 반복한다 — 단계가 섞일 일이 구조적으로 없다. 그림은 생성 길이까지 같아 빈 슬롯조차 없는 이상적 경우(happy path)다</sup></center>
 
 <p>반면 continuous batching에서 새로 합류하는 요청은 prefill부터 시작해야 하는데, 배치에는 이미 decode 중인 요청들이 있다. <a href="#continuous-batching">위 continuous batching 그림</a>에서 초록 decode 셀들 사이에 파란 prefill 셀이 끼어들던 장면이 바로 이것이다. <a href="#배치의-구조-prefill과-decode">배치의 구조</a>의 용어로, S=1인 요청들 옆에 — 예컨대 긴 문서가 프롬프트로 들어와 — S=8000짜리 요청이 오는 것이다. 공교롭게도 prefill/decode 구분은 continuous batching의 성립 전제이면서 동시에 이 문제의 원천이다 — 배치를 자유롭게 재구성할 수 있는 근거가 “decode는 전부 S=1이라 아무나 같은 모양으로 쌓인다”였는데, 새로 합류하는 요청은 S=8000의 prefill이기 때문이다.</p>
 
@@ -1099,6 +1108,10 @@ Decode <span class="o">(</span>그 다음부터<span class="o">)</span>:
 
 <p>진짜 문제는 마지막 줄이다. 토큰 하나를 디코딩하는 것은 prefill을 끝내는 것보다 훨씬 빠르기 때문에, 한 스텝의 길이는 그 스텝에서 가장 무거운 작업 — prefill — 이 결정한다. 담을 수는 있어도, 담는 순간 decode 중이던 요청의 그 스텝이 prefill 시간만큼 늘어나 토큰 간 지연이 튄다. 그림에서 요청 2·3의 prefill이 이어지는 동안 요청 1의 decode 토큰들이 그 긴 스텝의 박자에 묶이는 것이 보인다. 입력 프롬프트가 길수록 지연은 여전히 두드러진다.</p>
 
+<p><img src="https://sirzzang.github.io//assets/images/llmso-ch06-mixed-step-length.svg" alt="continuous의 단계가 섞이는 세계: 스텝 길이는 prefill이 정한다" class="align-center" /></p>
+
+<center><sup>AI를 이용해 직접 그린 도식. decode 박자로 돌던 배치(it k−1)에 새 요청 D가 끼어들면, 그 스텝(iteration k)의 길이는 S=8000 prefill이 정한다 — decode의 몫은 토큰 1개지만 prefill이 끝날 때까지 같은 스텝에 묶인다. prefill이 빠진 다음 스텝(it k+1)은 다시 decode 박자로 돌아온다</sup></center>
+
 <p><br /></p>
 
 <h1 id="남는-질문-6장의-나머지">남는 질문: 6장의 나머지</h1>
@@ -1141,7 +1154,7 @@ Decode <span class="o">(</span>그 다음부터<span class="o">)</span>:
   </tbody>
 </table>
 
-<p>selective batching의 아이디어는 위 표의 첫 두 줄 대비가 전부다 — 소속이 무관한 연산(GEMM)은 묶고, 소속이 본질인 연산(attention)은 따로 돈다. chunked prefill은 긴 prefill을 한 스텝에 다 하지 않고 청크로 나눠 여러 스텝에 싣는 방식이다. 앞 청크의 KV cache가 남아 있어 다음 청크가 이어서 계산할 수 있기 때문에 가능하고 — decode를 이어갈 수 있는 것과 같은 원리다 — 이때 <a href="#토큰-1개-생성-스텝이라는-통칭">앞</a>에서 말한 “새 토큰 없이 끝나는 iteration”(마지막이 아닌 중간 청크)이 실제로 생긴다.</p>
+<p>selective batching의 아이디어는 위 표의 첫 두 줄 대비가 전부다 — <strong>GEMM은 행(토큰)마다 계산이 독립이라</strong> 어느 요청의 토큰인지가 결과에 영향을 주지 않으니 전부 이어 붙여 한 번에 돌리고, <strong>attention은 같은 요청의 KV를 참조해야 해서 요청 경계가 계산 자체에 들어가니</strong> 요청별로 따로 돈다. chunked prefill은 긴 prefill을 한 스텝에 다 하지 않고 청크로 나눠 여러 스텝에 싣는 방식이다. 앞 청크의 KV cache가 남아 있어 다음 청크가 이어서 계산할 수 있기 때문에 가능하고 — decode를 이어갈 수 있는 것과 같은 원리다 — 이때 <a href="#토큰-1개-생성-스텝이라는-통칭">앞</a>에서 말한 “새 토큰 없이 끝나는 iteration”(마지막이 아닌 중간 청크)이 실제로 생긴다.</p>
 
 <h2 id="스케줄링의-cpu-비용">스케줄링의 CPU 비용</h2>
 
