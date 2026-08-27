@@ -15,7 +15,7 @@ tags:
   - TPOT
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-2
-last_modified_at: 2026-08-22
+last_modified_at: 2026-08-27
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 2주차 학습 내용을 기반으로 합니다.*
@@ -27,7 +27,7 @@ last_modified_at: 2026-08-22
 - 자기회귀 트랜스포머의 추론은 두 단계(phase)로 나뉜다. **prefill**은 프롬프트 전체를 한 번의 forward로 병렬 처리하며 KV cache를 채우고 첫 토큰을 내는 단계, **decode**는 이후 생성 토큰 하나당 forward 한 번씩 다음 토큰을 만드는 단계이다. 경계는 첫 토큰이고, 지연 지표도 그 경계를 따라 TTFT(prefill)와 TPOT(decode)로 나뉜다
 - 두 단계는 모델 아키텍처 성질 세 개 — causal attention의 병렬 프롬프트 처리, 자기회귀 생성의 순차성, 두 단계를 연결하는 KV cache — 에서 유도된다. "서빙 시스템"이 도입한 구분이 아니고, 로컬에서 `model.generate()` 한 번을 돌려 추론해도 존재하는 단계이다
 - AI 모델 서빙의 일반 용어도 아니다. BERT·ResNet처럼 요청당 forward 1회로 끝나는 모델에는 이 구분이 없다. 자기회귀 생성 모델의 추론 용어이고, 자원 특성이 반대인 두 단계가 스케줄링과 SLO(Service Level Objective)의 단위가 되는 서빙에서 일급 개념이 됐다
-- 같은 위치의 토큰 하나를 처리하는 FLOPs는 두 단계가 거의 같다. 차이는 커널 한 번이 처리하는 토큰 수다. prefill은 가중치를 한 번 읽어 n개 토큰에 쓰는 compute-bound, decode는 토큰 하나마다 가중치와 KV cache 전체를 읽는 memory-bandwidth-bound다
+- 같은 위치의 토큰 하나를 처리하는 FLOPs는 두 단계가 거의 같다. 차이는 커널 한 번이 처리하는 토큰 수다. prefill은 가중치를 한 번 읽어 n개 토큰에 쓰므로 프롬프트가 충분히 길면 compute-bound, decode는 토큰 하나마다 가중치와 KV cache 전체를 읽는 memory-bandwidth-bound다
 
 <br>
 
@@ -40,7 +40,9 @@ last_modified_at: 2026-08-22
 전제를 하나 놓는다. 트랜스포머의 forward pass 1회가 하는 일은 [1주차에서 따라간 파이프라인]({% post_url 2026-08-05-AI-LLM-Optimization-02-02-Transformer-Explainer-Overview %}) 그대로다 — 입력 토큰들을 임베딩과 트랜스포머 블록에 통과시켜, 마지막 위치의 로짓에서 **다음 토큰 하나를 샘플링한다**. forward의 목적은 언제나 "다음 토큰 하나"이고, prefill과 decode는 이 forward를 **무엇의 다음 토큰을 뽑기 위해, 입력 몇 개로 실행하느냐**가 다를 뿐이다.
 
 - **Prefill**: **"프롬프트 다음"에 올 첫 토큰을 뽑기 위한 forward**다. 프롬프트의 모든 토큰을 행렬 하나로 묶어 **한 번의 forward pass로 병렬 처리**하며, 이 pass에서 (1) 모든 레이어·모든 프롬프트 위치의 K·V가 계산되어 KV cache에 적재되고, (2) 마지막 위치의 로짓에서 **첫 생성 토큰이 나온다**. 이름은 KV cache를 미리(pre-) 채운다(fill)는 뜻으로 통용된다
-- **Decode**: **"방금 나온 토큰 다음"의 토큰을 뽑기 위한 forward**다. 첫 토큰부터 **토큰 하나 입력 → forward 1회 → 다음 토큰 하나**를 반복한다. 새 토큰의 q·k·v만 계산해 k·v는 캐시에 덧붙이고, q는 캐시된 K 전체와 어텐션한다. EOS 또는 최대 길이에서 종료된다 (표기: 소문자 q·k·v는 토큰 하나의 벡터, 대문자 Q·K·V는 여러 토큰을 쌓은 행렬이다)
+- **Decode**: **"방금 나온 토큰 다음"의 토큰을 뽑기 위한 forward**다. 첫 토큰부터 **토큰 하나 입력 → forward 1회 → 다음 토큰 하나**를 반복한다. 새 토큰의 q·k·v만 계산해 k·v는 캐시에 덧붙이고, q는 캐시된 K 전체와 어텐션한다. EOS 또는 최대 길이에서 종료된다 
+
+> 표기: 소문자 q·k·v는 토큰 하나의 벡터, 대문자 Q·K·V는 여러 토큰을 쌓은 행렬
 
 ```mermaid
 flowchart LR
@@ -72,7 +74,9 @@ prefill이 끝나는 시점이 곧 첫 토큰이 나오는 시점이고, 그 뒤
 
 # 두 단계의 기원: 아키텍처에서의 유도
 
-굳이 이렇게 서빙의 각 단계에 특별한 이름을 붙여 말하니, 서빙 시스템에서 도입한 구분인가 싶을 수 있지만, 그렇지 않다. 각 단계는 **트랜스포머 아키텍처 성질 세 개에서 유도되는 실행 구조**다. 셋 모두 1주차에서 트랜스포머 모델 구조를 살펴 보며 자세히 확인한 성질이다. 핵심 구도부터 도식으로 놓으면 — 어텐션의 참조 패턴은 생성이 끝날 때까지 "자기 + 과거"의 하삼각 하나이고, 두 단계의 차이는 이 하삼각을 채우는 방식이다.
+굳이 이렇게 서빙의 각 단계에 특별한 이름을 붙여 말하니, 서빙 시스템에서 도입한 구분인가 싶을 수 있지만, 그렇지 않다. 각 단계는 **트랜스포머 아키텍처 성질 세 개에서 유도되는 실행 구조**다. 셋 모두 1주차에서 트랜스포머 모델 구조를 살펴 보며 자세히 확인한 성질이다. 
+
+핵심 구도부터 도식으로 놓자. 어텐션의 참조 패턴 — 각 위치가 자기와 과거만 보는 하삼각 — 은 prefill이든 decode든, 생성이 끝날 때까지 하나로 같다. 두 단계를 가르는 것은 패턴이 아니라 이 하삼각을 채우는 방식이다: prefill은 프롬프트 구간의 행들을 한 번에 채우고, decode는 생성 토큰의 행을 하나씩 덧붙인다.
 
 ![prefill과 decode의 시간 순서를 보여주는 어텐션 하삼각 도식]({{site.url}}/assets/images/llmso-prefill-decode-triangle-timeline.svg){: .align-center width="760"}
 
@@ -84,7 +88,7 @@ prefill이 끝나는 시점이 곧 첫 토큰이 나오는 시점이고, 그 뒤
 
 그렇다면 prefill은 병렬로 처리하라고 정해져 있는 것인가, 아니면 병렬로 할 수 있어서 하는 것인가. 후자다 — **강제도 정의도 아니고 "가능해서 하는" 선택**이다. 아키텍처가 보장하는 것은 프롬프트 구간을 몇 개씩 묶어 처리하든 결과가 같다는 **자유**다 — 하나씩 넣어도(decode와 같은 방식), 전부 한 번에 넣어도, 중간 크기로 쪼개 넣어도 결과가 동일하다. 전부 한 번에 처리하는 쪽이 가장 빠르므로 사실상 모든 구현이 그렇게 할 뿐이다. 이 자유는 반대 방향으로도 쓰인다 — 긴 prefill을 일부러 쪼개 여러 스텝에 나눠 처리하는 chunked prefill이 성립하는 근거 역시 어떻게 쪼개도 결과가 같다는 이 성질이다.
 
-2.5편에서 학습의 병렬성 관점으로 본 마스크를, 추론의 프롬프트 처리 관점에서 다시 쓰면 이렇다. 프롬프트 n개를 행렬 하나로 묶어 곱하면, 순차 처리에서는 계산되지 않았을 미래 위치 참조("위치 1이 위치 3을 보는" 항목)가 점수 행렬에 포함된다. causal mask는 이 항목에 −∞를 더해 softmax 후 가중치를 0으로 만든다. 그 결과 각 위치의 출력은 해당 위치까지의 입력에만 의존하고, 병렬 처리 결과가 순차 처리와 동일해진다. 즉 마스크는 병렬 처리를 제한하는 장치가 아니라, 병렬 처리가 순차 처리와 같은 결과를 내기 위한 조건이다. decode 스텝은 이 하삼각에 행 하나를 추가할 뿐이고, 그 행의 참조 대상이 전부 과거와 자신이라 차단할 항목이 없다. 참고로 구현에서 하삼각 항목만 골라 계산하지 않고 전부 곱한 뒤 마스크로 덮는 이유, 그리고 실제 커널이 상삼각 블록을 통째로 건너뛰는 방식은 [2.5편 마스킹 절 말미]({% post_url 2026-08-05-AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention %}#마스킹-causal-mask)에 정리되어 있다.
+2.5편에서 학습의 병렬성 관점으로 본 마스크를, 추론의 프롬프트 처리 관점에서 다시 쓰면 이렇다. 프롬프트 토큰 n개를 행렬 하나로 묶어 곱하면, 순차 처리에서는 계산되지 않았을 미래 위치 참조("위치 1이 위치 3을 보는" 항목)가 점수 행렬에 포함된다. causal mask는 이 항목에 −∞를 더해 softmax 후 가중치를 0으로 만든다. 그 결과 각 위치의 출력은 해당 위치까지의 입력에만 의존하고, 병렬 처리 결과가 순차 처리와 동일해진다. 즉 마스크가 표면적으로 하는 일은 항목을 차단하는 것이지만, 그 역할은 병렬 처리에 얹힌 제약이 아니라 병렬 처리의 성립 조건이다 — 마스크가 있어야 병렬 처리가 순차 처리와 같은 결과를 낸다. decode 스텝은 이 하삼각에 행 하나를 추가할 뿐이고, 그 행의 참조 대상이 전부 과거와 자신이라 차단할 항목이 없다. 참고로 구현에서 하삼각 항목만 골라 계산하지 않고 전부 곱한 뒤 마스크로 덮는 이유, 그리고 실제 커널이 상삼각 블록을 통째로 건너뛰는 방식은 [2.5편 마스킹 절 말미]({% post_url 2026-08-05-AI-LLM-Optimization-02-05-Transformer-Explainer-Self-Attention %}#마스킹-causal-mask)에 정리되어 있다.
 
 ![prefill에서 하삼각은 계산되어 유지되고 상삼각은 계산 후 마스크로 차단되는 모습]({{site.url}}/assets/images/llmso-prefill-attention-mask-parallel.svg){: .align-center width="620"}
 
@@ -110,7 +114,7 @@ prefill이 끝나는 시점이 곧 첫 토큰이 나오는 시점이고, 그 뒤
 
 ## 순차 생성: decode의 기원
 
-프롬프트와 달리 생성할 토큰에는 이 자유가 없다. 위 도식에서 t4 행은 prefill이 끝나 t4가 샘플링된 뒤에야 추가될 수 있고, t5 행은 t4의 forward가 끝나야 생긴다. [2.7편에서 본 자기회귀 루프]({% post_url 2026-08-05-AI-LLM-Optimization-02-07-Transformer-Explainer-Output %}#자기회귀-루프) — 선택된 토큰이 시퀀스 끝에 붙어 다시 입력이 되는 구조 — 그대로, 다음 토큰은 이전 토큰이 확정(샘플링)되어야 계산할 수 있기 때문이다. prefill처럼 여러 행을 묶을 재료 자체가 없으므로 **행이 하나씩 추가되는 토큰 단위 반복이 강제**되고, 이것이 decode 단계다. 자기회귀 모델이라면 RNN이든 트랜스포머든 해당되는 성질이다.
+프롬프트와 달리 생성할 토큰에는 이 자유가 없다. [첫 하삼각 타임라인 도식](#두-단계의-기원-아키텍처에서의-유도)에서 t4 행은 prefill이 끝나 t4가 샘플링된 뒤에야 추가될 수 있고, t5 행은 t4의 forward가 끝나야 생긴다. [2.7편에서 본 자기회귀 루프]({% post_url 2026-08-05-AI-LLM-Optimization-02-07-Transformer-Explainer-Output %}#자기회귀-루프) — 선택된 토큰이 시퀀스 끝에 붙어 다시 입력이 되는 구조 — 그대로, 다음 토큰은 이전 토큰이 확정(샘플링)되어야 계산할 수 있기 때문이다. prefill처럼 여러 행을 묶을 재료 자체가 없으므로 **행이 하나씩 추가되는 토큰 단위 반복이 강제**되고, 이것이 decode 단계다. 자기회귀 모델이라면 RNN이든 트랜스포머든 해당되는 성질이다.
 
 ![decode 스텝마다 새 토큰의 행 하나만 계산되고 이전 행들은 KV cache에서 읽히는 모습]({{site.url}}/assets/images/llmso-decode-attention-row-append.svg){: .align-center width="760"}
 
@@ -187,7 +191,7 @@ decode 쪽 가중치 로드는 [2.6편]({% post_url 2026-08-05-AI-LLM-Optimizati
 - `/basic_generate`·`/generate` 경로: HF `model.generate()` 내부에서 prefill과 decode가 모두 실행된다. 다만 `generate()`가 끝날 때까지 결과를 반환하지 않으므로 서빙 시스템 쪽에서는 두 단계가 보이지 않는다. [배치 편]({% post_url 2026-08-14-Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request %})의 배칭도 요청 단위였지 단계 단위가 아니었다
 - 스트리밍 경로: 토큰 단위 루프가 서빙 시스템 쪽으로 올라와, decode 스텝이 처음으로 코드에 나타난다. 다만 이 구현은 `use_cache=False`라 매 스텝 프롬프트 전체를 다시 forward한다 — 매 스텝이 prefill인 decode이고, KV cache가 없을 때의 비용을 보여주는 예시다. 스트리밍에서 코드로 확인한다
 
-[배치 편]({% post_url 2026-08-14-Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request %})에서 본 정적 배칭의 한계 — 요청 사이의 배칭이 없어 부하가 늘면 지연만 증가하는 문제 — 의 해법인 continuous batching은, 이 글의 용어로는 **스케줄링 단위를 요청에서 모델 실행 스텝(iteration)으로 내리는 방식**이다. 이 기법 자체가 prefill과 decode 두 단계의 구분을 전제한다.
+[배치 편]({% post_url 2026-08-14-Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request %})에서 본 정적 배칭의 한계 — 요청 사이의 배칭이 없어 부하가 늘면 지연만 증가하는 문제 — 의 해법인 continuous batching은, 이 글의 용어로는 **스케줄링 단위를 요청에서 모델 실행 스텝(iteration)으로 내리는 방식**이다. 이 기법 자체가 prefill과 decode 두 단계의 구분을 전제한다. [6.1편]({% post_url 2026-08-22-Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview %})은 이 구도를 실행 단위 → 배칭의 동기 → 구조 → 재구성 시점의 흐름으로 정리한다.
 
 <br>
 
@@ -209,7 +213,7 @@ decode 쪽 가중치 로드는 [2.6편]({% post_url 2026-08-05-AI-LLM-Optimizati
 
 - prefill은 프롬프트 전체를 한 번의 forward로 병렬 처리하며 KV cache를 채우고 첫 토큰을 내는 단계, decode는 토큰 하나당 forward 한 번으로 생성을 이어 가는 단계이다. 경계는 첫 토큰이고, TTFT와 TPOT의 경계이기도 하다
 - 두 단계는 causal attention의 병렬 프롬프트 처리, 자기회귀 생성의 순차성, 두 단계를 연결하는 KV cache라는 아키텍처 성질에서 유도된다. RNN에는 병렬 단계가 없고 BERT에는 캐시가 성립하지 않는다
-- 토큰당 FLOPs는 두 단계가 거의 같고, 차이는 커널 한 번이 처리하는 토큰 수다. prefill은 compute-bound, decode는 가중치·KV cache 로드를 혼자 부담하는 memory-bandwidth-bound다
+- 토큰당 FLOPs는 두 단계가 거의 같고, 차이는 커널 한 번이 처리하는 토큰 수다. prefill은 프롬프트가 충분히 길면 compute-bound, decode는 가중치·KV cache 로드를 혼자 부담하는 memory-bandwidth-bound다
 - 현상은 자기회귀 트랜스포머 추론 일반에 존재하고(로컬 `generate()`에도 있다), 모델 서빙 일반의 용어는 아니며(forward 1회 모델에는 구분이 없다), 명명은 initiation/increment(Orca), context/generation(TensorRT-LLM), prompt/token(Splitwise) 등으로 갈리다가 prefill/decode로 수렴했다
 - continuous batching·chunked prefill·disaggregated serving은 모두 이 구분을 전제한다. 스트리밍 시 decode 스텝이 처음으로 코드에 나타난다
 
