@@ -1,11 +1,11 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-08-28T17:54:41+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[Kubernetes] Service 포트와 노출 포트 혼동으로 인한 연결 타임아웃 트러블슈팅</title><link href="https://sirzzang.github.io//dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion/" rel="alternate" type="text/html" title="[Kubernetes] Service 포트와 노출 포트 혼동으로 인한 연결 타임아웃 트러블슈팅" /><published>2026-08-28T00:00:00+09:00</published><updated>2026-08-28T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion/">&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-08-28T18:15:51+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[Kubernetes] Service 포트와 노출 포트 혼동으로 인한 연결 타임아웃 트러블슈팅</title><link href="https://sirzzang.github.io//dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion/" rel="alternate" type="text/html" title="[Kubernetes] Service 포트와 노출 포트 혼동으로 인한 연결 타임아웃 트러블슈팅" /><published>2026-08-28T00:00:00+09:00</published><updated>2026-08-28T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion/">&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
 &lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
 
 &lt;ul&gt;
   &lt;li&gt;브라우저로 UI에 접속할 때 쓰는 포트(클러스터 밖으로 노출된 포트)와 클러스터 내부 Service 포트는 별개다. 클러스터 내부 워크로드의 접속 설정에는 반드시 Service 포트를 써야 한다&lt;/li&gt;
-  &lt;li&gt;Service DNS 이름이 틀리면 &lt;code class=&quot;highlighter-rouge&quot;&gt;NameResolutionError&lt;/code&gt;로 즉시 실패하고, 포트가 틀리면 아무 응답 없이 connect timeout까지 매달린다&lt;/li&gt;
-  &lt;li&gt;에러가 즉시 나면 이름(DNS) 문제, 매달리면 포트/엔드포인트 문제를 의심한다&lt;/li&gt;
+  &lt;li&gt;Service DNS 이름이 틀리면 &lt;code class=&quot;highlighter-rouge&quot;&gt;NameResolutionError&lt;/code&gt;로 빠르게 실패하고, Service에 정의되지 않은 포트로 가면 아무 응답 없이 connect timeout까지 매달린다&lt;/li&gt;
+  &lt;li&gt;빠르게 실패하면 이름(DNS)부터, 오래 매달리면 Service에 없는 포트부터, 곧바로 거절되면 endpoint·&lt;code class=&quot;highlighter-rouge&quot;&gt;targetPort&lt;/code&gt;부터 의심한다&lt;/li&gt;
 &lt;/ul&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
@@ -86,14 +86,14 @@ mlflow   ClusterIP   10.96.153.40   &amp;lt;none&amp;gt;        5000/TCP   112s
 
 &lt;p&gt;이 구조에서 &lt;strong&gt;어느 요소를 틀리느냐에 따라 증상이 완전히 달라진다&lt;/strong&gt;. 위 사례 환경에서 실제로 나타날 수 있는 두 가지 오설정을 비교해 보자.&lt;/p&gt;
 
-&lt;h2 id=&quot;네임스페이스가-틀린-경우--즉시-실패&quot;&gt;네임스페이스가 틀린 경우 — 즉시 실패&lt;/h2&gt;
+&lt;h2 id=&quot;네임스페이스가-틀린-경우--빠른-실패&quot;&gt;네임스페이스가 틀린 경우 — 빠른 실패&lt;/h2&gt;
 
 &lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;na&quot;&gt;env&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
   &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;MLFLOW_TRACKING_URI&lt;/span&gt;
     &lt;span class=&quot;na&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;http://mlflow.default.svc.cluster.local:5000&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;mlflow&lt;/code&gt; Service는 &lt;code class=&quot;highlighter-rouge&quot;&gt;default&lt;/code&gt;가 아니라 &lt;code class=&quot;highlighter-rouge&quot;&gt;mlflow&lt;/code&gt; 네임스페이스에 있다. 존재하지 않는 네임스페이스를 가리키면 DNS 이름 자체가 없으므로, 이름 해석 단계에서 즉시 실패한다.&lt;/p&gt;
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;mlflow&lt;/code&gt; Service는 &lt;code class=&quot;highlighter-rouge&quot;&gt;default&lt;/code&gt;가 아니라 &lt;code class=&quot;highlighter-rouge&quot;&gt;mlflow&lt;/code&gt; 네임스페이스에 있다. &lt;code class=&quot;highlighter-rouge&quot;&gt;default&lt;/code&gt; 네임스페이스 자체는 항상 존재하지만 그 안에 &lt;code class=&quot;highlighter-rouge&quot;&gt;mlflow&lt;/code&gt;라는 Service가 없으므로, 해당 DNS 이름이 등록되어 있지 않아 이름 해석 단계에서 실패한다.&lt;/p&gt;
 
 &lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;socket.gaierror: [Errno -2] Name or service not known
 
@@ -101,9 +101,9 @@ urllib3.exceptions.NameResolutionError: HTTPConnection(host='mlflow.default.svc.
 Failed to resolve 'mlflow.default.svc.cluster.local' ([Errno -2] Name or service not known)
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;파드가 곧바로 Failed 상태가 되고 로그에 원인이 그대로 찍히므로, 오히려 원인 파악이 쉬운 케이스다. 물론 이름 해석 실패가 &lt;strong&gt;항상 설정 오타 때문인 것은 아니다&lt;/strong&gt;. 클러스터 DNS 쪽이 문제였던 경우는 &lt;a href=&quot;/dev/Dev-Kubernetes-CoreDNS-Intermittent-Registry-DNS-Failure/&quot;&gt;CoreDNS 업스트림 DNS 오염 글&lt;/a&gt;에서 다룬 적이 있다.&lt;/p&gt;
+&lt;p&gt;다만 “즉시”라고 하기에는 약간의 시간이 걸린다. &lt;code class=&quot;highlighter-rouge&quot;&gt;NameResolutionError&lt;/code&gt;는 urllib3에서 연결 오류(&lt;code class=&quot;highlighter-rouge&quot;&gt;NewConnectionError&lt;/code&gt;)의 하위 클래스로 취급되어 재시도 대상에 들어가므로, MLflow 클라이언트 기본값(최대 7회 재시도, 백오프 계수 2)이면 백오프를 합쳐 수십 초에서 수 분이 지난 뒤에야 파드가 Failed 상태가 된다. 그래도 로그에 원인이 그대로 찍히므로 원인 파악은 쉬운 케이스다. 물론 이름 해석 실패가 &lt;strong&gt;항상 설정 오타 때문인 것은 아니다&lt;/strong&gt;. 클러스터 DNS 쪽이 문제였던 경우는 &lt;a href=&quot;/dev/Dev-Kubernetes-CoreDNS-Intermittent-Registry-DNS-Failure/&quot;&gt;CoreDNS 업스트림 DNS 오염 글&lt;/a&gt;에서 다룬 적이 있다.&lt;/p&gt;
 
-&lt;h2 id=&quot;포트가-틀린-경우--running인-채-무한-대기&quot;&gt;포트가 틀린 경우 — Running인 채 무한 대기&lt;/h2&gt;
+&lt;h2 id=&quot;포트가-틀린-경우--running인-채-장시간-대기&quot;&gt;포트가 틀린 경우 — Running인 채 장시간 대기&lt;/h2&gt;
 
 &lt;p&gt;네임스페이스는 맞게 썼지만, UI 접속에 쓰던 포트 &lt;code class=&quot;highlighter-rouge&quot;&gt;5001&lt;/code&gt;을 그대로 옮겨 적은 경우다.&lt;/p&gt;
 
@@ -126,9 +126,9 @@ http://mlflow.mlflow.svc.cluster.local:5001/api/2.0/mlflow/experiments/get-by-na
 failed with timeout exception ... Max retries exceeded
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;즉시 connection refused가 나지 않고 타임아웃까지 매달리는 이유는 &lt;strong&gt;ClusterIP&lt;/strong&gt;의 동작 방식에 있다. ClusterIP는 어떤 프로세스가 실제로 리슨(listen)하고 있는 IP가 아니라, &lt;strong&gt;kube-proxy&lt;/strong&gt;가 만들어 둔 규칙(iptables/IPVS)에 의해 백엔드 파드로 변환되는 가상 IP다. Service에 정의된 포트로 들어온 패킷만 변환 규칙에 걸리고, 정의되지 않은 포트로 들어온 패킷은 거절(RST) 응답 없이 버려지는(drop) 경우가 많다. 클라이언트 입장에서는 SYN을 보내도 아무 응답이 없으니 재전송만 반복하다가 connect timeout에 도달한다. kube-proxy가 커널에 설치하는 규칙이 실제로 어떤 모습인지는 &lt;a href=&quot;/kubernetes/Kubernetes-Networking-Linux-Stack/&quot;&gt;Linux 네트워크 스택 - iptables와 conntrack 글&lt;/a&gt;에서 다룬 적이 있다.&lt;/p&gt;
+&lt;p&gt;즉시 connection refused가 나지 않고 타임아웃까지 매달리는 이유는 &lt;strong&gt;ClusterIP&lt;/strong&gt;의 동작 방식에 있다. ClusterIP는 어떤 프로세스가 실제로 리슨(listen)하고 있는 IP가 아니라, &lt;strong&gt;kube-proxy&lt;/strong&gt;가 만들어 둔 변환 규칙에 의해 백엔드 파드로 변환되는 가상 IP다. Service에 정의된 포트로 들어온 패킷만 변환 규칙에 걸리고, 정의되지 않은 포트로 들어온 패킷은 매칭되는 규칙이 없어 거절(RST) 응답 없이 버려지는(drop) 경우가 많다(iptables 모드 기준이다. IPVS 모드에서는 kube-proxy가 ClusterIP를 &lt;code class=&quot;highlighter-rouge&quot;&gt;kube-ipvs0&lt;/code&gt; 더미 인터페이스에 바인딩해 그 IP가 노드의 로컬 주소가 되므로, 커널이 RST를 보내 곧바로 거절될 수 있다). 클라이언트 입장에서는 SYN을 보내도 아무 응답이 없으니 재전송만 반복하다가 connect timeout에 도달한다. 참고로 Linux 커널의 SYN 재전송 기본값(&lt;code class=&quot;highlighter-rouge&quot;&gt;tcp_syn_retries=6&lt;/code&gt;)으로는 약 127초 뒤에 커널이 먼저 포기하는데, MLflow 클라이언트의 연결 타임아웃 120초가 그보다 근소하게 짧아 에러 메시지에 120초가 찍힌 것이다. kube-proxy가 커널에 설치하는 규칙이 실제로 어떤 모습인지는 &lt;a href=&quot;/kubernetes/Kubernetes-Networking-Linux-Stack/&quot;&gt;Linux 네트워크 스택 - iptables와 conntrack 글&lt;/a&gt;에서 다룬 적이 있다.&lt;/p&gt;
 
-&lt;p&gt;여기에 클라이언트 라이브러리의 재시도가 겹치면 체감 시간은 더 늘어난다. 위 사례에서 MLflow 클라이언트의 HTTP 타임아웃 기본값은 120초이고, urllib3의 재시도와 백오프가 겹치면서 API 호출 한 번이 수 분에서 십수 분까지 걸렸다. 로그만 보면 “그냥 오래 걸리는 작업”처럼 보이는 것이다.&lt;/p&gt;
+&lt;p&gt;여기에 클라이언트 라이브러리의 재시도가 겹치면 체감 시간은 더 늘어난다. 위 사례에서 MLflow 클라이언트의 연결 타임아웃 기본값은 120초, 최대 재시도는 7회다. 시도마다 120초를 꼬박 기다린 뒤 백오프까지 얹히므로 API 호출 한 번이 십수 분까지 걸린다. 앞의 이름 해석 실패와 재시도 횟수는 같지만, 시도당 비용이 밀리초냐 120초냐에 따라 총 시간이 자릿수 단위로 벌어지는 것이다. 로그만 보면 “그냥 오래 걸리는 작업”처럼 보인다.&lt;/p&gt;
 
 &lt;h2 id=&quot;증상-비교&quot;&gt;증상 비교&lt;/h2&gt;
 
@@ -147,20 +147,36 @@ failed with timeout exception ... Max retries exceeded
       &lt;td&gt;서비스명·네임스페이스&lt;/td&gt;
       &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;mlflow.default.svc.cluster.local:5000&lt;/code&gt;&lt;/td&gt;
       &lt;td&gt;실패&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NameResolutionError&lt;/code&gt; — 파드 즉시 Failed&lt;/td&gt;
-      &lt;td&gt;즉시&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NameResolutionError&lt;/code&gt; — 재시도 후 Failed&lt;/td&gt;
+      &lt;td&gt;수십 초 ~ 수 분 (시도당 밀리초 × 재시도·백오프)&lt;/td&gt;
     &lt;/tr&gt;
     &lt;tr&gt;
-      &lt;td&gt;포트&lt;/td&gt;
+      &lt;td&gt;Service에 없는 포트&lt;/td&gt;
       &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;mlflow.mlflow.svc.cluster.local:5001&lt;/code&gt;&lt;/td&gt;
       &lt;td&gt;성공&lt;/td&gt;
       &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;ConnectTimeoutError&lt;/code&gt; — Running인 채 무응답&lt;/td&gt;
-      &lt;td&gt;타임아웃 이후 (120초 × 재시도)&lt;/td&gt;
+      &lt;td&gt;십수 분 (시도당 120초 × 재시도·백오프)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Service 포트는 맞지만 endpoint 0개&lt;/td&gt;
+      &lt;td&gt;selector 불일치, 파드 없음&lt;/td&gt;
+      &lt;td&gt;성공&lt;/td&gt;
+      &lt;td&gt;connection refused — kube-proxy가 endpoint 없는 Service 포트에 REJECT 규칙을 설치&lt;/td&gt;
+      &lt;td&gt;곧바로&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;targetPort&lt;/code&gt;가 틀림&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;targetPort: 5001&lt;/code&gt;인데 파드는 5000에서 리슨&lt;/td&gt;
+      &lt;td&gt;성공&lt;/td&gt;
+      &lt;td&gt;connection refused — 파드까지 DNAT된 뒤 파드 커널이 RST&lt;/td&gt;
+      &lt;td&gt;곧바로&lt;/td&gt;
     &lt;/tr&gt;
   &lt;/tbody&gt;
 &lt;/table&gt;
 
-&lt;p&gt;여기서 실전에서 바로 써먹을 수 있는 판별 규칙이 나온다. &lt;strong&gt;에러가 즉시 나면 이름(DNS) 문제, 매달리면 포트/엔드포인트 문제&lt;/strong&gt;다. 거꾸로 말하면, “실패도 안 하고 매달려 있는” 답답한 증상이 오히려 포트 쪽을 먼저 의심하라는 진단 단서가 된다.&lt;/p&gt;
+&lt;p&gt;위 두 행이 이번 사례에서 관측한 것이고, 아래 두 행은 비교를 위해 함께 적은 일반론이다. 이렇게 놓고 보면 “매달림”은 Service에 정의되지 않은 포트에서만 나오는 고유한 증상이다. endpoint가 없거나 &lt;code class=&quot;highlighter-rouge&quot;&gt;targetPort&lt;/code&gt;가 틀린 경우는 오히려 곧바로 거절된다.&lt;/p&gt;
+
+&lt;p&gt;여기서 실전에서 바로 써먹을 수 있는 판별 규칙이 나온다. &lt;strong&gt;빠르게 실패하면 이름(DNS), 오래 매달리면 Service에 없는 포트, 곧바로 거절되면 endpoint나 &lt;code class=&quot;highlighter-rouge&quot;&gt;targetPort&lt;/code&gt;&lt;/strong&gt;를 먼저 의심한다. 다만 이것은 단정이 아니라 먼저 의심할 순서다. 매달리는 증상은 NetworkPolicy나 노드 간 방화벽이 패킷을 버릴 때도 똑같이 나타나므로, 포트를 확인해도 원인이 안 보이면 그쪽으로 넘어간다.&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -171,10 +187,14 @@ failed with timeout exception ... Max retries exceeded
 &lt;p&gt;실습 환경이나 개발 환경은 보통 &lt;strong&gt;포트포워딩(port forwarding)&lt;/strong&gt;(&lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl port-forward&lt;/code&gt;나 프록시)으로 “호스트의 어떤 포트 → 클러스터 내부 Service 포트”를 이어서 웹 UI를 노출한다. 이때 호스트 쪽 포트는 환경을 만든 사람이 임의로 고른 숫자일 뿐, &lt;strong&gt;클러스터 내부 Service 포트와 일치할 의무가 전혀 없다&lt;/strong&gt;. 위 사례에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;5001&lt;/code&gt;은 호스트 세계에서만 유효한 번호였고, 클러스터 세계에서 MLflow의 주소는 &lt;code class=&quot;highlighter-rouge&quot;&gt;5000&lt;/code&gt;이었다.&lt;/p&gt;
 
 &lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart LR
-    B[브라우저] -- &quot;호스트 :5001&quot; --&amp;gt; PF[&quot;포트포워딩&quot;]
-    PF -- &quot;:5000&quot; --&amp;gt; SVC[&quot;Service mlflow&amp;lt;br/&amp;gt;(ClusterIP, 5000/TCP)&quot;]
-    W[워크플로우 파드] -- &quot;mlflow.mlflow.svc.cluster.local:5000&quot; --&amp;gt; SVC
-    SVC --&amp;gt; M[MLflow 서버 파드]
+    subgraph host[&quot;호스트 세계 (클러스터 밖)&quot;]
+        B[브라우저] -- &quot;:5001&quot; --&amp;gt; PF[&quot;포트포워딩&quot;]
+    end
+    subgraph cluster[&quot;클러스터 세계 (클러스터 안)&quot;]
+        W[워크플로우 파드] -- &quot;mlflow.mlflow.svc.cluster.local:5000&quot; --&amp;gt; SVC[&quot;Service mlflow&amp;lt;br/&amp;gt;(ClusterIP, 5000/TCP)&quot;]
+        SVC --&amp;gt; M[MLflow 서버 파드]
+    end
+    PF -- &quot;:5000&quot; --&amp;gt; SVC
 &lt;/code&gt;&lt;/pre&gt;
 
 &lt;p&gt;따라서 클러스터 내부 워크로드의 접속 설정을 쓸 때는, 브라우저 주소창의 숫자가 아니라 Service를 실측한 값을 쓴다.&lt;/p&gt;
@@ -182,6 +202,15 @@ failed with timeout exception ... Max retries exceeded
 &lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get svc &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; mlflow
 NAME     TYPE        CLUSTER-IP     EXTERNAL-IP   PORT&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;S&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;    AGE
 mlflow   ClusterIP   10.96.153.40   &amp;lt;none&amp;gt;        5000/TCP   112s
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;포트가 맞는데도 곧바로 거절된다면 endpoint와 &lt;code class=&quot;highlighter-rouge&quot;&gt;targetPort&lt;/code&gt;까지 확인한다. 앞서 증상 비교 표의 아래 두 행을 갈라내는 명령이다.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# endpoint가 실제로 있는지&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get endpointslice &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; mlflow &lt;span class=&quot;nt&quot;&gt;-l&lt;/span&gt; kubernetes.io/service-name&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;mlflow
+
+&lt;span class=&quot;c&quot;&gt;# Service 포트와 targetPort의 대응&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get svc &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; mlflow mlflow &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;jsonpath&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'{.spec.ports[*]}'&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
 &lt;p&gt;수정된 설정은 다음과 같다.&lt;/p&gt;
@@ -197,8 +226,8 @@ mlflow   ClusterIP   10.96.153.40   &amp;lt;none&amp;gt;        5000/TCP   112s
 
 &lt;ul&gt;
   &lt;li&gt;같은 숫자가 다른 세계에 산다. 클러스터 밖으로 노출된 접속용 포트는 호스트 세계의 번호이고, Service 포트는 클러스터 세계의 번호다. 클러스터 내부 워크로드의 접속 설정에는 Service 포트를 써야 한다&lt;/li&gt;
-  &lt;li&gt;접속 주소는 브라우저 주소창에서 복사하지 말고 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl get svc -n &amp;lt;네임스페이스&amp;gt;&lt;/code&gt;로 실측한다&lt;/li&gt;
-  &lt;li&gt;에러가 즉시 나면 이름(DNS) 문제, 매달리면 포트/엔드포인트 문제다. 특히 “Running인 채 무응답”은 endpoint 없는 포트로의 접속을 의심할 수 있는 진단 단서다&lt;/li&gt;
+  &lt;li&gt;접속 주소는 브라우저 주소창에서 복사하지 말고 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl get svc -n &amp;lt;네임스페이스&amp;gt;&lt;/code&gt;로 실측한다. 곧바로 거절된다면 endpointslice와 &lt;code class=&quot;highlighter-rouge&quot;&gt;targetPort&lt;/code&gt;까지 확인한다&lt;/li&gt;
+  &lt;li&gt;빠르게 실패하면 이름(DNS), 오래 매달리면 Service에 정의되지 않은 포트, 곧바로 거절되면 endpoint나 &lt;code class=&quot;highlighter-rouge&quot;&gt;targetPort&lt;/code&gt;를 먼저 의심한다. 특히 “Running인 채 무응답”은 Service에 없는 포트로의 접속에서만 나오는 고유한 증상이다 (endpoint가 없는 경우는 kube-proxy의 REJECT 규칙 때문에 오히려 곧바로 거절된다)&lt;/li&gt;
   &lt;li&gt;포트가 틀렸을 때 거절 응답조차 없이 매달리는 증상은, ClusterIP가 실제로 리슨하는 프로세스 없이 kube-proxy의 변환 규칙으로만 동작하는 가상 IP이기 때문에 나타난다. 이 동작 원리는 &lt;a href=&quot;/kubernetes/Kubernetes-Networking-04-Service/&quot;&gt;Service와 kube-proxy 글&lt;/a&gt;에서 다룬 적이 있다&lt;/li&gt;
 &lt;/ul&gt;
 
