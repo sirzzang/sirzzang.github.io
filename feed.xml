@@ -1,4 +1,214 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-08-27T15:37:09+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[LLM] LLM 서빙과 최적화: 서빙 최적화 기법 - 6.1. 개요: iteration에서 continuous batching까지</title><link href="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: 서빙 최적화 기법 - 6.1. 개요: iteration에서 continuous batching까지" /><published>2026-08-22T00:00:00+09:00</published><updated>2026-08-27T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-08-28T17:54:41+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[Kubernetes] Service 포트와 노출 포트 혼동으로 인한 연결 타임아웃 트러블슈팅</title><link href="https://sirzzang.github.io//dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion/" rel="alternate" type="text/html" title="[Kubernetes] Service 포트와 노출 포트 혼동으로 인한 연결 타임아웃 트러블슈팅" /><published>2026-08-28T00:00:00+09:00</published><updated>2026-08-28T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion/">&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;브라우저로 UI에 접속할 때 쓰는 포트(클러스터 밖으로 노출된 포트)와 클러스터 내부 Service 포트는 별개다. 클러스터 내부 워크로드의 접속 설정에는 반드시 Service 포트를 써야 한다&lt;/li&gt;
+  &lt;li&gt;Service DNS 이름이 틀리면 &lt;code class=&quot;highlighter-rouge&quot;&gt;NameResolutionError&lt;/code&gt;로 즉시 실패하고, 포트가 틀리면 아무 응답 없이 connect timeout까지 매달린다&lt;/li&gt;
+  &lt;li&gt;에러가 즉시 나면 이름(DNS) 문제, 매달리면 포트/엔드포인트 문제를 의심한다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;들어가며&quot;&gt;들어가며&lt;/h1&gt;
+
+&lt;p&gt;브라우저에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;localhost:5001&lt;/code&gt;로 잘 접속되던 웹 UI가 있다. 클러스터 안의 다른 파드에서 이 서비스에 접속해야 해서, 접속 주소에 같은 숫자 &lt;code class=&quot;highlighter-rouge&quot;&gt;5001&lt;/code&gt;을 옮겨 적는다. 그런데 연결이 되지 않는다. 에러조차 나지 않고, 그냥 하염없이 기다리기만 한다.&lt;/p&gt;
+
+&lt;p&gt;Kubernetes 클러스터를 운영하다 보면 누구나 알아야 하는 기본적인 내용이지만, 실습 환경이나 개발 환경처럼 포트포워딩이 미리 세팅된 곳에서는 의외로 하기 쉬운 실수다. 실제로 &lt;a href=&quot;https://kodekloud.com/&quot;&gt;KodeKloud&lt;/a&gt; 챌린지 실습을 진행하다가 이 혼동을 마주쳤는데, 접속용 포트가 안내문에 먼저 등장하는 실습 환경의 특성상 그 숫자가 클러스터 내부에서도 통할 것이라는 인상이 강하게 남기 때문이었다. 같은 숫자라도 &lt;strong&gt;브라우저가 사는 세계와 파드가 사는 세계에서 가리키는 곳이 다르다.&lt;/strong&gt; 이 글에서는 해당 실습 환경(Argo Workflows + MLflow) 사례를 통해 이 혼동이 어떤 증상으로 나타나는지, 그리고 증상만 보고 원인을 어떻게 판별할 수 있는지 알아본다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;사례-환경&quot;&gt;사례 환경&lt;/h1&gt;
+
+&lt;p&gt;혼동을 마주친 실습 환경은 단일 노드 클러스터로, 구성은 다음과 같다. &lt;code class=&quot;highlighter-rouge&quot;&gt;argo&lt;/code&gt; 네임스페이스에는 &lt;a href=&quot;https://argoproj.github.io/workflows/&quot;&gt;Argo Workflows&lt;/a&gt;(Kubernetes 네이티브 워크플로우 엔진)가, &lt;code class=&quot;highlighter-rouge&quot;&gt;mlflow&lt;/code&gt; 네임스페이스에는 &lt;a href=&quot;https://mlflow.org/&quot;&gt;MLflow&lt;/a&gt;(실험 추적 및 모델 레지스트리) 서버가 배포되어 있다. 학습 워크플로우가 매 분 실행되면서 MLflow에 실험을 기록하고 모델을 등록하는 구조다.&lt;/p&gt;
+
+&lt;p&gt;실습 환경은 두 개의 웹 UI를 브라우저로 접속할 수 있도록 노출해 두었다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Argo UI: &lt;code class=&quot;highlighter-rouge&quot;&gt;5000&lt;/code&gt; 포트&lt;/li&gt;
+  &lt;li&gt;MLflow UI: &lt;code class=&quot;highlighter-rouge&quot;&gt;5001&lt;/code&gt; 포트&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;한편 클러스터 내부의 Service를 실측하면 결과가 다르다.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get svc &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; argo
+NAME          TYPE        CLUSTER-IP      EXTERNAL-IP   PORT&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;S&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;             AGE
+argo-server   ClusterIP   10.96.56.158    &amp;lt;none&amp;gt;        2746/TCP            2m31s
+minio         ClusterIP   10.96.120.186   &amp;lt;none&amp;gt;        9000/TCP,9001/TCP   2m31s
+
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get svc &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; mlflow
+NAME     TYPE        CLUSTER-IP     EXTERNAL-IP   PORT&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;S&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;    AGE
+mlflow   ClusterIP   10.96.153.40   &amp;lt;none&amp;gt;        5000/TCP   112s
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;두 세계의 포트 번호를 나란히 놓으면 다음과 같다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;대상&lt;/th&gt;
+      &lt;th&gt;브라우저(호스트)에서 접속하는 포트&lt;/th&gt;
+      &lt;th&gt;클러스터 내부 Service 포트&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Argo UI&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;5000&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;2746&lt;/code&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;MLflow UI&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;5001&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;5000&lt;/code&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;함정이 보인다. &lt;strong&gt;호스트의 5000번은 Argo인데, 클러스터 내부의 5000번은 MLflow다.&lt;/strong&gt; 숫자 &lt;code class=&quot;highlighter-rouge&quot;&gt;5000&lt;/code&gt;이 양쪽 세계에 모두 등장하면서 “MLflow는 5001”이라는 인상이 강하게 남는다.&lt;/p&gt;
+
+&lt;p&gt;이 클러스터에서 MLflow에 접속하는 워크로드는 WorkflowTemplate의 학습·등록 스텝이고, 접속 주소는 환경변수 &lt;code class=&quot;highlighter-rouge&quot;&gt;MLFLOW_TRACKING_URI&lt;/code&gt;로 주입된다. 이 환경변수 값을 어떻게 쓰느냐가 이 글의 주제다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;em&gt;참고&lt;/em&gt;: 실습 환경의 다른 버그들&lt;/p&gt;
+
+  &lt;p&gt;이 실습에는 output parameter 이름 오타, 존재하지 않는 WorkflowTemplate을 가리키는 CronWorkflow 참조 등 다른 버그도 심어져 있었지만, 이 글에서는 포트 혼동 사례만 다룬다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;두-가지-오설정과-증상&quot;&gt;두 가지 오설정과 증상&lt;/h1&gt;
+
+&lt;p&gt;클러스터 내부에서 Service에 접속하는 표준 주소는 다음 구조를 갖는다.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;http://&amp;lt;서비스명&amp;gt;.&amp;lt;네임스페이스&amp;gt;.svc.cluster.local:&amp;lt;Service 포트&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;이 구조에서 &lt;strong&gt;어느 요소를 틀리느냐에 따라 증상이 완전히 달라진다&lt;/strong&gt;. 위 사례 환경에서 실제로 나타날 수 있는 두 가지 오설정을 비교해 보자.&lt;/p&gt;
+
+&lt;h2 id=&quot;네임스페이스가-틀린-경우--즉시-실패&quot;&gt;네임스페이스가 틀린 경우 — 즉시 실패&lt;/h2&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;na&quot;&gt;env&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;MLFLOW_TRACKING_URI&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;http://mlflow.default.svc.cluster.local:5000&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;mlflow&lt;/code&gt; Service는 &lt;code class=&quot;highlighter-rouge&quot;&gt;default&lt;/code&gt;가 아니라 &lt;code class=&quot;highlighter-rouge&quot;&gt;mlflow&lt;/code&gt; 네임스페이스에 있다. 존재하지 않는 네임스페이스를 가리키면 DNS 이름 자체가 없으므로, 이름 해석 단계에서 즉시 실패한다.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;socket.gaierror: [Errno -2] Name or service not known
+
+urllib3.exceptions.NameResolutionError: HTTPConnection(host='mlflow.default.svc.cluster.local', port=5000):
+Failed to resolve 'mlflow.default.svc.cluster.local' ([Errno -2] Name or service not known)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;파드가 곧바로 Failed 상태가 되고 로그에 원인이 그대로 찍히므로, 오히려 원인 파악이 쉬운 케이스다. 물론 이름 해석 실패가 &lt;strong&gt;항상 설정 오타 때문인 것은 아니다&lt;/strong&gt;. 클러스터 DNS 쪽이 문제였던 경우는 &lt;a href=&quot;/dev/Dev-Kubernetes-CoreDNS-Intermittent-Registry-DNS-Failure/&quot;&gt;CoreDNS 업스트림 DNS 오염 글&lt;/a&gt;에서 다룬 적이 있다.&lt;/p&gt;
+
+&lt;h2 id=&quot;포트가-틀린-경우--running인-채-무한-대기&quot;&gt;포트가 틀린 경우 — Running인 채 무한 대기&lt;/h2&gt;
+
+&lt;p&gt;네임스페이스는 맞게 썼지만, UI 접속에 쓰던 포트 &lt;code class=&quot;highlighter-rouge&quot;&gt;5001&lt;/code&gt;을 그대로 옮겨 적은 경우다.&lt;/p&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;na&quot;&gt;env&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;MLFLOW_TRACKING_URI&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;http://mlflow.mlflow.svc.cluster.local:5001&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;이번에는 DNS 해석이 정상적으로 되고 ClusterIP도 존재한다. 문제는 그 Service에 &lt;code class=&quot;highlighter-rouge&quot;&gt;5001&lt;/code&gt; 포트가 없다는 것뿐이다. 그러면 어떤 일이 벌어질까.&lt;/p&gt;
+
+&lt;p&gt;워크플로우는 실패하지 않는다. 로그는 의존성 설치 이후 멈춘 것처럼 보이고, 워크플로우는 Running 상태로 계속 남아 있는다. 한참을 기다린 뒤에야 타임아웃 에러가 떨어진다.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;TimeoutError: timed out
+
+urllib3.exceptions.ConnectTimeoutError: (&amp;lt;HTTPConnection(host='mlflow.mlflow.svc.cluster.local', port=5001)&amp;gt;,
+'Connection to mlflow.mlflow.svc.cluster.local timed out. (connect timeout=120)')
+
+mlflow.exceptions.MlflowException: API request to
+http://mlflow.mlflow.svc.cluster.local:5001/api/2.0/mlflow/experiments/get-by-name
+failed with timeout exception ... Max retries exceeded
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;즉시 connection refused가 나지 않고 타임아웃까지 매달리는 이유는 &lt;strong&gt;ClusterIP&lt;/strong&gt;의 동작 방식에 있다. ClusterIP는 어떤 프로세스가 실제로 리슨(listen)하고 있는 IP가 아니라, &lt;strong&gt;kube-proxy&lt;/strong&gt;가 만들어 둔 규칙(iptables/IPVS)에 의해 백엔드 파드로 변환되는 가상 IP다. Service에 정의된 포트로 들어온 패킷만 변환 규칙에 걸리고, 정의되지 않은 포트로 들어온 패킷은 거절(RST) 응답 없이 버려지는(drop) 경우가 많다. 클라이언트 입장에서는 SYN을 보내도 아무 응답이 없으니 재전송만 반복하다가 connect timeout에 도달한다. kube-proxy가 커널에 설치하는 규칙이 실제로 어떤 모습인지는 &lt;a href=&quot;/kubernetes/Kubernetes-Networking-Linux-Stack/&quot;&gt;Linux 네트워크 스택 - iptables와 conntrack 글&lt;/a&gt;에서 다룬 적이 있다.&lt;/p&gt;
+
+&lt;p&gt;여기에 클라이언트 라이브러리의 재시도가 겹치면 체감 시간은 더 늘어난다. 위 사례에서 MLflow 클라이언트의 HTTP 타임아웃 기본값은 120초이고, urllib3의 재시도와 백오프가 겹치면서 API 호출 한 번이 수 분에서 십수 분까지 걸렸다. 로그만 보면 “그냥 오래 걸리는 작업”처럼 보이는 것이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;증상-비교&quot;&gt;증상 비교&lt;/h2&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;틀린 요소&lt;/th&gt;
+      &lt;th&gt;예시&lt;/th&gt;
+      &lt;th&gt;DNS 해석&lt;/th&gt;
+      &lt;th&gt;증상&lt;/th&gt;
+      &lt;th&gt;드러나는 시점&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;서비스명·네임스페이스&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;mlflow.default.svc.cluster.local:5000&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;실패&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NameResolutionError&lt;/code&gt; — 파드 즉시 Failed&lt;/td&gt;
+      &lt;td&gt;즉시&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;포트&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;mlflow.mlflow.svc.cluster.local:5001&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;성공&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;ConnectTimeoutError&lt;/code&gt; — Running인 채 무응답&lt;/td&gt;
+      &lt;td&gt;타임아웃 이후 (120초 × 재시도)&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;여기서 실전에서 바로 써먹을 수 있는 판별 규칙이 나온다. &lt;strong&gt;에러가 즉시 나면 이름(DNS) 문제, 매달리면 포트/엔드포인트 문제&lt;/strong&gt;다. 거꾸로 말하면, “실패도 안 하고 매달려 있는” 답답한 증상이 오히려 포트 쪽을 먼저 의심하라는 진단 단서가 된다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;원인과-해결&quot;&gt;원인과 해결&lt;/h1&gt;
+
+&lt;p&gt;혼동의 근원으로 돌아가 보자. 브라우저로 접속하던 &lt;code class=&quot;highlighter-rouge&quot;&gt;5001&lt;/code&gt;은 무엇이었을까.&lt;/p&gt;
+
+&lt;p&gt;실습 환경이나 개발 환경은 보통 &lt;strong&gt;포트포워딩(port forwarding)&lt;/strong&gt;(&lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl port-forward&lt;/code&gt;나 프록시)으로 “호스트의 어떤 포트 → 클러스터 내부 Service 포트”를 이어서 웹 UI를 노출한다. 이때 호스트 쪽 포트는 환경을 만든 사람이 임의로 고른 숫자일 뿐, &lt;strong&gt;클러스터 내부 Service 포트와 일치할 의무가 전혀 없다&lt;/strong&gt;. 위 사례에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;5001&lt;/code&gt;은 호스트 세계에서만 유효한 번호였고, 클러스터 세계에서 MLflow의 주소는 &lt;code class=&quot;highlighter-rouge&quot;&gt;5000&lt;/code&gt;이었다.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart LR
+    B[브라우저] -- &quot;호스트 :5001&quot; --&amp;gt; PF[&quot;포트포워딩&quot;]
+    PF -- &quot;:5000&quot; --&amp;gt; SVC[&quot;Service mlflow&amp;lt;br/&amp;gt;(ClusterIP, 5000/TCP)&quot;]
+    W[워크플로우 파드] -- &quot;mlflow.mlflow.svc.cluster.local:5000&quot; --&amp;gt; SVC
+    SVC --&amp;gt; M[MLflow 서버 파드]
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;따라서 클러스터 내부 워크로드의 접속 설정을 쓸 때는, 브라우저 주소창의 숫자가 아니라 Service를 실측한 값을 쓴다.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get svc &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; mlflow
+NAME     TYPE        CLUSTER-IP     EXTERNAL-IP   PORT&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;S&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;    AGE
+mlflow   ClusterIP   10.96.153.40   &amp;lt;none&amp;gt;        5000/TCP   112s
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;수정된 설정은 다음과 같다.&lt;/p&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;na&quot;&gt;env&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;MLFLOW_TRACKING_URI&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;http://mlflow.mlflow.svc.cluster.local:5000&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;같은 숫자가 다른 세계에 산다. 클러스터 밖으로 노출된 접속용 포트는 호스트 세계의 번호이고, Service 포트는 클러스터 세계의 번호다. 클러스터 내부 워크로드의 접속 설정에는 Service 포트를 써야 한다&lt;/li&gt;
+  &lt;li&gt;접속 주소는 브라우저 주소창에서 복사하지 말고 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl get svc -n &amp;lt;네임스페이스&amp;gt;&lt;/code&gt;로 실측한다&lt;/li&gt;
+  &lt;li&gt;에러가 즉시 나면 이름(DNS) 문제, 매달리면 포트/엔드포인트 문제다. 특히 “Running인 채 무응답”은 endpoint 없는 포트로의 접속을 의심할 수 있는 진단 단서다&lt;/li&gt;
+  &lt;li&gt;포트가 틀렸을 때 거절 응답조차 없이 매달리는 증상은, ClusterIP가 실제로 리슨하는 프로세스 없이 kube-proxy의 변환 규칙으로만 동작하는 가상 IP이기 때문에 나타난다. 이 동작 원리는 &lt;a href=&quot;/kubernetes/Kubernetes-Networking-04-Service/&quot;&gt;Service와 kube-proxy 글&lt;/a&gt;에서 다룬 적이 있다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;em&gt;참고&lt;/em&gt;: “포트”라는 이름이 붙은 것들&lt;/p&gt;
+
+  &lt;p&gt;Kubernetes에는 Service의 &lt;code class=&quot;highlighter-rouge&quot;&gt;port&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;targetPort&lt;/code&gt;, NodePort 타입의 &lt;code class=&quot;highlighter-rouge&quot;&gt;nodePort&lt;/code&gt;, 파드 스펙의 &lt;code class=&quot;highlighter-rouge&quot;&gt;containerPort&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;hostPort&lt;/code&gt;까지 “포트”라 불리는 필드가 다섯 가지나 등장한다. 이번 사례의 노출 포트는 이 다섯 가지 중 어느 것도 아닌, 포트포워딩이 임시로 만들어 준 호스트 쪽 번호였다는 점이 함정이었다. 다섯 필드의 구분이 헷갈린다면 &lt;code class=&quot;highlighter-rouge&quot;&gt;Service port vs targetPort vs nodePort&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;hostPort vs NodePort&lt;/code&gt; 키워드로 따로 정리해 보는 것을 권한다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="k8s" /><category term="Service" /><category term="ClusterIP" /><category term="kube-proxy" /><category term="DNS" /><category term="MLflow" /><category term="Argo-Workflow" /><category term="port-forward" /><summary type="html">클러스터 밖으로 노출된 접속용 포트를 클러스터 내부 Service 포트로 착각하면 어떤 증상이 나타나는지 알아 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: 서빙 최적화 기법 - 6.1. 개요: iteration에서 continuous batching까지</title><link href="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: 서빙 최적화 기법 - 6.1. 개요: iteration에서 continuous batching까지" /><published>2026-08-22T00:00:00+09:00</published><updated>2026-08-27T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -513,7 +723,11 @@ Decode &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;그 다음부터&lt;span cl
 
 &lt;p&gt;반면 continuous batching에서 새로 합류하는 요청은 prefill부터 시작해야 하는데, 배치에는 이미 decode 중인 요청들이 있다. &lt;a href=&quot;#continuous-batching&quot;&gt;위 continuous batching 그림&lt;/a&gt;에서 초록 decode 셀들 사이에 파란 prefill 셀이 끼어들던 장면이 바로 이것이다. &lt;a href=&quot;#배치의-구조-prefill과-decode&quot;&gt;배치의 구조&lt;/a&gt;의 용어로, S=1인 요청들 옆에 — 예컨대 긴 문서가 프롬프트로 들어와 — S=8000짜리 요청이 오는 것이다. 공교롭게도 prefill/decode 구분은 continuous batching의 성립 전제이면서 동시에 이 문제의 원천이다 — 배치를 자유롭게 재구성할 수 있는 근거가 “decode는 전부 S=1이라 아무나 같은 모양으로 쌓인다”였는데, 새로 합류하는 요청은 S=8000의 prefill이기 때문이다.&lt;/p&gt;
 
-&lt;p&gt;선택지는 둘인데, 결론부터 말하면 어느 쪽도 만족스럽지 않다. 섞지 않으면 진행 중인 decode가 멎고, 섞어도 긴 prefill이 스텝 길이를 지배한다.&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-ch06-mixed-step-length.svg&quot; alt=&quot;continuous의 단계가 섞이는 세계: 스텝 길이는 prefill이 정한다&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. decode 박자로 돌던 배치(it k−1)에 새 요청 D가 끼어들면, 그 스텝(iteration k)의 길이는 S=8000 prefill이 정한다 — decode의 몫은 토큰 1개지만 prefill이 끝날 때까지 같은 스텝에 묶인다. prefill이 빠진 다음 스텝(it k+1)은 다시 decode 박자로 돌아온다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;문제 해결에 활용할 수 있는 선택지는 둘인데, 결론부터 말하면 어느 쪽도 만족스럽지 않다. 섞지 않으면 진행 중인 decode가 멎고, 섞어도 긴 prefill이 스텝 길이를 지배한다.&lt;/p&gt;
 
 &lt;h3 id=&quot;방안-1-prefill과-decode를-함께-배칭하지-않음&quot;&gt;방안 1: prefill과 decode를 함께 배칭하지 않음&lt;/h3&gt;
 
@@ -565,10 +779,6 @@ Decode &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;그 다음부터&lt;span cl
 &lt;/table&gt;
 
 &lt;p&gt;진짜 문제는 마지막 줄이다. 토큰 하나를 디코딩하는 것은 prefill을 끝내는 것보다 훨씬 빠르기 때문에, 한 스텝의 길이는 그 스텝에서 가장 무거운 작업 — prefill — 이 결정한다. 담을 수는 있어도, 담는 순간 decode 중이던 요청의 그 스텝이 prefill 시간만큼 늘어나 토큰 간 지연이 튄다. 그림에서 요청 2·3의 prefill이 이어지는 동안 요청 1의 decode 토큰들이 그 긴 스텝의 박자에 묶이는 것이 보인다. 입력 프롬프트가 길수록 지연은 여전히 두드러진다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-ch06-mixed-step-length.svg&quot; alt=&quot;continuous의 단계가 섞이는 세계: 스텝 길이는 prefill이 정한다&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. decode 박자로 돌던 배치(it k−1)에 새 요청 D가 끼어들면, 그 스텝(iteration k)의 길이는 S=8000 prefill이 정한다 — decode의 몫은 토큰 1개지만 prefill이 끝날 때까지 같은 스텝에 묶인다. prefill이 빠진 다음 스텝(it k+1)은 다시 decode 박자로 돌아온다&lt;/sup&gt;&lt;/center&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -4745,459 +4955,4 @@ FP16 (텐서 코어):     528 TC × ~1024 MAC/clk × 2 × 클럭 ≈ 1979 TFLOPS
   &lt;li&gt;&lt;a href=&quot;/dev/Dev-GPU-Phantom-Utilization/&quot;&gt;GPU 팬텀 사용률&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="GPU" /><category term="CUDA" /><category term="SM" /><category term="Tensor-Core" /><category term="Microarchitecture" /><category term="NVIDIA" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-3" /><summary type="html">스펙표의 TFLOPS가 어디서 나오는지 SM 구조로 분해해 보자.</summary></entry><entry><title type="html">[GPU] GPU 패키징과 노드 경계: die에서 랙까지</title><link href="https://sirzzang.github.io//cs/CS-GPU-Package-Node-Boundary/" rel="alternate" type="text/html" title="[GPU] GPU 패키징과 노드 경계: die에서 랙까지" /><published>2026-08-21T00:00:00+09:00</published><updated>2026-08-22T00:00:00+09:00</updated><id>https://sirzzang.github.io//cs/CS-GPU-Package-Node-Boundary</id><content type="html" xml:base="https://sirzzang.github.io//cs/CS-GPU-Package-Node-Boundary/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 중 딥다이브한 내용입니다.&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;인터커넥트의 경계선을 부르는 용어는 chip이 아니라 package다. chip은 문맥에 따라 die를 뜻하기도 package를 뜻하기도 해서 경계 용어로 쓰면 흔들린다&lt;/li&gt;
-  &lt;li&gt;그 경계는 고정이 아니다. H100 세대까지는 패키지 밖부터가 인터커넥트였지만, Blackwell은 패키지 안의 die↔die 링크(NV-HBI)까지 인터커넥트라 부른다. die를 2개로 잘라 붙이고도 GPU 1장으로 보이려면 그 링크가 자기 HBM보다 빨라야 한다&lt;/li&gt;
-  &lt;li&gt;노드의 경계는 물리가 정한다. 전력·냉각(공랭 약 10kW), CPU의 PCIe 레인 예산(2소켓 128 ~ 160레인), NUMA 균형이 겹쳐 8-GPU 노드가 업계 표준이 됐다&lt;/li&gt;
-  &lt;li&gt;GB200 NVL72는 액랭과 랙 내부 구리 배선으로 스케일업 도메인(NVLink 범위)을 섀시에서 랙(72 GPU)으로 끌어올렸다. 관리 단위(OS)와 스케일업 단위가 처음으로 분리된 사례다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;패키징-어휘&quot;&gt;패키징 어휘&lt;/h1&gt;
-
-&lt;p&gt;3주차 학습 내용 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/&quot;&gt;5.3편&lt;/a&gt;은 인터커넥트를 “패키지 경계 밖으로 주소 공간을 확장하는 링크”로 정의한다. 그 경계를 정확히 부르려면 반도체 패키징 어휘가 필요하다. 제조 순서를 따라가면 자연스럽게 정리된다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-gpu-chip-hardware-process.png&quot; alt=&quot;Wafer에서 Die를 거쳐 Package가 되는 제조 공정 순서&quot; class=&quot;align-center&quot; width=&quot;680&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. Wafer → Die → Package로 이어지는 공정 순서가 곧 추상화 순서다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;순서&lt;/th&gt;
-      &lt;th&gt;용어&lt;/th&gt;
-      &lt;th&gt;정의&lt;/th&gt;
-      &lt;th&gt;성질&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;1&lt;/td&gt;
-      &lt;td&gt;Wafer&lt;/td&gt;
-      &lt;td&gt;회로를 한꺼번에 새기는 실리콘 원판 (300mm)&lt;/td&gt;
-      &lt;td&gt;재료&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;2&lt;/td&gt;
-      &lt;td&gt;Die&lt;/td&gt;
-      &lt;td&gt;웨이퍼에서 잘라낸 회로 조각 하나&lt;/td&gt;
-      &lt;td&gt;기본 단위&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;3&lt;/td&gt;
-      &lt;td&gt;Chiplet&lt;/td&gt;
-      &lt;td&gt;큰 기능을 여러 die로 쪼갰을 때의 각 조각&lt;/td&gt;
-      &lt;td&gt;설계 전략 (die의 역할 이름)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;4&lt;/td&gt;
-      &lt;td&gt;Interposer&lt;/td&gt;
-      &lt;td&gt;die들을 올려 고밀도 배선으로 잇는 중간 판&lt;/td&gt;
-      &lt;td&gt;조립&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;5&lt;/td&gt;
-      &lt;td&gt;Substrate&lt;/td&gt;
-      &lt;td&gt;패키지 바닥 기판. 외부로 신호·전원을 낸다&lt;/td&gt;
-      &lt;td&gt;조립&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;6&lt;/td&gt;
-      &lt;td&gt;Package&lt;/td&gt;
-      &lt;td&gt;위 전부를 봉지해 하나의 부품으로 만든 것&lt;/td&gt;
-      &lt;td&gt;완성&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;7&lt;/td&gt;
-      &lt;td&gt;SiP&lt;/td&gt;
-      &lt;td&gt;성격이 다른 die를 한 패키지에 담은 형태&lt;/td&gt;
-      &lt;td&gt;패키지의 유형&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;8&lt;/td&gt;
-      &lt;td&gt;C2C&lt;/td&gt;
-      &lt;td&gt;패키지(칩) 사이를 잇는 연결&lt;/td&gt;
-      &lt;td&gt;링크&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;—&lt;/td&gt;
-      &lt;td&gt;Chip&lt;/td&gt;
-      &lt;td&gt;보통 6번을, 문맥에 따라 2번을 가리키는 구어&lt;/td&gt;
-      &lt;td&gt;호칭&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;포함 관계로 정렬하면 &lt;code class=&quot;highlighter-rouge&quot;&gt;Package ⊃ Substrate ⊃ Interposer ⊃ Die(= Chiplet)&lt;/code&gt;이다. 단면으로 보면 이렇다.&lt;/p&gt;
-
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;┌─ Package ─────────────────────────────┐ ← 부품으로 팔리는 단위 (= 흔히 &quot;Chip&quot;)
-│                                       │
-│  ┌ GPU die ┐ ┌ HBM ┐ ┌ HBM ┐          │ ← Die / Chiplet: 회로가 실제로 있는 실리콘
-│  └─────────┘ └─────┘ └─────┘          │
-│  ═══════════ Interposer ══════════    │ ← die끼리 잇는 고밀도 중간 판
-│  ─────────── Substrate ───────────    │ ← 바닥 기판. 외부 핀/볼로 신호·전원 배출
-└───────────────────────────────────────┘
-                    ↕  C2C                ← 패키지 밖으로 나가는 칩 간 연결
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-gpu-chip-hardware-structure.png&quot; alt=&quot;GPU 패키지 단면 구조. Substrate, Interposer, Die와 HBM, 패키지 경계와 C2C 링크&quot; class=&quot;align-center&quot; width=&quot;680&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. 점선이 인터커넥트 경계선(패키지)이고, 애매한 것(die↔die, die↔HBM)은 전부 점선 안, C2C부터가 밖이다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-gpu-hardware-structure-2.png&quot; alt=&quot;TSMC CoWoS 패키징 구조&quot; class=&quot;align-center&quot; width=&quot;640&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: &lt;a href=&quot;https://3dfabric.tsmc.com/english/dedicatedFoundry/technology/cowos.htm&quot;&gt;TSMC 3DFabric — CoWoS&lt;/a&gt;&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;이 사다리에서 흔히 헷갈리는 지점 세 가지만 짚는다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;Wafer는 사다리의 층이 아니다.&lt;/strong&gt; die의 상위 개념이 아니라 원재료다. 웨이퍼 1장에서 die 수십 ~ 수백 개가 나온다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Chiplet은 크기 개념이 아니라 설계 전략이다.&lt;/strong&gt; 수율 때문에 큰 die를 못 만들어 쪼갠 것이고, 쪼갠 조각을 이을 배선이 필요해져 Interposer와 C2C가 등장한다. 즉 3 → 4 → 8은 인과로 이어진 흐름이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;C2C는 몸통이 아니라 링크다.&lt;/strong&gt; 칸이 아니라 칸 사이에 있다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;이 어휘에서 실제로 챙길 결론은 한 줄이다. &lt;strong&gt;경계선을 부를 때는 chip이 아니라 package(또는 die)를 쓴다.&lt;/strong&gt; chip은 die를 가리키기도 package를 가리키기도 해서, 인터커넥트 경계를 논할 때 쓰면 개념이 흔들린다. 예를 들어 HBM은 GPU 연산 die와 별개 die지만 실리콘 인터포저로 붙어 같은 패키지 안에 있다 — “칩 밖”이라고 하면 HBM이 안인지 밖인지 애매해지지만, “패키지 안”이라고 하면 명확하다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;인터커넥트의-경계&quot;&gt;인터커넥트의 경계&lt;/h1&gt;
-
-&lt;h2 id=&quot;세대별-경계-이동&quot;&gt;세대별 경계 이동&lt;/h2&gt;
-
-&lt;p&gt;그렇다면 인터커넥트의 경계는 패키지로 고정인가. 아니다. 세대마다 움직인다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;어디를 넘는가&lt;/th&gt;
-      &lt;th&gt;이름&lt;/th&gt;
-      &lt;th&gt;인터커넥트인가&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;die ↔ die (한 패키지 안)&lt;/td&gt;
-      &lt;td&gt;NV-HBI&lt;/td&gt;
-      &lt;td&gt;넓게 보면 예 (Blackwell)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;die ↔ HBM (인터포저 위)&lt;/td&gt;
-      &lt;td&gt;HBM 인터페이스&lt;/td&gt;
-      &lt;td&gt;관례상 아니오 (메모리로 센다)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;칩 ↔ 칩 (패키지 밖, CPU↔GPU)&lt;/td&gt;
-      &lt;td&gt;NVLink-C2C&lt;/td&gt;
-      &lt;td&gt;예&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;GPU ↔ GPU (보드 위)&lt;/td&gt;
-      &lt;td&gt;NVLink · NVSwitch · PCIe&lt;/td&gt;
-      &lt;td&gt;예&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;노드 ↔ 노드&lt;/td&gt;
-      &lt;td&gt;InfiniBand · RoCE&lt;/td&gt;
-      &lt;td&gt;예&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;H100 문맥에서 인터커넥트의 경계는 패키지 밖이었다. 그런데 Blackwell부터는 패키지 안에도 인터커넥트가 생겼다. NV-HBI는 한 패키지 안에서 Blackwell die 두 개를 약 10TB/s로 붙여 OS에는 단일 GPU로 보이게 하는 링크인데, NVIDIA는 이것을 인터커넥트라고 부른다. “패키지 밖 = 인터커넥트”로 정의를 고정하면 이 세대에서 바로 깨지는 것이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-gpu-interconnect-comparison.png&quot; alt=&quot;패키지를 인터커넥트 경계로 볼 때 H100과 B200의 구조 비교&quot; class=&quot;align-center&quot; width=&quot;720&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. 구조는 그대로고, 가운데 die가 둘로 쪼개지면서 그 사이에 링크(NV-HBI)가 하나 생긴 것이 전부다 (B200 기준)&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;헷갈리지 않으려면 두 경계를 구분하면 된다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;구분&lt;/th&gt;
-      &lt;th&gt;H100&lt;/th&gt;
-      &lt;th&gt;B200&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;논리 경계 (어디까지가 GPU 1장인가)&lt;/td&gt;
-      &lt;td&gt;패키지&lt;/td&gt;
-      &lt;td&gt;패키지 (그대로)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;용어 경계 (어디부터 인터커넥트라 부르나)&lt;/td&gt;
-      &lt;td&gt;패키지 밖&lt;/td&gt;
-      &lt;td&gt;패키지 안까지&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;안쪽에 새 “경계”가 생긴 것이 아니라, 안쪽에 새 절단면(cut)이 생겼고 그것을 이을 링크가 필요해진 것이다. OS도 vLLM도 B200 한 패키지를 여전히 GPU 1장으로 본다. 인터커넥트라는 용어의 범위는 좁아진 게 아니라 넓어졌다 — 목록에 안쪽 항목이 추가됐을 뿐 기존 항목이 빠지지는 않았다.&lt;/p&gt;
-
-&lt;h2 id=&quot;단일-gpu의-조건&quot;&gt;단일 GPU의 조건&lt;/h2&gt;
-
-&lt;p&gt;왜 갑자기 die를 잘랐을까. 난이도의 문제라기보다 그때 처음 자를 필요가 생겼기 때문이다. 노광기가 한 번에 찍을 수 있는 die 크기(레티클 한계)가 약 858mm²인데, H100의 GH100 die가 이미 약 814mm²로 그 벽에 붙어 있었다. B200은 한계 크기의 die 2개를 붙여 약 1600mm²를 만든 것이다. 자를 필요가 없으면 이을 링크도 필요 없다 → 레티클 한계에 부딪혔다 → 잘랐다 → 자른 것을 숨길 링크가 필요해졌다는 흐름이다.&lt;/p&gt;
-
-&lt;p&gt;어려운 것은 링크 자체가 아니다. 링크는 오히려 패키지 안에 만드는 쪽이 쉽고 유리하다. 거리가 mm 단위라 비트당 에너지가 낮고 재전송·리타이머가 필요 없어, NVLink(약 1.8TB/s급)보다 NV-HBI(약 10TB/s)가 훨씬 빠르다. 어려운 것은 &lt;strong&gt;잘랐다는 사실을 숨기는 것&lt;/strong&gt;이다. 합격선은 die↔die 링크가 자기 HBM보다 빠른가다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;구간&lt;/th&gt;
-      &lt;th&gt;대역폭 (대략)&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;die 내부 배선 (자르지 않았을 때)&lt;/td&gt;
-      &lt;td&gt;수십 TB/s 이상&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;NV-HBI (B200 die↔die)&lt;/td&gt;
-      &lt;td&gt;약 10 TB/s&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;NVLink 5 (GPU↔GPU)&lt;/td&gt;
-      &lt;td&gt;약 1.8 TB/s&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;PCIe Gen5&lt;/td&gt;
-      &lt;td&gt;0.128 TB/s&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;링크가 자기 HBM보다 느리면, 옆 die의 데이터를 쓰는 것이 자기 메모리를 읽는 것보다 비싸져서 “어느 die에 있느냐”가 성능에 드러난다. 그러면 소프트웨어가 배치를 신경 써야 하고, 그것은 이미 GPU 2장이다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;사례&lt;/th&gt;
-      &lt;th&gt;die↔die 링크&lt;/th&gt;
-      &lt;th&gt;자기 HBM&lt;/th&gt;
-      &lt;th&gt;결과&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;B200 (NV-HBI)&lt;/td&gt;
-      &lt;td&gt;약 10 TB/s&lt;/td&gt;
-      &lt;td&gt;약 8 TB/s&lt;/td&gt;
-      &lt;td&gt;링크가 더 빠름 → GPU 1장으로 보임&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;AMD MI250X (Infinity Fabric)&lt;/td&gt;
-      &lt;td&gt;수백 GB/s급&lt;/td&gt;
-      &lt;td&gt;1.6 TB/s (GCD당)&lt;/td&gt;
-      &lt;td&gt;링크가 몇 배 느림 → GPU 2장으로 보임&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;실제 반례가 MI250X다. die 2개를 한 패키지에 넣었지만 OS에는 GPU 2개(2 GCD)로 보였다. 안쪽에 링크를 만들지 못해서가 아니라, 만들었는데도 HBM보다 느렸기 때문이다(MI300X에서야 하나로 합쳐졌다). 대역폭 외에 숨기기 위해 더 필요한 것들도 있다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;단일 주소 공간&lt;/strong&gt;: 두 die의 HBM이 하나의 연속된 메모리로 보여야 한다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;캐시 일관성&lt;/strong&gt;: 한쪽 die의 L2에 있는 값을 다른 die가 읽을 때 자동으로 최신 값이 와야 한다 — 멀티코어 CPU에서 두 코어가 한 메모리를 공유할 때와 같은 부류의 일관성 문제를 하드웨어 계층에서 푸는 것이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;스케줄러 통합&lt;/strong&gt;: 하나의 커널이 두 die의 SM에 걸쳐 뿌려져야 한다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;이것은 링크 배선이 아니라 아키텍처 설계의 영역이고, 하나만 빠져도 OS나 드라이버가 장치를 2개로 노출하게 된다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;노드의-경계&quot;&gt;노드의 경계&lt;/h1&gt;
-
-&lt;h2 id=&quot;노드의-세-정의&quot;&gt;노드의 세 정의&lt;/h2&gt;
-
-&lt;p&gt;패키지 밖으로 나가면 다음 경계는 노드다. 보통 노드의 정의는 세 가지가 겹친다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;관리 단위&lt;/strong&gt;: OS 인스턴스 1개 = Kubernetes Node 1개&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;물리 단위&lt;/strong&gt;: 메인보드 1개(2소켓) = 섀시 1대&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;스케일업 단위&lt;/strong&gt;: NVLink 도메인 1개 = 최대 8 GPU&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;전통적인 8-GPU 서버에서는 이 셋이 정확히 일치했다. 그래서 “노드 안/밖”이라는 말이 모호함 없이 통했다. 물리 계층부터 정리하면:&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;단위&lt;/th&gt;
-      &lt;th&gt;정의&lt;/th&gt;
-      &lt;th&gt;규격·숫자&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;소켓&lt;/td&gt;
-      &lt;td&gt;메인보드에 CPU 패키지 1개를 꽂는 자리&lt;/td&gt;
-      &lt;td&gt;LGA 4677(Intel), SP5(AMD) 등&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;메인보드&lt;/td&gt;
-      &lt;td&gt;소켓·DIMM·PCIe 슬롯이 붙은 기판&lt;/td&gt;
-      &lt;td&gt;2소켓 보드 = 소켓 2개&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;섀시&lt;/td&gt;
-      &lt;td&gt;메인보드·GPU·PSU·팬을 담는 금속 박스 1대 = 보통 노드 1개&lt;/td&gt;
-      &lt;td&gt;1U ~ 8U&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;랙&lt;/td&gt;
-      &lt;td&gt;섀시를 세로로 꽂는 캐비닛&lt;/td&gt;
-      &lt;td&gt;19인치 폭, 보통 42U, 10 ~ 20kW&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;U(rack unit)는 높이 단위로 1U = 1.75인치 = 44.45mm다. 19인치 폭 + U 배수 높이는 EIA-310 표준이라 벤더가 달라도 호환된다. 8-GPU 공랭 서버는 실제로 7 ~ 8U를 차지한다. 42U 랙에 물리적으로는 5대까지 들어가지만, 전력 예산(10 ~ 20kW) 때문에 1 ~ 2대만 넣고 비워 두는 경우가 흔하다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-socket-mainboard-chassis-rack.png&quot; alt=&quot;소켓, 2소켓 메인보드, 섀시, 랙으로 이어지는 물리 계층과 GB200 NVL72 랙 스케일 노드&quot; class=&quot;align-center&quot; width=&quot;780&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. 소켓 → 메인보드 → 섀시 → 랙 계층과, 스케일업 도메인이 랙으로 확장된 GB200 NVL72(하단). 그림의 논리 노드(logical node)는 NVLink 도메인을 가리키며, OS 관리 단위는 여전히 컴퓨트 트레이다 — 구분은 &lt;a href=&quot;#8-gpu-표준과-그-너머&quot;&gt;8-GPU 표준과 그 너머&lt;/a&gt; 참고. 랙 좌측 U 눈금은 개략적 표현이다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;한 노드에 GPU를 몇 장까지 담을 수 있는가 — 이 답이 보통 8인 이유는 물리 법칙이 아니라 여러 제약이 겹쳐 업계 표준으로 굳은 결과다. 이유를 하나씩 보자.&lt;/p&gt;
-
-&lt;h2 id=&quot;전력과-냉각&quot;&gt;전력과 냉각&lt;/h2&gt;
-
-&lt;p&gt;H100/H200 SXM은 장당 700W, B200은 1000W대의 전력을 쓴다. 8장이면 GPU만 5.6 ~ 8kW이고, CPU·메모리·NIC·팬까지 합치면 노드 하나가 10kW 안팎이다. 공랭 기준 4 ~ 8U 섀시가 감당할 수 있는 열량이 딱 이 근처고, 일반 랙의 전력 예산(10 ~ 20kW)도 노드 하나로 거의 소진된다. 16장으로 늘리려면 섀시가 아니라 랙 설계 자체가 바뀌어야 한다.&lt;/p&gt;
-
-&lt;h2 id=&quot;pcie-레인-예산&quot;&gt;PCIe 레인 예산&lt;/h2&gt;
-
-&lt;p&gt;PCIe 레인은 데이터가 지나가는 차선 1개다(송신·수신 차동쌍 각 1개로 구성된 full-duplex 직렬 링크). 레인은 CPU가 몇 개를 뽑아줄 수 있는지 정해진 유한 자원이다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;세대&lt;/th&gt;
-      &lt;th&gt;레인당 단방향&lt;/th&gt;
-      &lt;th&gt;x16 단방향&lt;/th&gt;
-      &lt;th&gt;x16 양방향 합계&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;PCIe Gen3&lt;/td&gt;
-      &lt;td&gt;약 1 GB/s&lt;/td&gt;
-      &lt;td&gt;약 16 GB/s&lt;/td&gt;
-      &lt;td&gt;약 32 GB/s&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;PCIe Gen4&lt;/td&gt;
-      &lt;td&gt;약 2 GB/s&lt;/td&gt;
-      &lt;td&gt;약 32 GB/s&lt;/td&gt;
-      &lt;td&gt;약 64 GB/s&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;PCIe Gen5&lt;/td&gt;
-      &lt;td&gt;약 4 GB/s&lt;/td&gt;
-      &lt;td&gt;약 63 GB/s&lt;/td&gt;
-      &lt;td&gt;약 128 GB/s&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;Intel Xeon Scalable은 소켓당 80레인, AMD EPYC은 소켓당 128레인(2소켓 구성에서는 일부를 소켓 간 연결에 사용)이라, 2소켓 서버의 실사용 레인은 보통 128 ~ 160개다. 데이터센터 GPU는 전부 x16 인터페이스로 설계되어 있으므로 산수가 이렇게 된다.&lt;/p&gt;
-
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;GPU 8장 × 16레인          = 128레인
-+ NIC (400G IB/RoCE는 x16) × 2~8장
-+ NVMe SSD (각 x4)
-+ BMC, 부팅 디바이스 등
-─────────────────────────────
-CPU가 주는 128~160레인을 초과
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;GPU 8장만으로 레인 예산이 거의 소진되고, 네트워크·스토리지를 붙이면 이미 부족하다. 참고로 SXM 폼팩터에서도 각 GPU는 host와 x16 PCIe로 연결된다. 다만 GPU↔GPU 트래픽이 PCIe를 안 쓰고 NVLink/NVSwitch로 우회하기 때문에, PCIe는 host 통신·NIC·스토리지 경로 전용으로 남는 것이다.&lt;/p&gt;
-
-&lt;h2 id=&quot;numa와-배치&quot;&gt;NUMA와 배치&lt;/h2&gt;
-
-&lt;p&gt;2소켓 서버는 NUMA(Non-Uniform Memory Access) 구조다. 각 CPU 소켓이 자기 로컬 메모리 채널과 자기 PCIe 루트를 갖고, 다른 소켓의 메모리·장치에 접근하려면 소켓 간 링크(Intel UPI, AMD Infinity Fabric)를 한 번 더 건너야 한다. 이 홉을 건너면 지연이 늘고 대역폭이 깎인다.&lt;/p&gt;
-
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[좋음 - 로컬 경로]
-CPU0 ── 로컬 DRAM ── PCIe(CPU0) ── GPU0 ── NIC0
-   같은 소켓 안에서 host→device 복사, GPUDirect RDMA 완결
-
-[나쁨 - 크로스 소켓 경로]
-CPU0 ── 로컬 DRAM ─┐
-                   UPI/IF 홉   ← 여기서 병목/지연
-CPU1 ── PCIe(CPU1) ┴─ GPU5
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;GPU 8장을 소켓당 4장씩(4+4) 배치하면 레인이 균등하게 나뉘고(소켓마다 4×16 = 64레인), GPU마다 같은 소켓의 NIC·NVMe와 짝지어 데이터 로딩과 RDMA를 소켓 안에서 끝낼 수 있으며, 서빙 프로세스를 &lt;code class=&quot;highlighter-rouge&quot;&gt;numactl --cpubind --membind&lt;/code&gt;로 같은 소켓에 고정하면 UPI 통과를 피할 수 있다. 반대로 6+2처럼 비대칭으로 붙이면 한쪽 소켓은 포화되고 반대쪽 GPU들은 크로스 소켓 홉을 강제로 타서, 같은 서버 안에서 GPU마다 성능이 달라지는 상황이 생긴다. &lt;code class=&quot;highlighter-rouge&quot;&gt;nvidia-smi topo -m&lt;/code&gt;에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;SYS&lt;/code&gt;로 표시되는 경로가 바로 소켓을 건너는 경로다.&lt;/p&gt;
-
-&lt;h2 id=&quot;pcie-스위치-오버서브스크립션&quot;&gt;PCIe 스위치 오버서브스크립션&lt;/h2&gt;
-
-&lt;p&gt;레인 예산을 넘어 GPU를 더 붙이려면 CPU와 GPU 사이에 PCIe 스위치 칩을 끼워 팬아웃해야 한다.&lt;/p&gt;
-
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[오버서브스크립션 없음 - 1:1]
-CPU ─x16─ GPU0
-CPU ─x16─ GPU1        레인 소모: 32
-    각 GPU가 x16 전용 → 각각 ~64 GB/s
-
-[4:1 오버서브스크립션]
-              ┌─x16─ GPU0
-CPU ─x16─ [SW]┼─x16─ GPU1
-   ↑          ├─x16─ GPU2
- 업스트림     └─x16─ GPU3     레인 소모: 16
- x16 하나를 4장이 공유
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;다운스트림은 x16씩 4개인데 CPU로 나가는 업스트림은 x16 하나라, 4장이 동시에 host → device 복사를 하면 GPU당 실효 대역폭이 1/4(약 16GB/s)로 떨어진다. 뉘앙스가 하나 있는데, GPU↔GPU P2P는 스위치 내부에서 처리되어 업스트림을 안 타고 full x16이 나온다. 병목은 업스트림을 타는 트래픽 — host→device 복사, NIC 방향 GPUDirect RDMA, 체크포인트 로딩 — 에 걸린다.&lt;/p&gt;
-
-&lt;p&gt;LLM 서빙에서 이 경로가 문제 되는 지점은 세 곳이다. 모델 로딩(디스크 → CPU 메모리 → GPU 메모리 경로가 정확히 업스트림을 탄다 — 671B급 가중치를 밀어넣을 때 대역폭이 1/4이면 콜드 스타트가 몇 배 길어져 오토스케일링 대응에 직결된다), NVLink 없는 구성에서의 TP all-reduce, 그리고 KV 캐시·prefix 캐시를 CPU 메모리로 내리는 오프로딩이다.&lt;/p&gt;
-
-&lt;p&gt;참고로 추론·렌더링용 PCIe GPU 서버 중에는 10장, 16장씩 넣는 제품도 있다. 같은 GPU인데 가능한 이유는 워크로드 성격이다 — GPU마다 독립 모델을 돌리는 식이라 GPU 간 통신이 거의 없어 오버서브스크립션의 병목을 감수할 수 있고, 카드 자체도 SXM 대비 저전력(L4·L40S급 72 ~ 350W)이라 전력·냉각 벽이 낮다. 이 설명은 제품 구성에서 일반화한 것이라, 특정 서버의 실제 토폴로지는 &lt;code class=&quot;highlighter-rouge&quot;&gt;nvidia-smi topo -m&lt;/code&gt;으로 확인하는 것이 안전하다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;8-gpu-표준과-그-너머&quot;&gt;8-GPU 표준과 그 너머&lt;/h1&gt;
-
-&lt;p&gt;정리하면 전력·냉각(약 8kW 벽)과 레인 예산(128레인 벽)이 겹쳐 8-GPU 노드가 업계 표준이 됐다. 부품 규격도 이를 고정한다. NVIDIA HGX 베이스보드와 AMD·Intel이 쓰는 OCP OAM(UBB) 규격 모두 8-way로 정의되어 있어, 애초에 부품이 8장 단위로 나온다. 소프트웨어 관행도 여기에 맞춰져 있다 — 텐서 병렬은 보통 2/4/8로 나누는데, 어텐션 헤드 수와 hidden 차원이 2의 거듭제곱으로 깔끔하게 나뉘고 all-reduce 알고리즘 효율도 좋다는 것이 일반적으로 설명되는 근거다(노드 안 NVLink로 TP ≤ 8, 노드 간 InfiniBand로 PP·DP라는 계층 구조가 여기서 나온다).&lt;/p&gt;
-
-&lt;p&gt;다만 8이 절대적인 숫자는 아니다. NVIDIA는 2018년 DGX-2에서 NVSwitch 12개로 V100 16장을 한 노드(10U, 10kW)에 묶은 적이 있고, 최근 GB200 NVL72는 아예 랙 하나를 72-GPU 단일 NVLink 도메인으로 만들었다.&lt;/p&gt;
-
-&lt;p&gt;NVL72에서 중요한 변화는 노드의 세 정의가 처음으로 분리됐다는 점이다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;랙 구성: 1U 컴퓨트 트레이 18개(트레이당 Grace CPU 2 + Blackwell GPU 4) + NVSwitch 트레이 9개 → 랙 전체 36 CPU / 72 GPU&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;관리 단위(OS/K8s Node)는 여전히 컴퓨트 트레이&lt;/strong&gt;다. 랙 하나가 리눅스 한 대로 보이는 것이 아니다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;스케일업 도메인(NVLink 범위)은 섀시 → 랙 전체&lt;/strong&gt;로 올라갔다. NVIDIA가 “acts as a single, massive GPU”라고 표현하는 부분이고, TP·EP를 72장 범위까지 NVLink로 걸 수 있게 됐다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;이 경계 이동을 가능하게 한 것이 액랭이다. 공랭으로는 섀시가 감당할 열량이 10kW 근처에서 막히는데, 액랭 + 랙 내부 구리 배선(copper spine)으로 가면 랙 TDP 약 120 ~ 132kW를 넣고 랙 안에서 NVLink를 전기 신호로 전부 연결할 수 있다. 광트랜시버 없이 구리로 버틸 수 있는 거리 = 랙 하나라는 물리 제약이 새 경계선을 그은 셈이다. 실무에서 “이 모델 TP는 8까지인가”를 묻던 질문이 NVL72에서는 “TP를 72까지 걸 수 있는가”로 바뀐다 — 서빙 관점의 의미는 3주차 학습 내용 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/&quot;&gt;5.5편&lt;/a&gt;에 정리되어 있다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;경계 어휘: 인터커넥트 경계선은 chip이 아니라 &lt;strong&gt;package&lt;/strong&gt;로 부른다. die↔HBM은 패키지 안(메모리로 센다), C2C부터가 밖이다&lt;/li&gt;
-  &lt;li&gt;경계의 이동: Blackwell은 레티클 한계 때문에 die를 잘랐고, NV-HBI가 자기 HBM보다 빨라서 여전히 GPU 1장으로 보인다. 논리 경계(패키지)는 그대로, 용어 경계만 안으로 들어왔다&lt;/li&gt;
-  &lt;li&gt;노드의 경계: 전력·냉각(약 10kW), PCIe 레인 예산(128 ~ 160), NUMA 균형, 8-way 보드 규격이 겹쳐 8-GPU 노드가 표준이 됐다&lt;/li&gt;
-  &lt;li&gt;경계의 확장: NVL72는 액랭·구리 배선으로 스케일업 도메인을 랙까지 넓히며 관리 단위와 스케일업 단위를 분리했다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://3dfabric.tsmc.com/english/dedicatedFoundry/technology/cowos.htm&quot;&gt;TSMC 3DFabric — CoWoS&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.nvidia.com/en-us/data-center/gb200-nvl72/&quot;&gt;NVIDIA GB200 NVL72&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.nvidia.com/en-us/data-center/hgx/&quot;&gt;NVIDIA HGX Platform&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.opencompute.org/projects/oai-open-accelerator-infrastructure&quot;&gt;OCP OAM (OCP Accelerator Module) Specification&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/&quot;&gt;LLM 서빙의 도전 과제 - 5.3. GPU 인터커넥트: 대역폭 계층과 GPU 선택&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/cs/CS-GPU-SM-Microarchitecture/&quot;&gt;SM 마이크로아키텍처: CUDA 코어·텐서 코어와 TFLOPS의 출처&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="GPU" /><category term="Chiplet" /><category term="HBM" /><category term="NVLink" /><category term="NUMA" /><category term="PCIe" /><category term="Datacenter" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-3" /><summary type="html">GPU 인터커넥트의 경계가 무엇으로 정해지는지 die부터 랙까지 따라가 보자.</summary></entry></feed>
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="GPU" /><category term="CUDA" /><category term="SM" /><category term="Tensor-Core" /><category term="Microarchitecture" /><category term="NVIDIA" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-3" /><summary type="html">스펙표의 TFLOPS가 어디서 나오는지 SM 구조로 분해해 보자.</summary></entry></feed>

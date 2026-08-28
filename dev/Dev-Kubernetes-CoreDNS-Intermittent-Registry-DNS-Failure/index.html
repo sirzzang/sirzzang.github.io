@@ -37,7 +37,7 @@
 
 
 
-  <meta property="article:modified_time" content="2026-08-11T00:00:00+09:00">
+  <meta property="article:modified_time" content="2026-08-28T00:00:00+09:00">
 
 
 
@@ -312,7 +312,7 @@
     <meta itemprop="headline" content="[Kubernetes] CoreDNS 업스트림 DNS 오염: 노드 편입이 부른 간헐적 이름 해석 실패">
     <meta itemprop="description" content="CoreDNS 레플리카 하나가 반환한 공용 IP, 그 간헐 실패의 진단과 해결 기록">
     <meta itemprop="datePublished" content="2026-08-10T00:00:00+09:00">
-    <meta itemprop="dateModified" content="2026-08-11T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-08-28T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
@@ -332,7 +332,7 @@
 
 
 
-  17 분 소요
+  18 분 소요
 
 
             
@@ -630,6 +630,10 @@ nameserver 10.0.2.6
   <p><strong>참고: 구글이 사내 도메인의 주소를 답할 수 있는 원리</strong> — 구글이 사내 정보를 아는 것이 아니다. 회사 도메인은 인터넷에 등록된 공개 도메인이고, 인터넷 쪽 권위(authoritative) 네임서버에 <code class="highlighter-rouge">harbor.example.com → 203.0.113.51</code> 공개 레코드가 등록돼 있다. 8.8.8.8은 재귀 resolver라서 루트 → TLD → 회사의 공개 권위 서버 순으로 따라 내려가 그 공개 레코드를 받아 돌려줄 뿐이다. 내부 주소(<code class="highlighter-rouge">10.0.20.10</code>)는 사내 DNS에만 존재하므로 구글은 알 수도, 답할 수도 없다. split-horizon의 두 뷰가 서로 다른 서버에 실려 있는 것이고, 8.8.8.8에게 물으면 항상 공개 뷰가 나온다.</p>
 </blockquote>
 
+<blockquote>
+  <p><strong>참고: CoreDNS의 두 역할</strong> — 위 구조에서 CoreDNS의 역할은 둘로 갈린다. 클러스터 존에 대해서는 답을 직접 만드는 권위 서버다. Service가 만들어지면 <code class="highlighter-rouge">&lt;서비스명&gt;.&lt;네임스페이스&gt;.svc.cluster.local</code> 레코드가 자동으로 생기고, 파드들은 Service의 가상 IP 대신 이 이름으로 서로를 찾는다(Service와 그 가상 IP의 동작은 <a href="/kubernetes/Kubernetes-Networking-04-Service/">Service와 kube-proxy 글</a>에서 다룬 적이 있다). 이 답은 API 서버에서 동기화해 온 클러스터 상태로 CoreDNS가 직접 만들므로 업스트림까지 갈 일이 없고, 이 이름과 IP는 클러스터 밖에서는 아무 의미도 없다. 반면 그 밖의 모든 이름 — 사내 레지스트리도 예외가 아니다 — 에 대해서 CoreDNS는 답을 만들지 않는 중계자다. 그 존의 레코드를 갖고 있지 않으니 forward 규칙대로 업스트림에 묻고, 받은 답을 그대로 돌려줄 뿐이다. 이번 오염의 사정거리가 클러스터 밖 이름으로 한정된 것도 이 분리 때문이다. 클러스터 존 질의는 오염된 노드의 레플리카에 떨어져도 업스트림으로 나가지 않으므로, 세 번째 nameserver가 끼어들 자리가 없다.</p>
+</blockquote>
+
 <p>이 구조의 핵심 고리인 forward 규칙은 Corefile에서 실측으로 확인할 수 있다. RKE2에서 CoreDNS 설정은 kube-system의 ConfigMap으로 배포되므로, 먼저 ConfigMap 이름부터 찾는다.</p>
 
 <div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># CoreDNS 관련 ConfigMap 확인</span>
@@ -861,9 +865,11 @@ gpu-node-05   Ready   3d17h   v1.35.7+rke2r1   <span class="nb">true
 <ul>
   <li><a href="https://coredns.io/plugins/forward/">CoreDNS forward plugin</a></li>
   <li><a href="https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/">Kubernetes: Customizing DNS Service</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/">Kubernetes: DNS for Services and Pods</a></li>
   <li><a href="https://docs.rke2.io/helm">RKE2: Helm Integration (HelmChartConfig)</a></li>
   <li><a href="https://netplan.readthedocs.io/">Netplan documentation</a></li>
   <li><a href="/kubernetes/Kubernetes-Networking-Linux-Stack/">Kubernetes 네트워킹: Linux 네트워크 스택 이해하기</a></li>
+  <li><a href="/kubernetes/Kubernetes-Networking-04-Service/">Kubernetes 네트워킹: Service와 kube-proxy</a></li>
   <li><a href="/kubernetes/Kubernetes-Kubeadm-01-7/">Kubeadm 클러스터: Static Pod 및 애드온 확인</a></li>
   <li><a href="/kubernetes/Kubernetes-RKE2-01-02/">RKE2 클러스터: 서버 노드 설치 결과 확인</a></li>
   <li><a href="/kubernetes/Kubernetes-EKS-01-01-07-Public-Public-Endpoint/">EKS: 엔드포인트 액세스 분석</a></li>
@@ -938,7 +944,7 @@ gpu-node-05   Ready   3d17h   v1.35.7+rke2r1   <span class="nb">true
 
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-11">August 11, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-28">August 28, 2026</time></p>
         
       </footer>
 
@@ -989,6 +995,51 @@ gpu-node-05   Ready   3d17h   v1.35.7+rke2r1   <span class="nb">true
     <div class="page__related">
       <h4 class="page__related-title">참고</h4>
       <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion/" rel="permalink">[Kubernetes] Service 포트와 노출 포트 혼동으로 인한 연결 타임아웃 트러블슈팅
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 28일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  5 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">클러스터 밖으로 노출된 접속용 포트를 클러스터 내부 Service 포트로 착각하면 어떤 증상이 나타나는지 알아 보자.
+</p>
+  </article>
+</div>
+
         
           
 
@@ -1120,51 +1171,6 @@ gpu-node-05   Ready   3d17h   v1.35.7+rke2r1   <span class="nb">true
       
     </p>
     <p class="archive__item-excerpt" itemprop="description">모델 로딩의 메모리 용량 제약과 실행 단계의 병목을 산술 강도로 분석해 보자.
-</p>
-  </article>
-</div>
-
-        
-          
-
-
-
-<div class="grid__item">
-  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
-    
-      <div class="archive__item-teaser">
-        <img src=
-          
-            "/assets/images/blog-Dev.jpg"
-          
-          alt="">
-      </div>
-    
-    <h2 class="archive__item-title" itemprop="headline">
-      
-        <a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/" rel="permalink">[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.3. GPU 인터커넥트: 대역폭 계층과 GPU 선택
-</a>
-      
-    </h2>
-    <p class="page__meta">
-      
-        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 22일
-        
-          <span class="page__meta-sep"> · </span>
-        
-      
-      
-        <i class="far fa-clock" aria-hidden="true"></i> 
-
-
-
-
-  11 분 소요
-
-
-      
-    </p>
-    <p class="archive__item-excerpt" itemprop="description">GPU 인터커넥트의 대역폭 계층을 이해하고 모델 크기별 GPU 선택 기준을 세워 보자.
 </p>
   </article>
 </div>
