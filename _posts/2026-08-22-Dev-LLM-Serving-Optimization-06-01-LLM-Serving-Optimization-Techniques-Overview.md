@@ -371,7 +371,12 @@ static과의 차이는 출발 조건뿐이다. 합승에 비유하면 정원이 
 
 반면 continuous batching에서 새로 합류하는 요청은 prefill부터 시작해야 하는데, 배치에는 이미 decode 중인 요청들이 있다. [위 continuous batching 그림](#continuous-batching)에서 초록 decode 셀들 사이에 파란 prefill 셀이 끼어들던 장면이 바로 이것이다. [배치의 구조](#배치의-구조-prefill과-decode)의 용어로, S=1인 요청들 옆에 — 예컨대 긴 문서가 프롬프트로 들어와 — S=8000짜리 요청이 오는 것이다. 공교롭게도 prefill/decode 구분은 continuous batching의 성립 전제이면서 동시에 이 문제의 원천이다 — 배치를 자유롭게 재구성할 수 있는 근거가 "decode는 전부 S=1이라 아무나 같은 모양으로 쌓인다"였는데, 새로 합류하는 요청은 S=8000의 prefill이기 때문이다.
 
-선택지는 둘인데, 결론부터 말하면 어느 쪽도 만족스럽지 않다. 섞지 않으면 진행 중인 decode가 멎고, 섞어도 긴 prefill이 스텝 길이를 지배한다.
+
+![continuous의 단계가 섞이는 세계: 스텝 길이는 prefill이 정한다]({{site.url}}/assets/images/llmso-ch06-mixed-step-length.svg){: .align-center}
+
+<center><sup>AI를 이용해 직접 그린 도식. decode 박자로 돌던 배치(it k−1)에 새 요청 D가 끼어들면, 그 스텝(iteration k)의 길이는 S=8000 prefill이 정한다 — decode의 몫은 토큰 1개지만 prefill이 끝날 때까지 같은 스텝에 묶인다. prefill이 빠진 다음 스텝(it k+1)은 다시 decode 박자로 돌아온다</sup></center>
+
+문제 해결에 활용할 수 있는 선택지는 둘인데, 결론부터 말하면 어느 쪽도 만족스럽지 않다. 섞지 않으면 진행 중인 decode가 멎고, 섞어도 긴 prefill이 스텝 길이를 지배한다.
 
 ### 방안 1: prefill과 decode를 함께 배칭하지 않음
 
@@ -402,10 +407,6 @@ prefill과 decode를 섞은 하이브리드 배치는 더 복잡한 GPU 커널�
 | 실무 관점 | 담아도 손해다 | 그 스텝의 소요 시간이 8000토큰 prefill에 지배된다 |
 
 진짜 문제는 마지막 줄이다. 토큰 하나를 디코딩하는 것은 prefill을 끝내는 것보다 훨씬 빠르기 때문에, 한 스텝의 길이는 그 스텝에서 가장 무거운 작업 — prefill — 이 결정한다. 담을 수는 있어도, 담는 순간 decode 중이던 요청의 그 스텝이 prefill 시간만큼 늘어나 토큰 간 지연이 튄다. 그림에서 요청 2·3의 prefill이 이어지는 동안 요청 1의 decode 토큰들이 그 긴 스텝의 박자에 묶이는 것이 보인다. 입력 프롬프트가 길수록 지연은 여전히 두드러진다.
-
-![continuous의 단계가 섞이는 세계: 스텝 길이는 prefill이 정한다]({{site.url}}/assets/images/llmso-ch06-mixed-step-length.svg){: .align-center}
-
-<center><sup>AI를 이용해 직접 그린 도식. decode 박자로 돌던 배치(it k−1)에 새 요청 D가 끼어들면, 그 스텝(iteration k)의 길이는 S=8000 prefill이 정한다 — decode의 몫은 토큰 1개지만 prefill이 끝날 때까지 같은 스텝에 묶인다. prefill이 빠진 다음 스텝(it k+1)은 다시 decode 박자로 돌아온다</sup></center>
 
 <br>
 

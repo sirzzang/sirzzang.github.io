@@ -13,7 +13,7 @@ tags:
   - DNS
   - Troubleshooting
   - RKE2
-last_modified_at: 2026-08-11
+last_modified_at: 2026-08-28
 ---
 
 <br>
@@ -220,6 +220,8 @@ flowchart LR
 - 8.8.8.8로 넘어간 질의에 구글은 사내 존을 모르니 공용 레코드를 답한다
 
 > **참고: 구글이 사내 도메인의 주소를 답할 수 있는 원리** — 구글이 사내 정보를 아는 것이 아니다. 회사 도메인은 인터넷에 등록된 공개 도메인이고, 인터넷 쪽 권위(authoritative) 네임서버에 `harbor.example.com → 203.0.113.51` 공개 레코드가 등록돼 있다. 8.8.8.8은 재귀 resolver라서 루트 → TLD → 회사의 공개 권위 서버 순으로 따라 내려가 그 공개 레코드를 받아 돌려줄 뿐이다. 내부 주소(`10.0.20.10`)는 사내 DNS에만 존재하므로 구글은 알 수도, 답할 수도 없다. split-horizon의 두 뷰가 서로 다른 서버에 실려 있는 것이고, 8.8.8.8에게 물으면 항상 공개 뷰가 나온다.
+
+> **참고: CoreDNS의 두 역할** — 위 구조에서 CoreDNS의 역할은 둘로 갈린다. 클러스터 존에 대해서는 답을 직접 만드는 권위 서버다. Service가 만들어지면 `<서비스명>.<네임스페이스>.svc.cluster.local` 레코드가 자동으로 생기고, 파드들은 Service의 가상 IP 대신 이 이름으로 서로를 찾는다(Service와 그 가상 IP의 동작은 [Service와 kube-proxy 글]({% post_url 2026-05-04-Kubernetes-Networking-04-Service %})에서 다룬 적이 있다). 이 답은 API 서버에서 동기화해 온 클러스터 상태로 CoreDNS가 직접 만들므로 업스트림까지 갈 일이 없고, 이 이름과 IP는 클러스터 밖에서는 아무 의미도 없다. 반면 그 밖의 모든 이름 — 사내 레지스트리도 예외가 아니다 — 에 대해서 CoreDNS는 답을 만들지 않는 중계자다. 그 존의 레코드를 갖고 있지 않으니 forward 규칙대로 업스트림에 묻고, 받은 답을 그대로 돌려줄 뿐이다. 이번 오염의 사정거리가 클러스터 밖 이름으로 한정된 것도 이 분리 때문이다. 클러스터 존 질의는 오염된 노드의 레플리카에 떨어져도 업스트림으로 나가지 않으므로, 세 번째 nameserver가 끼어들 자리가 없다.
 
 이 구조의 핵심 고리인 forward 규칙은 Corefile에서 실측으로 확인할 수 있다. RKE2에서 CoreDNS 설정은 kube-system의 ConfigMap으로 배포되므로, 먼저 ConfigMap 이름부터 찾는다.
 
@@ -450,9 +452,11 @@ gpu-node-06   Ready   3d17h   v1.35.7+rke2r1   true
 
 - [CoreDNS forward plugin](https://coredns.io/plugins/forward/)
 - [Kubernetes: Customizing DNS Service](https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/)
+- [Kubernetes: DNS for Services and Pods](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/)
 - [RKE2: Helm Integration (HelmChartConfig)](https://docs.rke2.io/helm)
 - [Netplan documentation](https://netplan.readthedocs.io/)
 - [Kubernetes 네트워킹: Linux 네트워크 스택 이해하기]({% post_url 2026-01-18-Kubernetes-Networking-Linux-Stack %})
+- [Kubernetes 네트워킹: Service와 kube-proxy]({% post_url 2026-05-04-Kubernetes-Networking-04-Service %})
 - [Kubeadm 클러스터: Static Pod 및 애드온 확인]({% post_url 2026-01-18-Kubernetes-Kubeadm-01-7 %})
 - [RKE2 클러스터: 서버 노드 설치 결과 확인]({% post_url 2026-02-15-Kubernetes-RKE2-01-02 %})
 - [EKS: 엔드포인트 액세스 분석]({% post_url 2026-03-12-Kubernetes-EKS-01-01-07-Public-Public-Endpoint %})
