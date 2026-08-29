@@ -1,0 +1,1088 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[LLM] LLM 서빙과 최적화: 고급 최적화 기법 - 7.1. 개요: 단일 GPU 너머의 네 기법 - Eraser’s StudyLog</title>
+<meta name="description" content="LLM 서빙 고급 최적화 기법(speculative decoding, 멀티 GPU 분산, PD 분리, 고급 KV 캐싱)에 대해 알아 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[LLM] LLM 서빙과 최적화: 고급 최적화 기법 - 7.1. 개요: 단일 GPU 너머의 네 기법">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview/">
+
+
+  <meta property="og:description" content="LLM 서빙 고급 최적화 기법(speculative decoding, 멀티 GPU 분산, PD 분리, 고급 KV 캐싱)에 대해 알아 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-08-29T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-08-29T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[LLM] LLM 서빙과 최적화: 고급 최적화 기법 - 7.1. 개요: 단일 GPU 너머의 네 기법">
+    <meta itemprop="description" content="LLM 서빙 고급 최적화 기법(speculative decoding, 멀티 GPU 분산, PD 분리, 고급 KV 캐싱)에 대해 알아 보자.">
+    <meta itemprop="datePublished" content="2026-08-29T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-08-29T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[LLM] LLM 서빙과 최적화: 고급 최적화 기법 - 7.1. 개요: 단일 GPU 너머의 네 기법
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-08-29T00:00:00+09:00">2026년 08월 29일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  6 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#전제-단일-gpu-서빙의-한계">전제: 단일 GPU 서빙의 한계</a></li>
+  <li><a href="#7장의-지도-네-가지-기법">7장의 지도: 네 가지 기법</a></li>
+  <li><a href="#네-기법을-관통하는-두-기준">네 기법을 관통하는 두 기준</a>
+    <ul>
+      <li><a href="#병목-축-compute-bound와-memory-bound">병목 축: compute-bound와 memory-bound</a></li>
+      <li><a href="#공통-비용-핸드오프">공통 비용: 핸드오프</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Hands-On LLM Serving and Optimization Study (LLMSO) 4주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>6장까지의 논의는 <strong>모델이 GPU 한 장에 올라가는 상황</strong>을 상정했다. 기법 자체는 분산 서빙에서도 그대로 쓰이지만, 100B급 모델은 용량(bf16 기준 파라미터만 200GB)과 지연 모든 측면에서 6장까지 논의한 기법들만으로는 해결되지 않는 문제를 새로 만든다</li>
+  <li>이에 대한 7장의 답은 넷이다: <strong>speculative decoding</strong>(ITL 개선), <strong>멀티 GPU·멀티 노드 분산</strong>(용량·처리량 확장), <strong>PD disaggregation</strong>(TTFT·ITL 독립 튜닝), <strong>고급 KV 캐싱</strong>(TTFT 단축·적중률 향상)</li>
+  <li>네 기법의 적용 조건은 전부 compute-bound / memory-bound 축 위의 위치로 결정된다. speculative decoding은 decode의 노는 연산 유닛에 검증을 맡기는 구조라 이득이 memory-bound·저배치에서 가장 크고, 배치가 차면 줄어들거나 손해로 바뀐다</li>
+  <li>속도를 얻는 지점마다 새 비용이 생긴다: 거부된 draft 토큰, all-reduce 통신, KV cache 전송, 캐시 콜드 스타트. 기법마다 이런 핸드오프 비용이 따르므로 스택 전체를 함께 튜닝해야 한다</li>
+  <li>이 글은 지도만 잡는다. speculative decoding은 <a href="/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/">7.2.1편</a>(개념)과 <a href="/dev/Dev-LLM-Serving-Optimization-07-02-02-Speculative-Decoding-Hands-On/">7.2.2편</a>(실습)에서 다룬다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="전제-단일-gpu-서빙의-한계">전제: 단일 GPU 서빙의 한계</h1>
+
+<p><a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/#6장의-지도-하나의-분수-세-방향의-공략">6.1편</a>에서 6장의 기법들을 산술 강도라는 분수 하나에 대한 세 방향의 공략 — 분자를 키우는 배칭·스케줄링, 분모를 줄이는 어텐션 최적화·모델 압축, 계산 자체를 피하는 프리픽스 캐싱 — 으로 정리했다. 이 논의 전체가 상정한 범위가 하나 있다. <strong>모델이 GPU 한 장에 올라간다</strong>는 것이다 — <a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/#실행-단위-iteration">6.1편의 실행 모델</a>부터가 한 엔진이 도는 단일 루프였다. 분명히 해 둘 것은, 이 상정이 기법의 적용 한계는 아니라는 점이다. 배칭도 어텐션 최적화도 캐싱도 여러 GPU에 분산된 모델 위에서 그대로 동작한다. 모델이 한 장을 넘을 때 생기는 일은 6장 기법이 무효가 되는 것이 아니라, <strong>그 기법들이 다루지 않는 문제가 추가되는 것</strong>이다.</p>
+
+<p>추가되는 문제는 두 갈래다.</p>
+
+<ul>
+  <li><strong>용량</strong>: <a href="/dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/#모델-크기-추정">5.4편의 모델 크기 추정</a>대로 bf16은 파라미터당 2바이트라, 100B 모델이면 가중치만 200GB다. H100 80GB는 물론 B200(180~192GB)으로도 한 장에 안 들어가고, <a href="/dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/#kv-캐시-크기-추정">KV cache</a>와 activation 몫까지 얹으면 경계는 더 이르게 온다</li>
+  <li><strong>지연</strong>: 올라가는 크기라도 문제가 끝나지 않는다. decode 한 스텝은 가중치 전체를 HBM에서 읽으므로, 모델이 클수록 스텝당 읽을 바이트가 늘어 ITL(Inter-Token Latency, 토큰 간 지연 — <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#서빙-지표-ttft와-tpot">3.3편의 서빙 지표</a> 참고)이 커진다. 단일 카드의 메모리 대역폭으로는 SLO(Service Level Objective)를 못 맞추는 지점이 온다</li>
+</ul>
+
+<p>사실 5장이 이미 이 방향을 예고했다. <a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/">5.3편</a>은 모델이 한 장을 넘을 때를 대비해 인터커넥트 대역폭 계층을 정리했고, <a href="/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/">5.5편</a>은 NVL72 같은 랙 스케일 아키텍처가 “대형 MoE 모델의 분리형 서빙(disaggregated serving)과 결합될 때 특히 강력하다”고 언급하며 7장을 가리켰다. 7장은 그 예고를 소프트웨어 쪽에서 받는 장이다.</p>
+
+<p><br /></p>
+
+<h1 id="7장의-지도-네-가지-기법">7장의 지도: 네 가지 기법</h1>
+
+<p>책이 7장에서 다루는 기법은 네 가지다. 표의 TTFT(Time To First Token, 첫 토큰까지의 시간)를 비롯한 지연 지표의 정의는 <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#서빙-지표-ttft와-tpot">3.3편의 서빙 지표</a>를 따른다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>기법</th>
+      <th>해결하려는 문제</th>
+      <th>주로 개선하는 지표</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><strong>Speculative Decoding</strong></td>
+      <td>decode가 스텝당 토큰 1개씩만 생성</td>
+      <td>ITL</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>멀티 GPU·멀티 노드 분산</strong> (DP·TP·PP·EP)</td>
+      <td>모델이 한 장에 안 들어가거나 처리량 부족</td>
+      <td>메모리 용량, 처리량</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>PD Disaggregation</strong></td>
+      <td>prefill과 decode가 서로 다른 자원 특성 요구</td>
+      <td>TTFT·ITL 독립 튜닝</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><strong>고급 KV 캐싱</strong></td>
+      <td>긴 컨텍스트의 prefill 반복과 GPU 메모리 부족</td>
+      <td>TTFT, 캐시 적중률</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>넷은 독립된 기능이 아니라 하나의 서빙 스택으로 조립된다. 책의 소개 순서(번호)와 각 기법이 배치되는 스택 계층(위아래)이 다르다는 점을 그림으로 먼저 확인해 두자.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-ch07-advanced-techniques-stack.svg" alt="7장 네 기법의 서빙 스택 내 위치" class="align-center" width="820" /></p>
+
+<center><sup>AI를 이용해 직접 그린 도식. 요청 라우팅부터 하드웨어까지의 서빙 스택 위에 7장 네 기법이 각자 다른 층으로 들어간다</sup></center>
+
+<ul>
+  <li><strong>speculative decoding</strong>(추측 디코딩, 1)은 엔진 안의 디코딩 로직을 바꾼다. 한 스텝에 토큰 하나라는 decode의 규칙을 깨고, 후보 여러 개를 한 번의 forward로 검증한다</li>
+  <li><strong>분산 실행</strong>(2)은 엔진 아래에서 모델을 쪼갠다. 복제(DP), 레이어 내 분할(TP), 레이어 간 분할(PP), expert 분할(EP)로 여러 GPU·노드에 나눠 싣는다</li>
+  <li><strong>PD disaggregation</strong>(3)은 엔진 위에서 인스턴스를 쪼갠다. prefill 전용 풀과 decode 전용 풀을 물리적으로 분리하고 그 사이에서 KV cache를 넘긴다</li>
+  <li><strong>고급 KV 캐싱</strong>(4)은 KV cache를 GPU HBM에 가두지 않고 CPU RAM → SSD → 원격 스토리지로 이어지는 계층 저장소로 확장하며, 맨 위 라우팅 층은 이 캐시가 어디에 있는지를 신호로 삼는다(cache-aware routing)</li>
+</ul>
+
+<p>스택이 정적인 배치도라면, 같은 네 기법을 요청 하나의 경로 위에 놓으면 각 기법의 개입 지점이 지표와 연결된다. <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/">3.3편</a>의 시간축 — prefill → 첫 토큰 → decode 반복 — 위에서 보면 다음과 같다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-ch07-request-path-interventions.svg" alt="요청 경로 위의 개입 지점" class="align-center" width="860" /></p>
+
+<center><sup>스터디 노트의 도식을 바탕으로 AI를 이용해 재구성했다. prefill 구간의 개입(③·④)은 TTFT를, decode 구간의 개입(①)은 토큰당 지연을 움직인다</sup></center>
+
+<p><br /></p>
+
+<h1 id="네-기법을-관통하는-두-기준">네 기법을 관통하는 두 기준</h1>
+
+<p>기법을 하나씩 파기 전에, 넷을 관통하는 판단 기준 두 개를 먼저 정리한다. <strong>언제 이득인가</strong>와 <strong>무엇을 대가로 치르는가</strong>다. 스터디에서 이 장을 마치고 답해 보라고 받은 질문들이기도 한데, 각 절을 따로 읽어서는 답이 안 나오고 겹쳐 읽어야 답이 나온다.</p>
+
+<h2 id="병목-축-compute-bound와-memory-bound">병목 축: compute-bound와 memory-bound</h2>
+
+<p>첫 번째 기준은 <a href="/dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/#병목-판정과-최적화-방향">5.4편</a>과 <a href="/dev/Dev-Roofline-Model-LLM-Serving/">roofline 실측 글</a>에서 쌓은 병목 판정 축이다. 이하의 memory-bound는 <a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/">6.1편</a>과 마찬가지로 메모리 용량이 아니라 대역폭의 병목을 가리킨다 — 용량 문제는 앞 절에서 따로 다뤘다. 결론부터 말하면, <strong>네 기법의 적용 조건은 전부 워크로드가 이 축의 어디에 있느냐로 결정된다.</strong></p>
+
+<ul>
+  <li><strong>speculative decoding</strong>: decode는 memory-bound라 가중치를 읽는 동안 연산 유닛이 논다. 이 기법은 그 노는 연산에 후보 토큰 검증을 맡기는 구조다. 뒤집으면, 배치가 차서 GPU가 이미 compute-bound로 넘어간 상황에서는 맡길 노는 연산이 없고, 검증에 쓴 잉여 연산이 그대로 처리량 손실이 된다. <a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/#처리량-이득의-원리">6.1편의 배칭</a>과 같은 상각 구조를 다른 축에서 쓰는 셈인데 — 배칭은 다른 요청의 토큰으로 가중치 읽기 1회를 나눠 쓰고, speculative decoding은 같은 요청의 미래 토큰 후보로 나눠 쓴다 — 그래서 두 기법은 같은 자원(노는 연산)을 두고 경쟁한다. 요청이 몰려 배칭이 그 자원을 채우면 speculative decoding의 몫이 사라진다. 이 부호 반전은 <a href="/dev/Dev-LLM-Serving-Optimization-07-02-02-Speculative-Decoding-Hands-On/">7.2.2편</a>에서 실측으로 확인한다</li>
+  <li><strong>PD disaggregation</strong>: <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#같은-flops-다른-병목">3.3편</a>에서 정리했듯 prefill은 compute-bound, decode는 memory-bound로 축의 반대편에 있다. 성격이 다른 두 단계가 같은 GPU에서 섞이면 서로 간섭한다 — <a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/#남는-질문-6장의-나머지">6.1편 말미</a>에서 본, 긴 prefill이 스텝 길이를 지배해 진행 중인 decode의 ITL을 흔드는 문제가 그것이다. 6장의 chunked prefill이 한 GPU 안에서 시간을 쪼개는 완화였다면, PD 분리는 아예 공간을 쪼개서 각 풀을 자기 병목에 맞는 하드웨어와 배치 설정으로 독립 튜닝하는 접근이다</li>
+  <li><strong>분산 실행과 MoE</strong>: 배치 크기는 축 위의 위치를 움직이는 조절 변수다. MoE(Mixture-of-Experts)의 희소성이 효율로 이어지려면 expert들이 고르게 채워질 만큼 큰 배치가 필요하다는 것도, 결국 배치가 병목 경계를 어느 쪽으로 옮기느냐의 문제다</li>
+  <li><strong>고급 KV 캐싱</strong>: prefill의 계산을 다시 하지 않으려는 기법이니, prefill이 compute-bound로 비싼 워크로드(긴 컨텍스트, 반복 프롬프트)일수록 이득이 크다</li>
+</ul>
+
+<h2 id="공통-비용-핸드오프">공통 비용: 핸드오프</h2>
+
+<p>두 번째 기준은 비용이다. 네 기법 모두 속도를 얻는 지점에서 <strong>무언가를 옮기거나 버리는 비용</strong>을 새로 만든다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>기법</th>
+      <th>새로 생기는 비용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>speculative decoding</td>
+      <td>거부된 draft 토큰에 쓴 연산 (폐기)</td>
+    </tr>
+    <tr>
+      <td>TP 등 분산 실행</td>
+      <td>레이어마다 all-reduce 같은 집합 통신 (비용의 크기는 <a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/#병렬화-배치와-인터커넥트-계층">5.3편</a>의 인터커넥트 계층이 결정한다)</td>
+    </tr>
+    <tr>
+      <td>PD disaggregation</td>
+      <td>prefill 풀 → decode 풀로의 KV cache 전송 대역폭</td>
+    </tr>
+    <tr>
+      <td>고급 KV 캐싱</td>
+      <td>계층 간 캐시 이동, 콜드 스타트 구간의 오히려 느려지는 지점</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>우연이 아니다. 6장까지가 한 장의 GPU 안에서 일을 재배치하는 이야기였다면, 7장은 일을 <strong>여러 실행 주체에 나누는</strong> 이야기라 나눈 경계마다 반드시 이동·폐기 비용이 생긴다. 그래서 이 장의 결론이 “기법을 켜라”가 아니라 <strong>“계층을 함께 튜닝하라”</strong>가 된다 — 어떤 기법의 이득도 그 기법이 만든 핸드오프 비용이 워크로드에서 실제로 얼마인지와 함께 계산해야 순이득이 보인다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<ul>
+  <li>6장까지의 논의는 모델이 GPU 한 장에 올라가는 상황을 상정했고, 100B급 모델은 용량과 지연 양쪽에서 그 기법들만으로 해결되지 않는 문제를 추가한다</li>
+  <li>7장의 네 기법은 스택의 서로 다른 층으로 들어간다: 라우팅(고급 KV 캐싱과 연동) → PD 분리 → 엔진 내 디코딩(speculative decoding) → 분산 실행 → KV cache 계층</li>
+  <li>적용 조건은 compute-bound / memory-bound 축 위의 위치가 정하고, 대가는 기법마다 새로 생기는 핸드오프 비용이 정한다</li>
+</ul>
+
+<p>한 가지 알아 둘 점이 있다. 네 기법 모두 “특정 조건에서만” 이득인데, 책의 실습은 전부 사람이 값을 고정해 두는 정적 튜닝이다 — speculative decoding의 K값이 대표적이다. 조건을 실시간으로 감지해 전환하는 동적 자동화는 Dynamo·llm-d의 라우팅 신호나 vLLM 문서의 dynamic speculative decoding 같은 형태로 언급만 되고, 엔진 내부 동작을 파는 이후 장에서 본격적으로 다루게 된다. 정적 튜닝으로 개념을 익히되, 실무의 끝 그림은 동적이라는 것을 염두에 두고 읽으면 좋다.</p>
+
+<p>이번 주는 첫 번째 기법인 speculative decoding을 두 편으로 다룬다. <a href="/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/">7.2.1편</a>에서 동작 원리와 draft 선택지를, <a href="/dev/Dev-LLM-Serving-Optimization-07-02-02-Speculative-Decoding-Hands-On/">7.2.2편</a>에서 vLLM 네 가지 변형의 실측을 정리한다. 나머지 세 기법은 이후 글에서 이어간다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://www.oreilly.com/library/view/hands-on-llm-serving/9798341621480/">Hands-On LLM Serving and Optimization (O’Reilly)</a></li>
+  <li><a href="https://github.com/ai-dynamo/dynamo">NVIDIA Dynamo (GitHub)</a></li>
+  <li><a href="https://github.com/llm-d/llm-d">llm-d (GitHub)</a></li>
+  <li><a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/">6.1편: 서빙 최적화 기법 개요</a></li>
+  <li><a href="/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/">5.5편: AI 가속기 지형과 메모리 벽</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study-week-4" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study-Week-4</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kv-cache" class="page__taxonomy-item" rel="tag">KV-Cache</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#llm-serving" class="page__taxonomy-item" rel="tag">LLM-Serving</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#parallelism" class="page__taxonomy-item" rel="tag">Parallelism</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#pd-disaggregation" class="page__taxonomy-item" rel="tag">PD-Disaggregation</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#speculative-decoding" class="page__taxonomy-item" rel="tag">Speculative-Decoding</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-29">August 29, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BLLM%5D+LLM+%EC%84%9C%EB%B9%99%EA%B3%BC+%EC%B5%9C%EC%A0%81%ED%99%94%3A+%EA%B3%A0%EA%B8%89+%EC%B5%9C%EC%A0%81%ED%99%94+%EA%B8%B0%EB%B2%95+-+7.1.+%EA%B0%9C%EC%9A%94%3A+%EB%8B%A8%EC%9D%BC+GPU+%EB%84%88%EB%A8%B8%EC%9D%98+%EB%84%A4+%EA%B8%B0%EB%B2%95%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion/" class="pagination--pager" title="[Kubernetes] Service 포트와 노출 포트 혼동으로 인한 연결 타임아웃 트러블슈팅
+">이전</a>
+    
+    
+      <a href="/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/" class="pagination--pager" title="[LLM] LLM 서빙과 최적화: 고급 최적화 기법 - 7.2.1. speculative decoding 원리: 추측, 병렬 검증, 분포 보존
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-07-02-02-Speculative-Decoding-Hands-On/" rel="permalink">[LLM] LLM 서빙과 최적화: 고급 최적화 기법 - 7.2.2. speculative decoding 실습: 네 가지 변형 벤치마크와 측정 검증
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 29일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  20 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">vLLM에서 vanilla, n-gram, EAGLE-3 변형을 동시성 1과 16으로 실측해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/" rel="permalink">[LLM] LLM 서빙과 최적화: 고급 최적화 기법 - 7.2.1. speculative decoding 원리: 추측, 병렬 검증, 분포 보존
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 29일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  17 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">추측과 병렬 검증으로 decode를 가속하는 speculative decoding의 원리에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion/" rel="permalink">[Kubernetes] Service 포트와 노출 포트 혼동으로 인한 연결 타임아웃 트러블슈팅
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 28일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  6 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">클러스터 밖으로 노출된 접속용 포트를 클러스터 내부 Service 포트로 착각하면 어떤 증상이 나타나는지 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화: 서빙 최적화 기법 - 6.1. 개요: iteration에서 continuous batching까지
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 22일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  22 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">서빙 최적화 기법의 출발점인 배칭의 큰 흐름을 실행 단위, 동기, 구조, 재구성 시점 순으로 잡아 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>
