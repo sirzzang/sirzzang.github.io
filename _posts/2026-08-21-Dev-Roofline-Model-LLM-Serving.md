@@ -17,7 +17,7 @@ tags:
   - MoE
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-3
-last_modified_at: 2026-08-27
+last_modified_at: 2026-08-29
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 중 딥다이브한 내용입니다.*
@@ -103,7 +103,7 @@ Roofline Model을 기준으로 **점을 어느 방향으로 옮기는가 / 지�
 | FlashAttention | $S^2$ 중간 행렬을 HBM에 안 적어 $Q$ 감소 → 점 오른쪽 | prefill attention |
 | GQA/MQA, KV 양자화 | KV 트래픽 감소 → attention 점 오른쪽 | decode-attention |
 | paged KV | 트래픽이 아니라 KV 메모리의 단편화 해소 — 더 큰 배치를 가능하게 해 간접적으로 점 이동 | decode-attention |
-| Speculative decoding | 가중치 1회 읽고 $k$토큰 검증 → $I$를 최대 $k$배 | 저배치·저지연 |
+| [Speculative decoding]({% post_url 2026-08-29-Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept %}) | 가중치 1회 읽고 $k$토큰 검증 → $I$를 최대 $k$배 | 저배치·저지연 |
 | Chunked prefill | 연산 바운드 작업과 메모리 바운드 작업을 섞어 두 지붕을 동시에 사용 | prefill·decode 혼재 |
 | AMP / FP8 | **지붕 자체를 위로** (동시에 ridge도 오른쪽으로) + $Q$ 감소로 점도 오른쪽 | 전 구간 |
 
@@ -132,9 +132,7 @@ Roofline Model을 기준으로 **점을 어느 방향으로 옮기는가 / 지�
 <details markdown="1">
 <summary><b>참고: 실측·작도 코드</b></summary>
 
-*본문 이해엔 필수가 아니다. 위 좌표를 어떻게 냈는지의 실제 코드다.*
-
-**① 지붕 측정.** 사선(대역폭)은 STREAM scale을 1버퍼 in-place로 변형한 것, 수평(연산)은 정사각 GEMM으로 잰다. 여기서 제일 중요한 것은 **버퍼 크기**다 — L2보다 작으면 DRAM이 아니라 캐시 대역폭이 찍혀 지붕이 몇 배로 부푼다. [STREAM 런 규칙](https://www.cs.virginia.edu/stream/ref.html)이 배열을 마지막 레벨 캐시 합의 **4배 이상**으로 잡으라고 하는 이유가 이것이고, 그 문턱을 넉넉히 넘기려고 2 GiB로 잡았다.
+**1. 지붕 측정.** 사선(대역폭)은 STREAM scale을 1버퍼 in-place로 변형한 것, 수평(연산)은 정사각 GEMM으로 잰다. 여기서 제일 중요한 것은 **버퍼 크기**다 — L2보다 작으면 DRAM이 아니라 캐시 대역폭이 찍혀 지붕이 몇 배로 부푼다. [STREAM 런 규칙](https://www.cs.virginia.edu/stream/ref.html)이 배열을 마지막 레벨 캐시 합의 **4배 이상**으로 잡으라고 하는 이유가 이것이고, 그 문턱을 넉넉히 넘기려고 2 GiB로 잡았다.
 
 ```python
 import time
@@ -175,7 +173,9 @@ def gemm_tflops(dtype):
 
 가동 중인 GPU에서는 이 측정이 안 된다. 서빙 엔진이 KV 캐시를 미리 잡아 여유 VRAM이 수십 MiB뿐이라 2 GiB 버퍼를 못 잡고, 억지로 줄이면 그 버퍼가 L2 안에 들어앉는다. 대상 GPU를 잠깐 내리고 쟀다.
 
-**② 좌표 계산.** 엔진 카운터를 창 단위로 잘라 step 수와 배치를 얻고, 거기에 config로 계산한 바이트·FLOP을 곱한다.
+<br>
+
+**2. 좌표 계산.** 엔진 카운터를 창 단위로 잘라 step 수와 배치를 얻고, 거기에 config로 계산한 바이트·FLOP을 곱한다.
 
 ```python
 # ── 창 단위 델타 → step 수 · 배치 · prefill 비율 ────────────────────────
