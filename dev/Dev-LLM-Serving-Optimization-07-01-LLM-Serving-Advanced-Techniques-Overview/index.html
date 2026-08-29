@@ -510,7 +510,6 @@ window.MathJax = {
   <li>이에 대한 7장의 답은 넷이다: <strong>speculative decoding</strong>(ITL 개선), <strong>멀티 GPU·멀티 노드 분산</strong>(용량·처리량 확장), <strong>PD disaggregation</strong>(TTFT·ITL 독립 튜닝), <strong>고급 KV 캐싱</strong>(TTFT 단축·적중률 향상)</li>
   <li>네 기법의 적용 조건은 전부 compute-bound / memory-bound 축 위의 위치로 결정된다. speculative decoding은 decode의 노는 연산 유닛에 검증을 맡기는 구조라 이득이 memory-bound·저배치에서 가장 크고, 배치가 차면 줄어들거나 손해로 바뀐다</li>
   <li>속도를 얻는 지점마다 새 비용이 생긴다: 거부된 draft 토큰, all-reduce 통신, KV cache 전송, 캐시 콜드 스타트. 기법마다 이런 핸드오프 비용이 따르므로 스택 전체를 함께 튜닝해야 한다</li>
-  <li>이 글은 지도만 잡는다. speculative decoding은 <a href="/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/">7.2.1편</a>(개념)과 <a href="/dev/Dev-LLM-Serving-Optimization-07-02-02-Speculative-Decoding-Hands-On/">7.2.2편</a>(실습)에서 다룬다</li>
 </ul>
 
 <p><br /></p>
@@ -523,10 +522,10 @@ window.MathJax = {
 
 <ul>
   <li><strong>용량</strong>: <a href="/dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/#모델-크기-추정">5.4편의 모델 크기 추정</a>대로 bf16은 파라미터당 2바이트라, 100B 모델이면 가중치만 200GB다. H100 80GB는 물론 B200(180~192GB)으로도 한 장에 안 들어가고, <a href="/dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/#kv-캐시-크기-추정">KV cache</a>와 activation 몫까지 얹으면 경계는 더 이르게 온다</li>
-  <li><strong>지연</strong>: 올라가는 크기라도 문제가 끝나지 않는다. decode 한 스텝은 가중치 전체를 HBM에서 읽으므로, 모델이 클수록 스텝당 읽을 바이트가 늘어 ITL(Inter-Token Latency, 토큰 간 지연 — <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#서빙-지표-ttft와-tpot">3.3편의 서빙 지표</a> 참고)이 커진다. 단일 카드의 메모리 대역폭으로는 SLO(Service Level Objective)를 못 맞추는 지점이 온다</li>
+  <li><strong>지연</strong>: 모델이 한 장에 올라가는 크기여도 문제가 끝나지 않는다. decode 한 스텝은 가중치 전체를 HBM에서 읽으므로, 모델이 클수록 스텝당 읽을 바이트가 늘어 ITL(Inter-Token Latency, 토큰 간 지연 — <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#서빙-지표-ttft와-tpot">3.3편의 서빙 지표</a> 참고)이 커진다. 단일 카드의 메모리 대역폭으로는 SLO(Service Level Objective)를 못 맞추는 지점이 온다</li>
 </ul>
 
-<p>사실 5장이 이미 이 방향을 예고했다. <a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/">5.3편</a>은 모델이 한 장을 넘을 때를 대비해 인터커넥트 대역폭 계층을 정리했고, <a href="/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/">5.5편</a>은 NVL72 같은 랙 스케일 아키텍처가 “대형 MoE 모델의 분리형 서빙(disaggregated serving)과 결합될 때 특히 강력하다”고 언급하며 7장을 가리켰다. 7장은 그 예고를 소프트웨어 쪽에서 받는 장이다.</p>
+<p>사실 5장이 이미 이 방향을 예고했다. <a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/">5.3편</a>은 모델이 한 장을 넘을 때를 대비해 인터커넥트 대역폭 계층을 정리했고, <a href="/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/">5.5편</a>은 NVL72 같은 랙 스케일 아키텍처가 “대형 MoE 모델의 분리형 서빙(disaggregated serving)과 결합될 때 특히 강력하다”고 언급하며 7장을 가리켰다. 5장이 이 방향의 하드웨어 기반(인터커넥트 계층, 랙 스케일 아키텍처)을 정리했다면, 7장은 같은 문제를 소프트웨어 기법으로 다룬다.</p>
 
 <p><br /></p>
 
@@ -571,9 +570,11 @@ window.MathJax = {
   </tbody>
 </table>
 
+<p><br /></p>
+
 <p>넷은 독립된 기능이 아니라 하나의 서빙 스택으로 조립된다. 책의 소개 순서(번호)와 각 기법이 배치되는 스택 계층(위아래)이 다르다는 점을 그림으로 먼저 확인해 두자.</p>
 
-<p><img src="https://sirzzang.github.io//assets/images/llmso-ch07-advanced-techniques-stack.svg" alt="7장 네 기법의 서빙 스택 내 위치" class="align-center" width="820" /></p>
+<p><a href="https://sirzzang.github.io//assets/images/llmso-ch07-advanced-techniques-stack.svg" target="_blank"><img src="https://sirzzang.github.io//assets/images/llmso-ch07-advanced-techniques-stack.svg" alt="7장 네 기법의 서빙 스택 내 위치" class="align-center" width="820" /></a></p>
 
 <center><sup>AI를 이용해 직접 그린 도식. 요청 라우팅부터 하드웨어까지의 서빙 스택 위에 7장 네 기법이 각자 다른 층으로 들어간다</sup></center>
 
@@ -584,24 +585,63 @@ window.MathJax = {
   <li><strong>고급 KV 캐싱</strong>(4)은 KV cache를 GPU HBM에 가두지 않고 CPU RAM → SSD → 원격 스토리지로 이어지는 계층 저장소로 확장하며, 맨 위 라우팅 층은 이 캐시가 어디에 있는지를 신호로 삼는다(cache-aware routing)</li>
 </ul>
 
+<p><br /></p>
+
 <p>스택이 정적인 배치도라면, 같은 네 기법을 요청 하나의 경로 위에 놓으면 각 기법의 개입 지점이 지표와 연결된다. <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/">3.3편</a>의 시간축 — prefill → 첫 토큰 → decode 반복 — 위에서 보면 다음과 같다.</p>
 
-<p><img src="https://sirzzang.github.io//assets/images/llmso-ch07-request-path-interventions.svg" alt="요청 경로 위의 개입 지점" class="align-center" width="860" /></p>
+<p><a href="https://sirzzang.github.io//assets/images/llmso-ch07-request-path-interventions.svg" target="_blank"><img src="https://sirzzang.github.io//assets/images/llmso-ch07-request-path-interventions.svg" alt="요청 경로 위의 개입 지점" class="align-center" width="860" /></a></p>
 
-<center><sup>스터디 노트의 도식을 바탕으로 AI를 이용해 재구성했다. prefill 구간의 개입(③·④)은 TTFT를, decode 구간의 개입(①)은 토큰당 지연을 움직인다</sup></center>
+<center><sup>스터디 노트의 도식을 바탕으로 AI를 이용해 재구성했다. prefill 구간의 개입(③·④)은 TTFT를, decode 구간의 개입(①)은 토큰당 지연을 움직인다. ②(분산 실행)는 특정 구간이 아니라 경로 전체의 전제라 시간축 위에 점으로 찍히지 않는다</sup></center>
 
 <p><br /></p>
 
 <h1 id="네-기법을-관통하는-두-기준">네 기법을 관통하는 두 기준</h1>
 
-<p>기법을 하나씩 파기 전에, 넷을 관통하는 판단 기준 두 개를 먼저 정리한다. <strong>언제 이득인가</strong>와 <strong>무엇을 대가로 치르는가</strong>다. 스터디에서 이 장을 마치고 답해 보라고 받은 질문들이기도 한데, 각 절을 따로 읽어서는 답이 안 나오고 겹쳐 읽어야 답이 나온다.</p>
+<p>기법을 하나씩 살펴 보기 전에, 넷을 관통하는 판단 기준 두 개를 먼저 정리한다. <strong>언제 이득인가</strong>와 <strong>무엇을 대가로 치르는가</strong>다. 이 장이 답하려는 질문을 먼저 살펴 보자.</p>
+
+<ul>
+  <li>compute-bound / memory-bound 축이 왜 이 장 전체를 관통하는 단일 기준이 되는가</li>
+  <li>네 기법이 공통적으로 핸드오프 비용을 대가로 치른다는 패턴은 무엇을 의미하는가</li>
+  <li>모든 최적화가 특정 조건에서만 이득이라면, 그 조건을 실시간으로 감지해 자동 전환하는 메커니즘은 왜 다뤄지지 않는가</li>
+</ul>
+
+<p>앞의 두 질문은 아래 두 절이 하나씩 맡는다 — 다만 각 절을 따로 읽어서는 답이 안 나오고 겹쳐 읽어야 답이 나온다. 마지막 질문은 <a href="#정리">정리</a>에서 답한다.</p>
 
 <h2 id="병목-축-compute-bound와-memory-bound">병목 축: compute-bound와 memory-bound</h2>
 
 <p>첫 번째 기준은 <a href="/dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/#병목-판정과-최적화-방향">5.4편</a>과 <a href="/dev/Dev-Roofline-Model-LLM-Serving/">roofline 실측 글</a>에서 쌓은 병목 판정 축이다. 이하의 memory-bound는 <a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/">6.1편</a>과 마찬가지로 메모리 용량이 아니라 대역폭의 병목을 가리킨다 — 용량 문제는 앞 절에서 따로 다뤘다. 결론부터 말하면, <strong>네 기법의 적용 조건은 전부 워크로드가 이 축의 어디에 있느냐로 결정된다.</strong></p>
 
+<table>
+  <thead>
+    <tr>
+      <th>기법</th>
+      <th>축 위의 위치와 적용 조건</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>speculative decoding</td>
+      <td>decode의 memory-bound(저배치) 구간에서 이득 — 배치가 차서 compute-bound로 넘어가면 손해</td>
+    </tr>
+    <tr>
+      <td>PD disaggregation</td>
+      <td>prefill(compute-bound)과 decode(memory-bound)가 축의 양 끝 — 분리해서 독립 튜닝</td>
+    </tr>
+    <tr>
+      <td>분산 실행과 MoE</td>
+      <td>배치 크기가 축 위의 위치를 옮긴다 — MoE는 expert를 채울 큰 배치가 조건</td>
+    </tr>
+    <tr>
+      <td>고급 KV 캐싱</td>
+      <td>prefill이 compute-bound로 비싼 워크로드(긴 컨텍스트, 반복 프롬프트)일수록 이득</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>각 판정의 근거는 다음과 같다.</p>
+
 <ul>
-  <li><strong>speculative decoding</strong>: decode는 memory-bound라 가중치를 읽는 동안 연산 유닛이 논다. 이 기법은 그 노는 연산에 후보 토큰 검증을 맡기는 구조다. 뒤집으면, 배치가 차서 GPU가 이미 compute-bound로 넘어간 상황에서는 맡길 노는 연산이 없고, 검증에 쓴 잉여 연산이 그대로 처리량 손실이 된다. <a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/#처리량-이득의-원리">6.1편의 배칭</a>과 같은 상각 구조를 다른 축에서 쓰는 셈인데 — 배칭은 다른 요청의 토큰으로 가중치 읽기 1회를 나눠 쓰고, speculative decoding은 같은 요청의 미래 토큰 후보로 나눠 쓴다 — 그래서 두 기법은 같은 자원(노는 연산)을 두고 경쟁한다. 요청이 몰려 배칭이 그 자원을 채우면 speculative decoding의 몫이 사라진다. 이 부호 반전은 <a href="/dev/Dev-LLM-Serving-Optimization-07-02-02-Speculative-Decoding-Hands-On/">7.2.2편</a>에서 실측으로 확인한다</li>
+  <li><strong>speculative decoding</strong>: decode는 memory-bound라 가중치를 읽는 동안 연산 유닛이 논다. 이 기법은 그 노는 연산에 후보 토큰 검증을 맡기는 구조다 — <a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/#처리량-이득의-원리">6.1편의 배칭</a>과 같은 상각 구조를 다른 축에서 쓰는 셈이다. 뒤집으면, 배치가 차서 GPU가 이미 compute-bound로 넘어간 상황에서는 맡길 노는 연산이 없고, 검증에 쓴 잉여 연산이 그대로 처리량 손실이 된다 — 배칭과 같은 자원(노는 연산)을 두고 경쟁하기 때문이다. 이 경쟁 구조는 <a href="/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/#이득의-원리-가중치-읽기-1회당-생성-토큰-수">7.2.1편</a>에서 전개하고, 부호 반전은 <a href="/dev/Dev-LLM-Serving-Optimization-07-02-02-Speculative-Decoding-Hands-On/">7.2.2편</a>에서 실측으로 확인한다</li>
   <li><strong>PD disaggregation</strong>: <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#같은-flops-다른-병목">3.3편</a>에서 정리했듯 prefill은 compute-bound, decode는 memory-bound로 축의 반대편에 있다. 성격이 다른 두 단계가 같은 GPU에서 섞이면 서로 간섭한다 — <a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/#남는-질문-6장의-나머지">6.1편 말미</a>에서 본, 긴 prefill이 스텝 길이를 지배해 진행 중인 decode의 ITL을 흔드는 문제가 그것이다. 6장의 chunked prefill이 한 GPU 안에서 시간을 쪼개는 완화였다면, PD 분리는 아예 공간을 쪼개서 각 풀을 자기 병목에 맞는 하드웨어와 배치 설정으로 독립 튜닝하는 접근이다</li>
   <li><strong>분산 실행과 MoE</strong>: 배치 크기는 축 위의 위치를 움직이는 조절 변수다. MoE(Mixture-of-Experts)의 희소성이 효율로 이어지려면 expert들이 고르게 채워질 만큼 큰 배치가 필요하다는 것도, 결국 배치가 병목 경계를 어느 쪽으로 옮기느냐의 문제다</li>
   <li><strong>고급 KV 캐싱</strong>: prefill의 계산을 다시 하지 않으려는 기법이니, prefill이 compute-bound로 비싼 워크로드(긴 컨텍스트, 반복 프롬프트)일수록 이득이 크다</li>

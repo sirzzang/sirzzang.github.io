@@ -542,52 +542,51 @@ window.MathJax = {
 
 <ul>
   <li><strong>target</strong>: <code class="highlighter-rouge">Qwen/Qwen3-32B</code> bf16 (가중치 61GiB). 네 변형 모두 동일</li>
-  <li><strong>변형 4종</strong>: draft만 바꾼다</li>
-</ul>
+  <li>
+    <p><strong>변형 4종</strong>: draft만 바꾼다</p>
 
-<table>
-  <thead>
-    <tr>
-      <th>변형</th>
-      <th>draft</th>
-      <th>draft 크기</th>
-      <th>K (제안 토큰)</th>
-      <th>비고</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>vanilla</td>
-      <td>없음</td>
-      <td>—</td>
-      <td>—</td>
-      <td>기준선</td>
-    </tr>
-    <tr>
-      <td>ngram</td>
-      <td>모델 아님 — prompt lookup</td>
-      <td>0</td>
-      <td>6</td>
-      <td>매칭 창 4~6</td>
-    </tr>
-    <tr>
-      <td>improved ngram</td>
-      <td>같은 방식, 창만 다름</td>
-      <td>0</td>
-      <td>4</td>
-      <td>매칭 창 2~128</td>
-    </tr>
-    <tr>
-      <td>eagle3</td>
-      <td><code class="highlighter-rouge">RedHatAI/Qwen3-32B-speculator.eagle3</code></td>
-      <td>2.9GiB</td>
-      <td>3</td>
-      <td>Qwen3-32B 전용 학습</td>
-    </tr>
-  </tbody>
-</table>
-
-<ul>
+    <table>
+      <thead>
+        <tr>
+          <th>변형</th>
+          <th>draft</th>
+          <th>draft 크기</th>
+          <th>K (제안 토큰)</th>
+          <th>비고</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>vanilla</td>
+          <td>없음</td>
+          <td>—</td>
+          <td>—</td>
+          <td>기준선</td>
+        </tr>
+        <tr>
+          <td>ngram</td>
+          <td>모델 아님 — prompt lookup</td>
+          <td>0</td>
+          <td>6</td>
+          <td>매칭 창 4~6</td>
+        </tr>
+        <tr>
+          <td>improved ngram</td>
+          <td>같은 방식, 창만 다름</td>
+          <td>0</td>
+          <td>4</td>
+          <td>매칭 창 2~128</td>
+        </tr>
+        <tr>
+          <td>eagle3</td>
+          <td><code class="highlighter-rouge">RedHatAI/Qwen3-32B-speculator.eagle3</code></td>
+          <td>2.9GiB</td>
+          <td>3</td>
+          <td>Qwen3-32B 전용 학습</td>
+        </tr>
+      </tbody>
+    </table>
+  </li>
   <li><strong>부하 2종</strong>: 동시성 1(저부하 — memory-bound가 지배하는, speculative decoding이 이겨야 하는 구간)과 16(고부하 — 배치가 연산을 채우는 구간)</li>
   <li><strong>벤치</strong>: <code class="highlighter-rouge">vllm bench serve</code> + <a href="https://github.com/hemingkx/Spec-Bench">Spec-Bench</a>의 <code class="highlighter-rouge">question.jsonl</code> 프롬프트, 요청 16개, 요청당 출력 512토큰</li>
 </ul>
@@ -1230,6 +1229,10 @@ This causes a latency spike; consider extending warmup to cover this shape/confi
   </tbody>
 </table>
 
+<p><br /></p>
+
+<p>결과를 해석해 보자.</p>
+
 <ul>
   <li><strong>동시성 1은 세 환경에서 수렴한다.</strong> ngram(1.06/1.06/1.07)과 improved(1.16/1.17/1.18)까지 포함해 배속이 사실상 같다 — memory-bound 구간에서는 하드웨어 차이가 약분된다는 앞 절의 설명이 제3의 환경에서도 성립한다</li>
   <li><strong>동시성 16은 벌어진다</strong> (1.65/1.70/1.83). compute-bound 구간은 커널·버전·스케줄링의 영향이 그대로 남는 구간이라는 방증인데, 어느 요인이 얼마인지는 이 데이터만으로 가릴 수 없다</li>
@@ -1239,7 +1242,9 @@ This causes a latency spike; consider extending warmup to cover this shape/confi
 
 <h2 id="여담-저자-실험-설계가-n-gram에-불리한-이유">여담: 저자 실험 설계가 n-gram에 불리한 이유</h2>
 
-<p>그런데 왜 n-gram만 유독 나빴을까. 발동률과 수락 길이 분포를 보다 보면, 기법 자체의 결함이라기보다 애초에 이 실험 워크로드가 n-gram에 불리하게 짜여 있었다는 쪽으로 생각이 간다. 측정값에서 역산하면 입력은 요청당 약 123토큰, 출력은 512토큰이다. prompt lookup은 지금까지의 시퀀스에서 최근 토큰 패턴과 같은 대목을 찾아 그 뒤에 왔던 토큰을 제안하는 방식이라, 찾아볼 원천 텍스트가 클수록 유리하다. 그런데 입력이 123토큰뿐이면 매칭이 성립할 기회 자체가 드물다 — n-gram은 사실상 자기가 방금 생성한 출력 안에서만 매칭하고 있었고, 위의 발동률 5%가 그 결과다. 발동해도 문제가 남는다. 이 워크로드의 출력 512토큰은 입력을 되풀이하는 성격이 아니라 자유 생성이라, 매칭된 뒤에 실제로 같은 토큰이 이어질(수락될) 확률도 낮다.</p>
+<p>그런데 실험 결과에서 왜 n-gram이 유독 나빴을까. 발동률과 수락 길이 분포를 보다 보면, <strong>기법 자체의 결함이라기보다 애초에 이 실험 워크로드가 n-gram에 불리하게 짜여 있었던 건 아닐까</strong>하는 생각이 든다.</p>
+
+<p>측정값에서 역산하면 입력은 요청당 약 123토큰, 출력은 512토큰이다. prompt lookup은 지금까지의 시퀀스에서 최근 토큰 패턴과 같은 대목을 찾아 그 뒤에 왔던 토큰을 제안하는 방식이라, 찾아볼 원천 텍스트가 클수록 유리하다. 그런데 입력이 123토큰뿐이면 매칭이 성립할 기회 자체가 드물다 — n-gram은 사실상 자기가 방금 생성한 출력 안에서만 매칭하고 있었고, 위의 발동률 5%가 그 결과다. 발동해도 문제가 남는다. 이 워크로드의 출력 512토큰은 입력을 되풀이하는 성격이 아니라 자유 생성이라, 매칭된 뒤에 실제로 같은 토큰이 이어질(수락될) 확률도 낮다.</p>
 
 <p>그렇다면 설계가 달랐다면 어땠을까. 프롬프트를 길게 주고 출력이 그 내용을 되풀이하는 과제 — 문서 다듬기, RAG 인용, 코드 편집, 긴 요약 — 였거나 JSON·SQL처럼 구조화된 출력을 시켰다면, <a href="/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/#n-gram-모델-없는-추측">7.2.1편에서 정리한 n-gram의 주 적용 조건</a>에 정확히 들어와 발동률과 수락률이 함께 올라갔을 수도 있었을 것 같다 — 물론 이 방향의 재실험은 해 보지 않았으므로 추정이다. 그러니 이 실습에서 얻을 수 있는 인사이트 중 하나는 “n-gram은 별로다”가 아니라 <strong>“draft 방식은 워크로드에 매칭돼야 한다”</strong>이다. 입력 재사용이 큰 워크로드는 다음 실습 주제인 LMCache(고급 KV 캐싱)의 주제이기도 하다.</p>
 
