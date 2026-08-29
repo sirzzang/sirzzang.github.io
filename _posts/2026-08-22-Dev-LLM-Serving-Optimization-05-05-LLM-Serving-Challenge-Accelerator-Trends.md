@@ -15,7 +15,7 @@ tags:
   - NVL72
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-3
-last_modified_at: 2026-08-22
+last_modified_at: 2026-08-29
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 내용을 기반으로 합니다.*
@@ -81,7 +81,7 @@ last_modified_at: 2026-08-22
 
 결과적으로 랙 하나에 Grace CPU 36개와 Blackwell GPU 72개가 연결된다. [5.3편]({% post_url 2026-08-22-Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection %})에서 본 "NVLink 도메인 = 노드 내 8장"의 경계가 랙 전체로 올라간 것으로, 텐서 병렬을 걸 수 있는 범위가 8장에서 72장이 된다. 이 경계 이동을 가능하게 한 물리(액랭, 랙 내부 구리 배선)는 [GPU 패키징과 노드 경계]({% post_url 2026-08-21-CS-GPU-Package-Node-Boundary %})에서 정리한다.
 
-이 랙 스케일 아키텍처는 대형 MoE 모델의 분리형 서빙(disaggregated serving)과 결합될 때 특히 강력하다고 평가되는데(책 7장에서 다룰 주제다), 이런 소프트웨어-하드웨어 공동설계가 필요한 구성은 아직 업계 대부분이 도입 중인 단계고 일부 하이퍼스케일러만 최전선에서 채택하고 있다.
+이 랙 스케일 아키텍처는 대형 MoE 모델의 분리형 서빙(disaggregated serving)과 결합될 때 특히 강력하다고 평가되는데([7.1편]({% post_url 2026-08-29-Dev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview %})에서 시작하는 책 7장의 주제다), 이런 소프트웨어-하드웨어 공동설계가 필요한 구성은 아직 업계 대부분이 도입 중인 단계고 일부 하이퍼스케일러만 최전선에서 채택하고 있다.
 
 <br>
 
