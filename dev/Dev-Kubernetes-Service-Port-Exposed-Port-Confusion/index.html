@@ -37,6 +37,8 @@
 
 
 
+  <meta property="article:modified_time" content="2026-08-31T00:00:00+09:00">
+
 
 
   
@@ -440,7 +442,7 @@ window.MathJax = {
     <meta itemprop="headline" content="[Kubernetes] Service 포트와 노출 포트 혼동으로 인한 연결 타임아웃 트러블슈팅">
     <meta itemprop="description" content="클러스터 밖으로 노출된 접속용 포트를 클러스터 내부 Service 포트로 착각하면 어떤 증상이 나타나는지 알아 보자.">
     <meta itemprop="datePublished" content="2026-08-28T00:00:00+09:00">
-    
+    <meta itemprop="dateModified" content="2026-08-31T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
@@ -626,7 +628,9 @@ http://mlflow.mlflow.svc.cluster.local:5001/api/2.0/mlflow/experiments/get-by-na
 failed with timeout exception ... Max retries exceeded
 </code></pre></div></div>
 
-<p>즉시 connection refused가 나지 않고 타임아웃까지 매달리는 이유는 <strong>ClusterIP</strong>의 동작 방식에 있다. ClusterIP는 어떤 프로세스가 실제로 리슨(listen)하고 있는 IP가 아니라, <strong>kube-proxy</strong>가 만들어 둔 변환 규칙에 의해 백엔드 파드로 변환되는 가상 IP다. Service에 정의된 포트로 들어온 패킷만 변환 규칙에 걸리고, 정의되지 않은 포트로 들어온 패킷은 매칭되는 규칙이 없어 거절(RST) 응답 없이 버려지는(drop) 경우가 많다(iptables 모드 기준이다. IPVS 모드에서는 kube-proxy가 ClusterIP를 <code class="highlighter-rouge">kube-ipvs0</code> 더미 인터페이스에 바인딩해 그 IP가 노드의 로컬 주소가 되므로, 커널이 RST를 보내 곧바로 거절될 수 있다). 클라이언트 입장에서는 SYN을 보내도 아무 응답이 없으니 재전송만 반복하다가 connect timeout에 도달한다. 참고로 Linux 커널의 SYN 재전송 기본값(<code class="highlighter-rouge">tcp_syn_retries=6</code>)으로는 약 127초 뒤에 커널이 먼저 포기하는데, MLflow 클라이언트의 연결 타임아웃 120초가 그보다 근소하게 짧아 에러 메시지에 120초가 찍힌 것이다. kube-proxy가 커널에 설치하는 규칙이 실제로 어떤 모습인지는 <a href="/kubernetes/Kubernetes-Networking-Linux-Stack/">Linux 네트워크 스택 - iptables와 conntrack 글</a>에서 다룬 적이 있다.</p>
+<p>즉시 connection refused가 나지 않고 타임아웃까지 매달리는 이유는 <strong>ClusterIP</strong>의 동작 방식에 있다. ClusterIP는 어떤 프로세스가 실제로 리슨(listen)하고 있는 IP가 아니라, <strong>kube-proxy</strong>가 만들어 둔 변환 규칙에 의해 백엔드 파드로 변환되는 가상 IP다. Service에 정의된 포트로 들어온 패킷만 변환 규칙에 걸리고, 정의되지 않은 포트로 들어온 패킷은 매칭되는 규칙이 없어 거절(RST) 응답 없이 버려지는(drop) 경우가 많다(iptables 모드 기준이다. IPVS 모드에서는 kube-proxy가 ClusterIP를 <code class="highlighter-rouge">kube-ipvs0</code> 더미 인터페이스에 바인딩해 그 IP가 노드의 로컬 주소가 되므로, 커널이 RST를 보내 곧바로 거절될 수 있다).</p>
+
+<p>클라이언트 입장에서는 SYN을 보내도 아무 응답이 없으니 재전송만 반복하다가 connect timeout에 도달한다. 참고로 Linux 커널의 SYN 재전송 기본값(<code class="highlighter-rouge">tcp_syn_retries=6</code>)으로는 약 127초 뒤에 커널이 먼저 포기하는데, MLflow 클라이언트의 연결 타임아웃 120초가 그보다 근소하게 짧아 에러 메시지에 120초가 찍힌 것이다. kube-proxy가 커널에 설치하는 규칙이 실제로 어떤 모습인지는 <a href="/kubernetes/Kubernetes-Networking-Linux-Stack/">Linux 네트워크 스택 - iptables와 conntrack 글</a>에서 다룬 적이 있다.</p>
 
 <p>여기에 클라이언트 라이브러리의 재시도가 겹치면 체감 시간은 더 늘어난다. 위 사례에서 MLflow 클라이언트의 연결 타임아웃 기본값은 120초, 최대 재시도는 7회다. 시도마다 120초를 꼬박 기다린 뒤 백오프까지 얹히므로 API 호출 한 번이 십수 분까지 걸린다. 앞의 이름 해석 실패와 재시도 횟수는 같지만, 시도당 비용이 밀리초냐 120초냐에 따라 총 시간이 자릿수 단위로 벌어지는 것이다. 로그만 보면 “그냥 오래 걸리는 작업”처럼 보인다.</p>
 
@@ -822,7 +826,7 @@ mlflow   ClusterIP   10.96.153.40   &lt;none&gt;        5000/TCP   112s
 
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-28T00:00:00+09:00">August 28, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-31">August 31, 2026</time></p>
         
       </footer>
 
@@ -873,6 +877,51 @@ mlflow   ClusterIP   10.96.153.40   &lt;none&gt;        5000/TCP   112s
     <div class="page__related">
       <h4 class="page__related-title">참고</h4>
       <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-GPU-Cluster-Analysis/" rel="permalink">[GPU] 사례로 본 GPU 클러스터의 LLM 서빙 전략: 스펙 시트 읽기부터 토폴로지 실측까지
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 30일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  15 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLMSO 스터디에서 정리한 GPU 스펙·인터커넥트 프레임 및 서빙 전략을 실제 클러스터에 적용해 보자.
+</p>
+  </article>
+</div>
+
         
           
 
@@ -1004,51 +1053,6 @@ mlflow   ClusterIP   10.96.153.40   &lt;none&gt;        5000/TCP   112s
       
     </p>
     <p class="archive__item-excerpt" itemprop="description">LLM 서빙 고급 최적화 기법(speculative decoding, 멀티 GPU 분산, PD 분리, 고급 KV 캐싱)에 대해 알아 보자.
-</p>
-  </article>
-</div>
-
-        
-          
-
-
-
-<div class="grid__item">
-  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
-    
-      <div class="archive__item-teaser">
-        <img src=
-          
-            "/assets/images/blog-Dev.jpg"
-          
-          alt="">
-      </div>
-    
-    <h2 class="archive__item-title" itemprop="headline">
-      
-        <a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화: 서빙 최적화 기법 - 6.1. 개요: iteration에서 continuous batching까지
-</a>
-      
-    </h2>
-    <p class="page__meta">
-      
-        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 22일
-        
-          <span class="page__meta-sep"> · </span>
-        
-      
-      
-        <i class="far fa-clock" aria-hidden="true"></i> 
-
-
-
-
-  22 분 소요
-
-
-      
-    </p>
-    <p class="archive__item-excerpt" itemprop="description">서빙 최적화 기법의 출발점인 배칭의 큰 흐름을 실행 단위, 동기, 구조, 재구성 시점 순으로 잡아 보자.
 </p>
   </article>
 </div>

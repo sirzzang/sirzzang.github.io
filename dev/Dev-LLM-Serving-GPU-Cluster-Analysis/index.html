@@ -1,0 +1,1402 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[GPU] 사례로 본 GPU 클러스터의 LLM 서빙 전략: 스펙 시트 읽기부터 토폴로지 실측까지 - Eraser’s StudyLog</title>
+<meta name="description" content="LLMSO 스터디에서 정리한 GPU 스펙·인터커넥트 프레임 및 서빙 전략을 실제 클러스터에 적용해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[GPU] 사례로 본 GPU 클러스터의 LLM 서빙 전략: 스펙 시트 읽기부터 토폴로지 실측까지">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-LLM-Serving-GPU-Cluster-Analysis/">
+
+
+  <meta property="og:description" content="LLMSO 스터디에서 정리한 GPU 스펙·인터커넥트 프레임 및 서빙 전략을 실제 클러스터에 적용해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-08-30T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-08-31T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-LLM-Serving-GPU-Cluster-Analysis/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[GPU] 사례로 본 GPU 클러스터의 LLM 서빙 전략: 스펙 시트 읽기부터 토폴로지 실측까지">
+    <meta itemprop="description" content="LLMSO 스터디에서 정리한 GPU 스펙·인터커넥트 프레임 및 서빙 전략을 실제 클러스터에 적용해 보자.">
+    <meta itemprop="datePublished" content="2026-08-30T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-08-31T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[GPU] 사례로 본 GPU 클러스터의 LLM 서빙 전략: 스펙 시트 읽기부터 토폴로지 실측까지
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-08-30T00:00:00+09:00">2026년 08월 30일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  14 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#분석-대상과-방법">분석 대상과 방법</a>
+    <ul>
+      <li><a href="#클러스터-구성">클러스터 구성</a></li>
+      <li><a href="#분석-방법">분석 방법</a></li>
+    </ul>
+  </li>
+  <li><a href="#스펙-시트-분석">스펙 시트 분석</a>
+    <ul>
+      <li><a href="#구세대-3종-세대-축의-차이">구세대 3종: 세대 축의 차이</a></li>
+      <li><a href="#rtx-5090-대역폭-우위-용량통신안정성-제약">RTX 5090: 대역폭 우위, 용량·통신·안정성 제약</a></li>
+      <li><a href="#rtx-pro-6000-용량안정성-우위-대역폭-열위">RTX PRO 6000: 용량·안정성 우위, 대역폭 열위</a></li>
+      <li><a href="#decode-상한-산수">decode 상한 산수</a></li>
+    </ul>
+  </li>
+  <li><a href="#토폴로지-실측">토폴로지 실측</a>
+    <ul>
+      <li><a href="#pro-6000-노드의-토폴로지">PRO 6000 노드의 토폴로지</a></li>
+      <li><a href="#p2p-실측-같은-pcie-다른-전송-경로">P2P 실측: 같은 PCIe, 다른 전송 경로</a></li>
+    </ul>
+  </li>
+  <li><a href="#서빙-전략">서빙 전략</a>
+    <ul>
+      <li><a href="#병렬화-배치-tp-회피-우선">병렬화 배치: TP 회피 우선</a></li>
+      <li><a href="#양자화-탑재-가능성의-문제">양자화: 탑재 가능성의 문제</a></li>
+      <li><a href="#batching과-speculative-decoding">Batching과 speculative decoding</a></li>
+      <li><a href="#kv-캐시">KV 캐시</a></li>
+      <li><a href="#gpu-분할공유-기법의-적용-지점">GPU 분할·공유 기법의 적용 지점</a></li>
+      <li><a href="#미검증-방향-kv-offload">미검증 방향: KV offload</a></li>
+    </ul>
+  </li>
+  <li><a href="#워크로드와-gpu-티어-매핑">워크로드와 GPU 티어 매핑</a></li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Hands-On LLM Serving and Optimization Study (LLMSO) 학습 내용을 실제 클러스터에 적용해 본 기록입니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>예시 클러스터의 서빙용 GPU는 RTX 5090(32GB, 1,792GB/s)과 RTX PRO 6000 Blackwell Server(96GB, 1,597GB/s) 두 축이다. 같은 Blackwell·같은 PCIe Gen5인데 서빙 관점의 강점 축은 반대다. 5090은 대역폭이, PRO 6000은 용량·안정성이 강점이다</li>
+  <li>결정적 차이는 스펙 표에 잘 안 보이는 P2P다. 실측 결과 5090은 GPU 간 P2P가 막혀 있어(<code class="highlighter-rouge">CNS</code>) 텐서 병렬 통신이 호스트 RAM을 경유하고, PRO 6000은 PCIe P2P가 열려 있다(<code class="highlighter-rouge">OK</code>)</li>
+  <li>전 노드에 NVLink가 없고 노드 간은 10G 이더넷뿐이라, <a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/">5.3편</a>의 대역폭 계층에서 아래 두 칸이 통째로 없는 셈이다. 유효한 전략은 TP(텐서 병렬, tensor parallelism) 회피(단일 카드 + 양자화 + 레플리카 수평 확장)로 수렴한다</li>
+  <li>실제 워크로드 배치도 이 결론과 일치한다. 구세대 카드는 소형 비전 모델 평가를, 5090은 MoE 모델의 NVFP4 카드당 1레플리카 서빙을, PRO 6000은 96GB 단일 카드 탑재를 전제한 VLM 워크로드를 맡는다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="분석-대상과-방법">분석 대상과 방법</h1>
+
+<p><a href="/dev/Dev-LLM-Serving-Optimization-05-01-LLM-Serving-Challenge-Importance/">LLMSO 스터디 5주차 학습 내용</a>에서 GPU 스펙을 연산·메모리 용량·메모리 대역폭·인터커넥트 네 요소로 읽는 프레임을 정리했다. 이어지는 6주차 학습 내용 <a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/">6장 개요</a>와 7주차 학습 내용 <a href="/dev/Dev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview/">7장 개요</a>는 그 하드웨어 위에서 쓰는 서빙 최적화 기법(양자화, batching, speculative decoding, 병렬화)을 정리한다.</p>
+
+<p>공부한 내용을 정리해 볼 겸, 접근 가능한 GPU 클러스터 하나를 예시로 삼아, 스펙 시트에서 시작해 토폴로지 실측을 거쳐, 하드웨어 제약 위에 어떤 서빙 기법이 유효한지까지 고민해 보고자 한다. 예시 클러스터는 책의 예시(H100·A100 같은 데이터센터 GPU)와 사정이 다르다 — 전부 컨슈머·워크스테이션 계열 카드라, 같은 프레임이 다른 결론에 도달하는 과정을 볼 수 있다.</p>
+
+<h2 id="클러스터-구성">클러스터 구성</h2>
+
+<p>예시 클러스터의 노드 구성은 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>풀</th>
+      <th>GPU</th>
+      <th>노드당 장수</th>
+      <th>VRAM</th>
+      <th>용도</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>구세대 풀</td>
+      <td><a href="https://www.nvidia.com/en-us/geforce/graphics-cards/30-series/rtx-3090-3090ti/">RTX 3090</a> / <a href="https://www.nvidia.com/en-us/geforce/graphics-cards/40-series/rtx-4090/">RTX 4090</a> / <a href="https://www.nvidia.com/en-us/geforce/graphics-cards/40-series/rtx-4080-family/">RTX 4080 SUPER</a></td>
+      <td>1 ~ 8</td>
+      <td>24 / 24 / 16 GB</td>
+      <td>비전 모델 평가 배치 워크로드</td>
+    </tr>
+    <tr>
+      <td>5090 풀</td>
+      <td><a href="https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5090/">RTX 5090</a></td>
+      <td>8</td>
+      <td>32 GB</td>
+      <td>로컬 VLM 서빙 (전용 박스) 및 학습</td>
+    </tr>
+    <tr>
+      <td>신규 풀</td>
+      <td><a href="https://www.nvidia.com/en-us/data-center/rtx-pro-6000-blackwell-server-edition/">RTX PRO 6000 Blackwell Server</a></td>
+      <td>4</td>
+      <td>96 GB</td>
+      <td>학습 및 VLM 서빙 (서빙 목적 도입)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>카드 스펙은 풀마다 다르지만, 이 클러스터의 인터커넥트 조건은 전 풀에 공통이라 먼저 확인한다. <strong>전 노드에 NVLink가 없고, InfiniBand도 없으며, 노드 간 연결은 10G 이더넷이다.</strong> 노드 간 네트워크는 클러스터가 공유하는 패브릭이라 원래 공통이 되기 쉽지만, NVLink 부재까지 전 노드 공통인 것은 일반 원칙이 아니라 이 클러스터의 카드 구성(전부 컨슈머·워크스테이션 계열)이 만든 결과다 (구세대 풀의 3090만 카드 스펙상 2-way NVLink Bridge를 지원하는데, 예시 클러스터에서 브리지 장착은 확인된 바 없다).</p>
+
+<p>10G는 약 1.25GB/s로, <a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/#인터커넥트-정의와-대역폭-계층">5.3편</a>의 계층표 최하단이던 InfiniBand(약 50GB/s)보다도 40배 느리다. 즉 대역폭 계층에서 NVLink 칸과 노드 간 고속 네트워크 칸이 통째로 비어 있는 구조다. <strong>책의 예시 환경(H100 SXM, NVLink 900GB/s, InfiniBand)과 이 클러스터를 가르는 지점이 바로 이 공백이고</strong>, 같은 프레임에서 다른 결론이 나오는 이유도, 뒤에서 볼 서빙 전략 전체를 규정하는 것도 이 공백이다.</p>
+
+<h2 id="분석-방법">분석 방법</h2>
+
+<ul>
+  <li>스펙 시트: NVIDIA 공식 제품 페이지(<a href="https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5090/">RTX 5090</a>, <a href="https://www.nvidia.com/en-us/data-center/rtx-pro-6000-blackwell-server-edition/">RTX PRO 6000 Blackwell Server Edition</a>)와 <a href="https://www.nvidia.com/content/dam/en-zz/Solutions/design-visualization/quadro-product-literature/NVIDIA-RTX-Blackwell-PRO-GPU-Architecture-v1.0.pdf">RTX Blackwell PRO 아키텍처 문서</a> 기준</li>
+  <li>실측: 대표 노드에서 <code class="highlighter-rouge">nvidia-smi</code>로 확인 — 쿼리(<code class="highlighter-rouge">--query-gpu</code>), 토폴로지(<code class="highlighter-rouge">topo -m</code>), P2P 지원(<code class="highlighter-rouge">topo -p2p r</code>)</li>
+  <li>계산: <a href="/dev/Dev-Roofline-Model-LLM-Serving/">Roofline 모델로 보는 LLM 서빙</a>의 방식대로 decode 이론 상한을 어림</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="스펙-시트-분석">스펙 시트 분석</h1>
+
+<p>클러스터의 다섯 기종 전체를 한 표에 모은다. 결론부터 정리하면 — 세로(세대 축)로는 Ampere → Ada → Blackwell로 오면서 대역폭과 지원 정밀도(FP8, FP4)가 계단식으로 올라가고, 서빙을 맡는 두 Blackwell 기종끼리는 강점 축이 반대다. <strong>모델이 32GB 안에 들어가고 토큰 생성 속도가 중요하면 5090, 모델이 크거나 KV 캐시·컨텍스트가 길거나 운영 안정성이 필요하면 PRO 6000이다.</strong> <a href="/dev/Dev-LLM-Serving-Optimization-05-02-LLM-Serving-Challenge-GPU-Compute-Memory/#스펙-읽기-h100-sxm-vs-h100-nvl">5.2편</a>의 H100 SXM vs NVL 판단(“모델이 안 들어가면 NVL”)과 같은 구도가 컨슈머 카드 쌍에서 재현된다. 표 이후의 심층 대조는 서빙 워크로드가 실제로 걸리는(걸릴) 두 기종 위주로 진행한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th><a href="https://www.nvidia.com/en-us/geforce/graphics-cards/30-series/rtx-3090-3090ti/">RTX 3090</a></th>
+      <th><a href="https://www.nvidia.com/en-us/geforce/graphics-cards/40-series/rtx-4090/">RTX 4090</a></th>
+      <th><a href="https://www.nvidia.com/en-us/geforce/graphics-cards/40-series/rtx-4080-family/">RTX 4080 SUPER</a></th>
+      <th><a href="https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5090/">RTX 5090</a></th>
+      <th><a href="https://www.nvidia.com/en-us/data-center/rtx-pro-6000-blackwell-server-edition/">RTX PRO 6000 Blackwell Server</a></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>아키텍처</td>
+      <td>Ampere</td>
+      <td>Ada Lovelace</td>
+      <td>Ada Lovelace</td>
+      <td>Blackwell</td>
+      <td>Blackwell</td>
+    </tr>
+    <tr>
+      <td>SM 수</td>
+      <td>82</td>
+      <td>128</td>
+      <td>80</td>
+      <td>170</td>
+      <td>188</td>
+    </tr>
+    <tr>
+      <td>CUDA 코어</td>
+      <td>10,496</td>
+      <td>16,384</td>
+      <td>10,240</td>
+      <td>21,760</td>
+      <td>24,064</td>
+    </tr>
+    <tr>
+      <td>텐서 코어</td>
+      <td>328 (3세대)</td>
+      <td>512 (4세대)</td>
+      <td>320 (4세대)</td>
+      <td>680 (5세대)</td>
+      <td>752 (5세대)</td>
+    </tr>
+    <tr>
+      <td>VRAM</td>
+      <td>24 GB GDDR6X</td>
+      <td>24 GB GDDR6X</td>
+      <td>16 GB GDDR6X</td>
+      <td>32 GB GDDR7</td>
+      <td>96 GB GDDR7 (ECC)</td>
+    </tr>
+    <tr>
+      <td>메모리 버스</td>
+      <td>384-bit</td>
+      <td>384-bit</td>
+      <td>256-bit</td>
+      <td>512-bit</td>
+      <td>512-bit</td>
+    </tr>
+    <tr>
+      <td>메모리 대역폭</td>
+      <td>936 GB/s</td>
+      <td>1,008 GB/s</td>
+      <td>736 GB/s</td>
+      <td>1,792 GB/s</td>
+      <td>1,597 GB/s</td>
+    </tr>
+    <tr>
+      <td>FP8 하드웨어 지원</td>
+      <td>미지원</td>
+      <td>지원</td>
+      <td>지원</td>
+      <td>지원 (FP4까지)</td>
+      <td>지원 (FP4까지)</td>
+    </tr>
+    <tr>
+      <td>호스트 링크</td>
+      <td>PCIe Gen4 x16</td>
+      <td>PCIe Gen4 x16</td>
+      <td>PCIe Gen4 x16</td>
+      <td>PCIe Gen5 x16</td>
+      <td>PCIe Gen5 x16</td>
+    </tr>
+    <tr>
+      <td>NVLink</td>
+      <td>2-way Bridge (스펙)</td>
+      <td>없음</td>
+      <td>없음</td>
+      <td>없음</td>
+      <td>없음</td>
+    </tr>
+    <tr>
+      <td>GPU 간 P2P</td>
+      <td>미지원 (GeForce)</td>
+      <td>미지원 (GeForce)</td>
+      <td>미지원 (GeForce)</td>
+      <td>미지원 (실측 <code class="highlighter-rouge">CNS</code>)</td>
+      <td>지원 (실측 <code class="highlighter-rouge">OK</code>)</td>
+    </tr>
+    <tr>
+      <td>MIG</td>
+      <td>미지원</td>
+      <td>미지원</td>
+      <td>미지원</td>
+      <td>미지원</td>
+      <td>지원 (최대 4분할)</td>
+    </tr>
+    <tr>
+      <td>TDP</td>
+      <td>350 W</td>
+      <td>450 W</td>
+      <td>320 W</td>
+      <td>575 W</td>
+      <td>600 W</td>
+    </tr>
+  </tbody>
+</table>
+
+<center><sup>스펙은 NVIDIA 공식 페이지 기준, P2P·compute capability는 5090·PRO 6000만 실측(구세대 3종의 P2P 미지원은 GeForce 공통 정책으로 적었다). 3090의 NVLink는 카드 스펙 이야기고, 예시 클러스터에서 브리지 장착은 확인된 바 없다. 텐서 TFLOPS 절대값은 소스마다 dense/sparse 표기가 섞여 있어 표에서 제외했다</sup></center>
+
+<h2 id="구세대-3종-세대-축의-차이">구세대 3종: 세대 축의 차이</h2>
+
+<p>구세대 풀 카드들은 표의 세대 축을 그대로 보여 준다. 3090(Ampere)은 FP8 텐서 연산이 하드웨어에 없다 — FP8이 별도 유닛이 아니라 텐서 코어의 저정밀 모드라서, 하드웨어가 그 모드를 지원해야 처리량 2배 이득이 생긴다 (<a href="/dev/Dev-LLM-Serving-Optimization-05-02-LLM-Serving-Challenge-GPU-Compute-Memory/#cuda-코어와-텐서-코어">5.2편</a> 참고). 지원이 없으면 FP8 가중치를 올려도 연산은 FP16 경로로 돌아, 용량·대역폭 이득만 남고 연산 이득은 사라진다. 4090·4080 SUPER(Ada)부터 FP8이 생기고, Blackwell에서 FP4까지 내려간다. 대역폭은 736 ~ 1,008GB/s로 5090의 절반 전후, 용량은 16 ~ 24GB다. 이 풀이 맡는 소형 비전 모델의 평가 배치는 모델이 수 GB 이하이고 처리량 지향이라, LLM 서빙의 병목 축이 거의 작동하지 않는 워크로드다. 그 용도에는 충분한 사양이고, LLM을 올린다면 7 ~ 8B급 단일 카드 서빙까지가 현실적인 범위다.</p>
+
+<h2 id="rtx-5090-대역폭-우위-용량통신안정성-제약">RTX 5090: 대역폭 우위, 용량·통신·안정성 제약</h2>
+
+<p>1,792GB/s는 A100 80GB PCIe(1,935GB/s)에 근접하는 값이다. decode가 메모리 대역폭 병목이라는 <a href="/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/">3.3편</a>의 결론을 대입하면, 모델이 올라가기만 하면 토큰 생성 속도는 데이터센터 GPU에 크게 밀리지 않는다는 뜻이다. 제약은 세 가지다.</p>
+
+<ul>
+  <li><strong>용량 32GB</strong>: FP8 기준 14B급이 단일 카드 탑재의 실질 한계다. 그 위로는 KV 캐시 공간이 안 남는다</li>
+  <li><strong>P2P 미지원</strong>: GeForce 계열은 드라이버 레벨에서 GPU 간 P2P가 막혀 있다. 여러 장을 묶는 순간 통신 비용이 커진다 (<a href="#토폴로지-실측">토폴로지 실측</a>에서 확인)</li>
+  <li><strong>ECC 없음</strong>: 메모리 오류가 조용히 지나갈 수 있다. 장시간 무인 서빙에서 신뢰성 감점 요인이다</li>
+</ul>
+
+<h2 id="rtx-pro-6000-용량안정성-우위-대역폭-열위">RTX PRO 6000: 용량·안정성 우위, 대역폭 열위</h2>
+
+<p>대역폭은 5090보다 오히려 11% 낮다. 대신 나머지 축이 전부 서버 쪽으로 설계됐다.</p>
+
+<ul>
+  <li><strong>용량 96GB</strong>: FP8 기준 70B급, FP4 기준 100B+ 모델을 단일 카드에 올릴 수 있다. 텐서 병렬을 아예 시작하지 않아도 되는 용량이다</li>
+  <li><strong>P2P 지원</strong>: PCIe 경유 P2P가 열려 있어, 필요할 때 TP 확장의 통신 비용이 5090보다 낮다</li>
+  <li><strong>ECC·MIG</strong>: ECC는 메모리 오류를 감지·정정한다 (동작 원리는 <a href="/cs/CS-GPU-ECC-Memory-Integrity/">GPU ECC와 메모리 무결성</a> 참고). 실제로 이 클러스터의 노드에서 Double-Bit ECC 오류(Xid 48)가 발생했을 때 오류 감지 → row remapping으로 복구된 사례가 있었다 — ECC가 없었다면 조용한 데이터 오염으로 이어질 수 있는 상황이었다. <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG/">MIG</a>는 한 장을 최대 4개 인스턴스로 분할하는 기능이다 — 이 클러스터에서의 적용 지점은 <a href="#gpu-분할공유-기법의-적용-지점">아래</a>에서 따로 본다</li>
+</ul>
+
+<h2 id="decode-상한-산수">decode 상한 산수</h2>
+
+<p>decode는 토큰 하나를 만들 때마다 모델 가중치 전체를 읽으므로, single-stream 이론 상한은 대역폭 나누기 모델 크기다 (유도 과정은 <a href="/dev/Dev-Roofline-Model-LLM-Serving/">Roofline 모델로 보는 LLM 서빙</a> 참고). 예를 들어 7B 모델을 FP16(파라미터당 2바이트)으로 올리면 가중치가 7B × 2바이트 = 14GB이고, 토큰 하나를 만들 때마다 이 14GB를 한 번씩 다 읽는다. 3090의 대역폭 936GB/s로는 이 읽기를 초당 936 ÷ 14 ≈ 67번 할 수 있으므로, 이론 상한이 약 67 tok/s다.</p>
+
+<p>같은 방식으로 각 기종에 대표 모델 크기를 대입하면 아래 표와 같다. 표의 모델 크기 급에 해당하는 공개 모델 예로는 7 ~ 8B의 Mistral 7B·Llama 3.1 8B, 14B의 Qwen2.5 14B, 32B의 Qwen2.5 32B, 70B의 Llama 3.3 70B, 활성 3B MoE의 Qwen3 30B-A3B가 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구성</th>
+      <th>가중치 크기</th>
+      <th>이론 상한 (개략)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>3090 + 7B FP16</td>
+      <td>약 14 GB</td>
+      <td>약 67 tok/s</td>
+    </tr>
+    <tr>
+      <td>4090 + 8B FP8</td>
+      <td>약 8 GB</td>
+      <td>약 126 tok/s</td>
+    </tr>
+    <tr>
+      <td>5090 + 14B FP8</td>
+      <td>약 14 GB</td>
+      <td>약 128 tok/s</td>
+    </tr>
+    <tr>
+      <td>5090 + 30B급 MoE (활성 3B급) NVFP4</td>
+      <td>토큰당 읽는 활성분 약 2 GB</td>
+      <td>수백 tok/s</td>
+    </tr>
+    <tr>
+      <td>PRO 6000 + 32B FP8</td>
+      <td>약 32 GB</td>
+      <td>약 50 tok/s</td>
+    </tr>
+    <tr>
+      <td>PRO 6000 + 70B FP8</td>
+      <td>약 70 GB</td>
+      <td>약 23 tok/s</td>
+    </tr>
+  </tbody>
+</table>
+
+<center><sup>weight 읽기만 고려한 어림값. KV 캐시 읽기·배치 효과는 제외</sup></center>
+
+<p>표에서 두 가지가 보인다. 첫째, MoE + 저정밀 양자화 조합은 대역폭 요구를 크게 낮춘다 — 30B급 모델인데 decode가 읽는 것은 활성 파라미터뿐이라, 32GB 카드에서도 여유가 있다. 둘째, batch=1 decode의 연산 강도는 약 1 FLOP/byte 수준인데 이 카드들의 ridge point는 수백 FLOP/byte라, roofline에서 한참 왼쪽(memory bound)에 있다. batching과 speculative decoding으로 끌어올릴 여지가 그만큼 크다는 뜻이다.</p>
+
+<p>실무에서 실측되는 tok/s는 커널 효율·KV 캐시 읽기·스케줄링 오버헤드 때문에 이 상한보다 낮게 나온다. 그래서 상한은 두 용도로 쓴다. 하나는 카드-모델 조합에서 기대할 수 있는 최대치의 가늠자 — 예를 들어 PRO 6000에 70B FP8을 올리는 구성은 아무리 튜닝해도 single-stream 23 tok/s를 못 넘는다는 것이 배포 전에 확정된다. 다른 하나는 병목 판정 기준선 — 실측이 상한에 근접하면 대역폭이 포화된 것이라 batching·양자화·speculative decoding 같은 구조적 기법 없이는 더 올릴 수 없고, 상한보다 크게 낮으면 소프트웨어 쪽(커널, 설정, CPU 병목)에 개선 여지가 남았다는 신호다. 한 가지 주의할 점은 이 상한이 single-stream 기준이라는 것이다. 즉 표의 수치는 batching을 적용하지 않고 요청 하나만 처리할 때(batch=1)의 상한이다. batching(<a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/">6.1편</a> 참고)은 스트림당 상한을 올리는 것이 아니라, 같은 가중치 읽기 한 번에 여러 요청의 토큰을 실어 합산 처리량을 올린다.</p>
+
+<p><br /></p>
+
+<h1 id="토폴로지-실측">토폴로지 실측</h1>
+
+<p>카드 스펙 다음은 “여러 장이 어떻게 연결되어 있는가”다. <a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/#토폴로지-확인">5.3편</a>에서 정리한 <code class="highlighter-rouge">nvidia-smi topo -m</code>을 실제 노드에 적용했다.</p>
+
+<h2 id="pro-6000-노드의-토폴로지">PRO 6000 노드의 토폴로지</h2>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>nvidia-smi topo <span class="nt">-m</span>
+        GPU0    GPU1    GPU2    GPU3    CPU Affinity    NUMA Affinity
+GPU0     X      PIX     SYS     SYS     0-35,72-107     0
+GPU1    PIX      X      SYS     SYS     0-35,72-107     0
+GPU2    SYS     SYS      X      PIX     36-71,108-143   1
+GPU3    SYS     SYS     PIX      X      36-71,108-143   1
+</code></pre></div></div>
+
+<p>판독 기준은 5.3편 그대로다. GPU 0-1과 GPU 2-3이 각각 같은 PCIe 스위치 아래 붙은 페어(<code class="highlighter-rouge">PIX</code>)이고, 페어를 건너면 CPU 소켓 경계를 넘는다(<code class="highlighter-rouge">SYS</code> = NUMA 홉). 즉 이 노드에서 GPU 간 통신 비용은 균일하지 않다 — 페어 안이 가장 싸고, 페어를 건너면 소켓 간 인터커넥트를 지나간다.</p>
+
+<p>5090 노드(8장 구성)도 패턴은 같다. 소켓당 4장씩 물려 있어 같은 소켓 안은 <code class="highlighter-rouge">NODE</code>, 소켓을 건너면 <code class="highlighter-rouge">SYS</code>다. NVLink 열(<code class="highlighter-rouge">NV#</code>)은 두 기종 모두 등장하지 않는다 — <code class="highlighter-rouge">nvidia-smi nvlink -s</code>도 무출력으로, NVLink 미지원이 실측으로 확정된다.</p>
+
+<h2 id="p2p-실측-같은-pcie-다른-전송-경로">P2P 실측: 같은 PCIe, 다른 전송 경로</h2>
+
+<p>토폴로지 매트릭스만 보면 두 기종은 비슷해 보인다. 차이는 P2P 조회에서 드러난다. <strong>P2P(peer-to-peer)는 한 GPU가 다른 GPU의 메모리에 호스트 RAM을 거치지 않고 직접 DMA로 접근하는 능력이다.</strong> 물리 링크(PCIe냐 NVLink냐)와는 층위가 다르다 — NVLink는 항상 P2P가 되지만, PCIe에서는 칩셋과 드라이버가 허용해야 한다. NVIDIA는 GeForce 계열에서 P2P를 드라이버 레벨로 막아 두고, 프로 카드에서는 PCIe P2P를 열어 둔다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>nvidia-smi topo <span class="nt">-p2p</span> r   <span class="c"># 5090 노드</span>
+        GPU0    GPU1    GPU2    ...
+GPU0     X      CNS     CNS
+GPU1    CNS      X      CNS
+<span class="c"># CNS = Chipset not supported. 전 쌍에서 P2P 불가</span>
+
+~<span class="nv">$ </span>nvidia-smi topo <span class="nt">-p2p</span> r   <span class="c"># PRO 6000 노드</span>
+        GPU0    GPU1    GPU2    GPU3
+GPU0     X      OK      OK      OK
+GPU1    OK       X      OK      OK
+<span class="c"># 전 쌍 OK. 소켓을 건너는 쌍(SYS)까지 P2P 가능</span>
+</code></pre></div></div>
+
+<p>P2P가 막히면 NCCL(NVIDIA Collective Communications Library)은 SHM transport로 폴백한다. GPU A가 호스트 RAM의 공유 버퍼에 쓰고, GPU B가 거기서 읽는다 — DMA 복사가 2회가 되고, 그 경로가 CPU 메모리 대역폭을 다른 워크로드와 나눠 쓴다. P2P가 되면 GPU A의 DMA 엔진이 GPU B의 메모리(PCIe BAR로 열린 주소 창)에 직접 쓴다 — 복사 1회다.</p>
+
+<pre><code class="language-mermaid">graph TB
+    subgraph PRO["PRO 6000: P2P transport"]
+        A0["GPU 0 VRAM"] --&gt;|"DMA 1회"| PSW["PCIe 스위치"] --&gt; A1["GPU 1 VRAM"]
+    end
+    subgraph GF["5090: SHM transport 폴백"]
+        B0["GPU 0 VRAM"] --&gt;|"DMA"| HRAM["호스트 RAM 공유 버퍼"] --&gt;|"DMA"| B1["GPU 1 VRAM"]
+    end
+</code></pre>
+
+<p>정리하면 세 층으로 나뉜다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>층</th>
+      <th>5090</th>
+      <th>PRO 6000</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>물리 링크</td>
+      <td>PCIe Gen5 x16</td>
+      <td>PCIe Gen5 x16 (동일)</td>
+    </tr>
+    <tr>
+      <td>P2P 허용</td>
+      <td>드라이버가 차단</td>
+      <td>허용</td>
+    </tr>
+    <tr>
+      <td>NCCL 전송 경로</td>
+      <td>SHM (호스트 RAM 경유, 복사 2회)</td>
+      <td>P2P (GPU 직행, 복사 1회)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>같은 전선을 쓰는데 전송 경로가 갈리는 것이라, 이 차이는 스펙 표의 어떤 숫자에도 나타나지 않는다. 멀티 GPU 서빙을 검토한다면 <code class="highlighter-rouge">topo -p2p r</code> 한 줄이 스펙 시트보다 많은 것을 알려 준다. P2P 차단이 정확히 어느 층(칩셋 판정, 드라이버 정책)에서 일어나는지, GPUDirect RDMA·PCIe ACS와의 관계는 이 글의 범위 밖이다.</p>
+
+<p><br /></p>
+
+<h1 id="서빙-전략">서빙 전략</h1>
+
+<p>하드웨어 조건을 다시 모으면 이렇다. NVLink가 없고, 노드 간은 10G이며, 5090은 P2P조차 없다. 대신 카드당 대역폭은 준수하고 FP4까지 하드웨어로 지원한다. 이 조건에서 <a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/">6장 개요</a>의 기법들을 배치해 보면 우선순위가 뚜렷해진다.</p>
+
+<h2 id="병렬화-배치-tp-회피-우선">병렬화 배치: TP 회피 우선</h2>
+
+<p><a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/#병렬화-배치와-인터커넥트-계층">5.3편</a>의 배치 원칙은 “TP는 NVLink 도메인 안에서만”이었다. 이 클러스터에는 NVLink 도메인이 없으므로, 원칙을 그대로 적용하면 <strong>가장 좋은 TP는 TP를 하지 않는 것</strong>이 된다. decode의 레이어당 all-reduce가 5090에서는 호스트 RAM 왕복으로, PRO 6000에서도 PCIe로 떨어지기 때문이다. 우선순위는 이렇게 정리된다.</p>
+
+<ol>
+  <li>양자화로 모델을 단일 카드에 넣는다 (TP 자체를 제거)</li>
+  <li>트래픽이 늘면 같은 구성의 레플리카를 추가하고 로드밸런서로 수평 확장한다. GPU 간 통신이 없는 DP(데이터 병렬, data parallelism) 구성이다</li>
+  <li>그래도 모델이 안 들어가면 TP를 걸되 배치를 지킨다. PRO 6000에서는 <code class="highlighter-rouge">PIX</code> 페어(TP=2) 안에, 5090에서는 같은 NUMA 노드 안에 둔다. <code class="highlighter-rouge">SYS</code> 경계를 넘는 TP는 소켓 간 인터커넥트까지 얹는다</li>
+  <li>노드 간 병렬화(TP·PP 모두)는 10G에서 논외다</li>
+</ol>
+
+<h2 id="양자화-탑재-가능성의-문제">양자화: 탑재 가능성의 문제</h2>
+
+<p>데이터센터 GPU에서 양자화가 처리량·비용 최적화 수단이라면, 32GB 카드에서는 <strong>모델이 올라가느냐 자체를 결정하는 전제 조건</strong>이다. 두 기종 모두 compute capability 12.0으로 5세대 텐서 코어의 FP4(NVFP4)를 하드웨어로 지원하므로, 저정밀 양자화가 성능 손해 없이 대역폭·용량 이득으로 직결되는 조건이다. 위 <a href="#decode-상한-산수">산수</a>에서 본 대로 30B급 MoE도 NVFP4로 32GB 카드에 들어간다 (양자화의 품질 영향은 별도 검증 주제다).</p>
+
+<h2 id="batching과-speculative-decoding">Batching과 speculative decoding</h2>
+
+<p>batch=1 decode가 roofline의 memory bound 구간 깊숙이 있다는 것은, 연산 자원이 대부분 놀고 있다는 뜻이다. 같은 가중치 읽기로 여러 요청의 토큰을 만드는 continuous batching이 첫 번째 수단이고, 단일 요청의 지연을 줄여야 한다면 <a href="/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/">7.2.1편</a>의 speculative decoding이 후보가 된다 — 검증 단계가 놀고 있는 연산 자원을 쓰는 구조라, memory bound가 깊을수록 이득 조건이 좋다. 이 클러스터에서의 실측 이득은 미검증이다.</p>
+
+<h2 id="kv-캐시">KV 캐시</h2>
+
+<p>32GB 카드에서 14B FP8 모델을 돌리면 가중치를 빼고 남는 공간이 십수 GB다. 여기서 KV 캐시가 동시 처리 가능한 요청 수와 컨텍스트 길이를 결정하므로, paged attention·prefix caching 같은 KV 캐시 관리가 96GB 카드에서보다 훨씬 민감하게 작동한다. VLM이라면 이미지가 수백 ~ 수천 토큰으로 변환되어 시퀀스가 길어지므로 더욱 그렇다.</p>
+
+<h2 id="gpu-분할공유-기법의-적용-지점">GPU 분할·공유 기법의 적용 지점</h2>
+
+<p>대형 모델 서빙 경로에는 <a href="/dev/Dev-GPU-Sharing-Mechanisms/">GPU 분할·공유</a>를 적용할 지점이 없다 — 위 전략대로면 단일 카드가 모델 하나로 이미 차기 때문이다. 이건 이 클러스터만의 사정이 아니라 일반론이다. 분할·공유는 한 장을 다 못 쓰는 워크로드 여럿을 한 장에 채워 넣는 기법이라, 대부분의 경우 모델이 카드 용량을 채우는 대형 모델 서빙에서는 환경이 무엇이든 성립할 여백이 없다. 의미가 생기는 곳은 반대편, 소형·저활용 워크로드다. 기법별로 이 클러스터에서의 적용 지점은 다음과 같다 (전부 이 클러스터에서는 미검증이고, 검토 방향 수준이다).</p>
+
+<ul>
+  <li><strong>MIG (PRO 6000 한정)</strong>: <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG/">하드웨어 파티셔닝</a>이라 격리가 강해, 지연 예측이 필요한 다중 소형 서비스에 맞는다. 96GB를 4분할하면 7 ~ 8B급 FP8 모델, 임베딩·리랭커, speculative decoding의 draft 모델 같은 보조 모델을 각각 독립 슬라이스에 둘 수 있다. 다만 분할 시 슬라이스당 메모리 대역폭도 함께 나뉘어 decode 상한이 그만큼 낮아지고, 파티션 재구성에는 카드의 워크로드를 비워야 한다. 분할 경계가 SM 단위라는 구조는 <a href="/cs/CS-GPU-SM-Microarchitecture/">SM 마이크로아키텍처</a>에서 정리했다. 참고로 이 클러스터의 두 Blackwell 기종에서 <code class="highlighter-rouge">nvidia-smi</code>의 MIG 표기가 갈리는 것은 실측한 적이 있다 — 5090은 <code class="highlighter-rouge">N/A</code>(하드웨어 미지원), PRO 6000은 <code class="highlighter-rouge">Disabled</code>(기능은 있고 꺼둔 상태)로, 구분의 의미는 <a href="/cs/CS-GPU-ECC-Memory-Integrity/">GPU ECC와 메모리 무결성</a>에서 다뤘다</li>
+  <li><strong>Time-slicing (전 기종 가능)</strong>: <a href="/kubernetes/Kubernetes-GPU-Time-Slicing-1/">시분할 공유</a>는 메모리 격리가 없어 워크로드 합산 VRAM이 초과하면 OOM이 나고, 지연 경합도 생긴다. 지연에 민감한 주 서빙 경로에는 부적합하고, 개발용 노트북 세션이나 GPU 활용률이 낮은 소형 잡의 bin-packing에 의미가 있다 — 한 GPU에 소형 LLM 5개 Pod를 올린 실습은 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification/">GenAI on K8s 10.7</a>에 있다. 적용 판단 전에 time-based utilization이 아니라 <code class="highlighter-rouge">PROF</code> 계열 지표로 실제 포화 여부부터 확인해야 한다 (<a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-02-GPU-Utilization-and-DCGM/">GenAI on K8s 10.2</a>)</li>
+  <li><strong>MPS</strong>: <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-04-GPU-Sharing-MPS-and-Time-Slicing/">공간 공유</a>는 같은 신뢰 도메인의 동질 프로세스 여러 개가 한 GPU를 나눠 쓸 때 쓴다. 이 클러스터에서는 구세대 풀의 평가 배치처럼 같은 팀의 다중 프로세스 워크로드가 후보인데, 오류 격리가 약해 프로세스 하나의 비정상 종료가 같은 GPU의 다른 프로세스로 번질 수 있다</li>
+</ul>
+
+<h2 id="미검증-방향-kv-offload">미검증 방향: KV offload</h2>
+
+<p>PCIe Gen5 x16의 호스트 링크(단방향 약 64GB/s)는 CPU RAM으로의 KV 캐시 계층화(LMCache류)를 시도할 조건은 된다. 실효성은 미검증이다.</p>
+
+<p><br /></p>
+
+<h1 id="워크로드와-gpu-티어-매핑">워크로드와 GPU 티어 매핑</h1>
+
+<p>실제 워크로드 배치를 위 분석에 대조해 보면, 티어별 역할 분담이 하드웨어 특성과 맞물려 있다 (워크로드 명칭은 일반화).</p>
+
+<ul>
+  <li>
+    <p><strong>구세대 풀(3090·4090·4080 SUPER) — 소형 비전 모델 평가 배치.</strong> 내부 비전 모델의 평가(evaluation) 워크로드가 돈다. CNN급 소형 모델이라 VRAM 요구가 수 GB 수준이고, 배치 처리량 지향이라 지연 요건도 없다. LLM 서빙의 병목 축(용량·대역폭·인터커넥트)이 거의 작동하지 않는 워크로드라 구세대 카드로 충분하다.</p>
+  </li>
+  <li>
+    <p><strong>5090 전용 박스 — 평가 결과 검수 자동화용 로컬 VLM.</strong> 사람이 하던 평가 결과 검수를 대신하는 로컬 VLM이 올라가 있다. 구성이 위 전략의 실물 사례다 — 30B급 MoE(활성 3B급) 모델을 NVFP4로 양자화해 <strong>카드당 1레플리카(TP 없음)</strong>, 로드밸런서 뒤에 레플리카를 병렬로 두는 DP 구성이다. P2P가 없는 카드에서 TP를 피하고, MoE + FP4로 대역폭·용량 요구를 낮춰 단일 카드에 맞춘 배치다. 참고로 이 박스는 전 카드에 450W 전력 캡이 걸려 있었다(TDP 575W 대비 하향) — 8장 동시 가동 시의 전력·발열 예산 관리로 보이며, <a href="/dev/Dev-LLM-Serving-Optimization-05-02-LLM-Serving-Challenge-GPU-Compute-Memory/#전력-속성">5.2편</a>에서 본 “전력은 성능을 어디서 실현할 수 있는가의 문제”가 컨슈머 카드 밀집 구성에서 그대로 나타난다.</p>
+  </li>
+  <li>
+    <p><strong>PRO 6000 신규 풀 — 데이터 속성 자동 태깅 VLM.</strong> 이 풀은 VLM 서빙을 염두에 두고 도입됐고, 이미지 데이터의 속성을 자동 태깅하는 VLM 워크로드가 올라갈 예정이다. 스펙이 목적에 부합하는지 따져 보면 — VLM은 이미지가 수백 ~ 수천 토큰으로 변환되어 prefill 비중이 텍스트 챗보다 크고(강한 텐서 연산이 유효), 멀티모달 KV 캐시가 크며(96GB가 유효), 배치·태깅 성격이라 single-stream 지연보다 처리량이 중요하다(대역폭 열위의 영향이 작다). 96GB 단일 카드 탑재로 TP를 피할 수 있고, 모자라면 <code class="highlighter-rouge">PIX</code> 페어 TP=2의 여지도 있다. 용량·연산·안정성 축이 워크로드 프로필과 맞는 선택이다 — 다만 이 판정의 정량 부분(실 벤치마크)은 미검증이다.</p>
+  </li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<ul>
+  <li>스펙 시트에서 읽을 것은 <a href="/dev/Dev-LLM-Serving-Optimization-05-02-LLM-Serving-Challenge-GPU-Compute-Memory/">5.2편</a>의 네 요소 그대로였고, 컨슈머 카드에서는 여기에 스펙 표에 없는 항목인 P2P 지원 여부가 추가된다. <code class="highlighter-rouge">nvidia-smi topo -p2p r</code>로 확인한다</li>
+  <li>5090과 PRO 6000은 같은 세대·같은 PCIe인데 서빙 축이 반대다. 대역폭의 5090, 용량·안정성의 PRO 6000</li>
+  <li>NVLink·고속 네트워크가 없는 클러스터의 서빙 전략은 TP 회피로 수렴한다. 양자화로 단일 카드에 넣고, 레플리카로 수평 확장하며, 불가피할 때만 토폴로지를 지켜 TP를 건다</li>
+  <li>실제 워크로드 배치(평가 배치 → 구세대, MoE VLM 레플리카 → 5090, 대용량 VLM → PRO 6000)가 이 분석과 일치했다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5090/">NVIDIA GeForce RTX 5090</a></li>
+  <li><a href="https://www.nvidia.com/en-us/data-center/rtx-pro-6000-blackwell-server-edition/">NVIDIA RTX PRO 6000 Blackwell Server Edition</a></li>
+  <li><a href="https://www.nvidia.com/content/dam/en-zz/Solutions/design-visualization/quadro-product-literature/NVIDIA-RTX-Blackwell-PRO-GPU-Architecture-v1.0.pdf">NVIDIA RTX Blackwell PRO GPU Architecture Whitepaper</a></li>
+  <li><a href="/dev/Dev-LLM-Serving-Optimization-05-02-LLM-Serving-Challenge-GPU-Compute-Memory/">LLM 서빙의 도전 과제 - 5.2. GPU 스펙 읽기: 연산과 메모리</a></li>
+  <li><a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/">LLM 서빙의 도전 과제 - 5.3. GPU 인터커넥트: 대역폭 계층과 GPU 선택</a></li>
+  <li><a href="/dev/Dev-Roofline-Model-LLM-Serving/">Roofline 모델로 보는 LLM 서빙: 세 점으로 나눠 찍는 병목</a></li>
+  <li><a href="/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/">스페큘러티브 디코딩 - 7.2.1. 개념</a></li>
+  <li><a href="/dev/Dev-GPU-Sharing-Mechanisms/">GPU 공유 메커니즘: 개요</a></li>
+  <li><a href="/cs/CS-GPU-ECC-Memory-Integrity/">GPU ECC와 메모리 무결성</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#llm-serving" class="page__taxonomy-item" rel="tag">LLM-Serving</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nccl" class="page__taxonomy-item" rel="tag">NCCL</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#p2p" class="page__taxonomy-item" rel="tag">P2P</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#pcie" class="page__taxonomy-item" rel="tag">PCIe</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#roofline" class="page__taxonomy-item" rel="tag">Roofline</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#rtx-5090" class="page__taxonomy-item" rel="tag">RTX-5090</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#rtx-pro-6000" class="page__taxonomy-item" rel="tag">RTX-PRO-6000</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#vlm" class="page__taxonomy-item" rel="tag">VLM</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-08-31">August 31, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BGPU%5D+%EC%82%AC%EB%A1%80%EB%A1%9C+%EB%B3%B8+GPU+%ED%81%B4%EB%9F%AC%EC%8A%A4%ED%84%B0%EC%9D%98+LLM+%EC%84%9C%EB%B9%99+%EC%A0%84%EB%9E%B5%3A+%EC%8A%A4%ED%8E%99+%EC%8B%9C%ED%8A%B8+%EC%9D%BD%EA%B8%B0%EB%B6%80%ED%84%B0+%ED%86%A0%ED%8F%B4%EB%A1%9C%EC%A7%80+%EC%8B%A4%EC%B8%A1%EA%B9%8C%EC%A7%80%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-GPU-Cluster-Analysis%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-GPU-Cluster-Analysis%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-LLM-Serving-GPU-Cluster-Analysis%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-LLM-Serving-GPU-Cluster-Analysis?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-LLM-Serving-Optimization-07-02-02-Speculative-Decoding-Hands-On/" class="pagination--pager" title="[LLM] LLM 서빙과 최적화: 고급 최적화 기법 - 7.2.2. speculative decoding 실습: 네 가지 변형 벤치마크와 측정 검증
+">이전</a>
+    
+    
+      <a href="#" class="pagination--pager disabled">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-07-02-02-Speculative-Decoding-Hands-On/" rel="permalink">[LLM] LLM 서빙과 최적화: 고급 최적화 기법 - 7.2.2. speculative decoding 실습: 네 가지 변형 벤치마크와 측정 검증
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 29일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">vLLM에서 vanilla, n-gram, EAGLE-3 변형을 동시성 1과 16으로 실측해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/" rel="permalink">[LLM] LLM 서빙과 최적화: 고급 최적화 기법 - 7.2.1. speculative decoding 원리: 추측, 병렬 검증, 분포 보존
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 29일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  17 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">추측과 병렬 검증으로 decode를 가속하는 speculative decoding의 원리에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview/" rel="permalink">[LLM] LLM 서빙과 최적화: 고급 최적화 기법 - 7.1. 개요: 단일 GPU 너머의 네 기법
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 29일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  6 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">LLM 서빙 고급 최적화 기법(speculative decoding, 멀티 GPU 분산, PD 분리, 고급 KV 캐싱)에 대해 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion/" rel="permalink">[Kubernetes] Service 포트와 노출 포트 혼동으로 인한 연결 타임아웃 트러블슈팅
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 08월 28일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  6 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">클러스터 밖으로 노출된 접속용 포트를 클러스터 내부 Service 포트로 착각하면 어떤 증상이 나타나는지 알아 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-LLM-Serving-GPU-Cluster-Analysis/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-LLM-Serving-GPU-Cluster-Analysis"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>
