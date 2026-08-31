@@ -17,7 +17,7 @@ tags:
   - MoE
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-3
-last_modified_at: 2026-08-29
+last_modified_at: 2026-08-31
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 중 딥다이브한 내용입니다.*
@@ -89,6 +89,17 @@ $$
 | **decode** | 대역폭 | 사선 | 달성 대역폭 (`dram__bytes_*`, 프록시로 `DRAM_ACTIVE`) | 배칭, 양자화, KV 캐시 관리 |
 
 같은 MFU(Model FLOPs Utilization — 하드웨어 연산 peak의 몇 %를 실제 모델 연산에 쓰고 있나) 숫자로 둘을 나란히 평가하면 decode는 항상 낮게 나오는데, 그것은 커널이 나쁜 게 아니라 **애초에 도달 가능한 지붕이 낮기 때문**이다. decode의 성적표는 MFU가 아니라 "대역폭을 몇 % 썼는가"다. 한 가지 보정도 필요하다. decode의 $Q$는 가중치만이 아니라 **가중치 + KV 캐시**다. 컨텍스트가 길어지면 KV 쪽이 트래픽을 지배하기 시작하고, KV는 요청마다 다르므로 배칭으로 공유되지 않는다. 즉 컨텍스트가 길어질수록 배칭의 효과가 줄어든다. 위의 $\approx 240$ tok/s 계산도 KV를 무시한 낙관적 상한이다.
+
+표의 "무엇을 봐야 하나" 열에는 정작 GPU가 느릴 때 가장 먼저 열어 보게 되는 nvidia-smi가 없다. decode 위주 부하와 prefill 위주 부하를 각각 걸어 두고 조회하면 이런 형태가 나온다.
+
+```bash
+# 같은 GPU에 부하 성격만 바꿔 조회 — 형태를 보이기 위한 예시이며 실측 캡처는 아니다
+$ nvidia-smi --query-gpu=pstate,utilization.gpu,memory.used --format=csv,noheader
+P0, 100 %, 29876 MiB    # decode 위주 부하 (메모리 바운드)
+P0, 100 %, 29876 MiB    # prefill 위주 부하 (연산 바운드)
+```
+
+병목이 정반대인 두 부하가 같은 값을 찍는다. GPU-Util은 "샘플 구간 중 커널이 하나라도 실행 중이던 시간의 비율"이라는 시간 기반 정의라, 메모리 바운드인 decode든 연산 바운드인 prefill이든 커널이 돌고 있는 한 똑같이 100% 근처로 포화된다 — 극단적으로는 실제 연산이 전혀 없는데도 100%에 고정되는 사례까지 있다. 이 정의와 그 극단 사례는 [Phantom GPU Utilization 사례 분석]({% post_url 2026-05-11-Dev-GPU-Phantom-Utilization %}#gpu-utilization의-정의-nvidia-smi와-nvml)이 다룬다. P-state(P0~P12)도 드라이버가 부하에 맞춰 클럭·전압을 조절하는 전력 관리 단계라, 부하가 걸려 있는 한 어느 쪽이든 P0이다 — "부하가 걸렸는가(P0) idle인가(P8)"를 보여줄 뿐 워크로드의 연산 강도나 병목 위치와는 직접 연관이 없다. memory.used도 서빙 엔진이 KV 캐시를 미리 잡아 두는 구조라 부하 성격과 무관하게 일정하다.
 
 <br>
 
