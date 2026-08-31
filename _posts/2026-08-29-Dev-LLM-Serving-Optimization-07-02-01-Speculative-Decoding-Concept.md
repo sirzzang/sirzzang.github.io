@@ -15,7 +15,7 @@ tags:
   - N-gram
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-4
-last_modified_at: 2026-08-29
+last_modified_at: 2026-08-31
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 4주차 학습 내용을 기반으로 합니다.*
@@ -255,6 +255,8 @@ draft를 정했다면 남는 조절 변수는 K, 즉 한 iteration에서 draft�
 이 장표에는 앞서 본 명제 두 개가 더 들어 있다. 표에서 수락률은 K가 3에서 6으로 커질수록 떨어지고(125M 기준 0.867 → 0.773 — [위치별 수락률](#draft-토큰-개수-k)이 뒤로 갈수록 낮아지는 그 현상이다), 그래프에서 speedup은 동시 클라이언트 수가 1에서 32로 늘수록 2.3배대에서 1배 근처로 줄어든다 — [배치가 차면 이득이 사라진다](#효과가-사라지는-조건)의 프로덕션 실측판이다.
 
 자사 Kanana 모델 적용 실험에서는 target의 약 1/10 크기 draft — 그것도 pretraining 중간 체크포인트에 instruct 튜닝 전 상태 — 로 수락률 0.6~0.8(greedy decoding·ShareGPT 기준)을 얻었고, 한국어 챗 데이터셋에서는 수락률이 0.84~0.91로 더 올라가며 속도 개선 폭도 커졌다고 소개한다.
+
+> 참고: instruct는 다음 토큰 예측만 사전학습한 베이스 모델에 지시-응답 쌍 데이터로 추가 파인튜닝을 해 지시를 따르게 만든 버전이다 (Llama-3-8B와 Llama-3-8B-Instruct처럼 별도 체크포인트로 배포된다). 이 실험의 target은 Instruct 버전인데 draft는 그 단계 전의 체크포인트다 — [draft를 고르는 네 가지 방법](#draft를-고르는-네-가지-방법)에서 본 정렬 문제가 그대로 생기는 조합이다. 여기서 핵심은 draft가 덜 훈련됐다는 사실 자체가 아니라 **두 모델의 짝이 안 맞는다**는 것이다. 수락률을 좌우하는 변수는 draft의 절대 성능이 아니라 target과의 분포 일치도라서, 학습 단계가 서로 다른 체크포인트 조합은 같은 입력에 서로 다른 다음 토큰 분포를 내고, 그만큼 draft가 낸 후보가 수락되는 비율이 떨어진다. 특히 instruction tuning은 출력 분포 자체를 바꿔 놓는 단계인데(베이스는 다음 텍스트를 이어 쓰고, Instruct는 지시에 응답한다) 서빙 트래픽이 바로 그 지시·대화 입력이라, 이 조합에서는 분포 차이가 매 위치에서 드러난다 — p와 q가 어긋나는 만큼 확률적 거부가 늘어난다. 발표가 아래 남은 과제에서 instruction tuning을 수락률 개선 항목으로 꼽는 것도 이 맥락으로 읽을 수 있다.
 
 ![Kanana 모델 적용 결과]({{site.url}}/assets/images/llmso-ifkakao-speculative-decoding-result-4-kanana-greedy-decoding.png){: .align-center width="720"}
 

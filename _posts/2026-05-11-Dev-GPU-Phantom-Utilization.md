@@ -18,6 +18,7 @@ tags:
   - Kubernetes
   - Troubleshooting
   - NCCL
+last_modified_at: 2026-08-31
 ---
 
 <br>
@@ -234,6 +235,8 @@ GPU의 전력 소비는 두 가지로 나뉜다. **동적 전력(dynamic power)*
 <summary><b>참고: GPU Performance State (P-state)</b></summary>
 
 NVIDIA GPU의 Performance State(P-state)는 P0(최고 성능)부터 P12(최저 전력)까지 있다. P-state는 클럭 주파수를 결정한다 — P8(idle)에서는 클럭이 최저로 내려가고, P0에서는 최대로 올라간다. Phantom GPU는 P0에 고정되어 클럭과 voltage가 최대치를 유지하고, 앞서 본 것처럼 높은 voltage가 정적 전력 소비를 유발한다.
+
+P-state가 알려주는 것은 "부하가 걸려 클럭이 올라갔는가"까지다. 그 부하가 연산 바운드인지 메모리 바운드인지 — 즉 워크로드의 연산 강도 — 와는 직접 연관이 없다. 연산 강도 기반의 병목 판별은 [Roofline 모델의 LLM 서빙 적용]({% post_url 2026-08-21-Dev-Roofline-Model-LLM-Serving %})이 다룬다.
 
 비유하면 자동차 공회전에 가깝다. 기어는 최고단(P0)에, 엔진 RPM은 최대(클럭 최대)인데, 바퀴는 굴러가지 않는(연산 없음) 상태다.
 

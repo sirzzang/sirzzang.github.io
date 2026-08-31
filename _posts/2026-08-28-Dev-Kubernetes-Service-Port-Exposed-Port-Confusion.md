@@ -16,6 +16,7 @@ tags:
   - MLflow
   - Argo-Workflow
   - port-forward
+last_modified_at: 2026-08-31
 ---
 
 <br>
@@ -129,7 +130,9 @@ http://mlflow.mlflow.svc.cluster.local:5001/api/2.0/mlflow/experiments/get-by-na
 failed with timeout exception ... Max retries exceeded
 ```
 
-즉시 connection refused가 나지 않고 타임아웃까지 매달리는 이유는 **ClusterIP**의 동작 방식에 있다. ClusterIP는 어떤 프로세스가 실제로 리슨(listen)하고 있는 IP가 아니라, **kube-proxy**가 만들어 둔 변환 규칙에 의해 백엔드 파드로 변환되는 가상 IP다. Service에 정의된 포트로 들어온 패킷만 변환 규칙에 걸리고, 정의되지 않은 포트로 들어온 패킷은 매칭되는 규칙이 없어 거절(RST) 응답 없이 버려지는(drop) 경우가 많다(iptables 모드 기준이다. IPVS 모드에서는 kube-proxy가 ClusterIP를 `kube-ipvs0` 더미 인터페이스에 바인딩해 그 IP가 노드의 로컬 주소가 되므로, 커널이 RST를 보내 곧바로 거절될 수 있다). 클라이언트 입장에서는 SYN을 보내도 아무 응답이 없으니 재전송만 반복하다가 connect timeout에 도달한다. 참고로 Linux 커널의 SYN 재전송 기본값(`tcp_syn_retries=6`)으로는 약 127초 뒤에 커널이 먼저 포기하는데, MLflow 클라이언트의 연결 타임아웃 120초가 그보다 근소하게 짧아 에러 메시지에 120초가 찍힌 것이다. kube-proxy가 커널에 설치하는 규칙이 실제로 어떤 모습인지는 [Linux 네트워크 스택 - iptables와 conntrack 글]({% post_url 2026-01-18-Kubernetes-Networking-Linux-Stack %})에서 다룬 적이 있다.
+즉시 connection refused가 나지 않고 타임아웃까지 매달리는 이유는 **ClusterIP**의 동작 방식에 있다. ClusterIP는 어떤 프로세스가 실제로 리슨(listen)하고 있는 IP가 아니라, **kube-proxy**가 만들어 둔 변환 규칙에 의해 백엔드 파드로 변환되는 가상 IP다. Service에 정의된 포트로 들어온 패킷만 변환 규칙에 걸리고, 정의되지 않은 포트로 들어온 패킷은 매칭되는 규칙이 없어 거절(RST) 응답 없이 버려지는(drop) 경우가 많다(iptables 모드 기준이다. IPVS 모드에서는 kube-proxy가 ClusterIP를 `kube-ipvs0` 더미 인터페이스에 바인딩해 그 IP가 노드의 로컬 주소가 되므로, 커널이 RST를 보내 곧바로 거절될 수 있다). 
+
+클라이언트 입장에서는 SYN을 보내도 아무 응답이 없으니 재전송만 반복하다가 connect timeout에 도달한다. 참고로 Linux 커널의 SYN 재전송 기본값(`tcp_syn_retries=6`)으로는 약 127초 뒤에 커널이 먼저 포기하는데, MLflow 클라이언트의 연결 타임아웃 120초가 그보다 근소하게 짧아 에러 메시지에 120초가 찍힌 것이다. kube-proxy가 커널에 설치하는 규칙이 실제로 어떤 모습인지는 [Linux 네트워크 스택 - iptables와 conntrack 글]({% post_url 2026-01-18-Kubernetes-Networking-Linux-Stack %})에서 다룬 적이 있다.
 
 여기에 클라이언트 라이브러리의 재시도가 겹치면 체감 시간은 더 늘어난다. 위 사례에서 MLflow 클라이언트의 연결 타임아웃 기본값은 120초, 최대 재시도는 7회다. 시도마다 120초를 꼬박 기다린 뒤 백오프까지 얹히므로 API 호출 한 번이 십수 분까지 걸린다. 앞의 이름 해석 실패와 재시도 횟수는 같지만, 시도당 비용이 밀리초냐 120초냐에 따라 총 시간이 자릿수 단위로 벌어지는 것이다. 로그만 보면 "그냥 오래 걸리는 작업"처럼 보인다.
 
