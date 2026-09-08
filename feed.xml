@@ -1,4 +1,653 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-09-05T20:31:03+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[Nsight] Nsight 프로파일러: 4. ncu 수집과 커널 판정</title><link href="https://sirzzang.github.io//dev/Dev-Nsight-Profiling-04-Ncu/" rel="alternate" type="text/html" title="[Nsight] Nsight 프로파일러: 4. ncu 수집과 커널 판정" /><published>2026-09-03T00:00:00+09:00</published><updated>2026-09-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-Nsight-Profiling-04-Ncu</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-Nsight-Profiling-04-Ncu/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 5주차 학습 중 딥다이브한 내용입니다.&lt;/em&gt;&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-09-08T19:43:14+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[MLflow] 시스템 메트릭 로깅 - 1. 컨테이너 안에서 잰 값은 누구의 것인가: psutil, 네임스페이스, cgroup</title><link href="https://sirzzang.github.io//dev/Dev-MLflow-System-Metrics-Container-Isolation/" rel="alternate" type="text/html" title="[MLflow] 시스템 메트릭 로깅 - 1. 컨테이너 안에서 잰 값은 누구의 것인가: psutil, 네임스페이스, cgroup" /><published>2026-09-08T00:00:00+09:00</published><updated>2026-09-08T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-MLflow-System-Metrics-Container-Isolation</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-MLflow-System-Metrics-Container-Isolation/">&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;학습 플랫폼의 tracking SDK에 MLflow 시스템 메트릭 로깅(CPU·메모리·디스크·네트워크·GPU)을 얹으려 했다. MLflow가 이미 제공하는 기능이라 SDK 함수 하나로 열어 주면 끝일 줄 알았다&lt;/li&gt;
+  &lt;li&gt;MLflow 시스템 메트릭은 &lt;code class=&quot;highlighter-rouge&quot;&gt;start_run&lt;/code&gt;을 부른 &lt;strong&gt;프로세스 안의 스레드&lt;/strong&gt;가 잰다. 제출 경로에서 그 프로세스는 워커 pod의 컨테이너 안에 있다. 그리고 MLflow는 메트릭을 직접 재지 않는다. psutil을 이용해 &lt;code class=&quot;highlighter-rouge&quot;&gt;/proc&lt;/code&gt; 파일을 읽고, pynvml을 이용해 NVML을 부른다&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/net/dev&lt;/code&gt;는 network namespace로 격리되고 NVML은 device plugin이 노출한 장치만 보지만, &lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/stat&lt;/code&gt;과 &lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/meminfo&lt;/code&gt;는 &lt;strong&gt;어떤 namespace로도 격리되지 않는다&lt;/strong&gt;. pod 안에서 열어도 노드 전체 값이 나온다&lt;/li&gt;
+  &lt;li&gt;그래서 pod 안에서 켠 시스템 메트릭의 CPU·메모리는 그 pod가 아니라 노드 전체의 사용량이다. 요구사항의 배경이 OOM 진단이었으므로, 노드 기준 사용률(예: 24%)을 자기 컨테이너의 사용률로 읽으면 여유가 있다고 잘못 판단하게 된다&lt;/li&gt;
+  &lt;li&gt;분산학습에서는 한 노드에 워커 pod가 여러 개 뜬다. 그 pod들이 읽는 &lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/meminfo&lt;/code&gt;는 전부 같은 노드 값인데, 기록은 rank 0의 메모리, rank 3의 메모리처럼 각각의 이름으로 남는다. 노드 하나의 값이 rank 수만큼 중복 기록되는 셈이다&lt;/li&gt;
+  &lt;li&gt;플랫폼 쪽 대응(지표 이름, cgroup 수집기, 원본을 고치지 않는 구현)은 다음 글에서 다룬다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;배경&quot;&gt;배경&lt;/h1&gt;
+
+&lt;h2 id=&quot;학습-플랫폼-구조&quot;&gt;학습 플랫폼 구조&lt;/h2&gt;
+
+&lt;p&gt;회사에서 ML 엔지니어들이 학습을 제출하고 실험을 기록하는 데 쓰는 학습 플랫폼을 만들어 운영하고 있다. 이 플랫폼은 Kubernetes 위에 있다. KubeRay가 RayJob 하나마다 Ray 클러스터(head pod 하나 + worker pod 여럿)를 띄우고, 그 위에서 Ray Train의 &lt;code class=&quot;highlighter-rouge&quot;&gt;TorchTrainer&lt;/code&gt;가 워커마다 학습 함수를 실행한다. 분산학습에서 &lt;strong&gt;rank&lt;/strong&gt;는 학습 프로세스 하나에 붙는 번호이고, 보통 GPU 한 장에 프로세스 하나를 둔다. 이 플랫폼에서는 그 프로세스 하나가 Ray Train 워커(Ray Actor) 하나이고, KubeRay가 워커마다 pod 하나를 띄우며, 각 pod가 GPU 1장을 받는다. 그래서 여기서는 rank, 워커 프로세스, pod, GPU가 전부 1:1이다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;rank의 정의는 &lt;a href=&quot;/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background/&quot;&gt;분산학습 배경 글&lt;/a&gt;에서, KubeRay와 Ray Train의 스케줄링 구조는 &lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-11-05-Ray-KubeRay-and-vLLM-Inference/&quot;&gt;Ray/KubeRay 글&lt;/a&gt;에서 다룬 적이 있다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;이 대응 관계를 미리 잡아 두는 이유는 이 구조에서 &lt;strong&gt;rank 하나가 컨테이너 하나에서 돌기 때문&lt;/strong&gt;이다. &lt;strong&gt;격리의 단위는 pod가 아니라 컨테이너&lt;/strong&gt;다. pod는 네트워크 namespace처럼 일부를 공유하는 컨테이너 묶음이고, 같은 pod의 사이드카는 자기 cgroup 한도와 루트 파일시스템을 따로 갖는다. 그래서 어느 rank가 무엇을 보는가는 그 rank가 사는 컨테이너가 무엇을 보는가로 정해지며, 계열에 따라 컨테이너 것(GPU, cgroup 한도)과 pod 것(네트워크)으로 나뉜다. 뒤에서 rank마다 GPU는 다르게 보이고 CPU·메모리는 같게 보이는 현상에 대해 언급하는데, 이것이 전부 이 대응 위에 있다.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;graph TB
+    subgraph N1[&quot;gpu-node-1&quot;]
+        W0[&quot;worker pod&amp;lt;br/&amp;gt;rank 0 · GPU 1장&quot;]
+        W3[&quot;worker pod&amp;lt;br/&amp;gt;rank 3 · GPU 1장&quot;]
+    end
+    subgraph N2[&quot;gpu-node-2&quot;]
+        W1[&quot;worker pod&amp;lt;br/&amp;gt;rank 1 · GPU 1장&quot;]
+    end
+    subgraph N3[&quot;gpu-node-3&quot;]
+        W2[&quot;worker pod&amp;lt;br/&amp;gt;rank 2 · GPU 1장&quot;]
+    end
+    H[&quot;head pod&amp;lt;br/&amp;gt;(driver)&quot;] --&amp;gt; W0 &amp;amp; W1 &amp;amp; W2 &amp;amp; W3
+    W0 &amp;amp; W1 &amp;amp; W2 &amp;amp; W3 --&amp;gt; M[&quot;MLflow 서버&quot;]
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;여기서 하나 눈여겨 볼 것은, &lt;strong&gt;한 노드에 워커 pod가 여러 개 뜰 수 있다&lt;/strong&gt;는 점이다. 위 그림에서 rank 0과 rank 3은 같은 노드에 있다. 실제 4워커 제출의 배치가 이랬다. 어느 pod가 어느 노드에 가는지는 Kubernetes 스케줄러가 정한다. Ray에도 스케줄러가 있지만 그것은 액터를 Ray 노드에 배치하는 것이고, 이 구조에서는 Ray 노드 하나가 pod 하나라 물리 노드 배치는 결국 Kubernetes 쪽 결정이다. 사용자는 이것을 통제하지 못한다. 이 사실이 뒤에서 중요해진다.&lt;/p&gt;
+
+&lt;h2 id=&quot;기록-표면의-분업&quot;&gt;기록 표면의 분업&lt;/h2&gt;
+
+&lt;p&gt;실험 기록은 플랫폼이 MLflow를 감싸서 제공한다. ML 엔지니어는 인터랙티브 세션에서 로컬로 실험을 돌리든(이하 로컬 경로), 플랫폼에 제출하든(이하 제출 경로) 같은 코드를 쓴다.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# ML 엔지니어가 쓰는 코드 — 로컬과 제출 양쪽에서 동일&lt;/span&gt;
+&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;mlplatform_sdk&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tracking&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;tracking&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;log_metric&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'val/acc'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;0.91&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;step&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;epoch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;tracking&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;log_params&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'lr'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;3e-4&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;})&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;tracking&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;log_artifact_dir&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'/tmp/fit_out'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;to&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'out'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;MLflow를 직접 쓰게 하지 않는 이유는 run의 생명주기를 플랫폼이 소유하기 때문이다. Ray Train은 워커마다 학습 함수를 호출하는데, 플랫폼은 그 함수를 감싸서 앞에는 준비 코드를, 뒤에는 정리 코드를 둔다. 제출 경로에서 run은 이 순서로 산다. driver가 run을 만들고, 준비 코드가 그 run에 붙고, ML 엔지니어의 학습 함수가 돌고, 정리 코드가 flush하고 떼어낸다. 이 글에서 &lt;strong&gt;워커 준비 단계&lt;/strong&gt;는 학습 함수 앞에서 도는 그 준비 코드를 가리킨다. 학습 함수가 도는 동안 ML 엔지니어가 &lt;code class=&quot;highlighter-rouge&quot;&gt;mlflow.start_run()&lt;/code&gt;을 직접 부르면 run이 둘이 되거나, rank마다 같은 지표를 중복 기록하게 된다.&lt;/p&gt;
+
+&lt;p&gt;로컬 경로에서처럼 사용자가 &lt;code class=&quot;highlighter-rouge&quot;&gt;start_run()&lt;/code&gt;을 직접 부르게 두면 되지 않을까 싶기도 하다. 로컬에서는 실제로 그렇게 둔다. 제출 경로에서 그렇게 두지 않는 이유는 run이 프로세스 단위이기 때문이다. 워커 4개가 각자 부르면 run이 4개 생기고, 하나로 모으려면 워커보다 먼저 존재하는 driver가 만들어 id를 나눠 줘야 하는데, 이걸 ML 엔지니어가 인지하고 변경해 줘야 한다. 그리고 학습 코드가 OOM 등의 이유로 죽으면 자기 run을 FAILED로 표시할 수 없다. 잡의 시작과 끝을 아는 플랫폼 쪽이 run을 소유해야 상태가 맞는다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;플랫폼이 처리하는 것&lt;/th&gt;
+      &lt;th&gt;SDK가 노출하는 것&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;run 생성(driver)과 워커의 run 부착&lt;/td&gt;
+      &lt;td&gt;스칼라 &lt;code class=&quot;highlighter-rouge&quot;&gt;log_metric&lt;/code&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;rank 0만 기록하도록 게이트&lt;/td&gt;
+      &lt;td&gt;파라미터 &lt;code class=&quot;highlighter-rouge&quot;&gt;log_params&lt;/code&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;MLFLOW_RUN_ID&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;MLFLOW_TRACKING_URI&lt;/code&gt;를 전 워커에 전파&lt;/td&gt;
+      &lt;td&gt;이미지·파일 &lt;code class=&quot;highlighter-rouge&quot;&gt;log_artifact_*&lt;/code&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;아티팩트 목적지(오브젝트 스토리지) 해소&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;start_run&lt;/code&gt; (로컬에서만 run 생성, 제출에서는 부착)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;종료 시 flush → detach 순서&lt;/td&gt;
+      &lt;td&gt;전 rank 집계 &lt;code class=&quot;highlighter-rouge&quot;&gt;log_metrics_collective&lt;/code&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;참고: rank 0 기록 게이트&lt;/p&gt;
+
+  &lt;p&gt;표의 rank 0 게이트는 학습 지표 이야기다. 동기 데이터 병렬에서는 rank마다 파라미터가 같고 검증 지표도 보통 rank 0이 모아서 계산하므로, 전 rank가 &lt;code class=&quot;highlighter-rouge&quot;&gt;log_metric&lt;/code&gt;을 부르면 같은 키, 같은 step에 같은 값이 워커 수만큼 쌓인다. 그래서 SDK의 기록 함수는 rank 0이 아니면 아무 일도 하지 않는다. rank마다 값이 다른 지표(로컬 배치의 loss, 처리량 등)를 위해서는 전 rank가 함께 불러 mean·sum·max로 모은 뒤 rank 0이 한 번 기록하는 &lt;code class=&quot;highlighter-rouge&quot;&gt;log_metrics_collective&lt;/code&gt;가 따로 있다.&lt;/p&gt;
+
+  &lt;p&gt;뒤에서 다룰 시스템 메트릭은 이 둘과 다르다. rank마다 값이 다를 수 있고 모을 이유도 없어서, 워커마다 자기 이름을 붙여 따로 기록한다. 같은 노드의 워커끼리 노드 값이 겹치는 문제(다음 글의 노드 계열의 중복)는 그 위에서 생기는 별개 이야기다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;sequenceDiagram
+    participant D as driver (head)
+    participant P as 워커 준비 단계 (플랫폼)
+    participant U as 학습 함수 (ML 엔지니어)
+    participant S as MLflow 서버
+    D-&amp;gt;&amp;gt;S: run 생성
+    D-&amp;gt;&amp;gt;P: MLFLOW_RUN_ID 전파
+    P-&amp;gt;&amp;gt;S: rank 0만 run 부착
+    P-&amp;gt;&amp;gt;U: 학습 함수 호출
+    U-&amp;gt;&amp;gt;S: tracking.log_metric(...)
+    U--&amp;gt;&amp;gt;P: 반환
+    P-&amp;gt;&amp;gt;S: flush, detach
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;즉 “ML 엔지니어가 함수를 부르면, 어느 프로세스가 어느 run에 어떤 이름으로 쓰고 언제 정리할지는 플랫폼이 정한다”는 분업이다. 플랫폼에 제출된 run은 전부 이 표면으로 기록되고 있고, 인터랙티브 세션의 로컬 실험도 같은 함수를 쓴다.&lt;/p&gt;
+
+&lt;h2 id=&quot;요구사항&quot;&gt;요구사항&lt;/h2&gt;
+
+&lt;p&gt;이 위에 신규 요구사항이 들어왔다. &lt;strong&gt;학습 지표 옆에 시스템 메트릭도 기록해서 같은 화면에서 보고 싶다&lt;/strong&gt;는 것이다. 배경이 있다. 플랫폼에 제출한 실험이 OOM으로 실패했고, 어떤 상황에서 죽는지 loss 곡선과 나란히 놓고 보고 싶다는 것이다.&lt;/p&gt;
+
+&lt;p&gt;여기서 경계를 하나 그어 두자. OOM 자체는 플랫폼이 대신 막아 줄 영역이 아니다. 배치 크기, 모델 크기, 데이터 로더의 워커 수 등은 학습 코드가 정한다. 플랫폼이 하는 일은 컨테이너에 한도를 걸고(cgroup), 한도를 넘으면 죽었다는 사실을 알려 주는 것까지다. 다만 &lt;strong&gt;어디까지 썼는지를 올바르게 보여 주는 것&lt;/strong&gt;은 플랫폼 몫이다. 이 요구는 정확히 그 몫을 달라는 것이었다.&lt;/p&gt;
+
+&lt;h2 id=&quot;레퍼런스와-검토한-대안&quot;&gt;레퍼런스와 검토한 대안&lt;/h2&gt;
+
+&lt;p&gt;학습 지표와 하드웨어 지표를 같은 run에 두는 것은 실험 추적 도구들이 기본으로 제공하는 기능이다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;MLflow allows users to log system metrics including CPU stats, GPU stats, memory usage, network traffic, and disk usage during the execution of an MLflow run.
+— &lt;a href=&quot;https://mlflow.org/docs/latest/ml/tracking/system-metrics/&quot;&gt;MLflow System Metrics&lt;/a&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;wandb automatically logs system metrics every 15 seconds.
+— &lt;a href=&quot;https://docs.wandb.ai/models/ref/python/experiments/system-metrics&quot;&gt;W&amp;amp;B System Metrics&lt;/a&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;brs&gt;
+
+다른 안도 있었다. pod 관점의 자원 사용량은 플랫폼에서 운영 중인 Grafana의 워크로드 대시보드에 이미 있다. cAdvisor가 노출하는 `container_memory_working_set_bytes`를 pod 한도와 나란히 그리는 패널이다.
+
+&amp;gt; 이런 패널을 읽는 예는 [FFmpeg 튜닝 실험 글](/dev/Dev-FFmpeg-CPU-04-02/)에 있다.
+
+그러니 MLflow run 페이지에 Grafana 링크를 달아 주면 되지 않을까. 
+
+충분히 가능한 대안이지만, 세 가지 이유로 채택하지 않았다.
+
+- **편의성**: ML 엔지니어가 가장 자주 보는 화면은 MLflow다. 실험 하나를 보려고 두 화면을 오가야 하고, Grafana 대시보드 읽는 법까지 익혀야 한다. 실제로 그렇게 안내한 적이 있었는데 잘 쓰이지 않았다
+- **대조의 번거로움**: MLflow 차트의 x축은 기록할 때 넘긴 `step`(epoch든 iteration이든 학습 코드가 정한 정수)이고 Grafana는 벽시계 시각 축이다. &quot;이 step에서 메모리가 얼마였나&quot;를 맞춰 보려면 매번 시각을 환산해야 한다
+- **보존 기간**: Grafana가 보여 주는 값은 Prometheus에 있고, 이 클러스터의 Prometheus 보존 기간은 10일이다(`--storage.tsdb.retention.time=10d`. 기본값은 15일). 며칠짜리 run을 몇 주 뒤에 다시 보면 이미 없다. Prometheus 보존 기간을 늘릴 수도 있지만, 그것은 실험 몇 개를 위해 클러스터 전체의 시계열을 다 오래 들고 있는 일이다
+  - 뒤집어 말하면 **실험 기록과 시스템 메트릭의 보존 기간이 서로 맞아야 한다.** loss 곡선은 MLflow에 남는데 그 옆에 둘 자원 사용량이 열흘 뒤 사라지면, 한 달 뒤 OOM run을 다시 열었을 때 절반만 남는다. MLflow는 run 지표에 보존 기간을 두는 설정 자체가 없어서(3.15 기준. 보존 설정은 트레이스 보관에만 있고, `mlflow gc`는 삭제 표시된 run만 정리한다) run과 지표의 수명이 같다. 이 서버에서 지표를 가진 가장 오래된 run은 196일 전 것인데 시계열이 그대로 조회된다. 시스템 메트릭을 MLflow에 넣으면 이 조건이 저절로 맞는다
+
+그래서 MLflow가 이미 제공하는 시스템 메트릭 기능을 SDK에 얹기로 했다. 방식은 [앞서 본 기록 표면의 분업](#기록-표면의-분업) 그대로다. ML 엔지니어는 함수 하나를 부르고, 어느 프로세스가 어느 run에 어떤 이름으로 쓸지는 플랫폼이 정한다. 함수 하나를 추가하고 켤 프로세스만 고르면 끝일 것 같았다.
+
+그런데 시스템 메트릭은 loss와 성질이 다르다. loss는 코드가 계산해 넘기는 값이라 어디서 부르든 같지만, 시스템 메트릭은 재는 프로세스가 어디에 있느냐에 따라 값이 달라진다. 그리고 제출 경로에서 그 프로세스는 컨테이너 안에 있다. 이 글은 여기서 마주친 문제를 다룬다. pod 안에서 잰 CPU·메모리가 왜 노드 값으로 기록되는지다. 그것을 지표 이름으로 드러내고 cgroup 수집기를 더한 설계와 구현은 다음 글에서 다룬다.
+
+&lt;br /&gt;
+
+# MLflow 시스템 메트릭의 동작 원리
+
+## 활성화와 기록 지표
+
+MLflow 시스템 메트릭 기록은 세 가지 방법으로 활성화할 수 있다.
+
+```python
+# 1. 프로세스 전역
+mlflow.enable_system_metrics_logging()
+# 2. run 단위
+mlflow.start_run(log_system_metrics=True)
+# 3. 환경변수
+# MLFLOW_ENABLE_SYSTEM_METRICS_LOGGING=true
+```
+
+&amp;gt; By default, system metrics are sampled every 10 seconds and are directly logged after sampling.
+&amp;gt; — [MLflow System Metrics](https://mlflow.org/docs/latest/ml/tracking/system-metrics/)
+
+기록되는 지표는 `system/` 접두 아래 13계열이다. 이 목록은 MLflow의 기본값이자 전부다. 어떤 계열을 켤지 고르는 옵션은 없고, 조절할 수 있는 것은 샘플링 주기와 표본 수뿐이다. GPU 계열만 그 프로세스에 보이는 GPU 장수만큼 5계열씩 늘어난다. 컨테이너에서는 할당받은 장수이고 베어 호스트에서는 노드에 장착된 장수라, 아래 표는 GPU가 1장 보일 때 기준이다.
+
+| 계열 | 키 | 개수 |
+| --- | --- | --- |
+| CPU | `cpu_utilization_percentage` | 1 |
+| 메모리 | `system_memory_usage_megabytes`, `system_memory_usage_percentage` | 2 |
+| 디스크 | `disk_usage_megabytes`, `disk_usage_percentage`, `disk_available_megabytes` | 3 |
+| 네트워크 | `network_receive_megabytes`, `network_transmit_megabytes` | 2 |
+| GPU | `gpu_0_utilization_percentage`, `gpu_0_memory_usage_*`(2), `gpu_0_power_usage_*`(2) | 5 × 장수 |
+
+`gpu_0_`의 0은 rank가 아니라 **그 프로세스에 보이는 장치의 인덱스**다. MLflow 원본 코드가 `nvmlDeviceGetCount()`로 센 개수만큼 `f&quot;gpu_{i}_...&quot;`를 만든다. 
+
+## 측정 위치
+
+시스템 메트릭이 어디서 측정되는지를 정확히 해 두자. 이것이 이 글이 다루고자 하는 문제의 출발점이다.
+
+MLflow의 `log_metric`은 호출한 스레드가 서버에 REST 요청을 보내는 것이다. 기본은 동기 호출이고, `MLFLOW_ENABLE_ASYNC_LOGGING`을 켜면 별도 큐 스레드가 보낸다. 어느 쪽이든 값은 호출자가 넘긴 것이고, MLflow는 측정하지 않는다.
+
+시스템 메트릭은 다르다. `start_run(log_system_metrics=True)`가 실행되는 자리에서 `SystemMetricsMonitor` 객체가 만들어지고([fluent.py](https://github.com/mlflow/mlflow/blob/v3.15.1/mlflow/tracking/fluent.py#L691-L710)), `start()`가 daemon 스레드 하나를 띄운다.
+
+MLflow 3.15.1 기준 원본 코드는 이렇다([system_metrics_monitor.py](https://github.com/mlflow/mlflow/blob/v3.15.1/mlflow/system_metrics/system_metrics_monitor.py#L105-L150)).
+
+```python
+# mlflow/system_metrics/system_metrics_monitor.py (발췌)
+def start(self):
+    self._process = threading.Thread(
+        target=self.monitor, daemon=True, name=&quot;SystemMetricsMonitor&quot;,
+    )
+    self._process.start()
+
+def monitor(self):
+    while not self._shutdown_event.is_set():
+        for _ in range(self.samples_before_logging):
+            self.collect_metrics()
+            self._shutdown_event.wait(self.sampling_interval)
+            run = MlflowClient(self._tracking_uri).get_run(self._run_id)
+            if run.info.status != &quot;RUNNING&quot;:
+                return
+        metrics = self.aggregate_metrics()
+        self.publish_metrics(metrics)
+```
+
+이 스레드는 **`start_run`을 부른 프로세스 안**에 산다. MLflow 서버가 재는 것도 아니고, 노드에 뜬 에이전트가 재는 것도 아니다. 그러니 `start_run`을 부르는 프로세스마다 스레드가 하나씩 생기고, 각 스레드는 자기가 사는 프로세스의 환경에서 잰다.
+
+```mermaid
+graph TB
+    subgraph WHERE[&quot;프로세스가 사는 곳 (베어 호스트 또는 컨테이너)&quot;]
+        subgraph PROC[&quot;start_run을 부른 프로세스 (학습 프로세스)&quot;]
+            L[&quot;학습 루프&quot;] --&amp;gt;|&quot;log_metric(loss)&lt;br /&gt;값은 호출자가 넘긴다&quot;| API[&quot;MLflow 클라이언트&quot;]
+            T[&quot;SystemMetricsMonitor&lt;br /&gt;daemon 스레드&quot;]
+        end
+        T --&amp;gt;|&quot;10초마다 잰다&quot;| M[&quot;이 프로세스가 사는 곳의&lt;br /&gt;CPU · 메모리 · 디스크 · 네트워크 · GPU&quot;]
+    end
+    API --&amp;gt; S[&quot;MLflow 서버&quot;]
+    T --&amp;gt;|&quot;log_batch&quot;| S
+```
+
+제출 경로에서 이 프로세스는 Ray 워커 pod의 컨테이너 안이다. 로컬 경로에서는 베어 호스트이거나 인터랙티브 세션 pod다. **같은 코드가 어디서 도느냐에 따라** 스레드가 보는 세계가 달라진다.
+
+## 측정 수단
+
+어디서 재는지를 정했으니 다음은 무엇으로 재는지다. 그 스레드가 값을 어디서 얻는가. MLflow 클라이언트에도, 서버에도 측정 코드는 없다. `SystemMetricsMonitor`는 수집기 리스트를 들고 주기적으로 부를 뿐이다([원본](https://github.com/mlflow/mlflow/blob/v3.15.1/mlflow/system_metrics/system_metrics_monitor.py#L68-L71)).
+
+```python
+# mlflow/system_metrics/system_metrics_monitor.py (발췌)
+self.monitors = [CPUMonitor(), DiskMonitor(), NetworkMonitor()]
+if gpu_monitor := self._initialize_gpu_monitor():
+    self.monitors.append(gpu_monitor)
+```
+
+실제 측정은 각 수집기가 psutil과 pynvml에 위임한다([cpu_monitor.py](https://github.com/mlflow/mlflow/blob/v3.15.1/mlflow/system_metrics/metrics/cpu_monitor.py), [gpu_monitor.py](https://github.com/mlflow/mlflow/blob/v3.15.1/mlflow/system_metrics/metrics/gpu_monitor.py)).
+
+```python
+# mlflow/system_metrics/metrics/cpu_monitor.py (발췌)
+def collect_metrics(self):
+    cpu_percent = psutil.cpu_percent()
+    self._metrics[&quot;cpu_utilization_percentage&quot;].append(cpu_percent)
+
+    system_memory = psutil.virtual_memory()
+    self._metrics[&quot;system_memory_usage_megabytes&quot;].append(system_memory.used / 1e6)
+    self._metrics[&quot;system_memory_usage_percentage&quot;].append(
+        system_memory.used / system_memory.total * 100
+    )
+```
+
+디스크는 `psutil.disk_usage(os.sep)`, 네트워크는 `psutil.net_io_counters()`, GPU는 `pynvml.nvmlDeviceGetHandleByIndex(i)`로 얻은 핸들이다. MLflow는 psutil을 의존성에 넣지 않았다는 점도 문서에 명시되어 있다.
+
+&amp;gt; To log system metrics in MLflow, please install `psutil`. We explicitly don't include `psutil` in MLflow's dependencies because `psutil` wheel is not available for linux aarch64, and building from source fails intermittently.
+&amp;gt; — [MLflow System Metrics, Extra Dependencies](https://mlflow.org/docs/latest/ml/tracking/system-metrics/#extra-dependencies)
+
+그리고 psutil은 리눅스에서 파일을 읽는다. `cpu_percent()`는 `/proc/stat`, `virtual_memory()`는 `/proc/meminfo`, `net_io_counters()`는 `/proc/net/dev`, `disk_usage('/')`는 `statvfs('/')`다. [Everything is a File 글](/cs/CS-Everything-is-a-File/#시스템-전체-정보)에서 `/proc` 루트에 시스템 전체 정보가 파일로 놓이는 구조를 다룬 적이 있는데, 그 글의 Kubernetes pod 모니터링 예시가 읽는 파일이 바로 `/proc/stat`과 `/proc/net/dev`다.
+
+## 종합 측정 구조
+
+정리하면 사슬은 이렇다. **MLflow 스레드 → psutil/pynvml → `/proc` 파일과 NVML → 커널.** [측정 위치](#측정-위치) 절의 그림에서 스레드 아래를 채우면 이렇게 된다.
+
+```mermaid
+graph TB
+    subgraph NODE[&quot;노드 (호스트 커널)&quot;]
+        subgraph POD[&quot;워커 pod / 컨테이너&quot;]
+            subgraph PROC[&quot;학습 프로세스&quot;]
+                L[&quot;학습 루프&quot;] --&amp;gt;|&quot;log_metric(loss)&quot;| API[&quot;MLflow 클라이언트&quot;]
+                T[&quot;SystemMetricsMonitor&lt;br /&gt;daemon 스레드&quot;] --&amp;gt; PS[&quot;psutil&quot;]
+                T --&amp;gt; NV[&quot;pynvml&quot;]
+            end
+            PS --&amp;gt;|&quot;읽기&quot;| PROC_FS[&quot;/proc/stat&lt;br /&gt;/proc/meminfo&lt;br /&gt;/proc/net/dev&lt;br /&gt;statvfs('/')&quot;]
+            NV --&amp;gt; NVML[&quot;NVML&quot;]
+        end
+    end
+    API --&amp;gt; S[&quot;MLflow 서버&quot;]
+    T --&amp;gt;|&quot;log_batch&quot;| S
+```
+
+MLflow가 기록하는 값은 결국 &quot;그 프로세스가 사는 곳에서 `/proc` 파일을 열면 무엇이 보이는가&quot;로 결정된다.
+
+&lt;br /&gt;
+
+# 현상: pod 안에서 잰 값은 노드 값
+
+앞의 원리를 컨테이너 환경에 놓으면 세 가지가 걸린다. psutil과 pynvml이 컨테이너 안에 있어야 한다는 **의존성**, 누가 어디서 켜느냐는 **활성화 지점**, 그리고 컨테이너 안에서 잰 값이 누구의 것이냐는 **측정 범위**다. 앞의 둘은 플랫폼 쪽 문제라 다음 글에서 다루고, 이 글은 셋째를 따라간다.
+
+컨테이너는 자원이 격리되어 보인다. 컨테이너 안에서 `nvidia-smi`를 치면 할당받은 GPU만 보이고, `ip addr`를 치면 자기 인터페이스만 보인다. 그렇다면 MLflow 시스템 메트릭이 컨테이너 안에서 켜지면 그 컨테이너의 사용량을 재는가. 달리 말해, psutil이 읽는 `/proc` 파일에도 같은 격리가 적용되는가.
+
+계열마다 답이 다르다. 그리고 그 사실이 이름에 드러나지 않는다.
+
+## 실측
+
+`system_memory_usage_*`가 무엇을 재는지 MLflow에 기록된 값으로 직접 확인했다. 이 확인을 위해 학습 하나를 실측용으로 제출해 돌렸다. rank 0 워커에서 MLflow의 `enable_system_metrics_logging()`을 직접 불러 시스템 메트릭을 켠 채로다. 16 GPU, 109시간, 1rank, 13계열, 38,867 step.
+
+그 run의 System metrics 탭이다. `system/` 접두 아래 13계열이 있고, GPU는 `gpu_0_` 다섯 계열뿐이며 이름에 rank 표기는 없다.
+
+![MLflow run의 System metrics 탭 위쪽. cpu_utilization_percentage가 13% 언저리를 오가고, disk 3계열과 gpu_0_ 5계열이 보인다](https://sirzzang.github.io//assets/images/mlflow-system-metric-logging-01.png){: .align-center}
+
+![같은 탭 아래쪽. network 2계열과 함께 system_memory_usage_megabytes가 109시간 동안 6만 MB에서 14만 MB 넘게 올라가고, system_memory_usage_percentage가 10%에서 27%로 오른다](https://sirzzang.github.io//assets/images/mlflow-system-metric-logging-02.png){: .align-center}
+
+오른쪽 아래 `system_memory_usage_megabytes`를 보자. 6만 MB에서 시작해 14만 MB를 넘는다. 이 run의 워커 pod 한도는 100 GiB(107,374 MB)였다. 컨테이너가 도달할 수 없는 값이 &quot;사용량&quot;으로 찍혀 있다. 
+
+이 값이 무엇인지 역산해 보자. 방법은 간단하다. `system_memory_usage_megabytes`와 `system_memory_usage_percentage`는 같은 시각에 같은 `psutil.virtual_memory()` 결과에서 나온다. 전자는 `used`, 후자는 `used / total * 100`이다. 두 계열을 step별로 짝지으면 `total`을 역산할 수 있다.
+
+```text
+# 두 계열에서 역산한 total (전 구간 38,867점)
+implied total MB   median=540,576   p05=539,579   p95=541,556
+
+# 그 run이 뜬 노드의 용량
+gpu-node-1 capacity = 540,565 MB   (144 논리 코어)
+```
+
+0.002% 차이로 노드 용량과 일치한다. 이 run의 워커 pod 한도는 100GiB였고, 같은 플랫폼의 다른 레포는 64GiB(65,536 MB)를 쓴다. 어느 쪽과도 관계없는 숫자다. **`system_memory_usage_*`는 pod가 아니라 노드를 잰다.**
+
+## 한도와 나란히 놓으면
+
+화면은 위 캡처 그대로다. 그 값을 워커 한도와 나란히 놓아 보면 이렇게 된다. 값은 위 run의 전 구간 평균이다.
+
+| 지표 | 보이는 값 | 워커 한도가 64GiB·8코어라면 |
+| --- | --- | --- |
+| `system_memory_usage_megabytes` | 132,688 MB | 한도 65,536 MB. **한도의 2배가 넘는 값이 &quot;사용량&quot;으로 보인다** |
+| `system_memory_usage_percentage` | 24.5% | 분모가 노드 540 GB. 한도와 무관 |
+| `cpu_utilization_percentage` | 12.7% | 노드 144코어 대비. 환산하면 약 18코어. 예산 8코어와 비교 불가 |
+
+그런데 이 표의 오른쪽 열은 ML 엔지니어의 화면에 없다. 워커 자원은 제출 설정에 적긴 하지만, 그 값이 컨테이너 한도로 걸린다는 것과 그 한도가 이 지표의 분모와 무관하다는 것까지 알고 차트를 보는 사람은 드물다. 그러니 132 GB가 찍혀도 &quot;내 학습이 그만큼 쓰나 보다&quot;로 읽을 뿐, 한도 64 GiB와 견줘 이상하다고 느낄 계기가 없다. 값이 틀려 보이지 않는다는 것이 이 문제의 성질이다.
+
+한도와 견줘 보면 사용량이 한도보다 크게 나오지만, 그렇다고 측정된 값이 틀린 것은 아니다. 노드 전체가 132 GB를 쓰고 있었다는 뜻이고, 거기엔 같은 노드의 다른 pod와 호스트 프로세스가 전부 들어 있다. 
+
+`cpu_utilization_percentage`도 마찬가지다. `psutil.cpu_percent()`는 노드 전체 논리 코어 대비 백분율이라, 12.7%는 노드의 논리 코어 144개가 그 시간의 12.7%만큼 바빴다는 뜻이다. 코어 18개 분량의 CPU 시간이 노드 전체에서 쓰였다는 것이지, 이 pod의 프로세스가 CPU 시간을 얼마나 받았다는 뜻이 아니다.
+
+## 오판 가능성
+
+문제는 이 값이 요구사항의 배경과 정면으로 부딪친다는 점이다. 
+
+노드 기준 메모리 24.5%를 보면 &quot;여유가 많다&quot;로 읽힌다. 배치를 올려도 되겠다는 판단으로 이어진다. 그렇게 올리면 자기 컨테이너는 64 GiB에서 죽는다. 노드 540 GB의 24.5%는 컨테이너가 도달할 수 없는 숫자다. 값 자체는 틀리지 않았지만, 지표 이름을 곧이곧대로 읽고 판단하면 정확히 반대 방향의 결론에 이른다. 
+
+요구의 출발이 OOM 진단이었다는 점을 고려해 보면, OOM을 피하려고 기록한 지표를 해석한 결과가 오히려 OOM을 부르는 쪽으로 읽히는 셈이다.
+
+메모리만의 문제도 아니다. 13계열 가운데 컨테이너 자기 몫을 재는 것은 GPU 5개와 네트워크 2개뿐이고, CPU·메모리 3개는 노드 값, 디스크 3개는 노드 디스크 값이다. 어느 계열이 무엇을 재는지는 [종합](#종합-한-이름-아래-성질-넷) 절에서 하나씩 가른다.
+
+## 분산학습에서의 복제
+
+여기에 분산학습이 얹히면 문제가 한 번 더 커진다. [학습 플랫폼 구조](#학습-플랫폼-구조) 절에서 한 노드에 워커 pod가 여러 개 뜰 수 있다고 했다. 4워커 제출의 실제 배치를 확인했더니 노드 셋에 2·1·1로 흩어져 있었다. rank 0과 rank 3이 같은 노드였다.
+
+같은 노드에 뜬 두 rank가 각각 시스템 메트릭을 켜면, 둘 다 같은 `/proc/meminfo`를 읽는다. 값이 같다. 그런데 이름은 각각 &quot;rank 0의 메모리&quot;, &quot;rank 1의 메모리&quot;로 붙는다. 노드 하나의 값이 rank 수만큼 복제되어 각각 자기 사용량처럼 보이는 것이다. 워커가 16개면 노드 값이 최대 16번 중복 기록된다.
+
+&lt;br /&gt;
+
+# 원인: /proc은 격리되지 않고, psutil은 /proc만 읽는다
+
+왜 `/proc/meminfo`는 컨테이너 안에서도 노드 값을 보여 주는가. 이 답은 MLflow에도, Kubernetes에도 없다. 원인은 둘이다. 리눅스 커널이 컨테이너를 격리하는 방식, 그리고 psutil이 그 격리되지 않는 파일만 읽는다는 사실이다. 앞의 것부터 본다.
+
+## namespace와 cgroup
+
+컨테이너는 별도의 커널을 갖지 않는다. 호스트 커널의 두 기능, **namespace**와 **cgroup**의 조합이다. namespace가 &quot;무엇이 보이는지&quot;를 제어하고, cgroup이 &quot;얼마나 쓸 수 있는지&quot;를 제어한다. 
+
+&amp;gt; [Pod CPU Limit 배경지식 글](/dev/Dev-FFmpeg-CPU-02/#컨테이너--namespace--cgroup)에서 이 구분을 다룬 적이 있다.
+
+namespace의 정의를 man 페이지에서 가져오면 이렇다.
+
+&amp;gt; A namespace wraps a global system resource in an abstraction that makes it appear to the processes within the namespace that they have their own isolated instance of the global resource.
+&amp;gt; — [namespaces(7)](https://man7.org/linux/man-pages/man7/namespaces.7.html)
+
+핵심은 &quot;a global system resource&quot;다. namespace는 **자원 종류별로** 감싼다. 리눅스에는 8종이 있다.
+
+| namespace | 격리하는 것 |
+| --- | --- |
+| mount | 마운트 포인트 |
+| PID | 프로세스 ID |
+| network | 네트워크 장치, 스택, 포트, 라우팅 |
+| IPC | System V IPC, POSIX 메시지 큐 |
+| UTS | 호스트명, 도메인명 |
+| user | UID, GID |
+| cgroup | cgroup 루트 디렉토리 |
+| time | 부팅 시각, 단조 시계 |
+
+이 목록에 &quot;메모리 통계&quot;나 &quot;CPU 통계&quot;는 없다. namespace가 감싸는 것은 **네트워크 스택, 마운트 트리, PID 공간 같은 커널 객체**이지, &quot;이 기계의 메모리가 얼마나 쓰이고 있나&quot; 같은 **시스템 전체 통계가 아니다**. 컨테이너 몫의 사용량을 세는 것은 namespace가 아니라 cgroup이다. 그래서 통계가 파일로 나오는 창도 둘이다. 시스템 전체 통계는 `/proc`(`/proc/meminfo`, `/proc/stat`)이 내보이고, cgroup 단위의 사용량과 한도는 `/sys/fs/cgroup`(`memory.current`, `memory.max`, `cpu.stat`)이 내보인다. 어느 창을 읽느냐가 곧 무엇을 재느냐다.
+
+## 격리되는 파일, 격리되지 않는 파일
+
+두 창 가운데 psutil이 읽는 것은 `/proc` 쪽이다. `/sys/fs/cgroup`은 애초에 cgroup마다 디렉토리가 나뉘어 있고, cgroup namespace를 쓰는 이 클러스터에서는 컨테이너 안에서 자기 cgroup이 루트로 보이므로 따질 것이 없다. 
+
+문제는 `/proc`이고, 그 파일마다 왜 다른지를 보려면 `/proc`이 무엇인지부터 떠올려야 한다. `/proc`은 디스크에 없다. [Everything is a File 글](/cs/CS-Everything-is-a-File/#파일-시스템-계층)에서 다룬 대로 커널이 런타임에 만드는 가상 파일 시스템이라, 파일을 읽을 때마다 커널이 그 순간의 상태를 조회해 내용을 만들어 돌려준다. 그러니 컨테이너 안에서 무엇이 보이는가는 **그 파일의 내용을 만드는 커널 코드가 어떤 namespace를 참조하는가**로 정해진다. `/proc/net/dev`를 만드는 코드는 읽는 프로세스가 속한 network namespace의 인터페이스 목록을 돌고, `/proc/meminfo`를 만드는 코드는 커널 전역의 메모리 통계를 읽는다. 같은 `/proc` 아래 있어도 한쪽은 격리되고 한쪽은 격리되지 않을 수 있는 이유다.
+
+`/proc/net/dev`는 격리된다. 네트워크 인터페이스 통계는 network namespace 소속이라, 컨테이너 안에서 열면 자기 namespace의 인터페이스만 나온다. [네임스페이스 네트워킹 글](/cs/CS-Container-Networking-Namespace/)에서 `ip netns exec`로 각 namespace가 자기 인터페이스만 보는 것을 실습했다. 그래서 MLflow의 `network_*` 계열은 pod 값이다. 아래 실측 pod 안에서 `/proc/net/dev`에는 `lo`와 `eth0` 두 줄뿐이었다. 같은 노드에서 hostNetwork로 뜬 컨테이너에서 같은 파일을 열면 물리 NIC 네 개와 calico 가상 인터페이스 십여 개가 전부 나온다.
+
+`/proc/stat`과 `/proc/meminfo`는 격리되지 않는다. 시스템 전체의 CPU 시간 누적과 메모리 총량·사용량은 어떤 namespace에도 속하지 않는 전역 정보다. 컨테이너 안에서 열어도 호스트 파일 그대로다. 컨테이너 안에서 `free -m`이나 `top`을 쳤을 때 노드 전체 메모리가 보이는 것과 같은 현상이고, Docker에서도 똑같다. Kubernetes와는 무관하다.
+
+&lt;br /&gt;
+
+이 사실은 오래됐다. 2014년의 글이 정확히 이 문장을 쓰고 있다.
+
+&amp;gt; Unfortunately `/proc/meminfo`, `/proc/vmstat` and friends are not _containerized_.
+&amp;gt; — [Fabio Kung, Memory inside Linux containers (2014)](https://fabiokung.com/2014/03/13/memory-inside-linux-containers/)
+
+Kubernetes 문서도 kubelet이 `free -m`을 쓰지 않는 이유로 이것을 든다.
+
+&amp;gt; On Linux nodes, the value for `memory.available` is derived from the cgroupfs instead of tools like `free -m`. This is important because `free -m` does not work in a container.
+&amp;gt; — [Kubernetes, Node-pressure Eviction](https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/)
+
+2012년에 `/proc/meminfo`를 memory cgroup 기준으로 보여 주자는 커널 패치가 올라온 적이 있는데(&quot;cgroup and namespaces are used for creating containers but some of information is not isolated/virtualized&quot;), 머지되지 않았다. psutil 메인테이너는 2024년에 Fabio Kung의 글을 인용하며 &quot;The article is from 2014 but it seems nothing has changed&quot;라고 썼다.
+
+&lt;br /&gt;
+
+컨테이너 안에서 두 파일을 나란히 열어 보면 차이가 바로 보인다. 학습 노드(144 논리 코어, 540 GB)에 워커와 같은 한도(메모리 64Gi, CPU 8, GPU 1장)로 pod를 하나 띄워 안에서 읽은 실제 출력이다.
+
+```bash
+# 실측 pod 안. 노드는 커널 5.15, cgroup v2
+$ head -3 /proc/meminfo
+MemTotal:       527895940 kB      # 노드 전체. 540,565 MB
+MemFree:        85196080 kB
+MemAvailable:   506045624 kB
+
+$ free -m | head -2
+               total        used        free      shared  buff/cache   available
+Mem:          515523       17939       83198          10      414385      494185
+
+$ nproc; grep -c '^cpu[0-9]' /proc/stat
+144
+144
+
+$ cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.current
+68719476736                        # 이 컨테이너의 한도. 64 GiB
+46043136                           # 이 컨테이너가 지금 쓰는 양. 46 MB
+$ cat /sys/fs/cgroup/cpu.max
+800000 100000                      # 100ms마다 800ms. 8코어 쿼터
+
+$ python3 -c &quot;import psutil; vm = psutil.virtual_memory(); print(round(vm.total/1e6), round(vm.used/1e6), vm.percent, psutil.cpu_count())&quot;
+540565 22378 4.1 144               # psutil이 보는 total, used, percent, cpu_count. 전부 노드 값
+```
+
+같은 컨테이너 안에서 psutil은 &quot;540 GB 중 22 GB, 4.1%&quot;라고 답하고, cgroup은 &quot;64 GiB 중 46 MB&quot;라고 답한다. 두 답이 같은 프로세스에서 나온다. MLflow의 `CPUMonitor`가 부르는 것은 앞의 것이다.
+
+&amp;gt; **참고**: cgroup namespace는 이름 때문에 오해하기 쉽다. cgroup namespace가 격리하는 것은 `/proc/self/cgroup`에 보이는 cgroup **경로**뿐이다. 위 pod 안에서 `/proc/self/cgroup`은 `0::/`로 자기가 루트인 것처럼 보이지만, 같은 자리에서 연 `/proc/meminfo`는 노드 값이다. 한편 이 문제를 사용자 공간에서 우회하는 도구로 lxcfs가 있다. FUSE 파일시스템으로 `/proc/meminfo`, `/proc/stat` 등을 덮어써 cgroup 값을 보여 준다. README는 목적을 &quot;making Linux containers feel more like a virtual machine&quot;으로 적고 있다. Kubernetes에서는 DaemonSet으로 띄우고 pod에 마운트를 주입하는 방식으로 쓰이지만, 기본 제공은 아니다.
+
+## psutil의 설계
+
+psutil은 시스템 레벨 라이브러리다. &quot;이 프로세스가 사는 컨테이너&quot;라는 개념을 갖고 있지 않고, 갖지 않기로 한 것이 설계다. 컨테이너의 한도는 `/proc`이 아니라 cgroup에 있다. `/sys/fs/cgroup/memory.max`(한도), `memory.current`(현재), `cpu.max`(CPU 쿼터)다. psutil의 `virtual_memory()`는 이 파일들을 읽지 않는다. 버그가 아니다. 이 라이브러리가 답하는 질문이 &quot;이 기계가 얼마나 쓰나&quot;이지 &quot;이 컨테이너가 얼마나 쓰나&quot;가 아닐 뿐이다. 컨테이너 안에서 이 cgroup 파일들을 직접 읽는 예시는 [Everything is a File 글](/cs/CS-Everything-is-a-File/#cgroup-정보-읽기)에 있다. CPU도 같다. [실측 pod](#격리되는-파일-격리되지-않는-파일)에서 `psutil.cpu_count()`와 `nproc`은 둘 다 144를 돌려줬다. `cpu.max`의 8코어 쿼터는 코어 수 어디에도 반영되지 않는다.
+
+&lt;br /&gt;
+
+# 디스크와 GPU: 격리는 되지만 방식이 다르다
+
+CPU·메모리는 격리되지 않는 `/proc`의 문제였다. 나머지 두 계열은 격리가 되긴 하는데, 그 방식이 `/proc` 이야기와 다르다. 디스크는 mount namespace로 격리된 자기 루트 파일시스템을 보지만 용량 숫자는 노드 디스크의 것이고, GPU는 namespace가 아니라 장치 파일로 격리된다.
+
+## 디스크
+
+`disk_*` 계열은 조금 다른 이유로 다른 것을 잰다. `psutil.disk_usage('/')`는 컨테이너의 루트 파일시스템에 `statvfs`를 호출한다. 컨테이너의 `/`는 mount namespace로 격리된 overlay 마운트다. [컨테이너 파일 시스템 글](/cs/CS-Container-Filesystem/)에서 overlay가 lower·upper 디렉토리를 합쳐 merged를 `/`로 만드는 과정을 다뤘다.
+
+문제는 overlay 파일시스템이 `statvfs`에 무엇을 돌려주느냐다. overlay는 자기 용량이 없다. upper 디렉토리가 있는 하위 파일시스템(보통 노드의 ext4)의 값을 그대로 넘긴다. 그래서 `disk_usage_megabytes`와 `disk_available_megabytes`는 노드 디스크의 용량이다. [실측 pod](#격리되는-파일-격리되지-않는-파일) 안에서 `df -h /`는 overlay 1.8 TB 중 970 GB 사용을 보여 줬고, `psutil.disk_usage('/')`도 총 1,888 GB를 돌려줬다. 그 pod가 디스크에 쓴 것은 사실상 없는데도 그렇다. 다만 노드 값이라고 부르기도 애매하다. 그 노드의 컨테이너 저장소가 있는 파티션 하나의 값이지, 학습이 실제로 읽고 쓰는 곳이 아니기 때문이다.
+
+ML 엔지니어 입장에서 이 값은 두 방향으로 오독될 수 있다. NFS로 마운트된 데이터셋의 남은 용량으로 읽거나, 체크포인트를 쓰는 오브젝트 스토리지의 여유로 읽는 것이다. 둘 다 아니다. 이 값이 급격히 오르면 그 노드의 컨테이너 저장소가 차오르고 있다는 뜻이라 플랫폼에는 의미 있는 신호지만, 실험 진단용은 아니다.
+
+## GPU
+
+`gpu_*` 계열은 pod 값이다. 다만 그 이유가 namespace가 아니다. Kubernetes의 NVIDIA device plugin은 pod에 GPU를 할당할 때 `Allocate` 응답으로 해당 장치의 UUID를 `NVIDIA_VISIBLE_DEVICES`에 넣고, 컨테이너 런타임 훅이 그 장치 노드만 컨테이너에 마운트한다. [NVIDIA Device Plugin 글](/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/)에서 이 흐름을 다뤘다. pynvml의 `nvmlDeviceGetCount()`는 그 컨테이너에 마운트된 장치만 센다.
+
+여기서 NVML이 무엇인지 짚고 가자. pynvml이 부르는 NVML은 `libnvidia-ml.so`, 즉 유저 공간 라이브러리다. [디바이스 드라이버 3계층 구조 글](/cs/CS-Linux-Device-Driver/#3계층-구조)에서 본 대로 유저 라이브러리는 장치 파일(`/dev/nvidia*`)을 열어 커널 모듈(`nvidia.ko`)에 닿는다. 그러니 **NVML이 셀 수 있는 GPU는 그 컨테이너에 장치 파일이 들어와 있는 GPU**다. [Everything is a File 글의 장치 주입 확인](/cs/CS-Everything-is-a-File/#장치-주입-확인)처럼 컨테이너 안에서 `ls -l /dev/nvidia*`를 치면 NVML이 보게 될 목록이 그대로 나온다.
+
+[실측 pod](#격리되는-파일-격리되지-않는-파일)(GPU 1장 할당)에서 확인한 모습이다.
+
+```bash
+# 실측 pod 안. 노드에는 GPU가 4장 있다
+$ ls -l /dev/nvidia*
+crw-rw-rw- 1 root root 195,   3 /dev/nvidia3        # 노드의 3번 장치 하나만 들어와 있다
+crw-rw-rw- 1 root root 195, 255 /dev/nvidiactl
+crw-rw-rw- 1 root root 506,   0 /dev/nvidia-uvm
+$ nvidia-smi -L
+GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition (UUID: GPU-cd61...)
+$ python3 -c &quot;import pynvml; pynvml.nvmlInit(); print(pynvml.nvmlDeviceGetCount())&quot;
+1
+```
+
+노드의 3번 장치가 컨테이너 안에서는 `GPU 0`이고, NVML은 1을 센다. 이 클러스터의 device plugin은 환경변수가 아니라 장치 파일 마운트로 GPU를 넘긴다. 컨테이너 안의 `NVIDIA_VISIBLE_DEVICES`는 `void`였다.
+
+GPU에는 격리처럼 보이는 장치가 하나 더 있다. `CUDA_VISIBLE_DEVICES`다. 이 환경변수로 GPU를 골라 쓰는 데 익숙하다 보니, 컨테이너에서 1장만 보이는 것도 이것 때문이 아니냐는 의문이 들 수 있다. 만약 그렇다면 시스템 메트릭의 GPU 계열은 장치 파일이 아니라 사용자가 바꿀 수 있는 환경변수 하나에 기대는 셈이 된다. 그래서 확인했다. `CUDA_VISIBLE_DEVICES`는 CUDA 런타임(`libcuda.so`)이 읽는 환경변수이고, NVML은 CUDA 런타임이 아니다. GPU 4장 호스트에서 `CUDA_VISIBLE_DEVICES`를 `0`, `1`, `0,2`로 바꿔 가며 `nvmlDeviceGetCount()`를 불러 봤더니 어느 경우에도 4가 나왔다. **NVML은 `CUDA_VISIBLE_DEVICES`를 무시한다.** pod 안에서 1장만 보이는 것은 장치 파일이 하나만 들어와서다. 이 사실은 뒤에서 한 번 더 쓰인다. 컨테이너 밖 베어 호스트에서는 같은 이유로 NVML이 노드의 GPU를 전부 센다.
+
+이것이 `gpu_0_`의 0이 항상 0인 이유다. 컨테이너마다 GPU가 1장이니 인덱스는 늘 0이고, rank를 구분하는 것은 인덱스가 아니라 이름에 따로 붙일 rank 표기여야 한다.
+
+&lt;br /&gt;
+
+# 종합: 한 이름 아래 성질 넷
+
+13계열을 psutil이 읽는 파일 기준으로 다시 나누면 이렇게 된다.
+
+| 계열 | psutil 호출 | 읽는 것 | 여는 프로세스의 namespace에 따라 내용이 다른가 | 재는 범위 | 같은 노드 rank끼리 |
+| --- | --- | --- | --- | --- | --- |
+| `cpu_utilization_percentage` | `cpu_percent()` | `/proc/stat` | **아니오** | **노드** | 같은 값 |
+| `system_memory_usage_*` | `virtual_memory()` | `/proc/meminfo` | **아니오** | **노드** | 같은 값 |
+| `disk_*` | `disk_usage('/')` | 컨테이너 rootfs `statvfs` | mount ns | **컨테이너 루트 FS** (노드 디스크가 backing) | 같은 값 |
+| `network_*` | `net_io_counters()` | `/proc/net/dev` | 예 (network ns) | **pod** | 다른 값 |
+| `gpu_0_*` | pynvml | NVML | device plugin이 장치 노출 | **그 컨테이너의 GPU** | 다른 값 |
+
+`system/`이라는 하나의 접두 아래 성질이 넷인 계열이 섞여 있다. 노드, 컨테이너 루트 파일시스템, pod, 장치. 이름은 그 사실을 말하지 않는다. 이것이 문제의 정체다.
+
+## 격리와 전 rank 수집
+
+이 표에서 한 가지가 더 읽힌다. &quot;전 rank가 수집한다&quot;는 것의 값어치가 어디서 나오는가다.
+
+| 계열 | 제출 (컨테이너) | 로컬 (베어 호스트) |
+| --- | --- | --- |
+| `gpu_*` | rank마다 다름 (device plugin이 1장씩) | 같음 (NVML이 호스트 전 장치를 센다) |
+| `network_*` | rank마다 다름 (pod netns) | 같음 (호스트 netns 하나) |
+| `cpu_`·`system_memory_` | 같은 노드끼리 같음 | 같음 |
+| `disk_*` | 같은 노드끼리 같음 | 같음 |
+
+제출 경로에서 GPU를 전부 보려면 전 rank가 수집하는 것 외에 방법이 없다. 한 프로세스가 1장만 보기 때문이다. 반면 로컬에서는 컨테이너 격리가 없어 어느 계열도 rank마다 다르지 않다. rank를 늘려도 정보가 늘지 않고 복제만 는다. rank를 늘리는 것 자체가 정보를 늘리는 것이 아니라, **컨테이너 격리가 프로세스마다 다른 것을 보게 만들어서** 늘어나는 것이다. 그래서 플랫폼 SDK는 격리가 없는 환경에서 전 워커 수집 옵션을 받아도 한 줄 안내하고 무시한다.
+
+다만 제출 경로에도 남는 것이 있다. 같은 노드에 뜬 rank끼리는 노드 계열과 루트 파일시스템 계열이 같은 값이다. 이 중복을 어떻게 다루는지는 다음 글의 노드 계열의 중복에서 다룬다.
+
+&lt;br /&gt;
+
+# 더 알아보기: 다른 도구의 대응
+
+같은 문제가 다른 도구에는 어떻게 있는지, 그리고 어떻게 대응했는지를 찾아봤다. 아래는 2026년 9월 초에 각 프로젝트의 문서·소스·이슈 트래커를 직접 확인한 내용이다. 도구들이 빠르게 바뀌는 영역이라 읽는 시점에는 달라져 있을 수 있으니, 링크에서 현재 상태를 확인하자.
+
+## psutil
+
+이 문제의 뿌리는 psutil에 있고, psutil은 알고 있다. 2022년 4월에 열린 이슈가 2026년 9월 현재도 열려 있다.
+
+&amp;gt; To my understanding from this ticket (#2100) and #2076, reading `/proc` from within the container returns info about the host and not the container. And that is a problem. I would say it's the container that is at fault here, but anyway.
+&amp;gt; — [giampaolo/psutil#2100](https://github.com/giampaolo/psutil/issues/2100), 메인테이너 코멘트 (2024-11)
+
+닫히지 않는 이유도 이슈에 있다. `/sys/fs/cgroup`을 읽자는 제안에 대해 &quot;그 경로는 Docker 전용이고 다른 컨테이너 런타임이 있다&quot;, &quot;컨테이너 안에 있는지, 어떤 컨테이너인지를 신뢰성 있게 감지할 표준이 없다&quot;는 반론이 붙어 있다. 2017년에 같은 내용으로 열린 이슈는 2026년 8월에 이 이슈의 중복으로 닫혔다.
+
+psutil이 그대로이니 psutil 위에 얹힌 파이썬 도구들도 그대로다. MLflow에는 2024년 6월에 &quot;컨테이너 안에서 psutil이 노출하는 시스템 메트릭은 학습의 실제 자원 소비를 반영하지 않는다&quot;는 기능 요청([mlflow#12365](https://github.com/mlflow/mlflow/issues/12365))이 열렸고, 메인테이너가 긍정적으로 답했지만 구현은 없다. ClearML의 리소스 모니터와 Aim의 수집기도 `psutil.virtual_memory()`를 그대로 쓴다.
+
+이름이 정직한 예도 있다. Lightning의 `DeviceStatsMonitor`는 docstring에서 `cpu_percent`를 &quot;System-wide CPU utilization (%)&quot;, `cpu_vm_percent`를 &quot;System-wide virtual memory (RAM) utilization (%)&quot;으로 적는다. 값은 노드 값이지만 이름이 그렇다고 말한다. HuggingFace Trainer의 메모리 추적은 `psutil.Process().memory_info().rss`, 즉 프로세스 RSS를 본다. 노드도 컨테이너도 아닌 제3의 관점이다.
+
+## 도구별 대응
+
+| 도구 | CPU·메모리 퍼센트의 분모 | 방식 | 확인 기준 |
+| --- | --- | --- | --- |
+| MLflow | 노드 | psutil 그대로. 키 이름이 `system_`이라 이름은 범위를 말한다 | 3.15 소스 |
+| W&amp;amp;B | **cgroup v2 한도** (컨테이너일 때) | 리눅스 컨테이너에서 cgroup v2 한도를 분모로. 옵트아웃 `x_stats_no_cgroup` | v0.27.0, 2026-05 |
+| Ray | cgroup 한도 (노드 메모리) / 호스트 (호스트 메모리) | 두 관점을 **다른 함수, 다른 키**로 노출 | master 소스 |
+| Lightning | 노드 | psutil 그대로. docstring이 &quot;System-wide&quot;라고 명시 | master 소스 |
+
+W&amp;amp;B의 변화가 가장 최근이다. 2026년 4월 30일에 머지된 PR이 5월 14일 0.27.0에 들어갔다.
+
+&amp;gt; Changed CPU and memory system metric percentages in Linux containers to use cgroup v2 resource limits instead of host node totals. Set the private `x_stats_no_cgroup` setting to `True` to opt out
+&amp;gt; — [wandb CHANGELOG 0.27.0](https://github.com/wandb/wandb/blob/main/CHANGELOG.md)
+
+구현 파일의 머리 주석이 문제를 이 글과 같은 말로 적고 있다.
+
+&amp;gt; This file detects cgroup v2 limits to use as denominators for the system memory and CPU percentages. Without these, a containerized run reports usage as a fraction of the host node, which produces misleading numbers when the cgroup limit is much smaller than the host.
+&amp;gt; — [wandb `core/internal/monitor/cgroup.go`](https://github.com/wandb/wandb/blob/main/core/internal/monitor/cgroup.go)
+
+설계 판단 몇 가지가 참고할 만하다. cgroup v1은 의도적으로 지원하지 않는다(&quot;v2 has been the default in every major distro for years&quot;). 부모 cgroup이 아니라 프로세스가 실제로 속한 leaf cgroup만 읽는다. 부모의 `memory.current`에는 형제 워크로드가 섞이기 때문이다. CPU는 `cpu.max` 쿼터와 `Cpus_allowed_list`의 크기 중 작은 쪽을 쓴다. 그리고 이 판단의 근거로 Go 런타임을 직접 인용한다(&quot;The Go runtime's cgroup-aware GOMAXPROCS makes the same call&quot;).
+
+한 가지 눈에 띄는 것은, 코드는 바뀌었는데 문서는 아직이라는 점이다. W&amp;amp;B 시스템 메트릭 레퍼런스는 2026년 9월 기준으로 Memory Percent를 &quot;the total system memory usage as a percentage of the total available memory&quot;로 설명하고 있고, cgroup이나 container라는 단어가 없다. 코드가 고쳐져도 이름과 문서가 따라오지 않으면 사용자는 여전히 오해한다. 다음 글에서 지표 이름에 집착하는 이유가 여기 있다.
+
+Ray는 훨씬 전부터 cgroup을 읽었다. `get_system_memory()`가 `/sys/fs/cgroup/memory/memory.limit_in_bytes`(v1)와 `/sys/fs/cgroup/memory.max`(v2)를 확인하고, 주석에 &quot;Try to accurately figure out the memory limit if we are in a docker container&quot;라고 적어 두었다. Ray의 OOM 방지 메모리 모니터도 이 값을 쓴다. 흥미로운 것은 대시보드 리포터다. `_get_mem_usage()`는 cgroup 기준 총량을, `_get_host_mem_usage()`는 `psutil.virtual_memory()`를 쓰고, 둘을 `cgroup_mem`과 `host_mem`이라는 다른 키로 내보낸다. 두 관점을 이름으로 분리한다는 이 글의 결론을 Ray는 이미 하고 있었다.
+
+## 런타임의 선례
+
+관측 도구보다 먼저 이 길을 걸은 것은 언어 런타임들이다.
+
+- **JVM**: JDK 10에서 컨테이너 감지와 자원 설정이 들어갔고(JDK-8146115, 8u191에도 백포트) `-XX:+UseContainerSupport`가 기본 on이다. 그 전의 JVM은 힙 크기를 &quot;기계의 물리 메모리&quot;에서 계산했다
+- **.NET**: GC 문서가 &quot;If the process runs inside an environment with a set memory limit (for example, a container), that limit is treated as the total physical memory&quot;라고 적는다. 힙 상한 기본값은 그 한도의 75%다
+- **Go**: 1.25부터 cgroup CPU 쿼터를 `GOMAXPROCS` 기본값에 반영한다. 공식 블로그는 &quot;Before Go 1.25, Go was unaware of CPU limits set by orchestration platforms. Instead, it would set `GOMAXPROCS` to the number of cores on the machine it was deployed to&quot;라고 적는다. 그 전에는 uber-go/automaxprocs가 사실상 표준이었다
+- **Python**: 3.13에서 `os.process_cpu_count()`와 `PYTHON_CPU_COUNT`가 추가됐다. 다만 이것은 CPU affinity(cpuset) 기준이라 `cpu.max` 쿼터는 반영하지 않는다. 메모리 쪽은 psutil 이슈가 열려 있는 채로다
+
+공통 패턴이 하나 보인다. 컨테이너 인식을 기본으로 켜되, 끄는 스위치를 남긴다. JVM의 `-XX:-UseContainerSupport`, W&amp;amp;B의 `x_stats_no_cgroup`, Go의 `GODEBUG=containermaxprocs=0`이 그것이다.
+
+## 세 가지 길
+
+정리하면 이 문제에 대한 대응은 세 갈래다.
+
+| 길 | 예 | 맞는 경우 |
+| --- | --- | --- |
+| **도구를 고친다** | W&amp;amp;B의 cgroup.go, Ray의 `get_system_memory()`, 다음 글의 cgroup 수집기 | 도구가 내 것이거나 감쌀 수 있을 때 |
+| **커널 뷰를 고친다** | lxcfs (FUSE로 `/proc/meminfo`·`/proc/stat` 덮어쓰기) | 도구를 못 고치고 노드에 손댈 수 있을 때. 다만 kubelet 기준값과 어긋날 수 있다 |
+| **밖에서 잰다** | cAdvisor → Prometheus, DCGM exporter | 시계열 관측 백엔드가 필요할 때. 실험 화면과는 분리된다 |
+
+세 번째 길에서 하나 적어 둘 것이 있다. `kubectl top`의 데이터 소스인 metrics-server는 README에서 &quot;Metrics Server is meant only for autoscaling purposes. For example, don't use it to forward metrics to monitoring solutions&quot;라고 못 박는다. pod 관점의 시계열은 cAdvisor에서 Prometheus로 가는 라인이 맞다. GPU 쪽은 NVML이 장치 격리를 따르므로 값 자체는 컨테이너 안에서도 맞지만, &quot;이 GPU가 어느 pod 것인가&quot;는 NVML이 모른다. DCGM exporter는 kubelet의 pod-resources API(`k8s.io/kubelet/pkg/apis/podresources/v1`)로 그 매핑을 얻어 `pod`·`namespace`·`container` 라벨을 붙인다.
+
+## 베스트 프랙티스
+
+위 조사에서 뽑을 수 있는 실천 원칙을 근거의 강도와 함께 적는다.
+
+| 원칙 | 근거 |
+| --- | --- |
+| 컨테이너가 자기 한도를 알아야 하면 `/proc`이 아니라 cgroup에서 읽는다 | 강함. 2014년 글, psutil 메인테이너, Docker `stats`, kubelet 문서가 같은 말을 한다 |
+| 도구가 container-aware가 아니면, 이름으로 범위를 드러내거나 수집기를 더한다. 둘 다 없으면 해석이 사용자 몫으로 남는다 | 강함. Lightning(이름), Ray(두 키), W&amp;amp;B(수집 변경)가 각각의 예다 |
+| pod 관점의 기준값은 kubelet/cAdvisor의 working set이고, 자체 수집기는 그 값과 맞아야 한다 | 강함. kubelet의 eviction 판정이 이 값이다. 두 화면이 다르면 사용자가 어느 쪽을 믿을지 판단해야 한다 |
+| GPU는 device plugin의 장치 격리를 그대로 쓰되, pod 매핑은 DCGM exporter에 맡긴다 | 중간. NVML이 `CUDA_VISIBLE_DEVICES`를 무시한다는 것은 이 글의 호스트 실측이고, 1차 문서로는 확인하지 않았다 |
+| 컨테이너 인식은 기본 on, 끄는 스위치는 남긴다 | 강함. JVM·.NET·Go·W&amp;amp;B가 같은 모양이다 |
+
+&lt;br /&gt;
+
+# 정리
+
+pod 안에서 켠 MLflow 시스템 메트릭이 무엇을 재는지를 따라온 결과를 정리하면 셋이다.
+
+1. **MLflow는 재지 않는다.** `start_run`을 부른 프로세스 안의 스레드가 psutil과 pynvml을 부르고, psutil은 `/proc` 파일을 읽는다. 값을 결정하는 것은 그 프로세스가 어디서 파일을 여느냐다
+2. **컨테이너 격리는 &quot;보이는 것&quot;과 &quot;쓸 수 있는 것&quot;이 따로다.** namespace는 자원 종류별로 감싸고, `/proc/stat`·`/proc/meminfo`는 어떤 namespace에도 속하지 않는다. 컨테이너의 한도는 cgroup에 있고 psutil은 그것을 읽지 않는다. 그래서 pod 안에서 켠 시스템 메트릭의 CPU·메모리는 노드 값이고, 같은 노드의 rank끼리는 그 값이 복제된다
+3. **이 문제는 도구 하나의 버그가 아니다.** psutil이 그대로이니 그 위의 파이썬 도구들이 그대로이고, 언어 런타임들은 이미 컨테이너 인식으로 넘어갔으며, W&amp;amp;B는 2026년에 그 선을 넘었다. 관측 도구가 런타임이 걸어간 길을 뒤늦게 걷고 있다
+
+이 위에서 플랫폼이 무엇을 했는지, 즉 노드를 재는 계열에 `node_`·`rootfs_` 접두를 붙이고 cgroup 한도 대비 working set을 재는 `container_` 계열을 더한 설계와, MLflow 원본을 고치지 않고 얹은 구현은 다음 글에서 다룬다. 이 글의 실측 중 GPU 격리의 기제는 호스트에서 NVML을 직접 불러 확인한 것이다.
+
+&lt;br /&gt;
+
+# 참고 자료
+
+- [MLflow System Metrics](https://mlflow.org/docs/latest/ml/tracking/system-metrics/) — 활성화 방법, 샘플링 주기, 추가 의존성
+- [MLflow 원본 코드 v3.15.1](https://github.com/mlflow/mlflow/tree/v3.15.1/mlflow/system_metrics) — `system_metrics_monitor.py`, `metrics/cpu_monitor.py`, `metrics/gpu_monitor.py`, `tracking/fluent.py`
+- [mlflow/mlflow#12365](https://github.com/mlflow/mlflow/issues/12365) — cgroup 메트릭 기능 요청 (2024-06, open)
+- [W&amp;amp;B System Metrics](https://docs.wandb.ai/models/ref/python/experiments/system-metrics) — 수집 주기와 지표 정의
+- [wandb/wandb#11796](https://github.com/wandb/wandb/pull/11796) — cgroup v2 한도를 분모로 쓰는 변경 (2026-04)
+- [wandb CHANGELOG 0.27.0](https://github.com/wandb/wandb/blob/main/CHANGELOG.md)
+- [giampaolo/psutil#2100](https://github.com/giampaolo/psutil/issues/2100) — 컨테이너 안에서 호스트 메모리 보고 (2022-04, open)
+- [Fabio Kung, Memory inside Linux containers (2014)](https://fabiokung.com/2014/03/13/memory-inside-linux-containers/)
+- [lxc/lxcfs](https://github.com/lxc/lxcfs) — `/proc` 파일을 cgroup 값으로 덮어쓰는 FUSE 파일시스템
+- [Alibaba Cloud, Using LXCFS to Improve Container Resource Visibility](https://www.alibabacloud.com/blog/kubernetes-demystified-using-lxcfs-to-improve-container-resource-visibility_594109)
+- [Linux cgroup v2 admin guide](https://docs.kernel.org/admin-guide/cgroup-v2.html) — `memory.current`, `memory.max`, `memory.stat`, `cpu.max`, `cpu.stat`
+- [Kubernetes, Node-pressure Eviction](https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/) — working set 정의
+- [kubernetes-sigs/metrics-server](https://github.com/kubernetes-sigs/metrics-server) — autoscaling 전용이라는 경고
+- [NVIDIA/dcgm-exporter](https://github.com/NVIDIA/dcgm-exporter) — kubelet pod-resources API로 GPU→pod 매핑
+- [Ray `_common/utils.py`](https://github.com/ray-project/ray/blob/master/python/ray/_common/utils.py) — `get_system_memory()`
+- [Ray Out-Of-Memory Prevention](https://docs.ray.io/en/latest/ray-core/scheduling/ray-oom-prevention.html)
+- [Lightning DeviceStatsMonitor](https://github.com/Lightning-AI/pytorch-lightning/blob/master/src/lightning/pytorch/callbacks/device_stats_monitor.py)
+- [Go blog, Container-aware GOMAXPROCS](https://go.dev/blog/container-aware-gomaxprocs), [Go 1.25 release notes](https://go.dev/doc/go1.25)
+- [uber-go/automaxprocs](https://github.com/uber-go/automaxprocs)
+- [JDK-8146115](https://bugs.openjdk.org/browse/JDK-8146115) — Improve docker container detection and resource configuration usage
+- [.NET Runtime configuration options for garbage collection](https://learn.microsoft.com/en-us/dotnet/core/runtime-config/garbage-collector)
+- [What's New In Python 3.13](https://docs.python.org/3/whatsnew/3.13.html) — `os.process_cpu_count()`
+- [namespaces(7)](https://man7.org/linux/man-pages/man7/namespaces.7.html)
+- [LKML, meminfo: show /proc/meminfo base on container's memcg (2012)](https://lore.kernel.org/linux-kernel//1338260214-21919-1-git-send-email-gaofeng@cn.fujitsu.com/T/) ([미러](https://lkml.iu.edu/hypermail/linux/kernel/1205.3/02096.html))
+- [Everything is a File 철학](/cs/CS-Everything-is-a-File/)
+- [디바이스 드라이버: 3계층 구조](/cs/CS-Linux-Device-Driver/)
+- [Pod CPU Limit과 FFmpeg Thread 최적 조정 - 2. 배경지식: cgroup, 컨테이너, 쿠버네티스](/dev/Dev-FFmpeg-CPU-02/)
+- [컨테이너 파일 시스템](/cs/CS-Container-Filesystem/)
+- [컨테이너 네트워킹 기본 원리: 네임스페이스 네트워킹](/cs/CS-Container-Networking-Namespace/)
+- [NVIDIA Device Plugin 동작 원리](/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/)
+- [NCCL Communicator 초기화 시점: Lazy vs Eager Init](/dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/)
+
+- 다음 글: [MLflow] 시스템 메트릭 로깅 - 2. 플랫폼 SDK에 얹기: 이름, cgroup 수집기, 원본 무수정 확장 (발행 예정)
+
+&lt;br /&gt;
+&lt;/brs&gt;</content><author><name>Eraser</name></author><category term="MLflow" /><category term="MLOps" /><category term="Kubernetes" /><category term="Ray" /><category term="Container" /><category term="cgroup" /><category term="Namespace" /><category term="psutil" /><category term="System-Metrics" /><summary type="html">학습 플랫폼 SDK에 MLflow 시스템 메트릭 로깅 기능을 추가하며, pod 안에서 어떤 문제가 발생할 수 있는지 알아 보자.</summary></entry><entry><title type="html">[Nsight] Nsight 프로파일러: 4. ncu 수집과 커널 판정</title><link href="https://sirzzang.github.io//dev/Dev-Nsight-Profiling-04-Ncu/" rel="alternate" type="text/html" title="[Nsight] Nsight 프로파일러: 4. ncu 수집과 커널 판정" /><published>2026-09-03T00:00:00+09:00</published><updated>2026-09-05T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-Nsight-Profiling-04-Ncu</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-Nsight-Profiling-04-Ncu/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 5주차 학습 중 딥다이브한 내용입니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -4794,705 +5443,4 @@ mlflow   ClusterIP   10.96.153.40   &amp;lt;none&amp;gt;        5000/TCP   112s
   &lt;p&gt;Kubernetes에는 Service의 &lt;code class=&quot;highlighter-rouge&quot;&gt;port&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;targetPort&lt;/code&gt;, NodePort 타입의 &lt;code class=&quot;highlighter-rouge&quot;&gt;nodePort&lt;/code&gt;, 파드 스펙의 &lt;code class=&quot;highlighter-rouge&quot;&gt;containerPort&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;hostPort&lt;/code&gt;까지 “포트”라 불리는 필드가 다섯 가지나 등장한다. 이번 사례의 노출 포트는 이 다섯 가지 중 어느 것도 아닌, 포트포워딩이 임시로 만들어 준 호스트 쪽 번호였다는 점이 함정이었다. 다섯 필드의 구분이 헷갈린다면 &lt;code class=&quot;highlighter-rouge&quot;&gt;Service port vs targetPort vs nodePort&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;hostPort vs NodePort&lt;/code&gt; 키워드로 따로 정리해 보는 것을 권한다.&lt;/p&gt;
 &lt;/blockquote&gt;
 
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="k8s" /><category term="Service" /><category term="ClusterIP" /><category term="kube-proxy" /><category term="DNS" /><category term="MLflow" /><category term="Argo-Workflow" /><category term="port-forward" /><summary type="html">클러스터 밖으로 노출된 접속용 포트를 클러스터 내부 Service 포트로 착각하면 어떤 증상이 나타나는지 알아 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: 서빙 최적화 기법 - 6.1. 개요: iteration에서 continuous batching까지</title><link href="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: 서빙 최적화 기법 - 6.1. 개요: iteration에서 continuous batching까지" /><published>2026-08-22T00:00:00+09:00</published><updated>2026-08-27T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;6장의 기법들은 산술 강도(FLOPs/byte)라는 분수 하나를 서로 다른 항에서 공략한다: 분자를 키우는 배칭·스케줄링, 분모를 줄이는 어텐션 최적화·모델 압축, 계산 자체를 피하는 프리픽스 캐싱&lt;/li&gt;
-  &lt;li&gt;서빙 엔진의 실행 단위는 요청이 아니라 모델 forward 1회, 즉 iteration이다. forward는 원자적이라 스케줄러(CPU)가 개입할 수 있는 지점은 iteration 경계뿐이다&lt;/li&gt;
-  &lt;li&gt;배칭의 이득은 &lt;strong&gt;한 번 읽은 가중치를 여러 요청이 나눠 쓰는 데서&lt;/strong&gt; 온다. memory-bound인 decode에서는 스텝 시간이 거의 그대로인 채 처리량이 배치 크기만큼 늘어난다. 단, 배칭이 상각하는 것은 공유되는 가중치 읽기뿐이고, 요청마다 따로 쌓이는 KV cache 읽기는 줄지 않는다&lt;/li&gt;
-  &lt;li&gt;prefill은 &lt;code class=&quot;highlighter-rouge&quot;&gt;[B, 1000, H]&lt;/code&gt;처럼 넓은 텐서, decode는 &lt;code class=&quot;highlighter-rouge&quot;&gt;[B, 1, H]&lt;/code&gt;의 좁은 텐서다. prefill 배치는 길이 차이(패딩), decode 배치는 종료 시점 분산이라는 문제를 남긴다&lt;/li&gt;
-  &lt;li&gt;static·dynamic·continuous 배칭 모두 텐서 쌓기는 같다. 차이는 배치 멤버십을 다시 정하는 시점 하나다: 배치 전체가 끝난 뒤 vs 매 iteration&lt;/li&gt;
-  &lt;li&gt;continuous batching에서는 prefill과 decode가 같은 스텝에서 만나면서 새로운 문제가 생긴다. 섞지 않으면 진행 중인 decode가 멎고, 섞어도 긴 prefill이 스텝 길이를 지배한다. chunked prefill·selective batching·KV cache 관리가 여기서 출발한다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;전제-지금까지-만든-서빙-시스템&quot;&gt;전제: 지금까지 만든 서빙 시스템&lt;/h1&gt;
-
-&lt;p&gt;6장은 continuous batching을 비롯한 서빙 최적화 기법들을 다룬다. 기법 하나하나로 들어가기 전에, 이 글에서 전체를 관통하는 흐름을 먼저 잡는다.&lt;/p&gt;
-
-&lt;p&gt;개인적으로 이해하는 데 도움이 되었던 &lt;strong&gt;단위 → 동기 → 구조 → 시점&lt;/strong&gt;의 순서를 이용해 보고자 한다. 실행의 단위가 무엇인지, 그 단위에 여러 요청을 넣는 게 왜 이득인지, 넣으면 어떤 모양이 되는지, 그 구성을 언제 다시 정하는지 순서로 따라가다 보면, 각 항목이 남기는 질문이 다음 항목의 출발점이 된다는 것을 알 수 있다.&lt;/p&gt;
-
-&lt;p&gt;그 출발점을 놓기 위해 지금까지 내용부터 복기해 보자.&lt;/p&gt;
-
-&lt;h2 id=&quot;요청-단위-실행-모델&quot;&gt;요청 단위 실행 모델&lt;/h2&gt;
-
-&lt;p&gt;&lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/&quot;&gt;2편&lt;/a&gt;에서 해부한 단일 모델 서빙 시스템은 API server가 요청을 받아 큐에 넣고, WorkloadManager가 배치 상한만큼 묶어 내주면, 별도 프로세스의 워커가 &lt;code class=&quot;highlighter-rouge&quot;&gt;generate()&lt;/code&gt;를 호출해 완성된 텍스트를 돌려주는 구조였다. &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/&quot;&gt;3.1편&lt;/a&gt;에서 한 번에 한 요청씩 처리할 때의 낮은 처리량을 재현했고, &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/&quot;&gt;3.2편&lt;/a&gt;에서 정적 배칭으로 처리량이 약 2배가 되는 것과 그 한계를 측정했다.&lt;/p&gt;
-
-&lt;p&gt;이 시스템에서 실행의 단위는 &lt;strong&gt;요청&lt;/strong&gt;(정확히는 요청 묶음)이었다. &lt;code class=&quot;highlighter-rouge&quot;&gt;generate()&lt;/code&gt; 호출이 한 번 시작되면 끝날 때까지 블랙박스다. 큐잉·프로세스 분리·IPC 같은 시스템 바깥 구조는 그대로 두고, 6장의 시선은 그 블랙박스 안쪽 — GPU가 실제로 도는 루프 — 으로 내려간다. 실서비스 엔진은 요청이 끊임없이 유입되는 &lt;strong&gt;온라인&lt;/strong&gt; 상황에서 돌고, 일반적으로 생성 중간중간 토큰을 곧바로 내보내는 &lt;strong&gt;스트리밍&lt;/strong&gt; 형태의 응답을 내놓는다. 이후의 배칭 논의는 이 온라인·토큰 단위 관점을 전제한다.&lt;/p&gt;
-
-&lt;h2 id=&quot;병목의-언어-산술-강도와-roofline&quot;&gt;병목의 언어: 산술 강도와 roofline&lt;/h2&gt;
-
-&lt;p&gt;병목을 판정하는 도구는 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/&quot;&gt;5.4편&lt;/a&gt;과 &lt;a href=&quot;/dev/Dev-Roofline-Model-LLM-Serving/&quot;&gt;roofline 실측 글&lt;/a&gt;에서 정리했다. 산술 강도(연산 강도, FLOPs/byte)가 ridge point보다 낮으면 memory-bound, 높으면 compute-bound이고, LLM 추론에서 prefill은 compute-bound 쪽에, decode는 memory-bound 쪽에 찍힌다 (이 글의 memory-bound는 전부 메모리 용량이 아니라 대역폭의 병목, 즉 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/&quot;&gt;5.4편&lt;/a&gt;의 memory bandwidth-bound를 가리킨다).&lt;/p&gt;
-
-&lt;p&gt;5장 전체를 관통하는 요점은 결국 한 문장으로 모인다. decode는 토큰 하나를 만들려고 가중치 전체를 HBM에서 훑는다. 만들 토큰이 하나뿐이니 FLOPs는 작은데 그 계산을 위해 메모리에서 옮기는 바이트는 최대치라, 산술 강도의 분수는 바닥이고 GPU 연산 유닛은 논다. &lt;strong&gt;하드웨어가 부족한 게 아니라, 하드웨어에 일을 못 먹이고 있는 것이다.&lt;/strong&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;6장의-지도-하나의-분수-세-방향의-공략&quot;&gt;6장의 지도: 하나의 분수, 세 방향의 공략&lt;/h2&gt;
-
-&lt;p&gt;6장의 모든 기법은 결국 “바이트 하나를 옮길 때 최대한 많은 토큰을 뽑아내라”는 하나의 명령을 서로 다른 층위에서 실행한 것이다. 그 명령을 분수로 쓰면 5장에서 정리한 산술 강도 그대로다.&lt;/p&gt;
-
-&lt;script type=&quot;math/tex; mode=display&quot;&gt;\text{산술 강도} = \frac{\text{FLOPs (수행한 계산)}}{\text{bytes (이동한 데이터)}}&lt;/script&gt;
-
-&lt;p&gt;이 분수를 기준으로 놓고 보면, 산술 강도를 증가시키기 위한 공략 방향은 원리적으로 셋이다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;방향&lt;/th&gt;
-      &lt;th&gt;무엇을 하는가&lt;/th&gt;
-      &lt;th&gt;6장의 기법&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;① 분자(FLOPs)를 키운다&lt;/td&gt;
-      &lt;td&gt;같은 한 번의 읽기로 더 많은 일을 시킨다&lt;/td&gt;
-      &lt;td&gt;배칭·스케줄링 (static → dynamic → continuous → chunked prefill)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;② 분모(bytes)를 줄인다&lt;/td&gt;
-      &lt;td&gt;옮겨야 할 바이트 자체를 줄인다&lt;/td&gt;
-      &lt;td&gt;어텐션 최적화 (GQA/MLA, FlashAttention), 모델 압축 (양자화)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;③ 아예 안 한다&lt;/td&gt;
-      &lt;td&gt;이미 한 계산을 다시 하지 않는다&lt;/td&gt;
-      &lt;td&gt;프리픽스 캐싱 (RadixAttention, cache-aware routing)&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;하나의 분수를 각자 다른 항에서 공략하는 체계다. 한 가지, 6장의 대표 기법인 PagedAttention은 이 분수의 어느 항도 직접 건드리지 않는다 — KV cache 메모리의 단편화 낭비를 회수해 같은 용량으로 더 큰 배치(①)를 가능하게 하는 기반 기법이라, 지도에서는 별도 자리로 둔다. 이 글은 그중 첫 번째 축 — 배칭 — 을 따라 continuous batching까지의 큰 흐름만 잡고, 거기서 드러나는 새 문제들을 확인하는 데서 멈춘다. 나머지 축의 기법들은 이후 글에서 하나씩 다룬다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;실행-단위-iteration&quot;&gt;실행 단위: iteration&lt;/h1&gt;
-
-&lt;p&gt;첫 번째 질문은 단위다. 지금까지의 서빙 시스템은 요청을 실행 단위로 삼았다 — 이 단위가 어떤 문제를 만드는지, 무엇으로 바꿔야 하는지부터 보자.&lt;/p&gt;
-
-&lt;h2 id=&quot;요청-단위의-문제&quot;&gt;요청 단위의 문제&lt;/h2&gt;
-
-&lt;p&gt;자기회귀 생성의 구조는 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/&quot;&gt;3.3편&lt;/a&gt;에서 정리했다. 요청 하나는 프롬프트 전체를 한 번에 처리하는 prefill 1회와, 토큰을 하나씩 이어 붙이는 decode의 반복으로 이루어진다. 토큰 N개를 생성하면 모델 forward가 N회 돈다.&lt;/p&gt;
-
-&lt;p&gt;전통적인 ML 서빙에서는 이 구분이 필요 없었다. 요청 1개 = forward 1회 = 응답 1회라서 “요청”과 “실행 스텝”이 같은 말이었고, 그 안을 더 쪼개서 부를 단어 자체가 필요 없었다. 그런데 LLM 서빙에서는 하나의 요청이 토큰 N개를 생성하면서 이 등식이 요청 1개 = forward N회로 바뀐다. 여기에 와서야 처음으로 두 개념이 분리됐고, 비로소 그 스텝을 가리킬 이름이 필요해진 것이다. 그렇게 자리 잡은 용어가 &lt;strong&gt;iteration&lt;/strong&gt;(또는 step)이다 — 모델 전체를 처음부터 끝까지 한 번 통과시키는 forward pass 1회를 가리킨다.&lt;/p&gt;
-
-&lt;p&gt;요청 단위로 스케줄링하면 이 forward N회짜리 반복이 통째로 하나의 작업 덩어리가 된다. 반복이 도는 동안 스케줄러가 끼어들어 내릴 수 있는 결정이 없다 — 새 요청을 넣을지, 먼저 끝난 요청을 뺄지는 실행 중인 묶음이 전부 끝난 뒤에야 정할 수 있다. 그래서 긴 생성 하나가 GPU를 붙잡고 있는 동안 짧은 요청은 큐에서 기다린다. &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/&quot;&gt;3.2편&lt;/a&gt;에서 관찰한 대기 지연 — 실행 중인 배치가 통째로 끝나야 대기 중인 요청이 실행되던 현상 — 이 정확히 이 구조에서 온 문제였다.&lt;/p&gt;
-
-&lt;h2 id=&quot;토큰-1개-생성-스텝이라는-통칭&quot;&gt;토큰 1개 생성 스텝이라는 통칭&lt;/h2&gt;
-
-&lt;p&gt;방금 iteration을 forward pass 1회로 정의했지만, 실무에서는 흔히 “iteration = 토큰 1개 생성 스텝”이라고도 말한다. 토큰을 하나씩 만드는 단계는 decode니, 언뜻 decode에 대한 말로 들린다. 그러나 이 등식은 decode만의 것이 아니다 — &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#경계-첫-토큰&quot;&gt;3.3편에서 정리했듯&lt;/a&gt; prefill의 forward도 마지막 위치에서 새 토큰 1개를 내놓고, 그 토큰이 곧 TTFT(Time To First Token, &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#서빙-지표-ttft와-tpot&quot;&gt;3.3편의 서빙 지표&lt;/a&gt; 참고)의 첫 토큰이다. 둘이 갈리는 지점은 나온 토큰 수가 아니라, 그 1개를 만들기 위해 &lt;strong&gt;한 번의 forward 안에서 계산한 위치의 수&lt;/strong&gt;다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;구분&lt;/th&gt;
-      &lt;th&gt;계산한 위치 수&lt;/th&gt;
-      &lt;th&gt;나온 새 토큰&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;prefill (프롬프트 1000토큰)&lt;/td&gt;
-      &lt;td&gt;1000&lt;/td&gt;
-      &lt;td&gt;1&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;decode&lt;/td&gt;
-      &lt;td&gt;1&lt;/td&gt;
-      &lt;td&gt;1&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;그럼에도 이 등식은 대개 decode의 표현으로 통용된다. 이유는 방금 본 스텝 하나의 크기가 아니라 &lt;strong&gt;스텝의 횟수&lt;/strong&gt;에 있다. 요청 하나의 생애에서 prefill iteration은 1회뿐이고 decode iteration은 나머지 토큰 수만큼(N−1회) 반복되니, 엔진이 도는 iteration의 대부분은 토큰 1개를 만드는 decode 스텝이다. 물론 “forward 1회 = 새 토큰 1개”가 항상 지켜지는 등식도 아니다. prefill을 여러 스텝에 나눠 실으면 새 토큰 없이 끝나는 iteration도 생기는데, 이 예외는 &lt;a href=&quot;#남는-질문-6장의-나머지&quot;&gt;후술&lt;/a&gt;하는 기법에서 등장한다.&lt;/p&gt;
-
-&lt;h2 id=&quot;엔진-루프의-한-스텝&quot;&gt;엔진 루프의 한 스텝&lt;/h2&gt;
-
-&lt;p&gt;그럼 이 iteration이 엔진 안에서 실제로 어떻게 도는지 보자. LLM 서빙 엔진이 GPU에 일을 시키는 방법은 하나뿐이다 — 입력 텐서를 만들어서 모델 전체를 한 번 통과시키고 출력을 받는 것, 즉 iteration 한 번이다. 엔진의 실체는 이 스텝을 도는 무한 루프고, vLLM 코드에서는 실제로 &lt;code class=&quot;highlighter-rouge&quot;&gt;engine.step()&lt;/code&gt;이다 (버전에 따라 클래스 이름이나 경로는 바뀔 수 있다).&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 엔진 바깥의 루프&lt;/span&gt;
-&lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;engine&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;has_unfinished_requests&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;():&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;request_outputs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;engine&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;step&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# step() 내부 (개념적으로)&lt;/span&gt;
-&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;step&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;scheduler_output&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;scheduler&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;schedule&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;   &lt;span class=&quot;c&quot;&gt;# CPU. 이번 forward에 태울 요청 결정&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;model_output&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;model_executor&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;execute_model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;scheduler_output&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;  &lt;span class=&quot;c&quot;&gt;# GPU&lt;/span&gt;
-    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;scheduler&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;update_from_output&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;model_output&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;  &lt;span class=&quot;c&quot;&gt;# CPU. EOS 판정, 슬롯 회수&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;이 루프는 특정 요청의 것이 아니라 엔진의 것이다. 요청 하나의 눈으로 보면 이 루프에서 자기 몫은 prefill iteration 1회와 decode iteration N−1회지만, 루프 자체는 요청들이 들어오고 나가는 동안 멈추지 않고 돈다. 각 스텝에 어느 요청의 어떤 작업을 실을지는 아직 정하지 않았다.&lt;/p&gt;
-
-&lt;h2 id=&quot;스케줄러의-위치-cpu와-gpu의-분업&quot;&gt;스케줄러의 위치: CPU와 GPU의 분업&lt;/h2&gt;
-
-&lt;p&gt;그렇다면 이번 forward에서 처리할 요청을 정하는 일 — 위 코드의 &lt;code class=&quot;highlighter-rouge&quot;&gt;schedule()&lt;/code&gt; — 은 누가 하는가.&lt;/p&gt;
-
-&lt;p&gt;GPU는 아니다. 판단할 지능이 없어서가 아니라 구조가 그렇다. GPU는 CPU가 큐에 넣어 준 커널을 실행하는 코프로세서(co-processor)라 스스로 다음 작업을 고르는 제어 주체가 아니고, 무엇보다 “다음에 누구를 넣을지”를 정하는 데 필요한 정보 — 요청 큐, 대기 중인 요청, 메모리 현황 — 가 전부 호스트(CPU) 쪽에 있다. 커널은 launch될 때 받은 텐서와 인자만 보고 돈다.&lt;/p&gt;
-
-&lt;p&gt;그래서 정책 판단은 전부 CPU 몫이고, 그 판단을 내리는 CPU 쪽 코드가 곧 서빙 엔진의 스케줄러다. &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/&quot;&gt;2편&lt;/a&gt;에서 본 시스템의 구도 — 요청 큐와 배처는 CPU, 모델 실행만 GPU — 의 직계 연장이다.&lt;/p&gt;
-
-&lt;p&gt;이름이 겹쳐서 헷갈리기 쉬운데, GPU 주변에는 층위가 완전히 다른 스케줄러 셋이 있다. 6장에서 말하는 스케줄러는 첫 번째이다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;스케줄러&lt;/th&gt;
-      &lt;th&gt;무엇을 정하나&lt;/th&gt;
-      &lt;th&gt;어디서&lt;/th&gt;
-      &lt;th&gt;시간 스케일&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;① 서빙 스케줄러&lt;/td&gt;
-      &lt;td&gt;이번 forward에 어느 요청을 넣을까&lt;/td&gt;
-      &lt;td&gt;CPU (엔진 코드)&lt;/td&gt;
-      &lt;td&gt;ms&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;② GPU 드라이버/스트림&lt;/td&gt;
-      &lt;td&gt;큐에 쌓인 커널을 어느 순서로&lt;/td&gt;
-      &lt;td&gt;CPU 드라이버 + GPU 커맨드 프로세서&lt;/td&gt;
-      &lt;td&gt;µs&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;③ warp 스케줄러&lt;/td&gt;
-      &lt;td&gt;SM 안에서 어느 warp를 이번 사이클에&lt;/td&gt;
-      &lt;td&gt;GPU 하드웨어&lt;/td&gt;
-      &lt;td&gt;ns&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;h2 id=&quot;원자성과-스케줄링-단위&quot;&gt;원자성과 스케줄링 단위&lt;/h2&gt;
-
-&lt;p&gt;그런데 이 CPU 스케줄러가 아무 때나 끼어들 수 있는 것은 아니다. forward는 &lt;strong&gt;원자적(atomic)&lt;/strong&gt;이다. 한 번 GPU에 던지면 중간에 끼어들 수도, 일부만 빼낼 수도 없고, forward가 끝나야 CPU가 다시 개입할 수 있다.&lt;/p&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;참고: 이 원자성을 DB 트랜잭션에 비유하면 all-or-nothing과 중간 상태 관찰 불가라는 점에서는 같지만 롤백이 없다는 점에서 다른, 일종의 “롤백 없는 원자적 커밋”이라고 이해할 수 있다. 클라이언트가 연결을 끊어도 이미 launch된 스텝은 끝까지 돌고, 그 요청은 다음 스케줄에서 빠질 뿐이다. 실행 중인 요청을 미루는 preemption류의 동작도 iteration 도중 중단이 아니라 다음 iteration에서 제외하는 방식으로 일어난다.&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;p&gt;그래서 &lt;strong&gt;스케줄링 단위&lt;/strong&gt;라는 말이 나온다. 스케줄러가 개입할 수 있는 지점은 오직 &lt;strong&gt;iteration 경계뿐이고&lt;/strong&gt;, 그 경계에서 다음 forward에 무엇을 넣어서 처리할지 정하는 것이다.&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;CPU&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;schedule&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;→&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;텐서&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;조립&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;→&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;커널들을&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;GPU&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;큐에&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;enqueue&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;비동기&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;바로&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;리턴&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;GPU&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;                          &lt;span class=&quot;o&quot;&gt;...&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;실제&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;실행&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;...&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;CPU&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;결과&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;동기화&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;→&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;EOS&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;판정&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;→&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;슬롯&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;회수&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;→&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;다시&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;schedule&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
-     &lt;span class=&quot;c&quot;&gt;# 여기가 iteration 경계. 개입할 수 있는 유일한 틈&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;단위를 iteration으로 잘게 쪼개면 얻는 것은 &lt;strong&gt;결정 지점의 수&lt;/strong&gt;다. 요청 단위에서는 스케줄링 결정의 기회가 요청 묶음당 1회지만, iteration 단위에서는 forward마다 돌아온다. 이 결정 기회를 실제로 언제 쓰는지는 &lt;a href=&quot;#배칭-방식-배치를-다시-짜는-시점&quot;&gt;배칭 방식&lt;/a&gt;에서 갈린다 — 여기서는 단위만 바꿔 두었다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;배칭-한-번-읽은-가중치로-여러-요청&quot;&gt;배칭: 한 번 읽은 가중치로 여러 요청&lt;/h1&gt;
-
-&lt;p&gt;실행 단위는 iteration으로 잡았다. 다음 질문은 하나다 — 그 한 스텝에 무엇을 넣나.&lt;/p&gt;
-
-&lt;h2 id=&quot;처리량-이득의-원리&quot;&gt;처리량 이득의 원리&lt;/h2&gt;
-
-&lt;p&gt;hidden size 4096, 가중치 14GB인 모델에서 요청 하나를 decode하는 상황을 보자. 아래 shape은 행렬 곱에 들어가는 2차원 모양(행 × hidden)으로 &lt;strong&gt;단순화해&lt;/strong&gt; 적은 것이다 — 입력 텐서의 정확한 축 구조는 &lt;a href=&quot;#세-축으로-읽는-입력-텐서&quot;&gt;배치의 구조&lt;/a&gt;에서 후술한다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;입력  &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;1, 4096]   &lt;span class=&quot;c&quot;&gt;# 요청 1개, 토큰 1개&lt;/span&gt;
-가중치 W: 14GB 전체를 HBM에서 읽어 옴
-출력  &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;1, 4096]   &lt;span class=&quot;c&quot;&gt;# 토큰 1개&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;decode 한 스텝의 forward는 모든 레이어의 attention projection과 FFN 가중치, 그리고 lm_head까지 전부 읽는다 — 입력 embedding만 lookup이라 해당 토큰의 행만 읽는다. 그 총합이 14GB다. 연산량은 이에 비해 매우 작고, 시간 대부분을 메모리에서 가중치를 퍼 오는 데 쓴다 — memory-bound다.&lt;/p&gt;
-
-&lt;p&gt;여기서 요청 3개를 배칭해 보자.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;입력  &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;3, 4096]   &lt;span class=&quot;c&quot;&gt;# 요청 3개, 각각 토큰 1개&lt;/span&gt;
-가중치 W: 14GB ... 똑같이 한 번만 읽음
-출력  &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;3, 4096]   &lt;span class=&quot;c&quot;&gt;# 토큰 3개&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;행렬 곱셈은 &lt;code class=&quot;highlighter-rouge&quot;&gt;[3, 4096] × [4096, 4096]&lt;/code&gt;으로 왼쪽 행렬의 행이 3개가 된 것뿐이고, 가중치 읽기는 그대로다. 3개 요청 모두 같은 가중치를 곱하기 때문에 가중치를 3번 읽을 필요가 없다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;구분&lt;/th&gt;
-      &lt;th&gt;요청 1개씩 3번&lt;/th&gt;
-      &lt;th&gt;3개 배칭해서 1번&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;가중치 읽기&lt;/td&gt;
-      &lt;td&gt;14GB × 3 = 42GB&lt;/td&gt;
-      &lt;td&gt;14GB&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;생성 토큰&lt;/td&gt;
-      &lt;td&gt;3&lt;/td&gt;
-      &lt;td&gt;3&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;FLOPs&lt;/td&gt;
-      &lt;td&gt;3배&lt;/td&gt;
-      &lt;td&gt;3배 (같음)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;산술 강도 (FLOPs/byte)&lt;/td&gt;
-      &lt;td&gt;기준&lt;/td&gt;
-      &lt;td&gt;3배&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;같은 계산량에 바이트 이동이 1/3이니 산술 강도가 3배다. “배칭이 산술 강도를 인위적으로 올린다”는 말의 문자 그대로의 의미가 이것이고, roofline 위에서는 memory-bound 사선 구간의 점이 오른쪽으로 이동하는 것으로 나타난다. &lt;a href=&quot;/dev/Dev-Roofline-Model-LLM-Serving/&quot;&gt;roofline 실측 글&lt;/a&gt;에서 배치를 실어 찍은 점들이 실제로 오른쪽으로 움직이는 것을 확인했다 (다만 실측 대상이 MoE 모델이라 이동 폭은 B에 비례하는 이상치에 못 미쳤다).&lt;/p&gt;
-
-&lt;p&gt;이 이득을 처리량의 식으로 옮기면 다음과 같다.&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;throughput&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;스텝당&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;산출&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;토큰&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;/&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;스텝&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;시간&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;c&quot;&gt;#              ↑ B배로 늘어남     ↑ memory-bound 구간에선 거의 그대로&lt;/span&gt;
-&lt;span class=&quot;c&quot;&gt;# → 거의 B배&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;돌아보면 이 구조 — 한 번 치른 읽기 비용을 여러 토큰이 나눠 부담하는 상각(amortization) — 는 prefill이 이미 쓰고 있던 수법이다. &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#같은-flops-다른-병목&quot;&gt;3.3편&lt;/a&gt;의 표현으로 prefill은 &lt;strong&gt;가중치를 한 번 읽어 프롬프트 토큰 전체에 쓰는 단계&lt;/strong&gt;였다 — 한 요청 안에서 토큰 축으로 상각한 것이다. decode는 자기회귀 때문에 그 축을 늘릴 수 없다. 그러니 배칭은 같은 상각 구조를 남은 축인 요청(B)에서 재현하는 것이다. 토큰이 어느 축에서 오든, 가중치 읽기 한 번을 나눠 쓰는 토큰 수가 늘어나는 만큼 산술 강도가 오른다.&lt;/p&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;참고: 정확히 하면 decode 한 스텝의 HBM 읽기는 가중치 항 하나가 아니라 가중치 항 + &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#kv-cache-두-단계의-연결&quot;&gt;KV cache&lt;/a&gt; 항의 합이다. 배칭이 상각하는 것은 모든 요청이 &lt;strong&gt;공유&lt;/strong&gt;하는 가중치 항뿐이고, 요청마다 따로 쌓이는 KV cache 항은 배칭으로 줄지 않는다 — 오히려 배치를 키우는 만큼 늘어난다. 위 계산은 가중치 항이 지배하는 구간의 이야기이고, 미뤄 둔 이 항은 &lt;a href=&quot;#남는-질문-6장의-나머지&quot;&gt;남는 질문&lt;/a&gt;에서 다시 만난다.&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;h2 id=&quot;선택으로서의-배칭과-지연의-거래&quot;&gt;선택으로서의 배칭과 지연의 거래&lt;/h2&gt;
-
-&lt;p&gt;그런데 이렇게 배치로 같이 처리해야 한다는 법이 있는 건 아니다. &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/&quot;&gt;3.3편&lt;/a&gt;에서 prefill의 병렬 처리를 두고 강제가 아니라 “가능해서 하는” 선택이라고 정리한 것과 같은 구도다. 요청 3개를 따로따로 3번 forward 돌려도 결과는 같다 — 가중치를 3번 읽을 뿐이다. 배칭은 법이 아니라 &lt;strong&gt;선택&lt;/strong&gt;이고, 그 선택의 동기는 “가중치를 한 번만 읽는다”다.&lt;/p&gt;
-
-&lt;p&gt;선택의 대가는 지연시간이다. 큐잉 이론(queueing theory)의 기본 분해를 빌리면, 어느 시스템에서든 요청 하나가 겪는 지연(latency)은 두 항의 합이다.&lt;/p&gt;
-
-&lt;script type=&quot;math/tex; mode=display&quot;&gt;\text{latency} = \text{queueing time (대기 시간)} + \text{service time (서비스 시간)}&lt;/script&gt;
-
-&lt;p&gt;“여러 요청을 같은 텐서에 쌓아서 한 forward에 넣는다”는 배칭의 정의만으로 이 두 항이 모두 영향을 받는다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;대기 시간&lt;/strong&gt;: 혼자면 도착 즉시 출발할 수 있었는데, 같은 텐서에 쌓으려면 누구와 쌓을지가 먼저 확정돼야 한다. 같이 탈 요청이 정해질 때까지 기다리는 시간이 이 항에 더해진다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;서비스 시간&lt;/strong&gt;: 텐서의 행이 B개가 되니 한 스텝이 짊어지는 일의 양이 B배가 된다. 일이 B배면 스텝 시간도 늘어날 수 있다 — 실제로 얼마나 늘어나는지는 워크로드의 병목에 달렸다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;여기까지는 LLM이 아니어도, 어떤 시스템의 배칭이든 성립하는 일반론이다.&lt;/p&gt;
-
-&lt;p&gt;LLM decode에 오면 두 번째 항의 사정이 특별해진다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;배치가 작을 때 — memory-bound 구간&lt;/strong&gt;: decode는 스텝 시간의 대부분이 계산이 아니라 가중치 읽기인데, 가중치 읽기는 행이 1개든 B개든 한 번이다. 일의 양이 B배가 되어도 스텝 시간은 거의 변하지 않는다 — 서비스 시간 증가가 거의 0인, 배칭의 이득이 사실상 추가 비용 없이 나오는 구간이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;배치를 계속 키우면 — compute-bound 전환&lt;/strong&gt;: &lt;a href=&quot;#처리량-이득의-원리&quot;&gt;처리량 이득의 원리&lt;/a&gt;에서 본 대로 배치를 키우는 것은 곧 산술 강도를 올리는 것이라, 읽기는 그대로인데 계산만 B배로 쌓이다 어느 순간 ridge point를 넘는다. 그때부터는 병목이 읽기에서 계산으로 바뀌어 스텝 시간이 배치 크기에 비례해 늘고, KV cache 메모리 압박도 커진다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;그래서 배치 크기와 처리량의 곡선에는 무릎(knee)이 있고, 서빙 엔진들이 배치 상한 파라미터(vLLM의 &lt;code class=&quot;highlighter-rouge&quot;&gt;max_num_seqs&lt;/code&gt; 등)를 두는 이유가 이것이다. 참고로 이 값을 1로 두면 배치 차원을 1로 강제해 배칭이 무력화된다.&lt;/p&gt;
-
-&lt;p&gt;정리하면, 배칭은 요청 하나의 지표(지연)를 내주고 시스템의 지표(처리량)를 사는 거래다 — 내 완료 시각이 남의 요청 상태에 종속되는 대신, 같은 시간에 시스템이 처리하는 토큰이 늘어난다. 이 거래의 대가가 대기 항과 서비스 항 중 어디에 얼마나 실리는지는 배칭 방식마다 다른데, &lt;a href=&quot;#배칭-방식-배치를-다시-짜는-시점&quot;&gt;배칭 방식&lt;/a&gt;에서 다시 본다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;배치의-구조-prefill과-decode&quot;&gt;배치의 구조: prefill과 decode&lt;/h1&gt;
-
-&lt;p&gt;배칭의 동기까지 확인했다. 그런데 iteration에 넣을 작업들이 전부 같은 모양은 아니다 — 이번에는 그 작업들이 텐서로 어떻게 쌓이는지, 그 모양이 어떤 문제를 남기는지 본다.&lt;/p&gt;
-
-&lt;h2 id=&quot;세-축으로-읽는-입력-텐서&quot;&gt;세 축으로 읽는 입력 텐서&lt;/h2&gt;
-
-&lt;p&gt;prefill과 decode의 개념과 기원은 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/&quot;&gt;3.3편&lt;/a&gt;에서 정리했다. 여기서는 배칭에 필요한 관점 하나만 얹는다 — 두 단계는 forward에 들어가는 &lt;strong&gt;텐서의 모양&lt;/strong&gt;이 다르다. 입력 텐서 &lt;code class=&quot;highlighter-rouge&quot;&gt;[B, S, H]&lt;/code&gt;에서 원소 하나는 “b번째 요청의, s번째 토큰의, h번째 특징값”이다 — &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/&quot;&gt;5.4편&lt;/a&gt;에서 산술 강도를 계산할 때 쓴 그 shape다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;축&lt;/th&gt;
-      &lt;th&gt;이름&lt;/th&gt;
-      &lt;th&gt;뜻&lt;/th&gt;
-      &lt;th&gt;예시 값&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;B&lt;/td&gt;
-      &lt;td&gt;batch&lt;/td&gt;
-      &lt;td&gt;이번 forward의 요청 개수&lt;/td&gt;
-      &lt;td&gt;3&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;S&lt;/td&gt;
-      &lt;td&gt;sequence&lt;/td&gt;
-      &lt;td&gt;요청당 이번 forward에서 계산할 토큰 수&lt;/td&gt;
-      &lt;td&gt;prefill 1000 / decode 1&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;H&lt;/td&gt;
-      &lt;td&gt;hidden&lt;/td&gt;
-      &lt;td&gt;토큰 1개를 표현하는 벡터 길이 (모델 상수)&lt;/td&gt;
-      &lt;td&gt;4096&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;앞서 &lt;a href=&quot;#처리량-이득의-원리&quot;&gt;배칭&lt;/a&gt;에서 쓴 &lt;code class=&quot;highlighter-rouge&quot;&gt;[1, 4096]&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;[3, 4096]&lt;/code&gt;은 이 표기로 각각 &lt;code class=&quot;highlighter-rouge&quot;&gt;[1, 1, 4096]&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;[3, 1, 4096]&lt;/code&gt;이다 — decode는 S=1이라 그 축을 접고, 행렬 곱에 들어가는 2차원 모양으로 적은 것이었다. 두 단계의 차이는 S 축에 몇 개가 들어가는가다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Prefill &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;프롬프트 1000토큰&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;:
-  입력 &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;1, 1000, 4096]  &lt;span class=&quot;c&quot;&gt;# 1000개 토큰을 한 forward에 전부&lt;/span&gt;
-
-Decode &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;그 다음부터&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;:
-  입력 &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;1, 1, 4096]     &lt;span class=&quot;c&quot;&gt;# 매 forward마다 딱 1개&lt;/span&gt;
-  입력 &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;1, 1, 4096]
-  ...
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;여기에 배치까지 얹어(B=3) 그림으로 보면, 두 단계의 텐서는 S 축의 폭만 다른 같은 구조다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-ch06-input-tensor-shapes.svg&quot; alt=&quot;B=3일 때 prefill과 decode의 입력 텐서 shape 비교&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. prefill은 요청마다 프롬프트 전체(S=1000)가, decode는 직전 생성 토큰 1개(S=1)가 실린다 — B와 H는 같고 S만 다르다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;prefill이 1000개를 한 번에 넣을 수 있는 이유는 프롬프트 토큰을 이미 다 알고 있고, causal mask 덕분에 동시에 넣어도 각 토큰이 자기 앞만 보기 때문이다. decode가 1개씩인 이유는 다음 토큰을 모르기 때문이다 — 501번째 토큰을 계산하려면 500번째 결과가 있어야 하는 자기회귀 구조라 원리적으로 병렬화가 안 된다.&lt;/p&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;참고: 서빙 엔진의 튜닝 파라미터가 정확히 이 두 축을 제한한다. vLLM 기준으로 &lt;code class=&quot;highlighter-rouge&quot;&gt;--max-num-seqs&lt;/code&gt;는 B(이번 forward의 요청 개수), &lt;code class=&quot;highlighter-rouge&quot;&gt;--max-num-batched-tokens&lt;/code&gt;는 이번 forward에 넣는 토큰 총수(요청별 S의 합)의 상한이다.&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;h2 id=&quot;prefill-배치-길이가-다른-시퀀스와-패딩&quot;&gt;prefill 배치: 길이가 다른 시퀀스와 패딩&lt;/h2&gt;
-
-&lt;p&gt;여러 요청이 “다 같이 prefill한다”는 말의 정확한 의미는 물리적으로 &lt;strong&gt;같은 forward pass 안에 들어간다&lt;/strong&gt;는 것이다. 시각이 같다는 뜻이 아니라 스케줄러가 그것들을 하나의 실행 단위로 묶었다는 뜻이고, forward 1회를 이루는 수백 개의 커널 호출(레이어마다 QKV projection, attention, FFN 등) 각각이 요청들을 하나의 텐서로 함께 받는다는 뜻이다. 요청들은 같은 텐서의 서로 다른 행이 되고, 결과는 iteration이 끝날 때 함께 나온다.&lt;/p&gt;
-
-&lt;p&gt;문제는 길이가 다르면 그냥 쌓을 수 없다는 것이다. 텐서는 직사각형이어야 한다. 이 문제를 해결하기 위한 가장 전통적 해법이 패딩(padding)이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-ch06-prefill-batch-padding.svg&quot; alt=&quot;패딩으로 직사각형 텐서 만들기&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. 가장 긴 요청(1000토큰)에 맞춰 직사각형을 만들면 짧은 요청의 남는 칸이 전부 pad가 된다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;pad 토큰은 mask로 결과에서 무효화되지만 메모리 자리와 연산은 그대로 소모한다. 길이 편차가 클수록 직사각형의 빈 구석, 즉 낭비가 커진다. 그래서 요즘 엔진(vLLM, FlashAttention의 varlen 커널)은 패딩 대신 토큰을 일렬로 이어 붙이고 경계만 따로 알려 주는 방식을 쓴다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-ch06-prefill-batch-varlen.svg&quot; alt=&quot;varlen 이어붙이기&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. 세 요청의 토큰을 일렬로 이어 붙이고 cu_seqlens로 경계만 표시한다 — pad가 사라진다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;길이 차이 때문에 패딩으로 생기던 낭비는 없어지되 “같은 forward pass 안에서 처리한다”는 성질은 동일하다. 개념적으로 달라진 것은 없다.&lt;/p&gt;
-
-&lt;h2 id=&quot;decode-배치-lockstep과-종료-시점&quot;&gt;decode 배치: lockstep과 종료 시점&lt;/h2&gt;
-
-&lt;p&gt;decode를 배칭하면 배치 안 요청들 사이에 시점 차이가 물리적으로 존재할 수 없다. 같은 커널 호출의 출력 텐서에서 서로 다른 행일 뿐이기 때문이다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;iteration 5:  입력 &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;3, 1, 4096] → GEMM&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;행렬 곱&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; → 출력 &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;3, 1, 4096]
-&lt;span class=&quot;c&quot;&gt;# A의 5번째 토큰, B의 5번째 토큰, C의 5번째 토큰이&lt;/span&gt;
-&lt;span class=&quot;c&quot;&gt;# 같은 행렬 곱셈의 3개 행으로 한꺼번에 나옴&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;A가 먼저 나오고 B가 0.1ms 뒤에 나오는 일은 없다. iteration 자체가 원자적이라 그 안에서는 순서라는 개념이 없다 — 발맞춰 행진하는 lockstep이다.&lt;/p&gt;
-
-&lt;p&gt;진짜 차이가 나는 것은 &lt;strong&gt;언제 끝나는가&lt;/strong&gt;뿐이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-ch06-decode-eos-timing.svg&quot; alt=&quot;decode 배치의 흩어지는 종료 시점&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. lockstep으로 함께 돌던 요청들도 EOS를 뱉는 iteration은 제각각이다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;출력 길이는 미리 알 수 없으므로 각 요청이 EOS를 뱉는 시점은 제각각이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;배칭-방식-배치를-다시-짜는-시점&quot;&gt;배칭 방식: 배치를 다시 짜는 시점&lt;/h1&gt;
-
-&lt;p&gt;&lt;a href=&quot;#배치의-구조-prefill과-decode&quot;&gt;배치의 구조&lt;/a&gt; 마지막에서 본 것은 종료 시점의 분산이었다. lockstep으로 돌던 배치에서 어떤 요청이 먼저 끝나면, 그 요청이 차지하던 배치 텐서의 행은 더 계산할 것이 없어진다. 이 자리를 어떻게 할 것인가 — 배치가 통째로 끝날 때까지 빈 채로 둘 수도 있고, 곧바로 새 요청으로 채울 수도 있다.&lt;/p&gt;
-
-&lt;p&gt;결국 배치 구성을 다시 정하는 시점의 문제고, 이 시점에 대한 서로 다른 답이 세 가지 배칭 방식이다.&lt;/p&gt;
-
-&lt;h2 id=&quot;세-가지-방식&quot;&gt;세 가지 방식&lt;/h2&gt;
-
-&lt;p&gt;결론부터 말하면, 세 방식 모두 지금까지 본 텐서 쌓기를 똑같이 한다. 다른 것은 이번 forward의 텐서에 어떤 요청들이 행으로 실려 있는가 — 이 요청 집합을 &lt;strong&gt;배치 멤버십&lt;/strong&gt;(batch membership)이라고 부르자 — 를 &lt;strong&gt;언제 다시 정하느냐&lt;/strong&gt; 하나뿐이다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;방식&lt;/th&gt;
-      &lt;th&gt;배치 확정 시점&lt;/th&gt;
-      &lt;th&gt;멤버십이 바뀌는 시점&lt;/th&gt;
-      &lt;th&gt;짧은 요청이 끝나면&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;static&lt;/td&gt;
-      &lt;td&gt;요청 N개가 다 모이면&lt;/td&gt;
-      &lt;td&gt;배치 전체가 끝난 뒤&lt;/td&gt;
-      &lt;td&gt;슬롯이 빈 채로 끝까지 유지&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;dynamic&lt;/td&gt;
-      &lt;td&gt;N개 차거나 max delay 지나면&lt;/td&gt;
-      &lt;td&gt;배치 전체가 끝난 뒤 (static과 동일)&lt;/td&gt;
-      &lt;td&gt;동일&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;continuous&lt;/td&gt;
-      &lt;td&gt;매 스텝&lt;/td&gt;
-      &lt;td&gt;매 iteration&lt;/td&gt;
-      &lt;td&gt;그 자리에 대기 중인 새 요청이 들어옴&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;h3 id=&quot;static-batching&quot;&gt;static batching&lt;/h3&gt;
-
-&lt;p&gt;배치 구성을 실행 시작 전에 한 번 정하고 끝까지 유지한다. &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/&quot;&gt;3.2편&lt;/a&gt;에서 실습한 방식이 여기에 해당한다 — 다만 그 구현은 정원이 찰 때까지 기다리지 않고 큐에 있는 만큼(최대 4개)으로 즉시 출발하는 변형이었다. 그런데도 static으로 묶이는 이유는 출발 조건이 아니라, 한 번 출발한 배치가 통째로 끝나야 해산한다는 멤버십 고정에 있다. 그렇게 상한 4로 잘라 실행한 결과가 &lt;code class=&quot;highlighter-rouge&quot;&gt;ceil(N/B)&lt;/code&gt; 계단으로 처리 시간에 그대로 드러났다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-ch06-static-batching.svg&quot; alt=&quot;static batching: 정원이 차야 출발, 전원이 끝나야 해산&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. 요청 셋이 모두 모여야 출발하고, 먼저 끝난 슬롯은 C가 끝나는 300번째 iteration까지 빈 채로 낭비된다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;h3 id=&quot;dynamic-batching&quot;&gt;dynamic batching&lt;/h3&gt;
-
-&lt;p&gt;static과의 차이는 출발 조건뿐이다. 합승에 비유하면 정원이 다 차야 출발하는 쪽(static)과, 정원이 안 찼어도 시간이 되면 출발하는 쪽(dynamic)이다. 출발한 뒤의 동작은 완전히 동일하다 — 배치가 통째로 끝나야 해산한다.&lt;/p&gt;
-
-&lt;p&gt;문제는 출발한 뒤다. &lt;a href=&quot;#decode-배치-lockstep과-종료-시점&quot;&gt;위의 종료 시점 그림&lt;/a&gt;에서 A는 iteration 4에 끝났는데도 C가 300번째 iteration을 돌 때까지 슬롯이 빈 채로 유지된다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-ch06-dynamic-batching.svg&quot; alt=&quot;dynamic batching: 시간이 되면 미달인 채로 출발&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. max delay가 지나면 정원이 안 찼어도 출발하지만, 출발한 뒤의 낭비 구조는 static과 같다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;배치에 묶인 요청들이 함께 끝나야 하는 구조 — 가장 오래 걸리는 요청까지 모두가 기다리는 구조다. 배치 경계를 요청 단위로 정했기 때문에 생기는 일이다.&lt;/p&gt;
-
-&lt;h3 id=&quot;continuous-batching&quot;&gt;continuous batching&lt;/h3&gt;
-
-&lt;p&gt;이것을 개선한 것이 continuous batching이다. 매 iteration 경계(forward 한 번이 끝날 때마다)에서 다음 forward에 넣을 텐서를 새로 조립한다. 끝난 요청은 그 스텝에서 즉시 빠지고, 큐에서 기다리던 요청은 다음 스텝에 바로 들어온다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-ch06-continuous-batching.svg&quot; alt=&quot;continuous batching: 매 iteration 경계에서 재구성&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. 먼저 끝난 슬롯이 다음 iteration에서 큐의 새 요청(prefill부터)으로 즉시 채워져 빈 슬롯이 없다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;알고리즘적으로 대단한 것을 새로 만든 게 아니다. 스케줄러가 개입하는 단위를 요청에서 iteration으로 내린 것이고, &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#직접-만든-서빙-시스템-속의-두-단계&quot;&gt;3.3편&lt;/a&gt;에서 예고한 그대로다. 위의 &lt;code class=&quot;highlighter-rouge&quot;&gt;engine.step()&lt;/code&gt; 코드로 보면 &lt;code class=&quot;highlighter-rouge&quot;&gt;schedule()&lt;/code&gt;이 매 루프마다 호출되는 것이 continuous batching이고, static/dynamic에서는 배치가 끝날 때까지 &lt;code class=&quot;highlighter-rouge&quot;&gt;schedule()&lt;/code&gt;이 다시 불리지 않는 것이다. &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/&quot;&gt;2편&lt;/a&gt;의 시스템과 비교하면 새 컴포넌트가 생긴 게 아니라 &lt;strong&gt;기존 배처의 호출 주기가 요청당 1회에서 스텝당 1회로 바뀐 것&lt;/strong&gt;이다.&lt;/p&gt;
-
-&lt;p&gt;이 방식을 iteration-level scheduling이라는 이름으로 처음 정식화한 것이 &lt;a href=&quot;https://www.usenix.org/conference/osdi22/presentation/yu&quot;&gt;Orca(OSDI ‘22)&lt;/a&gt; 논문이다. 굳이 &lt;em&gt;iteration-level&lt;/em&gt;이라고 부른 것은 기존 방식이 암묵적으로 &lt;em&gt;request-level&lt;/em&gt;이었기 때문이고, 이후 vLLM을 비롯한 현대 서빙 엔진의 표준이 됐다.&lt;/p&gt;
-
-&lt;p&gt;성립 전제도 짚어 둘 만하다. iteration-level scheduling이 가능하려면 두 가지가 필요하고, 둘 다 prefill/decode 구분에서 나온다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;요청이 여러 iteration에 걸쳐 살아 있어야 한다 → 스텝 사이에 넘겨줄 상태(KV cache)가 있어야 하고, 그 상태를 만드는 단계(prefill)와 이어가는 단계(decode)가 갈린다. 전통 ML 서빙은 요청 = forward 1회라 넘길 상태가 없고, iteration-level scheduling이라는 말 자체가 무의미하다&lt;/li&gt;
-  &lt;li&gt;스케줄러가 “이 요청은 이번 스텝에 몇 토큰을 기여하나”를 계산할 수 있어야 한다 → decode면 1, prefill이면 남은 프롬프트 길이다. 이 값을 모르면 스텝의 토큰 예산을 짤 수 없다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;continuous-batching이-남기는-문제&quot;&gt;continuous batching이 남기는 문제&lt;/h2&gt;
-
-&lt;p&gt;&lt;a href=&quot;#선택으로서의-배칭과-지연의-거래&quot;&gt;앞&lt;/a&gt;에서 배칭의 지연 비용을 대기와 서비스 두 항으로 분해했는데, 방식에 따라 주범이 달라진다. continuous batching에서는 새 항이 하나 생긴다 — &lt;strong&gt;남의 요청과의 간섭&lt;/strong&gt;이다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;지연 요인&lt;/th&gt;
-      &lt;th&gt;static/dynamic&lt;/th&gt;
-      &lt;th&gt;continuous&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;대기 (배치가 찰 때까지)&lt;/td&gt;
-      &lt;td&gt;주범 (static은 정원이 찰 때까지, dynamic은 최대 max delay)&lt;/td&gt;
-      &lt;td&gt;거의 없음 (다음 iteration 경계까지만)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;스텝 자체가 무거워짐&lt;/td&gt;
-      &lt;td&gt;있음&lt;/td&gt;
-      &lt;td&gt;있음&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;남의 요청과의 간섭&lt;/td&gt;
-      &lt;td&gt;없음 (배치 고정)&lt;/td&gt;
-      &lt;td&gt;주범&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;이 간섭은 어디서 오는가. static/dynamic에서는 배치 안 요청들의 단계가 항상 같다 — 다 같이 출발했으니 다 같이 prefill을 하고, 그 다음부터 다 같이 decode를 한다. 단계가 섞일 일 자체가 구조적으로 없다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-non-continuous-batching-happy-path.svg&quot; alt=&quot;static/dynamic의 단계 정렬: 전원 같이 prefill한 뒤 전원 같이 decode한다&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. 요청 셋이 iteration 1에서 한 배치로 prefill을 하고, 이후 전원이 lockstep으로 decode를 반복한다 — 단계가 섞일 일이 구조적으로 없다. 그림은 생성 길이까지 같아 빈 슬롯조차 없는 이상적 경우(happy path)다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;반면 continuous batching에서 새로 합류하는 요청은 prefill부터 시작해야 하는데, 배치에는 이미 decode 중인 요청들이 있다. &lt;a href=&quot;#continuous-batching&quot;&gt;위 continuous batching 그림&lt;/a&gt;에서 초록 decode 셀들 사이에 파란 prefill 셀이 끼어들던 장면이 바로 이것이다. &lt;a href=&quot;#배치의-구조-prefill과-decode&quot;&gt;배치의 구조&lt;/a&gt;의 용어로, S=1인 요청들 옆에 — 예컨대 긴 문서가 프롬프트로 들어와 — S=8000짜리 요청이 오는 것이다. 공교롭게도 prefill/decode 구분은 continuous batching의 성립 전제이면서 동시에 이 문제의 원천이다 — 배치를 자유롭게 재구성할 수 있는 근거가 “decode는 전부 S=1이라 아무나 같은 모양으로 쌓인다”였는데, 새로 합류하는 요청은 S=8000의 prefill이기 때문이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-ch06-mixed-step-length.svg&quot; alt=&quot;continuous의 단계가 섞이는 세계: 스텝 길이는 prefill이 정한다&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. decode 박자로 돌던 배치(it k−1)에 새 요청 D가 끼어들면, 그 스텝(iteration k)의 길이는 S=8000 prefill이 정한다 — decode의 몫은 토큰 1개지만 prefill이 끝날 때까지 같은 스텝에 묶인다. prefill이 빠진 다음 스텝(it k+1)은 다시 decode 박자로 돌아온다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;문제 해결에 활용할 수 있는 선택지는 둘인데, 결론부터 말하면 어느 쪽도 만족스럽지 않다. 섞지 않으면 진행 중인 decode가 멎고, 섞어도 긴 prefill이 스텝 길이를 지배한다.&lt;/p&gt;
-
-&lt;h3 id=&quot;방안-1-prefill과-decode를-함께-배칭하지-않음&quot;&gt;방안 1: prefill과 decode를 함께 배칭하지 않음&lt;/h3&gt;
-
-&lt;p&gt;prefill과 decode를 섞은 하이브리드 배치는 더 복잡한 GPU 커널이 필요하다. 그러니 우선 섞지 않는 쪽부터 보자.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-ch06-cb-prefill-priority.svg&quot; alt=&quot;prefill을 우선하고 decode와 함께 배칭하지 않는 continuous batching&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: Hands-On LLM Serving and Optimization (O'Reilly) 그림 6-7. AI를 이용해 재구성했다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;요청 1이 prefill(iteration 1)을 거쳐 decode(iteration 2)를 진행하던 중 요청 2·3이 도착했다. 이때 보통 prefill을 우선한다. prefill이 첫 토큰까지의 시간, 즉 TTFT를 결정하고, 챗봇 같은 대화형 서비스에서 TTFT가 중요한 지연 지표이기 때문이다.&lt;/p&gt;
-
-&lt;p&gt;대가는 그림의 iteration 3에 그대로 보인다. 요청 2·3의 prefill이 도는 동안 &lt;strong&gt;요청 1은 완전히 유휴 상태로 멎는다.&lt;/strong&gt; 새 요청의 프롬프트가 길수록 이 공백이 길어지고, 요청 1의 종단 지연(end-to-end latency)과 토큰 간 지연(inter-token latency, [3.3편]의 TPOT에 해당)이 그만큼 타격을 입는다. 스트리밍으로 토큰을 받아 보던 사용자 입장에서는 잘 나오던 글자가 갑자기 멈추는 것이다.&lt;/p&gt;
-
-&lt;h3 id=&quot;방안-2-prefill과-decode를-함께-배칭&quot;&gt;방안 2: prefill과 decode를 함께 배칭&lt;/h3&gt;
-
-&lt;p&gt;그럼 섞어 보자. 요청 1의 decode 스텝을 요청 2·3의 prefill과 같은 iteration에 넣어 함께 실행한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-ch06-cb-prefill-decode-mixed.svg&quot; alt=&quot;decode와 prefill을 함께 배칭하는 continuous batching&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: Hands-On LLM Serving and Optimization (O'Reilly) 그림 6-8. AI를 이용해 재구성했다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;그런데 “S=1과 S=8000을 한 텐서에 같이 담는다”는 게 그냥 되는 일인가? 층위를 나눠서 보자.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;층위&lt;/th&gt;
-      &lt;th&gt;S=1과 S=8000 같이 담기&lt;/th&gt;
-      &lt;th&gt;왜&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;GEMM / FFN&lt;/td&gt;
-      &lt;td&gt;된다&lt;/td&gt;
-      &lt;td&gt;토큰끼리 독립이라 8001개 행으로 이어 붙이면 된다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;attention&lt;/td&gt;
-      &lt;td&gt;순수 batched 커널로는 안 된다&lt;/td&gt;
-      &lt;td&gt;요청마다 Q 길이도 참조할 KV 길이도 달라 직사각형이 안 된다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;실무 관점&lt;/td&gt;
-      &lt;td&gt;담아도 손해다&lt;/td&gt;
-      &lt;td&gt;그 스텝의 소요 시간이 8000토큰 prefill에 지배된다&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;진짜 문제는 마지막 줄이다. 토큰 하나를 디코딩하는 것은 prefill을 끝내는 것보다 훨씬 빠르기 때문에, 한 스텝의 길이는 그 스텝에서 가장 무거운 작업 — prefill — 이 결정한다. 담을 수는 있어도, 담는 순간 decode 중이던 요청의 그 스텝이 prefill 시간만큼 늘어나 토큰 간 지연이 튄다. 그림에서 요청 2·3의 prefill이 이어지는 동안 요청 1의 decode 토큰들이 그 긴 스텝의 박자에 묶이는 것이 보인다. 입력 프롬프트가 길수록 지연은 여전히 두드러진다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;남는-질문-6장의-나머지&quot;&gt;남는 질문: 6장의 나머지&lt;/h1&gt;
-
-&lt;p&gt;continuous batching은 빈 슬롯 문제를 풀었지만, prefill과 decode가 한 스텝에서 만나는 새 문제를 남겼다. 두 방안 모두 만족스럽지 않다는 결론이 다음 질문들을 만든다. 이것이 6장 나머지의 지도다. 여기서는 방향만 확인하고 상세는 이후 글에서 다룬다.&lt;/p&gt;
-
-&lt;h2 id=&quot;prefill-쪼개기-selective-batching과-chunked-prefill&quot;&gt;prefill 쪼개기: selective batching과 chunked prefill&lt;/h2&gt;
-
-&lt;p&gt;방안 1과 2가 모두 만족스럽지 않았던 원인은 긴 prefill이 한 스텝에 통째로 실린다는 데 있었다. 그렇다면 prefill을 쪼갤 수는 없나 — &lt;strong&gt;쪼갤 수 있다.&lt;/strong&gt; 쪼개는 축이 두 개 있다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;구분&lt;/th&gt;
-      &lt;th&gt;selective batching&lt;/th&gt;
-      &lt;th&gt;chunked prefill&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;무엇을 쪼개나&lt;/td&gt;
-      &lt;td&gt;연산 종류 (GEMM은 묶고 attention은 요청별로)&lt;/td&gt;
-      &lt;td&gt;작업을 시간축으로 (prefill을 여러 iteration에 분산)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;층위&lt;/td&gt;
-      &lt;td&gt;커널 / 텐서 조립&lt;/td&gt;
-      &lt;td&gt;스케줄링&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;출처&lt;/td&gt;
-      &lt;td&gt;Orca (OSDI ‘22)&lt;/td&gt;
-      &lt;td&gt;Sarathi (2023) → vLLM&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;노리는 것&lt;/td&gt;
-      &lt;td&gt;혼재 배치가 성립하게 만들기&lt;/td&gt;
-      &lt;td&gt;토큰 간 지연 안정화 (대가는 TTFT)&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;selective batching의 아이디어는 위 표의 첫 두 줄 대비가 전부다 — &lt;strong&gt;GEMM은 행(토큰)마다 계산이 독립이라&lt;/strong&gt; 어느 요청의 토큰인지가 결과에 영향을 주지 않으니 전부 이어 붙여 한 번에 돌리고, &lt;strong&gt;attention은 같은 요청의 KV를 참조해야 해서 요청 경계가 계산 자체에 들어가니&lt;/strong&gt; 요청별로 따로 돈다. chunked prefill은 긴 prefill을 한 스텝에 다 하지 않고 청크로 나눠 여러 스텝에 싣는 방식이다. 어떻게 쪼개도 결과가 같다는 성질(&lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/#프롬프트-병렬-처리-prefill의-기원&quot;&gt;3.3편&lt;/a&gt;에서 정리한 분할의 자유)이 정확성을 보장하고, 앞 청크의 KV cache가 남아 있어 다음 청크가 이어서 계산할 수 있다 — decode를 이어갈 수 있는 것과 같은 원리다. 이때 &lt;a href=&quot;#토큰-1개-생성-스텝이라는-통칭&quot;&gt;앞&lt;/a&gt;에서 말한 “새 토큰 없이 끝나는 iteration”(마지막이 아닌 중간 청크)이 실제로 생긴다.&lt;/p&gt;
-
-&lt;h2 id=&quot;스케줄링의-cpu-비용&quot;&gt;스케줄링의 CPU 비용&lt;/h2&gt;
-
-&lt;p&gt;&lt;strong&gt;매 스텝 배치를 다시 짜는 CPU 비용도 공짜가 아니다.&lt;/strong&gt; 스케줄링은 CPU 몫이므로, 모델이 작아 GPU 스텝이 짧으면 CPU 스케줄링 시간이 상대적으로 커져 GPU가 CPU를 기다리는 상황이 생긴다. vLLM의 엔진 재작성(V1)이나 CUDA graph 같은 작업들이 이 CPU 구간을 줄이거나 GPU 실행 뒤로 숨기려는 시도다.&lt;/p&gt;
-
-&lt;h2 id=&quot;kv-cache-항&quot;&gt;KV cache 항&lt;/h2&gt;
-
-&lt;p&gt;&lt;strong&gt;KV cache를 절약할 수는 없을까.&lt;/strong&gt; decode 한 스텝의 HBM 읽기는 가중치 항과 KV cache 항의 합인데(&lt;a href=&quot;#처리량-이득의-원리&quot;&gt;처리량 이득의 원리&lt;/a&gt;에서 미뤄 둔 항이다), 배칭이 절약하는 것은 앞 항뿐이다.&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;decode&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;스텝의&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;HBM&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;읽기&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;가중치&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;14&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;GB&lt;/span&gt;        &lt;span class=&quot;c&quot;&gt;# 모든 요청이 공유. 배칭해도 1번&lt;/span&gt;
-                        &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;KV&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;cache&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;요청별&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;   &lt;span class=&quot;c&quot;&gt;# 요청마다 각자. 배칭하면 B배&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;배치를 키우다 보면 어느 순간 KV 읽기가 지배하기 시작하고, 그때부터는 배칭이 아니라 &lt;a href=&quot;#6장의-지도-하나의-분수-세-방향의-공략&quot;&gt;6장 지도&lt;/a&gt;의 두 번째 축 — 옮길 바이트를 줄이는 GQA·KV cache 양자화 — 이 답이 된다. 요청이 매 스텝 들고나는 배치에서 요청별로 자라나는 KV cache 메모리를 어떻게 관리하느냐의 문제도 여기서 함께 만나는데, PagedAttention이 다루는 단편화 낭비가 바로 그것이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
-
-&lt;p&gt;이 글의 흐름을 질문 사슬로 압축하면 다음과 같다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;순서&lt;/th&gt;
-      &lt;th&gt;질문&lt;/th&gt;
-      &lt;th&gt;답&lt;/th&gt;
-      &lt;th&gt;다음 질문&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;단위&lt;/td&gt;
-      &lt;td&gt;실행 단위는 무엇인가&lt;/td&gt;
-      &lt;td&gt;요청이 아니라 forward 1회, iteration. 원자적이라 개입 지점은 경계뿐&lt;/td&gt;
-      &lt;td&gt;그 스텝에 무엇을 넣나&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;동기&lt;/td&gt;
-      &lt;td&gt;여러 개 넣는 게 왜 이득인가&lt;/td&gt;
-      &lt;td&gt;한 번 읽은 가중치의 상각 — 산술 강도 상승&lt;/td&gt;
-      &lt;td&gt;넣을 작업의 모양이 같은가&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;구조&lt;/td&gt;
-      &lt;td&gt;어떤 모양으로 쌓이나&lt;/td&gt;
-      &lt;td&gt;prefill은 S가 크고 decode는 S=1 — 패딩 낭비와 종료 시점 분산&lt;/td&gt;
-      &lt;td&gt;빈 슬롯을 누가 언제 다시 채우나&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;시점&lt;/td&gt;
-      &lt;td&gt;배치를 언제 다시 짜나&lt;/td&gt;
-      &lt;td&gt;static·dynamic·continuous — 매 iteration 재구성이 continuous&lt;/td&gt;
-      &lt;td&gt;prefill과 decode가 한 스텝에서 만나면&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;이후 기법들을 읽을 때 길을 잃지 않기 위한 핵심 개념을 다시 정리하면:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;iteration&lt;/strong&gt; = 모델을 처음부터 끝까지 한 번 통과시키는 것. decode에서는 토큰 1개 생성. 원자적이며, 스케줄러의 개입 지점은 iteration 경계뿐이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;배칭&lt;/strong&gt; = 여러 요청의 입력을 같은 텐서에 쌓아 한 forward에 넣는 것. 목적은 오직 가중치를 한 번만 읽기다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;다 같이 prefill/decode&lt;/strong&gt; = 시간적 동시가 아니라 같은 forward pass 안이라는 뜻. 길이가 다르면 패딩 또는 varlen 이어붙이기로 맞춘다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;decode 배치에 시점 차이는 없다&lt;/strong&gt; — 같은 GEMM의 다른 행, lockstep이다. 차이가 나는 것은 오로지 끝나는 시점이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;세 방식의 차이&lt;/strong&gt; = 텐서 쌓기는 동일하고, 배치 멤버십을 언제 다시 정하느냐뿐이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;continuous batching의 대가&lt;/strong&gt; = prefill과 decode의 혼합. selective batching과 chunked prefill이 필요해진 이유다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;continuous batching은 종착점이 아니라 새 문제의 시작점이다. 6장의 나머지 기법들은 전부 &lt;a href=&quot;#남는-질문-6장의-나머지&quot;&gt;이 지도&lt;/a&gt; 위의 좌표로 읽을 수 있다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.oreilly.com/library/view/hands-on-llm-serving/9798341621480/&quot;&gt;Hands-On LLM Serving and Optimization (O’Reilly)&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.usenix.org/conference/osdi22/presentation/yu&quot;&gt;Orca: A Distributed Serving System for Transformer-Based Generative Models (OSDI ‘22)&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://arxiv.org/abs/2308.16369&quot;&gt;SARATHI: Efficient LLM Inference by Piggybacking Decodes with Chunked Prefills&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.anyscale.com/blog/continuous-batching-llm-inference&quot;&gt;Anyscale — How continuous batching enables 23x throughput in LLM inference&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.youtube.com/watch?v=9gmHwe5-j0E&amp;amp;t=611s&quot;&gt;The Engineering Behind LLM Inference: Serving in Production (YouTube)&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/&quot;&gt;LLM 서빙과 최적화 - 3.2. 배치 요청: 정적 배칭의 효과와 한계&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/&quot;&gt;LLM 서빙과 최적화 - 3.3. prefill과 decode: 생성 추론의 두 단계&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/dev/Dev-Roofline-Model-LLM-Serving/&quot;&gt;Roofline 모델로 보는 LLM 서빙&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="LLM-Serving" /><category term="Batching" /><category term="Continuous-Batching" /><category term="Prefill-Decode" /><category term="Iteration-Level-Scheduling" /><category term="vLLM" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-3" /><summary type="html">서빙 최적화 기법의 출발점인 배칭의 큰 흐름을 실행 단위, 동기, 구조, 재구성 시점 순으로 잡아 보자.</summary></entry></feed>
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="k8s" /><category term="Service" /><category term="ClusterIP" /><category term="kube-proxy" /><category term="DNS" /><category term="MLflow" /><category term="Argo-Workflow" /><category term="port-forward" /><summary type="html">클러스터 밖으로 노출된 접속용 포트를 클러스터 내부 Service 포트로 착각하면 어떤 증상이 나타나는지 알아 보자.</summary></entry></feed>
