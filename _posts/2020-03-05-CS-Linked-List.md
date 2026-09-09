@@ -11,6 +11,7 @@ tags:
   - Python
   - 자료구조
   - 연결 리스트
+last_modified_at: 2026-09-09
 ---
 
 
@@ -91,7 +92,7 @@ tags:
 
 연결 리스트는 메모리의 동적 할당을 기반으로 구현된 리스트이다. 순차 리스트와 달리, 개별적으로 위치한 원소의 주소를 연결하여 하나의 전체적인 자료구조를 형성한다. 따라서 자료의 논리적인 순서와 메모리 상 물리적 순서가 일치하지 않는다. 
 
-![array vs. linked]({{site.url}}/assets/images/linkedlist1.jpg)
+![array vs. linked]({{site.url}}/assets/images/array-vs-linked-list.jpg)
 
 > 배열 리스트는 왼쪽 그림과 같이 원소들이 연속적으로 연결되어 있는 형태이다. 반면, 연결 리스트는 오른쪽 그림과 같이 각각의  원소들이 흩어져 있고, 연결되어 있는 형태이다.
 
@@ -114,7 +115,7 @@ tags:
 
 
 
-![linked]({{site.url}}/assets/images/linkedlist2.jpg)
+![linked]({{site.url}}/assets/images/linkedlist-node-structure.jpg)
 
 
 
