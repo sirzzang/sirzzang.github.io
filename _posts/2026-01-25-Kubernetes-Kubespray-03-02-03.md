@@ -14,6 +14,7 @@ tags:
   - On-Premise-K8s-Hands-On-Study-Week-4
 hidden: true
 
+last_modified_at: 2026-09-09
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 On-Premise K8s Hands-on Study 4주차 학습 내용을 기반으로 합니다.*
@@ -88,7 +89,7 @@ Kubespray는 Ansible 변수 우선순위를 활용해 변수를 분리한다:
 
 ### main.yml - 핵심 설정
 
-![kubespray-deafult-default_main]({{site.url}}/assets/images/kubespray-deafult-default_main.svg)
+![kubespray-default-default_main]({{site.url}}/assets/images/kubespray-default-default_main.svg)
 
 Kubernetes 클러스터의 핵심 설정을 정의한다. 버전, 네트워크, 컨테이너 런타임 등 클러스터 구성의 기본값이 여기에 있다. 주요 변수는 아래와 같다.
 
@@ -237,7 +238,7 @@ cat /etc/sysctl.d/99-sysctl.conf
 
 ### download.yml - 다운로드 설정
 
-![kubespray-deafult-default_download]({{site.url}}/assets/images/kubespray-deafult-default_download.svg)
+![kubespray-default-default_download]({{site.url}}/assets/images/kubespray-default-default_download.svg)
 
 바이너리와 컨테이너 이미지의 다운로드 URL, 저장소 주소를 정의한다. 에어갭 환경이나 프라이빗 레지스트리 사용 시 이 변수들을 오버라이드한다.
 
