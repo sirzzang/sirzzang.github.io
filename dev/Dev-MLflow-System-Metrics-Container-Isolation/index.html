@@ -460,7 +460,7 @@ window.MathJax = {
 
 
 
-  31 분 소요
+  33 분 소요
 
 
             
@@ -482,7 +482,13 @@ window.MathJax = {
   <li><a href="#배경">배경</a>
     <ul>
       <li><a href="#학습-플랫폼-구조">학습 플랫폼 구조</a></li>
-      <li><a href="#기록-표면의-분업">기록 표면의 분업</a></li>
+      <li><a href="#기록-표면의-분업">기록 표면의 분업</a>
+        <ul>
+          <li><a href="#run의-생명주기">run의 생명주기</a></li>
+          <li><a href="#플랫폼이-소유하는-이유">플랫폼이 소유하는 이유</a></li>
+          <li><a href="#플랫폼이-처리하는-것-sdk가-노출하는-것">플랫폼이 처리하는 것, SDK가 노출하는 것</a></li>
+        </ul>
+      </li>
       <li><a href="#요구사항">요구사항</a></li>
       <li><a href="#레퍼런스와-검토한-대안">레퍼런스와 검토한 대안</a></li>
     </ul>
@@ -503,11 +509,11 @@ window.MathJax = {
       <li><a href="#분산학습에서의-복제">분산학습에서의 복제</a></li>
     </ul>
   </li>
-  <li><a href="#원인-proc은-격리되지-않고-psutil은-proc만-읽는다">원인: /proc은 격리되지 않고, psutil은 /proc만 읽는다</a>
+  <li><a href="#원인-cpu메모리-통계는-격리되지-않는다">원인: CPU·메모리 통계는 격리되지 않는다</a>
     <ul>
       <li><a href="#namespace와-cgroup">namespace와 cgroup</a></li>
       <li><a href="#격리되는-파일-격리되지-않는-파일">격리되는 파일, 격리되지 않는 파일</a></li>
-      <li><a href="#psutil의-설계">psutil의 설계</a></li>
+      <li><a href="#psutil은-cgroup을-읽지-않는다">psutil은 cgroup을 읽지 않는다</a></li>
     </ul>
   </li>
   <li><a href="#디스크와-gpu-격리는-되지만-방식이-다르다">디스크와 GPU: 격리는 되지만 방식이 다르다</a>
@@ -518,6 +524,7 @@ window.MathJax = {
   </li>
   <li><a href="#종합-한-이름-아래-성질-넷">종합: 한 이름 아래 성질 넷</a>
     <ul>
+      <li><a href="#계열별-성질">계열별 성질</a></li>
       <li><a href="#격리와-전-rank-수집">격리와 전 rank 수집</a></li>
     </ul>
   </li>
@@ -596,9 +603,58 @@ window.MathJax = {
 <span class="n">tracking</span><span class="o">.</span><span class="n">log_artifact_dir</span><span class="p">(</span><span class="s">'/tmp/fit_out'</span><span class="p">,</span> <span class="n">to</span><span class="o">=</span><span class="s">'out'</span><span class="p">)</span>
 </code></pre></div></div>
 
+<h3 id="run의-생명주기">run의 생명주기</h3>
+
 <p>MLflow를 직접 쓰게 하지 않는 이유는 run의 생명주기를 플랫폼이 소유하기 때문이다. Ray Train은 워커마다 학습 함수를 호출하는데, 플랫폼은 그 함수를 감싸서 앞에는 준비 코드를, 뒤에는 정리 코드를 둔다. 제출 경로에서 run은 이 순서로 산다. driver가 run을 만들고, 준비 코드가 그 run에 붙고, ML 엔지니어의 학습 함수가 돌고, 정리 코드가 flush하고 떼어낸다. 이 글에서 <strong>워커 준비 단계</strong>는 학습 함수 앞에서 도는 그 준비 코드를 가리킨다. 학습 함수가 도는 동안 ML 엔지니어가 <code class="highlighter-rouge">mlflow.start_run()</code>을 직접 부르면 run이 둘이 되거나, rank마다 같은 지표를 중복 기록하게 된다.</p>
 
-<p>로컬 경로에서처럼 사용자가 <code class="highlighter-rouge">start_run()</code>을 직접 부르게 두면 되지 않을까 싶기도 하다. 로컬에서는 실제로 그렇게 둔다. 제출 경로에서 그렇게 두지 않는 이유는 run이 프로세스 단위이기 때문이다. 워커 4개가 각자 부르면 run이 4개 생기고, 하나로 모으려면 워커보다 먼저 존재하는 driver가 만들어 id를 나눠 줘야 하는데, 이걸 ML 엔지니어가 인지하고 변경해 줘야 한다. 그리고 학습 코드가 OOM 등의 이유로 죽으면 자기 run을 FAILED로 표시할 수 없다. 잡의 시작과 끝을 아는 플랫폼 쪽이 run을 소유해야 상태가 맞는다.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant D as driver (head)
+    participant P as 워커 준비 단계 (플랫폼)
+    participant U as 학습 함수 (ML 엔지니어)
+    participant S as MLflow 서버
+    D-&gt;&gt;S: run 생성
+    D-&gt;&gt;P: MLFLOW_RUN_ID 전파
+    P-&gt;&gt;S: rank 0만 run 부착
+    P-&gt;&gt;U: 학습 함수 호출
+    U-&gt;&gt;S: tracking.log_metric(...)
+    U--&gt;&gt;P: 반환
+    P-&gt;&gt;S: flush, detach
+</code></pre>
+
+<h3 id="플랫폼이-소유하는-이유">플랫폼이 소유하는 이유</h3>
+
+<p>로컬 경로에서처럼 사용자가 <code class="highlighter-rouge">start_run()</code>을 직접 부르게 두면 되지 않을까 싶기도 하다. 로컬에서는 실제로 그렇게 둔다. 제출 경로에서 그렇게 두지 않는 이유는 크게 두 가지다.</p>
+
+<p><br /></p>
+
+<p>첫째, <strong>run은 프로세스 단위다.</strong> <code class="highlighter-rouge">mlflow.start_run()</code>은 부른 프로세스에 활성 run을 하나 만드니, 워커 4개가 각자 부르면 run이 4개 생긴다. 로컬 분산학습에서의 실험 추적 시 대표적인 방식은 <strong>rank 0만 run을 만들고 나머지 rank는 아무것도 기록하지 않는 것</strong>이다. Lightning의 <code class="highlighter-rouge">MLFlowLogger</code>, Hugging Face <code class="highlighter-rouge">Trainer</code>의 <code class="highlighter-rouge">MLflowCallback</code>, Ray 자체의 <code class="highlighter-rouge">setup_mlflow</code>가 전부 이 방식이다(2026년 9월 기준 소스 확인. 각각 <code class="highlighter-rouge">rank_zero_only</code> 데코레이터, <code class="highlighter-rouge">is_world_process_zero</code> 조건, <code class="highlighter-rouge">rank_zero_only=True</code> 기본값).</p>
+
+<p>Ray의 것을 보면 아래와 같다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># ray/air/integrations/mlflow.py — setup_mlflow (발췌, 2026-09 master)</span>
+<span class="k">class</span> <span class="nc">_NoopModule</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_NoopModule</span><span class="p">()</span>
+
+<span class="k">def</span> <span class="nf">setup_mlflow</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">rank_zero_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="bp">True</span><span class="p">):</span>
+    <span class="n">context</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">get_context</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">rank_zero_only</span> <span class="ow">and</span> <span class="n">context</span><span class="o">.</span><span class="n">get_world_rank</span><span class="p">()</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_NoopModule</span><span class="p">()</span>        <span class="c"># rank 0이 아니면 무엇을 불러도 아무 일도 없다</span>
+    <span class="o">...</span>
+    <span class="n">mlflow_util</span><span class="o">.</span><span class="n">start_run</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>      <span class="c"># rank 0만 여기 도달해 run을 만든다</span>
+</code></pre></div></div>
+
+<p>이 플랫폼의 SDK도 같다. <code class="highlighter-rouge">tracking.log_metric</code>류는 rank 0이 아니면 아무 일도 하지 않는다. 전 rank가 함께 불러야 하는 <code class="highlighter-rouge">log_metrics_collective</code>만 나머지 rank가 값을 보태는데, 그것도 모은 값을 rank 0이 한 번 쓴다. 이 분업은 <a href="#플랫폼이-처리하는-것-sdk가-노출하는-것">아래 표</a>에서 정리한다. loss처럼 rank 0이 대표로 기록하면 되는 지표에는 이것으로 충분하다.</p>
+
+<p>그러나 이 글의 주제인 시스템 메트릭처럼 rank마다 다른 값을 한 run에 두려면 <strong>워커 전부가 같은 run id를 알아야 한다</strong>. MLflow가 지원하는 채널은 환경변수 <code class="highlighter-rouge">MLFLOW_RUN_ID</code>다. 이 값이 있으면 <code class="highlighter-rouge">start_run()</code>은 새 run을 만드는 대신 그 run에 붙는다. 그 값을 워커에 실어 보내려면 워커보다 먼저 있는 driver가 run을 만들어야 하고, rank 0이 만들어 collective로 뿌리는 방법도 있다. 어느 쪽이든 rank를 의식한 배선이다. 플랫폼이 소유하지 않으면 ML 엔지니어가 학습 코드마다 이것을 직접 짜야 한다.</p>
+
+<p><br /></p>
+
+<p>둘째, <strong>죽는 프로세스는 자기 죽음을 기록할 수 없다.</strong> MLflow가 스스로 run에 FAILED를 쓰는 경로는 <code class="highlighter-rouge">with mlflow.start_run()</code> 블록을 예외로 빠져나갈 때뿐이고, 그 밖에는 코드가 <code class="highlighter-rouge">end_run(status='FAILED')</code>를 직접 불러야 한다. 프로세스가 정상 종료하면 atexit 훅이 FINISHED를 쓴다. cgroup 한도를 넘어 OOM으로 죽는 프로세스는 커널이 SIGKILL로 끝내므로 <code class="highlighter-rouge">finally</code>도 atexit도 돌지 않는다. MLflow에는 run에 대한 heartbeat나 시간 초과가 없어(3.15 기준), 그 run은 RUNNING으로 영원히 남는다. 요구사항의 배경이 된 OOM이 정확히 이 경우다. 반대 방향의 문제도 있다. 워커가 run에 붙은 채 정상 종료하면 atexit이 FINISHED를 쓴다. 전 워커를 한 run에 붙였다면 먼저 끝난 워커가 아직 도는 잡을 완주로 만든다.</p>
+
+<p>그래서 run의 상태는 그 프로세스보다 오래 살면서 잡 전체를 보는 쪽이 써야 한다. 학습 함수는 자기 프로세스의 시작과 끝만 안다. 다른 rank가 죽었다는 사실은 예외로 오지 않고, 집합 통신이 멈추거나 시간 초과로 끝나는 형태로 늦게 나타난다. Ray Train은 워커 하나가 실패하면 워커 그룹 전체를 내리고, 재시도가 남았으면 새 프로세스로 다시 띄운다. 전 rank가 끝났는지, 재시도가 소진됐는지는 <code class="highlighter-rouge">TorchTrainer.fit()</code>의 반환과 예외로 driver에 모이고, 잡이 밖에서 지워진 경우까지 포함한 최종 사실은 RayJob의 상태에 있다. 이 플랫폼에서는 driver가 run을 만들고 <code class="highlighter-rouge">fit()</code>의 결과로 FINISHED와 FAILED를 쓰며, 워커는 붙었다가 떼기만 하고 run을 닫지 않는다. driver마저 죽어 RUNNING으로 남은 run은 RayJob 상태를 읽는 정리 잡이 사후에 정정한다.</p>
+
+<h3 id="플랫폼이-처리하는-것-sdk가-노출하는-것">플랫폼이 처리하는 것, SDK가 노출하는 것</h3>
 
 <table>
   <thead>
@@ -636,22 +692,8 @@ window.MathJax = {
 
   <p>표의 rank 0 게이트는 학습 지표 이야기다. 동기 데이터 병렬에서는 rank마다 파라미터가 같고 검증 지표도 보통 rank 0이 모아서 계산하므로, 전 rank가 <code class="highlighter-rouge">log_metric</code>을 부르면 같은 키, 같은 step에 같은 값이 워커 수만큼 쌓인다. 그래서 SDK의 기록 함수는 rank 0이 아니면 아무 일도 하지 않는다. rank마다 값이 다른 지표(로컬 배치의 loss, 처리량 등)를 위해서는 전 rank가 함께 불러 mean·sum·max로 모은 뒤 rank 0이 한 번 기록하는 <code class="highlighter-rouge">log_metrics_collective</code>가 따로 있다.</p>
 
-  <p>뒤에서 다룰 시스템 메트릭은 이 둘과 다르다. rank마다 값이 다를 수 있고 모을 이유도 없어서, 워커마다 자기 이름을 붙여 따로 기록한다. 같은 노드의 워커끼리 노드 값이 겹치는 문제(다음 글의 노드 계열의 중복)는 그 위에서 생기는 별개 이야기다.</p>
+  <p>이 글의 주제인 시스템 메트릭은 이 둘과 다르다. rank마다 값이 다를 수 있고 모을 이유도 없어서, 워커마다 자기 이름을 붙여 따로 기록한다. 같은 노드의 워커끼리 노드 값이 겹치는 문제(다음 글의 중복 처리)는 그 위에서 생기는 별개 이야기다.</p>
 </blockquote>
-
-<pre><code class="language-mermaid">sequenceDiagram
-    participant D as driver (head)
-    participant P as 워커 준비 단계 (플랫폼)
-    participant U as 학습 함수 (ML 엔지니어)
-    participant S as MLflow 서버
-    D-&gt;&gt;S: run 생성
-    D-&gt;&gt;P: MLFLOW_RUN_ID 전파
-    P-&gt;&gt;S: rank 0만 run 부착
-    P-&gt;&gt;U: 학습 함수 호출
-    U-&gt;&gt;S: tracking.log_metric(...)
-    U--&gt;&gt;P: 반환
-    P-&gt;&gt;S: flush, detach
-</code></pre>
 
 <p>즉 “ML 엔지니어가 함수를 부르면, 어느 프로세스가 어느 run에 어떤 이름으로 쓰고 언제 정리할지는 플랫폼이 정한다”는 분업이다. 플랫폼에 제출된 run은 전부 이 표면으로 기록되고 있고, 인터랙티브 세션의 로컬 실험도 같은 함수를 쓴다.</p>
 
@@ -663,7 +705,7 @@ window.MathJax = {
 
 <h2 id="레퍼런스와-검토한-대안">레퍼런스와 검토한 대안</h2>
 
-<p>학습 지표와 하드웨어 지표를 같은 run에 두는 것은 실험 추적 도구들이 기본으로 제공하는 기능이다.</p>
+<p>학습 지표와 하드웨어 지표를 같은 run에 두는 것은 대부분의 ML 실험 추적 도구들이 기본으로 제공하는 기능이다.</p>
 
 <blockquote>
   <p>MLflow allows users to log system metrics including CPU stats, GPU stats, memory usage, network traffic, and disk usage during the execution of an MLflow run.
@@ -947,13 +989,13 @@ gpu-node-1 capacity = 540,565 MB   (144 논리 코어)
 
 <p>여기에 분산학습이 얹히면 문제가 한 번 더 커진다. <a href="#학습-플랫폼-구조">학습 플랫폼 구조</a> 절에서 한 노드에 워커 pod가 여러 개 뜰 수 있다고 했다. 4워커 제출의 실제 배치를 확인했더니 노드 셋에 2·1·1로 흩어져 있었다. rank 0과 rank 3이 같은 노드였다.</p>
 
-<p>같은 노드에 뜬 두 rank가 각각 시스템 메트릭을 켜면, 둘 다 같은 <code class="highlighter-rouge">/proc/meminfo</code>를 읽는다. 값이 같다. 그런데 이름은 각각 “rank 0의 메모리”, “rank 1의 메모리”로 붙는다. 노드 하나의 값이 rank 수만큼 복제되어 각각 자기 사용량처럼 보이는 것이다. 워커가 16개면 노드 값이 최대 16번 중복 기록된다.</p>
+<p>같은 노드에 뜬 두 rank가 각각 시스템 메트릭을 켜면, 둘 다 같은 <code class="highlighter-rouge">/proc/meminfo</code>를 읽는다. <strong>읽는 시각이 조금 달라 절대값은 어긋나지만, 같은 노드의 같은 사실이다</strong>. 그런데 이름은 각각 “rank 0의 메모리”, “rank 1의 메모리”로 붙는다. 노드 하나의 값이 rank 수만큼 복제되어 각각 자기 사용량처럼 보이는 것이다. 워커가 16개면 노드 값이 최대 16번 중복 기록된다.</p>
 
 <p><br /></p>
 
-<h1 id="원인-proc은-격리되지-않고-psutil은-proc만-읽는다">원인: /proc은 격리되지 않고, psutil은 /proc만 읽는다</h1>
+<h1 id="원인-cpu메모리-통계는-격리되지-않는다">원인: CPU·메모리 통계는 격리되지 않는다</h1>
 
-<p>왜 <code class="highlighter-rouge">/proc/meminfo</code>는 컨테이너 안에서도 노드 값을 보여 주는가. 이 답은 MLflow에도, Kubernetes에도 없다. 원인은 둘이다. 리눅스 커널이 컨테이너를 격리하는 방식, 그리고 psutil이 그 격리되지 않는 파일만 읽는다는 사실이다. 앞의 것부터 본다.</p>
+<p>왜 <code class="highlighter-rouge">/proc/meminfo</code>는 컨테이너 안에서도 노드 값을 보여 주는가. 이 답은 MLflow에도, Kubernetes에도 없다. 원인은 둘이다. 리눅스 커널이 <code class="highlighter-rouge">/proc</code>의 파일마다 격리를 다르게 하는 방식, 그리고 psutil이 그 가운데 격리되지 않는 파일을 읽고 cgroup은 읽지 않는다는 사실이다. 앞의 것부터 본다.</p>
 
 <h2 id="namespace와-cgroup">namespace와 cgroup</h2>
 
@@ -1079,7 +1121,7 @@ Mem:          515523       17939       83198          10      414385      494185
   <p><strong>참고</strong>: cgroup namespace는 이름 때문에 오해하기 쉽다. cgroup namespace가 격리하는 것은 <code class="highlighter-rouge">/proc/self/cgroup</code>에 보이는 cgroup <strong>경로</strong>뿐이다. 위 pod 안에서 <code class="highlighter-rouge">/proc/self/cgroup</code>은 <code class="highlighter-rouge">0::/</code>로 자기가 루트인 것처럼 보이지만, 같은 자리에서 연 <code class="highlighter-rouge">/proc/meminfo</code>는 노드 값이다. 한편 이 문제를 사용자 공간에서 우회하는 도구로 lxcfs가 있다. FUSE 파일시스템으로 <code class="highlighter-rouge">/proc/meminfo</code>, <code class="highlighter-rouge">/proc/stat</code> 등을 덮어써 cgroup 값을 보여 준다. README는 목적을 “making Linux containers feel more like a virtual machine”으로 적고 있다. Kubernetes에서는 DaemonSet으로 띄우고 pod에 마운트를 주입하는 방식으로 쓰이지만, 기본 제공은 아니다.</p>
 </blockquote>
 
-<h2 id="psutil의-설계">psutil의 설계</h2>
+<h2 id="psutil은-cgroup을-읽지-않는다">psutil은 cgroup을 읽지 않는다</h2>
 
 <p>psutil은 시스템 레벨 라이브러리다. “이 프로세스가 사는 컨테이너”라는 개념을 갖고 있지 않고, 갖지 않기로 한 것이 설계다. 컨테이너의 한도는 <code class="highlighter-rouge">/proc</code>이 아니라 cgroup에 있다. <code class="highlighter-rouge">/sys/fs/cgroup/memory.max</code>(한도), <code class="highlighter-rouge">memory.current</code>(현재), <code class="highlighter-rouge">cpu.max</code>(CPU 쿼터)다. psutil의 <code class="highlighter-rouge">virtual_memory()</code>는 이 파일들을 읽지 않는다. 버그가 아니다. 이 라이브러리가 답하는 질문이 “이 기계가 얼마나 쓰나”이지 “이 컨테이너가 얼마나 쓰나”가 아닐 뿐이다. 컨테이너 안에서 이 cgroup 파일들을 직접 읽는 예시는 <a href="/cs/CS-Everything-is-a-File/#cgroup-정보-읽기">Everything is a File 글</a>에 있다. CPU도 같다. <a href="#격리되는-파일-격리되지-않는-파일">실측 pod</a>에서 <code class="highlighter-rouge">psutil.cpu_count()</code>와 <code class="highlighter-rouge">nproc</code>은 둘 다 144를 돌려줬다. <code class="highlighter-rouge">cpu.max</code>의 8코어 쿼터는 코어 수 어디에도 반영되지 않는다.</p>
 
@@ -1087,7 +1129,7 @@ Mem:          515523       17939       83198          10      414385      494185
 
 <h1 id="디스크와-gpu-격리는-되지만-방식이-다르다">디스크와 GPU: 격리는 되지만 방식이 다르다</h1>
 
-<p>CPU·메모리는 격리되지 않는 <code class="highlighter-rouge">/proc</code>의 문제였다. <strong>나머지 두 계열은 격리가 되긴 하는데</strong>, 그 방식이 <code class="highlighter-rouge">/proc</code> 이야기와 다르다. 디스크는 mount namespace로 격리된 자기 루트 파일시스템을 보지만 용량 숫자는 노드 디스크의 것이고, GPU는 namespace가 아니라 장치 파일로 격리된다.</p>
+<p>CPU·메모리는 <code class="highlighter-rouge">/proc</code> 가운데 격리되지 않는 파일을 읽는 문제였다. <strong>나머지 두 계열은 격리가 되긴 하는데</strong>, 그 방식이 <code class="highlighter-rouge">/proc</code> 이야기와 다르다. 디스크는 mount namespace로 격리된 자기 루트 파일시스템을 보지만 용량 숫자는 노드 디스크의 것이고, GPU는 namespace가 아니라 장치 파일로 격리된다.</p>
 
 <h2 id="디스크">디스크</h2>
 
@@ -1157,7 +1199,7 @@ GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition <span class="o">(</span>UUID
   </tbody>
 </table>
 
-<p>첫째 줄이 위에서 본 device plugin의 표시다. 이 클러스터는 마운트 목록 방식이라 컨테이너 안의 <code class="highlighter-rouge">NVIDIA_VISIBLE_DEVICES</code>가 <code class="highlighter-rouge">void</code>였고, 환경변수 방식이었다면 장치 UUID가 들어 있었을 것이다. 어느 쪽이든 장치 파일이 들어온 뒤의 일은 같다.</p>
+<p>첫째 줄이 위에서 본 device plugin의 표시다. 이 클러스터는 마운트 목록 방식이라 컨테이너 안의 <code class="highlighter-rouge">NVIDIA_VISIBLE_DEVICES</code>가 <code class="highlighter-rouge">void</code>였고, 환경변수 방식이었다면 장치 UUID가 들어 있었을 것이다. 어느 쪽이든 장치 파일이 들어온 뒤의 일은 같다. 덧붙이면 이 환경변수는 GPU가 배정됐는지의 근거로도 쓸 수 없다. 이 클러스터의 CPU 워커에서도 베이스 이미지가 세워 둔 <code class="highlighter-rouge">NVIDIA_VISIBLE_DEVICES=all</code>이 그대로 들어 있었다. 배정 여부를 말하는 것은 장치 파일뿐이다.</p>
 
 <p>남는 것은 둘째 줄이다. GPU를 다루는 유저 라이브러리가 둘인데, 둘 다 장치 목록의 출발점은 같다. 컨테이너에 들어와 있는 장치 파일이다. 차이는 그 위에 <code class="highlighter-rouge">CUDA_VISIBLE_DEVICES</code>라는 필터를 얹느냐다.</p>
 
@@ -1207,6 +1249,8 @@ GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition <span class="o">(</span>UUID
 
 <h1 id="종합-한-이름-아래-성질-넷">종합: 한 이름 아래 성질 넷</h1>
 
+<h2 id="계열별-성질">계열별 성질</h2>
+
 <p>13계열을 psutil이 읽는 파일 기준으로 다시 나누면 이렇게 된다.</p>
 
 <table>
@@ -1227,7 +1271,7 @@ GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition <span class="o">(</span>UUID
       <td><code class="highlighter-rouge">/proc/stat</code></td>
       <td><strong>아니오</strong></td>
       <td><strong>노드</strong></td>
-      <td>같은 값</td>
+      <td>같은 사실</td>
     </tr>
     <tr>
       <td><code class="highlighter-rouge">system_memory_usage_*</code></td>
@@ -1235,7 +1279,7 @@ GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition <span class="o">(</span>UUID
       <td><code class="highlighter-rouge">/proc/meminfo</code></td>
       <td><strong>아니오</strong></td>
       <td><strong>노드</strong></td>
-      <td>같은 값</td>
+      <td>같은 사실</td>
     </tr>
     <tr>
       <td><code class="highlighter-rouge">disk_*</code></td>
@@ -1243,7 +1287,7 @@ GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition <span class="o">(</span>UUID
       <td>컨테이너 rootfs <code class="highlighter-rouge">statvfs</code></td>
       <td>mount ns</td>
       <td><strong>컨테이너 루트 FS</strong> (노드 디스크가 backing)</td>
-      <td>같은 값</td>
+      <td>같은 사실</td>
     </tr>
     <tr>
       <td><code class="highlighter-rouge">network_*</code></td>
@@ -1486,6 +1530,9 @@ GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition <span class="o">(</span>UUID
   <li><a href="https://github.com/ray-project/ray/blob/master/python/ray/_common/utils.py">Ray <code class="highlighter-rouge">_common/utils.py</code></a> — <code class="highlighter-rouge">get_system_memory()</code></li>
   <li><a href="https://docs.ray.io/en/latest/ray-core/scheduling/ray-oom-prevention.html">Ray Out-Of-Memory Prevention</a></li>
   <li><a href="https://github.com/Lightning-AI/pytorch-lightning/blob/master/src/lightning/pytorch/callbacks/device_stats_monitor.py">Lightning DeviceStatsMonitor</a></li>
+  <li><a href="https://github.com/Lightning-AI/pytorch-lightning/blob/master/src/lightning/pytorch/loggers/mlflow.py">Lightning MLFlowLogger</a>, <a href="https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/integration_utils.py">Hugging Face MLflowCallback</a>, <a href="https://github.com/ray-project/ray/blob/master/python/ray/air/integrations/mlflow.py">Ray <code class="highlighter-rouge">setup_mlflow</code></a> — 셋 다 rank 0만 run을 만든다</li>
+  <li><a href="https://github.com/mlflow/mlflow/blob/v3.15.1/mlflow/tracking/fluent.py">MLflow <code class="highlighter-rouge">tracking/fluent.py</code> v3.15.1</a> — <code class="highlighter-rouge">MLFLOW_RUN_ID</code> 부착, <code class="highlighter-rouge">ActiveRun.__exit__</code>의 FAILED, atexit의 <code class="highlighter-rouge">end_run</code></li>
+  <li><a href="https://docs.ray.io/en/latest/train/user-guides/fault-tolerance.html">Ray Train Fault Tolerance</a> — 워커 실패 시 워커 그룹 전체 재시작</li>
   <li><a href="https://go.dev/blog/container-aware-gomaxprocs">Go blog, Container-aware GOMAXPROCS</a>, <a href="https://go.dev/doc/go1.25">Go 1.25 release notes</a></li>
   <li><a href="https://github.com/uber-go/automaxprocs">uber-go/automaxprocs</a></li>
   <li><a href="https://bugs.openjdk.org/browse/JDK-8146115">JDK-8146115</a> — Improve docker container detection and resource configuration usage</li>
