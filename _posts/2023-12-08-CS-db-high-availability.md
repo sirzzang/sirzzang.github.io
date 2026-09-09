@@ -13,6 +13,7 @@ tags:
   - HA
   - 데이터베이스
   - 고가용성
+last_modified_at: 2026-09-09
 ---
 
 <br>
@@ -118,7 +119,7 @@ DB 서버를 다중화한다. 여러 대의 DB 서버를 하나의 클러스터�
 
 ## Shared Disk
 
-![db-clusetering-shared-disk]({{site.url}}/assets/images/db-clusetering-shared-disk.png){: .align-center}{: width="500"}
+![db-clustering-shared-disk]({{site.url}}/assets/images/db-clustering-shared-disk.png){: .align-center}{: width="500"}
 
 > In a shared disk architecture, multiple nodes in a cluster share access to the same storage (disk) subsystem. Each node in the cluster has its own processor and memory, but they all have concurrent access to a common pool of storage.
 

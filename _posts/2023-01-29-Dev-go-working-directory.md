@@ -9,6 +9,7 @@ tags:
   - Go
   - run
 toc: true
+last_modified_at: 2026-09-09
 ---
 
 
@@ -95,7 +96,7 @@ toc: true
 
  아무 생각 없이 `go run` 커맨드로 코드를 실행하다가, 갑자기 `/` 경로로 접속해 봤는데 404 Bad Request가 발생한다.
 
-![go-webapp-404-error]({{site.url}}/assets/images/go-webapp-404-error.png){: .align-center width="500"}
+![go-webapp-400-bad-request]({{site.url}}/assets/images/go-webapp-400-bad-request.png){: .align-center width="500"}
 
  `handlers.go` 소스 코드의 `render` 함수에서 템플릿 파일을 파싱하지 못하면 404 Bad Request 에러가 나도록 했기 때문에, 템플릿을 찾지 못하는 것이 아닌가 의심해 볼 수 있다.
 
