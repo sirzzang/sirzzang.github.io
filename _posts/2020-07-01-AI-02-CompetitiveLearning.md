@@ -307,7 +307,7 @@ plt.show()
 
  클러스터링 결과를 확인하면 다음과 같다.
 
-![img]({{site.url}}/assets/images/cluster-instar){: width="500" height="300"}{: .align-center}
+![img]({{site.url}}/assets/images/competitive-learning-clusters.png){: width="500" height="300"}{: .align-center}
 
 
 
