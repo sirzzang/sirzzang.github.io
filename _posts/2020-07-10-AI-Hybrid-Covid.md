@@ -523,9 +523,9 @@ None
 
 |                          |                          loss                           |                       prediction                        |
 | :----------------------- | :-----------------------------------------------------: | :-----------------------------------------------------: |
-| **병렬**                 | ![parallel-loss]({{site.url}}/assets/images/loss-1.png) | ![parallel-pred]({{site.url}}/assets/images/pred-1.png) |
-| **직렬**<br>*(LSTM-CNN)* | ![serial1-loss]({{site.url}}/assets/images/loss-2.png)  | ![serial1-pred]({{site.url}}/assets/images/pred-2.png)  |
-| **직렬**<br>*(CNN-LSTM)* | ![serial2-loss]({{site.url}}/assets/images/loss-3.png)  | ![serial2-pred]({{site.url}}/assets/images/pred-3.png)  |
+| **병렬**                 | ![parallel-loss]({{site.url}}/assets/images/hybrid-covid-loss-parallel.png) | ![parallel-pred]({{site.url}}/assets/images/hybrid-covid-pred-parallel.png) |
+| **직렬**<br>*(LSTM-CNN)* | ![serial1-loss]({{site.url}}/assets/images/hybrid-covid-loss-serial-lstm-cnn.png)  | ![serial1-pred]({{site.url}}/assets/images/hybrid-covid-pred-serial-lstm-cnn.png)  |
+| **직렬**<br>*(CNN-LSTM)* | ![serial2-loss]({{site.url}}/assets/images/hybrid-covid-loss-serial-cnn-lstm.png)  | ![serial2-pred]({{site.url}}/assets/images/hybrid-covid-pred-serial-cnn-lstm.png)  |
 
 
 

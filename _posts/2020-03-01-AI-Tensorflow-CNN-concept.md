@@ -221,7 +221,7 @@ $$
 
 
 
- ![padding ex]({{site.url}}/assets/images/padding_e.png){: width="600" height="400"}{: .align-center} 
+ ![padding ex]({{site.url}}/assets/images/cnn-padding-example.png){: width="600" height="400"}{: .align-center} 
 
 
 

@@ -60,7 +60,7 @@ last_modified_at: 2020-07-26
 
 
 
-![top20-words]({{site.url}}/assets/images/palez-top20.png){: width="400"}{: .align-center}
+![top20-words]({{site.url}}/assets/images/imdb-mi-score-top20-words.png){: width="400"}{: .align-center}
 
 <center><sup>사진 출처: Sentiment analysis of IMDb movie reviews </sup></center>
 
