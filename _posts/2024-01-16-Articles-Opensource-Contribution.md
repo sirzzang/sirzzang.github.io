@@ -8,6 +8,7 @@ tags:
   - 후기
   - 오픈 소스
 use_math: true
+last_modified_at: 2026-09-09
 ---
 
 야심차게 맞았던 2023년의 목표 중 하나였던 **오픈 소스 기여해 보기**. 비록 2023년이 가기 전에 성취하지는 못했지만, 2024년 벽두에나마 달성했다. 개발자로서 언젠가는 꼭 한 번 해 보고 싶다고 생각했던 일이었기에, 그 기록을 남기고 싶어 글을 쓰게 되었다.
@@ -44,7 +45,7 @@ use_math: true
 
 단순한 오타일 뿐이었기에, 이러한 내용으로도 PR을 작성할 수 있는지 궁금해 관련 PR이 있는지 검색해 봤다.
 
-![grule-typo-issues]({{site.url}}/assets/images/grule-typo-issues.png)
+![grule-typo-pr-search-results]({{site.url}}/assets/images/grule-typo-pr-search-results.png)
 
 오타와 관련된 PR 중 merge된 것이 여럿 보였고, 오픈 소스에 기여하는 것은 오타를 수정하는 것부터라는 말도 들었던 터라, 오타를 수정해 PR을 작성했다. 
 

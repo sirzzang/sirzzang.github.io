@@ -12,6 +12,7 @@ tags:
   - Docker Compose
   - Docker Network
   - Bridge
+last_modified_at: 2026-09-09
 ---
 
 <br>
@@ -45,9 +46,9 @@ OpenLDAP 컨테이너를 R550 서버에 배포한 뒤, 갑자기 개인 PC에서
 
  컨테이너를 배포하는 과정에서 문제가 있어서 서버를 죽인 것인가(...) 했는데, 로컬에서 R650 서버로 SSH 접속한 뒤, R650 서버에서 R550 서버로 SSH 접속해 본 결과, 문제가 없이 접속되는 것을 보니 서버가 죽지는 않았다.
 
-![r550-not-dead-1]({{site.url}}/assets/images/r550-not-dead-1.png){:width="600"}{: .align-center}
+![r650-ssh-alive-check]({{site.url}}/assets/images/r650-ssh-alive-check.png){:width="600"}{: .align-center}
 
-![r550-not-dead-2]({{site.url}}/assets/images/r550-not-dead-2.png){:width="600"}{: .align-center}
+![r550-ssh-alive-check]({{site.url}}/assets/images/r550-ssh-alive-check.png){:width="600"}{: .align-center}
 
 <center><sup>정리하다 보니, 로그인이 되는 시점의 터미널 출력에서부터 문제의 원인이 보인다. </sup></center>
 
