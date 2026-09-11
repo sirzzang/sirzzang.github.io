@@ -1,0 +1,1789 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성 - Eraser’s StudyLog</title>
+<meta name="description" content="EKS 컨트롤 플레인만 있는 상태에서 trn1.2xlarge 관리형 노드그룹을 붙이고, 미리 박혀 있던 AMI ID 때문에 막힌 지점을 풀어 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/">
+
+
+  <meta property="og:description" content="EKS 컨트롤 플레인만 있는 상태에서 trn1.2xlarge 관리형 노드그룹을 붙이고, 미리 박혀 있던 AMI ID 때문에 막힌 지점을 풀어 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-09-11T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-09-12T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성">
+    <meta itemprop="description" content="EKS 컨트롤 플레인만 있는 상태에서 trn1.2xlarge 관리형 노드그룹을 붙이고, 미리 박혀 있던 AMI ID 때문에 막힌 지점을 풀어 보자.">
+    <meta itemprop="datePublished" content="2026-09-11T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-09-12T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-09-11T00:00:00+09:00">2026년 09월 11일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  21 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#실습-환경">실습 환경</a>
+    <ul>
+      <li><a href="#워크샵이-미리-만들어-둔-것">워크샵이 미리 만들어 둔 것</a></li>
+      <li><a href="#도구-설치">도구 설치</a></li>
+      <li><a href="#미리-세팅된-환경변수">미리 세팅된 환경변수</a></li>
+    </ul>
+  </li>
+  <li><a href="#클러스터-네트워킹-해부">클러스터 네트워킹 해부</a>
+    <ul>
+      <li><a href="#클러스터와-같은-vpc에-붙어야-하는-이유">클러스터와 같은 VPC에 붙어야 하는 이유</a></li>
+      <li><a href="#가용-영역을-제한하는-인스턴스-타입">가용 영역을 제한하는 인스턴스 타입</a></li>
+      <li><a href="#퍼블릭-서브넷을-쓰는-이유">퍼블릭 서브넷을 쓰는 이유</a></li>
+    </ul>
+  </li>
+  <li><a href="#적용과-관찰-노드그룹과-스토리지">적용과 관찰: 노드그룹과 스토리지</a>
+    <ul>
+      <li><a href="#clusterconfig-작성">ClusterConfig 작성</a></li>
+      <li><a href="#노드그룹-배포">노드그룹 배포</a></li>
+      <li><a href="#노드-등록-결과">노드 등록 결과</a></li>
+      <li><a href="#kubectl-label이-no-op인-이유">kubectl label이 no-op인 이유</a></li>
+      <li><a href="#모델-캐시용-s3-버킷">모델 캐시용 S3 버킷</a></li>
+      <li><a href="#s3-csi-드라이버-설치">S3 CSI 드라이버 설치</a></li>
+    </ul>
+  </li>
+  <li><a href="#검증-vllm-배포를-받을-수-있는-상태">검증: vLLM 배포를 받을 수 있는 상태</a></li>
+  <li><a href="#막힘--해결-존재하지-않는-ami">막힘 &amp; 해결: 존재하지 않는 AMI</a>
+    <ul>
+      <li><a href="#증상">증상</a></li>
+      <li><a href="#증거">증거</a></li>
+      <li><a href="#원인">원인</a></li>
+      <li><a href="#해결">해결</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>워크샵이 만들어 둔 것은 EKS 컨트롤 플레인까지다. <code class="highlighter-rouge">trn1.2xlarge</code> 관리형 노드그룹은 실습자가 <code class="highlighter-rouge">eksctl</code>로 직접 붙인다. <code class="highlighter-rouge">coredns</code> 파드 2개가 8시간째 <code class="highlighter-rouge">Pending</code>인 것이 그 상태의 증거였다</li>
+  <li>노드그룹 네트워킹은 세 단계 필터로 정해진다 — 컨트롤 플레인과 같은 VPC → 인스턴스 타입이 제공되는 가용 영역(AZ) → 그 AZ에 있는 퍼블릭 서브넷. 인스턴스 타입이 AZ를 고르고 AZ가 서브넷을 고르므로 순서를 뒤집으면 안 된다</li>
+  <li>워크샵 셸에 미리 세팅돼 있던 <code class="highlighter-rouge">WORKER_AMI</code>가 이미 deregister된 AMI ID라 첫 배포가 <code class="highlighter-rouge">InvalidAMIID.NotFound</code>로 실패했다. 같은 셸에서 SSM을 직접 조회한 값과 환경변수 값이 다르다는 것 자체가, 그 값의 출처가 SSM이 아니라는 증거다</li>
+  <li>교훈은 두 줄이다 — AMI ID는 매번 SSM 파라미터에서 조회한다, 워크샵 환경에 미리 세팅된 값은 실제 값과 대조하고 쓴다</li>
+  <li>노드가 <code class="highlighter-rouge">Ready</code>가 되면 <code class="highlighter-rouge">aws.amazon.com/neuron: 1</code>과 <code class="highlighter-rouge">aws.amazon.com/neuroncore: 2</code>가 함께 광고된다. 칩 하나에 리소스가 왜 두 개인지는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/">다음 편</a>에서 다룬다</li>
+  <li><code class="highlighter-rouge">kubectl label</code>이 내놓는 <code class="highlighter-rouge">not labeled</code>는 실패가 아니라 no-op이다. <code class="highlighter-rouge">eksctl</code>이 노드 join 시점에 같은 라벨을 이미 심어 두기 때문이다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="실습-환경">실습 환경</h1>
+
+<p>이 글은 워크샵 Lab 1의 스텝 1~6과 8~9에 해당한다. 스텝 7(Neuron device plugin 재설치와 스케줄러 확장 설치)은 성격이 달라 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/">08-02-02편</a>에서 따로 다룬다. 워크샵 전체 구성과 아키텍처는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/">08-00편</a>, Trainium과 NeuronCore 배경지식은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/">08-01편</a>에 있다.</p>
+
+<p>작업은 전부 워크샵이 제공하는 배스천(bastion) 인스턴스에 SSH로 붙어서 진행한다. 아래 출력의 셸 프롬프트 <code class="highlighter-rouge">ubuntu@ip-10-0-1-100</code>이 그 인스턴스다. 이 글의 모든 출력에서 계정 ID, 클러스터명, VPC·서브넷·인스턴스 ID, 호스트명, IP는 예시 값으로 치환했다. 다만 <strong>AMI ID 두 개(<code class="highlighter-rouge">ami-08695d32a8bb6c5a5</code>, <code class="highlighter-rouge">ami-0e08c07b0376ba3f8</code>)는 그대로 뒀다</strong> — 두 값이 다르다는 사실 자체가 이 글 후반부 트러블슈팅의 증거이기 때문이다.</p>
+
+<h2 id="워크샵이-미리-만들어-둔-것">워크샵이 미리 만들어 둔 것</h2>
+
+<p>컨트롤 플레인은 이미 떠 있고, 워커 노드는 하나도 없는 상태에서 시작한다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># kubeconfig를 갱신해 컨트롤 플레인에 붙는다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>aws eks update-kubeconfig <span class="nt">--region</span> <span class="nv">$AWS_REGION</span> <span class="nt">--name</span> <span class="nv">$CLUSTER_NAME</span>
+Added new context arn:aws:eks:us-west-2:123456789012:cluster/my-neuron-cluster to /home/ubuntu/.kube/config
+
+<span class="c"># 워커 노드가 없으니 coredns가 배치될 곳이 없다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl get pod <span class="nt">-A</span>
+NAMESPACE     NAME                       READY   STATUS    RESTARTS   AGE
+kube-system   coredns-75cb89d95b-6lz4d   0/1     Pending   0          8h
+kube-system   coredns-75cb89d95b-k6csj   0/1     Pending   0          8h
+
+<span class="c"># 컨트롤 플레인 엔드포인트는 정상 응답한다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl cluster-info
+Kubernetes control plane is running at https://ABCDEF0123456789.gr7.us-west-2.eks.amazonaws.com
+CoreDNS is running at https://ABCDEF0123456789.gr7.us-west-2.eks.amazonaws.com/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">coredns</code> 2개가 8시간째 <code class="highlighter-rouge">Pending</code>이라는 것은 클러스터가 고장 났다는 뜻이 아니라, 스케줄 대상 노드가 아직 하나도 없다는 뜻이다. 워크샵 환경이 만들어진 시점부터 이 상태로 대기해 온 것이고, 노드그룹을 붙이는 순간 두 파드가 함께 배치된다.</p>
+
+<details>
+  <summary><b>aws eks update-kubeconfig 이후 ~/.kube/config 전문</b></summary>
+
+  <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">clusters</span><span class="pi">:</span>
+<span class="pi">-</span> <span class="na">cluster</span><span class="pi">:</span>
+    <span class="c1"># 인증서 본문은 앞부분만 남기고 생략했다</span>
+    <span class="na">certificate-authority-data</span><span class="pi">:</span> <span class="s">LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1J...(생략)</span>
+    <span class="na">server</span><span class="pi">:</span> <span class="s">https://ABCDEF0123456789.gr7.us-west-2.eks.amazonaws.com</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">arn:aws:eks:us-west-2:123456789012:cluster/my-neuron-cluster</span>
+<span class="na">contexts</span><span class="pi">:</span>
+<span class="pi">-</span> <span class="na">context</span><span class="pi">:</span>
+    <span class="na">cluster</span><span class="pi">:</span> <span class="s">arn:aws:eks:us-west-2:123456789012:cluster/my-neuron-cluster</span>
+    <span class="na">user</span><span class="pi">:</span> <span class="s">arn:aws:eks:us-west-2:123456789012:cluster/my-neuron-cluster</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">arn:aws:eks:us-west-2:123456789012:cluster/my-neuron-cluster</span>
+<span class="na">current-context</span><span class="pi">:</span> <span class="s">arn:aws:eks:us-west-2:123456789012:cluster/my-neuron-cluster</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Config</span>
+<span class="na">preferences</span><span class="pi">:</span> <span class="pi">{}</span>
+<span class="na">users</span><span class="pi">:</span>
+<span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">arn:aws:eks:us-west-2:123456789012:cluster/my-neuron-cluster</span>
+  <span class="na">user</span><span class="pi">:</span>
+    <span class="c1"># 토큰을 파일에 저장하지 않고, 호출 때마다 aws eks get-token으로 받아 온다</span>
+    <span class="na">exec</span><span class="pi">:</span>
+      <span class="na">apiVersion</span><span class="pi">:</span> <span class="s">client.authentication.k8s.io/v1beta1</span>
+      <span class="na">args</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="s">--region</span>
+      <span class="pi">-</span> <span class="s">us-west-2</span>
+      <span class="pi">-</span> <span class="s">eks</span>
+      <span class="pi">-</span> <span class="s">get-token</span>
+      <span class="pi">-</span> <span class="s">--cluster-name</span>
+      <span class="pi">-</span> <span class="s">my-neuron-cluster</span>
+      <span class="pi">-</span> <span class="s">--output</span>
+      <span class="pi">-</span> <span class="s">json</span>
+      <span class="na">command</span><span class="pi">:</span> <span class="s">aws</span>
+</code></pre></div>  </div>
+
+</details>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-aws-workshop-lab1-eks-control-plane.png" alt="EKS 컨트롤 플레인만 생성되어 있는 상태" class="align-center" /></p>
+<center><sup>직접 캡처. 클러스터명은 익명화를 위해 블러 처리했다. 표시한 대로 노드 0개, 노드 그룹 0개 상태다</sup></center>
+
+<p>콘솔에서도 같은 상태가 보인다. 클러스터는 활성이고 쿠버네티스 버전은 1.33인데, 노드와 노드 그룹은 둘 다 0이다. 노드 목록에 뜬 <code class="highlighter-rouge">Unauthorized</code>는 콘솔 로그인 주체가 클러스터의 access entry에 없어서 나는 것이고, 배스천 셸의 <code class="highlighter-rouge">kubectl</code>은 정상 동작한다.</p>
+
+<h2 id="도구-설치">도구 설치</h2>
+
+<p>배스천에는 <code class="highlighter-rouge">kubectl</code>과 <code class="highlighter-rouge">eksctl</code>이 이미 깔려 있고, 나머지를 워크샵 스크립트가 설치한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>도구</th>
+      <th>설치 방법</th>
+      <th>확인한 버전</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>AWS CLI v2</td>
+      <td><code class="highlighter-rouge">awscli-exe-linux-x86_64.zip</code> 내려받아 <code class="highlighter-rouge">./aws/install --update</code></td>
+      <td><code class="highlighter-rouge">aws-cli/2.36.43</code></td>
+    </tr>
+    <tr>
+      <td>Helm</td>
+      <td><code class="highlighter-rouge">get-helm-3</code> 스크립트</td>
+      <td><code class="highlighter-rouge">v3.22.0+g144ca65</code></td>
+    </tr>
+    <tr>
+      <td>jq</td>
+      <td><code class="highlighter-rouge">apt install</code></td>
+      <td><code class="highlighter-rouge">jq-1.6</code></td>
+    </tr>
+    <tr>
+      <td>python3-pip, unzip</td>
+      <td><code class="highlighter-rouge">apt install</code></td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>kubectl 자동완성</td>
+      <td><code class="highlighter-rouge">source &lt;(kubectl completion bash)</code> + <code class="highlighter-rouge">~/.bashrc</code> 추가</td>
+      <td>-</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">apt update</code> 자체는 배스천이 퍼블릭 서브넷에 있어 그대로 통과한다. 여기서 설치하는 Helm은 뒤에서 S3 CSI 드라이버를 깔 때, 그리고 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/">08-02-02편</a>에서 Neuron device plugin을 다시 깔 때 쓴다.</p>
+
+<h2 id="미리-세팅된-환경변수">미리 세팅된 환경변수</h2>
+
+<p>워크샵 문서는 아래 변수들을 설정하라고 안내한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">export </span><span class="nv">AWS_REGION</span><span class="o">=</span>us-west-2
+<span class="nb">export </span><span class="nv">CLUSTER_NAME</span><span class="o">=</span>my-neuron-cluster
+<span class="nb">export </span><span class="nv">EKS_VERSION</span><span class="o">=</span>1.33
+<span class="nb">export </span><span class="nv">INSTANCE_TYPE</span><span class="o">=</span>trn1.2xlarge
+<span class="nb">export </span><span class="nv">DESIRED_NODES</span><span class="o">=</span>1
+<span class="nb">export </span><span class="nv">AWS_ACCOUNT_ID</span><span class="o">=</span><span class="k">$(</span>aws sts get-caller-identity <span class="nt">--query</span> Account <span class="nt">--output</span> text<span class="k">)</span>
+<span class="nb">export </span><span class="nv">BUCKET_NAME</span><span class="o">=</span>vllm-models-cache-<span class="k">${</span><span class="nv">AWS_ACCOUNT_ID</span><span class="k">}</span>
+
+<span class="c"># 워커 노드 AMI: amazon-linux-2023 + neuron 경로 → Neuron 가속기용 EKS 최적화 AMI다</span>
+<span class="nb">export </span><span class="nv">WORKER_AMI</span><span class="o">=</span><span class="k">$(</span>aws ssm get-parameter <span class="se">\</span>
+    <span class="nt">--name</span> /aws/service/eks/optimized-ami/1.33/amazon-linux-2023/x86_64/neuron/recommended/image_id <span class="se">\</span>
+    <span class="nt">--region</span> <span class="nv">$AWS_REGION</span> <span class="se">\</span>
+    <span class="nt">--query</span> <span class="s2">"Parameter.Value"</span> <span class="se">\</span>
+    <span class="nt">--output</span> text<span class="k">)</span>
+
+<span class="nb">echo</span> <span class="s2">"</span><span class="nv">$CLUSTER_NAME</span><span class="s2"> </span><span class="nv">$WORKER_AMI</span><span class="s2"> </span><span class="nv">$AWS_ACCOUNT_ID</span><span class="s2"> </span><span class="nv">$BUCKET_NAME</span><span class="s2">"</span>
+</code></pre></div></div>
+
+<p>그런데 배스천에 붙어 보니 이 값들이 전부 이미 설정돼 있었다. 그래서 다시 설정하지 않고 지나갔는데, 그 판단이 뒤에서 노드그룹 배포를 막는다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># env 전문 중 워크샵이 심어 둔 변수만 발췌했다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>env
+...
+<span class="nv">CLUSTER_NAME</span><span class="o">=</span>my-neuron-cluster
+<span class="nv">EKS_VERSION</span><span class="o">=</span>1.33
+<span class="nv">AWS_REGION</span><span class="o">=</span>us-west-2
+<span class="nv">DESIRED_NODES</span><span class="o">=</span>1
+<span class="nv">BUCKET_NAME</span><span class="o">=</span>vllm-models-cache-123456789012
+<span class="nv">AWS_ACCOUNT_ID</span><span class="o">=</span>123456789012
+<span class="nv">WORKER_AMI</span><span class="o">=</span>ami-08695d32a8bb6c5a5     <span class="c"># 미리 박혀 있던 AMI ID</span>
+<span class="nv">INSTANCE_TYPE</span><span class="o">=</span>trn1.2xlarge
+...
+
+<span class="c"># 같은 셸, 같은 리전에서 SSM 파라미터를 직접 조회해 본 결과</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>aws ssm get-parameter <span class="se">\</span>
+<span class="o">&gt;</span>     <span class="nt">--name</span> /aws/service/eks/optimized-ami/1.33/amazon-linux-2023/x86_64/neuron/recommended/image_id <span class="se">\</span>
+<span class="o">&gt;</span>     <span class="nt">--region</span> <span class="nv">$AWS_REGION</span> <span class="se">\</span>
+<span class="o">&gt;</span>     <span class="nt">--query</span> <span class="s2">"Parameter.Value"</span> <span class="se">\</span>
+<span class="o">&gt;</span>     <span class="nt">--output</span> text
+ami-0e08c07b0376ba3f8                <span class="c"># 환경변수에 박혀 있던 값과 다르다</span>
+
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</span> <span class="s2">"</span><span class="nv">$CLUSTER_NAME</span><span class="s2"> </span><span class="nv">$WORKER_AMI</span><span class="s2"> </span><span class="nv">$AWS_ACCOUNT_ID</span><span class="s2"> </span><span class="nv">$BUCKET_NAME</span><span class="s2">"</span>
+my-neuron-cluster ami-08695d32a8bb6c5a5 123456789012 vllm-models-cache-123456789012
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">WORKER_AMI</code>가 SSM 조회 결과와 다르다. 워크샵 문서가 안내하는 명령은 <code class="highlighter-rouge">aws ssm get-parameter</code>로 값을 받아 오는 것인데, 셸에 이미 들어 있던 값은 그 결과와 일치하지 않았다. 이 불일치가 <a href="#막힘--해결-존재하지-않는-ami">막힘 &amp; 해결: 존재하지 않는 AMI</a>에서 다룰 사고의 출발점이다.</p>
+
+<p>노드 접속용 SSH 키를 만드는 옵션 단계도 있지만, 이 실습에서는 AWS Systems Manager Session Manager로 워커 노드에 붙는 편이 간단했다. 노드그룹 IAM 정책에 <code class="highlighter-rouge">AmazonSSMManagedInstanceCore</code>가 이미 들어가 있어 추가 설정이 필요 없다.</p>
+
+<p><br /></p>
+
+<h1 id="클러스터-네트워킹-해부">클러스터 네트워킹 해부</h1>
+
+<p>노드그룹을 붙이려면 VPC ID, 서브넷 ID, 보안그룹 ID를 <code class="highlighter-rouge">ClusterConfig</code>에 사람이 직접 채워 넣어야 한다. 세 값은 각각 다른 이유로 필요하고, 구하는 순서도 정해져 있다 — <strong>VPC는 클러스터에서 캐내고, AZ는 인스턴스 타입이 정하고, 서브넷은 그 AZ 안에서 고른다.</strong></p>
+
+<h2 id="클러스터와-같은-vpc에-붙어야-하는-이유">클러스터와 같은 VPC에 붙어야 하는 이유</h2>
+
+<p>EKS 컨트롤 플레인은 사용자 VPC의 서브넷에 cross-account ENI를 꽂아 워커 노드와 통신한다. 노드가 다른 VPC에 있으면 kubelet이 API 서버에 등록되지 못한다. 그래서 노드그룹은 반드시 클러스터와 같은 VPC 안에 만들어야 한다.</p>
+
+<p>여기에 이 실습 특유의 사정이 하나 더 붙는다. 이 클러스터는 <code class="highlighter-rouge">eksctl</code>이 만든 것이 아니라 워크샵의 CloudFormation이 미리 만든 것이다. <code class="highlighter-rouge">eksctl</code>은 자기가 만든 스택이 없으면 VPC를 추론할 근거가 없으므로, <code class="highlighter-rouge">vpc.id</code>·<code class="highlighter-rouge">vpc.subnets</code>·<code class="highlighter-rouge">vpc.securityGroup</code>을 설정 파일로 받아야 한다. 그래서 클러스터에서 직접 조회한다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 클러스터가 쓰고 있는 VPC를 캐낸다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ VPC_ID</span><span class="o">=</span><span class="k">$(</span>aws eks describe-cluster <span class="nt">--name</span> <span class="nv">$CLUSTER_NAME</span> <span class="nt">--region</span> <span class="nv">$AWS_REGION</span> <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--query</span> <span class="s1">'cluster.resourcesVpcConfig.vpcId'</span> <span class="nt">--output</span> text<span class="k">)</span>
+
+<span class="c"># 0.0.0.0/0 기본 경로를 가진 라우트 테이블 = 인터넷 게이트웨이로 나가는 경로</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ PUBLIC_ROUTE_TABLE</span><span class="o">=</span><span class="k">$(</span>aws ec2 describe-route-tables <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--filters</span> <span class="s2">"Name=vpc-id,Values=</span><span class="nv">$VPC_ID</span><span class="s2">"</span> <span class="s2">"Name=route.destination-cidr-block,Values=0.0.0.0/0"</span> <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--query</span> <span class="s1">'RouteTables[0].RouteTableId'</span> <span class="nt">--output</span> text<span class="k">)</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</span> <span class="s2">"</span><span class="nv">$VPC_ID</span><span class="s2"> </span><span class="nv">$PUBLIC_ROUTE_TABLE</span><span class="s2">"</span>
+vpc-0abc1234def567890 rtb-0abc1234def567890
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">eksctl</code>이 이 상황을 어떻게 인식하는지는 나중에 노드그룹 생성 로그 첫 줄에 그대로 나온다 — <code class="highlighter-rouge">no eksctl-managed CloudFormation stacks found ... will attempt to create nodegroup(s) on non eksctl-managed cluster</code>.</p>
+
+<h2 id="가용-영역을-제한하는-인스턴스-타입">가용 영역을 제한하는 인스턴스 타입</h2>
+
+<p><code class="highlighter-rouge">trn1.2xlarge</code>는 리전의 모든 가용 영역에 있지 않다. 그래서 서브넷을 고르기 전에 인스턴스 타입이 제공되는 AZ부터 구한다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 인스턴스 타입이 제공되는 AZ 목록을 배열로 받는다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ SUPPORTED_AZS</span><span class="o">=(</span><span class="k">$(</span>aws ec2 describe-instance-type-offerings <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--location-type</span> availability-zone <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--filters</span> <span class="s2">"Name=instance-type,Values=</span><span class="nv">$INSTANCE_TYPE</span><span class="s2">"</span> <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--query</span> <span class="s1">'InstanceTypeOfferings[*].Location'</span> <span class="nt">--output</span> text<span class="k">)</span><span class="o">)</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</span> <span class="s2">"</span><span class="nv">$SUPPORTED_AZS</span><span class="s2">"</span>
+us-west-2b
+
+<span class="c"># 각 AZ에서 퍼블릭 서브넷을 하나씩 골라 배열에 담는다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ VALID_SUBNETS</span><span class="o">=()</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="k">for </span>az <span class="k">in</span> <span class="s2">"</span><span class="k">${</span><span class="nv">SUPPORTED_AZS</span><span class="p">[@]</span><span class="k">}</span><span class="s2">"</span><span class="p">;</span> <span class="k">do</span>
+<span class="o">&gt;</span>   <span class="nv">subnet</span><span class="o">=</span><span class="k">$(</span>aws ec2 describe-subnets <span class="se">\</span>
+<span class="o">&gt;</span>     <span class="nt">--filters</span> <span class="s2">"Name=vpc-id,Values=</span><span class="nv">$VPC_ID</span><span class="s2">"</span> <span class="s2">"Name=map-public-ip-on-launch,Values=true"</span> <span class="s2">"Name=availability-zone,Values=</span><span class="nv">$az</span><span class="s2">"</span> <span class="se">\</span>
+<span class="o">&gt;</span>     <span class="nt">--query</span> <span class="s1">'Subnets[0].SubnetId'</span> <span class="nt">--output</span> text<span class="k">)</span>
+<span class="o">&gt;</span>   <span class="o">[</span> <span class="s2">"</span><span class="nv">$subnet</span><span class="s2">"</span> <span class="o">!=</span> <span class="s2">"None"</span> <span class="o">]</span> <span class="o">&amp;&amp;</span> <span class="o">[</span> <span class="s2">"</span><span class="nv">$subnet</span><span class="s2">"</span> <span class="o">!=</span> <span class="s2">""</span> <span class="o">]</span> <span class="o">&amp;&amp;</span> VALID_SUBNETS+<span class="o">=(</span><span class="s2">"</span><span class="nv">$subnet</span><span class="s2">"</span><span class="o">)</span>
+<span class="o">&gt;</span> <span class="k">done
+</span>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</span> <span class="k">${</span><span class="nv">VALID_SUBNETS</span><span class="p">[0]</span><span class="k">}</span>
+subnet-0aaa1111bbb222233
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</span> <span class="k">${</span><span class="nv">VALID_SUBNETS</span><span class="p">[1]</span><span class="k">}</span>
+subnet-0ccc4444ddd555566
+
+<span class="c"># 서로 다른 AZ의 퍼블릭 서브넷이 2개 미만이면 여기서 중단한다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="o">[</span> <span class="k">${#</span><span class="nv">VALID_SUBNETS</span><span class="p">[@]</span><span class="k">}</span> <span class="nt">-lt</span> 2 <span class="o">]</span> <span class="o">&amp;&amp;</span> <span class="o">{</span> <span class="nb">echo</span> <span class="s2">"Error: Need at least 2 public subnets in AZs that support </span><span class="nv">$INSTANCE_TYPE</span><span class="s2">"</span><span class="p">;</span> <span class="nb">exit </span>1<span class="p">;</span> <span class="o">}</span>
+
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ PUBLIC_SUBNET_1</span><span class="o">=</span><span class="k">${</span><span class="nv">VALID_SUBNETS</span><span class="p">[0]</span><span class="k">}</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ PUBLIC_SUBNET_2</span><span class="o">=</span><span class="k">${</span><span class="nv">VALID_SUBNETS</span><span class="p">[1]</span><span class="k">}</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ AZ_1</span><span class="o">=</span><span class="k">$(</span>aws ec2 describe-subnets <span class="nt">--subnet-ids</span> <span class="nv">$PUBLIC_SUBNET_1</span> <span class="nt">--query</span> <span class="s1">'Subnets[0].AvailabilityZone'</span> <span class="nt">--output</span> text<span class="k">)</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ AZ_2</span><span class="o">=</span><span class="k">$(</span>aws ec2 describe-subnets <span class="nt">--subnet-ids</span> <span class="nv">$PUBLIC_SUBNET_2</span> <span class="nt">--query</span> <span class="s1">'Subnets[0].AvailabilityZone'</span> <span class="nt">--output</span> text<span class="k">)</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</span> <span class="nv">$AZ_1</span> <span class="nv">$AZ_2</span>
+us-west-2b us-west-2d
+</code></pre></div></div>
+
+<p>여기서 출력 하나를 잘못 읽을 뻔했다. <code class="highlighter-rouge">echo "$SUPPORTED_AZS"</code>가 <code class="highlighter-rouge">us-west-2b</code> 하나만 찍어서 “제공 AZ가 하나뿐”이라고 적어 뒀는데, bash에서 배열을 <code class="highlighter-rouge">"$arr"</code>로 참조하면 <code class="highlighter-rouge">"${arr[0]}"</code>와 같아 <strong>첫 원소만 출력된다.</strong> 전체를 보려면 <code class="highlighter-rouge">"${SUPPORTED_AZS[@]}"</code>여야 한다. 실제로 제공 AZ가 둘 이상이었다는 증거는 같은 출력 안에 있다 — <code class="highlighter-rouge">${VALID_SUBNETS[1]}</code>이 값을 내놓았고 <code class="highlighter-rouge">AZ_2</code>가 <code class="highlighter-rouge">us-west-2d</code>로 나왔다.</p>
+
+<p>이 차이가 중요한 이유는 <code class="highlighter-rouge">ClusterConfig</code>의 <code class="highlighter-rouge">vpc.subnets.public</code>이 서로 다른 AZ의 서브넷을 2개 이상 요구하기 때문이다. 워크샵 스크립트가 <code class="highlighter-rouge">[ ${#VALID_SUBNETS[@]} -lt 2 ]</code>에서 조기 종료하도록 만들어 둔 것도 같은 이유다. 인스턴스 타입이 AZ를 고르고 AZ가 서브넷을 고르는 순서라, 이 순서를 뒤집으면 노드그룹 생성 단계에서 용량 또는 미지원 오류로 넘어간다.</p>
+
+<h2 id="퍼블릭-서브넷을-쓰는-이유">퍼블릭 서브넷을 쓰는 이유</h2>
+
+<p>서브넷 필터가 <code class="highlighter-rouge">map-public-ip-on-launch=true</code>라는 점이 핵심이다. 이 조건에 맞는 서브넷에 뜬 인스턴스는 퍼블릭 IP를 자동으로 받는다.</p>
+
+<p>노드가 바깥으로 나가야 할 곳이 적지 않다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">public.ecr.aws</code> — Neuron device plugin, Neuron scheduler, vLLM 컨테이너 이미지</li>
+  <li>EKS 퍼블릭 API 엔드포인트 — kubelet 등록과 통신</li>
+  <li>SSM — Session Manager로 노드에 접속</li>
+  <li>S3, Hugging Face — 모델 가중치와 컴파일 캐시</li>
+</ul>
+
+<p>앞서 <code class="highlighter-rouge">PUBLIC_ROUTE_TABLE</code>을 <code class="highlighter-rouge">route.destination-cidr-block=0.0.0.0/0</code>으로 찾은 것은 인터넷 게이트웨이(IGW) 기본 경로가 있는 라우트 테이블을 고른 것이다. 노드에 퍼블릭 IP를 직접 붙여 IGW로 내보내는 구성이고, 실제로 그렇게 됐다는 증거는 뒤에서 볼 <a href="#노드-등록-결과">노드 등록 결과</a>에 있다 — <code class="highlighter-rouge">ExternalIP</code>와 <code class="highlighter-rouge">ExternalDNS</code>가 채워져 있다. 프라이빗 서브넷 + NAT 게이트웨이 구성이었다면 이 필드가 비어 있다.</p>
+
+<blockquote>
+  <p>이 VPC에 NAT 게이트웨이가 아예 없는지는 직접 조회하지 않았다. 확인한 범위는 “노드에 퍼블릭 IP가 붙었고 IGW 경로가 있는 서브넷을 골랐다”까지다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="적용과-관찰-노드그룹과-스토리지">적용과 관찰: 노드그룹과 스토리지</h1>
+
+<h2 id="clusterconfig-작성">ClusterConfig 작성</h2>
+
+<p>앞에서 구한 값들을 heredoc으로 전개해 <code class="highlighter-rouge">eks_nodegroup.yaml</code>을 만든다. 전개 결과는 다음과 같다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">eksctl.io/v1alpha5</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">ClusterConfig</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">my-neuron-cluster</span>
+  <span class="na">region</span><span class="pi">:</span> <span class="s">us-west-2</span>
+  <span class="na">version</span><span class="pi">:</span> <span class="s2">"</span><span class="s">1.33"</span>
+<span class="c1"># eksctl이 만든 클러스터가 아니므로 VPC/서브넷/보안그룹을 직접 지정한다</span>
+<span class="na">vpc</span><span class="pi">:</span>
+  <span class="na">id</span><span class="pi">:</span> <span class="s">vpc-0abc1234def567890</span>
+  <span class="na">subnets</span><span class="pi">:</span>
+    <span class="na">public</span><span class="pi">:</span>
+      <span class="na">us-west-2b</span><span class="pi">:</span> <span class="pi">{</span> <span class="nv">id</span><span class="pi">:</span> <span class="nv">subnet-0aaa1111bbb222233</span> <span class="pi">}</span>
+      <span class="na">us-west-2d</span><span class="pi">:</span> <span class="pi">{</span> <span class="nv">id</span><span class="pi">:</span> <span class="nv">subnet-0ccc4444ddd555566</span> <span class="pi">}</span>
+  <span class="na">securityGroup</span><span class="pi">:</span> <span class="s">sg-0abc1234def567890</span>
+<span class="na">managedNodeGroups</span><span class="pi">:</span>
+<span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">neuron-trn1-2x</span>
+  <span class="na">ami</span><span class="pi">:</span> <span class="s">ami-08695d32a8bb6c5a5</span>        <span class="c1"># 환경변수에서 전개된 값. 이 값이 문제였다</span>
+  <span class="na">amiFamily</span><span class="pi">:</span> <span class="s">AmazonLinux2023</span>
+  <span class="na">subnets</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">subnet-0aaa1111bbb222233"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">subnet-0ccc4444ddd555566"</span><span class="pi">]</span>
+  <span class="na">iam</span><span class="pi">:</span>
+    <span class="na">attachPolicyARNs</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="s">arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy</span>
+    <span class="pi">-</span> <span class="s">arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly</span>
+    <span class="pi">-</span> <span class="s">arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore</span>
+    <span class="pi">-</span> <span class="s">arn:aws:iam::aws:policy/AmazonS3FullAccess</span>
+    <span class="pi">-</span> <span class="s">arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy</span>
+  <span class="na">instanceType</span><span class="pi">:</span> <span class="s">trn1.2xlarge</span>
+  <span class="na">desiredCapacity</span><span class="pi">:</span> <span class="s">1</span>
+  <span class="na">volumeSize</span><span class="pi">:</span> <span class="s">100</span>
+  <span class="na">volumeType</span><span class="pi">:</span> <span class="s">gp2</span>
+  <span class="na">ssh</span><span class="pi">:</span>
+     <span class="na">allow</span><span class="pi">:</span> <span class="no">true</span>
+     <span class="na">publicKeyPath</span><span class="pi">:</span> <span class="s">~/.ssh/id_rsa.pub</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">ami</code>를 직접 지정하면 <code class="highlighter-rouge">amiFamily</code>도 함께 지정해야 <code class="highlighter-rouge">eksctl</code>이 부트스트랩 방식을 결정할 수 있다. IAM 정책 5개는 각각 다음을 담당한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>정책</th>
+      <th>용도</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">AmazonEKSWorkerNodePolicy</code></td>
+      <td>kubelet이 클러스터에 등록하고 노드 정보를 갱신</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">AmazonEC2ContainerRegistryReadOnly</code></td>
+      <td>ECR에서 컨테이너 이미지 pull</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">AmazonSSMManagedInstanceCore</code></td>
+      <td>Session Manager로 노드 셸 접속</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">AmazonS3FullAccess</code></td>
+      <td>모델 캐시 버킷 읽기·쓰기 (뒤의 S3 CSI 드라이버가 사용)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">AmazonEKS_CNI_Policy</code></td>
+      <td>VPC CNI가 ENI·보조 IP를 파드에 할당</td>
+    </tr>
+  </tbody>
+</table>
+
+<details>
+  <summary><b>heredoc으로 eks_nodegroup.yaml을 생성하는 명령 전문</b></summary>
+
+  <div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">cat</span> <span class="o">&gt;</span> eks_nodegroup.yaml <span class="o">&lt;&lt;</span><span class="no">EOF</span><span class="sh">
+&gt; apiVersion: eksctl.io/v1alpha5
+&gt; kind: ClusterConfig
+&gt; metadata:
+&gt;   name: </span><span class="nv">$CLUSTER_NAME</span><span class="sh">
+&gt;   region: </span><span class="nv">$AWS_REGION</span><span class="sh">
+&gt;   version: "</span><span class="nv">$EKS_VERSION</span><span class="sh">"
+&gt; vpc:
+&gt;   id: </span><span class="nv">$VPC_ID</span><span class="sh">
+&gt;   subnets:
+&gt;     public:
+&gt;       </span><span class="nv">$AZ_1</span><span class="sh">: { id: </span><span class="nv">$PUBLIC_SUBNET_1</span><span class="sh"> }
+&gt;       </span><span class="nv">$AZ_2</span><span class="sh">: { id: </span><span class="nv">$PUBLIC_SUBNET_2</span><span class="sh"> }
+&gt;   securityGroup: </span><span class="k">$(</span>aws eks describe-cluster <span class="nt">--name</span> <span class="nv">$CLUSTER_NAME</span> <span class="nt">--region</span> <span class="nv">$AWS_REGION</span> <span class="nt">--query</span> <span class="s1">'cluster.resourcesVpcConfig.clusterSecurityGroupId'</span> <span class="nt">--output</span> text<span class="k">)</span><span class="sh">
+&gt; managedNodeGroups:
+&gt; - name: neuron-trn1-2x
+&gt;   ami: </span><span class="nv">$WORKER_AMI</span><span class="sh">
+&gt;   amiFamily: AmazonLinux2023
+&gt;   subnets: ["</span><span class="nv">$PUBLIC_SUBNET_1</span><span class="sh">", "</span><span class="nv">$PUBLIC_SUBNET_2</span><span class="sh">"]
+&gt;   iam:
+&gt;     attachPolicyARNs:
+&gt;     - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+&gt;     - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+&gt;     - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+&gt;     - arn:aws:iam::aws:policy/AmazonS3FullAccess
+&gt;     - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+&gt;   instanceType: </span><span class="nv">$INSTANCE_TYPE</span><span class="sh">
+&gt;   desiredCapacity: </span><span class="nv">$DESIRED_NODES</span><span class="sh">
+&gt;   volumeSize: 100
+&gt;   volumeType: gp2
+&gt;   ssh:
+&gt;      allow: true
+&gt;      publicKeyPath: ~/.ssh/id_rsa.pub
+&gt; EOF
+</span></code></pre></div>  </div>
+
+  <p>heredoc은 작성 시점의 변수 값을 그대로 굽는다. 즉 <code class="highlighter-rouge">$WORKER_AMI</code>가 낡은 값이면 그 값이 YAML에 박히고, 나중에 환경변수만 고쳐도 파일은 바뀌지 않는다.</p>
+
+</details>
+
+<h2 id="노드그룹-배포">노드그룹 배포</h2>
+
+<p>첫 시도는 AMI를 찾지 못해 실패했다. 증상과 원인, 해결은 <a href="#막힘--해결-존재하지-않는-ami">막힘 &amp; 해결: 존재하지 않는 AMI</a>에 따로 정리했고, 여기서는 AMI를 바로잡고 재실행한 결과를 본다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 노드그룹 생성 (3~4분 소요)</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>eksctl create nodegroup <span class="nt">--config-file</span><span class="o">=</span>eks_nodegroup.yaml
+
+<span class="c"># 실행 결과 (발췌)</span>
+2026-09-11 12:36:21 <span class="o">[!]</span>  no eksctl-managed CloudFormation stacks found <span class="k">for</span> <span class="s2">"my-neuron-cluster"</span>, will attempt to create nodegroup<span class="o">(</span>s<span class="o">)</span> on non eksctl-managed cluster
+2026-09-11 12:36:21 <span class="o">[</span>ℹ]  nodegroup <span class="s2">"neuron-trn1-2x"</span> will use <span class="s2">"ami-0e08c07b0376ba3f8"</span> <span class="o">[</span>AmazonLinux2023/1.33]
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  1 task: <span class="o">{</span> install Neuron device plugin <span class="o">}</span>
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  as you are using the EKS-Optimized Accelerated AMI with an inf1 instance <span class="nb">type</span>, the AWS Neuron Kubernetes device plugin was automatically installed.
+	to skip installing it, use <span class="nt">--install-neuron-plugin</span><span class="o">=</span>false.
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  node <span class="s2">"ip-10-0-5-100.us-west-2.compute.internal"</span> is ready
+2026-09-11 12:39:12 <span class="o">[</span>✔]  created 1 managed nodegroup<span class="o">(</span>s<span class="o">)</span> <span class="k">in </span>cluster <span class="s2">"my-neuron-cluster"</span>
+</code></pre></div></div>
+
+<p>첫 줄의 <code class="highlighter-rouge">[!]</code> 경고는 정상이다. 컨트롤 플레인이 <code class="highlighter-rouge">eksctl</code>이 아니라 워크샵 CloudFormation으로 만들어졌기 때문에 나오는 것이고, 노드그룹 생성 자체는 그대로 진행된다.</p>
+
+<p>눈여겨볼 것은 <code class="highlighter-rouge">install Neuron device plugin</code>이다. <code class="highlighter-rouge">eksctl</code>이 노드그룹을 만든 뒤 Neuron device plugin을 알아서 설치했다. 메시지 문구는 <code class="highlighter-rouge">inf1 instance type</code>이라고 쓰지만 실제 인스턴스 타입은 <code class="highlighter-rouge">trn1.2xlarge</code>이고, <code class="highlighter-rouge">--install-neuron-plugin=false</code>로 끌 수 있다고 안내한다. 이 자동 설치분이 나중에 Helm으로 다시 까는 쪽과 충돌하는데, 그 이야기는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/">08-02-02편</a>에서 다룬다.</p>
+
+<details>
+  <summary><b>eksctl create nodegroup 전체 출력</b></summary>
+
+  <div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>eksctl create nodegroup <span class="nt">--config-file</span><span class="o">=</span>eks_nodegroup.yaml
+2026-09-11 12:36:21 <span class="o">[!]</span>  no eksctl-managed CloudFormation stacks found <span class="k">for</span> <span class="s2">"my-neuron-cluster"</span>, will attempt to create nodegroup<span class="o">(</span>s<span class="o">)</span> on non eksctl-managed cluster
+2026-09-11 12:36:21 <span class="o">[</span>ℹ]  nodegroup <span class="s2">"neuron-trn1-2x"</span> will use <span class="s2">"ami-0e08c07b0376ba3f8"</span> <span class="o">[</span>AmazonLinux2023/1.33]
+2026-09-11 12:36:21 <span class="o">[</span>ℹ]  using SSH public key <span class="s2">"/home/ubuntu/.ssh/id_rsa.pub"</span> as <span class="s2">"eksctl-my-neuron-cluster-nodegroup-neuron-trn1-2x-xx:xx:xx:xx:xx:xx"</span>
+2026-09-11 12:36:22 <span class="o">[</span>ℹ]  1 nodegroup <span class="o">(</span>neuron-trn1-2x<span class="o">)</span> was included <span class="o">(</span>based on the include/exclude rules<span class="o">)</span>
+2026-09-11 12:36:22 <span class="o">[</span>ℹ]  will create a CloudFormation stack <span class="k">for </span>each of 1 managed nodegroups <span class="k">in </span>cluster <span class="s2">"my-neuron-cluster"</span>
+2026-09-11 12:36:22 <span class="o">[</span>ℹ]  1 task: <span class="o">{</span> 1 task: <span class="o">{</span> 1 task: <span class="o">{</span> create managed nodegroup <span class="s2">"neuron-trn1-2x"</span> <span class="o">}</span> <span class="o">}</span> <span class="o">}</span>
+2026-09-11 12:36:22 <span class="o">[</span>ℹ]  building managed nodegroup stack <span class="s2">"eksctl-my-neuron-cluster-nodegroup-neuron-trn1-2x"</span>
+2026-09-11 12:36:22 <span class="o">[</span>ℹ]  deploying stack <span class="s2">"eksctl-my-neuron-cluster-nodegroup-neuron-trn1-2x"</span>
+2026-09-11 12:36:22 <span class="o">[</span>ℹ]  waiting <span class="k">for </span>CloudFormation stack <span class="s2">"eksctl-my-neuron-cluster-nodegroup-neuron-trn1-2x"</span>
+2026-09-11 12:36:52 <span class="o">[</span>ℹ]  waiting <span class="k">for </span>CloudFormation stack <span class="s2">"eksctl-my-neuron-cluster-nodegroup-neuron-trn1-2x"</span>
+2026-09-11 12:37:26 <span class="o">[</span>ℹ]  waiting <span class="k">for </span>CloudFormation stack <span class="s2">"eksctl-my-neuron-cluster-nodegroup-neuron-trn1-2x"</span>
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  waiting <span class="k">for </span>CloudFormation stack <span class="s2">"eksctl-my-neuron-cluster-nodegroup-neuron-trn1-2x"</span>
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  1 task: <span class="o">{</span> install Neuron device plugin <span class="o">}</span>
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  created <span class="s2">"ClusterRole.rbac.authorization.k8s.io/neuron-device-plugin"</span>
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  created <span class="s2">"kube-system:ServiceAccount/neuron-device-plugin"</span>
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  created <span class="s2">"kube-system:ClusterRoleBinding.rbac.authorization.k8s.io/neuron-device-plugin"</span>
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  created <span class="s2">"kube-system:DaemonSet.apps/neuron-device-plugin"</span>
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  as you are using the EKS-Optimized Accelerated AMI with an inf1 instance <span class="nb">type</span>, the AWS Neuron Kubernetes device plugin was automatically installed.
+	to skip installing it, use <span class="nt">--install-neuron-plugin</span><span class="o">=</span>false.
+2026-09-11 12:39:12 <span class="o">[</span>✔]  created 0 nodegroup<span class="o">(</span>s<span class="o">)</span> <span class="k">in </span>cluster <span class="s2">"my-neuron-cluster"</span>
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  nodegroup <span class="s2">"neuron-trn1-2x"</span> has 1 node<span class="o">(</span>s<span class="o">)</span>
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  node <span class="s2">"ip-10-0-5-100.us-west-2.compute.internal"</span> is ready
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  waiting <span class="k">for </span>at least 1 node<span class="o">(</span>s<span class="o">)</span> to become ready <span class="k">in</span> <span class="s2">"neuron-trn1-2x"</span>
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  nodegroup <span class="s2">"neuron-trn1-2x"</span> has 1 node<span class="o">(</span>s<span class="o">)</span>
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  node <span class="s2">"ip-10-0-5-100.us-west-2.compute.internal"</span> is ready
+2026-09-11 12:39:12 <span class="o">[</span>✔]  created 1 managed nodegroup<span class="o">(</span>s<span class="o">)</span> <span class="k">in </span>cluster <span class="s2">"my-neuron-cluster"</span>
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  checking security group configuration <span class="k">for </span>all nodegroups
+2026-09-11 12:39:12 <span class="o">[</span>ℹ]  all nodegroups have up-to-date cloudformation templates
+</code></pre></div>  </div>
+
+  <p><code class="highlighter-rouge">created 0 nodegroup(s)</code>와 <code class="highlighter-rouge">created 1 managed nodegroup(s)</code>가 나란히 찍히는데, 앞쪽은 비관리형(unmanaged) 노드그룹 개수이고 뒤쪽이 이번에 만든 관리형 노드그룹이다.</p>
+
+</details>
+
+<h2 id="노드-등록-결과">노드 등록 결과</h2>
+
+<p>노드 하나가 <code class="highlighter-rouge">Ready</code> 상태로 등록됐다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl <span class="nb">wait</span> <span class="nt">--for</span><span class="o">=</span><span class="nv">condition</span><span class="o">=</span>Ready nodes <span class="nt">--all</span> <span class="nt">--timeout</span><span class="o">=</span>300s
+node/ip-10-0-5-100.us-west-2.compute.internal condition met
+
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl get nodes <span class="nt">-o</span> wide
+
+<span class="c"># 실행 결과 (일부 열 생략)</span>
+NAME                                       STATUS   ROLES    AGE     VERSION                INTERNAL-IP   EXTERNAL-IP     CONTAINER-RUNTIME
+ip-10-0-5-100.us-west-2.compute.internal   Ready    &lt;none&gt;   6m14s   v1.33.13-eks-cb19647   10.0.5.100    203.0.113.10    containerd://2.2.5+unknown
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">EXTERNAL-IP</code>가 채워져 있다 — <a href="#퍼블릭-서브넷을-쓰는-이유">퍼블릭 서브넷을 쓰는 이유</a>에서 말한 구성이 실제로 적용된 결과다. <code class="highlighter-rouge">describe node</code>에서 확인할 부분은 두 군데다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl describe node
+
+<span class="c"># 실행 결과 (Labels 발췌) - eksctl이 join 시점에 심은 라벨 2개</span>
+Labels:             alpha.eksctl.io/cluster-name<span class="o">=</span>my-neuron-cluster
+                    alpha.eksctl.io/nodegroup-name<span class="o">=</span>neuron-trn1-2x
+                    ...
+                    eks.amazonaws.com/nodegroup-image<span class="o">=</span>ami-0e08c07b0376ba3f8
+                    node.kubernetes.io/instance-type<span class="o">=</span>trn1.2xlarge
+                    topology.kubernetes.io/zone<span class="o">=</span>us-west-2b
+
+<span class="c"># 실행 결과 (Capacity / Allocatable 발췌)</span>
+Capacity:
+  aws.amazon.com/neuron:      1
+  aws.amazon.com/neuroncore:  2
+  cpu:                        8
+  ephemeral-storage:          104779756Ki
+  memory:                     32332248Ki
+  pods:                       58
+Allocatable:
+  aws.amazon.com/neuron:      1
+  aws.amazon.com/neuroncore:  2
+  cpu:                        7910m
+  ephemeral-storage:          95491281146
+  memory:                     31315416Ki
+  pods:                       58
+</code></pre></div></div>
+
+<p>칩 하나짜리 노드인데 확장 리소스(extended resource)가 두 종류 광고된다. <code class="highlighter-rouge">aws.amazon.com/neuron</code>이 1, <code class="highlighter-rouge">aws.amazon.com/neuroncore</code>가 2다. 왜 두 개인지, 그리고 이 둘을 섞어 쓰면 어떤 문제가 생기는지는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/#리소스가-두-개-광고되는-이유">08-02-02편의 “리소스가 두 개 광고되는 이유”</a>에서 다룬다. 확장 리소스와 device plugin 할당 메커니즘 자체가 낯설다면 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/">GenAI on K8s 10.1편</a>이 배경이 된다.</p>
+
+<details>
+  <summary><b>kubectl describe node 전체 출력</b></summary>
+
+  <p>머신 고유 식별자(Machine ID, System UUID, Boot ID) 행은 제거했고, 호스트명·IP·인스턴스 ID·시작 템플릿 ID는 예시 값으로 치환했다.</p>
+
+  <div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl describe node
+Name:               ip-10-0-5-100.us-west-2.compute.internal
+Roles:              &lt;none&gt;
+Labels:             alpha.eksctl.io/cluster-name<span class="o">=</span>my-neuron-cluster
+                    alpha.eksctl.io/nodegroup-name<span class="o">=</span>neuron-trn1-2x
+                    beta.kubernetes.io/arch<span class="o">=</span>amd64
+                    beta.kubernetes.io/instance-type<span class="o">=</span>trn1.2xlarge
+                    beta.kubernetes.io/os<span class="o">=</span>linux
+                    eks.amazonaws.com/capacityType<span class="o">=</span>ON_DEMAND
+                    eks.amazonaws.com/nodegroup<span class="o">=</span>neuron-trn1-2x
+                    eks.amazonaws.com/nodegroup-image<span class="o">=</span>ami-0e08c07b0376ba3f8
+                    eks.amazonaws.com/sourceLaunchTemplateId<span class="o">=</span>lt-0abc1234def567890
+                    eks.amazonaws.com/sourceLaunchTemplateVersion<span class="o">=</span>1
+                    failure-domain.beta.kubernetes.io/region<span class="o">=</span>us-west-2
+                    failure-domain.beta.kubernetes.io/zone<span class="o">=</span>us-west-2b
+                    k8s.io/cloud-provider-aws<span class="o">=</span>&lt;<span class="nb">hash</span><span class="o">&gt;</span>
+                    kubernetes.io/arch<span class="o">=</span>amd64
+                    kubernetes.io/hostname<span class="o">=</span>ip-10-0-5-100.us-west-2.compute.internal
+                    kubernetes.io/os<span class="o">=</span>linux
+                    node.kubernetes.io/instance-type<span class="o">=</span>trn1.2xlarge
+                    topology.k8s.aws/network-node-layer-1<span class="o">=</span>nn-xxxxxxxxxxxxxxxxx
+                    topology.k8s.aws/network-node-layer-2<span class="o">=</span>nn-xxxxxxxxxxxxxxxxx
+                    topology.k8s.aws/network-node-layer-3<span class="o">=</span>nn-xxxxxxxxxxxxxxxxx
+                    topology.k8s.aws/zone-id<span class="o">=</span>usw2-az1
+                    topology.kubernetes.io/region<span class="o">=</span>us-west-2
+                    topology.kubernetes.io/zone<span class="o">=</span>us-west-2b
+Annotations:        alpha.kubernetes.io/provided-node-ip: 10.0.5.100
+                    node.alpha.kubernetes.io/ttl: 0
+                    volumes.kubernetes.io/controller-managed-attach-detach: <span class="nb">true
+</span>CreationTimestamp:  Fri, 11 Sep 2026 12:37:57 +0000
+Taints:             &lt;none&gt;
+Unschedulable:      <span class="nb">false
+</span>Lease:
+  HolderIdentity:  ip-10-0-5-100.us-west-2.compute.internal
+  AcquireTime:     &lt;<span class="nb">unset</span><span class="o">&gt;</span>
+  RenewTime:       Fri, 11 Sep 2026 12:42:41 +0000
+Conditions:
+  Type             Status  LastHeartbeatTime                 LastTransitionTime                Reason                       Message
+  <span class="nt">----</span>             <span class="nt">------</span>  <span class="nt">-----------------</span>                 <span class="nt">------------------</span>                <span class="nt">------</span>                       <span class="nt">-------</span>
+  MemoryPressure   False   Fri, 11 Sep 2026 12:39:28 +0000   Fri, 11 Sep 2026 12:37:54 +0000   KubeletHasSufficientMemory   kubelet has sufficient memory available
+  DiskPressure     False   Fri, 11 Sep 2026 12:39:28 +0000   Fri, 11 Sep 2026 12:37:54 +0000   KubeletHasNoDiskPressure     kubelet has no disk pressure
+  PIDPressure      False   Fri, 11 Sep 2026 12:39:28 +0000   Fri, 11 Sep 2026 12:37:54 +0000   KubeletHasSufficientPID      kubelet has sufficient PID available
+  Ready            True    Fri, 11 Sep 2026 12:39:28 +0000   Fri, 11 Sep 2026 12:38:06 +0000   KubeletReady                 kubelet is posting ready status
+Addresses:
+  InternalIP:   10.0.5.100
+  ExternalIP:   203.0.113.10
+  InternalDNS:  ip-10-0-5-100.us-west-2.compute.internal
+  Hostname:     ip-10-0-5-100.us-west-2.compute.internal
+  ExternalDNS:  ec2-203-0-113-10.us-west-2.compute.amazonaws.com
+Capacity:
+  aws.amazon.com/neuron:      1
+  aws.amazon.com/neuroncore:  2
+  cpu:                        8
+  ephemeral-storage:          104779756Ki
+  hugepages-1Gi:              0
+  hugepages-2Mi:              0
+  memory:                     32332248Ki
+  pods:                       58
+Allocatable:
+  aws.amazon.com/neuron:      1
+  aws.amazon.com/neuroncore:  2
+  cpu:                        7910m
+  ephemeral-storage:          95491281146
+  hugepages-1Gi:              0
+  hugepages-2Mi:              0
+  memory:                     31315416Ki
+  pods:                       58
+System Info:
+  Kernel Version:             6.12.103-127.188.amzn2023.x86_64
+  OS Image:                   Amazon Linux 2023.12.20260831
+  Operating System:           linux
+  Architecture:               amd64
+  Container Runtime Version:  containerd://2.2.5+unknown
+  Kubelet Version:            v1.33.13-eks-cb19647
+ProviderID:                   aws:///us-west-2b/i-0abc1234def56789
+Non-terminated Pods:          <span class="o">(</span>5 <span class="k">in </span>total<span class="o">)</span>
+  Namespace                   Name                          CPU Requests  CPU Limits  Memory Requests  Memory Limits  Age
+  <span class="nt">---------</span>                   <span class="nt">----</span>                          <span class="nt">------------</span>  <span class="nt">----------</span>  <span class="nt">---------------</span>  <span class="nt">-------------</span>  <span class="nt">---</span>
+  kube-system                 aws-node-9nzqc                50m <span class="o">(</span>0%<span class="o">)</span>      0 <span class="o">(</span>0%<span class="o">)</span>      0 <span class="o">(</span>0%<span class="o">)</span>           0 <span class="o">(</span>0%<span class="o">)</span>         4m54s
+  kube-system                 coredns-75cb89d95b-6lz4d      100m <span class="o">(</span>1%<span class="o">)</span>     0 <span class="o">(</span>0%<span class="o">)</span>      70Mi <span class="o">(</span>0%<span class="o">)</span>        170Mi <span class="o">(</span>0%<span class="o">)</span>     8h
+  kube-system                 coredns-75cb89d95b-k6csj      100m <span class="o">(</span>1%<span class="o">)</span>     0 <span class="o">(</span>0%<span class="o">)</span>      70Mi <span class="o">(</span>0%<span class="o">)</span>        170Mi <span class="o">(</span>0%<span class="o">)</span>     8h
+  kube-system                 kube-proxy-fntzm              100m <span class="o">(</span>1%<span class="o">)</span>     0 <span class="o">(</span>0%<span class="o">)</span>      0 <span class="o">(</span>0%<span class="o">)</span>           0 <span class="o">(</span>0%<span class="o">)</span>         4m54s
+  kube-system                 neuron-device-plugin-vfwks    0 <span class="o">(</span>0%<span class="o">)</span>        0 <span class="o">(</span>0%<span class="o">)</span>      0 <span class="o">(</span>0%<span class="o">)</span>           0 <span class="o">(</span>0%<span class="o">)</span>         3m39s
+Allocated resources:
+  <span class="o">(</span>Total limits may be over 100 percent, i.e., overcommitted.<span class="o">)</span>
+  Resource                   Requests    Limits
+  <span class="nt">--------</span>                   <span class="nt">--------</span>    <span class="nt">------</span>
+  cpu                        350m <span class="o">(</span>4%<span class="o">)</span>   0 <span class="o">(</span>0%<span class="o">)</span>
+  memory                     140Mi <span class="o">(</span>0%<span class="o">)</span>  340Mi <span class="o">(</span>1%<span class="o">)</span>
+  ephemeral-storage          0 <span class="o">(</span>0%<span class="o">)</span>      0 <span class="o">(</span>0%<span class="o">)</span>
+  hugepages-1Gi              0 <span class="o">(</span>0%<span class="o">)</span>      0 <span class="o">(</span>0%<span class="o">)</span>
+  hugepages-2Mi              0 <span class="o">(</span>0%<span class="o">)</span>      0 <span class="o">(</span>0%<span class="o">)</span>
+  aws.amazon.com/neuron      0           0
+  aws.amazon.com/neuroncore  0           0
+Events:
+  Type     Reason                   Age                    From                   Message
+  <span class="nt">----</span>     <span class="nt">------</span>                   <span class="nt">----</span>                   <span class="nt">----</span>                   <span class="nt">-------</span>
+  Normal   Starting                 4m51s                  kube-proxy
+  Normal   Starting                 4m57s                  kubelet                Starting kubelet.
+  Warning  InvalidDiskCapacity      4m57s                  kubelet                invalid capacity 0 on image filesystem
+  Normal   NodeHasSufficientMemory  4m57s <span class="o">(</span>x3 over 4m57s<span class="o">)</span>  kubelet                Node ip-10-0-5-100.us-west-2.compute.internal status is now: NodeHasSufficientMemory
+  Normal   NodeHasNoDiskPressure    4m57s <span class="o">(</span>x3 over 4m57s<span class="o">)</span>  kubelet                Node ip-10-0-5-100.us-west-2.compute.internal status is now: NodeHasNoDiskPressure
+  Normal   NodeHasSufficientPID     4m57s <span class="o">(</span>x3 over 4m57s<span class="o">)</span>  kubelet                Node ip-10-0-5-100.us-west-2.compute.internal status is now: NodeHasSufficientPID
+  Normal   NodeAllocatableEnforced  4m57s                  kubelet                Updated Node Allocatable limit across pods
+  Normal   Synced                   4m54s                  cloud-node-controller  Node synced successfully
+  Normal   RegisteredNode           4m53s                  node-controller        Node ip-10-0-5-100.us-west-2.compute.internal event: Registered Node ip-10-0-5-100.us-west-2.compute.internal <span class="k">in </span>Controller
+  Normal   NodeReady                4m45s                  kubelet
+</code></pre></div>  </div>
+
+  <p><code class="highlighter-rouge">Non-terminated Pods</code>에 <code class="highlighter-rouge">neuron-device-plugin-vfwks</code>가 이미 올라와 있고, <code class="highlighter-rouge">Pending</code>이던 <code class="highlighter-rouge">coredns</code> 2개도 이 노드에 배치됐다.</p>
+
+</details>
+
+<p>노드그룹 자체는 콘솔에서도 확인할 수 있다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-aws-workshop-lab1-eks-node-group.png" alt="eksctl이 생성한 관리형 노드 그룹" class="align-center" /></p>
+<center><sup>직접 캡처. 클러스터명이 들어가는 영역(상단 경로, 시작 템플릿 이름)은 익명화를 위해 블러 처리했다. 노드 그룹 <code>neuron-trn1-2x</code>가 원하는 크기 1, 표시한 AMI 릴리스 버전 <code>ami-0e08c07b0376ba3f8</code>로 활성 상태다</sup></center>
+
+<p>EKS 워커 노드가 등록될 때 노드 쪽에서 어떤 파일과 프로세스가 관여하는지는 <a href="/kubernetes/Kubernetes-EKS-01-01-05-EKS-Cluster-Worker-Node-Result/">EKS 워커 노드 구성 결과</a>에 정리해 둔 것이 있다.</p>
+
+<h2 id="kubectl-label이-no-op인-이유">kubectl label이 no-op인 이유</h2>
+
+<p>워크샵 절차에는 노드에 노드그룹 라벨을 붙이는 단계가 있는데, 실행하면 <code class="highlighter-rouge">not labeled</code>가 나온다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ NODE_NAME</span><span class="o">=</span><span class="k">$(</span>kubectl get nodes <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.items[0].metadata.name}'</span><span class="k">)</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl label node <span class="nv">$NODE_NAME</span> alpha.eksctl.io/nodegroup-name<span class="o">=</span>neuron-trn1-2x
+node/ip-10-0-5-100.us-west-2.compute.internal not labeled
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">kubectl label</code>의 응답은 세 가지로 갈린다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>출력</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">node/... labeled</code></td>
+      <td>라벨이 없었고 새로 붙였다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">node/... not labeled</code></td>
+      <td>키와 값이 이미 완전히 같다 → 변경 없음 (이번 경우)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">error: 'alpha...' already has a value (X), and --overwrite is false</code></td>
+      <td>같은 키에 다른 값이 있다 → 이때만 실제 문제</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이미 붙어 있는 이유는 <code class="highlighter-rouge">eksctl</code>로 만든 관리형 노드그룹이기 때문이다. 노드가 join할 때 <code class="highlighter-rouge">eksctl</code>이 <code class="highlighter-rouge">alpha.eksctl.io/cluster-name</code>과 <code class="highlighter-rouge">alpha.eksctl.io/nodegroup-name</code>을 함께 심는다. 앞의 <code class="highlighter-rouge">describe node</code> 출력 첫 두 줄이 그 결과다. 워크샵의 <code class="highlighter-rouge">kubectl label</code> 단계는 <code class="highlighter-rouge">eksctl</code> 외부에서 만든 노드그룹까지 커버하려는 보험용 명령이고, <code class="highlighter-rouge">eksctl</code>로 만든 경우에는 항상 no-op이 된다.</p>
+
+<h2 id="모델-캐시용-s3-버킷">모델 캐시용 S3 버킷</h2>
+
+<p>vLLM이 모델을 Neuron용으로 컴파일한 산출물을 캐시할 버킷을 만든다. 컴파일 결과를 여기에 올려 두고 재사용하는 과정은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">8.3.1편</a>에서 다룬다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</span> <span class="nv">$BUCKET_NAME</span>
+vllm-models-cache-123456789012
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>aws s3 mb <span class="s2">"s3://</span><span class="nv">$BUCKET_NAME</span><span class="s2">"</span> <span class="nt">--region</span> <span class="s2">"</span><span class="nv">$AWS_REGION</span><span class="s2">"</span>
+make_bucket: vllm-models-cache-123456789012
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>aws s3 <span class="nb">ls
+</span>2026-09-11 13:18:09 vllm-models-cache-123456789012
+</code></pre></div></div>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-aws-workshop-lab1-s3-preparation.png" alt="생성된 모델 캐시용 S3 버킷" class="align-center" /></p>
+<center><sup>직접 캡처. 버킷 이름에 AWS 계정 ID가 포함되어 있어 해당 영역만 블러 처리했다. 리전은 us-west-2다</sup></center>
+
+<h2 id="s3-csi-드라이버-설치">S3 CSI 드라이버 설치</h2>
+
+<p>버킷을 파드 안에서 파일시스템처럼 쓰기 위해 Mountpoint for Amazon S3 CSI 드라이버를 Helm으로 설치한다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 차트 저장소 등록</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>helm repo add aws-mountpoint-s3-csi-driver https://awslabs.github.io/mountpoint-s3-csi-driver
+<span class="s2">"aws-mountpoint-s3-csi-driver"</span> has been added to your repositories
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>helm repo update
+...Successfully got an update from the <span class="s2">"aws-mountpoint-s3-csi-driver"</span> chart repository
+
+<span class="c"># kube-system 네임스페이스에 설치</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>helm upgrade <span class="nt">--install</span> aws-mountpoint-s3-csi-driver <span class="se">\</span>
+<span class="o">&gt;</span>     <span class="nt">--namespace</span> kube-system <span class="se">\</span>
+<span class="o">&gt;</span>     aws-mountpoint-s3-csi-driver/aws-mountpoint-s3-csi-driver
+Release <span class="s2">"aws-mountpoint-s3-csi-driver"</span> does not exist. Installing it now.
+NAME: aws-mountpoint-s3-csi-driver
+LAST DEPLOYED: Fri Sep 11 13:27:33 2026
+NAMESPACE: kube-system
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+Thank you <span class="k">for </span>using Mountpoint <span class="k">for </span>Amazon S3 CSI Driver v2.8.0.
+
+<span class="c"># 설치 결과 확인: 컨트롤러 1개 + 노드 DaemonSet 1개</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl get pods <span class="nt">-n</span> kube-system <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>aws-mountpoint-s3-csi-driver
+NAME                                 READY   STATUS    RESTARTS   AGE
+s3-csi-controller-5df587766f-sr6rn   1/1     Running   0          14s
+s3-csi-node-th8j4                    3/3     Running   0          14s
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">s3-csi-node</code>는 노드마다 뜨는 DaemonSet이라 워커 노드 1개인 이 클러스터에서는 파드도 1개다. 버킷 접근 권한은 앞서 노드그룹 IAM에 붙인 <code class="highlighter-rouge">AmazonS3FullAccess</code>로 확보되어 있다.</p>
+
+<p><br /></p>
+
+<h1 id="검증-vllm-배포를-받을-수-있는-상태">검증: vLLM 배포를 받을 수 있는 상태</h1>
+
+<p>질문은 이것이다 — 클러스터가 vLLM 배포를 받을 수 있는 상태인가. 워크샵이 제시하는 최종 확인 절차를 그대로 돌려 본다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</span> <span class="s2">"=== Cluster Status ==="</span> <span class="o">&amp;&amp;</span> kubectl get nodes
+<span class="o">===</span> Cluster Status <span class="o">===</span>
+NAME                                       STATUS   ROLES    AGE   VERSION
+ip-10-0-5-100.us-west-2.compute.internal   Ready    &lt;none&gt;   50m   v1.33.13-eks-cb19647
+
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</span> <span class="nt">-e</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">=== Neuron Devices ==="</span> <span class="o">&amp;&amp;</span> kubectl describe nodes <span class="nt">-l</span> alpha.eksctl.io/nodegroup-name<span class="o">=</span>neuron-trn1-2x | <span class="nb">grep</span> <span class="s2">"aws.amazon.com/neuron"</span>
+<span class="o">===</span> Neuron Devices <span class="o">===</span>
+  aws.amazon.com/neuron:      1          <span class="c"># Capacity</span>
+  aws.amazon.com/neuroncore:  2
+  aws.amazon.com/neuron:      1          <span class="c"># Allocatable</span>
+  aws.amazon.com/neuroncore:  2
+  aws.amazon.com/neuron      0           0    <span class="c"># Allocated (요청/제한 합계)</span>
+  aws.amazon.com/neuroncore  0           0
+
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</span> <span class="nt">-e</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">=== Storage Classes ==="</span> <span class="o">&amp;&amp;</span> kubectl get storageclass
+<span class="o">===</span> Storage Classes <span class="o">===</span>
+NAME   PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
+gp2    kubernetes.io/aws-ebs   Delete          WaitForFirstConsumer   <span class="nb">false                  </span>9h
+
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</span> <span class="nt">-e</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">=== Current Namespace ==="</span> <span class="o">&amp;&amp;</span> kubectl config get-contexts
+<span class="o">===</span> Current Namespace <span class="o">===</span>
+CURRENT   NAME                                                       CLUSTER                                                    AUTHINFO
+<span class="k">*</span>         arn:aws:eks:us-west-2:123456789012:cluster/my-neuron-cluster   arn:aws:eks:us-west-2:123456789012:cluster/my-neuron-cluster   arn:aws:eks:us-west-2:123456789012:cluster/my-neuron-cluster
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">grep</code>이 6줄을 내놓는 것은 <code class="highlighter-rouge">describe node</code>가 같은 리소스 이름을 <code class="highlighter-rouge">Capacity</code>·<code class="highlighter-rouge">Allocatable</code>·<code class="highlighter-rouge">Allocated resources</code> 세 블록에서 각각 출력하기 때문이다. 마지막 두 줄의 <code class="highlighter-rouge">0 0</code>은 아직 이 리소스를 요청한 파드가 없다는 뜻이다.</p>
+
+<p>워크샵이 정리한 “지금까지 구성한 것” 네 항목을 위 출력과 맞춰 보면 이렇게 대응된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>워크샵이 말하는 구성 요소</th>
+      <th>대응하는 확인 결과</th>
+      <th>비고</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Base EKS Cluster (Kubernetes 1.33)</td>
+      <td><code class="highlighter-rouge">kubectl get nodes</code>의 <code class="highlighter-rouge">v1.33.13-eks-cb19647</code></td>
+      <td>VPC CNI는 <code class="highlighter-rouge">aws-node</code> 파드로, OIDC는 워크샵 CFN이 설정</td>
+    </tr>
+    <tr>
+      <td>Neuron 관리형 노드그룹 (<code class="highlighter-rouge">trn1.2xlarge</code>)</td>
+      <td>노드 1개 <code class="highlighter-rouge">Ready</code>, <code class="highlighter-rouge">instance-type=trn1.2xlarge</code></td>
+      <td>워크샵 요약문은 스토리지를 500GB라고 적지만, 이 실습의 <code class="highlighter-rouge">ClusterConfig</code>는 <code class="highlighter-rouge">volumeSize: 100</code>이다. <code class="highlighter-rouge">ephemeral-storage</code> 약 100GiB가 그 결과</td>
+    </tr>
+    <tr>
+      <td>Neuron device plugin</td>
+      <td><code class="highlighter-rouge">aws.amazon.com/neuron</code>·<code class="highlighter-rouge">neuroncore</code>가 광고됨</td>
+      <td><code class="highlighter-rouge">eksctl</code>이 자동 설치한 것. 교체는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/">08-02-02편</a></td>
+    </tr>
+    <tr>
+      <td>S3 모델 캐시</td>
+      <td><code class="highlighter-rouge">aws s3 ls</code>의 버킷 + <code class="highlighter-rouge">s3-csi-*</code> 파드 <code class="highlighter-rouge">Running</code></td>
+      <td>StorageClass는 아직 <code class="highlighter-rouge">gp2</code>뿐이고, S3 볼륨을 PV·PVC로 붙이는 것은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">8.3.1편</a>이다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>반대 방향의 확인도 해 두면 좋다. device plugin이 죽으면 <code class="highlighter-rouge">allocatable</code>에서 확장 리소스가 사라지고 파드가 <code class="highlighter-rouge">Pending</code>에 머무는데, 그 케이스는 <a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending/">EKS GPU 트러블슈팅 3.1편</a>에 정리해 둔 것이 있다.</p>
+
+<p><br /></p>
+
+<h1 id="막힘--해결-존재하지-않는-ami">막힘 &amp; 해결: 존재하지 않는 AMI</h1>
+
+<h2 id="증상">증상</h2>
+
+<p>노드그룹 생성 첫 시도가 CloudFormation 스택을 만들기도 전에 끊겼다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>eksctl create nodegroup <span class="nt">--config-file</span><span class="o">=</span>eks_nodegroup.yaml
+2026-09-11 12:24:37 <span class="o">[!]</span>  no eksctl-managed CloudFormation stacks found <span class="k">for</span> <span class="s2">"my-neuron-cluster"</span>, will attempt to create nodegroup<span class="o">(</span>s<span class="o">)</span> on non eksctl-managed cluster
+2026-09-11 12:24:37 <span class="o">[</span>ℹ]  nodegroup <span class="s2">"neuron-trn1-2x"</span> will use <span class="s2">"ami-08695d32a8bb6c5a5"</span> <span class="o">[</span>AmazonLinux2023/1.33]
+Error: unable to find image <span class="s2">"ami-08695d32a8bb6c5a5"</span>: operation error EC2: DescribeImages, https response error StatusCode: 400, RequestID: &lt;uuid&gt;, api error InvalidAMIID.NotFound: The image id <span class="s1">'[ami-08695d32a8bb6c5a5]'</span> does not exist
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">eksctl</code>은 스택을 올리기 전에 <code class="highlighter-rouge">DescribeImages</code>로 AMI 존재 여부를 확인하고, 여기서 걸리면 바로 중단한다. AWS가 <code class="highlighter-rouge">does not exist</code>라고 답했으므로 권한 문제가 아니라 조회하는 리전에 그 AMI가 없다는 뜻이다.</p>
+
+<h2 id="증거">증거</h2>
+
+<p>원인을 좁히는 결정적 증거는 <a href="#미리-세팅된-환경변수">미리 세팅된 환경변수</a>에 이미 나와 있었다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>값</th>
+      <th>출처</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">ami-08695d32a8bb6c5a5</code></td>
+      <td>배스천 셸의 <code class="highlighter-rouge">WORKER_AMI</code> 환경변수</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">ami-0e08c07b0376ba3f8</code></td>
+      <td>같은 셸, 같은 리전에서 <code class="highlighter-rouge">aws ssm get-parameter</code>로 조회한 결과</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>같은 셸에서 같은 리전을 보고 있는데 두 값이 다르다. 부팅 시 UserData가 SSM에서 값을 받아 심었다면 두 값은 같아야 한다. <strong>다르다는 사실 자체가 <code class="highlighter-rouge">WORKER_AMI</code>의 출처가 SSM이 아니라는 증거</strong>다. 즉 어딘가에 하드코딩된 값이다.</p>
+
+<h2 id="원인">원인</h2>
+
+<p>가능한 설명이 세 가지 있는데, “값이 어디서 왔나”와 “왜 지금 안 되나” 두 축에서 갈린다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>가설</th>
+      <th>값의 출처</th>
+      <th>실패 메커니즘</th>
+      <th>판정</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>(a) 부팅 후 SSM 값이 교체됨</td>
+      <td>SSM (부팅 시 조회)</td>
+      <td>실습 중에 새 릴리스가 나와 구 AMI가 deregister</td>
+      <td><strong>배제</strong></td>
+    </tr>
+    <tr>
+      <td>(b) 리전 불일치</td>
+      <td>템플릿에 박힌 다른 리전(us-east-1) AMI</td>
+      <td>AMI ID는 리전 스코프라 us-west-2에서 조회하면 존재하지 않음</td>
+      <td>가능하지만 약함</td>
+    </tr>
+    <tr>
+      <td>(c) 템플릿 노후화</td>
+      <td>워크샵 CloudFormation·부트스트랩에 하드코딩된 AMI ID</td>
+      <td>작성 시점 이후 릴리스가 지나가며 구 AMI가 deregister</td>
+      <td><strong>1순위</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>(a)는 위의 증거 하나로 탈락한다. 출처가 SSM이 아니므로 SSM 값이 바뀌었는지 여부는 애초에 관계가 없다. 타이밍으로도 성립하지 않는다 — SSM이 반환한 최신 AMI는 <code class="highlighter-rouge">amazon-eks-node-al2023-x86_64-neuron-1.33-v20260903</code>, 생성일 2026-09-03으로 실습 8일 전이다. EKS AMI 릴리스는 배스천이 켜져 있던 8시간 사이에 일어나는 일이 아니다.</p>
+
+<p>(b)가 약한 이유는 워크샵 템플릿의 통상적인 작성 방식 때문이다. 여러 리전을 지원하려고 마음먹었다면 보통 CloudFormation Mappings로 리전별 AMI를 매핑하거나 애초에 SSM 파라미터를 참조한다. 한 리전 값만 박아 놓고 다른 리전에서도 쓰게 하는 구성은 상대적으로 드물다.</p>
+
+<p>(c)를 1순위로 보는 근거는 같은 환경에 독립적인 증거가 하나 더 있다는 점이다. 워크샵 환경의 <code class="highlighter-rouge">.env</code>에 들어 있던 Hugging Face 토큰도 만료되어 있어 새로 발급해야 했다. 토큰과 AMI ID는 서로 아무 관계가 없는 값인데, <strong>환경 구축 시점에 박혀서 그 후로 갱신되지 않았다</strong>는 동일한 실패 양상을 보인다. 리전 불일치 가설로는 토큰 만료를 설명할 수 없지만, 템플릿 노후화 가설은 둘을 한 번에 설명한다.</p>
+
+<p>여기서 “워크샵이 설계된 시점과 지금이 다르다”가 가리키는 것이 분명해진다. 워크샵 환경 템플릿이 만들어진 시점의 AWS 리소스 스냅샷이 그대로 굳어 있는데, 그 뒤 AWS 쪽에서만 시간이 흘렀다는 뜻이다. <code class="highlighter-rouge">/aws/service/eks/optimized-ami/1.33/.../recommended/image_id</code>가 가리키는 AMI는 새 릴리스마다 바뀌고 구버전은 일정 기간 후 deregister되므로, 굳어 있던 값은 언젠가 반드시 깨진다.</p>
+
+<p>결국 이 사고의 본질은 불일치다. 워크샵 문서 본문은 <code class="highlighter-rouge">aws ssm get-parameter</code>로 AMI를 조회하라고 지시하는데, 환경 부트스트랩은 그 지시를 따르지 않고 값을 박아 뒀다.</p>
+
+<blockquote>
+  <p>정확히 어느 파일에 하드코딩되어 있었는지(CloudFormation UserData인지, <code class="highlighter-rouge">.bashrc</code>인지, 별도 부트스트랩 스크립트인지)는 확인하지 못했다. 워크샵 환경의 소스를 열어 보지 않았기 때문에, 이 글에서 단정할 수 있는 범위는 “SSM이 아닌 어딘가에 하드코딩되어 있었다”까지다.</p>
+</blockquote>
+
+<h2 id="해결">해결</h2>
+
+<p>SSM에서 다시 받아 환경변수를 덮어쓰고, 그 AMI가 실제로 존재하는지 먼저 검증한 뒤 YAML을 재생성했다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 1. SSM에서 최신 AMI를 다시 받아 환경변수를 덮어쓴다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">export </span><span class="nv">AWS_REGION</span><span class="o">=</span>us-west-2
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">export </span><span class="nv">WORKER_AMI</span><span class="o">=</span><span class="k">$(</span>aws ssm get-parameter <span class="se">\</span>
+<span class="o">&gt;</span>     <span class="nt">--name</span> /aws/service/eks/optimized-ami/1.33/amazon-linux-2023/x86_64/neuron/recommended/image_id <span class="se">\</span>
+<span class="o">&gt;</span>     <span class="nt">--region</span> <span class="nv">$AWS_REGION</span> <span class="se">\</span>
+<span class="o">&gt;</span>     <span class="nt">--query</span> <span class="s2">"Parameter.Value"</span> <span class="se">\</span>
+<span class="o">&gt;</span>     <span class="nt">--output</span> text<span class="k">)</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</span> <span class="nv">$WORKER_AMI</span>
+ami-0e08c07b0376ba3f8
+
+<span class="c"># 2. 실제로 존재하는지 확인한다. eksctl이 내부적으로 하는 것과 같은 호출이라,</span>
+<span class="c">#    여기서 통과하면 eksctl도 통과한다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>aws ec2 describe-images <span class="nt">--image-ids</span> <span class="nv">$WORKER_AMI</span> <span class="nt">--region</span> <span class="nv">$AWS_REGION</span> <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--query</span> <span class="s1">'Images[0].[ImageId,Name,CreationDate]'</span> <span class="nt">--output</span> text
+ami-0e08c07b0376ba3f8   amazon-eks-node-al2023-x86_64-neuron-1.33-v20260903     2026-09-03T22:42:42.000Z
+</code></pre></div></div>
+
+<p>환경변수만 고쳐서는 부족하다. <code class="highlighter-rouge">eks_nodegroup.yaml</code>은 heredoc으로 만들 때 이미 낡은 값이 구워진 파일이라, 같은 heredoc을 다시 실행해 파일을 재생성해야 한다. 재생성 결과는 <code class="highlighter-rouge">ami:</code> 한 줄만 달라진다.</p>
+
+<div class="language-diff highlighter-rouge"><div class="highlight"><pre class="highlight"><code> managedNodeGroups:
+ - name: neuron-trn1-2x
+<span class="gd">-  ami: ami-08695d32a8bb6c5a5
+</span><span class="gi">+  ami: ami-0e08c07b0376ba3f8
+</span>   amiFamily: AmazonLinux2023
+</code></pre></div></div>
+
+<p>이 상태로 <code class="highlighter-rouge">eksctl create nodegroup</code>을 다시 실행한 결과가 <a href="#노드그룹-배포">노드그룹 배포</a>의 출력이다.</p>
+
+<p>재실행 전에 한 가지 더 확인해 둘 것이 있다. YAML에 <code class="highlighter-rouge">ssh.publicKeyPath: ~/.ssh/id_rsa.pub</code>가 들어 있어, 그 파일이 없으면 여기서도 막힌다. 노드 접속을 Session Manager로 할 생각이면 <code class="highlighter-rouge">ssh:</code> 블록을 아예 지우는 편이 간단하고, 남겨 둘 거면 <code class="highlighter-rouge">ssh-keygen</code>으로 키를 만들어 두면 된다.</p>
+
+<p>교훈은 두 줄이다.</p>
+
+<ul>
+  <li>AMI ID는 하드코딩하거나 셸 히스토리의 값을 재사용하지 말고, 매번 SSM 파라미터에서 조회한다</li>
+  <li>워크샵 환경에 미리 세팅된 값은 그대로 믿지 말고 실제 값과 대조하고 쓴다. 이번 실습에서는 AMI ID와 Hugging Face 토큰이 둘 다 여기에 걸렸다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>단계</th>
+      <th>한 일</th>
+      <th>확인 지점</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>실습 환경</td>
+      <td>배스천에 AWS CLI·Helm·jq 설치, kubeconfig 갱신</td>
+      <td><code class="highlighter-rouge">coredns</code> 2개가 <code class="highlighter-rouge">Pending</code> = 노드 없음</td>
+    </tr>
+    <tr>
+      <td>네트워킹</td>
+      <td>VPC → 인스턴스 타입 제공 AZ → 퍼블릭 서브넷 순으로 값 확보</td>
+      <td>서로 다른 AZ의 퍼블릭 서브넷 2개</td>
+    </tr>
+    <tr>
+      <td>노드그룹</td>
+      <td><code class="highlighter-rouge">eksctl create nodegroup</code>으로 <code class="highlighter-rouge">trn1.2xlarge</code> 1대</td>
+      <td>노드 <code class="highlighter-rouge">Ready</code>, <code class="highlighter-rouge">ExternalIP</code> 부여됨</td>
+    </tr>
+    <tr>
+      <td>스토리지</td>
+      <td>모델 캐시 버킷 + Mountpoint S3 CSI 드라이버</td>
+      <td><code class="highlighter-rouge">s3-csi-controller</code>·<code class="highlighter-rouge">s3-csi-node</code> <code class="highlighter-rouge">Running</code></td>
+    </tr>
+    <tr>
+      <td>막힘</td>
+      <td>미리 박힌 <code class="highlighter-rouge">WORKER_AMI</code>가 deregister된 AMI</td>
+      <td>SSM 조회값과 환경변수값의 불일치</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 편에서 확보한 것은 vLLM 배포를 받을 수 있는 클러스터 상태다. 노드가 <code class="highlighter-rouge">Ready</code>이고, Neuron 확장 리소스가 광고되고, 모델 캐시용 스토리지가 붙어 있다.</p>
+
+<p>남은 질문은 광고된 리소스 쪽에 있다. 칩 하나짜리 노드인데 <code class="highlighter-rouge">aws.amazon.com/neuron: 1</code>과 <code class="highlighter-rouge">aws.amazon.com/neuroncore: 2</code>가 함께 나온다. 이 둘이 같은 하드웨어를 두 가지 단위로 센 것이라면, 스케줄러는 그 사실을 어떻게 아는가. <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/">08-02-02편</a>에서 노드 안으로 들어가 커널 디바이스 노드와 device plugin 소켓까지 확인한다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://docs.aws.amazon.com/eks/latest/userguide/retrieve-ami-id.html">Amazon EKS 최적화 AMI ID 조회 (AWS 문서)</a></li>
+  <li><a href="https://docs.aws.amazon.com/eks/latest/userguide/network-reqs.html">Amazon EKS VPC 및 서브넷 요구 사항 (AWS 문서)</a></li>
+  <li><a href="https://eksctl.io/usage/eks-managed-nodes/">eksctl: Managed Nodegroups</a></li>
+  <li><a href="https://github.com/awslabs/mountpoint-s3-csi-driver">awslabs/mountpoint-s3-csi-driver</a></li>
+  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/">AWS Neuron Documentation</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/">Kubernetes: Device Plugins</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/">08-00편: vLLM on Trainium 워크샵 개요</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/">08-01편: AWS 가속기 - Inferentia, Trainium, NeuronCore</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/">08-02-02편: Trainium 디바이스가 쿠버네티스에 노출되는 경로</a></li>
+  <li><a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/">GenAI on K8s 10.1편: GPU 자원 개요와 K8s 할당 메커니즘</a></li>
+  <li><a href="/kubernetes/Kubernetes-EKS-01-01-05-EKS-Cluster-Worker-Node-Result/">EKS 클러스터 워커 노드 구성 결과</a></li>
+  <li><a href="/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending/">EKS GPU 트러블슈팅 3.1편: Device Plugin 비활성화 시 파드 Pending</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#aws" class="page__taxonomy-item" rel="tag">AWS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eksctl" class="page__taxonomy-item" rel="tag">eksctl</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study-week-6" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study-Week-6</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#neuron" class="page__taxonomy-item" rel="tag">Neuron</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#trainium" class="page__taxonomy-item" rel="tag">Trainium</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#vllm" class="page__taxonomy-item" rel="tag">vLLM</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-09-12">September 12, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEKS%5D+LLM+%EC%84%9C%EB%B9%99%EA%B3%BC+%EC%B5%9C%EC%A0%81%ED%99%94%3A+vLLM+on+Trainium+%EC%9B%8C%ED%81%AC%EC%83%B5+-+8.2.1.+Trainium+%EB%85%B8%EB%93%9C%EA%B7%B8%EB%A3%B9+%EA%B5%AC%EC%84%B1%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/" class="pagination--pager" title="[Trainium] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.1. Trainium·Inferentia와 Neuron 스택
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/" class="pagination--pager" title="[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/" rel="permalink">[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.2. LoadBalancer 서비스 노출과 추론 테스트
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  20 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">vLLM Service를 LoadBalancer로 노출했을 때 만들어지는 CLB의 리스너 구조를 확인하고, 추론 요청이 실제로 왕복하는지 검증해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/" rel="permalink">[vLLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.1. init container 모델 컴파일과 S3 캐시
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  35 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">vLLM Deployment를 init container 패턴으로 올리고, Neuron 컴파일 산출물이 S3 캐시를 거쳐 메인 컨테이너로 전달되는 경로를 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/" rel="permalink">[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  32 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">칩 하나에 리소스가 둘 광고되는 이유를 커널 디바이스 노드와 device plugin 소켓까지 내려가 확인하고, NVIDIA와 갈리는 지점을 정리해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/" rel="permalink">[Trainium] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.1. Trainium·Inferentia와 Neuron 스택
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  27 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">워크샵이 쓰는 Trainium이 어떤 칩인지, Neuron SDK가 어떤 스택인지, NVIDIA 스택과 어디까지 대응되는지 정리해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

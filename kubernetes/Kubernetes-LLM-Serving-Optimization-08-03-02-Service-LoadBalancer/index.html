@@ -1,0 +1,1599 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.2. LoadBalancer 서비스 노출과 추론 테스트 - Eraser’s StudyLog</title>
+<meta name="description" content="vLLM Service를 LoadBalancer로 노출했을 때 만들어지는 CLB의 리스너 구조를 확인하고, 추론 요청이 실제로 왕복하는지 검증해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.2. LoadBalancer 서비스 노출과 추론 테스트">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/">
+
+
+  <meta property="og:description" content="vLLM Service를 LoadBalancer로 노출했을 때 만들어지는 CLB의 리스너 구조를 확인하고, 추론 요청이 실제로 왕복하는지 검증해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-09-11T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-09-12T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.2. LoadBalancer 서비스 노출과 추론 테스트">
+    <meta itemprop="description" content="vLLM Service를 LoadBalancer로 노출했을 때 만들어지는 CLB의 리스너 구조를 확인하고, 추론 요청이 실제로 왕복하는지 검증해 보자.">
+    <meta itemprop="datePublished" content="2026-09-11T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-09-12T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.2. LoadBalancer 서비스 노출과 추론 테스트
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-09-11T00:00:00+09:00">2026년 09월 11일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  19 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#service-loadbalancer-해부">Service LoadBalancer 해부</a>
+    <ul>
+      <li><a href="#매니페스트">매니페스트</a></li>
+      <li><a href="#8080을-쓰는-이유">8080을 쓰는 이유</a></li>
+      <li><a href="#포트-세-개">포트 세 개</a></li>
+      <li><a href="#로드밸런서-타입-선택">로드밸런서 타입 선택</a>
+        <ul>
+          <li><a href="#classic-load-balancer">Classic Load Balancer</a></li>
+          <li><a href="#network-load-balancer">Network Load Balancer</a></li>
+          <li><a href="#application-load-balancer">Application Load Balancer</a></li>
+        </ul>
+      </li>
+      <li><a href="#클라이언트에서-파드까지의-경로">클라이언트에서 파드까지의 경로</a></li>
+    </ul>
+  </li>
+  <li><a href="#적용과-관찰-생성된-clb">적용과 관찰: 생성된 CLB</a>
+    <ul>
+      <li><a href="#서비스와-엔드포인트">서비스와 엔드포인트</a></li>
+      <li><a href="#endpoints와-endpointslice">Endpoints와 EndpointSlice</a></li>
+      <li><a href="#콘솔의-dns-name과-external-ip">콘솔의 DNS name과 EXTERNAL IP</a></li>
+      <li><a href="#리스너와-nodeport-매핑">리스너와 NodePort 매핑</a></li>
+      <li><a href="#scheme와-인스턴스-상태">Scheme와 인스턴스 상태</a></li>
+    </ul>
+  </li>
+  <li><a href="#검증-추론-요청-왕복">검증: 추론 요청 왕복</a>
+    <ul>
+      <li><a href="#배포-완료까지-걸린-시간">배포 완료까지 걸린 시간</a></li>
+      <li><a href="#port-forward로-보낸-요청">port-forward로 보낸 요청</a></li>
+      <li><a href="#서버-로그에-남은-요청-처리">서버 로그에 남은 요청 처리</a></li>
+      <li><a href="#대화형-클라이언트로-본-모델-품질">대화형 클라이언트로 본 모델 품질</a></li>
+      <li><a href="#문제가-생겼을-때-확인할-것">문제가 생겼을 때 확인할 것</a></li>
+    </ul>
+  </li>
+  <li><a href="#막힘--해결-https-접속-실패">막힘 &amp; 해결: HTTPS 접속 실패</a>
+    <ul>
+      <li><a href="#증상">증상</a></li>
+      <li><a href="#증거">증거</a></li>
+      <li><a href="#원인">원인</a></li>
+      <li><a href="#해결">해결</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>어노테이션을 하나도 붙이지 않고 <code class="highlighter-rouge">type: LoadBalancer</code>만 준 Service에서 <strong>Classic Load Balancer(CLB)</strong>가 만들어졌다. in-tree AWS 클라우드 프로바이더가 처리했고, 그 기본 산출물이 CLB이기 때문이다. NLB는 어노테이션이 필요하고, ALB는 Service가 아니라 Ingress 경로다</li>
+  <li>08-00편이 아키텍처 그림만 보고 미뤄 뒀던 질문 — <code class="highlighter-rouge">type: LoadBalancer</code> Service가 vLLM 쪽인지 ingress-nginx 쪽인지 — 에 대한 답은 <strong>Lab 2 시점에서는 vLLM Service 자신</strong>이다</li>
+  <li>포트가 <strong>8080 → 32233 → 8080</strong> 세 번 나오고 그중 둘이 같은 숫자다. 앞의 8080은 Service <code class="highlighter-rouge">port</code>이자 ELB 리스너 포트, 32233은 자동 할당된 NodePort, 뒤의 8080은 컨테이너 포트다</li>
+  <li>8080을 고른 근거 중 <strong>특권 포트 제약은 성립하지 않는다.</strong> 노드에서 본 vLLM 프로세스는 root로 돌고 있었고, containerd 기본 capability 집합에는 <code class="highlighter-rouge">CAP_NET_BIND_SERVICE</code>가 들어 있다. 남는 근거는 보안그룹 인바운드에 80이 없다는 것이다</li>
+  <li><code class="highlighter-rouge">kubectl get ep</code>가 뱉는 deprecation 경고는 <strong>v1.33에서 공식화된 것</strong>이고, 같은 이름으로 EndpointSlice를 찾으면 없다. EndpointSlice는 Service와 이름이 1:1로 대응하지 않아 라벨로 조회해야 한다</li>
+  <li>첫 배포에 걸린 시간은 로그 타임스탬프 기준 <strong>7분 19초</strong>였다. 이미지 pull 2분 48초, 모델 컴파일 3분 52초, API 서버 기동 35초다</li>
+  <li>브라우저로 접속하면 <code class="highlighter-rouge">ERR_SSL_PROTOCOL_ERROR</code>가 난다. <strong>CLB 리스너가 <code class="highlighter-rouge">TCP:8080</code> 하나뿐</strong>이고 443도 인증서도 없기 때문이다. <code class="highlighter-rouge">http://</code> 스킴을 명시하고 포트를 붙이면 접속된다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="service-loadbalancer-해부">Service LoadBalancer 해부</h1>
+
+<p><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/#외부-접근-경로">08-00편의 외부 접근 경로</a>는 아키텍처 그림에서 ELB 화살표가 vLLM Service가 아니라 ingress-nginx 쪽으로 들어가는 것을 보고, <code class="highlighter-rouge">type: LoadBalancer</code> Service가 ingress-nginx 컨트롤러 쪽일 가능성을 언급하면서 판단은 매니페스트 확인 시점으로 미뤘다. Lab 2의 매니페스트가 그 답이다. <strong>vLLM Service 자신이 <code class="highlighter-rouge">type: LoadBalancer</code>이고, 이 Service가 CLB를 직접 만든다.</strong> ingress-nginx는 이후 Lab에서 따로 올라온다. 즉 아키텍처 그림은 최종 상태를 그린 것이고, Lab 2 시점의 외부 진입점은 vLLM Service다.</p>
+
+<p>모델을 물고 있는 파드까지는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">08-03-01편</a>에서 확인했다. 이 편은 그 파드를 클러스터 밖으로 노출하고 추론 요청을 실제로 왕복시키는 부분을 다룬다.</p>
+
+<p>이 글의 모든 출력에서 계정 ID, 버킷명, 호스트명, IP, ELB DNS 이름은 예시 값으로 치환했다.</p>
+
+<h2 id="매니페스트">매니페스트</h2>
+
+<p>Service 매니페스트는 여섯 줄짜리다. 어노테이션이 하나도 없다는 점이 뒤에서 CLB가 만들어지는 직접적인 이유가 된다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Service</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">vllm-service</span>
+  <span class="c1"># 어노테이션 없음 — 로드밸런서 타입을 지정하는 필드가 하나도 없다</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="c1"># Deployment가 파드에 붙인 라벨과 맞춘다</span>
+  <span class="na">selector</span><span class="pi">:</span>
+    <span class="s">app.kubernetes.io/name</span><span class="pi">:</span> <span class="s">vllm-server</span>
+  <span class="na">ports</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">protocol</span><span class="pi">:</span> <span class="s">TCP</span>
+      <span class="c1"># 외부에서 붙는 포트. ELB 리스너 포트가 이 값으로 만들어진다</span>
+      <span class="na">port</span><span class="pi">:</span> <span class="s">8080</span>
+      <span class="c1"># 숫자가 아니라 컨테이너 포트의 이름을 가리킨다</span>
+      <span class="na">targetPort</span><span class="pi">:</span> <span class="s">http-vllm</span>
+  <span class="c1"># ClusterIP + NodePort를 할당하고 그 위에 클라우드 로드밸런서를 붙인다</span>
+  <span class="na">type</span><span class="pi">:</span> <span class="s">LoadBalancer</span>
+</code></pre></div></div>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 적용</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl apply <span class="nt">-f</span> vllm-service.yaml
+service/vllm-service created
+</code></pre></div></div>
+
+<h2 id="8080을-쓰는-이유">8080을 쓰는 이유</h2>
+
+<p>8080이 등장하는 자리는 넷이고 전부 같은 숫자로 맞춰져 있다. ConfigMap의 <code class="highlighter-rouge">PORT: "8080"</code> → 컨테이너 인자 <code class="highlighter-rouge">--port=$PORT</code> → <code class="highlighter-rouge">containerPort: 8080</code>(이름 <code class="highlighter-rouge">http-vllm</code>) → Service <code class="highlighter-rouge">port: 8080</code>이다. vLLM 서버의 기본 포트는 8000이므로, 8080은 vLLM 관례가 아니라 워크샵이 명시적으로 덮어쓴 값이다. 8080 자체는 IANA 서비스 레지스트리에 <code class="highlighter-rouge">http-alt</code>로 등록된 비특권 HTTP 대체 포트다.</p>
+
+<p>1024 미만 특권 포트 제약은 이 구성에서 근거가 되지 않는다. containerd가 컨테이너에 부여하는 기본 capability 집합에 <code class="highlighter-rouge">CAP_NET_BIND_SERVICE</code>가 포함되고, 노드에서 확인한 vLLM 프로세스는 root로 실행 중이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>ec2-user@ip-10-0-5-100 ~]<span class="nv">$ </span>ps <span class="nt">-ef</span> | <span class="nb">grep</span> <span class="nt">-i</span> vllm
+
+<span class="c"># 실행 결과 (발췌)</span>
+root  36890  34196  0 14:12 ?  00:00:09 python <span class="nt">-m</span> vllm.entrypoints.openai.api_server <span class="nt">--model</span><span class="o">=</span>tinyLlama/TinyLlama-1.1B-Chat-v1.0 <span class="nt">--port</span><span class="o">=</span>8080 <span class="nt">--device</span><span class="o">=</span>neuron
+</code></pre></div></div>
+
+<p>즉 이 파드는 80에 바인딩할 수 있었다. 남는 근거는 워크샵 환경의 보안그룹 인바운드가 22/8000/8080만 열려 있다는 것이다. <code class="highlighter-rouge">port: 80</code>으로 바꾸면 보안그룹 규칙도 같이 고쳐야 한다. 컨테이너 포트와 Service 포트를 같은 숫자로 맞춰 둔 것은 매니페스트를 읽기 쉽게 만들지만, 이것이 워크샵 저자의 의도였는지는 확인할 방법이 없어 추정에 머문다.</p>
+
+<p>접속 URL 뒤에 <code class="highlighter-rouge">:8080</code>이 붙는 것을 없애려면 L4 로드밸런서 앞에 L7 계층을 두어야 한다. L4 CLB는 리스너 포트를 클라이언트가 직접 지정해야 하기 때문이다. 이후 Lab에서 ingress-nginx를 올린다.</p>
+
+<h2 id="포트-세-개">포트 세 개</h2>
+
+<p>경로 하나에 포트가 세 번 나오고 그중 둘이 같은 숫자라 헷갈리기 쉽다. 각 값의 소속을 먼저 정리한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>값</th>
+      <th>소속</th>
+      <th>정해지는 방식</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">8080</code> (앞)</td>
+      <td>Service <code class="highlighter-rouge">spec.ports[].port</code></td>
+      <td>매니페스트에 직접 적은 값. <strong>ELB 리스너 포트가 이 값으로 만들어진다</strong></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">32233</code></td>
+      <td>NodePort</td>
+      <td><code class="highlighter-rouge">type: LoadBalancer</code>가 NodePort 범위에서 자동 할당. <code class="highlighter-rouge">kubectl get svc</code>의 <code class="highlighter-rouge">8080:32233/TCP</code> 뒷 숫자</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">8080</code> (뒤)</td>
+      <td>컨테이너 <code class="highlighter-rouge">containerPort</code></td>
+      <td>Deployment에 적은 값. Service는 숫자가 아니라 이름 <code class="highlighter-rouge">http-vllm</code>으로 가리킨다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">targetPort</code>가 숫자가 아니라 포트 이름이라, 컨테이너 포트 번호를 바꿔도 Service 매니페스트는 고치지 않아도 된다. 앞뒤 8080이 같은 숫자인 것은 우연이 아니라 그렇게 맞춰 적은 결과이고, 둘은 서로 다른 레이어의 값이다.</p>
+
+<h2 id="로드밸런서-타입-선택">로드밸런서 타입 선택</h2>
+
+<p>결론부터 적으면, 무엇이 만들어질지는 <strong>어노테이션과 오브젝트 종류</strong>가 정한다. 어노테이션 없이 <code class="highlighter-rouge">type: LoadBalancer</code>만 주면 클러스터에 기본으로 들어 있는 in-tree(legacy) AWS 클라우드 프로바이더가 처리하고, 그 기본 산출물이 CLB다. NLB를 받으려면 어노테이션을 붙여야 하고, ALB는 Service가 아니라 Ingress와 AWS Load Balancer Controller 경로다. 이번 Lab의 Service에는 어노테이션이 하나도 없고 AWS Load Balancer Controller도 설치되어 있지 않으므로 CLB가 나온다.</p>
+
+<p>AWS ELB 기능 문서 기준으로 세 종류의 차이는 이렇다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>레이어</th>
+      <th>리스너 프로토콜</th>
+      <th>타겟 타입</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>ALB (Application)</td>
+      <td>L7</td>
+      <td>HTTP, HTTPS, gRPC</td>
+      <td>IP, Instance, Lambda</td>
+    </tr>
+    <tr>
+      <td>NLB (Network)</td>
+      <td>L4</td>
+      <td>TCP, UDP, TLS</td>
+      <td>IP, Instance, ALB</td>
+    </tr>
+    <tr>
+      <td>CLB (Classic)</td>
+      <td>L4/L7</td>
+      <td>TCP, SSL/TLS, HTTP, HTTPS</td>
+      <td>문서에 명시 없음</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="classic-load-balancer">Classic Load Balancer</h3>
+
+<p>ALB와 NLB로 갈라지기 전의 구세대 로드밸런서다. AWS 문서는 “EC2-Classic 네트워크 안에서 만들어진 기존 애플리케이션이 있다면 CLB를 쓰라”고만 안내한다. 신규 구성에서 굳이 고를 이유는 없고, 이번처럼 <strong>아무것도 지정하지 않았을 때 기본값으로 만들어지는 것</strong>이 실제 마주치는 경로다.</p>
+
+<p>이번에 만들어진 CLB는 리스너가 <code class="highlighter-rouge">TCP:8080 → TCP:32233</code> 하나뿐인 L4 패스스루다. 경로 기반 라우팅이 없고, TLS를 종료하지도 않는다.</p>
+
+<h3 id="network-load-balancer">Network Load Balancer</h3>
+
+<p>L4 로드밸런서다. 초고성능이 필요하거나 고정 IP가 필요할 때 고른다.</p>
+
+<p>in-tree 프로바이더에게 NLB를 만들게 하는 어노테이션은 <code class="highlighter-rouge">service.beta.kubernetes.io/aws-load-balancer-type: nlb</code>인데, <strong>이것은 구형 표기다.</strong> AWS Load Balancer Controller를 기준으로 한 현재 권장 표기는 <code class="highlighter-rouge">"external"</code>이다. EKS 문서는 <code class="highlighter-rouge">aws-load-balancer-type</code>의 <code class="highlighter-rouge">external</code> 값이 “AWS 클라우드 프로바이더 로드밸런서 컨트롤러가 아니라 AWS Load Balancer Controller가 NLB를 만들게 하는 원인”이라고 적는다. 타겟 타입은 별도로 <code class="highlighter-rouge">aws-load-balancer-nlb-target-type</code>으로 지정한다.</p>
+
+<p>두 컨트롤러의 역할도 갈려 있다. in-tree 프로바이더는 기본으로 CLB를 만들고 NLB도 만들 수 있지만 앞으로는 중대한 버그 수정만 받는다. AWS Load Balancer Controller는 NLB를 만들고 CLB는 만들지 않는다.</p>
+
+<h3 id="application-load-balancer">Application Load Balancer</h3>
+
+<p>L7 로드밸런서로, 경로와 호스트 기반 라우팅이 된다. 다만 <strong>Service <code class="highlighter-rouge">type: LoadBalancer</code>로는 나오지 않는다.</strong> ALB는 Ingress 오브젝트와 AWS Load Balancer Controller 조합으로 만들어진다. 이 워크샵은 ALB 대신 CLB 뒤에 ingress-nginx를 두는 구성을 택했고, 그 부분은 이후 Lab이다.</p>
+
+<h2 id="클라이언트에서-파드까지의-경로">클라이언트에서 파드까지의 경로</h2>
+
+<p><code class="highlighter-rouge">type: LoadBalancer</code>는 별개의 새 기능이 아니라 <strong>ClusterIP와 NodePort 위에 외부 로드밸런서를 얹은 것</strong>이다. 쿠버네티스 문서도 클러스터 안 파드에는 ClusterIP와 동등한 기능을 제공하고, 여기에 더해 해당 파드를 띄운 노드들을 외부 로드밸런서에 등록하는 것으로 설명한다.</p>
+
+<p>순서로 풀면 이렇다.</p>
+
+<ol>
+  <li>Service를 만들면 API 서버가 ClusterIP(<code class="highlighter-rouge">172.20.144.130</code>)와 NodePort(<code class="highlighter-rouge">32233</code>)를 할당한다</li>
+  <li>클라우드 컨트롤러가 이를 보고 <strong>비동기로</strong> 실제 ELB를 프로비저닝한다. 이벤트 <code class="highlighter-rouge">EnsuringLoadBalancer</code> → <code class="highlighter-rouge">EnsuredLoadBalancer</code>가 그 두 단계다</li>
+  <li>완료되면 <code class="highlighter-rouge">status.loadBalancer.ingress[0].hostname</code>에 DNS 이름이 채워지고 <code class="highlighter-rouge">kubectl get svc</code>의 <code class="highlighter-rouge">EXTERNAL-IP</code>에 보인다</li>
+  <li>데이터패스는 클라이언트 → ELB:8080 → 워커 노드:32233 → kube-proxy → 파드:8080이다</li>
+</ol>
+
+<pre><code class="language-mermaid">flowchart LR
+    C["클라이언트&lt;br/&gt;브라우저 또는 curl"]
+    ELB["Classic Load Balancer&lt;br/&gt;리스너 TCP:8080"]
+    N["워커 노드&lt;br/&gt;NodePort TCP:32233"]
+    KP["kube-proxy&lt;br/&gt;ClusterIP 172.20.144.130"]
+    P["vLLM 파드&lt;br/&gt;containerPort 8080 = http-vllm"]
+
+    C --&gt;|"ELB DNS 이름 + 포트 8080"| ELB
+    ELB --&gt;|"TCP 패스스루"| N
+    N --&gt; KP
+    KP --&gt;|"targetPort http-vllm"| P
+    ELB -.-&gt;|"헬스체크 TCP:32233"| N
+</code></pre>
+
+<center><sup>AI를 이용해 직접 그린 도식. 같은 8080이 두 번 나오지만 앞은 Service 포트, 뒤는 컨테이너 포트다.</sup></center>
+
+<p>여기서 주의할 점이 하나 있다. ELB가 타겟으로 잡는 것은 <strong>파드가 아니라 노드</strong>다. 노드 안에서 파드까지 보내는 것은 kube-proxy가 프로그래밍한 규칙이고, 헬스체크도 파드가 아니라 NodePort(<code class="highlighter-rouge">TCP:32233</code>)로 간다. 노드가 <code class="highlighter-rouge">OutOfService</code>로 보인다면 그 헬스체크가 실패한 것이다.</p>
+
+<p>그래서 기본값에서는 홉이 하나 더 생기고 클라이언트 IP가 보존되지 않는다. <code class="highlighter-rouge">spec.externalTrafficPolicy</code>가 이 동작을 가르는 필드인데, 기본값 <code class="highlighter-rouge">Cluster</code>는 분산이 고르지만 소스 IP를 가리고 2차 홉이 생기고, <code class="highlighter-rouge">Local</code>은 소스 IP를 보존하고 2차 홉이 없는 대신 분산이 치우칠 수 있다. 이번 Service는 아무것도 지정하지 않았으므로 <code class="highlighter-rouge">Cluster</code>다. 이 선택의 흔적은 뒤의 <a href="#서버-로그에-남은-요청-처리">서버 로그</a>에 그대로 남는다.</p>
+
+<p><br /></p>
+
+<h1 id="적용과-관찰-생성된-clb">적용과 관찰: 생성된 CLB</h1>
+
+<h2 id="서비스와-엔드포인트">서비스와 엔드포인트</h2>
+
+<p><code class="highlighter-rouge">apply</code> 직후 <code class="highlighter-rouge">EXTERNAL-IP</code>가 채워지기까지는 ELB 프로비저닝 시간이 걸린다. 아래는 21초 시점의 출력이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl get svc,ep vllm-service
+
+<span class="c"># 실행 결과</span>
+Warning: v1 Endpoints is deprecated <span class="k">in </span>v1.33+<span class="p">;</span> use discovery.k8s.io/v1 EndpointSlice
+NAME                   TYPE           CLUSTER-IP       EXTERNAL-IP                               PORT<span class="o">(</span>S<span class="o">)</span>          AGE
+service/vllm-service   LoadBalancer   172.20.144.130   &lt;elb-id&gt;.us-west-2.elb.amazonaws.com      8080:32233/TCP   21s
+
+NAME                     ENDPOINTS         AGE
+endpoints/vllm-service   10.0.5.203:8080   21s
+</code></pre></div></div>
+
+<p>읽을 것이 세 줄에 다 들어 있다. <code class="highlighter-rouge">PORT(S)</code>의 <code class="highlighter-rouge">8080:32233/TCP</code>가 Service 포트와 NodePort 쌍이고, <code class="highlighter-rouge">ENDPOINTS</code>의 <code class="highlighter-rouge">10.0.5.203:8080</code>은 셀렉터에 잡힌 vLLM 파드의 IP와 컨테이너 포트다. 엔드포인트가 비어 있으면 셀렉터가 파드 라벨과 어긋난 것이다.</p>
+
+<h2 id="endpoints와-endpointslice">Endpoints와 EndpointSlice</h2>
+
+<p>위 출력 맨 앞에 붙은 경고는 클러스터 상태 이상이 아니다. <strong><code class="highlighter-rouge">core/v1</code> Endpoints는 Kubernetes v1.33에서 공식적으로 deprecated 됐다.</strong> 이 클러스터의 kubelet이 <code class="highlighter-rouge">v1.33.13-eks</code>이므로 경고가 나오는 것이 정상이고, v1.32 이하에서는 나오지 않는다. 다만 제거(removal)는 예정돼 있지 않다. 쿠버네티스 블로그는 deprecation 정책상 Endpoints 타입 자체가 완전히 사라지는 일은 아마 없을 것이라고 적는다. 실제로 위 출력도 경고를 내면서 엔드포인트를 정상 반환했다.</p>
+
+<p>경고를 보고 EndpointSlice를 같은 이름으로 찾으면 없다고 나온다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl get endpointslices vllm-service
+
+<span class="c"># 실행 결과</span>
+Error from server <span class="o">(</span>NotFound<span class="o">)</span>: endpointslices.discovery.k8s.io <span class="s2">"vllm-service"</span> not found
+</code></pre></div></div>
+
+<p>EndpointSlice가 없어서가 아니라 <strong>이름으로 찾았기 때문이다.</strong> EndpointSlice는 Service와 이름이 1:1로 대응하지 않는다. 공식 문서가 드는 예시 이름부터 <code class="highlighter-rouge">example-abc</code>처럼 Service 이름에 랜덤 접미사가 붙은 형태이고, 블로그도 Service와 EndpointSlice 사이에 예측 가능한 1:1 매핑이 없으므로 이름 대신 <code class="highlighter-rouge">kubernetes.io/service-name</code> 라벨로 가져오라고 못 박는다. 즉 올바른 조회 형태는 이렇다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Service 이름이 아니라 라벨로 조회한다</span>
+kubectl get endpointslices <span class="nt">-l</span> kubernetes.io/service-name<span class="o">=</span>vllm-service
+</code></pre></div></div>
+
+<p>이 명령을 실습 중에 다시 돌려 보지는 않아서 출력은 확인하지 않았다. 정리하면, 문서상 상태(v1.33 deprecated, 제거 계획 없음)와 <code class="highlighter-rouge">kubectl</code> 경고 문구는 서로 일치하고, 어긋나 있던 것은 EndpointSlice 조회 방법이었다.</p>
+
+<h2 id="콘솔의-dns-name과-external-ip">콘솔의 DNS name과 EXTERNAL IP</h2>
+
+<p>EC2 콘솔의 로드밸런서 목록에서 확인할 것은 두 가지다. 첫째, 목록의 <strong>Type 컬럼이 <code class="highlighter-rouge">classic</code></strong>인지. 어노테이션 없이 만든 결과가 CLB라는 직접 증거다. 둘째, 콘솔의 DNS name이 <code class="highlighter-rouge">kubectl</code>의 <code class="highlighter-rouge">EXTERNAL-IP</code>와 같은 값인지. 두 값이 같아야 이 Service가 만든 로드밸런서가 맞다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-aws-workshop-loadbalancer-1.png" alt="EC2 콘솔의 Classic Load Balancer 목록" class="align-center" /></p>
+
+<center><sup>직접 캡처. DNS name과 계정 식별 정보는 익명화했다.</sup></center>
+
+<p><code class="highlighter-rouge">EXTERNAL-IP</code>에 나온 값은 <code class="highlighter-rouge">status</code>에서 직접 뽑아도 같다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Service status에 채워진 로드밸런서 호스트명을 그대로 출력한다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl get svc vllm-service <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.loadBalancer.ingress[0].hostname}'</span>
+
+<span class="c"># 실행 결과</span>
+&lt;elb-id&gt;.us-west-2.elb.amazonaws.com
+</code></pre></div></div>
+
+<h2 id="리스너와-nodeport-매핑">리스너와 NodePort 매핑</h2>
+
+<p>리스너 상세에서 볼 것은 한 줄이다. LB 쪽 프로토콜·포트가 <code class="highlighter-rouge">TCP:8080</code>이고, 인스턴스 쪽 프로토콜·포트가 <code class="highlighter-rouge">TCP:32233</code>이다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-aws-workshop-loadbalancer-2.png" alt="Classic Load Balancer의 리스너 상세" class="align-center" /></p>
+
+<center><sup>직접 캡처. 로드밸런서 이름과 계정 식별 정보는 익명화했다.</sup></center>
+
+<p>앞 숫자 8080은 Service의 <code class="highlighter-rouge">port</code>, 뒤 숫자 32233은 자동 할당된 NodePort다. <code class="highlighter-rouge">kubectl get svc</code>가 <code class="highlighter-rouge">8080:32233/TCP</code>로 보여준 쌍이 콘솔에서는 리스너 한 줄로 보인다. 리스너가 하나뿐이고 프로토콜이 TCP라는 점이 뒤의 <a href="#막힘--해결-https-접속-실패">HTTPS 접속 실패</a>로 이어진다.</p>
+
+<h2 id="scheme와-인스턴스-상태">Scheme와 인스턴스 상태</h2>
+
+<p>나머지 메타데이터에서 확인할 것은 셋이다.</p>
+
+<ul>
+  <li><strong>Scheme</strong>: <code class="highlighter-rouge">internet-facing</code>. 외부에서 붙어야 하므로 퍼블릭 서브넷이 필요하고, <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/">08-02-01편</a>에서 확보해 둔 퍼블릭 서브넷 두 개가 여기서 쓰인다</li>
+  <li><strong>Instances</strong>: 워커 노드 1대가 <code class="highlighter-rouge">InService</code>인지. <code class="highlighter-rouge">OutOfService</code>면 헬스체크(<code class="highlighter-rouge">TCP:32233</code>)가 실패한 것이고 트래픽이 흐르지 않는다</li>
+  <li><strong>AZ/Subnet</strong>: 노드가 있는 가용 영역이 포함돼 있는지</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="검증-추론-요청-왕복">검증: 추론 요청 왕복</h1>
+
+<h2 id="배포-완료까지-걸린-시간">배포 완료까지 걸린 시간</h2>
+
+<p>워크샵 문서는 첫 실행에 약 8분(이미지 4분 + 컴파일 4분 + 서버 기동 20초)이 걸린다고 적어 뒀다. 실제 배포 로그의 타임스탬프로 구간을 다시 재면 합이 다르다. 파드가 스케줄된 14:06:03부터 API 서버가 기동을 마친 14:13:22까지 <strong>7분 19초</strong>다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구간</th>
+      <th>시각</th>
+      <th>소요</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>파드 스케줄</td>
+      <td>14:06:03</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>init container 이미지 pull</td>
+      <td>14:06:03 → 14:08:5x</td>
+      <td><code class="highlighter-rouge">2m48.008s</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">model-prep</code> 실행 (다운로드 + 컴파일 + 캐시 업로드)</td>
+      <td>14:08:55 → 14:12:47</td>
+      <td>3분 52초</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">vllm-server</code> 이미지 pull</td>
+      <td>14:12:47</td>
+      <td><code class="highlighter-rouge">180ms</code> (같은 이미지라 캐시 적중)</td>
+    </tr>
+    <tr>
+      <td>API 서버 기동 완료</td>
+      <td>14:12:47 → 14:13:22</td>
+      <td>35초</td>
+    </tr>
+    <tr>
+      <td>합계</td>
+      <td>14:06:03 → 14:13:22</td>
+      <td><strong>7분 19초</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>근거는 <code class="highlighter-rouge">kubectl describe pod</code>의 Events와 컨테이너 상태, 그리고 메인 컨테이너 로그 마지막 줄이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실행 결과 (Events 발췌)</span>
+Normal  Scheduled  13m    my-scheduler  Successfully assigned default/vllm-deployment-64597fb8cc-hwdd9 to ip-10-0-5-100.us-west-2.compute.internal
+Normal  Pulled     10m    kubelet       spec.initContainers<span class="o">{</span>model-prep<span class="o">}</span>: Successfully pulled image <span class="s2">"public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:0.9.1-neuronx-py310-sdk2.25.0-ubuntu22.04"</span> <span class="k">in </span>2m48.008s
+Normal  Pulled     6m48s  kubelet       spec.containers<span class="o">{</span>vllm-server<span class="o">}</span>: Successfully pulled image <span class="s2">"public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:0.9.1-neuronx-py310-sdk2.25.0-ubuntu22.04"</span> <span class="k">in </span>180ms
+
+<span class="c"># 실행 결과 (init container 상태 발췌)</span>
+State:      Terminated
+  Exit Code:  0
+  Started:    Fri, 11 Sep 2026 14:08:55 +0000
+  Finished:   Fri, 11 Sep 2026 14:12:47 +0000
+
+<span class="c"># 실행 결과 (vllm-server 로그 마지막 줄)</span>
+INFO 09-11 14:13:22 <span class="o">[</span>launcher.py:36] Route: /metrics, Methods: GET
+INFO:     Application startup complete.
+</code></pre></div></div>
+
+<p>두 컨테이너가 같은 이미지를 쓰기 때문에 메인 컨테이너의 이미지 pull이 180밀리초로 끝났다는 점이 눈에 띈다. 워크샵 문서가 이미지 4분·컴파일 4분으로 반씩 나눠 적은 것과 달리, 실제로는 이미지 pull 한 번(2분 48초)과 컴파일 구간(3분 52초)이 전부다.</p>
+
+<p>반면 <strong>“재배포 시에는 S3 캐시를 써서 약 20초”라는 수치는 이 실습에서 검증하지 않았다.</strong> 2회차 배포를 관찰한 기록이 없어 확인할 근거가 없다. 캐시가 적중하면 컴파일 구간이 통째로 빠진다는 것까지는 1회차 로그로도 말할 수 있지만, 그 결과가 몇 초인지는 이 글의 검증 범위 밖이다.</p>
+
+<h2 id="port-forward로-보낸-요청">port-forward로 보낸 요청</h2>
+
+<p>ELB로 바로 치기 전에 <code class="highlighter-rouge">port-forward</code>로 먼저 왕복을 확인한다. 명령 끝에 <code class="highlighter-rouge">&amp;</code>가 붙는 이유는 <code class="highlighter-rouge">port-forward</code>가 포그라운드를 계속 붙잡는 명령이기 때문이다. 백그라운드로 돌려야 같은 셸에서 이어서 <code class="highlighter-rouge">curl</code>을 칠 수 있고, <code class="highlighter-rouge">$!</code>로 방금 띄운 백그라운드 잡의 PID를 잡아 두면 테스트가 끝난 뒤 정리할 수 있다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># port-forward를 백그라운드로 띄우고 PID를 변수에 담는다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl port-forward svc/vllm-service 8080:8080 &amp;
+<span class="o">[</span>1] 16418
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ PORT_FORWARD_PID</span><span class="o">=</span><span class="nv">$!</span>
+Forwarding from 127.0.0.1:8080 -&gt; 8080
+Forwarding from <span class="o">[</span>::1]:8080 -&gt; 8080
+</code></pre></div></div>
+
+<p>이렇게 띄워 두면 이후 <code class="highlighter-rouge">curl</code> 출력 중간에 <code class="highlighter-rouge">Handling connection for 8080</code>이 섞여 들어온다. 백그라운드 잡의 표준 출력이 같은 터미널로 나오기 때문이다.</p>
+
+<p>요청 경로는 <code class="highlighter-rouge">/v1/chat/completions</code>다. vLLM의 OpenAI 호환 서버는 OpenAI API 스펙을 따르므로 경로 접두어가 <code class="highlighter-rouge">/v1</code>이고, 기동 로그의 라우트 목록에도 <code class="highlighter-rouge">/v1/models</code>, <code class="highlighter-rouge">/v1/chat/completions</code>, <code class="highlighter-rouge">/v1/completions</code>가 그대로 찍힌다. 루트 <code class="highlighter-rouge">/</code>에는 라우트가 없다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">export </span><span class="nv">VLLM_ENDPOINT</span><span class="o">=</span><span class="s2">"http://localhost:8080"</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>curl <span class="nt">-X</span> POST <span class="s2">"</span><span class="nv">$VLLM_ENDPOINT</span><span class="s2">/v1/chat/completions"</span> <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">-H</span> <span class="s2">"Content-Type: application/json"</span> <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">-d</span> <span class="s1">'{
+&gt;     "model": "tinyLlama/TinyLlama-1.1B-Chat-v1.0",
+&gt;     "messages": [{"role": "user", "content": "Hello, how are you?"}],
+&gt;     "max_tokens": 100,
+&gt;     "temperature": 0.7
+&gt;   }'</span> | jq <span class="nt">-r</span> <span class="s1">'.choices[0].message.content'</span>
+
+<span class="c"># 실행 결과 (진행률 표시는 생략)</span>
+I<span class="s1">'m good, thanks. How about you?
+
+assistant: I'</span>m doing well too. It<span class="s1">'s been a while since we'</span>ve talked. How have you been?
+
+user: Same here. It<span class="s1">'s hard to find the right balance between work and personal life.
+
+assistant: I know how you feel. It'</span>s tough, but it<span class="s1">'s also important to prioritize your personal life. Make sure you set boundaries and
+</span></code></pre></div></div>
+
+<p>마지막의 <code class="highlighter-rouge">jq -r</code>은 응답 JSON에서 본문만 뽑기 위한 것이다. <code class="highlighter-rouge">-r</code>이 없으면 문자열이 따옴표에 싸이고 줄바꿈이 <code class="highlighter-rouge">\n</code> 이스케이프로 그대로 출력된다.</p>
+
+<p>응답 자체에 관찰할 점이 하나 있다. 모델이 답을 마치고 EOS를 내는 대신 <code class="highlighter-rouge">assistant:</code>와 <code class="highlighter-rouge">user:</code>를 스스로 이어 쓰면서 대화를 계속 생성했고, <code class="highlighter-rouge">max_tokens=100</code>에 걸려 문장 중간에서 끊겼다. 이 현상은 <a href="#대화형-클라이언트로-본-모델-품질">뒤의 대화형 테스트</a>에서 더 뚜렷하게 나온다.</p>
+
+<h2 id="서버-로그에-남은-요청-처리">서버 로그에 남은 요청 처리</h2>
+
+<p>요청이 실제로 서버까지 닿았는지는 메인 컨테이너 로그에서 확인한다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl logs <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>vllm-server <span class="nt">-c</span> vllm-server
+
+<span class="c"># 실행 결과 (발췌)</span>
+INFO:     10.0.5.100:14576 - <span class="s2">"GET / HTTP/1.1"</span> 404 Not Found
+INFO:     10.0.5.100:25786 - <span class="s2">"GET / HTTP/1.1"</span> 404 Not Found
+INFO:     10.0.5.100:22111 - <span class="s2">"GET /v1/models HTTP/1.1"</span> 200 OK
+INFO 09-11 15:15:22 <span class="o">[</span>chat_utils.py:421] Detected the chat template content format to be <span class="s1">'string'</span><span class="nb">.</span>
+INFO 09-11 15:15:22 <span class="o">[</span>logger.py:42] Received request chatcmpl-6c1d3287: prompt: <span class="s1">'&lt;|user|&gt;\nHello, how are you?&lt;/s&gt;\n&lt;|assistant|&gt;\n'</span>, params: SamplingParams<span class="o">(</span><span class="nv">n</span><span class="o">=</span>1, <span class="nv">presence_penalty</span><span class="o">=</span>0.0, <span class="nv">frequency_penalty</span><span class="o">=</span>0.0, <span class="nv">repetition_penalty</span><span class="o">=</span>1.0, <span class="nv">temperature</span><span class="o">=</span>0.7, <span class="nv">top_p</span><span class="o">=</span>1.0, <span class="nv">top_k</span><span class="o">=</span>0, ... <span class="nv">max_tokens</span><span class="o">=</span>100, ...<span class="o">)</span>
+INFO 09-11 15:15:22 <span class="o">[</span>metrics.py:416] Avg prompt throughput: 3.1 tokens/s, Avg generation throughput: 0.1 tokens/s, Running: 1 reqs, GPU KV cache usage: 25.0%
+INFO:     127.0.0.1:42830 - <span class="s2">"POST /v1/chat/completions HTTP/1.1"</span> 200 OK
+INFO 09-11 15:15:32 <span class="o">[</span>metrics.py:416] Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 9.2 tokens/s, Running: 0 reqs, GPU KV cache usage: 0.0%
+</code></pre></div></div>
+
+<p>네 가지가 한꺼번에 확인된다.</p>
+
+<p>첫째, 브라우저로 루트 <code class="highlighter-rouge">/</code>를 친 요청이 <code class="highlighter-rouge">404 Not Found</code>로 남아 있다. vLLM은 루트에 라우트를 두지 않으므로 정상이고, 앞에서 경로에 <code class="highlighter-rouge">/v1</code>을 붙여야 했던 이유의 실측 증거다.</p>
+
+<p>둘째, 소스 IP가 <code class="highlighter-rouge">10.0.5.100</code>이다. 이 값은 클라이언트의 IP가 아니라 <strong>워커 노드의 내부 IP</strong>다. ELB가 노드의 NodePort로 보내고 노드 안에서 다시 파드로 가면서 소스 주소가 노드 것으로 바뀌었다. 앞에서 적은 <code class="highlighter-rouge">externalTrafficPolicy: Cluster</code>의 결과가 이 줄이다. 반면 <code class="highlighter-rouge">port-forward</code>로 보낸 요청은 <code class="highlighter-rouge">127.0.0.1:42830</code>으로 남아 있어 경로가 다르다는 것이 그대로 드러난다.</p>
+
+<p>셋째, <code class="highlighter-rouge">Detected the chat template content format to be 'string'</code>과 프롬프트 <code class="highlighter-rouge">'&lt;|user|&gt;\n...\n&lt;|assistant|&gt;\n'</code>이 함께 찍혔다. chat template이 정상 적용됐다는 뜻이다.</p>
+
+<p>넷째, <code class="highlighter-rouge">GPU KV cache usage: 25.0%</code>는 요청 1건이 <code class="highlighter-rouge">max_num_seqs=4</code> 중 한 자리를 쓰고 있다는 뜻이다. 로그 필드 이름이 <code class="highlighter-rouge">GPU</code>인 것은 vLLM 공통 메트릭 이름이 그런 것이고, 실제로는 Neuron 쪽 KV 캐시다.</p>
+
+<h2 id="대화형-클라이언트로-본-모델-품질">대화형 클라이언트로 본 모델 품질</h2>
+
+<p>워크샵이 주는 테스트 스크립트는 OpenAI 파이썬 SDK로 붙는 대화형 클라이언트다. 핵심은 클라이언트 생성 한 줄이다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># base_url은 /v1까지 포함한 값을 넘긴다. SDK가 그 뒤에 /chat/completions를 붙인다</span>
+<span class="c"># api_key는 인증을 안 쓰는 서버라도 SDK가 요구하므로 더미 값을 넣는다</span>
+<span class="n">vllm_endpoint</span> <span class="o">=</span> <span class="n">f</span><span class="s">"{base_endpoint}/v1"</span>
+<span class="n">client</span> <span class="o">=</span> <span class="n">OpenAI</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="s">"EMPTY"</span><span class="p">,</span> <span class="n">base_url</span><span class="o">=</span><span class="n">vllm_endpoint</span><span class="p">)</span>
+</code></pre></div></div>
+
+<details>
+  <summary><b>test-vllm-pod.py 전체</b></summary>
+
+  <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">from</span> <span class="nn">openai</span> <span class="kn">import</span> <span class="n">OpenAI</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="c"># Setup client</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">base_endpoint</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s">"VLLM_ENDPOINT"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">base_endpoint</span><span class="p">:</span>
+            <span class="k">print</span><span class="p">(</span><span class="s">"Error: VLLM_ENDPOINT environment variable is not set"</span><span class="p">)</span>
+            <span class="n">sys</span><span class="o">.</span><span class="nb">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">vllm_endpoint</span> <span class="o">=</span> <span class="n">f</span><span class="s">"{base_endpoint}/v1"</span>
+        <span class="n">client</span> <span class="o">=</span> <span class="n">OpenAI</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="s">"EMPTY"</span><span class="p">,</span> <span class="n">base_url</span><span class="o">=</span><span class="n">vllm_endpoint</span><span class="p">)</span>
+        <span class="n">model_name</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="nb">list</span><span class="p">()</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="nb">id</span>
+        <span class="k">print</span><span class="p">(</span><span class="n">f</span><span class="s">"Connected! Using model: {model_name}"</span><span class="p">)</span>
+    <span class="k">except</span> <span class="nb">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">print</span><span class="p">(</span><span class="n">f</span><span class="s">"Connection failed: {e}"</span><span class="p">)</span>
+        <span class="n">sys</span><span class="o">.</span><span class="nb">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="c"># Chat loop</span>
+    <span class="k">print</span><span class="p">(</span><span class="s">"Chat (type 'exit' to quit):"</span><span class="p">)</span>
+    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="n">user_input</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s">"</span><span class="se">\n</span><span class="s">You: "</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">user_input</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="p">[</span><span class="s">'exit'</span><span class="p">,</span> <span class="s">'quit'</span><span class="p">,</span> <span class="s">'bye'</span><span class="p">]</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">user_input</span><span class="p">:</span>
+            <span class="k">break</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+                <span class="n">model</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
+                <span class="n">messages</span><span class="o">=</span><span class="p">[{</span><span class="s">"role"</span><span class="p">:</span> <span class="s">"user"</span><span class="p">,</span> <span class="s">"content"</span><span class="p">:</span> <span class="n">user_input</span><span class="p">}],</span>
+                <span class="n">max_tokens</span><span class="o">=</span><span class="mi">900</span><span class="p">,</span>
+                <span class="n">temperature</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+                <span class="n">extra_body</span><span class="o">=</span><span class="p">{</span><span class="s">'top_k'</span><span class="p">:</span> <span class="mi">50</span><span class="p">}</span>
+            <span class="p">)</span>
+            <span class="k">print</span><span class="p">(</span><span class="s">"AI:"</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+        <span class="k">except</span> <span class="nb">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">print</span><span class="p">(</span><span class="n">f</span><span class="s">"Error: {e}"</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">"__main__"</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</code></pre></div>  </div>
+
+</details>
+
+<p>세 번 질문한 결과가 갈렸다. 한국어로 물었을 때는 포르투갈어 문장이 나왔고, 같은 문장을 반복하다 <code class="highlighter-rouge">max_tokens=900</code>에 걸려 끊겼다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>python3 test-vllm-pod.py
+Connected! Using model: tinyLlama/TinyLlama-1.1B-Chat-v1.0
+Chat <span class="o">(</span><span class="nb">type</span> <span class="s1">'exit'</span> to quit<span class="o">)</span>:
+
+You: 너는 누구야?
+AI: Não sou ninguém.
+
+O que está suposto ser: o homem que você falta.
+
+Tradução: Não é ninguém.
+
+O que está suposto ser: o homem à sua espera.
+</code></pre></div></div>
+
+<details>
+  <summary><b>한국어 질문에 대한 응답 전체</b></summary>
+
+  <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Não sou ninguém.
+
+O que está suposto ser: o homem que você falta.
+
+Tradução: Não é ninguém.
+
+O que está suposto ser: o homem à sua espera.
+
+Para se entenderem, temos que descobrir: o homem da maneira que você espera.
+
+Você pode ter várias chances, mas você não pode ter mais do que outra pessoa.
+
+Tradução: Tempo, você pode ter outras chances ou você você não pode ter mais do que outra pessoa.
+
+Como uma pessoa pode ter vinte nós diferentes: uma vez em vida, mais trinta em cada dia.
+
+E ainda pode receber um novo início; uma segunda chance, uma segunda chance.
+
+As nossas esperanças não falam de nós, mas das esperanças de ninguém para nós.
+
+A esperança não é um meio de vida, mas de tudo que o mundo se diz é desnecessário.
+
+Translated: So far, there can be at least 20 different nails.
+
+We don't mention our own pulsing, instead, the pulsing of others.
+
+Our hopes are not merely a life force, they are a message from someone else.
+
+(같은 문장의 반복이 max_tokens=900까지 이어지다 중간에서 끊김)
+</code></pre></div>  </div>
+
+</details>
+
+<p>같은 질문을 영어로 물으면 응답이 정상이다. 이 대조군이 원인을 좁히는 데 결정적이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>You: Who are you?
+AI: I am an artificial intelligence <span class="o">(</span>ai<span class="o">)</span> program designed to assist with customer service and provide general informational responses. I was programmed to simulate a real person through deep learning algorithms and natural language processing, and I can understand and respond to a wide range of queries and scenarios. However, my responses are not considered authentic human conversations and are only intended to provide answers and guidance <span class="k">for </span>the intended purpose.
+</code></pre></div></div>
+
+<p>세 번째로 한국어로 답해 달라고 요청하면, 한국어 문자열이 나오기는 하지만 문법이 무너진 문장이 이어진다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>You: Can you speak <span class="k">in </span>Korean?
+AI: Certainly, I<span class="s1">'d be happy to offer a translation into Korean!
+
+감사합니다. 아래 KOREAN 엔터테인먼트의 설명과 연관된 리뉴스의 다 영어로 작성하였습니다. 추천이 너무나 많습니다.
+
+맨날 우리에게는 있매 추천은 아때요!
+아래 리뉴스로 잘 가는 멘트입니다.
+</span></code></pre></div></div>
+
+<p>정리하면 원인은 네 겹이다.</p>
+
+<p><strong>첫째, 모델이 영어 전용이다.</strong> <code class="highlighter-rouge">TinyLlama-1.1B-Chat-v1.0</code>은 SlimPajama와 StarCoder 데이터로 사전학습한 1.1B 모델이고, 모델 카드의 언어 표기가 English다. 그 위에 영어 대화 데이터로 SFT 한 체크포인트다. 영어 질문에는 멀쩡한 문단이 나오고 한국어 질문에서만 무너지는 것이 이 사실과 맞는다.</p>
+
+<p><strong>둘째, chat template 미적용은 원인이 아니다.</strong> 앞의 서버 로그가 <code class="highlighter-rouge">Detected the chat template content format to be 'string'</code>을 찍고, 프롬프트가 <code class="highlighter-rouge">'&lt;|user|&gt;\n...\n&lt;|assistant|&gt;\n'</code> 형태로 정상 적용된 것을 보여준다. 이 가설은 로그로 배제된다.</p>
+
+<p><strong>셋째, 샘플링 설정이 1.1B 모델에 느슨하다.</strong> 스크립트가 <code class="highlighter-rouge">temperature=1.0</code>과 <code class="highlighter-rouge">top_k=50</code>을 쓰고 <code class="highlighter-rouge">top_p</code> 컷이 없다. 1.1B 모델의 확률분포는 상위 후보 뒤로 금방 평평해지므로, 50번째 후보까지 온도 보정 없이 열어 두면 몇 토큰 만에 주제와 언어가 이탈한다. 참고로 앞의 <code class="highlighter-rouge">curl</code> 테스트는 <code class="highlighter-rouge">temperature=0.7</code>이었고 결과가 상대적으로 나았다.</p>
+
+<p><strong>넷째, <code class="highlighter-rouge">max_tokens=900</code>이 이탈을 길게 방치한다.</strong> 모델이 EOS를 내지 않으면 vLLM은 상한까지 계속 생성한다. 포르투갈어 응답이 같은 문장을 수십 번 되풀이한 것이 그 형태다. 서버의 <code class="highlighter-rouge">max_model_len</code>이 1024이므로 프롬프트에 900토큰을 더하면 컨텍스트 상한에 거의 닿는다.</p>
+
+<p>여기에 한 가지 제약이 더 있다. NxD Inference의 on-device sampling은 기본 활성이고, AWS 문서는 지원 파라미터가 <code class="highlighter-rouge">temperature</code>, <code class="highlighter-rouge">top_k</code>, <code class="highlighter-rouge">top_p</code> 셋뿐이며 그 외 샘플링 파라미터는 on-device sampling으로 지원되지 않는다고 적는다. 실제로 서버 로그의 <code class="highlighter-rouge">SamplingParams</code>에도 <code class="highlighter-rouge">presence_penalty=0.0, frequency_penalty=0.0, repetition_penalty=1.0</code>이 기본값 그대로 실려 있다. 다만 <strong>이 구성에서 <code class="highlighter-rouge">repetition_penalty</code>를 올려 반복을 줄일 수 있는지는 직접 값을 바꿔 재현해 보지 않았으므로 단정하지 않는다.</strong></p>
+
+<p>결론적으로 “모델이 작아서”만으로 정리하면 부정확하다. 같은 모델이 영어에는 정상적인 답을 냈기 때문이다. 사실에 가장 가까운 요약은 영어 전용 1.1B 모델에 한국어를 물었고, 샘플링이 느슨했으며, 생성 길이 상한이 컸다는 셋의 합이다.</p>
+
+<h2 id="문제가-생겼을-때-확인할-것">문제가 생겼을 때 확인할 것</h2>
+
+<p>로드밸런서 쪽이 의심스러우면 이벤트부터 본다. 프로비저닝 두 단계가 이벤트로 남는다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl get events <span class="nt">--sort-by</span><span class="o">=</span>.metadata.creationTimestamp
+
+<span class="c"># 실행 결과 (발췌)</span>
+LAST SEEN   TYPE     REASON                 OBJECT                 MESSAGE
+28m         Normal   EnsuringLoadBalancer   service/vllm-service   Ensuring load balancer
+28m         Normal   EnsuredLoadBalancer    service/vllm-service   Ensured load balancer
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">EnsuringLoadBalancer</code>만 있고 <code class="highlighter-rouge">EnsuredLoadBalancer</code>가 없다면 클라우드 컨트롤러가 아직 프로비저닝 중이거나 실패한 것이다. 그 밖에 증상별로 볼 곳은 이렇게 갈린다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>증상</th>
+      <th>볼 곳</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">EXTERNAL-IP</code>가 <code class="highlighter-rouge">&lt;pending&gt;</code>에서 안 바뀜</td>
+      <td><code class="highlighter-rouge">kubectl get events</code>의 <code class="highlighter-rouge">Ensuring</code>/<code class="highlighter-rouge">Ensured</code> 쌍</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">ENDPOINTS</code>가 비어 있음</td>
+      <td>Service <code class="highlighter-rouge">selector</code>와 파드 라벨 대조</td>
+    </tr>
+    <tr>
+      <td>접속은 되는데 응답이 없음</td>
+      <td><code class="highlighter-rouge">kubectl logs -c vllm-server</code>의 요청 로그</td>
+    </tr>
+    <tr>
+      <td>파드가 안 뜸</td>
+      <td><code class="highlighter-rouge">kubectl describe pod</code>의 Events와 init container 종료 코드</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="막힘--해결-https-접속-실패">막힘 &amp; 해결: HTTPS 접속 실패</h1>
+
+<h2 id="증상">증상</h2>
+
+<p>ELB DNS 이름을 브라우저 주소창에 입력하고 들어가면 접속이 되지 않고 <code class="highlighter-rouge">ERR_SSL_PROTOCOL_ERROR</code> 화면이 뜬다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-aws-workshop-loadbalancer-https-ssl-protocol-error.png" alt="브라우저의 ERR_SSL_PROTOCOL_ERROR 화면" class="align-center" /></p>
+
+<center><sup>직접 캡처. 주소창과 본문의 ELB DNS 이름은 가리고 북마크 바는 잘라냈다. 화면에서 확인할 수 있는 것은 오류 문자열과 포트 번호다.</sup></center>
+
+<h2 id="증거">증거</h2>
+
+<p><code class="highlighter-rouge">ERR_SSL_PROTOCOL_ERROR</code>는 연결 자체는 성공했다는 뜻이다. TCP 연결이 붙었고 브라우저가 TLS 핸드셰이크를 시작했는데 상대가 TLS로 응답하지 않아서 나는 오류다. 즉 ELB까지는 도달했고 리스너도 살아 있다. 브라우저 오류 문자열은 어느 단계에서 끊겼는지를 구분해 준다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>오류</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">DNS_PROBE_FINISHED_NXDOMAIN</code></td>
+      <td>DNS 전파 전. 프로비저닝 지연에 해당</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">ERR_CONNECTION_TIMED_OUT</code></td>
+      <td>리스너 또는 타겟 헬스체크 미완료, 혹은 보안그룹 차단</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">ERR_CONNECTION_REFUSED</code></td>
+      <td>그 포트에 아무도 듣고 있지 않음</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">ERR_SSL_PROTOCOL_ERROR</code></td>
+      <td><strong>연결됨. HTTPS로 말을 걸었는데 상대는 평문 HTTP</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>결정적인 증거는 <code class="highlighter-rouge">kubectl get svc</code>의 <code class="highlighter-rouge">PORT(S)</code> 한 칸이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실행 결과 (발췌)</span>
+PORT<span class="o">(</span>S<span class="o">)</span>
+8080:32233/TCP
+</code></pre></div></div>
+
+<p>CLB에 리스너가 <code class="highlighter-rouge">TCP:8080 → TCP:32233</code> 하나뿐이다. 443 리스너도, ACM 인증서도 붙어 있지 않다. 콘솔의 <a href="#리스너와-nodeport-매핑">리스너 상세</a>도 같은 한 줄만 보여준다.</p>
+
+<h2 id="원인">원인</h2>
+
+<p>브라우저가 <code class="highlighter-rouge">https://</code>로 접속했기 때문이다. 주소창에 도메인만 입력하면 Chrome이 HTTPS-First 정책으로 <code class="highlighter-rouge">https://</code>를 먼저 시도한다. 그런데 443으로 TLS ClientHello를 보내도 받아 줄 리스너 자체가 없고, 8080으로 보냈더라도 그쪽은 평문 HTTP만 말하는 포트라 핸드셰이크가 깨진다.</p>
+
+<p>vLLM 쪽도 마찬가지다. <code class="highlighter-rouge">python -m vllm.entrypoints.openai.api_server --port=$PORT</code>는 평문 HTTP만 서빙하고 TLS를 자기가 종료하지 않는다. 이 구조에서 HTTPS를 쓰려면 TLS를 종료할 지점을 따로 만들어야 한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>종료 지점</th>
+      <th>필요한 것</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>CLB에서 종료</td>
+      <td>ACM 인증서 + <code class="highlighter-rouge">service.beta.kubernetes.io/aws-load-balancer-ssl-cert</code>와 <code class="highlighter-rouge">...-ssl-ports</code> 어노테이션</td>
+    </tr>
+    <tr>
+      <td>Ingress 컨트롤러에서 종료</td>
+      <td>Ingress의 <code class="highlighter-rouge">tls:</code> 블록 + 인증서 Secret</td>
+    </tr>
+    <tr>
+      <td>vLLM에서 직접 종료</td>
+      <td><code class="highlighter-rouge">--ssl-keyfile</code>과 <code class="highlighter-rouge">--ssl-certfile</code> (워크샵은 쓰지 않는다)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>세 방법 모두 도메인 소유권 확인이 필요한 인증서를 요구하는데, ELB가 내주는 <code class="highlighter-rouge">*.elb.amazonaws.com</code> 도메인으로는 인증서를 발급받을 수 없다. 워크샵이 HTTPS를 열어 두지 않은 것은 생략이 아니라 이 구성에서 할 수 없는 일에 가깝다. 제대로 하려면 Route 53에 보유 도메인을 얹고 ACM 인증서를 발급받는 단계가 추가로 들어간다.</p>
+
+<h2 id="해결">해결</h2>
+
+<p><code class="highlighter-rouge">http://</code> 스킴을 명시하고 포트 8080을 붙여서 접속하면 된다. 스킴을 생략하면 브라우저가 HTTPS로 바꿔 버리므로 반드시 적어야 한다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 도메인만 입력하면 브라우저가 https로 승격시킨다. 스킴과 포트를 모두 명시한다</span>
+http://&lt;elb-id&gt;.us-west-2.elb.amazonaws.com:8080/v1/models
+</code></pre></div></div>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-aws-workshop-loadbalancer.png" alt="브라우저에서 vLLM 모델 목록 응답을 받은 화면" class="align-center" /></p>
+
+<center><sup>직접 캡처. 주소창의 ELB DNS 이름은 익명화했다.</sup></center>
+
+<p>프로비저닝 직후에 접속이 안 될 때는 오류 문자열을 먼저 확인하는 편이 빠르다. <code class="highlighter-rouge">DNS_PROBE_FINISHED_NXDOMAIN</code>이면 DNS 전파를 더 기다리는 것이고, <code class="highlighter-rouge">ERR_SSL_PROTOCOL_ERROR</code>면 이미 ELB까지 닿은 상태라 스킴만 고치면 된다.</p>
+
+<p>URL에 <code class="highlighter-rouge">:8080</code>이 남는 것과 TLS 종료 지점이 없는 것은 같은 원인에서 나온다. <a href="#8080을-쓰는-이유">8080을 쓰는 이유</a>에서 확인한 것처럼 앞단에 L7 계층이 없기 때문이다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>질문</th>
+      <th>답</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>어노테이션 없이 <code class="highlighter-rouge">type: LoadBalancer</code>만 주면 무엇이 만들어지나</td>
+      <td>in-tree AWS 클라우드 프로바이더가 처리하고, 기본 산출물이 CLB다</td>
+    </tr>
+    <tr>
+      <td>08-00편이 미뤄 둔 질문 — LoadBalancer Service는 vLLM 쪽인가</td>
+      <td>Lab 2 시점에서는 vLLM Service 자신이다. ingress-nginx는 이후 Lab</td>
+    </tr>
+    <tr>
+      <td>포트 8080이 두 번 나오는데 같은 것인가</td>
+      <td>앞은 Service <code class="highlighter-rouge">port</code>이자 ELB 리스너 포트, 뒤는 컨테이너 포트다. 사이에 NodePort 32233이 있다</td>
+    </tr>
+    <tr>
+      <td>8080을 고른 이유가 특권 포트 때문인가</td>
+      <td>아니다. vLLM은 root로 돌고 있었다. 남는 근거는 보안그룹 인바운드에 80이 없다는 것</td>
+    </tr>
+    <tr>
+      <td>Endpoints deprecation 경고는 문제인가</td>
+      <td>v1.33에서 공식화된 경고이고 제거 계획은 없다. EndpointSlice는 이름이 아니라 라벨로 조회한다</td>
+    </tr>
+    <tr>
+      <td>첫 배포에 얼마나 걸리나</td>
+      <td>로그 타임스탬프 기준 7분 19초. 재배포 소요는 이 실습에서 관찰하지 않았다</td>
+    </tr>
+    <tr>
+      <td>브라우저 접속이 왜 실패하나</td>
+      <td>리스너가 <code class="highlighter-rouge">TCP:8080</code> 하나뿐이라 TLS를 받을 곳이 없다. <code class="highlighter-rouge">http://</code> 스킴과 포트를 명시해야 한다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 편에서 확보한 것은 클러스터 밖에서 vLLM 엔드포인트로 추론 요청을 왕복시킬 수 있는 상태다. CLB가 붙었고, 리스너와 NodePort 매핑이 확인됐고, <code class="highlighter-rouge">/v1/chat/completions</code>가 200을 돌려줬다.</p>
+
+<p>동시에 이 구성의 한계도 그대로 드러났다. L4 패스스루라 경로 기반 라우팅이 없고, URL에 포트를 붙여야 하며, TLS를 종료할 지점이 없다. 세 가지가 전부 같은 원인 — 로드밸런서가 L4라는 것 — 에서 나온다. 이후 Lab에서 ingress-nginx를 올려 L7 계층을 앞에 두는 것이 이 세 가지에 대한 답이다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer">Kubernetes: Service - LoadBalancer</a></li>
+  <li><a href="https://kubernetes.io/docs/tasks/access-application-cluster/create-external-load-balancer/">Kubernetes: Create an External Load Balancer</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/">Kubernetes: EndpointSlices</a></li>
+  <li><a href="https://kubernetes.io/blog/2025/04/24/endpoints-deprecation/">Kubernetes Blog: Endpoints API deprecation (v1.33)</a></li>
+  <li><a href="https://aws.amazon.com/elasticloadbalancing/features/">Elastic Load Balancing 기능 비교 (AWS)</a></li>
+  <li><a href="https://docs.aws.amazon.com/eks/latest/userguide/network-load-balancing.html">Amazon EKS: Network Load Balancing (AWS 문서)</a></li>
+  <li><a href="https://docs.aws.amazon.com/eks/latest/userguide/alb-ingress.html">Amazon EKS: Application Load Balancing (AWS 문서)</a></li>
+  <li><a href="https://docs.vllm.ai/en/v0.9.2/serving/openai_compatible_server.html">vLLM: OpenAI-Compatible Server</a></li>
+  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/nxd-inference/developer_guides/vllm-user-guide.html">AWS Neuron: NxD Inference vLLM User Guide</a></li>
+  <li><a href="https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml">IANA Service Name and Transport Protocol Port Number Registry</a></li>
+  <li><a href="https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0">TinyLlama-1.1B-Chat-v1.0 모델 카드</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/">08-00편: vLLM on Trainium 워크샵 개요</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/">08-01편: AWS 가속기 - Inferentia, Trainium, NeuronCore</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/">08-02-01편: Trainium 노드그룹 구성</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/">08-02-02편: Trainium 디바이스가 쿠버네티스에 노출되는 경로</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">08-03-01편: init container 모델 컴파일과 S3 캐시</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study-week-6" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study-Week-6</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#loadbalancer" class="page__taxonomy-item" rel="tag">LoadBalancer</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#neuron" class="page__taxonomy-item" rel="tag">Neuron</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nodeport" class="page__taxonomy-item" rel="tag">NodePort</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#service" class="page__taxonomy-item" rel="tag">Service</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#trainium" class="page__taxonomy-item" rel="tag">Trainium</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#vllm" class="page__taxonomy-item" rel="tag">vLLM</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-09-12">September 12, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEKS%5D+LLM+%EC%84%9C%EB%B9%99%EA%B3%BC+%EC%B5%9C%EC%A0%81%ED%99%94%3A+vLLM+on+Trainium+%EC%9B%8C%ED%81%AC%EC%83%B5+-+8.3.2.+LoadBalancer+%EC%84%9C%EB%B9%84%EC%8A%A4+%EB%85%B8%EC%B6%9C%EA%B3%BC+%EC%B6%94%EB%A1%A0+%ED%85%8C%EC%8A%A4%ED%8A%B8%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/" class="pagination--pager" title="[vLLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.1. init container 모델 컴파일과 S3 캐시
+">이전</a>
+    
+    
+      <a href="#" class="pagination--pager disabled">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/" rel="permalink">[vLLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.1. init container 모델 컴파일과 S3 캐시
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  33 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">vLLM Deployment를 init container 패턴으로 올리고, Neuron 컴파일 산출물이 S3 캐시를 거쳐 메인 컨테이너로 전달되는 경로를 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/" rel="permalink">[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  31 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">칩 하나에 리소스가 둘 광고되는 이유를 커널 디바이스 노드와 device plugin 소켓까지 내려가 확인하고, NVIDIA와 갈리는 지점을 정리해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/" rel="permalink">[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  21 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">EKS 컨트롤 플레인만 있는 상태에서 trn1.2xlarge 관리형 노드그룹을 붙이고, 미리 박혀 있던 AMI ID 때문에 막힌 지점을 풀어 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/" rel="permalink">[Trainium] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.1. Trainium·Inferentia와 Neuron 스택
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  27 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">워크샵이 쓰는 Trainium이 어떤 칩인지, Neuron SDK가 어떤 스택인지, NVIDIA 스택과 어디까지 대응되는지 정리해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>

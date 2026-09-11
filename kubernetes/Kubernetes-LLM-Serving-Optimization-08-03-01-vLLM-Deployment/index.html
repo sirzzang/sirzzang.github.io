@@ -1,0 +1,2393 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[vLLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.1. init container 모델 컴파일과 S3 캐시 - Eraser’s StudyLog</title>
+<meta name="description" content="vLLM Deployment를 init container 패턴으로 올리고, Neuron 컴파일 산출물이 S3 캐시를 거쳐 메인 컨테이너로 전달되는 경로를 확인해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[vLLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.1. init container 모델 컴파일과 S3 캐시">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">
+
+
+  <meta property="og:description" content="vLLM Deployment를 init container 패턴으로 올리고, Neuron 컴파일 산출물이 S3 캐시를 거쳐 메인 컨테이너로 전달되는 경로를 확인해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-09-11T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-09-12T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[vLLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.1. init container 모델 컴파일과 S3 캐시">
+    <meta itemprop="description" content="vLLM Deployment를 init container 패턴으로 올리고, Neuron 컴파일 산출물이 S3 캐시를 거쳐 메인 컨테이너로 전달되는 경로를 확인해 보자.">
+    <meta itemprop="datePublished" content="2026-09-11T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-09-12T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[vLLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.1. init container 모델 컴파일과 S3 캐시
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-09-11T00:00:00+09:00">2026년 09월 11일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  33 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#워크로드-구성과-init-container-패턴">워크로드 구성과 init container 패턴</a>
+    <ul>
+      <li><a href="#lab-2가-만드는-오브젝트">Lab 2가 만드는 오브젝트</a></li>
+      <li><a href="#init-container-패턴이-푸는-문제">init container 패턴이 푸는 문제</a></li>
+    </ul>
+  </li>
+  <li><a href="#매니페스트-해부">매니페스트 해부</a>
+    <ul>
+      <li><a href="#hf-토큰-secret">HF 토큰 Secret</a></li>
+      <li><a href="#configmap의-키-14개">ConfigMap의 키 14개</a>
+        <ul>
+          <li><a href="#vllm-서버-공통-설정">vLLM 서버 공통 설정</a></li>
+          <li><a href="#neuron-런타임-전용-설정">Neuron 런타임 전용 설정</a></li>
+        </ul>
+      </li>
+      <li><a href="#s3-pv와-pvc">S3 PV와 PVC</a></li>
+      <li><a href="#deployment-매니페스트">Deployment 매니페스트</a>
+        <ul>
+          <li><a href="#schedulername과-nodeselector">schedulerName과 nodeSelector</a></li>
+          <li><a href="#init-container-model-prep">init container model-prep</a></li>
+          <li><a href="#메인-컨테이너-vllm-server">메인 컨테이너 vllm-server</a></li>
+          <li><a href="#칩-1개-요청과-코어-2개-텐서-병렬">칩 1개 요청과 코어 2개 텐서 병렬</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#적용과-관찰-컴파일과-캐시-적재">적용과 관찰: 컴파일과 캐시 적재</a>
+    <ul>
+      <li><a href="#배포-직전-노드-상태">배포 직전 노드 상태</a></li>
+      <li><a href="#init-container-로그">init container 로그</a>
+        <ul>
+          <li><a href="#캐시-미적중과-재컴파일">캐시 미적중과 재컴파일</a></li>
+          <li><a href="#hlo-생성과-neuronx-cc-호출">HLO 생성과 neuronx-cc 호출</a></li>
+          <li><a href="#워밍업과-종료">워밍업과 종료</a></li>
+        </ul>
+      </li>
+      <li><a href="#메인-컨테이너-기동-로그">메인 컨테이너 기동 로그</a>
+        <ul>
+          <li><a href="#캐시-적중">캐시 적중</a></li>
+          <li><a href="#openai-호환-라우트">OpenAI 호환 라우트</a></li>
+        </ul>
+      </li>
+      <li><a href="#기동-로그에-남은-경고">기동 로그에 남은 경고</a></li>
+      <li><a href="#s3에-올라간-아티팩트">S3에 올라간 아티팩트</a></li>
+    </ul>
+  </li>
+  <li><a href="#노드-안에서-본-실행-상태-해부">노드 안에서 본 실행 상태 해부</a>
+    <ul>
+      <li><a href="#컨테이너-이미지와-vllm-프로세스">컨테이너 이미지와 vLLM 프로세스</a></li>
+      <li><a href="#neuron-ls가-잡는-pid">neuron-ls가 잡는 PID</a></li>
+      <li><a href="#mount가-보여주는-fuse-마운트-두-개">mount가 보여주는 FUSE 마운트 두 개</a></li>
+      <li><a href="#mountpoint-for-s3가-파일-시스템으로-보이는-구조">Mountpoint for S3가 파일 시스템으로 보이는 구조</a></li>
+      <li><a href="#pv-capacity가-강제되지-않는-이유">PV capacity가 강제되지 않는 이유</a></li>
+      <li><a href="#posix와-갈리는-지점">POSIX와 갈리는 지점</a></li>
+    </ul>
+  </li>
+  <li><a href="#검증-파드에-실제로-적용된-설정">검증: 파드에 실제로 적용된 설정</a>
+    <ul>
+      <li><a href="#schedulername이-적용됐는지">schedulerName이 적용됐는지</a></li>
+      <li><a href="#컨테이너-환경변수">컨테이너 환경변수</a></li>
+      <li><a href="#마운트된-캐시-디렉터리">마운트된 캐시 디렉터리</a></li>
+      <li><a href="#neuron_configjson에-확정된-값">neuron_config.json에 확정된 값</a></li>
+      <li><a href="#파드-안에서-본-모델-목록">파드 안에서 본 모델 목록</a></li>
+      <li><a href="#컨트롤러-파드-로그">컨트롤러 파드 로그</a>
+        <ul>
+          <li><a href="#neuron-device-plugin의-allocate">neuron device plugin의 Allocate</a></li>
+          <li><a href="#k8s-neuron-scheduler의-bind">k8s-neuron-scheduler의 bind</a></li>
+          <li><a href="#mountpoint-s3의-마운트">mountpoint-s3의 마운트</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>Lab 2는 Secret, ConfigMap, PV, PVC, Deployment 다섯 오브젝트로 vLLM 파드 하나를 올린다. 구조의 핵심은 <strong>init container가 컴파일을 전담하고 메인 컨테이너는 그 산출물을 읽기 전용으로 받는 권한 분리</strong>다</li>
+  <li>init container는 <code class="highlighter-rouge">/shared/model/cache</code>가 비어 있는지로 갈린다. 비어 있으면 Hugging Face에서 가중치를 받아 <code class="highlighter-rouge">neuronx-cc</code>로 컴파일하고 <code class="highlighter-rouge">cp -r</code>로 PVC에 복사한다. 실측 실행 구간은 3분 52초였다</li>
+  <li>PV의 <code class="highlighter-rouge">capacity: 100Gi</code>는 <strong>PV와 PVC를 바인딩하는 조건을 맞추기 위한 형식값</strong>이다. 스케줄러는 이 값을 보지 않고, Mountpoint for S3 CSI 드라이버는 이 값을 해석조차 하지 않는다</li>
+  <li>노드의 <code class="highlighter-rouge">mount</code> 출력에 FUSE 항목이 두 줄 보이지만 <strong><code class="highlighter-rouge">mount-s3</code> 프로세스는 하나뿐</strong>이다. 두 번째 줄은 CSI 드라이버가 파드 볼륨 경로로 다시 건 bind mount다</li>
+  <li>ConfigMap 14개 키 중 <code class="highlighter-rouge">S3_BUCKET</code>과 <code class="highlighter-rouge">S3_PREFIX</code>는 <strong>매니페스트 어디에서도 참조되지 않는 미사용 키</strong>다. S3 반영은 <code class="highlighter-rouge">cp -r</code>과 PVC 마운트로 일어난다</li>
+  <li>기동 로그에는 경고가 여럿 남지만 배포를 막지 않았다. 이 구성의 성격을 결정하는 것은 <code class="highlighter-rouge">device type=neuron is not supported by the V1 Engine</code> 한 줄이다. Neuron 경로는 V0 엔진으로 내려앉는다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="워크로드-구성과-init-container-패턴">워크로드 구성과 init container 패턴</h1>
+
+<h2 id="lab-2가-만드는-오브젝트">Lab 2가 만드는 오브젝트</h2>
+
+<p><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/">08-02-01편</a>에서 <code class="highlighter-rouge">trn1.2xlarge</code> 노드그룹과 S3 캐시 버킷을 만들었고, <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/">08-02-02편</a>에서 Neuron device plugin과 스케줄러 확장까지 올렸다. Lab 2는 그 위에 실제 워크로드를 얹는다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>오브젝트</th>
+      <th>이름</th>
+      <th>역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Secret</td>
+      <td><code class="highlighter-rouge">hf-token-secret</code></td>
+      <td>Hugging Face 액세스 토큰</td>
+    </tr>
+    <tr>
+      <td>ConfigMap</td>
+      <td><code class="highlighter-rouge">vllm-shared-config</code></td>
+      <td>두 컨테이너가 공유하는 설정 14개 키</td>
+    </tr>
+    <tr>
+      <td>PersistentVolume</td>
+      <td><code class="highlighter-rouge">s3-model-cache-pv</code></td>
+      <td>S3 버킷을 CSI로 붙이는 정적 PV</td>
+    </tr>
+    <tr>
+      <td>PersistentVolumeClaim</td>
+      <td><code class="highlighter-rouge">s3-model-cache-pvc</code></td>
+      <td>위 PV를 <code class="highlighter-rouge">volumeName</code>으로 직접 지목</td>
+    </tr>
+    <tr>
+      <td>Deployment</td>
+      <td><code class="highlighter-rouge">vllm-deployment</code></td>
+      <td>init container <code class="highlighter-rouge">model-prep</code> + 메인 컨테이너 <code class="highlighter-rouge">vllm-server</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 다섯 개까지가 이 글의 범위다. 서버를 외부로 노출하는 <code class="highlighter-rouge">type: LoadBalancer</code> Service와 추론 요청 왕복은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/">08-03-02편</a>에서 다룬다.</p>
+
+<p>작업은 앞 편들과 같이 워크샵이 제공하는 배스천 인스턴스에서 진행한다. 아래 출력의 셸 프롬프트 <code class="highlighter-rouge">ubuntu@ip-10-0-1-100</code>이 그 인스턴스이고, <code class="highlighter-rouge">[ec2-user@ip-10-0-5-100 ~]$</code>은 세션 매니저로 붙은 <code class="highlighter-rouge">trn1.2xlarge</code> 워커 노드다. 이 글의 모든 출력에서 계정 ID, 클러스터명, 버킷명, 인스턴스 ID, 호스트명, IP, 토큰은 예시 값으로 치환했다. AMI ID <code class="highlighter-rouge">ami-0e08c07b0376ba3f8</code>만 앞 편과의 정합을 위해 그대로 뒀다.</p>
+
+<h2 id="init-container-패턴이-푸는-문제">init container 패턴이 푸는 문제</h2>
+
+<p>init container는 파드의 메인 컨테이너보다 먼저 순서대로 실행되고, 전부 성공 종료해야 메인 컨테이너가 시작되는 컨테이너다. 메인 컨테이너와 같은 볼륨을 붙일 수 있으면서 생명주기는 분리되어 있어서, 준비 작업과 서비스 실행을 다른 프로세스로 쪼갤 때 쓴다.</p>
+
+<p>여기서 쪼개려는 준비 작업은 Neuron 컴파일이다. Neuron 백엔드는 모델 가중치를 그대로 올려 쓰지 않고 NxD Inference로 컴파일한 산출물을 쓴다. 컴파일 자체가 분 단위로 걸리므로, 파드가 뜰 때마다 다시 컴파일하면 그 시간이 기동 시간에 그대로 얹힌다. 산출물을 S3에 남겨 두고 다음 파드는 읽기만 하게 만드는 것이 이 패턴의 목적이다. 캐시 분기 구조 자체는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/#모델-캐시-스토리지">08-00편</a>에 정리해 두었다.</p>
+
+<p>매니페스트에서 눈에 띄는 것은 같은 PVC를 두 컨테이너가 <strong>다른 권한으로</strong> 받는다는 점이다. init container는 <code class="highlighter-rouge">/shared/model</code>을 읽고 쓸 수 있고, 메인 컨테이너는 <code class="highlighter-rouge">readOnly: true</code>로 받는다. 서빙 프로세스가 캐시를 건드릴 수 없게 막아 두는 구성이다.</p>
+
+<pre><code class="language-mermaid">flowchart TD
+    init["init container model-prep&lt;br/&gt;/shared/model 마운트 rw"] --&gt; check{"/shared/model/cache 가 비어 있는가"}
+    check -- "비어 있음" --&gt; dl["Hugging Face 가중치 다운로드"]
+    dl --&gt; compile["neuronx-cc 컴파일&lt;br/&gt;산출물은 컨테이너 로컬 /tmp/cache"]
+    compile --&gt; cp["cp -r 로 /shared/model/cache 에 복사&lt;br/&gt;PVC 경유 S3 PutObject"]
+    cp --&gt; done["init container 종료 Exit Code 0"]
+    check -- "비어 있지 않음" --&gt; skip["컴파일 건너뜀"]
+    skip --&gt; done
+    done --&gt; main["메인 컨테이너 vllm-server&lt;br/&gt;/shared/model 마운트 ro"]
+    main --&gt; load["precompiled artifacts 로드&lt;br/&gt;컴파일 없이 서버 기동"]
+</code></pre>
+
+<center><sup>AI를 이용해 직접 그린 도식. 같은 PVC를 init container는 rw로, 메인 컨테이너는 ro로 받는 권한 분리를 보여 준다</sup></center>
+
+<p><br /></p>
+
+<h1 id="매니페스트-해부">매니페스트 해부</h1>
+
+<h2 id="hf-토큰-secret">HF 토큰 Secret</h2>
+
+<p>TinyLlama 가중치를 받으려면 Hugging Face 토큰이 필요하다. 토큰은 워크샵 인스턴스의 <code class="highlighter-rouge">.env</code>에 들어 있고, 그 값을 Secret으로 올린다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 워크샵이 미리 만들어 둔 .env를 셸에 로드한다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">source</span> /home/ubuntu/workshop/.env
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</span> <span class="nv">$HF_TOKEN</span>
+hf_xxxxxxxxxxxxxxxxxxxx
+
+<span class="c"># create 결과를 곧바로 apply로 넘긴다</span>
+<span class="c"># create 단독은 같은 이름이 이미 있으면 AlreadyExists로 실패하지만,</span>
+<span class="c"># --dry-run=client로 매니페스트만 뽑아 apply에 넘기면 있으면 갱신 없으면 생성이 된다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl create secret generic hf-token-secret <span class="se">\</span>
+<span class="o">&gt;</span>     <span class="nt">--from-literal</span><span class="o">=</span><span class="nv">HF_TOKEN</span><span class="o">=</span><span class="s2">"</span><span class="nv">$HF_TOKEN</span><span class="s2">"</span> <span class="se">\</span>
+<span class="o">&gt;</span>     <span class="nt">--dry-run</span><span class="o">=</span>client <span class="nt">-o</span> yaml | kubectl apply <span class="nt">-f</span> -
+secret/hf-token-secret created
+
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl get secret hf-token-secret
+NAME              TYPE     DATA   AGE
+hf-token-secret   Opaque   1      3s
+</code></pre></div></div>
+
+<p>토큰 발급 절차는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/#hugging-face-토큰-설정">08-00편</a>에 있다.</p>
+
+<h2 id="configmap의-키-14개">ConfigMap의 키 14개</h2>
+
+<p>결론부터 말하면 ConfigMap 키가 곧 vLLM 설정인 것은 아니다. 14개 키는 세 갈래로 갈린다. 셸이 <code class="highlighter-rouge">--model=$MODEL_NAME</code> 처럼 전개해 <strong>vLLM CLI 인자</strong>로 바뀌는 것, 프로세스가 <strong>환경변수로 직접 읽는 것</strong>, 그리고 <strong>아무도 읽지 않는 것</strong>이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>키</th>
+      <th>값</th>
+      <th>갈래</th>
+      <th>소비자</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">MODEL_NAME</code></td>
+      <td><code class="highlighter-rouge">tinyLlama/TinyLlama-1.1B-Chat-v1.0</code></td>
+      <td>CLI 인자로 전개</td>
+      <td><code class="highlighter-rouge">--model</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">MAX_NUM_SEQS</code></td>
+      <td><code class="highlighter-rouge">4</code></td>
+      <td>CLI 인자로 전개</td>
+      <td><code class="highlighter-rouge">--max-num-seqs</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">MAX_MODEL_LEN</code></td>
+      <td><code class="highlighter-rouge">1024</code></td>
+      <td>CLI 인자로 전개</td>
+      <td><code class="highlighter-rouge">--max-model-len</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">TENSOR_PARALLEL_SIZE</code></td>
+      <td><code class="highlighter-rouge">2</code></td>
+      <td>CLI 인자로 전개</td>
+      <td><code class="highlighter-rouge">--tensor-parallel-size</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">PORT</code></td>
+      <td><code class="highlighter-rouge">8080</code></td>
+      <td>CLI 인자로 전개</td>
+      <td><code class="highlighter-rouge">--port</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">HF_TOKEN</code></td>
+      <td>(토큰)</td>
+      <td>환경변수</td>
+      <td><code class="highlighter-rouge">huggingface_hub</code> 표준 변수</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">VLLM_NEURON_FRAMEWORK</code></td>
+      <td><code class="highlighter-rouge">neuronx-distributed-inference</code></td>
+      <td>환경변수</td>
+      <td>vLLM Neuron 백엔드 선택</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">NEURON_COMPILED_ARTIFACTS</code></td>
+      <td><code class="highlighter-rouge">/shared/model/cache</code></td>
+      <td>환경변수</td>
+      <td>NxD Inference 사전 컴파일 산출물 경로</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">NEURON_COMPILE_CACHE_URL</code></td>
+      <td><code class="highlighter-rouge">/shared/model/cache</code></td>
+      <td>환경변수</td>
+      <td><code class="highlighter-rouge">neuronx-cc</code> 영속 캐시 위치</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">NEURON_RT_VISIBLE_CORES</code></td>
+      <td><code class="highlighter-rouge">0-1</code></td>
+      <td>환경변수</td>
+      <td>Neuron 런타임에 노출할 코어 범위</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">NEURON_RT_LOG_LEVEL</code></td>
+      <td><code class="highlighter-rouge">ERROR</code></td>
+      <td>환경변수</td>
+      <td>Neuron 런타임 로그 레벨</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS</code></td>
+      <td><code class="highlighter-rouge">4</code></td>
+      <td>환경변수</td>
+      <td>비동기 실행 in-flight 상한</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">S3_BUCKET</code></td>
+      <td>캐시 버킷명</td>
+      <td>미사용</td>
+      <td>없음</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">S3_PREFIX</code></td>
+      <td><code class="highlighter-rouge">compiled-models</code></td>
+      <td>미사용</td>
+      <td>없음</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># vllm-configmap.yaml</span>
+<span class="c1"># 배스천에서 heredoc으로 작성하므로 $HF_TOKEN과 $(aws sts ...)는 셸이 먼저 전개한다</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">ConfigMap</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">vllm-shared-config</span>
+<span class="na">data</span><span class="pi">:</span>
+  <span class="na">HF_TOKEN</span><span class="pi">:</span> <span class="s2">"</span><span class="s">$HF_TOKEN"</span>
+  <span class="na">MODEL_NAME</span><span class="pi">:</span> <span class="s2">"</span><span class="s">tinyLlama/TinyLlama-1.1B-Chat-v1.0"</span>     <span class="c1"># 서빙 대상 모델. 1.1B라 컴파일이 빠르다</span>
+  <span class="na">S3_BUCKET</span><span class="pi">:</span> <span class="s2">"</span><span class="s">vllm-models-cache-$(aws</span><span class="nv"> </span><span class="s">sts</span><span class="nv"> </span><span class="s">get-caller-identity</span><span class="nv"> </span><span class="s">|</span><span class="nv"> </span><span class="s">jq</span><span class="nv"> </span><span class="s">-r</span><span class="nv"> </span><span class="s">.Account)"</span>
+  <span class="na">S3_PREFIX</span><span class="pi">:</span> <span class="s2">"</span><span class="s">compiled-models"</span>
+  <span class="na">MAX_NUM_SEQS</span><span class="pi">:</span> <span class="s2">"</span><span class="s">4"</span>                                    <span class="c1"># continuous batching이 동시에 물 수 있는 시퀀스 수</span>
+  <span class="na">PORT</span><span class="pi">:</span> <span class="s2">"</span><span class="s">8080"</span>
+  <span class="na">NEURON_COMPILED_ARTIFACTS</span><span class="pi">:</span> <span class="s2">"</span><span class="s">/shared/model/cache"</span>     <span class="c1"># 사전 컴파일 산출물을 찾을 경로. S3 PVC 마운트 지점</span>
+  <span class="na">NEURON_COMPILE_CACHE_URL</span><span class="pi">:</span> <span class="s2">"</span><span class="s">/shared/model/cache"</span>      <span class="c1"># neuronx-cc 캐시 위치. 위와 같은 경로</span>
+  <span class="na">TENSOR_PARALLEL_SIZE</span><span class="pi">:</span> <span class="s2">"</span><span class="s">2"</span>                            <span class="c1"># 가중치를 NeuronCore 2개에 분할</span>
+  <span class="na">MAX_MODEL_LEN</span><span class="pi">:</span> <span class="s2">"</span><span class="s">1024"</span>                                <span class="c1"># 프롬프트와 생성을 합친 최대 토큰 길이</span>
+  <span class="na">NEURON_RT_VISIBLE_CORES</span><span class="pi">:</span> <span class="s2">"</span><span class="s">0-1"</span>                       <span class="c1"># 런타임에 노출할 코어 인덱스 범위</span>
+  <span class="na">NEURON_RT_LOG_LEVEL</span><span class="pi">:</span> <span class="s2">"</span><span class="s">ERROR"</span>                         <span class="c1"># 런타임 로그 레벨</span>
+  <span class="na">NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS</span><span class="pi">:</span> <span class="s2">"</span><span class="s">4"</span>      <span class="c1"># 비동기 실행 in-flight 상한</span>
+  <span class="na">VLLM_NEURON_FRAMEWORK</span><span class="pi">:</span> <span class="s2">"</span><span class="s">neuronx-distributed-inference"</span> <span class="c1"># Neuron 백엔드로 NxD Inference를 쓰게 하는 플래그</span>
+</code></pre></div></div>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl apply <span class="nt">-f</span> vllm-configmap.yaml
+configmap/vllm-shared-config created
+
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl get cm vllm-shared-config
+NAME                 DATA   AGE
+vllm-shared-config   14     5s
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">S3_BUCKET</code>과 <code class="highlighter-rouge">S3_PREFIX</code>는 이 매니페스트 어디에서도 참조되지 않는다. init container 스크립트도, 메인 컨테이너의 <code class="highlighter-rouge">args</code>도 두 값을 읽지 않으므로 “S3 캐시 경로를 지정한다”는 설명은 성립하지 않는다. S3에 산출물이 올라가는 경로는 <code class="highlighter-rouge">cp -r</code>이 쓰는 로컬 경로와 그 경로에 붙은 PVC가 정한다. 그 증거가 버킷에 찍힌 객체 키다 — <code class="highlighter-rouge">S3_PREFIX</code>가 <code class="highlighter-rouge">compiled-models</code>인데 실제 키는 전부 <code class="highlighter-rouge">cache/</code>로 시작한다. <code class="highlighter-rouge">/shared/model/cache</code>라는 마운트 경로 구조가 그대로 키가 된 것이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>aws s3 <span class="nb">ls </span>s3://<span class="nv">$BUCKET_NAME</span> <span class="nt">--recursive</span> <span class="nt">--human-readable</span>
+
+<span class="c"># 실행 결과 (발췌). compiled-models/ 가 아니라 cache/ 로 시작한다</span>
+2026-09-11 14:12:45    4.6 MiB cache/model.pt
+2026-09-11 14:12:46    6.1 KiB cache/neuron_config.json
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">HF_TOKEN</code>은 Secret으로 따로 주입되는데 ConfigMap에도 평문으로 한 번 더 들어간다. 두 컨테이너 모두 <code class="highlighter-rouge">configMapRef</code>와 <code class="highlighter-rouge">secretRef</code>를 함께 걸고 있어서 어느 쪽이 최종 값이 되든 동작에는 차이가 없지만, 토큰을 ConfigMap에 평문으로 두는 것은 Secret을 따로 만든 취지와 어긋난다.</p>
+
+<h3 id="vllm-서버-공통-설정">vLLM 서버 공통 설정</h3>
+
+<p><code class="highlighter-rouge">MODEL_NAME</code>, <code class="highlighter-rouge">MAX_NUM_SEQS</code>, <code class="highlighter-rouge">MAX_MODEL_LEN</code>, <code class="highlighter-rouge">TENSOR_PARALLEL_SIZE</code>, <code class="highlighter-rouge">PORT</code> 다섯 개는 Neuron과 무관하게 vLLM을 띄울 때 정하는 값이다. 이름이 vLLM 규약인 것도 아니다. 컨테이너 <code class="highlighter-rouge">args</code>의 셸이 <code class="highlighter-rouge">--model=$MODEL_NAME</code> 형태로 전개하려고 만든 변수이므로, 이름을 다르게 지어도 <code class="highlighter-rouge">args</code>만 맞추면 동작한다.</p>
+
+<p><code class="highlighter-rouge">PORT: "8080"</code>은 vLLM 기본값이 아니다. vLLM의 기본 포트는 8000이고, 8080은 워크샵이 명시적으로 덮어쓴 값이다. 왜 8080인지는 Service 포트와 묶어 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/">08-03-02편</a>에서 다룬다.</p>
+
+<p><code class="highlighter-rouge">TENSOR_PARALLEL_SIZE: "2"</code>가 2인 근거는 <code class="highlighter-rouge">trn1.2xlarge</code> 칩 하나 안에 NeuronCore가 둘이라는 것이다. 칩과 코어의 계층은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/#칩-하나-코어-둘">08-02-02편</a>에 정리되어 있다.</p>
+
+<h3 id="neuron-런타임-전용-설정">Neuron 런타임 전용 설정</h3>
+
+<p><code class="highlighter-rouge">NEURON_</code>으로 시작하는 다섯 개와 <code class="highlighter-rouge">VLLM_NEURON_FRAMEWORK</code>는 CLI 인자로 전개되지 않고 프로세스가 환경변수로 직접 읽는다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">VLLM_NEURON_FRAMEWORK: neuronx-distributed-inference</code> — vLLM이 Neuron에서 쓸 백엔드를 고른다. vLLM과 Neuron이 이어지는 두 갈래 경로는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/#vllm-통합-두-갈래">08-01편</a>에 있다</li>
+  <li><code class="highlighter-rouge">NEURON_COMPILED_ARTIFACTS</code> — 이 경로에 사전 컴파일 산출물이 있으면 그대로 로드하고, vLLM API로 넘어온 모델 설정이 달라도 재컴파일을 트리거하지 않는다</li>
+  <li><code class="highlighter-rouge">NEURON_COMPILE_CACHE_URL</code> — <code class="highlighter-rouge">neuronx-cc</code>의 영속 캐시 위치다. 기본값은 <code class="highlighter-rouge">/var/tmp/neuron-compile-cache</code>인데, 여기서는 위와 같은 PVC 경로로 돌려 놓았다</li>
+  <li><code class="highlighter-rouge">NEURON_RT_VISIBLE_CORES: 0-1</code> — 런타임에 노출할 코어 범위다. 범위는 연속이어야 한다</li>
+  <li><code class="highlighter-rouge">NEURON_RT_LOG_LEVEL: ERROR</code> — 런타임 로그를 에러만 남긴다</li>
+</ul>
+
+<p><code class="highlighter-rouge">NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS: "4"</code>는 그대로 옮겨 쓰기 전에 알아 둘 점이 있다. AWS Neuron 런타임 문서의 권장값은 3이고, 3을 넘기면 실행 중 out-of-memory가 발생할 수 있다고 적혀 있다. 기본값 <code class="highlighter-rouge">0</code>은 비동기 실행 비활성화다. 워크샵이 넣은 4는 문서가 권장하는 범위 밖의 값이다. 이번 실습에서는 이 값으로 기동과 추론이 모두 정상이었지만, 그건 TinyLlama 1.1B에 <code class="highlighter-rouge">max_model_len</code> 1024, <code class="highlighter-rouge">max_num_seqs</code> 4라는 작은 구성에서의 결과다. 다른 모델 크기나 시퀀스 길이에서 같은 값이 안전한지는 확인하지 않았다.</p>
+
+<h2 id="s3-pv와-pvc">S3 PV와 PVC</h2>
+
+<p>Mountpoint for Amazon S3 CSI 드라이버는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/#s3-csi-드라이버-설치">08-02-01편</a>에서 이미 깔았고, 캐시용 버킷도 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/#모델-캐시용-s3-버킷">같은 편</a>에서 만들어 뒀다. 여기서는 그 버킷을 PV로 선언하고 PVC로 물린다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># vllm-storage.yaml</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">PersistentVolume</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">s3-model-cache-pv</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">capacity</span><span class="pi">:</span>
+    <span class="na">storage</span><span class="pi">:</span> <span class="s">100Gi</span>              <span class="c1"># PV와 PVC 바인딩 조건을 맞추기 위한 형식값. 아래에서 따로 다룬다</span>
+  <span class="na">accessModes</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="s">ReadWriteMany</span>             <span class="c1"># 여러 파드가 같은 캐시를 동시에 읽는 구성을 염두에 둔 접근 모드</span>
+  <span class="na">persistentVolumeReclaimPolicy</span><span class="pi">:</span> <span class="s">Retain</span>   <span class="c1"># PVC를 지워도 버킷 내용은 남긴다</span>
+  <span class="na">csi</span><span class="pi">:</span>
+    <span class="na">driver</span><span class="pi">:</span> <span class="s">s3.csi.aws.com</span>
+    <span class="na">volumeHandle</span><span class="pi">:</span> <span class="s">vllm-models-cache-$(aws sts get-caller-identity | jq -r .Account)</span>
+    <span class="na">volumeAttributes</span><span class="pi">:</span>
+      <span class="na">bucketName</span><span class="pi">:</span> <span class="s">vllm-models-cache-$(aws sts get-caller-identity | jq -r .Account)</span>
+
+<span class="nn">---</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">PersistentVolumeClaim</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">s3-model-cache-pvc</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">accessModes</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="s">ReadWriteMany</span>
+  <span class="na">resources</span><span class="pi">:</span>
+    <span class="na">requests</span><span class="pi">:</span>
+      <span class="na">storage</span><span class="pi">:</span> <span class="s">100Gi</span>           <span class="c1"># PV capacity 이하여야 바인딩된다</span>
+  <span class="na">volumeName</span><span class="pi">:</span> <span class="s">s3-model-cache-pv</span>  <span class="c1"># StorageClass를 거치지 않고 위 PV를 직접 지목한다</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">volumeName</code>으로 PV를 직접 지목하므로 StorageClass가 없고, 동적 프로비저닝도 일어나지 않는다. <code class="highlighter-rouge">100Gi</code>가 실제로 무엇을 강제하는지는 <a href="#pv-capacity가-강제되지-않는-이유">PV capacity가 강제되지 않는 이유</a>에서 노드 쪽 관찰과 함께 다룬다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl apply <span class="nt">-f</span> vllm-storage.yaml
+persistentvolume/s3-model-cache-pv created
+persistentvolumeclaim/s3-model-cache-pvc created
+
+<span class="c"># apply 직후 스냅샷. PVC는 아직 Pending이고 CAPACITY 열이 비어 있다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl get pvc,pv
+NAME                                       STATUS    VOLUME              CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+persistentvolumeclaim/s3-model-cache-pvc   Pending   s3-model-cache-pv   0                                        3s
+
+NAME                                 CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   AGE
+persistentvolume/s3-model-cache-pv   100Gi      RWX            Retain           Available
+</code></pre></div></div>
+
+<h2 id="deployment-매니페스트">Deployment 매니페스트</h2>
+
+<p>Deployment 하나에 <code class="highlighter-rouge">replicas: 1</code>, 그 안에 init container 하나와 메인 컨테이너 하나가 들어간다. 두 컨테이너는 같은 이미지를 쓰고 같은 ConfigMap과 Secret을 받는다. 달라지는 것은 실행하는 명령과 볼륨 권한뿐이다.</p>
+
+<p>이미지 <code class="highlighter-rouge">public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:0.9.1-neuronx-py310-sdk2.25.0-ubuntu22.04</code>는 AWS가 배포하는 Neuron용 vLLM 컨테이너다. 태그 구조와 이 이미지가 서빙 스택에서 차지하는 위치는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/#vllm-서빙-구성">08-00편</a>에 있다.</p>
+
+<h3 id="schedulername과-nodeselector">schedulerName과 nodeSelector</h3>
+
+<p>파드 스펙 최상단에 이 두 줄이 있다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">spec</span><span class="pi">:</span>
+  <span class="na">schedulerName</span><span class="pi">:</span> <span class="s">my-scheduler</span>   <span class="c1"># 기본 스케줄러가 아니라 Neuron 확장을 붙인 두 번째 스케줄러를 쓴다</span>
+  <span class="na">nodeSelector</span><span class="pi">:</span>
+    <span class="s">alpha.eksctl.io/nodegroup-name</span><span class="pi">:</span> <span class="s">neuron-trn1-2x</span>   <span class="c1"># eksctl이 붙인 노드그룹 라벨로 trn1 노드를 고른다</span>
+  <span class="na">tolerations</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">key</span><span class="pi">:</span> <span class="s2">"</span><span class="s">node.kubernetes.io/disk-pressure"</span>
+      <span class="na">operator</span><span class="pi">:</span> <span class="s2">"</span><span class="s">Exists"</span>
+      <span class="na">effect</span><span class="pi">:</span> <span class="s2">"</span><span class="s">NoSchedule"</span>      <span class="c1"># 8GB 이미지를 받는 동안 disk-pressure가 걸려도 쫓겨나지 않게 한다</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">schedulerName: my-scheduler</code>는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/#스케줄러-확장이-개입하는-지점">08-02-02편</a>에서 배포한 두 번째 스케줄러를 지목한다. EKS는 기본 스케줄러 설정 변경을 지원하지 않으므로 스케줄러를 따로 띄우고 파드가 이름으로 opt-in하는 구조다. 이 한 줄이 실제로 반영됐는지는 <a href="#schedulername이-적용됐는지">schedulerName이 적용됐는지</a>에서 확인한다.</p>
+
+<p><code class="highlighter-rouge">nodeSelector</code>가 쓰는 라벨은 <code class="highlighter-rouge">neuron.amazonaws.com/present=true</code>가 아니라 <code class="highlighter-rouge">alpha.eksctl.io/nodegroup-name</code>이다. Neuron 디바이스 유무가 아니라 특정 노드그룹을 지목하는 셈이라, 노드그룹 이름이 바뀌면 같이 고쳐야 한다.</p>
+
+<h3 id="init-container-model-prep">init container model-prep</h3>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">initContainers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">model-prep</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:0.9.1-neuronx-py310-sdk2.25.0-ubuntu22.04</span>
+    <span class="na">imagePullPolicy</span><span class="pi">:</span> <span class="s">Always</span>
+    <span class="na">envFrom</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">configMapRef</span><span class="pi">:</span>
+          <span class="na">name</span><span class="pi">:</span> <span class="s">vllm-shared-config</span>     <span class="c1"># 메인 컨테이너와 같은 설정 한 벌을 공유한다</span>
+      <span class="pi">-</span> <span class="na">secretRef</span><span class="pi">:</span>
+          <span class="na">name</span><span class="pi">:</span> <span class="s">hf-token-secret</span>
+    <span class="na">command</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">/bin/bash"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">-c"</span><span class="pi">]</span>
+    <span class="na">args</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="pi">|</span>
+        <span class="no">set -e</span>
+        <span class="no">echo "Starting model prep for $MODEL_NAME..."</span>
+        <span class="no">huggingface-cli login --token "$HF_TOKEN"</span>
+        <span class="no">mkdir -p /tmp/cache /shared/model/cache</span>
+
+        <span class="no"># 캐시 디렉터리가 비어 있을 때만 컴파일한다</span>
+        <span class="no">if [ ! "$(ls -A /shared/model/cache 2&gt;/dev/null)" ]; then</span>
+          <span class="no"># 컴파일 산출물은 일단 컨테이너 로컬 /tmp/cache에 쌓는다</span>
+          <span class="no">export NEURON_COMPILED_ARTIFACTS=/tmp/cache NEURON_COMPILE_CACHE_URL=/tmp/cache</span>
+          <span class="no">python3 -c "</span>
+        <span class="no">import os</span>
+        <span class="no">from vllm import LLM</span>
+        <span class="no">LLM(model=os.environ['MODEL_NAME'], max_num_seqs=int(os.environ['MAX_NUM_SEQS']),</span>
+            <span class="no">max_model_len=int(os.environ['MAX_MODEL_LEN']), tensor_parallel_size=int(os.environ['TENSOR_PARALLEL_SIZE']),</span>
+            <span class="no">device='neuron', override_neuron_config={'enable_bucketing': False})</span>
+        <span class="no">print('Model compiled successfully!')"</span>
+          <span class="no"># 다 만든 뒤 통짜로 PVC에 복사한다. 이 복사가 S3 PutObject가 된다</span>
+          <span class="no">cp -r /tmp/cache/* /shared/model/cache/ 2&gt;/dev/null || true</span>
+        <span class="no">else</span>
+          <span class="no">echo "Model cache exists, skipping compilation"</span>
+        <span class="no">fi</span>
+    <span class="na">volumeMounts</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">model-storage</span>
+        <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/shared/model</span>       <span class="c1"># 읽기 쓰기 둘 다 가능</span>
+</code></pre></div></div>
+
+<p>구조에서 눈여겨볼 점이 둘이다.</p>
+
+<p>첫째, 컴파일 산출물을 곧바로 <code class="highlighter-rouge">/shared/model/cache</code>에 쓰지 않고 컨테이너 로컬 <code class="highlighter-rouge">/tmp/cache</code>에 만든 뒤 <code class="highlighter-rouge">cp -r</code>로 옮긴다. <code class="highlighter-rouge">NEURON_COMPILED_ARTIFACTS</code>와 <code class="highlighter-rouge">NEURON_COMPILE_CACHE_URL</code>을 <code class="highlighter-rouge">/tmp/cache</code>로 덮어쓰는 <code class="highlighter-rouge">export</code> 두 줄이 그 장치다. ConfigMap이 준 값이 <code class="highlighter-rouge">/shared/model/cache</code>인데 init container 안에서만 이 값을 바꾼다. 컴파일러가 캐시 디렉터리에 파일을 열어 놓고 점진적으로 쓰는 동작을 S3 마운트 위에서 하지 않게 만드는 구성이고, 이유는 <a href="#posix와-갈리는-지점">POSIX와 갈리는 지점</a>에서 다룬다.</p>
+
+<p>둘째, 분기 조건이 S3 API 호출이 아니라 <code class="highlighter-rouge">ls -A /shared/model/cache</code>다. 버킷을 조회하는 것이 아니라 마운트된 디렉터리가 비었는지 보는 것이라, 캐시 판정은 전적으로 PVC 마운트가 정상이라는 전제 위에 있다.</p>
+
+<p><code class="highlighter-rouge">vllm</code> 패키지를 <code class="highlighter-rouge">LLM(...)</code> 생성자로 한 번 호출하는 것만으로 컴파일이 일어난다. 서버를 띄우지 않고 엔진 초기화까지만 돌려 산출물을 만드는 방식이다.</p>
+
+<h3 id="메인-컨테이너-vllm-server">메인 컨테이너 vllm-server</h3>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">containers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">vllm-server</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:0.9.1-neuronx-py310-sdk2.25.0-ubuntu22.04</span>
+    <span class="na">imagePullPolicy</span><span class="pi">:</span> <span class="s">Always</span>
+    <span class="na">ports</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">containerPort</span><span class="pi">:</span> <span class="s">8080</span>
+        <span class="na">name</span><span class="pi">:</span> <span class="s">http-vllm</span>               <span class="c1"># Service가 targetPort를 숫자가 아닌 이 이름으로 참조한다</span>
+    <span class="na">envFrom</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">configMapRef</span><span class="pi">:</span>
+          <span class="na">name</span><span class="pi">:</span> <span class="s">vllm-shared-config</span>
+      <span class="pi">-</span> <span class="na">secretRef</span><span class="pi">:</span>
+          <span class="na">name</span><span class="pi">:</span> <span class="s">hf-token-secret</span>
+    <span class="na">command</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">/bin/bash"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">-c"</span><span class="pi">]</span>
+    <span class="na">args</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="pi">|</span>
+        <span class="no">python -m vllm.entrypoints.openai.api_server \</span>
+          <span class="no">--model="$MODEL_NAME" \</span>
+          <span class="no">--max-num-seqs=$MAX_NUM_SEQS \</span>
+          <span class="no">--max-model-len=$MAX_MODEL_LEN \</span>
+          <span class="no">--tensor-parallel-size=$TENSOR_PARALLEL_SIZE \</span>
+          <span class="no">--port=$PORT \</span>
+          <span class="no">--device=neuron \</span>
+          <span class="no">--override-neuron-config='{"enable_bucketing":false}'</span>
+    <span class="na">volumeMounts</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">model-storage</span>
+        <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/shared/model</span>
+        <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>                <span class="c1"># init container와 달리 읽기 전용이다</span>
+</code></pre></div></div>
+
+<p>ConfigMap 키가 그대로 CLI 플래그로 전개되는 모습이 여기 있다. <code class="highlighter-rouge">--override-neuron-config='{"enable_bucketing":false}'</code>는 init container의 <code class="highlighter-rouge">override_neuron_config={'enable_bucketing': False}</code>와 같은 설정이다. 두 컨테이너가 같은 설정으로 컴파일하고 같은 설정으로 로드해야 캐시가 적중하기 때문에 같은 값을 양쪽에 적어 둔 것이다.</p>
+
+<p>버킷팅은 시퀀스 길이 구간마다 그래프를 따로 컴파일해 두고 요청 길이에 맞는 것을 고르는 기법이다. 끄면 <code class="highlighter-rouge">max_model_len</code> 하나짜리 그래프만 만들어 컴파일 시간이 줄지만, 짧은 요청도 1024 길이 그래프로 처리한다.</p>
+
+<h3 id="칩-1개-요청과-코어-2개-텐서-병렬">칩 1개 요청과 코어 2개 텐서 병렬</h3>
+
+<p>리소스 요청과 텐서 병렬 크기가 다른 숫자라는 점이 이 매니페스트에서 가장 혼동하기 쉬운 대목이다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">resources</span><span class="pi">:</span>
+  <span class="na">limits</span><span class="pi">:</span>
+    <span class="s">aws.amazon.com/neuron</span><span class="pi">:</span> <span class="s">1</span>     <span class="c1"># 칩 단위로 1개 요청</span>
+    <span class="na">ephemeral-storage</span><span class="pi">:</span> <span class="s">50Gi</span>
+    <span class="na">cpu</span><span class="pi">:</span> <span class="s2">"</span><span class="s">8000m"</span>
+  <span class="na">requests</span><span class="pi">:</span>
+    <span class="s">aws.amazon.com/neuron</span><span class="pi">:</span> <span class="s">1</span>
+    <span class="na">ephemeral-storage</span><span class="pi">:</span> <span class="s">50Gi</span>
+    <span class="na">cpu</span><span class="pi">:</span> <span class="s2">"</span><span class="s">4000m"</span>
+</code></pre></div></div>
+
+<p>요청 단위는 칩(<code class="highlighter-rouge">aws.amazon.com/neuron</code>)이라 1이고, <code class="highlighter-rouge">TENSOR_PARALLEL_SIZE</code>는 그 칩 안의 코어 수라 2다. 서로 다른 리소스를 두 개 요청한 것이 아니라, 칩 1개를 받으면 그 안의 코어 2개가 따라온다. 리소스 이름이 둘인 이유와 요청 단위를 고르는 기준은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/#리소스가-두-개-광고되는-이유">08-02-02편</a>에 정리해 두었다.</p>
+
+<p><code class="highlighter-rouge">ephemeral-storage: 50Gi</code>는 8GB대 이미지와 <code class="highlighter-rouge">/tmp/cache</code>에 쌓이는 컴파일 중간 산출물을 감안한 값이다. CPU는 <code class="highlighter-rouge">requests</code> 4코어, <code class="highlighter-rouge">limits</code> 8코어로 잡혀 있어 QoS 클래스가 <code class="highlighter-rouge">Burstable</code>이 된다.</p>
+
+<details>
+  <summary><b>vllm-deployment.yaml 전문</b></summary>
+
+  <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">apps/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Deployment</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">vllm-deployment</span>
+  <span class="na">labels</span><span class="pi">:</span>
+    <span class="s">app.kubernetes.io/name</span><span class="pi">:</span> <span class="s">vllm-server</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">replicas</span><span class="pi">:</span> <span class="s">1</span>
+  <span class="na">selector</span><span class="pi">:</span>
+    <span class="na">matchLabels</span><span class="pi">:</span>
+      <span class="s">app.kubernetes.io/name</span><span class="pi">:</span> <span class="s">vllm-server</span>
+  <span class="na">template</span><span class="pi">:</span>
+    <span class="na">metadata</span><span class="pi">:</span>
+      <span class="na">labels</span><span class="pi">:</span>
+        <span class="s">app.kubernetes.io/name</span><span class="pi">:</span> <span class="s">vllm-server</span>
+    <span class="na">spec</span><span class="pi">:</span>
+      <span class="na">restartPolicy</span><span class="pi">:</span> <span class="s">Always</span>
+      <span class="na">schedulerName</span><span class="pi">:</span> <span class="s">my-scheduler</span>
+      <span class="na">nodeSelector</span><span class="pi">:</span>
+        <span class="s">alpha.eksctl.io/nodegroup-name</span><span class="pi">:</span> <span class="s">neuron-trn1-2x</span>
+      <span class="na">tolerations</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">key</span><span class="pi">:</span> <span class="s2">"</span><span class="s">node.kubernetes.io/disk-pressure"</span>
+          <span class="na">operator</span><span class="pi">:</span> <span class="s2">"</span><span class="s">Exists"</span>
+          <span class="na">effect</span><span class="pi">:</span> <span class="s2">"</span><span class="s">NoSchedule"</span>
+      <span class="na">volumes</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">model-storage</span>
+          <span class="na">persistentVolumeClaim</span><span class="pi">:</span>
+            <span class="na">claimName</span><span class="pi">:</span> <span class="s">s3-model-cache-pvc</span>
+      <span class="na">initContainers</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">model-prep</span>
+          <span class="na">image</span><span class="pi">:</span> <span class="s">public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:0.9.1-neuronx-py310-sdk2.25.0-ubuntu22.04</span>
+          <span class="na">imagePullPolicy</span><span class="pi">:</span> <span class="s">Always</span>
+          <span class="na">envFrom</span><span class="pi">:</span>
+            <span class="pi">-</span> <span class="na">configMapRef</span><span class="pi">:</span>
+                <span class="na">name</span><span class="pi">:</span> <span class="s">vllm-shared-config</span>
+            <span class="pi">-</span> <span class="na">secretRef</span><span class="pi">:</span>
+                <span class="na">name</span><span class="pi">:</span> <span class="s">hf-token-secret</span>
+          <span class="na">command</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">/bin/bash"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">-c"</span><span class="pi">]</span>
+          <span class="na">args</span><span class="pi">:</span>
+            <span class="pi">-</span> <span class="pi">|</span>
+              <span class="no">set -e</span>
+              <span class="no">echo "Starting model prep for $MODEL_NAME..."</span>
+              <span class="no">huggingface-cli login --token "$HF_TOKEN"</span>
+              <span class="no">mkdir -p /tmp/cache /shared/model/cache</span>
+
+              <span class="no">if [ ! "$(ls -A /shared/model/cache 2&gt;/dev/null)" ]; then</span>
+                <span class="no">export NEURON_COMPILED_ARTIFACTS=/tmp/cache NEURON_COMPILE_CACHE_URL=/tmp/cache</span>
+                <span class="no">python3 -c "</span>
+              <span class="no">import os</span>
+              <span class="no">from vllm import LLM</span>
+              <span class="no">LLM(model=os.environ['MODEL_NAME'], max_num_seqs=int(os.environ['MAX_NUM_SEQS']),</span>
+                  <span class="no">max_model_len=int(os.environ['MAX_MODEL_LEN']), tensor_parallel_size=int(os.environ['TENSOR_PARALLEL_SIZE']),</span>
+                  <span class="no">device='neuron', override_neuron_config={'enable_bucketing': False})</span>
+              <span class="no">print('Model compiled successfully!')"</span>
+                <span class="no">cp -r /tmp/cache/* /shared/model/cache/ 2&gt;/dev/null || true</span>
+              <span class="no">else</span>
+                <span class="no">echo "Model cache exists, skipping compilation"</span>
+              <span class="no">fi</span>
+          <span class="na">resources</span><span class="pi">:</span>
+            <span class="na">limits</span><span class="pi">:</span>
+              <span class="s">aws.amazon.com/neuron</span><span class="pi">:</span> <span class="s">1</span>
+              <span class="na">ephemeral-storage</span><span class="pi">:</span> <span class="s">50Gi</span>
+            <span class="na">requests</span><span class="pi">:</span>
+              <span class="s">aws.amazon.com/neuron</span><span class="pi">:</span> <span class="s">1</span>
+              <span class="na">ephemeral-storage</span><span class="pi">:</span> <span class="s">50Gi</span>
+          <span class="na">volumeMounts</span><span class="pi">:</span>
+            <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">model-storage</span>
+              <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/shared/model</span>
+      <span class="na">containers</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">vllm-server</span>
+          <span class="na">image</span><span class="pi">:</span> <span class="s">public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:0.9.1-neuronx-py310-sdk2.25.0-ubuntu22.04</span>
+          <span class="na">imagePullPolicy</span><span class="pi">:</span> <span class="s">Always</span>
+          <span class="na">ports</span><span class="pi">:</span>
+            <span class="pi">-</span> <span class="na">containerPort</span><span class="pi">:</span> <span class="s">8080</span>
+              <span class="na">name</span><span class="pi">:</span> <span class="s">http-vllm</span>
+          <span class="na">envFrom</span><span class="pi">:</span>
+            <span class="pi">-</span> <span class="na">configMapRef</span><span class="pi">:</span>
+                <span class="na">name</span><span class="pi">:</span> <span class="s">vllm-shared-config</span>
+            <span class="pi">-</span> <span class="na">secretRef</span><span class="pi">:</span>
+                <span class="na">name</span><span class="pi">:</span> <span class="s">hf-token-secret</span>
+          <span class="na">command</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">/bin/bash"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">-c"</span><span class="pi">]</span>
+          <span class="na">args</span><span class="pi">:</span>
+            <span class="pi">-</span> <span class="pi">|</span>
+              <span class="no">python -m vllm.entrypoints.openai.api_server \</span>
+                <span class="no">--model="$MODEL_NAME" \</span>
+                <span class="no">--max-num-seqs=$MAX_NUM_SEQS \</span>
+                <span class="no">--max-model-len=$MAX_MODEL_LEN \</span>
+                <span class="no">--tensor-parallel-size=$TENSOR_PARALLEL_SIZE \</span>
+                <span class="no">--port=$PORT \</span>
+                <span class="no">--device=neuron \</span>
+                <span class="no">--override-neuron-config='{"enable_bucketing":false}'</span>
+          <span class="na">volumeMounts</span><span class="pi">:</span>
+            <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">model-storage</span>
+              <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/shared/model</span>
+              <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+          <span class="na">resources</span><span class="pi">:</span>
+            <span class="na">limits</span><span class="pi">:</span>
+              <span class="s">aws.amazon.com/neuron</span><span class="pi">:</span> <span class="s">1</span>
+              <span class="na">ephemeral-storage</span><span class="pi">:</span> <span class="s">50Gi</span>
+              <span class="na">cpu</span><span class="pi">:</span> <span class="s2">"</span><span class="s">8000m"</span>
+            <span class="na">requests</span><span class="pi">:</span>
+              <span class="s">aws.amazon.com/neuron</span><span class="pi">:</span> <span class="s">1</span>
+              <span class="na">ephemeral-storage</span><span class="pi">:</span> <span class="s">50Gi</span>
+              <span class="na">cpu</span><span class="pi">:</span> <span class="s2">"</span><span class="s">4000m"</span>
+</code></pre></div>  </div>
+
+</details>
+
+<p><br /></p>
+
+<h1 id="적용과-관찰-컴파일과-캐시-적재">적용과 관찰: 컴파일과 캐시 적재</h1>
+
+<h2 id="배포-직전-노드-상태">배포 직전 노드 상태</h2>
+
+<p>배포 전 노드에는 시스템 파드 9개만 떠 있고 Neuron 리소스는 하나도 쓰이지 않은 상태다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl describe node
+
+<span class="c"># 실행 결과 (발췌)</span>
+Non-terminated Pods:          <span class="o">(</span>9 <span class="k">in </span>total<span class="o">)</span>
+  Namespace     Name                                    CPU Requests  Memory Requests  Age
+  kube-system   aws-node-9nzqc                          50m <span class="o">(</span>0%<span class="o">)</span>      0 <span class="o">(</span>0%<span class="o">)</span>           87m
+  kube-system   coredns-75cb89d95b-6lz4d                100m <span class="o">(</span>1%<span class="o">)</span>     70Mi <span class="o">(</span>0%<span class="o">)</span>        10h
+  kube-system   coredns-75cb89d95b-k6csj                100m <span class="o">(</span>1%<span class="o">)</span>     70Mi <span class="o">(</span>0%<span class="o">)</span>        10h
+  kube-system   k8s-neuron-scheduler-785c8d99f8-gf5r5   0 <span class="o">(</span>0%<span class="o">)</span>        0 <span class="o">(</span>0%<span class="o">)</span>           44m
+  kube-system   kube-proxy-fntzm                        100m <span class="o">(</span>1%<span class="o">)</span>     0 <span class="o">(</span>0%<span class="o">)</span>           87m
+  kube-system   my-scheduler-55f56bc9f8-cd49d           100m <span class="o">(</span>1%<span class="o">)</span>     0 <span class="o">(</span>0%<span class="o">)</span>           44m
+  kube-system   neuron-device-plugin-b7r4x              0 <span class="o">(</span>0%<span class="o">)</span>        0 <span class="o">(</span>0%<span class="o">)</span>           46m
+  kube-system   s3-csi-controller-5df587766f-sr6rn      0 <span class="o">(</span>0%<span class="o">)</span>        0 <span class="o">(</span>0%<span class="o">)</span>           38m
+  kube-system   s3-csi-node-th8j4                       30m <span class="o">(</span>0%<span class="o">)</span>      120Mi <span class="o">(</span>0%<span class="o">)</span>       38m
+
+Allocated resources:
+  Resource                   Requests    Limits
+  <span class="nt">--------</span>                   <span class="nt">--------</span>    <span class="nt">------</span>
+  aws.amazon.com/neuron      0           0        <span class="c"># 아직 아무도 칩을 잡지 않았다</span>
+  aws.amazon.com/neuroncore  0           0
+</code></pre></div></div>
+
+<p>노드 전체 출력과 Capacity 해석은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/#검증-vllm-배포를-받을-수-있는-상태">08-02-01편</a>에 있다. 여기 뜬 파드 9개 중 이 배포에 직접 관여하는 넷은 <a href="#컨트롤러-파드-로그">컨트롤러 파드 로그</a>에서 다시 본다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl apply <span class="nt">-f</span> vllm-deployment.yaml
+deployment.apps/vllm-deployment created
+</code></pre></div></div>
+
+<h2 id="init-container-로그">init container 로그</h2>
+
+<p><code class="highlighter-rouge">kubectl logs</code>에 <code class="highlighter-rouge">-c model-prep</code>을 붙여 init container만 따라간다. 이미지가 8GB대라 pull이 끝날 때까지 <code class="highlighter-rouge">PodInitializing</code>이 반복된다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl logs <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>vllm-server <span class="nt">-c</span> model-prep <span class="nt">-f</span>
+
+<span class="c"># 실행 결과 (발췌). 이미지 pull이 끝날 때까지 같은 줄이 반복된다</span>
+container <span class="s2">"model-prep"</span> <span class="k">in </span>pod <span class="s2">"vllm-deployment-64597fb8cc-hwdd9"</span> is waiting to start: PodInitializing
+...
+</code></pre></div></div>
+
+<h3 id="캐시-미적중과-재컴파일">캐시 미적중과 재컴파일</h3>
+
+<p>컨테이너가 뜨면 vLLM이 플랫폼을 먼저 감지한다. 여기서 <code class="highlighter-rouge">neuron</code>으로 잡혀야 이후가 전부 맞는다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실행 결과 (발췌)</span>
+INFO 09-11 14:08:59 <span class="o">[</span>__init__.py:243] Automatically detected platform neuron.
+WARNING 09-11 14:09:08 <span class="o">[</span>arg_utils.py:1611] device <span class="nb">type</span><span class="o">=</span>neuron is not supported by the V1 Engine. Falling back to V0.
+INFO 09-11 14:09:08 <span class="o">[</span>llm_engine.py:230] Initializing a V0 LLM engine <span class="o">(</span>v0.9.0.dev<span class="o">)</span> with config: <span class="nv">model</span><span class="o">=</span><span class="s1">'tinyLlama/TinyLlama-1.1B-Chat-v1.0'</span>, ... <span class="nv">dtype</span><span class="o">=</span>torch.bfloat16, <span class="nv">max_seq_len</span><span class="o">=</span>1024, <span class="nv">tensor_parallel_size</span><span class="o">=</span>2, ...
+INFO 09-11 14:09:14 <span class="o">[</span>neuronx_distributed.py:843] Neuron Config: <span class="o">{</span><span class="s1">'tp_degree'</span>: 2, <span class="s1">'ctx_batch_size'</span>: 1, <span class="s1">'batch_size'</span>: 4, <span class="s1">'max_context_length'</span>: 1024, <span class="s1">'seq_len'</span>: 1024, <span class="s1">'enable_bucketing'</span>: False, <span class="s1">'is_continuous_batching'</span>: True, <span class="s1">'quantized'</span>: False, <span class="s1">'torch_dtype'</span>: <span class="s1">'bfloat16'</span>, ..., <span class="s1">'pa_num_blocks'</span>: 4, <span class="s1">'pa_block_size'</span>: 1024<span class="o">}</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">Neuron Config:</code> 한 줄이 ConfigMap 값이 NxD Inference 설정으로 번역된 결과다. <code class="highlighter-rouge">tp_degree: 2</code>는 <code class="highlighter-rouge">TENSOR_PARALLEL_SIZE</code>, <code class="highlighter-rouge">batch_size: 4</code>는 <code class="highlighter-rouge">MAX_NUM_SEQS</code>, <code class="highlighter-rouge">seq_len: 1024</code>는 <code class="highlighter-rouge">MAX_MODEL_LEN</code>이 각각 번역된 것이다.</p>
+
+<p>그다음 캐시 판정이 나온다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실행 결과 (발췌)</span>
+WARNING 09-11 14:09:14 <span class="o">[</span>neuronx_distributed.py:249] Exception: <span class="o">[</span>Errno 2] No such file or directory: <span class="s1">'/tmp/cache/neuron_config.json'</span>
+WARNING 09-11 14:09:14 <span class="o">[</span>neuronx_distributed.py:250] Failed to load the model from /tmp/cache. Recompiling...
+INFO:Neuron:Saving the neuron_config to /tmp/cache/
+INFO:Neuron:Generating HLOs <span class="k">for </span>the following models: <span class="o">[</span><span class="s1">'context_encoding_model'</span>, <span class="s1">'token_generation_model'</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>찾는 경로가 <code class="highlighter-rouge">/tmp/cache</code>인 것이 init container에서 <code class="highlighter-rouge">export</code>로 덮어쓴 결과다. 캐시 적중 판정의 실제 기준은 그 디렉터리에 <code class="highlighter-rouge">neuron_config.json</code>이 있는지다. 셸의 <code class="highlighter-rouge">ls -A</code> 분기와 라이브러리의 <code class="highlighter-rouge">neuron_config.json</code> 확인이 이중으로 걸려 있는 셈이다.</p>
+
+<h3 id="hlo-생성과-neuronx-cc-호출">HLO 생성과 neuronx-cc 호출</h3>
+
+<p>컴파일 단위는 모델 하나가 아니라 둘이다. prefill을 담당하는 <code class="highlighter-rouge">context_encoding_model</code>과 decode를 담당하는 <code class="highlighter-rouge">token_generation_model</code>이 따로 컴파일된다. 뒤에서 볼 S3의 <code class="highlighter-rouge">MODULE_...</code> 디렉터리 두 개가 이 둘이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실행 결과 (발췌)</span>
+INFO:Neuron:Generating 1 hlos <span class="k">for </span>key: context_encoding_model
+INFO:Neuron:Finished generating HLO <span class="k">for </span>token_generation_model <span class="k">in </span>1.116992473602295 seconds, input example shape <span class="o">=</span> torch.Size<span class="o">([</span>4, 1]<span class="o">)</span>
+INFO:Neuron:Generated all HLOs <span class="k">in </span>2.8791353702545166 seconds
+INFO:Neuron:Starting compilation <span class="k">for </span>the priority HLO
+INFO:Neuron:<span class="s1">'token_generation_model'</span> is the priority model with bucket rank 0
+2026-09-11 14:10:14.000827:  11  INFO <span class="o">||</span>NEURON_CC_WRAPPER||: Call compiler with cmd: neuronx-cc compile <span class="nt">--framework</span><span class="o">=</span>XLA /tmp/nxd_model/token_generation_model/_tp0_bk0/model.MODULE_56f0d314fda2b6e1e336+617f6939.hlo_module.pb <span class="nt">--output</span> /tmp/nxd_model/token_generation_model/_tp0_bk0/model.MODULE_56f0d314fda2b6e1e336+617f6939.neff <span class="nt">--target</span><span class="o">=</span>trn1 <span class="nt">--auto-cast</span><span class="o">=</span>none <span class="nt">--model-type</span><span class="o">=</span>transformer <span class="nt">--lnc</span><span class="o">=</span>1 <span class="nt">-O2</span> ...
+</code></pre></div></div>
+
+<p>PyTorch 모델이 곧바로 기계어가 되는 것이 아니라 HLO(High Level Optimizer) 그래프를 거친다는 것이 이 두 줄에 드러난다. <code class="highlighter-rouge">neuronx-cc</code>가 받는 것은 <code class="highlighter-rouge">.hlo_module.pb</code>이고 내놓는 것은 <code class="highlighter-rouge">.neff</code>(Neuron Executable File Format)다. <code class="highlighter-rouge">--target=trn1</code>이 대상 하드웨어를, <code class="highlighter-rouge">--lnc=1</code>이 논리 NeuronCore 구성을 지정한다. <code class="highlighter-rouge">token_generation_model</code>이 priority로 먼저 컴파일되는 것은 decode가 토큰마다 반복 실행되는 쪽이기 때문이다.</p>
+
+<p><code class="highlighter-rouge">input example shape = torch.Size([4, 1])</code>은 decode 그래프가 배치 4, 토큰 1개짜리 고정 shape으로 만들어졌다는 뜻이다. prefill 쪽은 <code class="highlighter-rouge">torch.Size([1, 1024])</code>다. 배치가 서로 다른 것은 <code class="highlighter-rouge">ctx_batch_size: 1</code>과 <code class="highlighter-rouge">batch_size: 4</code> 설정에서 온다.</p>
+
+<h3 id="워밍업과-종료">워밍업과 종료</h3>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실행 결과 (발췌)</span>
+INFO:Neuron:Warming up the model.
+INFO:Neuron:Warmup completed <span class="k">in </span>0.4088766574859619 seconds.
+INFO 09-11 14:12:43 <span class="o">[</span>executor_base.py:112] <span class="c"># neuron blocks: 4, # CPU blocks: 0</span>
+INFO 09-11 14:12:43 <span class="o">[</span>executor_base.py:117] Maximum concurrency <span class="k">for </span>1024 tokens per request: 4.00x
+Model compiled successfully!
+nrtucode: internal error: 52 object<span class="o">(</span>s<span class="o">)</span> leaked, improper teardown
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge"># neuron blocks: 4</code>와 <code class="highlighter-rouge">Maximum concurrency ... 4.00x</code>가 KV 캐시 용량과 그로부터 나온 동시성 상한이다. Neuron 경로는 PagedAttention 대신 연속 메모리 레이아웃을 쓰기 때문에, 블록 수가 <code class="highlighter-rouge">max_num_seqs</code>인 4, 블록 크기가 <code class="highlighter-rouge">max_model_len</code>인 1024로 그대로 떨어진다. <code class="highlighter-rouge">neuron_config.json</code>의 <code class="highlighter-rouge">pa_num_blocks: 4</code>, <code class="highlighter-rouge">pa_block_size: 1024</code>가 같은 값이다.</p>
+
+<p><code class="highlighter-rouge">Model compiled successfully!</code>는 init container 스크립트가 파이썬 마지막 줄에서 찍는 문자열이고, 이 뒤에 <code class="highlighter-rouge">cp -r</code>이 돈다. <code class="highlighter-rouge">kubectl describe pod</code>로 본 실행 구간은 다음과 같다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실행 결과 (발췌)</span>
+Init Containers:
+  model-prep:
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Fri, 11 Sep 2026 14:08:55 +0000
+      Finished:     Fri, 11 Sep 2026 14:12:47 +0000
+    Mounts:
+      /shared/model from model-storage <span class="o">(</span>rw<span class="o">)</span>
+</code></pre></div></div>
+
+<p>3분 52초가 다운로드, 컴파일, S3 복사를 합친 시간이다. <code class="highlighter-rouge">Exit Code: 0</code>이 나와야 메인 컨테이너가 시작되고, <code class="highlighter-rouge">Mounts</code>의 <code class="highlighter-rouge">(rw)</code>가 매니페스트에 <code class="highlighter-rouge">readOnly</code>를 적지 않은 결과다.</p>
+
+<h2 id="메인-컨테이너-기동-로그">메인 컨테이너 기동 로그</h2>
+
+<h3 id="캐시-적중">캐시 적중</h3>
+
+<p>메인 컨테이너는 이미지를 다시 받지 않는다. init container가 이미 노드에 내려받아 둔 레이어가 그대로 재사용돼 pull이 180ms에 끝났다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl logs <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>vllm-server <span class="nt">-c</span> vllm-server <span class="nt">-f</span>
+
+<span class="c"># 실행 결과 (발췌)</span>
+INFO 09-11 14:12:53 <span class="o">[</span>api_server.py:1288] vLLM API server version 0.9.0.dev
+INFO 09-11 14:12:54 <span class="o">[</span>cli_args.py:308] non-default args: <span class="o">{</span><span class="s1">'port'</span>: 8080, <span class="s1">'model'</span>: <span class="s1">'tinyLlama/TinyLlama-1.1B-Chat-v1.0'</span>, <span class="s1">'max_model_len'</span>: 1024, <span class="s1">'override_neuron_config'</span>: <span class="o">{</span><span class="s1">'enable_bucketing'</span>: False<span class="o">}</span>, <span class="s1">'tensor_parallel_size'</span>: 2, <span class="s1">'device'</span>: <span class="s1">'neuron'</span>, <span class="s1">'max_num_seqs'</span>: 4<span class="o">}</span>
+INFO 09-11 14:13:01 <span class="o">[</span>api_server.py:266] Started engine process with PID 45
+INFO 09-11 14:13:21 <span class="o">[</span>neuronx_distributed.py:244] Successfully loaded precompiled model artifacts from /shared/model/cache
+INFO 09-11 14:13:21 <span class="o">[</span>executor_base.py:112] <span class="c"># neuron blocks: 4, # CPU blocks: 0</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">non-default args:</code> 줄이 ConfigMap에서 환경변수를 거쳐 CLI 인자까지 값이 온전히 전달됐는지 확인하는 지점이다. 매니페스트의 셸 전개가 실패하면 여기에 값이 빠진다.</p>
+
+<p><code class="highlighter-rouge">Successfully loaded precompiled model artifacts from /shared/model/cache</code>가 init container가 만든 캐시를 메인 컨테이너가 재사용했다는 직접 증거다. 이 줄 대신 <code class="highlighter-rouge">Generating HLOs...</code>가 다시 돌면 캐시 미적중이고, 기동이 컴파일 시간만큼 늘어난다.</p>
+
+<h3 id="openai-호환-라우트">OpenAI 호환 라우트</h3>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실행 결과 (발췌). 주요 라우트만 추렸다</span>
+INFO 09-11 14:13:22 <span class="o">[</span>api_server.py:1353] Starting vLLM API server 0 on http://0.0.0.0:8080
+INFO 09-11 14:13:22 <span class="o">[</span>launcher.py:28] Available routes are:
+INFO 09-11 14:13:22 <span class="o">[</span>launcher.py:36] Route: /health, Methods: GET
+INFO 09-11 14:13:22 <span class="o">[</span>launcher.py:36] Route: /v1/models, Methods: GET
+INFO 09-11 14:13:22 <span class="o">[</span>launcher.py:36] Route: /v1/chat/completions, Methods: POST
+INFO 09-11 14:13:22 <span class="o">[</span>launcher.py:36] Route: /v1/completions, Methods: POST
+INFO 09-11 14:13:22 <span class="o">[</span>launcher.py:36] Route: /metrics, Methods: GET
+INFO:     Started server process <span class="o">[</span>1]
+INFO:     Waiting <span class="k">for </span>application startup.
+INFO:     Application startup complete.
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">0.0.0.0:8080</code>으로 바인딩하므로 파드 IP로 들어오는 요청을 받는다. <code class="highlighter-rouge">/v1/chat/completions</code>와 <code class="highlighter-rouge">/v1/models</code>가 OpenAI 호환 API이고, <code class="highlighter-rouge">/metrics</code>는 이후 Lab의 Prometheus 수집 대상이 된다. <code class="highlighter-rouge">Application startup complete.</code>까지 와야 Service의 엔드포인트로 붙는다.</p>
+
+<h2 id="기동-로그에-남은-경고">기동 로그에 남은 경고</h2>
+
+<p>두 컨테이너 로그에 경고가 여럿 남았지만 어느 것도 배포를 막지 않았다. 로그로 확인한 것과 확인하지 않은 것을 구분해 정리하면 이렇다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>경고</th>
+      <th>확인한 것</th>
+      <th>확인하지 않은 것</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">Failed to import from vllm._C</code> / <code class="highlighter-rouge">Disabled the custom all-reduce kernel because it is not supported on current platform</code></td>
+      <td>CUDA 확장 모듈이 없어서 나는 메시지다. Neuron 빌드에서는 해당 커널을 쓰지 않는다</td>
+      <td>해당 없음</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">device type=neuron is not supported by the V1 Engine. Falling back to V0.</code></td>
+      <td>이 시점 Neuron 경로가 V1 엔진을 쓰지 못하고 V0로 내려앉는다. 뒤이어 <code class="highlighter-rouge">Initializing a V0 LLM engine</code>이 찍힌다</td>
+      <td>V1 지원 시점과 그때의 성능 차이</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">TP degree (2) and KV heads (4) are not divisible. Overriding attention sharding strategy to GQA.CONVERT_TO_MHA!</code></td>
+      <td>어텐션 샤딩 전략이 GQA에서 MHA 변환으로 바뀌었다. TinyLlama는 <code class="highlighter-rouge">num_key_value_heads: 4</code>인 GQA 모델이다</td>
+      <td>메시지에 적힌 판정 조건이 산술과 어긋난다. 4는 2로 나누어떨어지는데도 이 경고가 뜬다. 라이브러리 내부 판정 기준은 확인하지 않았다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">libnccom-net.so load failed. libfabric.so.1: cannot open shared object file</code></td>
+      <td>EFA 라이브러리가 없다는 뜻이다. 이후 컴파일과 워밍업이 끝까지 진행됐다</td>
+      <td>노드 간 collective가 필요한 다중 노드 구성에서의 영향</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nrtucode: internal error: 52 object(s) leaked, improper teardown</code></td>
+      <td><code class="highlighter-rouge">Model compiled successfully!</code> 이후 프로세스 종료 단계에서 나왔고, init container는 <code class="highlighter-rouge">Exit Code: 0</code>으로 끝났다. S3에 올라간 산출물도 정상 로드됐다</td>
+      <td>이 메시지가 무해하다는 공식 확인 문구는 찾지 못했다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">libfabric.so.1</code> 쪽은 이번 구성이 <code class="highlighter-rouge">trn1.2xlarge</code> 한 대, 칩 하나라 노드 간 collective 경로가 아예 쓰이지 않는다는 점과 맞물린다. 텐서 병렬은 칩 내부 코어 둘 사이에서만 일어난다.</p>
+
+<h2 id="s3에-올라간-아티팩트">S3에 올라간 아티팩트</h2>
+
+<p>init container가 끝난 뒤 버킷을 조회하면 <code class="highlighter-rouge">cp -r</code>이 올린 객체가 보인다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>aws s3 <span class="nb">ls </span>s3://<span class="nv">$BUCKET_NAME</span> <span class="nt">--recursive</span> <span class="nt">--human-readable</span>
+2026-09-11 14:12:45    4.6 MiB cache/model.pt
+2026-09-11 14:12:46    6.1 KiB cache/neuron_config.json
+2026-09-11 14:12:47  359 Bytes cache/neuronxcc-2.20.9961.0+0acef03a/MODULE_56f0d314fda2b6e1e336+617f6939/compile_flags.json
+2026-09-11 14:12:47    0 Bytes cache/neuronxcc-2.20.9961.0+0acef03a/MODULE_56f0d314fda2b6e1e336+617f6939/model.done
+2026-09-11 14:12:47  547.2 KiB cache/neuronxcc-2.20.9961.0+0acef03a/MODULE_56f0d314fda2b6e1e336+617f6939/model.hlo_module.pb
+2026-09-11 14:12:47    1.5 MiB cache/neuronxcc-2.20.9961.0+0acef03a/MODULE_56f0d314fda2b6e1e336+617f6939/model.neff
+2026-09-11 14:12:47    1.6 MiB cache/neuronxcc-2.20.9961.0+0acef03a/MODULE_56f0d314fda2b6e1e336+617f6939/wrapped_neff.hlo
+2026-09-11 14:12:46  359 Bytes cache/neuronxcc-2.20.9961.0+0acef03a/MODULE_ae92d68443828ba4e463+ad9e832d/compile_flags.json
+2026-09-11 14:12:46    0 Bytes cache/neuronxcc-2.20.9961.0+0acef03a/MODULE_ae92d68443828ba4e463+ad9e832d/model.done
+2026-09-11 14:12:46  851.5 KiB cache/neuronxcc-2.20.9961.0+0acef03a/MODULE_ae92d68443828ba4e463+ad9e832d/model.hlo_module.pb
+2026-09-11 14:12:46  741.0 KiB cache/neuronxcc-2.20.9961.0+0acef03a/MODULE_ae92d68443828ba4e463+ad9e832d/model.neff
+</code></pre></div></div>
+
+<p>구조를 읽으면 이렇다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">cache/model.pt</code> — 샤딩된 가중치. 4.6MiB로 작은 것은 TinyLlama 1.1B를 bfloat16으로 다룬 결과다</li>
+  <li><code class="highlighter-rouge">cache/neuron_config.json</code> — 컴파일 시점에 확정된 설정. 메인 컨테이너가 캐시 적중을 판정할 때 보는 파일이다</li>
+  <li><code class="highlighter-rouge">cache/neuronxcc-2.20.9961.0+.../</code> — 컴파일러 버전이 경로에 박힌다. 컴파일러가 바뀌면 캐시 경로가 갈라진다</li>
+  <li><code class="highlighter-rouge">MODULE_...</code> 디렉터리 둘 — <code class="highlighter-rouge">context_encoding_model</code>과 <code class="highlighter-rouge">token_generation_model</code>이다. 각각 <code class="highlighter-rouge">model.neff</code>가 실제 실행 바이너리이고, <code class="highlighter-rouge">model.done</code>은 0바이트 완료 표식이다</li>
+</ul>
+
+<p>객체 키가 전부 <code class="highlighter-rouge">cache/</code>로 시작하는 것이 <code class="highlighter-rouge">S3_PREFIX: compiled-models</code>가 쓰이지 않았다는 증거다. <code class="highlighter-rouge">cache/</code>는 <code class="highlighter-rouge">/shared/model/cache</code>라는 마운트 경로에서 온 것이다.</p>
+
+<p><br /></p>
+
+<h1 id="노드-안에서-본-실행-상태-해부">노드 안에서 본 실행 상태 해부</h1>
+
+<p>여기부터는 세션 매니저로 <code class="highlighter-rouge">trn1.2xlarge</code> 워커 노드에 직접 붙어서 확인한 내용이다.</p>
+
+<h2 id="컨테이너-이미지와-vllm-프로세스">컨테이너 이미지와 vLLM 프로세스</h2>
+
+<p>노드의 containerd 이미지 목록에 vLLM 이미지가 태그와 다이제스트 두 형태로 잡힌다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>ec2-user@ip-10-0-5-100 ~]<span class="nv">$ </span><span class="nb">sudo </span>ctr <span class="nt">-n</span> k8s.io images <span class="nb">ls</span> | <span class="nb">grep</span> <span class="nt">-i</span> vllm
+
+<span class="c"># 실행 결과 (발췌). 같은 다이제스트가 태그 참조와 다이제스트 참조 두 줄로 보인다</span>
+public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:0.9.1-neuronx-py310-sdk2.25.0-ubuntu22.04   sha256:01f0f7b1e2cf256019a80c16712e79a5f254b04a3a77dbf8ac196de4ee380928 7.9 GiB   linux/amd64
+</code></pre></div></div>
+
+<p>프로세스를 보면 매니페스트의 <code class="highlighter-rouge">args</code>가 그대로 명령행으로 펼쳐져 있다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>ec2-user@ip-10-0-5-100 ~]<span class="nv">$ </span>ps <span class="nt">-ef</span> | <span class="nb">grep</span> <span class="nt">-i</span> vllm
+
+<span class="c"># 실행 결과 (발췌)</span>
+ec2-user   34071   34024  0 14:06 ?  00:00:00 /mountpoint-s3/bin/mount-s3 vllm-models-cache-123456789012 /dev/fd/3 <span class="nt">--allow-root</span> <span class="nt">--foreground</span> <span class="nt">--user-agent-prefix</span><span class="o">=</span>s3-csi-driver/2.8.0 credential-source#driver k8s/v1.33.13-eks-4cc7921 md/install#helm
+root       36890   34196  0 14:12 ?  00:00:09 python <span class="nt">-m</span> vllm.entrypoints.openai.api_server <span class="nt">--model</span><span class="o">=</span>tinyLlama/TinyLlama-1.1B-Chat-v1.0 <span class="nt">--max-num-seqs</span><span class="o">=</span>4 <span class="nt">--max-model-len</span><span class="o">=</span>1024 <span class="nt">--tensor-parallel-size</span><span class="o">=</span>2 <span class="nt">--port</span><span class="o">=</span>8080 <span class="nt">--device</span><span class="o">=</span>neuron <span class="nt">--override-neuron-config</span><span class="o">={</span><span class="s2">"enable_bucketing"</span>:false<span class="o">}</span>
+</code></pre></div></div>
+
+<p>ConfigMap에 넣은 값이 셸을 거쳐 전부 CLI 플래그로 전개됐다. <code class="highlighter-rouge">--device=neuron</code>이 Neuron 백엔드를 쓰게 하는 인자다. vLLM 프로세스는 <code class="highlighter-rouge">root</code>로 돌고, <code class="highlighter-rouge">mount-s3</code>는 <code class="highlighter-rouge">ec2-user</code>로 돈다.</p>
+
+<h2 id="neuron-ls가-잡는-pid">neuron-ls가 잡는 PID</h2>
+
+<p><code class="highlighter-rouge">neuron-ls</code>는 칩과 코어, 그리고 그 디바이스를 연 프로세스를 함께 보여 준다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>ec2-user@ip-10-0-5-100 ~]<span class="nv">$ </span>neuron-ls
+instance-type: trn1.2xlarge
+instance-id: i-0abc1234def56789
++--------+--------+----------+--------+--------------+-------+----------+------+------------------------------------------+---------+
+| NEURON | NEURON |  NEURON  | NEURON |     PCI      |  PID  |   CPU    | NUMA |                 COMMAND                  | RUNTIME |
+| DEVICE | CORES  | CORE IDS | MEMORY |     BDF      |       | AFFINITY | NODE |                                          | VERSION |
++--------+--------+----------+--------+--------------+-------+----------+------+------------------------------------------+---------+
+| 0      | 2      | 0-1      | 32 GB  | 0000:00:1e.0 | 37021 | 0-7      | <span class="nt">-1</span>   | /opt/conda/bin/python <span class="nt">-c</span> from multipr... | 2.27.23 |
++--------+--------+----------+--------+--------------+-------+----------+------+------------------------------------------+---------+
+</code></pre></div></div>
+
+<p>칩 하나에 코어 둘, 코어 ID <code class="highlighter-rouge">0-1</code>이 잡힌 것은 <code class="highlighter-rouge">NEURON_RT_VISIBLE_CORES: "0-1"</code>과 일치한다. <code class="highlighter-rouge">neuron-ls</code> 출력 각 열의 의미는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/#neuron-ls-한-줄이-담은-정보">08-02-02편</a>에 정리해 두었다.</p>
+
+<p>눈에 띄는 것은 PID다. <code class="highlighter-rouge">ps -ef</code>가 보여 준 API 서버는 36890인데 <code class="highlighter-rouge">neuron-ls</code>의 PID 열에는 37021이 찍힌다. COMMAND 열도 <code class="highlighter-rouge">api_server</code>가 아니라 <code class="highlighter-rouge">python -c from multipr...</code>로 잘려 있다. 디바이스를 실제로 연 것은 API 서버 프로세스가 아니라 그것이 <code class="highlighter-rouge">multiprocessing</code>으로 띄운 별도 프로세스라는 뜻이다. 기동 로그의 <code class="highlighter-rouge">Started engine process with PID 45</code>도 같은 구조를 가리킨다 — 컨테이너 안 PID 45가 엔진 프로세스이고, 노드에서는 다른 번호로 보인다. 다만 36890과 37021의 부모 자식 관계를 직접 확인하지는 않았다.</p>
+
+<h2 id="mount가-보여주는-fuse-마운트-두-개">mount가 보여주는 FUSE 마운트 두 개</h2>
+
+<p><code class="highlighter-rouge">mount</code> 출력에서 <code class="highlighter-rouge">s3</code>를 걸러 보면 <code class="highlighter-rouge">mountpoint-s3</code> 항목이 두 줄 나온다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>ec2-user@ip-10-0-5-100 ~]<span class="nv">$ </span>mount | <span class="nb">grep</span> <span class="nt">-i</span> s3
+
+<span class="c"># 실행 결과</span>
+mountpoint-s3 on /var/lib/kubelet/plugins/s3.csi.aws.com/mnt/mp-llbbw <span class="nb">type </span>fuse <span class="o">(</span>rw,nosuid,nodev,noatime,user_id<span class="o">=</span>0,group_id<span class="o">=</span>0,default_permissions,allow_other<span class="o">)</span>
+mountpoint-s3 on /var/lib/kubelet/pods/&lt;pod-uid&gt;/volumes/kubernetes.io~csi/s3-model-cache-pv/mount <span class="nb">type </span>fuse <span class="o">(</span>rw,nosuid,nodev,noatime,user_id<span class="o">=</span>0,group_id<span class="o">=</span>0,default_permissions,allow_other<span class="o">)</span>
+</code></pre></div></div>
+
+<p>두 줄이지만 FUSE 프로세스는 하나다. 두 번째 줄은 CSI 드라이버가 첫 번째 마운트 지점을 파드 볼륨 경로로 다시 건 bind mount이고, 드라이버 문서도 target path로의 bind mount라고 적고 있다. 노드에서 프로세스를 세어 보면 <code class="highlighter-rouge">mount-s3</code>는 PID 34071 하나뿐이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>ec2-user@ip-10-0-5-100 ~]<span class="nv">$ </span>ps <span class="nt">-ef</span> | <span class="nb">grep</span> <span class="nt">-i</span> vllm
+
+<span class="c"># 실행 결과 (발췌). mount-s3 프로세스는 이 한 줄이 전부다</span>
+ec2-user   34071   34024  0 14:06 ?  00:00:00 /mountpoint-s3/bin/mount-s3 vllm-models-cache-123456789012 /dev/fd/3 <span class="nt">--allow-root</span> <span class="nt">--foreground</span> ...
+</code></pre></div></div>
+
+<p>CSI 드라이버 v2는 Mountpoint 프로세스를 호스트 systemd가 아니라 <code class="highlighter-rouge">mount-s3</code> 네임스페이스의 비특권 파드 안에서 띄우고, 같은 볼륨과 같은 자격증명을 쓰는 워크로드끼리 그 파드를 공유한다. 마운트 지점마다 FUSE 데몬이 따로 뜨는 구조가 아니다. 여기서 그 파드가 <code class="highlighter-rouge">mp-llbbw</code>이고, 첫 번째 줄의 경로에 그 이름이 그대로 들어 있다.</p>
+
+<h2 id="mountpoint-for-s3가-파일-시스템으로-보이는-구조">Mountpoint for S3가 파일 시스템으로 보이는 구조</h2>
+
+<p><code class="highlighter-rouge">type fuse</code>가 이 마운트의 성격을 말해 준다. FUSE(Filesystem in Userspace)는 파일 시스템 구현을 커널이 아니라 유저스페이스 프로세스에 두는 커널 인터페이스다. 컨테이너 안의 프로세스가 <code class="highlighter-rouge">/shared/model/cache/model.pt</code>를 열면 그 시스템 콜이 커널 FUSE 계층을 거쳐 <code class="highlighter-rouge">mount-s3</code> 프로세스로 전달되고, 그 프로세스가 S3의 <code class="highlighter-rouge">GetObject</code>, <code class="highlighter-rouge">PutObject</code>, <code class="highlighter-rouge">ListObjectsV2</code> 호출로 번역한다.</p>
+
+<p>블록 디바이스가 없으므로 <code class="highlighter-rouge">df</code>에 파일 시스템처럼 보여도 실제로 디스크가 붙은 것은 아니다. 마운트 옵션의 <code class="highlighter-rouge">allow_other</code>와 <code class="highlighter-rouge">default_permissions</code>는 마운트를 띄운 사용자가 아닌 다른 사용자도 접근할 수 있게 하는 설정인데, <code class="highlighter-rouge">mount-s3</code>가 <code class="highlighter-rouge">ec2-user</code>로 도는데 vLLM 프로세스는 <code class="highlighter-rouge">root</code>인 이 구성에서 필요한 옵션이다.</p>
+
+<h2 id="pv-capacity가-강제되지-않는-이유">PV capacity가 강제되지 않는 이유</h2>
+
+<p>PV의 <code class="highlighter-rouge">capacity: 100Gi</code>는 PV와 PVC를 바인딩하는 조건을 만족시키기 위한 형식값이다. 스케줄러는 이 값을 보지 않는다. 쿠버네티스에서 바인딩을 담당하는 것은 컨트롤 플레인의 컨트롤 루프이고, 이 루프가 PVC의 <code class="highlighter-rouge">resources.requests.storage</code> 이상인 PV를 찾아 묶는다. 공식 문서 표현으로 사용자는 “요청한 것 이상을 받고, 볼륨은 요청보다 클 수 있다”. 이 구성은 거기에 더해 <code class="highlighter-rouge">volumeName</code>으로 PV를 직접 지목하므로 후보를 고를 여지도 없다.</p>
+
+<p>그리고 Mountpoint for S3 CSI 드라이버는 이 숫자를 해석조차 하지 않는다. 드라이버 저장소의 static provisioning 예제 YAML은 PV와 PVC 양쪽 <code class="highlighter-rouge">storage</code> 필드에 <code class="highlighter-rouge"># Ignored, required</code> 주석을 달아 두었다. 필요하지만 무시된다는 뜻이다. 100Gi를 넘겨 써도 막히지 않고, 1Gi로 적어도 S3 사용량이 줄지 않는다.</p>
+
+<p><code class="highlighter-rouge">kubectl get pvc,pv</code> 출력이 이 상태와 맞는다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl get pvc,pv
+
+<span class="c"># 실행 결과 (발췌). PV의 CAPACITY는 100Gi인데 PVC의 CAPACITY는 0이다</span>
+NAME                                       STATUS    VOLUME              CAPACITY   ACCESS MODES   AGE
+persistentvolumeclaim/s3-model-cache-pvc   Pending   s3-model-cache-pv   0                         3s
+
+NAME                                 CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      AGE
+persistentvolume/s3-model-cache-pv   100Gi      RWX            Retain           Available
+</code></pre></div></div>
+
+<p>PVC의 CAPACITY 열이 <code class="highlighter-rouge">0</code>인 것은 그 값이 <code class="highlighter-rouge">spec</code>이 아니라 <code class="highlighter-rouge">status.capacity</code>에서 오기 때문이다. 바인딩이 끝나야 채워지므로 apply 직후 스냅샷에서는 비어 있다. 즉 이 숫자는 PVC가 얼마를 쓸 수 있는지가 아니라, 바인딩 이후 PV에서 복사된 값을 그대로 보여 주는 열이다.</p>
+
+<h2 id="posix와-갈리는-지점">POSIX와 갈리는 지점</h2>
+
+<p>ext4 같은 일반 파일 시스템에서는 <code class="highlighter-rouge">open()</code>으로 얻은 파일 디스크립터에 파일 오프셋이 딸려 온다. <code class="highlighter-rouge">write()</code>는 그 오프셋에 쓰고 오프셋을 전진시키며, <code class="highlighter-rouge">lseek()</code>으로 임의 위치로 옮겨 덮어쓸 수도 있고, <code class="highlighter-rouge">O_APPEND</code>로 열면 매 <code class="highlighter-rouge">write()</code>가 파일 끝으로 이동해 덧붙인다. 로그 파일에 한 줄씩 계속 쓰는 것, 체크포인트를 열어 둔 채 주기적으로 flush 하는 것이 전부 이 의미론 위에 있다. 파일이 열려 있는 동안에도 부분적으로 갱신되고, 다른 프로세스가 그 중간 상태를 읽을 수 있다.</p>
+
+<p>Mountpoint for S3는 이 중 어느 것도 제공하지 않는다. 공식 SEMANTICS 문서가 못 박는다 — 쓰기는 항상 파일 처음부터 시작해야 하고 순차적이어야 하며, 이전 쓰기의 끝이 아닌 위치로 seek한 뒤의 쓰기는 실패한다. 기존 파일 수정은 기본적으로 금지되고 <code class="highlighter-rouge">--allow-overwrite</code>를 켜도 <code class="highlighter-rouge">O_TRUNC</code>로 통째로 갈아엎는 것만 허용된다. 게다가 새 객체는 close나 <code class="highlighter-rouge">fsync</code> 이후에야 다른 S3 클라이언트에 보이고, 쓰는 중인 파일은 읽을 수 없다. <code class="highlighter-rouge">fallocate</code>, hard link, symbolic link, <code class="highlighter-rouge">lockf</code>, 확장 속성도 지원하지 않는다.</p>
+
+<p>이유는 구조적이다. S3의 쓰기 단위는 바이트 범위가 아니라 객체 전체(<code class="highlighter-rouge">PutObject</code> 또는 멀티파트 업로드)다. Mountpoint의 <code class="highlighter-rouge">write()</code>는 멀티파트 업로드의 파트를 채우는 동작이고 <code class="highlighter-rouge">close()</code>가 <code class="highlighter-rouge">CompleteMultipartUpload</code>에 해당한다. 중간으로 되돌아가 쓰는 연산에 대응할 S3 API가 없다.</p>
+
+<p>그래서 init container가 <code class="highlighter-rouge">cp -r</code>로 통짜 복사만 하는 것이 이 제약과 정확히 맞물린다. 새 파일을 처음부터 끝까지 한 번에 쓰고 닫는 패턴이기 때문이다. 반대로 컴파일러가 캐시 디렉터리에 파일을 열어 놓고 점진적으로 갱신하는 동작을 S3 마운트 위에서 직접 하게 두었다면 같은 방식으로는 동작하지 않았을 것이다. <code class="highlighter-rouge">NEURON_COMPILE_CACHE_URL</code>을 init container 안에서만 <code class="highlighter-rouge">/tmp/cache</code>로 덮어쓴 구성이 그 지점을 비켜 간다.</p>
+
+<p><code class="highlighter-rouge">mount-s3</code>의 로그에도 미지원 연산이 경고로 남는다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실행 결과 (발췌)</span>
+2026-09-11T14:12:44.733211Z  WARN ThreadId<span class="o">(</span>08<span class="o">)</span> getxattr<span class="o">{</span><span class="nv">req</span><span class="o">=</span>34 <span class="nv">ino</span><span class="o">=</span>3 <span class="nv">name</span><span class="o">=</span><span class="s2">"security.capability"</span> <span class="nv">pid</span><span class="o">=</span>36827<span class="o">}</span>: mountpoint_s3_fs::fuse: getxattr failed: operation not supported by Mountpoint
+</code></pre></div></div>
+
+<p>확장 속성 조회가 실패한 것인데, 컴파일 산출물 복사와 이후 로드에는 영향이 없었다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-aws-workshop-s3-cache.png" alt="S3에 적재된 컴파일 캐시" class="align-center" /></p>
+<center><sup>직접 캡처. 버킷명과 계정 식별자는 익명화했다.</sup></center>
+
+<p><br /></p>
+
+<h1 id="검증-파드에-실제로-적용된-설정">검증: 파드에 실제로 적용된 설정</h1>
+
+<h2 id="schedulername이-적용됐는지">schedulerName이 적용됐는지</h2>
+
+<p><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/#스케줄러-확장이-개입하는-지점">08-02-02편</a>에서 두 번째 스케줄러를 띄워 놓고도 이번 실습 구성에서는 차이가 드러나지 않는다고 적었다. 그 스케줄러가 실제로 이 파드를 잡았는지는 세 군데에서 확인된다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 파드 스펙에 지정된 스케줄러 이름</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl get pod <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>vllm-server <span class="nt">-o</span> yaml | <span class="nb">grep</span> <span class="nt">-i</span> scheduler
+    schedulerName: my-scheduler
+
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl get pod <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>vllm-server <span class="nt">-owide</span>
+NAME                               READY   STATUS    RESTARTS   AGE   IP           NODE
+vllm-deployment-64597fb8cc-hwdd9   1/1     Running   0          13m   10.0.5.203   ip-10-0-5-100.us-west-2.compute.internal
+</code></pre></div></div>
+
+<p>두 번째 증거는 <code class="highlighter-rouge">kubectl describe pod</code>의 Events다. <code class="highlighter-rouge">From</code> 열이 <code class="highlighter-rouge">default-scheduler</code>가 아니라 <code class="highlighter-rouge">my-scheduler</code>다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실행 결과 (발췌)</span>
+Events:
+  Type    Reason     Age    From          Message
+  <span class="nt">----</span>    <span class="nt">------</span>     <span class="nt">----</span>   <span class="nt">----</span>          <span class="nt">-------</span>
+  Normal  Scheduled  13m    my-scheduler  Successfully assigned default/vllm-deployment-64597fb8cc-hwdd9 to ip-10-0-5-100.us-west-2.compute.internal
+  Normal  Pulling    13m    kubelet       spec.initContainers<span class="o">{</span>model-prep<span class="o">}</span>: Pulling image <span class="s2">"public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:..."</span>
+  Normal  Pulled     10m    kubelet       spec.initContainers<span class="o">{</span>model-prep<span class="o">}</span>: Successfully pulled image ... <span class="k">in </span>2m48.008s. Image size: 8454539505 bytes.
+  Normal  Pulled     6m48s  kubelet       spec.containers<span class="o">{</span>vllm-server<span class="o">}</span>: Successfully pulled image ... <span class="k">in </span>180ms. Image size: 8454539505 bytes.
+</code></pre></div></div>
+
+<p>세 번째는 스케줄러 자신의 로그다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl logs <span class="nt">-n</span> kube-system <span class="nt">-l</span> app.kubernetes.io/component<span class="o">=</span>my-scheduler
+
+<span class="c"># 실행 결과 (발췌). TLS 부트스트랩 줄은 생략했다</span>
+I0911 13:21:01.710342       1 leaderelection.go:268] successfully acquired lease kube-system/my-scheduler
+I0911 14:06:03.520793       1 schedule_one.go:314] <span class="s2">"Successfully bound pod to node"</span> <span class="nv">pod</span><span class="o">=</span><span class="s2">"default/vllm-deployment-64597fb8cc-hwdd9"</span> <span class="nv">node</span><span class="o">=</span><span class="s2">"ip-10-0-5-100.us-west-2.compute.internal"</span> <span class="nv">evaluatedNodes</span><span class="o">=</span>1 <span class="nv">feasibleNodes</span><span class="o">=</span>1
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">feasibleNodes=1</code>이 배치 가능한 노드를 하나 찾았다는 뜻이다. 여기가 <code class="highlighter-rouge">0</code>이면 파드가 <code class="highlighter-rouge">Pending</code>으로 남는다.</p>
+
+<p>describe pod의 Tolerations도 볼 만하다. 매니페스트에 적은 것은 <code class="highlighter-rouge">node.kubernetes.io/disk-pressure</code> 하나인데 출력에는 <code class="highlighter-rouge">aws.amazon.com/neuron:NoSchedule</code>이 함께 있다. <code class="highlighter-rouge">aws.amazon.com/neuron</code> 확장 리소스를 요청한 파드에 ExtendedResourceToleration 어드미션이 자동으로 붙여 준 것이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실행 결과 (발췌)</span>
+Node-Selectors:              alpha.eksctl.io/nodegroup-name<span class="o">=</span>neuron-trn1-2x
+Tolerations:                 aws.amazon.com/neuron:NoSchedule <span class="nv">op</span><span class="o">=</span>Exists
+                             node.kubernetes.io/disk-pressure:NoSchedule <span class="nv">op</span><span class="o">=</span>Exists
+                             node.kubernetes.io/not-ready:NoExecute <span class="nv">op</span><span class="o">=</span>Exists <span class="k">for </span>300s
+                             node.kubernetes.io/unreachable:NoExecute <span class="nv">op</span><span class="o">=</span>Exists <span class="k">for </span>300s
+</code></pre></div></div>
+
+<h2 id="컨테이너-환경변수">컨테이너 환경변수</h2>
+
+<p>ConfigMap이 <code class="highlighter-rouge">envFrom</code>으로 들어갔는지 컨테이너 안에서 직접 확인한다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl <span class="nb">exec</span> <span class="nt">-it</span> deploy/vllm-deployment <span class="nt">-c</span> vllm-server <span class="nt">--</span> env | <span class="nb">grep</span> <span class="nt">-E</span> <span class="s1">'NEURON|VLLM|MAX|TENSOR'</span>
+<span class="nv">VLLM_TARGET_DEVICE</span><span class="o">=</span>neuron
+<span class="nv">NEURON_LOGICAL_NC_CONFIG</span><span class="o">=</span>1
+<span class="nv">NEURON_RT_LOG_LEVEL</span><span class="o">=</span>ERROR
+<span class="nv">NEURON_RT_VISIBLE_CORES</span><span class="o">=</span>0-1
+<span class="nv">TENSOR_PARALLEL_SIZE</span><span class="o">=</span>2
+<span class="nv">NEURON_COMPILE_CACHE_URL</span><span class="o">=</span>/shared/model/cache
+<span class="nv">NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS</span><span class="o">=</span>4
+<span class="nv">MAX_MODEL_LEN</span><span class="o">=</span>1024
+<span class="nv">MAX_NUM_SEQS</span><span class="o">=</span>4
+<span class="nv">NEURON_COMPILED_ARTIFACTS</span><span class="o">=</span>/shared/model/cache
+<span class="nv">VLLM_NEURON_FRAMEWORK</span><span class="o">=</span>neuronx-distributed-inference
+</code></pre></div></div>
+
+<p>ConfigMap에 없는 변수가 둘 섞여 있다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">VLLM_TARGET_DEVICE=neuron</code> — 컨테이너 이미지에 박혀 있는 값이다</li>
+  <li><code class="highlighter-rouge">NEURON_LOGICAL_NC_CONFIG=1</code> — device plugin이 할당하면서 주입한 값이다. 아래 <a href="#neuron-device-plugin의-allocate">neuron device plugin의 Allocate</a> 로그가 그 사실을 직접 찍는다</li>
+</ul>
+
+<p>LNC(Logical NeuronCore)는 물리 코어 여러 개를 논리 코어 하나로 묶는 설정으로 Trainium2 이상에서 의미를 갖고 Trn2 기본값이 2다. <code class="highlighter-rouge">trn1</code>은 코어를 묶지 않으므로 1이 붙는다.</p>
+
+<p>메인 컨테이너의 <code class="highlighter-rouge">NEURON_COMPILE_CACHE_URL</code>은 <code class="highlighter-rouge">/shared/model/cache</code> 그대로다. init container에서만 <code class="highlighter-rouge">/tmp/cache</code>로 덮어썼다는 점이 여기서도 확인된다.</p>
+
+<h2 id="마운트된-캐시-디렉터리">마운트된 캐시 디렉터리</h2>
+
+<p>메인 컨테이너 안에서 본 <code class="highlighter-rouge">/shared/model</code>은 S3 버킷 내용을 그대로 보여 준다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl <span class="nb">exec</span> <span class="nt">-it</span> deploy/vllm-deployment <span class="nt">-c</span> vllm-server <span class="nt">--</span> <span class="nb">ls</span> <span class="nt">-R</span> <span class="nt">-1</span> /shared/model
+/shared/model:
+cache
+
+/shared/model/cache:
+model.pt
+neuron_config.json
+neuronxcc-2.20.9961.0+0acef03a
+
+/shared/model/cache/neuronxcc-2.20.9961.0+0acef03a:
+MODULE_56f0d314fda2b6e1e336+617f6939
+MODULE_ae92d68443828ba4e463+ad9e832d
+
+/shared/model/cache/neuronxcc-2.20.9961.0+0acef03a/MODULE_56f0d314fda2b6e1e336+617f6939:
+compile_flags.json
+model.done
+model.hlo_module.pb
+model.neff
+wrapped_neff.hlo
+
+/shared/model/cache/neuronxcc-2.20.9961.0+0acef03a/MODULE_ae92d68443828ba4e463+ad9e832d:
+compile_flags.json
+model.done
+model.hlo_module.pb
+model.neff
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">aws s3 ls</code>가 보여 준 객체 키와 디렉터리 트리가 정확히 대응한다. 객체 키의 <code class="highlighter-rouge">/</code>가 디렉터리 경계로 번역된 것이고, 실제로 S3에 디렉터리라는 오브젝트가 있는 것은 아니다.</p>
+
+<h2 id="neuron_configjson에-확정된-값">neuron_config.json에 확정된 값</h2>
+
+<p>캐시 적중 여부를 판정하는 파일이자 컴파일 시점 설정이 고정된 결과다. 바깥은 Hugging Face <code class="highlighter-rouge">LlamaConfig</code> 원본이고, 안쪽 <code class="highlighter-rouge">"neuron_config"</code> 블록이 NxD Inference가 확정한 값이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl <span class="nb">exec</span> <span class="nt">-it</span> deploy/vllm-deployment <span class="nt">-c</span> vllm-server <span class="nt">--</span> <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nb">cat</span> /shared/model/cache/neuron_config.json
+</code></pre></div></div>
+
+<p>ConfigMap과 CLI 인자가 어디로 흘러 들어갔는지만 추리면 이렇다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th><code class="highlighter-rouge">neuron_config</code> 키</th>
+      <th>값</th>
+      <th>출처</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">tp_degree</code>, <code class="highlighter-rouge">world_size</code>, <code class="highlighter-rouge">local_ranks_size</code></td>
+      <td><code class="highlighter-rouge">2</code></td>
+      <td><code class="highlighter-rouge">TENSOR_PARALLEL_SIZE=2</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">batch_size</code>, <code class="highlighter-rouge">max_batch_size</code>, <code class="highlighter-rouge">kv_cache_batch_size</code>, <code class="highlighter-rouge">tkg_batch_size</code></td>
+      <td><code class="highlighter-rouge">4</code></td>
+      <td><code class="highlighter-rouge">MAX_NUM_SEQS=4</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">seq_len</code>, <code class="highlighter-rouge">max_length</code>, <code class="highlighter-rouge">max_context_length</code>, <code class="highlighter-rouge">n_positions</code></td>
+      <td><code class="highlighter-rouge">1024</code></td>
+      <td><code class="highlighter-rouge">MAX_MODEL_LEN=1024</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">buckets</code></td>
+      <td><code class="highlighter-rouge">[1024]</code></td>
+      <td><code class="highlighter-rouge">enable_bucketing: false</code>의 결과. 길이 구간이 하나뿐이다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">enable_bucketing</code></td>
+      <td><code class="highlighter-rouge">false</code></td>
+      <td><code class="highlighter-rouge">--override-neuron-config</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">torch_dtype</code>, <code class="highlighter-rouge">overrides_torch_dtype</code></td>
+      <td><code class="highlighter-rouge">bfloat16</code>, <code class="highlighter-rouge">true</code></td>
+      <td>기동 로그의 <code class="highlighter-rouge">dtype=torch.bfloat16</code>. 체크포인트가 float32라 변환 경고가 대량으로 뜬 이유이기도 하다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">is_continuous_batching</code></td>
+      <td><code class="highlighter-rouge">true</code></td>
+      <td>vLLM continuous batching 사용</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">is_chunked_prefill</code>, <code class="highlighter-rouge">is_prefix_caching</code></td>
+      <td><code class="highlighter-rouge">false</code></td>
+      <td>이번 구성에서 쓰지 않는 최적화</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">ctx_batch_size</code></td>
+      <td><code class="highlighter-rouge">1</code></td>
+      <td>prefill은 배치 1, decode는 배치 4. 컴파일 모듈이 둘로 갈린 이유</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">pa_num_blocks</code>, <code class="highlighter-rouge">pa_block_size</code></td>
+      <td><code class="highlighter-rouge">4</code>, <code class="highlighter-rouge">1024</code></td>
+      <td>기동 로그의 <code class="highlighter-rouge"># neuron blocks: 4</code>와 <code class="highlighter-rouge">Maximum concurrency ... 4.00x</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">logical_nc_config</code></td>
+      <td><code class="highlighter-rouge">1</code></td>
+      <td>device plugin이 주입한 <code class="highlighter-rouge">NEURON_LOGICAL_NC_CONFIG=1</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">quantized</code>, <code class="highlighter-rouge">sequence_parallel_enabled</code>, <code class="highlighter-rouge">flash_decoding_enabled</code>, <code class="highlighter-rouge">enable_fused_speculation</code></td>
+      <td>전부 <code class="highlighter-rouge">false</code></td>
+      <td>이번 Lab에서 쓰지 않은 최적화들</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">on_device_sampling_config</code>는 따로 볼 만하다.</p>
+
+<div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="s2">"on_device_sampling_config"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+  </span><span class="s2">"deterministic"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"do_sample"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"dynamic"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"global_topk"</span><span class="p">:</span><span class="w"> </span><span class="mi">256</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"temperature"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"top_k"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"top_p"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div></div>
+
+<p>Neuron은 샘플링을 디바이스 위에서 수행한다. <code class="highlighter-rouge">dynamic: true</code>라 요청마다 다른 <code class="highlighter-rouge">top_k</code>, <code class="highlighter-rouge">top_p</code>, <code class="highlighter-rouge">temperature</code>는 반영되지만, 그 세 개 말고 다른 샘플링 파라미터는 반영되지 않는다. 기동 로그에도 같은 취지의 경고가 있다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실행 결과 (발췌)</span>
+WARNING 09-11 14:09:14 <span class="o">[</span>neuron_model_runner.py:151] On-device sampling is turned on <span class="k">in </span>Neuron by default, only top_k, top_p, and temperature are current supported sampling parameters. To turn off the on-device sampling, please <span class="nb">set </span>the environment variable <span class="nv">NEURON_ON_DEVICE_SAMPLING_DISABLED</span><span class="o">=</span>1.
+</code></pre></div></div>
+
+<p>바깥 <code class="highlighter-rouge">LlamaConfig</code> 블록은 모델 자체의 형상이라 컴파일 설정과 무관해 보이지만, 두 군데가 앞의 내용과 맞물린다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">num_attention_heads: 32</code>와 <code class="highlighter-rouge">num_key_value_heads: 4</code> — TinyLlama가 GQA 모델이라는 뜻이다. 어텐션 샤딩 전략을 MHA 변환으로 바꾼다는 <a href="#기동-로그에-남은-경고">기동 로그 경고</a>가 판정에 쓴 값이 이 둘이다</li>
+  <li><code class="highlighter-rouge">max_position_embeddings: 2048</code> — 모델이 지원하는 최대 길이는 2048인데 <code class="highlighter-rouge">seq_len</code>은 1024로 확정됐다. <code class="highlighter-rouge">MAX_MODEL_LEN=1024</code>로 모델 능력보다 짧게 잘라 컴파일한 것이고, 그만큼 KV 캐시도 작아진다</li>
+</ul>
+
+<p>나머지 <code class="highlighter-rouge">num_hidden_layers: 22</code>, <code class="highlighter-rouge">hidden_size: 2048</code>, <code class="highlighter-rouge">vocab_size: 32000</code>은 TinyLlama-1.1B 체크포인트 값 그대로이고, 컴파일 과정에서 바뀌지 않는다.</p>
+
+<details>
+  <summary><b>neuron_config.json 전체</b></summary>
+
+  <div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+  </span><span class="s2">"_attn_implementation_autoset"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"_name_or_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tinyLlama/TinyLlama-1.1B-Chat-v1.0"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"add_cross_attention"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"architectures"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w">
+    </span><span class="s2">"LlamaForCausalLM"</span><span class="w">
+  </span><span class="p">],</span><span class="w">
+  </span><span class="s2">"attention_bias"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"attention_dropout"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.0</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"attribute_map"</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span><span class="w">
+  </span><span class="s2">"bad_words_ids"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"begin_suppress_tokens"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"bos_token_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"chunk_size_feed_forward"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"cross_attention_hidden_size"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"decoder_start_token_id"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"diversity_penalty"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.0</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"do_sample"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"early_stopping"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"encoder_no_repeat_ngram_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"eos_token_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"exponential_decay_length_penalty"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"finetuning_task"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"forced_bos_token_id"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"forced_eos_token_id"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"fused_spec_config"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"head_dim"</span><span class="p">:</span><span class="w"> </span><span class="mi">64</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"hidden_act"</span><span class="p">:</span><span class="w"> </span><span class="s2">"silu"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"hidden_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">2048</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"id2label"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+    </span><span class="s2">"0"</span><span class="p">:</span><span class="w"> </span><span class="s2">"LABEL_0"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"1"</span><span class="p">:</span><span class="w"> </span><span class="s2">"LABEL_1"</span><span class="w">
+  </span><span class="p">},</span><span class="w">
+  </span><span class="s2">"initializer_range"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.02</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"intermediate_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">5632</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"is_decoder"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"is_encoder_decoder"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"label2id"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+    </span><span class="s2">"LABEL_0"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"LABEL_1"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="w">
+  </span><span class="p">},</span><span class="w">
+  </span><span class="s2">"length_penalty"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"max_length"</span><span class="p">:</span><span class="w"> </span><span class="mi">20</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"max_position_embeddings"</span><span class="p">:</span><span class="w"> </span><span class="mi">2048</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"metadata"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"min_length"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"mlp_bias"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"model_type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"llama"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"neuron_config"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+    </span><span class="s2">"activation_quantization_type"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"allow_input_truncation"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"apply_seq_ids_mask"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"async_mode"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"attention_dp_degree"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"attention_dtype"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"attn_block_cte_nki_kernel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"attn_block_tkg_nki_kernel_cache_update"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"attn_block_tkg_nki_kernel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"attn_cls"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NeuronLlamaAttention"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"attn_kernel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"attn_tkg_builtin_kernel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"attn_tkg_nki_kernel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"batch_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"bucket_n_active_tokens"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"buckets"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w">
+      </span><span class="mi">1024</span><span class="w">
+    </span><span class="p">],</span><span class="w">
+    </span><span class="s2">"cast_type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"config"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"cc_pipeline_tiling_factor"</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"chunked_prefill_config"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"context_encoding_buckets"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"cp_degree"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"ctx_batch_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"disable_kv_cache_tiling"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"draft_model_modules_to_not_convert"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"enable_bucketing"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"enable_eagle_draft_input_norm"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"enable_eagle_speculation"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"enable_fused_speculation"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"enable_long_context_mode"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"enable_output_completion_notifications"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"enable_spill_reload_dge"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"enable_token_tree"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"ep_degree"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"expert_mlp_nki_kernel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"flash_decoding_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"fused_qkv"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"fused_rmsnorm_skip_gamma"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"is_block_kv_layout"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"is_chunked_prefill"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"is_continuous_batching"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"is_eagle_draft"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"is_medusa"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"is_prefill_stage"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"is_prefix_caching"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"k_cache_transposed"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"kv_cache_batch_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"kv_cache_padding_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"kv_cache_quant"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"kv_cache_tiling"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"layer_boundary_markers"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"lm_head_pad"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"lm_head_pad_alignment_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"local_ranks_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"logical_nc_config"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"lora_config"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"max_batch_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"max_context_length"</span><span class="p">:</span><span class="w"> </span><span class="mi">1024</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"max_length"</span><span class="p">:</span><span class="w"> </span><span class="mi">1024</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"max_new_tokens"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"medusa_speculation_length"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"medusa_tree"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"mlp_kernel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"mlp_kernel_fuse_residual_add"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"modules_to_not_convert"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"moe_fused_nki_kernel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"n_active_tokens"</span><span class="p">:</span><span class="w"> </span><span class="mi">1024</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"n_positions"</span><span class="p">:</span><span class="w"> </span><span class="mi">1024</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"num_medusa_heads"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"on_cpu"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"on_device_sampling_config"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+      </span><span class="s2">"deterministic"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"do_sample"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"dynamic"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"global_topk"</span><span class="p">:</span><span class="w"> </span><span class="mi">256</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"on_device_sampling_config"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"temperature"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"top_k"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"top_k_kernel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"top_p"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="w">
+    </span><span class="p">},</span><span class="w">
+    </span><span class="s2">"output_logits"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"overrides_torch_dtype"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"pa_block_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">1024</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"pa_num_blocks"</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"padding_side"</span><span class="p">:</span><span class="w"> </span><span class="s2">"right"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"pp_degree"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"prefix_buckets"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"qk_layernorm"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"qkv_kernel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"qkv_kernel_fuse_residual_add"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"qkv_kernel_nbsd_layout"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"quantization_dtype"</span><span class="p">:</span><span class="w"> </span><span class="s2">"int8"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"quantization_type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"per_tensor_symmetric"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"quantize_clamp_bound"</span><span class="p">:</span><span class="w"> </span><span class="err">Infinity</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"quantized"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"quantized_checkpoints_path"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"quantized_mlp_kernel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"rmsnorm_quantize_kernel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"router_topk_nki_kernel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"rpl_reduce_dtype"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"save_sharded_checkpoint"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"scratchpad_page_size"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"seq_len"</span><span class="p">:</span><span class="w"> </span><span class="mi">1024</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"seq_len_threshold_for_cc_tiling"</span><span class="p">:</span><span class="w"> </span><span class="mi">16384</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"sequence_parallel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"shared_mlp_nki_kernel_enabled"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"skip_sharding"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"skip_warmup"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"spec_batch_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"speculation_length"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"start_rank_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"target"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"tile_cc"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"tkg_batch_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"token_generation_buckets"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"token_tree_config"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"torch_dtype"</span><span class="p">:</span><span class="w"> </span><span class="s2">"bfloat16"</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"tp_degree"</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"vocab_parallel"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"weight_gather_seq_len_threshold"</span><span class="p">:</span><span class="w"> </span><span class="mi">32768</span><span class="p">,</span><span class="w">
+    </span><span class="s2">"weights_to_skip_layout_optimization"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span><span class="w">
+    </span><span class="s2">"world_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="w">
+  </span><span class="p">},</span><span class="w">
+  </span><span class="s2">"no_repeat_ngram_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"num_attention_heads"</span><span class="p">:</span><span class="w"> </span><span class="mi">32</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"num_beam_groups"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"num_beams"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"num_cores_per_group"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"num_hidden_layers"</span><span class="p">:</span><span class="w"> </span><span class="mi">22</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"num_key_value_heads"</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"num_return_sequences"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"output_attentions"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"output_hidden_states"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"output_scores"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"pad_token_id"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"prefix"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"pretraining_tp"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"problem_type"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"pruned_heads"</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span><span class="w">
+  </span><span class="s2">"remove_invalid_values"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"repetition_penalty"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"return_dict"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"return_dict_in_generate"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"rms_norm_eps"</span><span class="p">:</span><span class="w"> </span><span class="mi">1e-05</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"rope_scaling"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"rope_theta"</span><span class="p">:</span><span class="w"> </span><span class="mf">10000.0</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"sep_token_id"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"suppress_tokens"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"task_specific_params"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"temperature"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"tf_legacy_loss"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"tie_encoder_decoder"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"tie_word_embeddings"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"tokenizer_class"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"top_k"</span><span class="p">:</span><span class="w"> </span><span class="mi">50</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"top_p"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"torchscript"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"transformers_version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"4.35.0"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"typical_p"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"use_bfloat16"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"use_cache"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"vocab_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">32000</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div>  </div>
+
+</details>
+
+<h2 id="파드-안에서-본-모델-목록">파드 안에서 본 모델 목록</h2>
+
+<p>서버가 실제로 모델을 물고 있는지는 파드 안에서 OpenAI 호환 엔드포인트를 직접 쳐 보면 된다. 외부 노출 전에 확인하는 순서다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl <span class="nb">exec</span> <span class="nt">-it</span> deploy/vllm-deployment <span class="nt">-c</span> vllm-server <span class="nt">--</span> curl <span class="nt">-s</span> http://localhost:8080/v1/models | jq .data
+
+<span class="c"># 실행 결과 (발췌). permission 블록은 생략했다</span>
+<span class="o">[</span>
+  <span class="o">{</span>
+    <span class="s2">"id"</span>: <span class="s2">"tinyLlama/TinyLlama-1.1B-Chat-v1.0"</span>,
+    <span class="s2">"object"</span>: <span class="s2">"model"</span>,
+    <span class="s2">"created"</span>: 1789138359,
+    <span class="s2">"owned_by"</span>: <span class="s2">"vllm"</span>,
+    <span class="s2">"root"</span>: <span class="s2">"tinyLlama/TinyLlama-1.1B-Chat-v1.0"</span>,
+    <span class="s2">"parent"</span>: null,
+    <span class="s2">"max_model_len"</span>: 1024
+  <span class="o">}</span>
+<span class="o">]</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">id</code>가 ConfigMap의 <code class="highlighter-rouge">MODEL_NAME</code>과 같고 <code class="highlighter-rouge">max_model_len</code>이 1024다. 이 응답이 나오면 파드 안쪽은 끝난 상태이고, 남은 것은 밖에서 여기까지 트래픽을 보내는 경로다. 그 경로는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/">08-03-02편</a>에서 만든다.</p>
+
+<h2 id="컨트롤러-파드-로그">컨트롤러 파드 로그</h2>
+
+<p>이 파드 하나가 뜨기까지 네 주체가 관여한다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">neuron-device-plugin</code> (DaemonSet) — Neuron 디바이스를 kubelet에 광고하고 컨테이너에 <code class="highlighter-rouge">/dev/neuron*</code>을 붙인다</li>
+  <li><code class="highlighter-rouge">my-scheduler</code> — Neuron 확장을 붙인 두 번째 스케줄러. 위 <a href="#schedulername이-적용됐는지">schedulerName이 적용됐는지</a>에서 확인했다</li>
+  <li><code class="highlighter-rouge">k8s-neuron-scheduler</code> — 스케줄러 확장. 연속 코어 배정을 담당한다</li>
+  <li><code class="highlighter-rouge">s3-csi-controller</code> / <code class="highlighter-rouge">s3-csi-node</code> / <code class="highlighter-rouge">mount-s3</code> 네임스페이스의 Mountpoint 파드 — S3 볼륨 마운트</li>
+</ul>
+
+<p>정상 기동에서는 이 로그를 굳이 볼 일이 없다. 멈췄을 때 보는 순서가 정해져 있다는 쪽이 실용적이다. <code class="highlighter-rouge">Pending</code>이면 <code class="highlighter-rouge">my-scheduler</code>와 <code class="highlighter-rouge">k8s-neuron-scheduler</code>, <code class="highlighter-rouge">ContainerCreating</code>이면 <code class="highlighter-rouge">s3-csi-node</code>와 Mountpoint 파드, 컨테이너는 떴는데 디바이스가 안 보이면 <code class="highlighter-rouge">neuron-device-plugin</code>이다.</p>
+
+<h3 id="neuron-device-plugin의-allocate">neuron device plugin의 Allocate</h3>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl logs <span class="nt">-n</span> kube-system <span class="nt">-l</span> <span class="nv">name</span><span class="o">=</span>neuron-device-plugin-ds
+
+<span class="c"># 실행 결과 (발췌)</span>
+neuron-device-plugin: 2026/09/11 14:06:03 Container requesting <span class="s1">'1'</span> neuron resources, neuron scheduler extension flow not needed, starting allocation....
+neuron-device-plugin: 2026/09/11 14:06:03 Allocated Neuron devices <span class="o">[</span>0] from simple alloc with env map[NEURON_LOGICAL_NC_CONFIG:1]
+neuron-device-plugin: 2026/09/11 14:06:03 Checking <span class="k">if </span>device id:<span class="sb">`</span>0<span class="sb">`</span> exists
+neuron-device-plugin: 2026/09/11 14:06:03 Mounting /dev/neuron0 to container as /dev/neuron0
+</code></pre></div></div>
+
+<p>세 가지를 확인할 수 있다.</p>
+<ol>
+  <li>요청이 칩 1개라 스케줄러 확장 경로를 타지 않고 단순 할당으로 끝났다(<code class="highlighter-rouge">neuron scheduler extension flow not needed</code>).</li>
+  <li><code class="highlighter-rouge">NEURON_LOGICAL_NC_CONFIG:1</code>을 환경변수로 함께 주입한다 — 앞에서 <code class="highlighter-rouge">env</code>에 보인 그 값이다.</li>
+  <li>컨테이너에 들어가는 것은 <code class="highlighter-rouge">/dev/neuron0</code> 하나다. device plugin의 <code class="highlighter-rouge">Allocate()</code> 응답이 NVIDIA와 갈리는 지점은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/#allocate-응답에서-갈리는-지점">08-02-02편</a>에 있다.</li>
+</ol>
+
+<h3 id="k8s-neuron-scheduler의-bind">k8s-neuron-scheduler의 bind</h3>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl logs <span class="nt">-n</span> kube-system <span class="nt">-l</span> app.kubernetes.io/component<span class="o">=</span>k8s-neuron-scheduler
+
+<span class="c"># 실행 결과</span>
+2026/09/11 14:06:03 Generating resourceUsageMap <span class="k">for </span>node ip-10-0-5-100.us-west-2.compute.internal resourceCount 1
+2026/09/11 14:06:03 Generated resource usage map :[false]
+2026/09/11 14:06:03 Generating resourceUsageMap <span class="k">for </span>node ip-10-0-5-100.us-west-2.compute.internal resourceCount 2
+2026/09/11 14:06:03 Generated resource usage map :[false <span class="nb">false</span><span class="o">]</span>
+2026/09/11 14:06:03 Allocated Neuron resource list 0 <span class="k">for </span>resource aws.amazon.com/neuron
+2026/09/11 14:06:03 Allocated Neuron resources list <span class="o">[</span>0 1] <span class="k">for </span>other resource aws.amazon.com/neuroncore
+2026/09/11 14:06:03 Succesfully updated the resourceUsageMap <span class="o">[</span><span class="nb">true</span><span class="o">]</span> and otherResourceUsageMap <span class="o">[</span><span class="nb">true true</span><span class="o">]</span> after alloc <span class="k">for </span>node ip-10-0-5-100.us-west-2.compute.internal
+2026/09/11 14:06:03 Finished executing Bind Request...
+</code></pre></div></div>
+
+<p>칩 카운터와 코어 카운터를 따로 관리하는 모습이 그대로 보인다. <code class="highlighter-rouge">resourceCount 1</code>이 칩, <code class="highlighter-rouge">resourceCount 2</code>가 코어다. 칩 0번을 할당하면서 코어 <code class="highlighter-rouge">[0 1]</code> 둘을 함께 잡고 두 맵을 동시에 갱신한다. 칩과 코어를 따로 세면 생기는 문제는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/#칩과-코어를-따로-세면-생기는-일">08-02-02편</a>에 정리해 두었다.</p>
+
+<p>로그 마지막에 Mountpoint 파드 생성까지 찍힌다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실행 결과 (발췌)</span>
+2026/09/11 14:06:03 Processing change to Pod mount-s3/mp-llbbw
+2026/09/11 14:06:03 Pod Creating Event: mp-llbbw
+</code></pre></div></div>
+
+<h3 id="mountpoint-s3의-마운트">mountpoint-s3의 마운트</h3>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl logs <span class="nt">-n</span> mount-s3 <span class="nt">-l</span> s3.csi.aws.com/mounted-by-csi-driver-version<span class="o">=</span>2.8.0
+
+<span class="c"># 실행 결과 (발췌)</span>
+I0911 14:06:06.102058       1 main.go:75] Trying to receive mount options from /comm/mount.sock
+I0911 14:06:06.615552       1 main.go:80] Mount options has been received from /comm/mount.sock
+2026-09-11T14:06:06.618245Z  INFO ThreadId<span class="o">(</span>01<span class="o">)</span> mountpoint_s3::run: mount-s3 1.23.0
+2026-09-11T14:06:06.662058Z  INFO ThreadId<span class="o">(</span>01<span class="o">)</span> mountpoint_s3::cli: target network throughput 12.5 Gbps
+2026-09-11T14:06:06.713201Z  INFO ThreadId<span class="o">(</span>01<span class="o">)</span> mountpoint_s3::run: successfully mounted bucket vllm-models-cache-123456789012 at /dev/fd/3
+</code></pre></div></div>
+
+<p>마운트 옵션이 유닉스 소켓(<code class="highlighter-rouge">/comm/mount.sock</code>)으로 전달되고, 마운트 지점이 경로가 아니라 파일 디스크립터(<code class="highlighter-rouge">/dev/fd/3</code>)다. 노드 데몬셋이 FUSE 디바이스를 열어 그 fd를 Mountpoint 파드로 넘기고, 파드 안의 <code class="highlighter-rouge">mount-s3</code>는 받은 fd 위에서 동작한다. 앞서 <code class="highlighter-rouge">ps -ef</code>에서 본 <code class="highlighter-rouge">mount-s3</code> 명령행의 마지막 인자가 바로 이 <code class="highlighter-rouge">/dev/fd/3</code>이다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>질문</th>
+      <th>답</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>init container가 푸는 문제는 무엇인가</td>
+      <td>Neuron 컴파일을 파드 기동 경로에서 떼어 낸다. 한 번 컴파일해 S3에 남기고 이후 파드는 읽기만 한다</td>
+    </tr>
+    <tr>
+      <td>두 컨테이너의 차이는 무엇인가</td>
+      <td>같은 이미지에 같은 설정을 받지만 명령이 다르고 볼륨 권한이 다르다. init은 rw, 메인은 ro다</td>
+    </tr>
+    <tr>
+      <td>ConfigMap 14개 키는 다 쓰이나</td>
+      <td>아니다. <code class="highlighter-rouge">S3_BUCKET</code>과 <code class="highlighter-rouge">S3_PREFIX</code>는 어디에서도 참조되지 않는다. S3 반영은 <code class="highlighter-rouge">cp -r</code>과 PVC 마운트로 일어난다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">100Gi</code>는 무엇을 강제하나</td>
+      <td>아무것도 강제하지 않는다. PV와 PVC를 묶는 조건을 맞추는 형식값이고, Mountpoint CSI 드라이버는 이 값을 해석하지 않는다</td>
+    </tr>
+    <tr>
+      <td>캐시 적중은 어떻게 판정하나</td>
+      <td>셸의 <code class="highlighter-rouge">ls -A /shared/model/cache</code> 분기와, NxD Inference가 그 경로에서 <code class="highlighter-rouge">neuron_config.json</code>을 찾는 확인이 이중으로 걸려 있다</td>
+    </tr>
+    <tr>
+      <td>컴파일 산출물은 왜 <code class="highlighter-rouge">/tmp/cache</code>를 거치나</td>
+      <td>S3 마운트는 파일을 열어 놓고 이어 쓰는 POSIX 의미론을 제공하지 않는다. 다 만든 뒤 통짜로 복사하는 패턴만 안전하다</td>
+    </tr>
+    <tr>
+      <td>FUSE 데몬은 몇 개인가</td>
+      <td>하나다. <code class="highlighter-rouge">mount</code>에 두 줄이 보이는 것은 CSI 드라이버가 파드 볼륨 경로로 건 bind mount 때문이다</td>
+    </tr>
+    <tr>
+      <td>기동 로그에서 가장 중요한 줄은</td>
+      <td><code class="highlighter-rouge">device type=neuron is not supported by the V1 Engine. Falling back to V0.</code>와 <code class="highlighter-rouge">Successfully loaded precompiled model artifacts from /shared/model/cache</code> 두 줄이다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">schedulerName</code>은 실제로 먹었나</td>
+      <td>먹었다. Events의 <code class="highlighter-rouge">From</code> 열이 <code class="highlighter-rouge">my-scheduler</code>이고, 스케줄러 자신의 로그에 <code class="highlighter-rouge">Successfully bound pod to node</code>가 남았다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>파드 안쪽은 여기까지다. <code class="highlighter-rouge">/v1/models</code>가 응답하고 컴파일 산출물이 S3에 남았으므로, 남은 것은 클러스터 밖에서 이 파드까지 요청을 보내는 경로다. <code class="highlighter-rouge">type: LoadBalancer</code> Service가 만드는 CLB와 그 리스너 구조, 그리고 실제 추론 요청 왕복은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/">08-03-02편</a>에서 확인한다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://kubernetes.io/docs/concepts/workloads/pods/init-containers/">Kubernetes: Init Containers</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">Kubernetes: Persistent Volumes</a></li>
+  <li><a href="https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/">Kubernetes: Configure Multiple Schedulers</a></li>
+  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/nxd-inference/developer_guides/vllm-user-guide.html">AWS Neuron: vLLM User Guide for NxD Inference</a></li>
+  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-runtime/nrt-configurable-parameters.html">AWS Neuron: Runtime Configuration</a></li>
+  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-features/neuron-caching.html">AWS Neuron: Persistent Cache</a></li>
+  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/about-neuron/arch/neuron-features/logical-neuroncore-config.html">AWS Neuron: Logical NeuronCore Configuration</a></li>
+  <li><a href="https://docs.aws.amazon.com/eks/latest/userguide/device-management-neuron.html">AWS Neuron: Kubernetes device plugin</a></li>
+  <li><a href="https://docs.vllm.ai/en/v0.9.2/serving/openai_compatible_server.html">vLLM: OpenAI Compatible Server</a></li>
+  <li><a href="https://github.com/awslabs/mountpoint-s3/blob/main/doc/SEMANTICS.md">Mountpoint for Amazon S3: File system semantics</a></li>
+  <li><a href="https://github.com/awslabs/mountpoint-s3-csi-driver/blob/main/docs/ARCHITECTURE.md">Mountpoint for Amazon S3 CSI Driver: Architecture</a></li>
+  <li><a href="https://github.com/awslabs/mountpoint-s3-csi-driver/blob/main/examples/kubernetes/static_provisioning/static_provisioning.yaml">Mountpoint for Amazon S3 CSI Driver: static provisioning 예제</a></li>
+  <li><a href="https://docs.aws.amazon.com/eks/latest/userguide/s3-csi.html">AWS: Mountpoint for Amazon S3 CSI driver on EKS</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/">08-00편: vLLM on Trainium 워크샵 개요와 아키텍처</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/">08-01편: AWS 가속기 - Trainium·Inferentia와 Neuron 스택</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/">08-02-01편: Trainium 노드그룹 구성</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/">08-02-02편: Trainium 디바이스가 쿠버네티스에 노출되는 경로</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/">08-03-02편: LoadBalancer 서비스 노출과 추론 테스트</a></li>
+  <li><a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/">[GenAI] GPU 자원 개요와 K8s 할당 메커니즘</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#configmap" class="page__taxonomy-item" rel="tag">ConfigMap</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study-week-6" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study-Week-6</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#init-container" class="page__taxonomy-item" rel="tag">Init-Container</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mountpoint-for-s3" class="page__taxonomy-item" rel="tag">Mountpoint-for-S3</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#neuron" class="page__taxonomy-item" rel="tag">Neuron</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#s3-csi-driver" class="page__taxonomy-item" rel="tag">S3-CSI-Driver</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#trainium" class="page__taxonomy-item" rel="tag">Trainium</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#vllm" class="page__taxonomy-item" rel="tag">vLLM</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-09-12">September 12, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BvLLM%5D+LLM+%EC%84%9C%EB%B9%99%EA%B3%BC+%EC%B5%9C%EC%A0%81%ED%99%94%3A+vLLM+on+Trainium+%EC%9B%8C%ED%81%AC%EC%83%B5+-+8.3.1.+init+container+%EB%AA%A8%EB%8D%B8+%EC%BB%B4%ED%8C%8C%EC%9D%BC%EA%B3%BC+S3+%EC%BA%90%EC%8B%9C%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/" class="pagination--pager" title="[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/" class="pagination--pager" title="[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.2. LoadBalancer 서비스 노출과 추론 테스트
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/" rel="permalink">[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.2. LoadBalancer 서비스 노출과 추론 테스트
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  20 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">vLLM Service를 LoadBalancer로 노출했을 때 만들어지는 CLB의 리스너 구조를 확인하고, 추론 요청이 실제로 왕복하는지 검증해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/" rel="permalink">[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  31 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">칩 하나에 리소스가 둘 광고되는 이유를 커널 디바이스 노드와 device plugin 소켓까지 내려가 확인하고, NVIDIA와 갈리는 지점을 정리해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/" rel="permalink">[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  21 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">EKS 컨트롤 플레인만 있는 상태에서 trn1.2xlarge 관리형 노드그룹을 붙이고, 미리 박혀 있던 AMI ID 때문에 막힌 지점을 풀어 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/" rel="permalink">[Trainium] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.1. Trainium·Inferentia와 Neuron 스택
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  27 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">워크샵이 쓰는 Trainium이 어떤 칩인지, Neuron SDK가 어떤 스택인지, NVIDIA 스택과 어디까지 대응되는지 정리해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>
