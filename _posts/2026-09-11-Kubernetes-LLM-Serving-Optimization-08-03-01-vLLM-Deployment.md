@@ -1,5 +1,5 @@
 ---
-title: "[vLLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.1. init container 모델 컴파일과 S3 캐시"
+title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.1. init container 모델 컴파일과 S3 캐시"
 excerpt: "vLLM Deployment를 init container 패턴으로 올리고, Neuron 컴파일 산출물이 S3 캐시를 거쳐 메인 컨테이너로 전달되는 경로를 확인해 보자."
 categories:
   - Kubernetes
@@ -812,7 +812,7 @@ Mountpoint for S3는 이 중 어느 것도 제공하지 않는다. 공식 SEMANT
 확장 속성 조회가 실패한 것인데, 컴파일 산출물 복사와 이후 로드에는 영향이 없었다.
 
 ![S3에 적재된 컴파일 캐시]({{site.url}}/assets/images/llmso-aws-workshop-s3-cache.png){: .align-center}
-<center><sup>직접 캡처. 버킷명과 계정 식별자는 익명화했다.</sup></center>
+<center><sup>직접 캡처. 모델 캐시 S3 버킷의 객체 목록이다. init container가 올린 컴파일 산출물이 들어와 있다.</sup></center>
 
 <br>
 

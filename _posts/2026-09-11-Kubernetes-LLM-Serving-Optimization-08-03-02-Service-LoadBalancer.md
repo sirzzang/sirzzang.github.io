@@ -1,5 +1,5 @@
 ---
-title: "[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.2. LoadBalancer 서비스 노출과 추론 테스트"
+title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.2. LoadBalancer 서비스 노출과 추론 테스트"
 excerpt: "vLLM Service를 LoadBalancer로 노출했을 때 만들어지는 CLB의 리스너 구조를 확인하고, 추론 요청이 실제로 왕복하는지 검증해 보자."
 categories:
   - Kubernetes
@@ -27,7 +27,7 @@ last_modified_at: 2026-09-12
 
 # TL;DR
 
-- 어노테이션을 하나도 붙이지 않고 `type: LoadBalancer`만 준 Service에서 **Classic Load Balancer(CLB)**가 만들어졌다. in-tree AWS 클라우드 프로바이더가 처리했고, 그 기본 산출물이 CLB이기 때문이다. NLB는 어노테이션이 필요하고, ALB는 Service가 아니라 Ingress 경로다
+- 어노테이션을 하나도 붙이지 않고 `type: LoadBalancer`만 준 Service에서 **Classic Load Balancer(CLB)**가 만들어졌다. `cloud-provider-aws`의 service controller가 처리했고, 그 기본 산출물이 CLB이기 때문이다. NLB는 어노테이션이 필요하고, ALB는 Service가 아니라 Ingress 경로다
 - 08-00편이 아키텍처 그림만 보고 미뤄 뒀던 질문 — `type: LoadBalancer` Service가 vLLM 쪽인지 ingress-nginx 쪽인지 — 에 대한 답은 **Lab 2 시점에서는 vLLM Service 자신**이다
 - 포트가 **8080 → 32233 → 8080** 세 번 나오고 그중 둘이 같은 숫자다. 앞의 8080은 Service `port`이자 ELB 리스너 포트, 32233은 자동 할당된 NodePort, 뒤의 8080은 컨테이너 포트다
 - 8080을 고른 근거 중 **특권 포트 제약은 성립하지 않는다.** 노드에서 본 vLLM 프로세스는 root로 돌고 있었고, containerd 기본 capability 집합에는 `CAP_NET_BIND_SERVICE`가 들어 있다. 남는 근거는 보안그룹 인바운드에 80이 없다는 것이다
@@ -39,7 +39,7 @@ last_modified_at: 2026-09-12
 
 # Service LoadBalancer 해부
 
-[08-00편의 외부 접근 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#외부-접근-경로)는 아키텍처 그림에서 ELB 화살표가 vLLM Service가 아니라 ingress-nginx 쪽으로 들어가는 것을 보고, `type: LoadBalancer` Service가 ingress-nginx 컨트롤러 쪽일 가능성을 언급하면서 판단은 매니페스트 확인 시점으로 미뤘다. Lab 2의 매니페스트가 그 답이다. **vLLM Service 자신이 `type: LoadBalancer`이고, 이 Service가 CLB를 직접 만든다.** ingress-nginx는 이후 Lab에서 따로 올라온다. 즉 아키텍처 그림은 최종 상태를 그린 것이고, Lab 2 시점의 외부 진입점은 vLLM Service다.
+[08-00편의 외부 접근 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#외부-접근-경로)는 아키텍처 그림에서 ELB 화살표가 vLLM Service가 아니라 ingress-nginx 쪽으로 들어가는 것을 보고, `type: LoadBalancer` Service가 ingress-nginx 컨트롤러 쪽일 가능성을 언급하면서 판단은 매니페스트 확인 시점으로 미뤘다. Lab 2의 매니페스트가 그 답이다. **vLLM Service 자신이 `type: LoadBalancer`이고, 이 Service가 CLB를 직접 만든다.** ingress-nginx는 [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})에서 따로 올라온다. 즉 아키텍처 그림은 최종 상태를 그린 것이고, Lab 2 시점의 외부 진입점은 vLLM Service다.
 
 모델을 물고 있는 파드까지는 [08-03-01편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})에서 확인했다. 이 편은 그 파드를 클러스터 밖으로 노출하고 추론 요청을 실제로 왕복시키는 부분을 다룬다.
 
@@ -90,7 +90,7 @@ root  36890  34196  0 14:12 ?  00:00:09 python -m vllm.entrypoints.openai.api_se
 
 즉 이 파드는 80에 바인딩할 수 있었다. 남는 근거는 워크샵 환경의 보안그룹 인바운드가 22/8000/8080만 열려 있다는 것이다. `port: 80`으로 바꾸면 보안그룹 규칙도 같이 고쳐야 한다. 컨테이너 포트와 Service 포트를 같은 숫자로 맞춰 둔 것은 매니페스트를 읽기 쉽게 만들지만, 이것이 워크샵 저자의 의도였는지는 확인할 방법이 없어 추정에 머문다.
 
-접속 URL 뒤에 `:8080`이 붙는 것을 없애려면 L4 로드밸런서 앞에 L7 계층을 두어야 한다. L4 CLB는 리스너 포트를 클라이언트가 직접 지정해야 하기 때문이다. 이후 Lab에서 ingress-nginx를 올린다.
+접속 URL 뒤에 `:8080`이 붙는 것을 없애려면 L4 로드밸런서 앞에 L7 계층을 두어야 한다. L4 CLB는 리스너 포트를 클라이언트가 직접 지정해야 하기 때문이다. [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})에서 ingress-nginx를 올린다.
 
 ## 포트 세 개
 
@@ -106,7 +106,7 @@ root  36890  34196  0 14:12 ?  00:00:09 python -m vllm.entrypoints.openai.api_se
 
 ## 로드밸런서 타입 선택
 
-결론부터 적으면, 무엇이 만들어질지는 **어노테이션과 오브젝트 종류**가 정한다. 어노테이션 없이 `type: LoadBalancer`만 주면 클러스터에 기본으로 들어 있는 in-tree(legacy) AWS 클라우드 프로바이더가 처리하고, 그 기본 산출물이 CLB다. NLB를 받으려면 어노테이션을 붙여야 하고, ALB는 Service가 아니라 Ingress와 AWS Load Balancer Controller 경로다. 이번 Lab의 Service에는 어노테이션이 하나도 없고 AWS Load Balancer Controller도 설치되어 있지 않으므로 CLB가 나온다.
+결론부터 적으면, 무엇이 만들어질지는 **어노테이션과 오브젝트 종류**가 정한다. 어노테이션 없이 `type: LoadBalancer`만 주면 EKS가 기본으로 돌리는 `cloud-provider-aws`의 service controller가 처리하고, 그 기본 산출물이 CLB다. NLB를 받으려면 어노테이션을 붙여야 하고, ALB는 Service가 아니라 Ingress와 AWS Load Balancer Controller 경로다. 이번 Lab의 Service에는 어노테이션이 하나도 없고 AWS Load Balancer Controller도 설치되어 있지 않으므로 CLB가 나온다.
 
 AWS ELB 기능 문서 기준으로 세 종류의 차이는 이렇다.
 
@@ -126,13 +126,15 @@ ALB와 NLB로 갈라지기 전의 구세대 로드밸런서다. AWS 문서는 "E
 
 L4 로드밸런서다. 초고성능이 필요하거나 고정 IP가 필요할 때 고른다.
 
-in-tree 프로바이더에게 NLB를 만들게 하는 어노테이션은 `service.beta.kubernetes.io/aws-load-balancer-type: nlb`인데, **이것은 구형 표기다.** AWS Load Balancer Controller를 기준으로 한 현재 권장 표기는 `"external"`이다. EKS 문서는 `aws-load-balancer-type`의 `external` 값이 "AWS 클라우드 프로바이더 로드밸런서 컨트롤러가 아니라 AWS Load Balancer Controller가 NLB를 만들게 하는 원인"이라고 적는다. 타겟 타입은 별도로 `aws-load-balancer-nlb-target-type`으로 지정한다.
+`cloud-provider-aws`에게 NLB를 만들게 하는 어노테이션은 `service.beta.kubernetes.io/aws-load-balancer-type: nlb`인데, **이것은 구형 표기다.** AWS Load Balancer Controller를 기준으로 한 현재 권장 표기는 `"external"`이다. EKS 문서는 `aws-load-balancer-type`의 `external` 값이 "AWS 클라우드 프로바이더 로드밸런서 컨트롤러가 아니라 AWS Load Balancer Controller가 NLB를 만들게 하는 원인"이라고 적는다. 타겟 타입은 별도로 `aws-load-balancer-nlb-target-type`으로 지정한다.
 
-두 컨트롤러의 역할도 갈려 있다. in-tree 프로바이더는 기본으로 CLB를 만들고 NLB도 만들 수 있지만 앞으로는 중대한 버그 수정만 받는다. AWS Load Balancer Controller는 NLB를 만들고 CLB는 만들지 않는다.
+두 컨트롤러의 역할도 갈려 있다. `cloud-provider-aws`는 기본으로 CLB를 만들고 NLB도 만들 수 있지만 앞으로는 중대한 버그 수정만 받는다. AWS Load Balancer Controller는 NLB를 만들고 CLB는 만들지 않는다.
+
+이 컴포넌트를 인트리(in-tree) 프로바이더라고 부르던 시기가 있었지만, 지금 표기로는 맞지 않는다. 쿠버네티스 코어에 들어 있던 클라우드 프로바이더 코드는 v1.31에서 제거됐고, 이 클러스터(1.33)에서 CLB를 만드는 것은 아웃오브트리로 분리된 `cloud-provider-aws`다. 동작과 유지보수 상태는 그대로이고 이름만 달라진 것이다.
 
 ### Application Load Balancer
 
-L7 로드밸런서로, 경로와 호스트 기반 라우팅이 된다. 다만 **Service `type: LoadBalancer`로는 나오지 않는다.** ALB는 Ingress 오브젝트와 AWS Load Balancer Controller 조합으로 만들어진다. 이 워크샵은 ALB 대신 CLB 뒤에 ingress-nginx를 두는 구성을 택했고, 그 부분은 이후 Lab이다.
+L7 로드밸런서로, 경로와 호스트 기반 라우팅이 된다. 다만 **Service `type: LoadBalancer`로는 나오지 않는다.** ALB는 Ingress 오브젝트와 AWS Load Balancer Controller 조합으로 만들어진다. 이 워크샵은 ALB 대신 CLB 뒤에 ingress-nginx를 두는 구성을 택했고, 그 부분은 [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})이다.
 
 ## 클라이언트에서 파드까지의 경로
 
@@ -216,7 +218,7 @@ EC2 콘솔의 로드밸런서 목록에서 확인할 것은 두 가지다. 첫�
 
 ![EC2 콘솔의 Classic Load Balancer 목록]({{site.url}}/assets/images/llmso-aws-workshop-loadbalancer-1.png){: .align-center}
 
-<center><sup>직접 캡처. DNS name과 계정 식별 정보는 익명화했다.</sup></center>
+<center><sup>직접 캡처. EC2 콘솔의 로드밸런서 목록이다. 유형 컬럼이 classic이다.</sup></center>
 
 `EXTERNAL-IP`에 나온 값은 `status`에서 직접 뽑아도 같다.
 
@@ -235,7 +237,7 @@ ubuntu@ip-10-0-1-100:~/workshop$ kubectl get svc vllm-service \
 
 ![Classic Load Balancer의 리스너 상세]({{site.url}}/assets/images/llmso-aws-workshop-loadbalancer-2.png){: .align-center}
 
-<center><sup>직접 캡처. 로드밸런서 이름과 계정 식별 정보는 익명화했다.</sup></center>
+<center><sup>직접 캡처. CLB의 리스너 상세다. 로드밸런서 쪽이 TCP:8080, 인스턴스 쪽이 TCP:32233이다.</sup></center>
 
 앞 숫자 8080은 Service의 `port`, 뒤 숫자 32233은 자동 할당된 NodePort다. `kubectl get svc`가 `8080:32233/TCP`로 보여준 쌍이 콘솔에서는 리스너 한 줄로 보인다. 리스너가 하나뿐이고 프로토콜이 TCP라는 점이 뒤의 [HTTPS 접속 실패](#막힘--해결-https-접속-실패)로 이어진다.
 
@@ -537,7 +539,7 @@ ELB DNS 이름을 브라우저 주소창에 입력하고 들어가면 접속이 
 
 ![브라우저의 ERR_SSL_PROTOCOL_ERROR 화면]({{site.url}}/assets/images/llmso-aws-workshop-loadbalancer-https-ssl-protocol-error.png){: .align-center}
 
-<center><sup>직접 캡처. 주소창과 본문의 ELB DNS 이름은 가리고 북마크 바는 잘라냈다. 화면에서 확인할 수 있는 것은 오류 문자열과 포트 번호다.</sup></center>
+<center><sup>직접 캡처. 브라우저로 ELB 주소에 접속했을 때 뜬 화면이다. 오류 문자열이 ERR_SSL_PROTOCOL_ERROR다.</sup></center>
 
 ## 증거
 
@@ -585,7 +587,7 @@ http://<elb-id>.us-west-2.elb.amazonaws.com:8080/v1/models
 
 ![브라우저에서 vLLM 모델 목록 응답을 받은 화면]({{site.url}}/assets/images/llmso-aws-workshop-loadbalancer.png){: .align-center}
 
-<center><sup>직접 캡처. 주소창의 ELB DNS 이름은 익명화했다.</sup></center>
+<center><sup>직접 캡처. 스킴과 포트를 명시해 접속한 화면이다. vLLM 모델 목록 응답이 그대로 보인다.</sup></center>
 
 프로비저닝 직후에 접속이 안 될 때는 오류 문자열을 먼저 확인하는 편이 빠르다. `DNS_PROBE_FINISHED_NXDOMAIN`이면 DNS 전파를 더 기다리는 것이고, `ERR_SSL_PROTOCOL_ERROR`면 이미 ELB까지 닿은 상태라 스킴만 고치면 된다.
 
@@ -597,8 +599,8 @@ URL에 `:8080`이 남는 것과 TLS 종료 지점이 없는 것은 같은 원인
 
 | 질문 | 답 |
 |---|---|
-| 어노테이션 없이 `type: LoadBalancer`만 주면 무엇이 만들어지나 | in-tree AWS 클라우드 프로바이더가 처리하고, 기본 산출물이 CLB다 |
-| 08-00편이 미뤄 둔 질문 — LoadBalancer Service는 vLLM 쪽인가 | Lab 2 시점에서는 vLLM Service 자신이다. ingress-nginx는 이후 Lab |
+| 어노테이션 없이 `type: LoadBalancer`만 주면 무엇이 만들어지나 | `cloud-provider-aws`의 service controller가 처리하고, 기본 산출물이 CLB다 |
+| 08-00편이 미뤄 둔 질문 — LoadBalancer Service는 vLLM 쪽인가 | Lab 2 시점에서는 vLLM Service 자신이다. ingress-nginx는 [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %}) |
 | 포트 8080이 두 번 나오는데 같은 것인가 | 앞은 Service `port`이자 ELB 리스너 포트, 뒤는 컨테이너 포트다. 사이에 NodePort 32233이 있다 |
 | 8080을 고른 이유가 특권 포트 때문인가 | 아니다. vLLM은 root로 돌고 있었다. 남는 근거는 보안그룹 인바운드에 80이 없다는 것 |
 | Endpoints deprecation 경고는 문제인가 | v1.33에서 공식화된 경고이고 제거 계획은 없다. EndpointSlice는 이름이 아니라 라벨로 조회한다 |
@@ -607,7 +609,7 @@ URL에 `:8080`이 남는 것과 TLS 종료 지점이 없는 것은 같은 원인
 
 이 편에서 확보한 것은 클러스터 밖에서 vLLM 엔드포인트로 추론 요청을 왕복시킬 수 있는 상태다. CLB가 붙었고, 리스너와 NodePort 매핑이 확인됐고, `/v1/chat/completions`가 200을 돌려줬다.
 
-동시에 이 구성의 한계도 그대로 드러났다. L4 패스스루라 경로 기반 라우팅이 없고, URL에 포트를 붙여야 하며, TLS를 종료할 지점이 없다. 세 가지가 전부 같은 원인 — 로드밸런서가 L4라는 것 — 에서 나온다. 이후 Lab에서 ingress-nginx를 올려 L7 계층을 앞에 두는 것이 이 세 가지에 대한 답이다.
+동시에 이 구성의 한계도 그대로 드러났다. L4 패스스루라 경로 기반 라우팅이 없고, URL에 포트를 붙여야 하며, TLS를 종료할 지점이 없다. 세 가지가 전부 같은 원인 — 로드밸런서가 L4라는 것 — 에서 나온다. [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})에서 ingress-nginx를 올려 L7 계층을 앞에 두는 것이 이 세 가지에 대한 답이다.
 
 <br>
 
@@ -619,6 +621,8 @@ URL에 `:8080`이 남는 것과 TLS 종료 지점이 없는 것은 같은 원인
 - [Kubernetes Blog: Endpoints API deprecation (v1.33)](https://kubernetes.io/blog/2025/04/24/endpoints-deprecation/)
 - [Elastic Load Balancing 기능 비교 (AWS)](https://aws.amazon.com/elasticloadbalancing/features/)
 - [Amazon EKS: Network Load Balancing (AWS 문서)](https://docs.aws.amazon.com/eks/latest/userguide/network-load-balancing.html)
+- [cloud-provider-aws: Service Controller](https://cloud-provider-aws.sigs.k8s.io/service_controller/)
+- [Kubernetes 블로그: 클라우드 프로바이더 마이그레이션 완료](https://kubernetes.io/blog/2024/05/20/completing-cloud-provider-migration/)
 - [Amazon EKS: Application Load Balancing (AWS 문서)](https://docs.aws.amazon.com/eks/latest/userguide/alb-ingress.html)
 - [vLLM: OpenAI-Compatible Server](https://docs.vllm.ai/en/v0.9.2/serving/openai_compatible_server.html)
 - [AWS Neuron: NxD Inference vLLM User Guide](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/nxd-inference/developer_guides/vllm-user-guide.html)

@@ -1,5 +1,5 @@
 ---
-title: "[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로"
+title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로"
 excerpt: "칩 하나에 리소스가 둘 광고되는 이유를 커널 디바이스 노드와 device plugin 소켓까지 내려가 확인하고, NVIDIA와 갈리는 지점을 정리해 보자."
 categories:
   - Kubernetes
@@ -162,7 +162,7 @@ MFU = 달성 FLOPS / (칩 수 x 칩당 피크 FLOPS)
 워커 노드에는 Session Manager로 접속했다. SSH 키나 배스천 호스트, 인바운드 포트 없이 IAM 인증으로 붙는다.
 
 ![session-manager-connect]({{site.url}}/assets/images/llmso-aws-workshop-lab1-eks-node-session-manager.png){: .align-center}
-<center><sup>직접 캡처. 인스턴스 ID·클러스터명·VPC/서브넷/보안그룹 ID가 있는 영역은 크롭했고, IAM 역할 이름은 블러 처리했다</sup></center>
+<center><sup>직접 캡처. 워커 노드의 EC2 연결 화면. SSM 에이전트가 온라인이라 Session Manager로 붙을 수 있다</sup></center>
 
 접속하면 `ssm-user`로 떨어진다. `ec2-user`로 전환한 뒤 PCI, 커널 모듈, 디바이스 파일을 차례로 확인했다.
 
@@ -290,7 +290,7 @@ instance-id: i-0abc1234def56789
 `neuron-top`을 띄우면 같은 구조가 화면으로 보인다. 디바이스는 `ND0` 하나인데 그 아래 사용률 막대가 `NC0`, `NC1` 둘이다.
 
 ![neuron-top]({{site.url}}/assets/images/llmso-aws-workshop-lab1-eks-node-session-manager-neuron-top.png){: .align-center}
-<center><sup>직접 캡처. 상단 타이틀의 인스턴스 ID는 블러 처리했다. 표시한 영역에 디바이스 <code>ND0</code> 하나와 코어 <code>NC0</code>·<code>NC1</code> 둘이 나온다</sup></center>
+<center><sup>직접 캡처. <code>neuron-top</code> 출력. 디바이스 <code>ND0</code> 하나와 코어 <code>NC0</code>·<code>NC1</code> 둘이 나온다</sup></center>
 
 ## device plugin이 만든 소켓 두 개
 

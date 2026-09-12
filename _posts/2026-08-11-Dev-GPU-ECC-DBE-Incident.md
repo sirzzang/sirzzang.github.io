@@ -17,7 +17,7 @@ tags:
   - NCCL
   - GPU-Operator
   - MLOps
-last_modified_at: 2026-08-20
+last_modified_at: 2026-09-12
 ---
 
 <br>
@@ -40,7 +40,7 @@ last_modified_at: 2026-08-20
 
 ![GPU Uncorrectable Remap Slack 알림]({{site.url}}/assets/images/gpu-ecc-slack-notification.png){: .align-center}
 
-<center><sup>직접 캡처. 사내 노드명·클러스터명은 블러 처리했다.</sup></center>
+<center><sup>직접 캡처. GPU Uncorrectable Remap 알림이 Slack으로 들어온 화면이다</sup></center>
 
 알림 내용은 이렇다. 이하 노드명·클러스터명은 익명화했다 (문제 노드는 `gpu-node-a` — [이론 글]({% post_url 2026-06-01-CS-GPU-ECC-Memory-Integrity %})에서 Full ECC 지원 노드로 확인했던 바로 그 노드다).
 
@@ -61,7 +61,7 @@ VRAM DBE 로 인한 row remap. 학습 결과 신뢰성 저하. HW 점검 권장.
 
 ![Grafana GPU Uncorrectable Remap alert rule]({{site.url}}/assets/images/grafana-gpu-uncorrectable-remap.png){: .align-center}
 
-<center><sup>직접 캡처. 테이블의 호스트명은 블러 처리했다.</sup></center>
+<center><sup>직접 캡처. Grafana의 GPU Uncorrectable Remap 알림 규칙이다</sup></center>
 
 ```text
 max by (Hostname, gpu) (increase(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS[1h]))
@@ -89,7 +89,7 @@ max by (Hostname, gpu) (increase(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS[1h]))
 
 ![Grafana alert history]({{site.url}}/assets/images/grafana-gpu-uncorrectable-remap-history.png){: .align-center}
 
-<center><sup>직접 캡처. 필터의 호스트명은 블러 처리했다.</sup></center>
+<center><sup>직접 캡처. Grafana 알림 이력이다</sup></center>
 
 **알림의 Resolved와 ECC 기록의 소멸은 서로 다른 이야기다.** 경보는 `increase(...[1h])`를 보기 때문에, 마지막 증가가 1시간 윈도우 밖으로 빠져나가면 값이 0으로 돌아가 자동 해소된다. 즉 "GPU가 정상 복구됐다"가 아니라 **"최근 1시간 동안 추가 remap이 관측되지 않았다"**는 뜻이다. 반면 `nvidia-smi`의 `Volatile Uncorr. ECC` 카운터는 드라이버 로드 이후의 누적 이력이라 새 오류가 없어도 리셋 전까지 그대로 남는다.
 
