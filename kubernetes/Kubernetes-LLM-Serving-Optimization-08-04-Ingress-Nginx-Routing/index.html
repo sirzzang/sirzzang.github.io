@@ -554,11 +554,11 @@
 
 <h3 id="rewrite-target-어노테이션">rewrite-target 어노테이션</h3>
 
-<p>워크샵 매니페스트에 <code class="highlighter-rouge">nginx.ingress.kubernetes.io/rewrite-target: /</code>가 붙어 있는데, <strong>이 구성에서는 아무 일도 하지 않는다.</strong> 컨트롤러 소스로 확인한 이유는 둘이다.</p>
-
-<p>첫째, 프록시 지시어를 만드는 <code class="highlighter-rouge">buildProxyPass()</code>가 <code class="highlighter-rouge">path</code>와 rewrite 타깃이 같으면 특별 처리 없이 곧바로 기본 <code class="highlighter-rouge">proxy_pass</code>를 반환한다. 여기서 <code class="highlighter-rouge">path</code>는 <code class="highlighter-rouge">/</code>, 타깃도 <code class="highlighter-rouge">/</code>라 첫 분기에서 걸리고, <code class="highlighter-rouge">rewrite</code> 지시어 자체가 생성되지 않는다.</p>
-
-<p>둘째, location 수식자도 바뀌지 않는다. <code class="highlighter-rouge">needsRewrite()</code>는 타깃이 비어 있지 않으면서 <code class="highlighter-rouge">path</code>와 <strong>다를 때만</strong> 참이 되는데, 여기서는 같으므로 거짓이다. <code class="highlighter-rouge">use-regex</code>도 쓰지 않았으므로 정규식 강제가 걸리지 않고, location은 <code class="highlighter-rouge">~* "^/"</code>가 아니라 평범한 <code class="highlighter-rouge">"/"</code>로 만들어진다.</p>
+<p>워크샵 매니페스트에 <code class="highlighter-rouge">nginx.ingress.kubernetes.io/rewrite-target: /</code>가 붙어 있는데, <strong>이 구성에서는 아무 일도 하지 않는다.</strong> 컨트롤러 소스로 확인한 이유는 다음과 같다.</p>
+<ul>
+  <li>첫째, 프록시 지시어를 만드는 <code class="highlighter-rouge">buildProxyPass()</code>가 <code class="highlighter-rouge">path</code>와 rewrite 타깃이 같으면 특별 처리 없이 곧바로 기본 <code class="highlighter-rouge">proxy_pass</code>를 반환한다. 여기서 <code class="highlighter-rouge">path</code>는 <code class="highlighter-rouge">/</code>, 타깃도 <code class="highlighter-rouge">/</code>라 첫 분기에서 걸리고, <code class="highlighter-rouge">rewrite</code> 지시어 자체가 생성되지 않는다.</li>
+  <li>둘째, location 수식자도 바뀌지 않는다. <code class="highlighter-rouge">needsRewrite()</code>는 타깃이 비어 있지 않으면서 <code class="highlighter-rouge">path</code>와 <strong>다를 때만</strong> 참이 되는데, 여기서는 같으므로 거짓이다. <code class="highlighter-rouge">use-regex</code>도 쓰지 않았으므로 정규식 강제가 걸리지 않고, location은 <code class="highlighter-rouge">~* "^/"</code>가 아니라 평범한 <code class="highlighter-rouge">"/"</code>로 만들어진다.</li>
+</ul>
 
 <p>정리하면 이 어노테이션을 지워도 생성되는 NGINX 설정이 같다. 어노테이션이 실제로 일하려면 경로에 정규식 캡처 그룹이 있어야 한다. ingress-nginx 문서가 드는 형태는 <code class="highlighter-rouge">path: /api(/|$)(.*)</code> + <code class="highlighter-rouge">rewrite-target: /$2</code> 조합이고, 이때 <code class="highlighter-rouge">rewrite "(?i)&lt;path&gt;" &lt;target&gt; break;</code> 같은 지시어가 만들어져 <code class="highlighter-rouge">/api/v1/models</code> 요청이 백엔드에는 <code class="highlighter-rouge">/v1/models</code>로 전달된다.</p>
 
@@ -844,15 +844,13 @@ Events:
   Normal  Sync    2s <span class="o">(</span>x2 over 62s<span class="o">)</span>  nginx-ingress-controller  Scheduled <span class="k">for </span>sync
 </code></pre></div></div>
 
-<p>읽을 것이 네 줄이다.</p>
-
-<p>첫째, <code class="highlighter-rouge">Backends</code> 칸이 <code class="highlighter-rouge">vllm-service:8080 (10.0.5.203:8080)</code> 형태다. 괄호 앞은 매니페스트에 적은 Service 이름과 포트이고, <strong>괄호 안이 실제로 프록시되는 엔드포인트</strong>다. <code class="highlighter-rouge">10.0.5.203</code>은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">08-03-01편</a>에서 올린 vLLM 파드의 IP다. 앞에서 정리한 “ClusterIP가 아니라 파드 엔드포인트로 간다”가 이 출력에 그대로 보인다.</p>
-
-<p>둘째, <code class="highlighter-rouge">Host</code> 칸이 <code class="highlighter-rouge">*</code>다. <code class="highlighter-rouge">kubectl get</code>과 같은 표시이고, host 필드가 비었다는 뜻이다.</p>
-
-<p>셋째, <code class="highlighter-rouge">Default backend: &lt;default&gt;</code>는 <code class="highlighter-rouge">spec.defaultBackend</code>를 선언하지 않았다는 표시다. 앞에서 확인한 대로 매칭되지 않는 요청은 컨트롤러가 자체 404로 받는다.</p>
-
-<p>넷째, <code class="highlighter-rouge">Address</code>가 채워져 있다. 이 값은 Ingress가 자기 로드밸런서를 갖게 됐다는 뜻이 아니다. 차트가 컨트롤러에 <code class="highlighter-rouge">--publish-service</code> 플래그를 기본으로 넣어 두고, 컨트롤러의 status 동기화 로직이 <strong>자기 Service의 <code class="highlighter-rouge">status.loadBalancer.ingress[].hostname</code>을 읽어 자기가 담당하는 모든 Ingress의 status에 복사</strong>한다. 그래서 앞의 <code class="highlighter-rouge">kubectl get svc</code>가 보여준 <code class="highlighter-rouge">EXTERNAL-IP</code>와 같은 값이 여기 들어온다.</p>
+<p>네 가지 사항을 집중적으로 확인한다.</p>
+<ol>
+  <li><strong><code class="highlighter-rouge">Backends</code> 칸이 <code class="highlighter-rouge">vllm-service:8080 (10.0.5.203:8080)</code> 형태다.</strong> 괄호 앞은 매니페스트에 적은 Service 이름과 포트이고, <strong>괄호 안이 실제로 프록시되는 엔드포인트</strong>다. <code class="highlighter-rouge">10.0.5.203</code>은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">08-03-01편</a>에서 올린 vLLM 파드의 IP다. 앞에서 정리한 “ClusterIP가 아니라 파드 엔드포인트로 간다”가 이 출력에 그대로 보인다.</li>
+  <li><strong><code class="highlighter-rouge">Host</code> 칸이 <code class="highlighter-rouge">*</code>다.</strong> <code class="highlighter-rouge">kubectl get</code>과 같은 표시이고, host 필드가 비었다는 뜻이다.</li>
+  <li><strong><code class="highlighter-rouge">Default backend: &lt;default&gt;</code>는 <code class="highlighter-rouge">spec.defaultBackend</code>를 선언하지 않았다는 표시다.</strong> 앞에서 확인한 대로 매칭되지 않는 요청은 컨트롤러가 자체 404로 받는다.</li>
+  <li><strong><code class="highlighter-rouge">Address</code>가 채워져 있다.</strong> 이 값은 Ingress가 자기 로드밸런서를 갖게 됐다는 뜻이 아니다. 차트가 컨트롤러에 <code class="highlighter-rouge">--publish-service</code> 플래그를 기본으로 넣어 두고, 컨트롤러의 status 동기화 로직이 <strong>자기 Service의 <code class="highlighter-rouge">status.loadBalancer.ingress[].hostname</code>을 읽어 자기가 담당하는 모든 Ingress의 status에 복사</strong>한다. 그래서 앞의 <code class="highlighter-rouge">kubectl get svc</code>가 보여준 <code class="highlighter-rouge">EXTERNAL-IP</code>와 같은 값이 여기 들어온다.</li>
+</ol>
 
 <p><br /></p>
 
@@ -1168,9 +1166,9 @@ ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</
   </tbody>
 </table>
 
-<p>08-03-02편이 남긴 세 가지 중 둘은 닫혔다. URL에서 <code class="highlighter-rouge">:8080</code>이 사라졌고, TLS를 종료할 지점이 생겼다. 나머지 하나인 경로 기반 라우팅은 능력만 확보한 상태다. 컨트롤러가 L7에서 경로를 판단할 수 있게 됐지만 실제로 적용한 규칙은 <code class="highlighter-rouge">/</code> 하나여서, 분기시키는 동작은 이번 Lab에 없다.</p>
+<p>08-03-02편이 남긴 세 가지 중 둘은 닫혔다. URL에서 <code class="highlighter-rouge">:8080</code>이 사라졌고, TLS를 종료할 지점이 생겼다. 나머지 하나인 경로 기반 라우팅은 능력만 확보한 상태다. 컨트롤러가 L7에서 경로를 판단할 수 있게 됐지만 실제로 적용한 규칙은 <code class="highlighter-rouge">/</code> 하나여서, 분기시키는 동작은 이번 Lab에 없다. 이 분기는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/">8.5.1편</a>에서 <code class="highlighter-rouge">/p8s</code> 규칙이 붙으면서 실제로 쓰인다.</p>
 
-<p><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/#외부-접근-경로">08-00편의 외부 접근 경로</a>에서 본 아키텍처 그림의 <code class="highlighter-rouge">ELB → ingress-nginx</code> 화살표는 이 시점에 실제 상태가 됐다. 동시에 그림에 없던 vLLM CLB가 그대로 남아 있어, 실제 구성은 그림보다 진입점이 하나 더 많다. 지표 수집과 오토스케일링은 이후 Lab이다.</p>
+<p><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/#외부-접근-경로">08-00편의 외부 접근 경로</a>에서 본 아키텍처 그림의 <code class="highlighter-rouge">ELB → ingress-nginx</code> 화살표는 이 시점에 실제 상태가 됐다. 동시에 그림에 없던 vLLM CLB가 그대로 남아 있어, 실제 구성은 그림보다 진입점이 하나 더 많다. 지표 수집은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/">8.5.1편</a>과 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/">8.5.2편</a>에서 다룬다. 오토스케일링은 이후 Lab이다.</p>
 
 <p><br /></p>
 
@@ -1316,7 +1314,8 @@ ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</
 ">이전</a>
     
     
-      <a href="#" class="pagination--pager disabled">다음</a>
+      <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/" class="pagination--pager" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.1. vLLM 메트릭 수집과 서브패스 노출
+">다음</a>
     
   </nav>
 
@@ -1339,6 +1338,96 @@ ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</
     <div class="page__related">
       <h4 class="page__related-title">참고</h4>
       <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.2. 데이터소스 프로비저닝과 vLLM 대시보드
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  27 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Grafana를 서브패스로 노출하고 Prometheus 데이터소스를 프로비저닝한 뒤, ConfigMap으로 넣은 vLLM 대시보드가 언제 목록에 뜨는지 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.1. vLLM 메트릭 수집과 서브패스 노출
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  20 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Helm으로 Prometheus를 올려 vLLM의 /metrics를 수집하고, Ingress 서브패스로 웹 UI를 열었을 때 무엇이 함께 바뀌는지 확인해 보자.
+</p>
+  </article>
+</div>
+
         
           
 
@@ -1425,96 +1514,6 @@ ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span><span class="nb">echo</
       
     </p>
     <p class="archive__item-excerpt" itemprop="description">vLLM Deployment를 init container 패턴으로 올리고, Neuron 컴파일 산출물이 S3 캐시를 거쳐 메인 컨테이너로 전달되는 경로를 확인해 보자.
-</p>
-  </article>
-</div>
-
-        
-          
-
-
-
-<div class="grid__item">
-  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
-    
-      <div class="archive__item-teaser">
-        <img src=
-          
-            "/assets/images/blog-Dev.jpg"
-          
-          alt="">
-      </div>
-    
-    <h2 class="archive__item-title" itemprop="headline">
-      
-        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로
-</a>
-      
-    </h2>
-    <p class="page__meta">
-      
-        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
-        
-          <span class="page__meta-sep"> · </span>
-        
-      
-      
-        <i class="far fa-clock" aria-hidden="true"></i> 
-
-
-
-
-  31 분 소요
-
-
-      
-    </p>
-    <p class="archive__item-excerpt" itemprop="description">칩 하나에 리소스가 둘 광고되는 이유를 커널 디바이스 노드와 device plugin 소켓까지 내려가 확인하고, NVIDIA와 갈리는 지점을 정리해 보자.
-</p>
-  </article>
-</div>
-
-        
-          
-
-
-
-<div class="grid__item">
-  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
-    
-      <div class="archive__item-teaser">
-        <img src=
-          
-            "/assets/images/blog-Dev.jpg"
-          
-          alt="">
-      </div>
-    
-    <h2 class="archive__item-title" itemprop="headline">
-      
-        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성
-</a>
-      
-    </h2>
-    <p class="page__meta">
-      
-        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
-        
-          <span class="page__meta-sep"> · </span>
-        
-      
-      
-        <i class="far fa-clock" aria-hidden="true"></i> 
-
-
-
-
-  21 분 소요
-
-
-      
-    </p>
-    <p class="archive__item-excerpt" itemprop="description">EKS 컨트롤 플레인만 있는 상태에서 trn1.2xlarge 관리형 노드그룹을 붙이고, 미리 박혀 있던 AMI ID 때문에 막힌 지점을 풀어 보자.
 </p>
   </article>
 </div>

@@ -941,17 +941,19 @@ AI: Certainly, I<span class="s1">'d be happy to offer a translation into Korean!
 아래 리뉴스로 잘 가는 멘트입니다.
 </span></code></pre></div></div>
 
-<p>정리하면 원인은 네 겹이다.</p>
+<p>의심해 볼 수 있는 것은 넷이다. 모델 자체가 한국어를 못 하거나, chat template이 적용되지 않았거나, 샘플링 설정이 느슨하거나, 생성 길이 상한이 너무 크거나다.</p>
 
-<p><strong>첫째, 모델이 영어 전용이다.</strong> <code class="highlighter-rouge">TinyLlama-1.1B-Chat-v1.0</code>은 SlimPajama와 StarCoder 데이터로 사전학습한 1.1B 모델이고, 모델 카드의 언어 표기가 English다. 그 위에 영어 대화 데이터로 SFT 한 체크포인트다. 영어 질문에는 멀쩡한 문단이 나오고 한국어 질문에서만 무너지는 것이 이 사실과 맞는다.</p>
+<p>이 중 chat template은 배제된다. 앞의 서버 로그가 <code class="highlighter-rouge">Detected the chat template content format to be 'string'</code>을 찍었고, 프롬프트도 <code class="highlighter-rouge">'&lt;|user|&gt;\n...\n&lt;|assistant|&gt;\n'</code> 형태로 정상 적용된 것을 보여준다. 템플릿이 빠졌다면 나왔을 증상이 아니다.</p>
 
-<p><strong>둘째, chat template 미적용은 원인이 아니다.</strong> 앞의 서버 로그가 <code class="highlighter-rouge">Detected the chat template content format to be 'string'</code>을 찍고, 프롬프트가 <code class="highlighter-rouge">'&lt;|user|&gt;\n...\n&lt;|assistant|&gt;\n'</code> 형태로 정상 적용된 것을 보여준다. 이 가설은 로그로 배제된다.</p>
+<p>남는 셋은 서로 겹쳐 있다.</p>
 
-<p><strong>셋째, 샘플링 설정이 1.1B 모델에 느슨하다.</strong> 스크립트가 <code class="highlighter-rouge">temperature=1.0</code>과 <code class="highlighter-rouge">top_k=50</code>을 쓰고 <code class="highlighter-rouge">top_p</code> 컷이 없다. 1.1B 모델의 확률분포는 상위 후보 뒤로 금방 평평해지므로, 50번째 후보까지 온도 보정 없이 열어 두면 몇 토큰 만에 주제와 언어가 이탈한다. 참고로 앞의 <code class="highlighter-rouge">curl</code> 테스트는 <code class="highlighter-rouge">temperature=0.7</code>이었고 결과가 상대적으로 나았다.</p>
+<ul>
+  <li><strong>첫째, 모델이 영어 전용이다.</strong> <code class="highlighter-rouge">TinyLlama-1.1B-Chat-v1.0</code>은 SlimPajama와 StarCoder 데이터로 사전학습한 1.1B 모델이고, 모델 카드의 언어 표기가 English다. 그 위에 영어 대화 데이터로 SFT 한 체크포인트다. 영어 질문에는 멀쩡한 문단이 나오고 한국어 질문에서만 무너지는 것이 이 사실과 맞는다.</li>
+  <li><strong>둘째, 샘플링 설정이 1.1B 모델에 느슨하다.</strong> 스크립트가 <code class="highlighter-rouge">temperature=1.0</code>과 <code class="highlighter-rouge">top_k=50</code>을 쓰고 <code class="highlighter-rouge">top_p</code> 컷이 없다. 1.1B 모델의 확률분포는 상위 후보 뒤로 금방 평평해지므로, 50번째 후보까지 온도 보정 없이 열어 두면 몇 토큰 만에 주제와 언어가 이탈한다. 참고로 앞의 <code class="highlighter-rouge">curl</code> 테스트는 <code class="highlighter-rouge">temperature=0.7</code>이었고 결과가 상대적으로 나았다.</li>
+  <li><strong>셋째, <code class="highlighter-rouge">max_tokens=900</code>이 이탈을 길게 방치한다.</strong> 모델이 EOS를 내지 않으면 vLLM은 상한까지 계속 생성한다. 포르투갈어 응답이 같은 문장을 수십 번 되풀이한 것이 그 형태다. 서버의 <code class="highlighter-rouge">max_model_len</code>이 1024이므로 프롬프트에 900토큰을 더하면 컨텍스트 상한에 거의 닿는다.</li>
+</ul>
 
-<p><strong>넷째, <code class="highlighter-rouge">max_tokens=900</code>이 이탈을 길게 방치한다.</strong> 모델이 EOS를 내지 않으면 vLLM은 상한까지 계속 생성한다. 포르투갈어 응답이 같은 문장을 수십 번 되풀이한 것이 그 형태다. 서버의 <code class="highlighter-rouge">max_model_len</code>이 1024이므로 프롬프트에 900토큰을 더하면 컨텍스트 상한에 거의 닿는다.</p>
-
-<p>여기에 한 가지 제약이 더 있다. NxD Inference의 on-device sampling은 기본 활성이고, AWS 문서는 지원 파라미터가 <code class="highlighter-rouge">temperature</code>, <code class="highlighter-rouge">top_k</code>, <code class="highlighter-rouge">top_p</code> 셋뿐이며 그 외 샘플링 파라미터는 on-device sampling으로 지원되지 않는다고 적는다. 실제로 서버 로그의 <code class="highlighter-rouge">SamplingParams</code>에도 <code class="highlighter-rouge">presence_penalty=0.0, frequency_penalty=0.0, repetition_penalty=1.0</code>이 기본값 그대로 실려 있다. 다만 <strong>이 구성에서 <code class="highlighter-rouge">repetition_penalty</code>를 올려 반복을 줄일 수 있는지는 직접 값을 바꿔 재현해 보지 않았으므로 단정하지 않는다.</strong></p>
+<p>원인은 여기까지고, 고치려 할 때 걸리는 제약이 하나 있다. NxD Inference의 on-device sampling은 기본 활성이고, AWS 문서는 지원 파라미터가 <code class="highlighter-rouge">temperature</code>, <code class="highlighter-rouge">top_k</code>, <code class="highlighter-rouge">top_p</code> 셋뿐이며 그 외 샘플링 파라미터는 on-device sampling으로 지원되지 않는다고 적는다. 실제로 서버 로그의 <code class="highlighter-rouge">SamplingParams</code>에도 <code class="highlighter-rouge">presence_penalty=0.0, frequency_penalty=0.0, repetition_penalty=1.0</code>이 기본값 그대로 실려 있다. 다만 <strong>이 구성에서 <code class="highlighter-rouge">repetition_penalty</code>를 올려 반복을 줄일 수 있는지는 직접 값을 바꿔 재현해 보지 않았으므로 단정하지 않는다.</strong></p>
 
 <p>결론적으로 “모델이 작아서”만으로 정리하면 부정확하다. 같은 모델이 영어에는 정상적인 답을 냈기 때문이다. 사실에 가장 가까운 요약은 영어 전용 1.1B 모델에 한국어를 물었고, 샘플링이 느슨했으며, 생성 길이 상한이 컸다는 셋의 합이다.</p>
 
@@ -1325,6 +1327,96 @@ http://&lt;elb-id&gt;.us-west-2.elb.amazonaws.com:8080/v1/models
     
     <h2 class="archive__item-title" itemprop="headline">
       
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.2. 데이터소스 프로비저닝과 vLLM 대시보드
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  27 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Grafana를 서브패스로 노출하고 Prometheus 데이터소스를 프로비저닝한 뒤, ConfigMap으로 넣은 vLLM 대시보드가 언제 목록에 뜨는지 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.1. vLLM 메트릭 수집과 서브패스 노출
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  20 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Helm으로 Prometheus를 올려 vLLM의 /metrics를 수집하고, Ingress 서브패스로 웹 UI를 열었을 때 무엇이 함께 바뀌는지 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
         <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.4. ingress-nginx L7 노출과 자체 서명 인증서
 </a>
       
@@ -1393,96 +1485,6 @@ http://&lt;elb-id&gt;.us-west-2.elb.amazonaws.com:8080/v1/models
       
     </p>
     <p class="archive__item-excerpt" itemprop="description">vLLM Deployment를 init container 패턴으로 올리고, Neuron 컴파일 산출물이 S3 캐시를 거쳐 메인 컨테이너로 전달되는 경로를 확인해 보자.
-</p>
-  </article>
-</div>
-
-        
-          
-
-
-
-<div class="grid__item">
-  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
-    
-      <div class="archive__item-teaser">
-        <img src=
-          
-            "/assets/images/blog-Dev.jpg"
-          
-          alt="">
-      </div>
-    
-    <h2 class="archive__item-title" itemprop="headline">
-      
-        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로
-</a>
-      
-    </h2>
-    <p class="page__meta">
-      
-        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
-        
-          <span class="page__meta-sep"> · </span>
-        
-      
-      
-        <i class="far fa-clock" aria-hidden="true"></i> 
-
-
-
-
-  31 분 소요
-
-
-      
-    </p>
-    <p class="archive__item-excerpt" itemprop="description">칩 하나에 리소스가 둘 광고되는 이유를 커널 디바이스 노드와 device plugin 소켓까지 내려가 확인하고, NVIDIA와 갈리는 지점을 정리해 보자.
-</p>
-  </article>
-</div>
-
-        
-          
-
-
-
-<div class="grid__item">
-  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
-    
-      <div class="archive__item-teaser">
-        <img src=
-          
-            "/assets/images/blog-Dev.jpg"
-          
-          alt="">
-      </div>
-    
-    <h2 class="archive__item-title" itemprop="headline">
-      
-        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성
-</a>
-      
-    </h2>
-    <p class="page__meta">
-      
-        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
-        
-          <span class="page__meta-sep"> · </span>
-        
-      
-      
-        <i class="far fa-clock" aria-hidden="true"></i> 
-
-
-
-
-  21 분 소요
-
-
-      
-    </p>
-    <p class="archive__item-excerpt" itemprop="description">EKS 컨트롤 플레인만 있는 상태에서 trn1.2xlarge 관리형 노드그룹을 붙이고, 미리 박혀 있던 AMI ID 때문에 막힌 지점을 풀어 보자.
 </p>
   </article>
 </div>
