@@ -1,5 +1,5 @@
 ---
-title: "[EKS] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성"
+title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성"
 excerpt: "EKS 컨트롤 플레인만 있는 상태에서 trn1.2xlarge 관리형 노드그룹을 붙이고, 미리 박혀 있던 AMI ID 때문에 막힌 지점을 풀어 보자."
 categories:
   - Kubernetes
@@ -104,7 +104,7 @@ users:
 </details>
 
 ![EKS 컨트롤 플레인만 생성되어 있는 상태]({{site.url}}/assets/images/llmso-aws-workshop-lab1-eks-control-plane.png){: .align-center}
-<center><sup>직접 캡처. 클러스터명은 익명화를 위해 블러 처리했다. 표시한 대로 노드 0개, 노드 그룹 0개 상태다</sup></center>
+<center><sup>직접 캡처. 컴퓨팅 탭이 노드 0개, 노드 그룹 0개 상태다</sup></center>
 
 콘솔에서도 같은 상태가 보인다. 클러스터는 활성이고 쿠버네티스 버전은 1.33인데, 노드와 노드 그룹은 둘 다 0이다. 노드 목록에 뜬 `Unauthorized`는 콘솔 로그인 주체가 클러스터의 access entry에 없어서 나는 것이고, 배스천 셸의 `kubectl`은 정상 동작한다.
 
@@ -588,7 +588,7 @@ Events:
 노드그룹 자체는 콘솔에서도 확인할 수 있다.
 
 ![eksctl이 생성한 관리형 노드 그룹]({{site.url}}/assets/images/llmso-aws-workshop-lab1-eks-node-group.png){: .align-center}
-<center><sup>직접 캡처. 클러스터명이 들어가는 영역(상단 경로, 시작 템플릿 이름)은 익명화를 위해 블러 처리했다. 노드 그룹 <code>neuron-trn1-2x</code>가 원하는 크기 1, 표시한 AMI 릴리스 버전 <code>ami-0e08c07b0376ba3f8</code>로 활성 상태다</sup></center>
+<center><sup>직접 캡처. 노드 그룹 <code>neuron-trn1-2x</code>가 원하는 크기 1, AMI 릴리스 버전 <code>ami-0e08c07b0376ba3f8</code>로 활성 상태다</sup></center>
 
 EKS 워커 노드가 등록될 때 노드 쪽에서 어떤 파일과 프로세스가 관여하는지는 [EKS 워커 노드 구성 결과]({% post_url 2026-03-12-Kubernetes-EKS-01-01-05-EKS-Cluster-Worker-Node-Result %})에 정리해 둔 것이 있다.
 
@@ -626,7 +626,7 @@ ubuntu@ip-10-0-1-100:~/workshop$ aws s3 ls
 ```
 
 ![생성된 모델 캐시용 S3 버킷]({{site.url}}/assets/images/llmso-aws-workshop-lab1-s3-preparation.png){: .align-center}
-<center><sup>직접 캡처. 버킷 이름에 AWS 계정 ID가 포함되어 있어 해당 영역만 블러 처리했다. 리전은 us-west-2다</sup></center>
+<center><sup>직접 캡처. 모델 캐시용 S3 버킷이다. 리전은 us-west-2다</sup></center>
 
 ## S3 CSI 드라이버 설치
 

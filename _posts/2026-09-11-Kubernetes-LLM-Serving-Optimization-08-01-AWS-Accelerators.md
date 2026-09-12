@@ -1,5 +1,5 @@
 ---
-title: "[Trainium] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.1. Trainium·Inferentia와 Neuron 스택"
+title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.1. Trainium·Inferentia와 Neuron 스택"
 excerpt: "워크샵이 쓰는 Trainium이 어떤 칩인지, Neuron SDK가 어떤 스택인지, NVIDIA 스택과 어디까지 대응되는지 정리해 보자."
 categories:
   - Kubernetes
@@ -79,30 +79,9 @@ Activation (배치/시퀀스 비례)    : 수십 GB
 
 ## 처리량 지표의 차이
 
-throughput은 단위 시간당 처리한 작업량이고, "작업 1건"을 무엇으로 셀지만 정하면 어떤 워크로드에도 적용된다. 추론에서는 요청 1개 또는 출력 토큰 1개, 학습에서는 샘플 1개·토큰 1개·스텝 1회다.
+throughput은 단위 시간당 처리한 작업량인데, "작업 1건"을 무엇으로 세는지가 학습과 추론에서 갈린다. 학습은 `tokens/sec`나 `samples/sec`로 세고, 추론은 `output tokens/sec`나 `req/sec`로 센다.
 
-LLM 학습에서의 사실상 표준 단위는 `tokens/sec`이다. `steps/sec`만 보면 안 된다.
-
-두 지표는 스텝당 토큰 수로 이어진다. 스텝 1회는 글로벌 배치 하나를 처리하는 단위이고, 그 배치에 들어 있는 토큰은 `글로벌 배치 크기 × 시퀀스 길이`다. 따라서 `tokens/sec`는 `steps/sec`에 그 값을 곱한 것이 된다.
-
-이 관계를 놓고 보면 `steps/sec`를 단독으로 보면 안 되는 이유가 드러난다. 글로벌 배치 크기를 절반으로 줄이면 스텝 하나가 맡는 연산이 절반이라 스텝 시간도 대략 절반이 되고, `steps/sec`는 두 배로 뛴다. 그런데 스텝당 토큰 수도 함께 절반이 됐으므로 둘을 곱한 값은 그대로다. 실제 처리한 데이터 양은 변하지 않았는데 지표만 두 배로 보이는 것이다.
-
-```python
-# steps/sec = 1 / step_time_sec 이므로, 스텝당 토큰 수를 곱하면 tokens/sec가 된다
-tokens_per_sec = global_batch_size * sequence_length / step_time_sec
-```
-
-`tokens/sec`는 절댓값이라 그 자체로는 좋고 나쁨을 판단할 수 없다. 그래서 하드웨어 이론 최대 성능 대비 몇 퍼센트를 실제로 썼는지로 환산한 MFU(Model FLOPs Utilization)를 함께 본다. 근거가 되는 근사식이 6ND rule이다.
-
-- forward 1 토큰 처리는 약 `2N` FLOPs다 (N은 파라미터 수, MAC 1회 = 곱 1 + 덧셈 1)
-- backward는 forward의 약 2배인 `4N` FLOPs다 (입력에 대한 gradient + 가중치에 대한 gradient)
-- 합계 약 `6N` FLOPs per token이 되고, 추론은 forward만이므로 `2N`이다. 앞 표의 "학습 연산량이 추론의 3배"가 여기서 나온다
-
-```python
-# 달성 FLOPS와 MFU
-achieved_flops = 6 * N * tokens_per_sec
-mfu = achieved_flops / (num_chips * peak_flops_per_chip)
-```
+세는 단위만 다른 것이 아니라 판단 기준도 다르다. 학습에서는 처리량 절댓값만으로 좋고 나쁨을 알 수 없어, 하드웨어 이론 최대 성능 대비 얼마를 실제로 썼는지로 환산한 MFU(Model FLOPs Utilization)를 함께 본다. 근거가 되는 근사식이 6ND rule이다. forward 1 토큰이 약 `2N` FLOPs(N은 파라미터 수)이고 backward가 그 2배인 `4N`이라, 학습은 합계 `6N`이고 추론은 forward만이므로 `2N`이다. 앞 표의 "학습 연산량이 추론의 3배"가 여기서 나온다.
 
 <details markdown="1">
 <summary><b>Trainium 기준 MFU 계산 예시</b></summary>
