@@ -493,17 +493,17 @@ AI: Certainly, I'd be happy to offer a translation into Korean!
 아래 리뉴스로 잘 가는 멘트입니다.
 ```
 
-정리하면 원인은 네 겹이다.
+의심해 볼 수 있는 것은 넷이다. 모델 자체가 한국어를 못 하거나, chat template이 적용되지 않았거나, 샘플링 설정이 느슨하거나, 생성 길이 상한이 너무 크거나다.
 
-**첫째, 모델이 영어 전용이다.** `TinyLlama-1.1B-Chat-v1.0`은 SlimPajama와 StarCoder 데이터로 사전학습한 1.1B 모델이고, 모델 카드의 언어 표기가 English다. 그 위에 영어 대화 데이터로 SFT 한 체크포인트다. 영어 질문에는 멀쩡한 문단이 나오고 한국어 질문에서만 무너지는 것이 이 사실과 맞는다.
+이 중 chat template은 배제된다. 앞의 서버 로그가 `Detected the chat template content format to be 'string'`을 찍었고, 프롬프트도 `'<|user|>\n...\n<|assistant|>\n'` 형태로 정상 적용된 것을 보여준다. 템플릿이 빠졌다면 나왔을 증상이 아니다.
 
-**둘째, chat template 미적용은 원인이 아니다.** 앞의 서버 로그가 `Detected the chat template content format to be 'string'`을 찍고, 프롬프트가 `'<|user|>\n...\n<|assistant|>\n'` 형태로 정상 적용된 것을 보여준다. 이 가설은 로그로 배제된다.
+남는 셋은 서로 겹쳐 있다.
 
-**셋째, 샘플링 설정이 1.1B 모델에 느슨하다.** 스크립트가 `temperature=1.0`과 `top_k=50`을 쓰고 `top_p` 컷이 없다. 1.1B 모델의 확률분포는 상위 후보 뒤로 금방 평평해지므로, 50번째 후보까지 온도 보정 없이 열어 두면 몇 토큰 만에 주제와 언어가 이탈한다. 참고로 앞의 `curl` 테스트는 `temperature=0.7`이었고 결과가 상대적으로 나았다.
+- **첫째, 모델이 영어 전용이다.** `TinyLlama-1.1B-Chat-v1.0`은 SlimPajama와 StarCoder 데이터로 사전학습한 1.1B 모델이고, 모델 카드의 언어 표기가 English다. 그 위에 영어 대화 데이터로 SFT 한 체크포인트다. 영어 질문에는 멀쩡한 문단이 나오고 한국어 질문에서만 무너지는 것이 이 사실과 맞는다.
+- **둘째, 샘플링 설정이 1.1B 모델에 느슨하다.** 스크립트가 `temperature=1.0`과 `top_k=50`을 쓰고 `top_p` 컷이 없다. 1.1B 모델의 확률분포는 상위 후보 뒤로 금방 평평해지므로, 50번째 후보까지 온도 보정 없이 열어 두면 몇 토큰 만에 주제와 언어가 이탈한다. 참고로 앞의 `curl` 테스트는 `temperature=0.7`이었고 결과가 상대적으로 나았다.
+- **셋째, `max_tokens=900`이 이탈을 길게 방치한다.** 모델이 EOS를 내지 않으면 vLLM은 상한까지 계속 생성한다. 포르투갈어 응답이 같은 문장을 수십 번 되풀이한 것이 그 형태다. 서버의 `max_model_len`이 1024이므로 프롬프트에 900토큰을 더하면 컨텍스트 상한에 거의 닿는다.
 
-**넷째, `max_tokens=900`이 이탈을 길게 방치한다.** 모델이 EOS를 내지 않으면 vLLM은 상한까지 계속 생성한다. 포르투갈어 응답이 같은 문장을 수십 번 되풀이한 것이 그 형태다. 서버의 `max_model_len`이 1024이므로 프롬프트에 900토큰을 더하면 컨텍스트 상한에 거의 닿는다.
-
-여기에 한 가지 제약이 더 있다. NxD Inference의 on-device sampling은 기본 활성이고, AWS 문서는 지원 파라미터가 `temperature`, `top_k`, `top_p` 셋뿐이며 그 외 샘플링 파라미터는 on-device sampling으로 지원되지 않는다고 적는다. 실제로 서버 로그의 `SamplingParams`에도 `presence_penalty=0.0, frequency_penalty=0.0, repetition_penalty=1.0`이 기본값 그대로 실려 있다. 다만 **이 구성에서 `repetition_penalty`를 올려 반복을 줄일 수 있는지는 직접 값을 바꿔 재현해 보지 않았으므로 단정하지 않는다.**
+원인은 여기까지고, 고치려 할 때 걸리는 제약이 하나 있다. NxD Inference의 on-device sampling은 기본 활성이고, AWS 문서는 지원 파라미터가 `temperature`, `top_k`, `top_p` 셋뿐이며 그 외 샘플링 파라미터는 on-device sampling으로 지원되지 않는다고 적는다. 실제로 서버 로그의 `SamplingParams`에도 `presence_penalty=0.0, frequency_penalty=0.0, repetition_penalty=1.0`이 기본값 그대로 실려 있다. 다만 **이 구성에서 `repetition_penalty`를 올려 반복을 줄일 수 있는지는 직접 값을 바꿔 재현해 보지 않았으므로 단정하지 않는다.**
 
 결론적으로 "모델이 작아서"만으로 정리하면 부정확하다. 같은 모델이 영어에는 정상적인 답을 냈기 때문이다. 사실에 가장 가까운 요약은 영어 전용 1.1B 모델에 한국어를 물었고, 샘플링이 느슨했으며, 생성 길이 상한이 컸다는 셋의 합이다.
 

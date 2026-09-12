@@ -649,7 +649,7 @@ INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 ```
 
-`0.0.0.0:8080`으로 바인딩하므로 파드 IP로 들어오는 요청을 받는다. `/v1/chat/completions`와 `/v1/models`가 OpenAI 호환 API이고, `/metrics`는 이후 Lab의 Prometheus 수집 대상이 된다. `Application startup complete.`까지 와야 Service의 엔드포인트로 붙는다.
+`0.0.0.0:8080`으로 바인딩하므로 파드 IP로 들어오는 요청을 받는다. `/v1/chat/completions`와 `/v1/models`가 OpenAI 호환 API이고, `/metrics`는 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})에서 Prometheus 수집 대상이 된다. `Application startup complete.`까지 와야 Service의 엔드포인트로 붙는다.
 
 ## 기동 로그에 남은 경고
 
