@@ -135,11 +135,9 @@ ingress-nginx 쪽에서는 host 없는 규칙이 NGINX의 catch-all 서버(`serv
 
 ### rewrite-target 어노테이션
 
-워크샵 매니페스트에 `nginx.ingress.kubernetes.io/rewrite-target: /`가 붙어 있는데, **이 구성에서는 아무 일도 하지 않는다.** 컨트롤러 소스로 확인한 이유는 둘이다.
-
-첫째, 프록시 지시어를 만드는 `buildProxyPass()`가 `path`와 rewrite 타깃이 같으면 특별 처리 없이 곧바로 기본 `proxy_pass`를 반환한다. 여기서 `path`는 `/`, 타깃도 `/`라 첫 분기에서 걸리고, `rewrite` 지시어 자체가 생성되지 않는다.
-
-둘째, location 수식자도 바뀌지 않는다. `needsRewrite()`는 타깃이 비어 있지 않으면서 `path`와 **다를 때만** 참이 되는데, 여기서는 같으므로 거짓이다. `use-regex`도 쓰지 않았으므로 정규식 강제가 걸리지 않고, location은 `~* "^/"`가 아니라 평범한 `"/"`로 만들어진다.
+워크샵 매니페스트에 `nginx.ingress.kubernetes.io/rewrite-target: /`가 붙어 있는데, **이 구성에서는 아무 일도 하지 않는다.** 컨트롤러 소스로 확인한 이유는 다음과 같다.
+- 첫째, 프록시 지시어를 만드는 `buildProxyPass()`가 `path`와 rewrite 타깃이 같으면 특별 처리 없이 곧바로 기본 `proxy_pass`를 반환한다. 여기서 `path`는 `/`, 타깃도 `/`라 첫 분기에서 걸리고, `rewrite` 지시어 자체가 생성되지 않는다.
+- 둘째, location 수식자도 바뀌지 않는다. `needsRewrite()`는 타깃이 비어 있지 않으면서 `path`와 **다를 때만** 참이 되는데, 여기서는 같으므로 거짓이다. `use-regex`도 쓰지 않았으므로 정규식 강제가 걸리지 않고, location은 `~* "^/"`가 아니라 평범한 `"/"`로 만들어진다.
 
 정리하면 이 어노테이션을 지워도 생성되는 NGINX 설정이 같다. 어노테이션이 실제로 일하려면 경로에 정규식 캡처 그룹이 있어야 한다. ingress-nginx 문서가 드는 형태는 `path: /api(/|$)(.*)` + `rewrite-target: /$2` 조합이고, 이때 `rewrite "(?i)<path>" <target> break;` 같은 지시어가 만들어져 `/api/v1/models` 요청이 백엔드에는 `/v1/models`로 전달된다.
 
@@ -400,15 +398,11 @@ Events:
   Normal  Sync    2s (x2 over 62s)  nginx-ingress-controller  Scheduled for sync
 ```
 
-읽을 것이 네 줄이다.
-
-첫째, `Backends` 칸이 `vllm-service:8080 (10.0.5.203:8080)` 형태다. 괄호 앞은 매니페스트에 적은 Service 이름과 포트이고, **괄호 안이 실제로 프록시되는 엔드포인트**다. `10.0.5.203`은 [08-03-01편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})에서 올린 vLLM 파드의 IP다. 앞에서 정리한 "ClusterIP가 아니라 파드 엔드포인트로 간다"가 이 출력에 그대로 보인다.
-
-둘째, `Host` 칸이 `*`다. `kubectl get`과 같은 표시이고, host 필드가 비었다는 뜻이다.
-
-셋째, `Default backend: <default>`는 `spec.defaultBackend`를 선언하지 않았다는 표시다. 앞에서 확인한 대로 매칭되지 않는 요청은 컨트롤러가 자체 404로 받는다.
-
-넷째, `Address`가 채워져 있다. 이 값은 Ingress가 자기 로드밸런서를 갖게 됐다는 뜻이 아니다. 차트가 컨트롤러에 `--publish-service` 플래그를 기본으로 넣어 두고, 컨트롤러의 status 동기화 로직이 **자기 Service의 `status.loadBalancer.ingress[].hostname`을 읽어 자기가 담당하는 모든 Ingress의 status에 복사**한다. 그래서 앞의 `kubectl get svc`가 보여준 `EXTERNAL-IP`와 같은 값이 여기 들어온다.
+네 가지 사항을 집중적으로 확인한다.
+1. **`Backends` 칸이 `vllm-service:8080 (10.0.5.203:8080)` 형태다.** 괄호 앞은 매니페스트에 적은 Service 이름과 포트이고, **괄호 안이 실제로 프록시되는 엔드포인트**다. `10.0.5.203`은 [08-03-01편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})에서 올린 vLLM 파드의 IP다. 앞에서 정리한 "ClusterIP가 아니라 파드 엔드포인트로 간다"가 이 출력에 그대로 보인다.
+2. **`Host` 칸이 `*`다.** `kubectl get`과 같은 표시이고, host 필드가 비었다는 뜻이다.
+3. **`Default backend: <default>`는 `spec.defaultBackend`를 선언하지 않았다는 표시다.** 앞에서 확인한 대로 매칭되지 않는 요청은 컨트롤러가 자체 404로 받는다.
+4. **`Address`가 채워져 있다.** 이 값은 Ingress가 자기 로드밸런서를 갖게 됐다는 뜻이 아니다. 차트가 컨트롤러에 `--publish-service` 플래그를 기본으로 넣어 두고, 컨트롤러의 status 동기화 로직이 **자기 Service의 `status.loadBalancer.ingress[].hostname`을 읽어 자기가 담당하는 모든 Ingress의 status에 복사**한다. 그래서 앞의 `kubectl get svc`가 보여준 `EXTERNAL-IP`와 같은 값이 여기 들어온다.
 
 <br>
 
@@ -659,9 +653,9 @@ spec:
 | HTTPS 오류 코드가 왜 바뀌었나 | 443 리스너가 생겨 핸드셰이크가 성공했고, 자체 서명 인증서를 브라우저가 신뢰하지 못했다 |
 | 경고를 없애려면 | 보유 도메인과 공인 인증서가 필요하다. `*.elb.amazonaws.com`으로는 발급받을 수 없고, 이번 실습에서 적용하지 않은 범위다 |
 
-08-03-02편이 남긴 세 가지 중 둘은 닫혔다. URL에서 `:8080`이 사라졌고, TLS를 종료할 지점이 생겼다. 나머지 하나인 경로 기반 라우팅은 능력만 확보한 상태다. 컨트롤러가 L7에서 경로를 판단할 수 있게 됐지만 실제로 적용한 규칙은 `/` 하나여서, 분기시키는 동작은 이번 Lab에 없다.
+08-03-02편이 남긴 세 가지 중 둘은 닫혔다. URL에서 `:8080`이 사라졌고, TLS를 종료할 지점이 생겼다. 나머지 하나인 경로 기반 라우팅은 능력만 확보한 상태다. 컨트롤러가 L7에서 경로를 판단할 수 있게 됐지만 실제로 적용한 규칙은 `/` 하나여서, 분기시키는 동작은 이번 Lab에 없다. 이 분기는 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})에서 `/p8s` 규칙이 붙으면서 실제로 쓰인다.
 
-[08-00편의 외부 접근 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#외부-접근-경로)에서 본 아키텍처 그림의 `ELB → ingress-nginx` 화살표는 이 시점에 실제 상태가 됐다. 동시에 그림에 없던 vLLM CLB가 그대로 남아 있어, 실제 구성은 그림보다 진입점이 하나 더 많다. 지표 수집과 오토스케일링은 이후 Lab이다.
+[08-00편의 외부 접근 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#외부-접근-경로)에서 본 아키텍처 그림의 `ELB → ingress-nginx` 화살표는 이 시점에 실제 상태가 됐다. 동시에 그림에 없던 vLLM CLB가 그대로 남아 있어, 실제 구성은 그림보다 진입점이 하나 더 많다. 지표 수집은 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})과 [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})에서 다룬다. 오토스케일링은 이후 Lab이다.
 
 <br>
 

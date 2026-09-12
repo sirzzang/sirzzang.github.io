@@ -45,7 +45,7 @@ vLLM과 AWS Trainium(`trn1.2xlarge`)을 Amazon EKS 위에서 조합해, 운영 �
 - vLLM과 NxD로 TinyLlama-1.1B 모델 서빙 배포 — [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
 - init container 기반 모델 컴파일과 S3 캐싱 패턴 구현 — [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
 - ingress-nginx로 외부 접근과 로드밸런싱 구성 — [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})
-- Prometheus와 Grafana(및 CloudWatch)로 모니터링 구축 — 이후 Lab
+- Prometheus와 Grafana로 모니터링 구축 — [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %}), [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %}) (CloudWatch는 배포하지 않았다)
 - CPU 사용률 기반 HPA 구성 — 이후 Lab
 - llmperf 등으로 처리량과 지연 시간 검증 — 이후 Lab
 
@@ -127,7 +127,9 @@ EKS 쪽은 AWS가 컨트롤 플레인만 관리하고 데이터 플레인은 사
 | 스토리지 | S3 모델 캐시, S3 CSI Driver, PV/PVC | 일부 사전 배포 | [8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %}) |
 | 네트워크 | vLLM Service (`LoadBalancer`) | 미배포 | [8.3.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}) |
 | 네트워크 | ingress-nginx 컨트롤러 | 미배포 | [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %}) |
-| 관측 | Prometheus, Grafana, CloudWatch | 미배포 | 이후 Lab |
+| 관측 | Prometheus, vLLM 메트릭 스크레이프 | 미배포 | [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %}) |
+| 관측 | Grafana, vLLM 대시보드 | 미배포 | [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %}) |
+| 관측 | CloudWatch Container Insights | 미배포 | 다루지 않음 |
 
 표에서 상태 열이 중요하다. 워크샵 환경에 접속해 EKS 콘솔을 열어 보면 클러스터는 이미 활성 상태인데 컴퓨팅(노드 그룹)이 비어 있다. 즉 실습의 출발점은 클러스터 생성이 아니라 **Trainium 인스턴스를 쓰는 노드 그룹을 붙이는 것**이다. 이 경계가 이후 Lab들의 순서를 결정한다.
 
@@ -285,7 +287,7 @@ flowchart TD
 
 vLLM Deployment에는 readiness probe와 liveness probe가 붙고, 지표는 Prometheus와 Grafana, CloudWatch로 모은다. 오토스케일링은 CPU 사용률 기반 HPA다.
 
-가속기 워크로드인데 스케일 기준이 가속기 사용률이 아니라 CPU 사용률이라는 점은 이 구성의 특징으로 기억해 둘 만하다. 실제 동작과 지표 수집 구성은 Lab 4에서 확인한다.
+가속기 워크로드인데 스케일 기준이 가속기 사용률이 아니라 CPU 사용률이라는 점은 이 구성의 특징으로 기억해 둘 만하다. 지표 수집 구성은 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})과 [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})에서 확인한다. 오토스케일링의 실제 동작은 이후 Lab이다.
 
 <br>
 
