@@ -17,6 +17,7 @@ tags:
   - fsGroup
   - file-permissions
 hidden: true
+last_modified_at: 2026-09-13
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 9장의 학습 내용을 기반으로 합니다.*
@@ -423,8 +424,6 @@ configMap 볼륨의 동작 방식을 이해해 두지 않으면 예상치 못한
 
 컨테이너 파일시스템의 디렉토리에 볼륨을 마운트하면, 컨테이너 이미지에서 해당 디렉토리에 원래 존재하던 **모든 파일에 접근할 수 없게** 된다. 하위 디렉토리도 마찬가지다.
 
-![configMap 볼륨 마운트 시 기존 파일 가림 효과]({{site.url}}/assets/images/k8s-vol-04-configmap-mount-effect.png){: .align-center}
-
 예를 들어, Unix 시스템에서 중요한 설정 파일이 위치하는 `/etc` 디렉토리에 configMap 볼륨을 마운트하면, ConfigMap이 제공하는 파일만 볼 수 있고 `/etc`에 원래 있어야 할 다른 모든 파일이 숨겨진다. 이 문제는 볼륨 마운트 시 `subPath` 필드를 사용하여 완화할 수 있다.
 
 `subPath`를 사용하면 전체 볼륨을 `/etc`에 마운트하는 대신, `mountPath`와 `subPath` 필드의 조합으로 특정 파일만 마운트할 수 있다.
@@ -432,8 +431,6 @@ configMap 볼륨의 동작 방식을 이해해 두지 않으면 예상치 못한
 ## 심볼릭 링크를 이용한 원자적(atomic) 업데이트
 
 일부 애플리케이션은 설정 파일의 변경을 감시하고 업데이트가 감지되면 자동으로 설정을 다시 로드한다. 그러나 대용량 파일이나 여러 파일을 사용하는 경우, 모든 업데이트가 완전히 기록되기 전에 변경을 감지할 수 있다. 애플리케이션이 부분적으로만 업데이트된 파일을 읽으면 정상적으로 동작하지 않을 수 있다.
-
-![심볼릭 링크를 이용한 원자적 업데이트 방식]({{site.url}}/assets/images/k8s-vol-04-configmap-atomic-update.png){: .align-center}
 
 Kubernetes는 이를 방지하기 위해 configMap 볼륨의 모든 파일이 **원자적으로(atomically)** 업데이트되도록 보장한다. 이는 심볼릭 파일 링크를 사용하여 달성된다.
 
@@ -549,8 +546,6 @@ spec:
     - name: admin
       containerPort: 9901
 ```
-
-![secret 볼륨과 configMap 볼륨을 함께 사용하는 Pod 구조]({{site.url}}/assets/images/k8s-vol-04-secret-volume-structure.png){: .align-center}
 
 ## secret 볼륨의 파일 읽기
 
@@ -900,8 +895,6 @@ containers:
 #   metadata/pod-name       ← Downward API
 #   metadata/pod-namespace  ← Downward API
 ```
-
-![projected 볼륨으로 여러 소스를 하나의 디렉토리에 합치기]({{site.url}}/assets/images/k8s-vol-04-projected-volume.png){: .align-center}
 
 > **Note:** `projected` 볼륨은 Pod의 ServiceAccount와 연결된 토큰도 노출할 수 있다. 각 Pod는 ServiceAccount에 연결되어 있으며, Pod는 이 토큰을 사용하여 Kubernetes API에 인증할 수 있다.
 

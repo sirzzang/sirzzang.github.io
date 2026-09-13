@@ -48,7 +48,7 @@ vLLM과 AWS Trainium(`trn1.2xlarge`)을 Amazon EKS 위에서 조합해, 운영 �
 - ingress-nginx로 외부 접근과 로드밸런싱 구성 — [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})
 - Prometheus와 Grafana로 모니터링 구축 — [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %}), [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %}) (CloudWatch는 배포하지 않았다)
 - CPU 사용률 기반 HPA 구성 — 이후 Lab
-- llmperf 등으로 처리량과 지연 시간 검증 — 이후 Lab
+- llmperf 등으로 처리량과 지연 시간 검증 — [8.6편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark %})
 
 워크샵은 이 산출물을 Lab 단위로 나눠 진행한다. 이 시리즈의 편 번호가 그 Lab 경계를 따른다.
 
@@ -58,7 +58,8 @@ vLLM과 AWS Trainium(`trn1.2xlarge`)을 Amazon EKS 위에서 조합해, 운영 �
 | Lab 2 | vLLM Deployment 배포와 Service 노출 | [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %}), [8.3.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}) |
 | Lab 3 | ingress-nginx로 L7 노출 | [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %}) |
 | Lab 4 | Prometheus 수집과 Grafana 대시보드 | [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %}), [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %}) |
-| 이후 Lab | llmperf 부하 테스트, CPU 사용률 기반 HPA | 별도 편에서 다룬다 |
+| Lab 5 | llmperf 부하 테스트와 성능 측정 | [8.6편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark %}) |
+| 이후 Lab | CPU 사용률 기반 HPA | 별도 편에서 다룬다 |
 
 ## 기술 스택
 
@@ -291,7 +292,7 @@ flowchart TD
 
 마운트는 분기의 한쪽이 아니라 **분기보다 먼저 일어나는 전제**다. 캐시가 있든 없든 파드는 PV를 먼저 마운트하고, 그다음에 마운트된 디렉터리가 비었는지를 보고 컴파일 여부를 정한다. 캐시가 있으면 그 디렉터리에서 바로 읽어 쓰고, 없으면 컴파일한 산출물을 그 디렉터리에 써서 다음 파드가 쓸 수 있게 남긴다. 판정 기준이 S3 API 호출이 아니라 마운트된 디렉터리를 보는 것이라, 캐시 판정 자체가 마운트가 정상이라는 전제 위에 있다. 실제 매니페스트와 init container 스크립트에서 이 분기가 어떻게 구현돼 있는지는 [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})에서 확인한다.
 
-캐시 버킷 이름은 `vllm-models-cache-<ACCOUNT_ID>` 형태다. 이 버킷을 Mountpoint for Amazon S3 CSI Driver로 100Gi, `ReadWriteMany` PV로 마운트한다. `ReadWriteMany`라서 여러 파드가 같은 캐시를 동시에 읽을 수 있고, HPA로 파드가 늘어나는 Lab 6 시나리오에서 이 구조가 의미를 갖는다. 새로 뜬 파드가 컴파일을 건너뛰고 바로 서버를 올릴 수 있기 때문이다.
+캐시 버킷 이름은 `vllm-models-cache-<ACCOUNT_ID>` 형태다. 이 버킷을 Mountpoint for Amazon S3 CSI Driver로 100Gi, `ReadWriteMany` PV로 마운트한다. `ReadWriteMany`라서 여러 파드가 같은 캐시를 동시에 읽을 수 있고, HPA로 파드가 늘어나는 이후 Lab 시나리오에서 이 구조가 의미를 갖는다. 새로 뜬 파드가 컴파일을 건너뛰고 바로 서버를 올릴 수 있기 때문이다.
 
 ## 외부 접근 경로
 

@@ -16,6 +16,7 @@ tags:
   - ImageVolume
   - security
 hidden: true
+last_modified_at: 2026-09-13
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 9장의 학습 내용을 기반으로 합니다.*
@@ -298,8 +299,6 @@ Kubernetes의 핵심 추상화는 워크로드를 노드에서 격리하는 것�
 ## hostPath 소개
 
 `hostPath` 볼륨은 **노드의 파일 시스템 경로를 Pod에 마운트**하는 범용 볼륨 타입으로, 호스트 노드의 파일 시스템에 있는 특정 파일이나 디렉터리를 가리킨다. 같은 노드에서 실행되고 같은 `hostPath` 경로를 사용하는 Pod들은 동일한 파일에 접근할 수 있지만, **다른 노드의 Pod는 접근할 수 없다.**
-
-![hostPath 볼륨 다이어그램]({{site.url}}/assets/images/k8s-vol-03-hostpath-volume.png){: .align-center}
 
 `hostPath` 볼륨은 해당 Pod가 항상 같은 노드에서 실행되도록 보장하지 않는 한, Pod의 데이터를 저장하기에 적합하지 않다.
 

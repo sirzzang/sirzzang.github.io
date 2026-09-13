@@ -28,15 +28,12 @@ last_modified_at: 2026-09-13
 
 # TL;DR
 
-- Grafana는 Prometheus와 **별개 릴리스**다. `grafana/grafana` 차트 10.5.15(앱 12.3.1)를 따로 설치한다. 오퍼레이터도 CRD도 없는 구성이라 데이터소스와 대시보드를 리소스로 선언할 수 없고, 전부 values의 프로비저닝 파일과 파드 안 파일시스템으로 들어간다
-- values의 `datasources`·`dashboardProviders`·`dashboards` 셋은 이름이 비슷하지만 산출물이 다르다. 앞의 둘은 `/etc/grafana/provisioning` 아래 설정 파일이 되고, 셋째는 init container `download-dashboards`가 grafana.com에서 받아 `/var/lib/grafana/dashboards/default`에 떨구는 **JSON 파일**이 된다
-- 프로비저닝된 데이터소스는 Grafana UI에서 읽기 전용으로 잠긴다. URL 한 줄을 고치는 데도 values 수정 + `helm upgrade` 경로를 타야 한다
-- Prometheus에 `--web.route-prefix=/p8s`를 붙인 순간 접근 수단과 무관하게 경로가 바뀐다. Grafana 파드 안에서 확인하면 `/api/v1/query`는 404, `/p8s/api/v1/query`는 200이다. 그래서 데이터소스 URL도 `/p8s`로 고쳐야 했다
-- Grafana의 대응물은 `root_url`과 `serve_from_sub_path`다. 다만 Prometheus와 달리 **`root_url`에 서브패스를 적어도 자동으로 켜지지 않는다.** `serve_from_sub_path: true`를 따로 줘야 하고, 차트가 프로브 경로를 자동으로 맞춰 주지 않으므로 `/grafana/api/health`를 values에 직접 적어야 한다
-- 대시보드 ConfigMap을 만들어도 목록에 뜨지 않는다. provider가 `type: file`이라 Grafana는 쿠버네티스 API가 아니라 **디렉터리**를 읽고, 그 디렉터리에 파일을 놓는 마운트가 빠져 있었다. `grafana_dashboard` 라벨은 이 구성과 무관하다 — 라벨을 감시하는 사이드카가 설치돼 있지 않다
-- `subPath`로 마운트한 ConfigMap은 갱신이 반영되지 않는다. 대시보드 JSON을 고쳐 ConfigMap을 갱신해도 파드 안 파일은 그대로다
-- Lab 마지막 단계의 `kubectl annotate deployment`는 이 구성에서 효과가 없다. 어노테이션이 Deployment 오브젝트에 붙고 파드 템플릿으로 전파되지 않았다. 출력의 `revision`이 1에서 움직이지 않은 것이 그 증거다
-- 패널 값이 대부분 0인 것은 메트릭 미노출이 아니다. 순간값 패널은 요청이 돌지 않으면 0이 맞는 값이고, 누적값도 요청 9건분이라 15분 창에서 평평하다
+- Grafana는 Prometheus와 **별개 릴리스**다. 오퍼레이터도 CRD도 없어 데이터소스와 대시보드를 리소스로 선언할 수 없고, values의 프로비저닝 파일과 파드 안 파일시스템으로 들어간다
+- values의 `datasources`·`dashboardProviders`·`dashboards` 셋은 산출물이 다르다. 앞의 둘은 `/etc/grafana/provisioning` 아래 설정 파일이 되고, 셋째는 init container가 받아 오는 **JSON 파일**이 된다
+- 프로비저닝된 데이터소스는 `editable` 기본값이 `false`라 UI에서 잠긴다. URL 한 줄을 고치는 데도 values 수정 + `helm upgrade`를 타야 한다
+- [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})에서 붙인 `/p8s` 때문에 데이터소스 URL도 함께 고쳐야 했다. Grafana 쪽 대응물인 `serve_from_sub_path`는 `root_url`만 적어서는 켜지지 않는다
+- 대시보드 ConfigMap을 만들어도 목록에 뜨지 않는다. provider가 `type: file`이라 Grafana가 쿠버네티스 API가 아니라 **디렉터리**를 읽는데 그 마운트가 빠져 있었다
+- 패널 값이 대부분 0인 것은 메트릭 미노출이 아니다. 순간값 패널은 요청이 돌지 않으면 0이 맞고, 누적값도 요청 9건분이라 15분 창에서 평평하다
 
 <br>
 
@@ -1238,7 +1235,7 @@ grafana-bf745454-nmsv8   1/1   Terminating       0     11m
 | 패널 값이 왜 대부분 0인가 | 순간값 패널은 요청이 돌지 않으면 0이 맞는 값이다. 누적값도 테스트 요청 몇 건분이라 15분 창에서 평평하다. 메트릭 미노출이 아니다 |
 | `Total Successful Requests`가 왜 두 칸인가 | `finished_reason` 라벨 때문에 시리즈가 둘인데 쿼리에 `sum()`이 없다 |
 
-Lab 4에서 만든 것은 수집과 화면까지다. Prometheus가 vLLM 메트릭을 긁고, Grafana가 그것을 읽고, 대시보드 한 장이 값을 표시한다. 부하를 실제로 걸어 이 패널들이 움직이는지 확인하는 것, 그리고 CPU 사용률 기반 오토스케일링은 이후 Lab이다.
+Lab 4에서 만든 것은 수집과 화면까지다. Prometheus가 vLLM 메트릭을 긁고, Grafana가 그것을 읽고, 대시보드 한 장이 값을 표시한다. 부하를 실제로 걸어 이 패널들이 움직이는지는 [8.6편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark %})에서 확인한다. CPU 사용률 기반 오토스케일링은 이후 Lab이다.
 
 보관에 대해 알아 둘 점도 하나 있다. Prometheus에 PV가 없어서 `prometheus-server` 파드가 교체될 때마다 기존 시계열이 사라진다. Lab 진행 중 그 파드가 교체됐으므로, 대시보드에서 그 이전 구간을 조회하면 그때는 정말로 비어 있다.
 

@@ -27,13 +27,12 @@ last_modified_at: 2026-09-13
 
 # TL;DR
 
-- 어노테이션을 하나도 붙이지 않고 `type: LoadBalancer`만 준 Service에서 **Classic Load Balancer(CLB)**가 만들어졌다. `cloud-provider-aws`의 service controller가 처리했고, 그 기본 산출물이 CLB이기 때문이다. NLB는 어노테이션이 필요하고, ALB는 Service가 아니라 Ingress 경로다
-- 08-00편이 아키텍처 그림만 보고 미뤄 뒀던 질문 — `type: LoadBalancer` Service가 vLLM 쪽인지 ingress-nginx 쪽인지 — 에 대한 답은 **Lab 2 시점에서는 vLLM Service 자신**이다
-- 포트가 **8080 → 32233 → 8080** 세 번 나오고 그중 둘이 같은 숫자다. 앞의 8080은 Service `port`이자 ELB 리스너 포트, 32233은 자동 할당된 NodePort, 뒤의 8080은 컨테이너 포트다
-- 8080을 고른 근거 중 **특권 포트 제약은 성립하지 않는다.** 노드에서 본 vLLM 프로세스는 root로 돌고 있었고, containerd 기본 capability 집합에는 `CAP_NET_BIND_SERVICE`가 들어 있다. 남는 근거는 보안그룹 인바운드에 80이 없다는 것이다
-- `kubectl get ep`가 뱉는 deprecation 경고는 **v1.33에서 공식화된 것**이고, 같은 이름으로 EndpointSlice를 찾으면 없다. EndpointSlice는 Service와 이름이 1:1로 대응하지 않아 라벨로 조회해야 한다
-- 첫 배포에 걸린 시간은 로그 타임스탬프 기준 **7분 19초**였다. 이미지 pull 2분 48초, 모델 컴파일 3분 52초, API 서버 기동 35초다
-- 브라우저로 접속하면 `ERR_SSL_PROTOCOL_ERROR`가 난다. **CLB 리스너가 `TCP:8080` 하나뿐**이고 443도 인증서도 없기 때문이다. `http://` 스킴을 명시하고 포트를 붙이면 접속된다
+- 어노테이션을 하나도 붙이지 않고 `type: LoadBalancer`만 준 Service에서 **Classic Load Balancer(CLB)**가 만들어졌다. `cloud-provider-aws`의 service controller가 처리했고 그 기본 산출물이 CLB다. NLB는 어노테이션이 필요하고, ALB는 Service가 아니라 Ingress 경로다
+- [8.0편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})이 아키텍처 그림만 보고 미뤄 뒀던 질문 — `type: LoadBalancer` Service가 vLLM 쪽인지 ingress-nginx 쪽인지 — 에 대한 답은 **Lab 2 시점에서는 vLLM Service 자신**이다
+- 포트가 **8080 → 32233 → 8080** 세 번 나오고 그중 둘이 같은 숫자다. 앞은 Service `port` 겸 ELB 리스너, 가운데는 자동 할당된 NodePort, 뒤는 컨테이너 포트다
+- 8080을 고른 근거 중 **특권 포트 제약은 성립하지 않는다.** vLLM 프로세스는 root로 돌고 containerd 기본 capability에 `CAP_NET_BIND_SERVICE`가 있다. 남는 근거는 보안그룹 인바운드에 80이 없다는 것이다
+- 첫 배포에 걸린 시간은 **7분 19초**였다. 이미지 pull 2분 48초, 모델 컴파일 3분 52초, API 서버 기동 35초다
+- 브라우저로 접속하면 `ERR_SSL_PROTOCOL_ERROR`가 난다. **CLB 리스너가 `TCP:8080` 하나뿐**이고 443도 인증서도 없기 때문이다
 
 <br>
 

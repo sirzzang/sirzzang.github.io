@@ -16,6 +16,7 @@ tags:
   - VPN
   - SSL-Inspection
   - NODE_EXTRA_CA_CERTS
+last_modified_at: 2026-09-13
 ---
 
 <br>
@@ -158,7 +159,7 @@ subject=CN=*.google.com
 
 브라우저에서 인증서 상세를 열어 봐도 발급 기관이 회사 CA로 찍혀 있지만, 자물쇠는 정상이고 차단도 되지 않는다.
 
-![VPN 환경에서 google.com 인증서 — 회사 CA로 재서명되었지만 유효]({{site.url}}/assets/images/vpn-on-google-ceertificate.png){: .align-center width="500"}
+![VPN 환경에서 google.com 인증서 — 회사 CA로 재서명되었지만 유효]({{site.url}}/assets/images/vpn-on-google-certificate.png){: .align-center width="500"}
 
 이것이 가능한 이유는 **브라우저가 OS 시스템 trust store(macOS 키체인)를 참조**하기 때문이다. 회사 IT/MDM 정책으로 macOS 키체인에 회사 CA가 "항상 신뢰"로 설치되어 있다.
 

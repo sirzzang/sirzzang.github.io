@@ -27,15 +27,12 @@ last_modified_at: 2026-09-13
 
 # TL;DR
 
-- 이 Lab이 쓰는 것은 kube-prometheus-stack이 아니다. `prometheus-community/prometheus` 차트 29.28.1(앱 v3.14.0) 하나이고, **prometheus-operator가 의존 서브차트에 없다.** 오퍼레이터가 없으니 `ServiceMonitor`·`PodMonitor` 같은 CRD도 없다. 대상을 늘리려면 Prometheus 설정 파일에 잡을 직접 적거나, 차트 기본 잡이 이미 돌리고 있는 `prometheus.io/scrape` 어노테이션 디스커버리에 태워야 한다. 이 Lab이 고른 것은 앞쪽이다
-- vLLM 수집은 values의 `serverFiles.prometheus.yml.scrape_configs`에 적은 `static_configs` 잡 하나다. 서비스 디스커버리를 쓰지 않고, Prometheus가 하는 일은 `vllm-service.default.svc.cluster.local`을 DNS로 푸는 것뿐이다
-- 그 경로는 Ingress를 거치지 않는다. non-headless Service의 A 레코드는 ClusterIP 하나이므로 스크레이프는 **ClusterIP → kube-proxy → 파드**로 간다. [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})에서 만든 ELB와 ingress-nginx는 이 수집에 관여하지 않는다
-- values에 적은 `nodeExporter:`와 `kubeStateMetrics:` 두 블록은 차트 29.28.1이 읽는 키가 아니다. 실제 키는 `prometheus-node-exporter:`와 `kube-state-metrics:`이고, `values.schema.json`에 `additionalProperties` 제약이 없어 오타가 검증에 걸리지 않고 조용히 버려진다. 두 파드가 뜬 것은 **서브차트 기본값이 이미 `enabled: true`**이기 때문이지 저 두 줄 때문이 아니다
-- values의 `scrape_configs`는 차트 기본 잡을 대체하지 않고 뒤에 이어 붙는다. 최종 설정에는 기본 잡 열 개와 `vllm-metrics`가 함께 들어간다
-- `alertmanager: enabled: false`는 파드를 안 띄우는 데서 끝나지 않는다. `prometheus.yml`의 `alerting:` 블록이 통째로 생략되는데, 그 블록이 alertmanager 파드를 찾으려고 `role: pod` 디스커버리를 돌리던 자리다
-- `--web.route-prefix=/p8s`는 리버스 프록시 쪽 설정이 아니라 **Prometheus 프로세스 자신의 내부 라우팅 프리픽스**다. `/api/v1`뿐 아니라 Prometheus 자신의 `/metrics`와 `/-/ready`까지 `/p8s` 아래로 옮겨간다
-- 그 결과 차트 기본 `prometheus` 잡이 자기 자신을 긁다가 404로 DOWN이 됐다. 자기 메트릭은 `/p8s/metrics`로 옮겨갔는데 잡의 `metrics_path`는 `/metrics`로 남아 있다. 프로브 경로는 차트가 함께 옮겨 주지만 스크레이프 잡은 건드리지 않는다
-- `vllm-metrics` 잡은 UP이고, PromQL 결과에 붙은 `instance`·`job` 라벨에 수집 경로가 그대로 남는다. `/metrics` 응답의 값과 조회 결과 값이 일치한다
+- 이 Lab이 쓰는 것은 kube-prometheus-stack이 아니다. `prometheus-community/prometheus` 차트 하나이고 **오퍼레이터가 없어 `ServiceMonitor`·`PodMonitor` CRD도 없다**
+- 그래서 vLLM 수집은 values에 직접 적은 `static_configs` 잡 하나다. 서비스 디스커버리 없이 서비스 DNS를 풀 뿐이라 Ingress를 거치지 않고 **ClusterIP → 파드**로 간다
+- values의 `nodeExporter:`와 `kubeStateMetrics:`는 차트가 읽는 키가 아니다. `additionalProperties` 제약이 없어 오타가 조용히 버려졌고, 두 파드가 뜬 것은 **서브차트 기본값** 때문이다
+- values의 `scrape_configs`는 차트 기본 잡을 대체하지 않고 뒤에 이어 붙는다. 반면 `alertmanager: enabled: false`는 `alerting:` 블록을 통째로 지운다
+- `--web.route-prefix=/p8s`는 리버스 프록시 설정이 아니라 **Prometheus 자신의 내부 라우팅 프리픽스**다. `/api/v1`뿐 아니라 자신의 `/metrics`와 `/-/ready`까지 옮겨간다
+- 그 결과 기본 `prometheus` 잡이 자기 자신을 긁다 404로 DOWN이 됐다. 프로브 경로는 차트가 함께 옮겨 주지만 스크레이프 잡은 건드리지 않기 때문이다
 
 <br>
 
@@ -573,7 +570,7 @@ Annotations:  <none>
 
 Query 화면에서 `vllm:`을 입력하면 자동완성이 뜬다.
 
-![Prometheus 쿼리 화면의 자동완성 목록]({{site.url}}/assets/images/llmso-aws-workshop-promehteus-query.png){: .align-center}
+![Prometheus 쿼리 화면의 자동완성 목록]({{site.url}}/assets/images/llmso-aws-workshop-prometheus-query.png){: .align-center}
 
 <center><sup>직접 캡처. Prometheus Query 화면에서 vllm: 을 입력했을 때의 자동완성 목록이다. 메트릭 이름 오른쪽에 gauge와 counter 종류가 함께 표시된다.</sup></center>
 
@@ -661,7 +658,7 @@ Error scraping target: server returned HTTP status 404 Not Found
 
 8.4편이 능력만 확보해 둔 경로 분기가 이 편에서 처음 실제로 쓰였다. 같은 ELB 하나 뒤에 `/`로 가는 vLLM과 `/p8s`로 가는 Prometheus가 함께 붙었고, 서브패스를 쓰려면 Ingress 규칙만으로는 부족하고 애플리케이션도 자기 위치를 알아야 한다는 점이 `--web.route-prefix`의 효과로 드러났다. 그 대가로 Prometheus의 내부 경로가 전부 이동했고, 그 결과 자기 자신을 긁는 기본 잡이 404로 실패하는 상태가 됐다.
 
-이 시점의 Prometheus에는 `vllm:` 계열 시계열이 들어오고 있지만 화면은 PromQL 조회 결과 한 줄이다. 값을 패널로 묶어 보는 부분은 [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})에서 다룬다. 게이지가 전부 0인 지금 상태에서 그 패널들이 실제로 움직이는지 확인하려면 부하를 걸어야 하는데, 그건 이후 Lab이다.
+이 시점의 Prometheus에는 `vllm:` 계열 시계열이 들어오고 있지만 화면은 PromQL 조회 결과 한 줄이다. 값을 패널로 묶어 보는 부분은 [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})에서 다룬다. 게이지가 전부 0인 지금 상태에서 그 패널들이 실제로 움직이는지는 부하를 걸어야 확인된다. 그 부하는 [8.6편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark %})에서 건다.
 
 <br>
 
