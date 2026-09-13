@@ -628,9 +628,4 @@ URL에 `:8080`이 남는 것과 TLS 종료 지점이 없는 것은 같은 원인
 - [IANA Service Name and Transport Protocol Port Number Registry](https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml)
 - [TinyLlama-1.1B-Chat-v1.0 모델 카드](https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0)
 - [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
-- [8.1편: Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
-- [8.2.1편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
-- [8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
-- [8.3.1편: init container 모델 컴파일과 S3 캐시]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
-
 <br>

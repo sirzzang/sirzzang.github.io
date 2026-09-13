@@ -1470,9 +1470,6 @@ Lab 1은 여기까지다. 노드가 칩과 코어를 광고하고, 그 자원을
 - [aws-neuron/neuron-helm-charts](https://github.com/aws-neuron/neuron-helm-charts)
 - [eksctl](https://eksctl.io/)
 - [Helm: FAQ](https://helm.sh/docs/faq/)
-- [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
-- [8.1편: Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
-- [8.2.1편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
 - [[Kubernetes] NVIDIA Device Plugin 동작 원리]({% post_url 2024-07-23-Dev-Kubernetes-NVIDIA-GPU-Mechanism %})
 - [[Kubernetes] Kubernetes 환경에서 NVIDIA GPU 사용하기 - NVIDIA Device Plugin]({% post_url 2024-07-19-Dev-Kubernetes-GPU-Setting %})
 - [[Container] 컨테이너 장치 주입: OCI Runtime Hook과 CDI]({% post_url 2026-02-02-CS-Container-Device-Injection %})
@@ -1483,5 +1480,5 @@ Lab 1은 여기까지다. 노드가 칩과 코어를 광고하고, 그 자원을
 - [[GenAI] GPU 자원 개요와 K8s 할당 메커니즘]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation %})
 - [[Kubernetes] GPU Sharing: Time Slicing - 2. 설정]({% post_url 2025-11-22-Kubernetes-GPU-Time-Slicing-2 %})
 - [[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 1. Device Plugin 비활성화]({% post_url 2026-04-09-Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending %})
-
+- [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
 <br>

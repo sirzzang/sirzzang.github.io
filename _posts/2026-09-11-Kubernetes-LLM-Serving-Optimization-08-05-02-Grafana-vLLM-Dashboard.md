@@ -1235,7 +1235,7 @@ grafana-bf745454-nmsv8   1/1   Terminating       0     11m
 | 패널 값이 왜 대부분 0인가 | 순간값 패널은 요청이 돌지 않으면 0이 맞는 값이다. 누적값도 테스트 요청 몇 건분이라 15분 창에서 평평하다. 메트릭 미노출이 아니다 |
 | `Total Successful Requests`가 왜 두 칸인가 | `finished_reason` 라벨 때문에 시리즈가 둘인데 쿼리에 `sum()`이 없다 |
 
-Lab 4에서 만든 것은 수집과 화면까지다. Prometheus가 vLLM 메트릭을 긁고, Grafana가 그것을 읽고, 대시보드 한 장이 값을 표시한다. 부하를 실제로 걸어 이 패널들이 움직이는지는 [8.6편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark %})에서 확인한다. CPU 사용률 기반 오토스케일링은 이후 Lab이다.
+Lab 4에서 만든 것은 수집과 화면까지다. Prometheus가 vLLM 메트릭을 긁고, Grafana가 그것을 읽고, 대시보드 한 장이 값을 표시한다. 부하를 실제로 걸어 이 패널들이 움직이는지는 [8.6편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark %})에서 확인한다. CPU 사용률 기반 오토스케일링은 [8.7편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-07-Scaling %})에서 다룬다.
 
 보관에 대해 알아 둘 점도 하나 있다. Prometheus에 PV가 없어서 `prometheus-server` 파드가 교체될 때마다 기존 시계열이 사라진다. Lab 진행 중 그 파드가 교체됐으므로, 대시보드에서 그 이전 구간을 조회하면 그때는 정말로 비어 있다.
 
@@ -1256,12 +1256,4 @@ Lab 4에서 만든 것은 수집과 화면까지다. Prometheus가 vLLM 메트�
 - [Kubernetes: Ingress - Path types](https://kubernetes.io/docs/concepts/services-networking/ingress/#path-types)
 - [vLLM Documentation](https://docs.vllm.ai/)
 - [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
-- [8.1편: Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
-- [8.2.1편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
-- [8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
-- [8.3.1편: init container 모델 컴파일과 S3 캐시]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
-- [8.3.2편: LoadBalancer 서비스 노출과 추론 테스트]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})
-- [8.4편: ingress-nginx L7 노출과 자체 서명 인증서]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})
-- [8.5.1편: vLLM 메트릭 수집과 서브패스 노출]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})
-
 <br>

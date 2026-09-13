@@ -657,7 +657,7 @@ spec:
 
 08-03-02편이 남긴 세 가지 중 둘은 닫혔다. URL에서 `:8080`이 사라졌고, TLS를 종료할 지점이 생겼다. 나머지 하나인 경로 기반 라우팅은 능력만 확보한 상태다. 컨트롤러가 L7에서 경로를 판단할 수 있게 됐지만 실제로 적용한 규칙은 `/` 하나여서, 분기시키는 동작은 이번 Lab에 없다. 이 분기는 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})에서 `/p8s` 규칙이 붙으면서 실제로 쓰인다.
 
-[8.0편의 외부 접근 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#외부-접근-경로)에서 본 아키텍처 그림의 `ELB → ingress-nginx` 화살표는 이 시점에 실제 상태가 됐다. 동시에 그림에 없던 vLLM CLB가 그대로 남아 있어, 실제 구성은 그림보다 진입점이 하나 더 많다. 지표 수집은 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})과 [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})에서 다룬다. 오토스케일링은 이후 Lab이다.
+[8.0편의 외부 접근 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#외부-접근-경로)에서 본 아키텍처 그림의 `ELB → ingress-nginx` 화살표는 이 시점에 실제 상태가 됐다. 동시에 그림에 없던 vLLM CLB가 그대로 남아 있어, 실제 구성은 그림보다 진입점이 하나 더 많다. 지표 수집은 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})과 [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})에서 다룬다. 오토스케일링은 [8.7편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-07-Scaling %})에서 다룬다.
 
 <br>
 
@@ -679,10 +679,4 @@ spec:
 - [Let's Encrypt: Challenge Types](https://letsencrypt.org/docs/challenge-types/)
 - [cert-manager: Securing Ingress Resources](https://cert-manager.io/docs/usage/ingress/)
 - [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
-- [8.1편: Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
-- [8.2.1편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
-- [8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
-- [8.3.1편: init container 모델 컴파일과 S3 캐시]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
-- [8.3.2편: LoadBalancer 서비스 노출과 추론 테스트]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})
-
 <br>

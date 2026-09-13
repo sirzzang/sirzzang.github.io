@@ -826,11 +826,8 @@ ami-0e08c07b0376ba3f8   amazon-eks-node-al2023-x86_64-neuron-1.33-v20260903     
 - [awslabs/mountpoint-s3-csi-driver](https://github.com/awslabs/mountpoint-s3-csi-driver)
 - [AWS Neuron Documentation](https://awsdocs-neuron.readthedocs-hosted.com/)
 - [Kubernetes: Device Plugins](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/)
-- [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
-- [8.1편: Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
-- [8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
 - [GenAI on K8s 10.1편: GPU 자원 개요와 K8s 할당 메커니즘]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation %})
 - [EKS 클러스터 워커 노드 구성 결과]({% post_url 2026-03-12-Kubernetes-EKS-01-01-05-EKS-Cluster-Worker-Node-Result %})
 - [EKS GPU 트러블슈팅 3.1편: Device Plugin 비활성화 시 파드 Pending]({% post_url 2026-04-09-Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending %})
-
+- [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
 <br>

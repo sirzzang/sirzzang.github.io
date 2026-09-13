@@ -695,7 +695,6 @@ flowchart TD
 
 # 참고 링크
 
-- [AWS Neuron Documentation](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/)
 - [Trainium Architecture](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/trainium.html)
 - [Trainium2 Architecture](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/trainium2.html)
 - [Inferentia2 Architecture](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/inferentia2.html)
@@ -709,5 +708,5 @@ flowchart TD
 - [vllm-project/vllm-neuron](https://github.com/vllm-project/vllm-neuron)
 - [AWS DLAMI: Inferentia 튜토리얼](https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia.html)
 - [aws-neuron/deep-learning-containers](https://github.com/aws-neuron/deep-learning-containers)
-
+- [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
 <br>
