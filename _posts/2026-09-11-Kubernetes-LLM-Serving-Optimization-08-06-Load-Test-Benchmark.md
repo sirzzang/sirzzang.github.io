@@ -1241,7 +1241,7 @@ vLLM 서빙과 모니터링 스택은 다른 네임스페이스에 있으므로 
 
 수치 해석에서 얻은 것은 도구가 찍는 숫자의 이름과 그 산출식을 따로 봐야 한다는 쪽이다. `Tokens per Second`가 처리량이 아니고, `Average Tokens per Response`가 토큰 수가 아니고, P99가 백분위가 아니고, `inter_token_latency_s`가 디코드 스텝 시간이 아니었다. 네 경우 모두 산출식을 읽고서야 무엇을 재고 있는지 알 수 있었다.
 
-남은 Lab은 CPU 사용률 기반 HPA다. 부하를 거는 쪽까지는 이 편에서 확인했고, 그 부하에 파드 수가 반응하는지는 이후 Lab이다. 이번 데이터로 판정하지 못한 `vllm:num_requests_running`과 `vllm:num_requests_waiting`도 부하 지속 시간을 스크레이프 간격보다 길게 잡아 다시 볼 대상이다.
+남은 Lab은 CPU 사용률 기반 HPA다. 부하를 거는 쪽까지는 이 편에서 확인했고, 그 부하에 파드 수가 반응하는지는 [8.7편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-07-Scaling %})에서 다룬다. 다만 그 편에서 확인되는 것은 파드 수가 늘어나는 장면이 아니라 노드도 파드도 늘릴 수 없는 자원 제약 쪽이다. 이번 데이터로 판정하지 못한 `vllm:num_requests_running`과 `vllm:num_requests_waiting`도 부하 지속 시간을 스크레이프 간격보다 길게 잡아 다시 볼 대상이다. 뒤쪽 지표는 8.7편에서 CPU를 대신할 스케일 신호 후보로 다시 나온다.
 
 <br>
 
@@ -1261,13 +1261,4 @@ vLLM 서빙과 모니터링 스택은 다른 네임스페이스에 있으므로 
 - [Locust Documentation](https://docs.locust.io/)
 - [PyPI: asyncio](https://pypi.org/project/asyncio/)
 - [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
-- [8.1편: Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
-- [8.2.1편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
-- [8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
-- [8.3.1편: init container 모델 컴파일과 S3 캐시]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
-- [8.3.2편: LoadBalancer 서비스 노출과 추론 테스트]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})
-- [8.4편: ingress-nginx L7 노출과 자체 서명 인증서]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})
-- [8.5.1편: vLLM 메트릭 수집과 서브패스 노출]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})
-- [8.5.2편: 데이터소스 프로비저닝과 vLLM 대시보드]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})
-
 <br>

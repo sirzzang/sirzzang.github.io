@@ -40,26 +40,14 @@ last_modified_at: 2026-09-13
 
 vLLM과 AWS Trainium(`trn1.2xlarge`)을 Amazon EKS 위에서 조합해, 운영 환경을 가정한 LLM 추론 서빙 인프라를 구축하는 핸즈온 워크샵이다. 서빙 대상은 `TinyLlama-1.1B-Chat-v1.0`이고, 이 모델을 NeuronX Distributed(NxD)로 컴파일해 배포한 뒤 모니터링과 오토스케일링, 부하 테스트까지 이어 간다.
 
-워크샵이 목표로 하는 최종 산출물은 일곱 개다. 각 항목이 이 시리즈의 어디에 해당하는지 함께 적는다.
+워크샵이 목표로 내건 최종 산출물은 일곱 개이고, 진행은 Lab 여섯 개로 나뉜다. 이 시리즈의 편 번호가 그 Lab 경계를 따른다.
 
-- Trainium(`trn1.2xlarge`) 기반 EKS 클러스터 구성 — [8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
-- vLLM과 NxD로 TinyLlama-1.1B 모델 서빙 배포 — [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
-- init container 기반 모델 컴파일과 S3 캐싱 패턴 구현 — [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
-- ingress-nginx로 외부 접근과 로드밸런싱 구성 — [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})
-- Prometheus와 Grafana로 모니터링 구축 — [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %}), [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %}) (CloudWatch는 배포하지 않았다)
-- CPU 사용률 기반 HPA 구성 — 이후 Lab
-- llmperf 등으로 처리량과 지연 시간 검증 — [8.6편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark %})
-
-워크샵은 이 산출물을 Lab 단위로 나눠 진행한다. 이 시리즈의 편 번호가 그 Lab 경계를 따른다.
-
-| Lab | 범위 | 편 |
-|---|---|---|
-| Lab 1 | EKS 노드그룹 구성, Neuron device plugin과 스케줄러 확장 | [8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})(스텝 1~6, 8~9), [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})(스텝 7) |
-| Lab 2 | vLLM Deployment 배포와 Service 노출 | [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %}), [8.3.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}) |
-| Lab 3 | ingress-nginx로 L7 노출 | [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %}) |
-| Lab 4 | Prometheus 수집과 Grafana 대시보드 | [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %}), [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %}) |
-| Lab 5 | llmperf 부하 테스트와 성능 측정 | [8.6편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark %}) |
-| 이후 Lab | CPU 사용률 기반 HPA | 별도 편에서 다룬다 |
+- **Lab 1** — Trainium(`trn1.2xlarge`) 기반 EKS 클러스터 구성과 Neuron 자원 노출 — [8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})(스텝 1~6, 8~9), [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})(스텝 7)
+- **Lab 2** — vLLM과 NxD로 TinyLlama-1.1B 서빙 배포, init container 기반 모델 컴파일과 S3 캐싱, Service로 외부 노출 — [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %}), [8.3.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})
+- **Lab 3** — ingress-nginx로 외부 접근과 로드밸런싱 구성 — [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})
+- **Lab 4** — Prometheus와 Grafana로 모니터링 구축 — [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %}), [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %}) (CloudWatch는 배포하지 않았다)
+- **Lab 5** — llmperf 등으로 처리량과 지연 시간 검증 — [8.6편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark %})
+- **Lab 6** — CPU 사용률 기반 HPA 구성 — [8.7편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-07-Scaling %}) (자원 제약으로 완주하지 못했다)
 
 ## 기술 스택
 
@@ -129,20 +117,19 @@ EKS 쪽은 AWS가 컨트롤 플레인만 관리하고 데이터 플레인은 사
 
 왼쪽부터 따라가면, 외부 클라이언트의 요청이 인터넷 게이트웨이를 지나 ELB로 들어오고, ELB가 워커 노드의 ingress-nginx 컨트롤러로 전달한다. 컨트롤러는 vLLM Service를 거쳐 vLLM 파드로 요청을 보내고, 그 파드가 노드에 붙은 Trn1 가속기를 쓴다. 파드 안에는 vLLM 컨테이너와 init container가 함께 들어 있고, 모델 캐시는 S3를 PV로 마운트한 볼륨에 있다. 오른쪽의 EKS 애드온 5종과 AWS 관리형 서비스 5종은 아래 표에서 하나씩 확인한다.
 
-| 레이어 | 구성 요소 | 접속 시점 상태 | 만드는 시점 |
-|---|---|---|---|
-| 인프라 | VPC, 퍼블릭 서브넷, 보안 그룹, 워크샵 인스턴스(`t3.2xlarge`) | 사전 배포 | 해당 없음 |
-| 컨트롤 플레인 | EKS 1.33, VPC CNI, OIDC | 사전 배포 | 해당 없음 |
-| 데이터 플레인 | 관리형 노드 그룹 `neuron-trn1-2x`(`trn1.2xlarge`) | 미배포 | [8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %}) |
-| 가속기 통합 | Neuron device plugin, Neuron scheduler extension | 미배포 | [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}) |
-| 서빙 | vLLM Deployment와 init container, NxD | 미배포 | [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %}) |
-| 스토리지 | S3 모델 캐시 버킷, S3 CSI Driver | 미배포 | [8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %}) |
-| 스토리지 | 모델 캐시 PV/PVC | 미배포 | [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %}) |
-| 네트워크 | vLLM Service (`LoadBalancer`) | 미배포 | [8.3.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}) |
-| 네트워크 | ingress-nginx 컨트롤러 | 미배포 | [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %}) |
-| 관측 | Prometheus(클러스터 내 Helm 설치), vLLM 메트릭 스크레이프 | 미배포 | [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %}) |
-| 관측 | Grafana(클러스터 내 Helm 설치), vLLM 대시보드 | 미배포 | [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %}) |
-| 관측 | CloudWatch Container Insights | 미배포 | 다루지 않음 |
+| 레이어 | 구성 요소 | 접속 시점 상태 |
+|---|---|---|
+| 인프라 | VPC, 퍼블릭 서브넷, 보안 그룹, 워크샵 인스턴스(`t3.2xlarge`) | 사전 배포 |
+| 컨트롤 플레인 | EKS 1.33, VPC CNI, OIDC | 사전 배포 |
+| 데이터 플레인 | 관리형 노드 그룹 `neuron-trn1-2x`(`trn1.2xlarge`) | 미배포 |
+| 가속기 통합 | Neuron device plugin, Neuron scheduler extension | 미배포 |
+| 서빙 | vLLM Deployment와 init container, NxD | 미배포 |
+| 스토리지 | S3 모델 캐시 버킷, S3 CSI Driver, 모델 캐시 PV/PVC | 미배포 |
+| 네트워크 | vLLM Service (`LoadBalancer`) | 미배포 |
+| 네트워크 | ingress-nginx 컨트롤러 | 미배포 |
+| 관측 | Prometheus(클러스터 내 Helm 설치), vLLM 메트릭 스크레이프 | 미배포 |
+| 관측 | Grafana(클러스터 내 Helm 설치), vLLM 대시보드 | 미배포 |
+| 관측 | CloudWatch Container Insights | 미배포. 이 시리즈에서 다루지 않는다 |
 
 그림의 AWS 관리형 서비스 칸에는 AWS Prometheus와 AWS Grafana가 그려져 있지만, 실제로 Lab이 올리는 것은 관리형 서비스가 아니라 클러스터 안에 Helm으로 설치하는 `prometheus-community`와 `grafana` 차트다. 표의 관측 행은 이 차이를 반영한 값이다.
 
@@ -292,7 +279,7 @@ flowchart TD
 
 마운트는 분기의 한쪽이 아니라 **분기보다 먼저 일어나는 전제**다. 캐시가 있든 없든 파드는 PV를 먼저 마운트하고, 그다음에 마운트된 디렉터리가 비었는지를 보고 컴파일 여부를 정한다. 캐시가 있으면 그 디렉터리에서 바로 읽어 쓰고, 없으면 컴파일한 산출물을 그 디렉터리에 써서 다음 파드가 쓸 수 있게 남긴다. 판정 기준이 S3 API 호출이 아니라 마운트된 디렉터리를 보는 것이라, 캐시 판정 자체가 마운트가 정상이라는 전제 위에 있다. 실제 매니페스트와 init container 스크립트에서 이 분기가 어떻게 구현돼 있는지는 [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})에서 확인한다.
 
-캐시 버킷 이름은 `vllm-models-cache-<ACCOUNT_ID>` 형태다. 이 버킷을 Mountpoint for Amazon S3 CSI Driver로 100Gi, `ReadWriteMany` PV로 마운트한다. `ReadWriteMany`라서 여러 파드가 같은 캐시를 동시에 읽을 수 있고, HPA로 파드가 늘어나는 이후 Lab 시나리오에서 이 구조가 의미를 갖는다. 새로 뜬 파드가 컴파일을 건너뛰고 바로 서버를 올릴 수 있기 때문이다.
+캐시 버킷 이름은 `vllm-models-cache-<ACCOUNT_ID>` 형태다. 이 버킷을 Mountpoint for Amazon S3 CSI Driver로 100Gi, `ReadWriteMany` PV로 마운트한다. `ReadWriteMany`라서 여러 파드가 같은 캐시를 동시에 읽을 수 있고, 새로 뜬 파드는 컴파일을 건너뛰고 바로 서버를 올릴 수 있다. 이 구조를 전제하는 것이 HPA로 파드가 늘어나는 Lab 6인데, 실제로는 노드의 칩이 하나뿐이라 두 번째 파드가 스케줄되지 않았다([8.7편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-07-Scaling %})).
 
 ## 외부 접근 경로
 
@@ -304,7 +291,7 @@ flowchart TD
 
 지표는 Prometheus와 Grafana로 모은다. 아키텍처 그림에 함께 그려진 CloudWatch는 이 실습에서 배포하지 않았다. 오토스케일링은 CPU 사용률 기반 HPA다. vLLM Deployment에 readiness probe나 liveness probe는 붙지 않는다.
 
-가속기 워크로드인데 스케일 기준이 가속기 사용률이 아니라 CPU 사용률이라는 점은 이 구성의 특징으로 기억해 둘 만하다. 지표 수집 구성은 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})과 [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})에서 확인한다. 오토스케일링의 실제 동작은 이후 Lab이다.
+가속기 워크로드인데 스케일 기준이 가속기 사용률이 아니라 CPU 사용률이라는 점은 이 구성의 특징으로 기억해 둘 만하다. 지표 수집 구성은 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})과 [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})에서 확인한다. 오토스케일링은 [8.7편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-07-Scaling %})에서 다루는데, 자원 제약으로 파드가 늘어나는 동작까지는 가지 못했고 CPU 사용률이 이 워크로드의 스케일 신호가 되는지를 수치로 확인하는 데서 끝난다.
 
 <br>
 
