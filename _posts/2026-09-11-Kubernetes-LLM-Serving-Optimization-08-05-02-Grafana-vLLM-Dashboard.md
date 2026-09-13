@@ -19,7 +19,7 @@ tags:
   - Observability
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-6
-last_modified_at: 2026-09-12
+last_modified_at: 2026-09-13
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.*
@@ -32,7 +32,7 @@ last_modified_at: 2026-09-12
 - values의 `datasources`·`dashboardProviders`·`dashboards` 셋은 이름이 비슷하지만 산출물이 다르다. 앞의 둘은 `/etc/grafana/provisioning` 아래 설정 파일이 되고, 셋째는 init container `download-dashboards`가 grafana.com에서 받아 `/var/lib/grafana/dashboards/default`에 떨구는 **JSON 파일**이 된다
 - 프로비저닝된 데이터소스는 Grafana UI에서 읽기 전용으로 잠긴다. URL 한 줄을 고치는 데도 values 수정 + `helm upgrade` 경로를 타야 한다
 - Prometheus에 `--web.route-prefix=/p8s`를 붙인 순간 접근 수단과 무관하게 경로가 바뀐다. Grafana 파드 안에서 확인하면 `/api/v1/query`는 404, `/p8s/api/v1/query`는 200이다. 그래서 데이터소스 URL도 `/p8s`로 고쳐야 했다
-- Grafana의 대응물은 `root_url`과 `serve_from_sub_path`다. 다만 Prometheus와 달리 **`root_url`에 서브패스를 적어도 자동으로 켜지지 않는다.** `serve_from_sub_path: true`를 따로 줘야 하고, 켜면 헬스 엔드포인트도 `/grafana/api/health`로 옮겨가므로 프로브 경로를 함께 고쳐야 한다
+- Grafana의 대응물은 `root_url`과 `serve_from_sub_path`다. 다만 Prometheus와 달리 **`root_url`에 서브패스를 적어도 자동으로 켜지지 않는다.** `serve_from_sub_path: true`를 따로 줘야 하고, 차트가 프로브 경로를 자동으로 맞춰 주지 않으므로 `/grafana/api/health`를 values에 직접 적어야 한다
 - 대시보드 ConfigMap을 만들어도 목록에 뜨지 않는다. provider가 `type: file`이라 Grafana는 쿠버네티스 API가 아니라 **디렉터리**를 읽고, 그 디렉터리에 파일을 놓는 마운트가 빠져 있었다. `grafana_dashboard` 라벨은 이 구성과 무관하다 — 라벨을 감시하는 사이드카가 설치돼 있지 않다
 - `subPath`로 마운트한 ConfigMap은 갱신이 반영되지 않는다. 대시보드 JSON을 고쳐 ConfigMap을 갱신해도 파드 안 파일은 그대로다
 - Lab 마지막 단계의 `kubectl annotate deployment`는 이 구성에서 효과가 없다. 어노테이션이 Deployment 오브젝트에 붙고 파드 템플릿으로 전파되지 않았다. 출력의 `revision`이 1에서 움직이지 않은 것이 그 증거다
@@ -56,7 +56,7 @@ last_modified_at: 2026-09-12
 
 알아 둘 점이 하나 있다. 이 구성은 **Prometheus와 Grafana를 한 차트로 묶어 올리지 않는다.** [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})이 설치한 것은 `prometheus-community/prometheus` 29.28.1이고, Grafana는 `grafana/grafana` 10.5.15로 따로 설치한다. 두 차트 어느 쪽도 prometheus-operator를 포함하지 않으므로 `ServiceMonitor`나 `GrafanaDatasource` 같은 커스텀 리소스는 이 클러스터에 존재하지 않는다. 데이터소스도 대시보드도 **values에 적어 넣는 프로비저닝 파일**로만 들어간다.
 
-설치 명령을 실행하면 첫 줄에 `WARNING: This chart is deprecated`가 찍힌다. 차트 자체가 deprecated 표시를 달고 있다. 무엇으로 옮겨야 하는지는 이번 실습에서 확인하지 않았다.
+설치 명령을 실행하면 첫 줄에 `WARNING: This chart is deprecated`가 찍힌다. 차트 자체가 deprecated 표시를 달고 있다. 무엇으로 옮겨야 하는지는 실습 중에는 확인하지 않았다. 이후 확인해 보니 이 차트는 `grafana-community/helm-charts`로 이관됐다.
 
 ## values가 프로비저닝하는 세 가지
 
@@ -164,7 +164,7 @@ dashboardProviders:
         path: /var/lib/grafana/dashboards/default
 ```
 
-`options.path`가 `/var/lib/grafana/dashboards/default`다. Grafana는 이 경로를 파일시스템에서 읽을 뿐 쿠버네티스 API를 보지 않는다. `folder: ''`라 대시보드는 폴더 없이 일반 목록에 놓이고, `editable: true`라 UI에서 수정은 가능하다.
+`options.path`가 `/var/lib/grafana/dashboards/default`다. Grafana는 이 경로를 파일시스템에서 읽을 뿐 쿠버네티스 API를 보지 않는다. `folder: ''`라 대시보드는 폴더 없이 일반 목록에 놓인다. 마지막 `editable: true`는 차트 values 예시를 그대로 옮긴 것인데, 대시보드 provider에서 UI 저장을 허용하는 문서화된 키는 `allowUiUpdates`이고 `editable`은 데이터소스 쪽 옵션이다. 이 줄이 실제로 하는 일은 확인하지 않았다.
 
 ### dashboards
 
@@ -189,7 +189,7 @@ dashboards:
 
 ## 프로비저닝된 데이터소스의 읽기 전용 잠금
 
-프로비저닝 파일로 등록된 데이터소스는 Grafana UI에서 수정할 수 없다. 설정 화면이 열리기는 하지만 읽기 전용으로 잠긴다. 파일이 원본이고 UI가 사본이라, UI에서 고치면 다음 기동 때 파일 값으로 되돌아가기 때문이다.
+프로비저닝 파일로 등록된 데이터소스는 기본적으로 Grafana UI에서 수정할 수 없다. 설정 화면이 열리기는 하지만 읽기 전용으로 잠긴다. 프로비저닝 설정에 `editable: true`를 적으면 UI 수정이 열리는데, 기본값이 `false`라 이 values에서는 잠긴 상태다. 잠가 두는 쪽이 기본값인 이유는 파일이 원본이고 UI가 사본이라, UI에서 고쳐도 다음 기동 때 파일 값으로 되돌아가기 때문이다.
 
 그래서 URL 한 글자를 바꾸는 데도 경로가 정해져 있다. `grafana-values.yaml`을 고치고 `helm upgrade`를 돌려야 한다. 다음 절의 수정이 그 과정을 그대로 밟는다.
 
@@ -249,7 +249,11 @@ livenessProbe:
 
 `domain`과 `root_url`을 나눠 쓴 것이 눈에 띈다. heredoc이 따옴표 없이 열려 있어 `$INGRESS`는 셸이 먼저 전개하지만, `%(domain)s`는 셸 문법이 아니라 Grafana 설정 파일의 치환 문법이라 파일에 그대로 남는다. Grafana가 기동할 때 `domain` 값으로 채운다.
 
-프로브 두 개를 함께 고친 것은 선택이 아니라 필수다. `serve_from_sub_path`를 켜면 Grafana의 모든 경로가 `/grafana` 아래로 옮겨가므로 차트 기본값인 `/api/health`는 더 이상 응답하지 않는다. Prometheus 쪽에서는 차트가 프리픽스 값을 읽어 프로브 경로를 스스로 만들어 줬지만, Grafana 차트는 그 자동 연동이 없어 values에 직접 적어야 한다.
+프로브 두 개도 같이 고쳤다. Prometheus 쪽에서는 차트가 프리픽스 값을 읽어 프로브 경로를 스스로 만들어 줬지만, Grafana 차트의 `_pod.tpl`은 `livenessProbe`·`readinessProbe` values를 그대로 넣을 뿐 `serve_from_sub_path`를 읽지 않는다. 그래서 서브패스를 켜도 차트 기본값 `/api/health`가 그대로 남는다.
+
+다만 "안 고치면 프로브가 깨진다"는 이번 실습에서 확인한 범위가 아니다. 서브패스 적용과 프로브 경로 변경을 한 번에 얹었기 때문이다. 오히려 Grafana 소스를 보면 두 경로가 모두 응답할 가능성이 크다. 라우터는 `strings.TrimPrefix(req.URL.Path, urlPrefix)`로 프리픽스를 떼는데 프리픽스가 없는 `/api/health`는 이 함수가 그대로 돌려주므로 등록된 라우트에 계속 매치되고, 서브패스 리다이렉트 미들웨어도 `/api`로 시작하는 요청은 제외한다. 설령 리다이렉트가 걸리더라도 kubelet의 httpGet 프로브는 200 이상 400 미만을 성공으로 본다.
+
+어느 쪽이든 서브패스를 켠 뒤 프로브 경로를 `/grafana/api/health`로 맞춰 두면 설정과 실제 접근 경로가 어긋나지 않는다.
 
 여기까지의 작업을 하나로 묶으면 이유는 하나다. **ELB 하나에 붙은 ingress-nginx 뒤에 vLLM, Prometheus, Grafana 셋을 경로로 갈라 넣으려는 것이다.** 루트는 이미 [8.4편의 Ingress 규칙]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %}#ingress-규칙-해석)이 `path: /`로 가져갔으므로 나머지 둘은 서브패스를 받을 수밖에 없다. Ingress에 경로를 적는 것이 절반이고, 애플리케이션이 자기가 서브패스 아래에 있다는 것을 아는 것이 나머지 절반이다.
 
@@ -522,7 +526,7 @@ Events:
 
 ## 데이터소스 URL 수정
 
-`access: proxy`라 질의를 보내는 주체가 Grafana 파드다. 그러면 판정도 파드 안에서 하면 된다. Grafana 컨테이너에서 두 경로를 각각 때려 본다.
+`access: proxy`라 질의를 보내는 주체가 Grafana 파드다. 그러면 판정도 파드 안에서 하면 된다. Grafana 컨테이너에서 두 경로에 각각 요청을 보내 본다.
 
 ```shell
 # 현재 설정된 경로 → 404
@@ -1110,7 +1114,7 @@ Annotations:            deployment.kubernetes.io/revision: 1
                         prometheus.io/scrape: true
 ```
 
-바뀐 것은 어노테이션뿐이다. 포트를 새로 연 것도, 컨테이너 인자를 고친 것도 아니다. 노리는 메커니즘은 차트 기본 잡 `kubernetes-pods`인데, 이 잡은 `role: pod`로 파드를 발견한 뒤 `prometheus.io/scrape`가 `true`인 것만 남긴다. 여기까지는 실재하는 동작이다.
+바뀐 것은 어노테이션뿐이다. 포트를 새로 연 것도, 컨테이너 인자를 고친 것도 아니다. 노리는 메커니즘은 [8.5.1편에서 확인한 차트 기본 잡]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %}) `kubernetes-pods`인데, 이 잡은 `role: pod`로 파드를 발견한 뒤 `prometheus.io/scrape`가 `true`인 것만 남긴다. 여기까지는 실재하는 동작이다.
 
 그런데 그 relabel이 읽는 것은 **파드**의 어노테이션이고, `kubectl annotate deployment`는 **Deployment 오브젝트 자신**에 붙인다. `spec.template.metadata.annotations`가 아니므로 파드로 전파되지 않는다. 위 출력이 그대로 말해 준다. 세 어노테이션이 `deployment.kubernetes.io/revision`과 같은 블록에 찍혀 있는데, 이 키는 Deployment 컨트롤러가 Deployment 오브젝트에 다는 것이다. 그리고 그 `revision`이 1에서 움직이지 않았다. 파드 템플릿이 바뀌었다면 새 ReplicaSet이 생기고 롤아웃이 돌면서 revision이 올라갔을 것이다. 롤아웃이 없었다는 것은 파드가 바뀐 적 없다는 뜻이다.
 
@@ -1193,7 +1197,7 @@ grafana-bf745454-nmsv8   1/1   Terminating       0     11m
 
 <center><sup>직접 캡처. 볼륨 마운트를 붙이고 파드가 교체된 뒤의 Dashboards 목록이다. vLLM Inference Metrics가 추가됐고, 대시보드 JSON에 적은 inference, llm, vllm 태그가 함께 보인다.</sup></center>
 
-이 마운트 모양은 차트가 `dashboards` values를 처리할 때 쓰는 것과 같다. 손으로 차트 동작을 재현한 셈이다. values로 관리하고 싶다면 이미 만들어 둔 ConfigMap을 붙이는 `dashboardsConfigMaps` 키가 그 자리다. 다만 이번 실습에서는 `kubectl patch`로만 적용했고, 이후 `helm upgrade`를 돌렸을 때 차트 밖에서 추가한 이 볼륨이 어떻게 되는지는 확인하지 않았다.
+이 마운트 모양은 차트가 `dashboards` values를 처리할 때 쓰는 것과 같다. 손으로 차트 동작을 재현한 셈이다. values로 관리하고 싶다면 이미 만들어 둔 ConfigMap을 붙이는 `dashboardsConfigMaps` 키가 그 자리다. 다만 이 키는 지금 한 것과 마운트 모양이 다르다. 차트는 이 키를 `/var/lib/grafana/dashboards/<provider>` 디렉터리 통째 마운트로 만들기 때문에, provider 이름을 `default`로 주면 init container가 받아 둔 JSON 두 개가 가려진다. 같은 파일 단위 마운트를 values로 옮기려면 `dashboards.default.<이름>.json` 또는 `.file` 항목을 쓰는 쪽이 맞다. 다만 이번 실습에서는 `kubectl patch`로만 적용했고, 이후 `helm upgrade`를 돌렸을 때 차트 밖에서 추가한 이 볼륨이 어떻게 되는지는 확인하지 않았다.
 
 제약도 하나 붙는다. 쿠버네티스 문서가 적어 둔 대로 **`subPath`로 마운트한 ConfigMap은 갱신이 반영되지 않는다.** 대시보드 JSON을 고쳐 ConfigMap을 갱신해도 파드 안 파일은 그대로이고, 파드를 다시 띄워야 바뀐 내용이 들어간다.
 
@@ -1209,6 +1213,10 @@ grafana-bf745454-nmsv8   1/1   Terminating       0     11m
 
 값이 거의 0이라 수집이 안 되는 것처럼 보이지만 그렇지 않다. `Running Requests`와 `Waiting Requests`, `KV Cache Usage` 셋은 순간값이라 요청이 돌고 있지 않으면 0이 맞는 값이다. No data가 아니라 0이다. 누적값 패널은 값이 있다 — 프롬프트 토큰 210개, 생성 토큰 2371개다. 그때까지 보낸 것이 테스트 요청 몇 건뿐이라 15분 창에서는 평평한 직선으로 그려진다. 앞 절에서 짚은 원시 counter 쿼리 문제가 여기에 겹친다.
 
+`KV Cache Usage`는 한 가지를 더 알아 둘 필요가 있다. 이름은 GPU를 가리키지만 이 클러스터에 GPU는 없다. NxD Inference는 contiguous KV cache 레이아웃에서 `block_size`를 `max_model_len`으로 덮고 블록 개수를 `max_num_seqs`에 맞추는데, [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})의 `/metrics`에 찍힌 `vllm:cache_config_info{block_size="1024", num_gpu_blocks="4"}`가 정확히 그 결과다. 그래서 이 게이지가 재는 것은 NeuronCore 메모리 점유율이 아니라 동시 시퀀스 슬롯 네 칸 중 몇 칸이 찼는지이고, 값도 0·25·50·75·100%로만 움직인다. 패널에 걸어 둔 60·80 임계값은 이 해상도에서는 사실상 75% 한 지점에서만 갈린다.
+
+두 토큰 패널이 빨간 숫자로 보이는 것도 경고가 아니다. 이 두 패널에는 JSON에 `fieldConfig`를 적지 않아 Grafana 기본 임계값(80 이상 빨강)이 그대로 적용됐고, 210과 2371이 그 선을 넘었을 뿐이다.
+
 `Total Successful Requests`가 한 칸이 아니라 3과 6 두 칸으로 나뉜 것도 같은 계열이다. `finished_reason` 라벨 때문에 시리즈가 둘인데 쿼리에 `sum()`이 없어 각각 표시됐다. 오른쪽 `Request Success Over Time` 패널의 계열 두 개가 3과 6에 각각 평평하게 깔린 것도 같은 이유다.
 
 <br>
@@ -1219,10 +1227,10 @@ grafana-bf745454-nmsv8   1/1   Terminating       0     11m
 |---|---|
 | Grafana는 Prometheus와 같은 릴리스인가 | 아니다. `grafana/grafana` 10.5.15 별도 릴리스다. 오퍼레이터도 CRD도 없어 데이터소스와 대시보드는 values의 프로비저닝 파일로 들어간다 |
 | `datasources`와 `dashboards`는 같은 방식인가 | 아니다. 앞은 설정 파일로 마운트되고, 뒤는 init container가 파일로 내려받는다 |
-| 데이터소스 URL을 UI에서 못 고치는 이유 | 프로비저닝된 데이터소스는 읽기 전용으로 잠긴다. values를 고쳐 `helm upgrade` 해야 한다 |
+| 데이터소스 URL을 UI에서 못 고치는 이유 | 프로비저닝된 데이터소스는 `editable` 기본값이 `false`라 읽기 전용으로 잠긴다. values를 고쳐 `helm upgrade` 해야 한다 |
 | URL에 `/p8s`를 왜 붙였나 | `--web.route-prefix`가 Prometheus 프로세스의 내부 라우팅 테이블을 바꿔서 ClusterIP로 직행하는 경로도 옮겨갔다. 파드 안에서 확인하면 `/api/v1/query`는 404, `/p8s/api/v1/query`는 200이다 |
 | `root_url`만 고치면 되나 | 안 된다. `serve_from_sub_path: true`를 따로 켜야 Grafana가 `/grafana` 아래에서 응답한다 |
-| 프로브를 왜 같이 고치나 | 서브패스가 켜지면 `/api/health`도 `/grafana/api/health`로 옮겨간다. Prometheus 차트가 자동으로 해 주던 일을 Grafana 차트에서는 values로 직접 적는다 |
+| 프로브를 왜 같이 고치나 | Grafana 차트가 `serve_from_sub_path`를 읽어 프로브 경로를 맞춰 주지 않기 때문이다. Prometheus 차트가 자동으로 해 주던 일을 여기서는 values로 직접 적는다. 기본값 `/api/health`가 서브패스 적용 후에도 응답하는지는 확인하지 않았다 |
 | ConfigMap을 만들었는데 대시보드가 없는 이유 | Grafana가 ConfigMap을 읽지 않는다. provider가 `type: file`이라 파드 안 디렉터리만 읽고, 마운트가 빠져 있었다 |
 | `grafana_dashboard` 라벨을 붙이면 되나 | 이 구성에서는 무관하다. 라벨을 감시하는 대시보드 사이드카가 설치돼 있지 않다 |
 | 마운트한 JSON을 고치면 바로 반영되나 | 아니다. `subPath`로 마운트한 ConfigMap은 갱신이 반영되지 않는다. 파드를 다시 띄워야 한다 |
@@ -1250,13 +1258,13 @@ Lab 4에서 만든 것은 수집과 화면까지다. Prometheus가 vLLM 메트�
 - [Kubernetes: Annotations](https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/)
 - [Kubernetes: Ingress - Path types](https://kubernetes.io/docs/concepts/services-networking/ingress/#path-types)
 - [vLLM Documentation](https://docs.vllm.ai/)
-- [08-00편: vLLM on Trainium 워크샵 개요]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
-- [08-01편: AWS 가속기 - Inferentia, Trainium, NeuronCore]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
-- [08-02-01편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
-- [08-02-02편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
-- [08-03-01편: init container 모델 컴파일과 S3 캐시]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
-- [08-03-02편: LoadBalancer 서비스 노출과 추론 테스트]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})
-- [08-04편: ingress-nginx L7 노출과 자체 서명 인증서]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})
-- [08-05-01편: vLLM 메트릭 수집과 서브패스 노출]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})
+- [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
+- [8.1편: Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
+- [8.2.1편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
+- [8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
+- [8.3.1편: init container 모델 컴파일과 S3 캐시]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
+- [8.3.2편: LoadBalancer 서비스 노출과 추론 테스트]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})
+- [8.4편: ingress-nginx L7 노출과 자체 서명 인증서]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})
+- [8.5.1편: vLLM 메트릭 수집과 서브패스 노출]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})
 
 <br>

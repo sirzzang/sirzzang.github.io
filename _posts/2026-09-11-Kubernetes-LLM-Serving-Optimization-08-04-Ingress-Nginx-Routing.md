@@ -18,7 +18,7 @@ tags:
   - vLLM
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-6
-last_modified_at: 2026-09-12
+last_modified_at: 2026-09-13
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.*
@@ -30,7 +30,7 @@ last_modified_at: 2026-09-12
 - ingress-nginx 차트를 값 오버라이드 없이 설치하면 컨트롤러 Service가 `type: LoadBalancer`로 만들어진다. 매니페스트에 적은 적이 없는데 CLB가 하나 더 생긴 것은 **차트 기본값** `controller.service.type: LoadBalancer` 때문이다. Ingress 오브젝트가 만든 것이 아니다
 - 이 시점에 CLB가 **두 개**다. Lab 2의 `vllm-service` CLB(`TCP:8080 → 32233`)와 이번 `ingress-nginx-controller` CLB(`TCP:80 → 31875`, `TCP:443 → 32278`)가 같은 워커 노드 한 대를 서로 다른 NodePort로 가리킨다
 - 리스너가 80/443인 것은 Ingress에 적은 포트와 무관하다. 차트의 `controller.service.ports.http`와 `.https` 기본값이 각각 80과 443이다. NodePort 두 개는 `nodePorts` 기본값이 빈 문자열이라 쿠버네티스가 자동 할당했다
-- Ingress 규칙 한 장은 "`/` 이하 전부를 `vllm-service:8080`으로"가 맞다. 다만 셋이 함께 붙는다 — `host`를 생략해 Host 헤더를 가리지 않고, `pathType: Prefix` + `path: /`라 모든 경로에 매칭되며, 이 규칙에 걸리지 않는 요청은 컨트롤러가 자체적으로 404로 받는다
+- Ingress 규칙 한 장은 "`/` 이하 전부를 `vllm-service:8080`으로"가 맞다. 다만 셋이 함께 붙는다 — `host`를 생략해 Host 헤더를 가리지 않고, `pathType: Prefix` + `path: /`라 모든 경로에 매칭되며, `spec.defaultBackend`를 선언하지 않아 매칭 없는 요청은 컨트롤러의 자체 404로 가게 되어 있다. 다만 `/` 규칙이 전부를 가져가므로 실제로 그리 떨어지는 요청은 없다
 - `nginx.ingress.kubernetes.io/rewrite-target: /`는 이 구성에서 **아무 일도 하지 않는다.** 컨트롤러 소스는 `path`와 rewrite 타깃 문자열이 같으면 `rewrite` 지시어를 만들지 않고, 정규식 location 수식자도 붙이지 않는다. 지운 것과 같은 설정이 나온다
 - Ingress 오브젝트 자체는 AWS에 아무것도 만들지 않는다. 실제 진입점을 만든 것은 **컨트롤러의 Service**이고, Ingress는 그 컨트롤러가 읽는 라우팅 규칙 문서다
 - URL에서 `:8080`이 사라진 것은 홉이 하나 늘어난 결과다. 클라이언트 → CLB:80 → 노드:31875 → 컨트롤러 파드:80 → vLLM 파드:8080이고, 마지막 구간은 Service ClusterIP를 거치지 않고 **엔드포인트(파드 IP:8080)로 직접** 간다
@@ -40,17 +40,17 @@ last_modified_at: 2026-09-12
 
 # Ingress 오브젝트와 컨트롤러 해부
 
-[08-03-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})은 Lab 2 구성의 한계를 셋으로 정리하고 끝났다. L4 패스스루라 경로 기반 라우팅이 없고, URL에 `:8080`을 붙여야 하며, TLS를 종료할 지점이 없다. Lab 3은 그 앞에 ingress-nginx를 두는 Lab이다.
+[8.3.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})은 Lab 2 구성의 한계를 셋으로 정리하고 끝났다. L4 패스스루라 경로 기반 라우팅이 없고, URL에 `:8080`을 붙여야 하며, TLS를 종료할 지점이 없다. Lab 3은 그 앞에 ingress-nginx를 두는 Lab이다.
 
 이 글의 모든 출력에서 계정 ID, 호스트명, IP, ELB DNS 이름은 예시 값으로 치환했다.
 
 ## Lab 3이 만드는 오브젝트
 
-워크샵이 Lab 3 목표로 내건 항목은 다섯이다. NGINX Ingress Controller로 HTTP 로드밸런싱과 라우팅을 붙이고, vLLM API의 공개 엔드포인트를 만들고, 모든 트래픽을 8080 포트의 vLLM Service로 보내고, 개발·테스트용 최소 설정을 유지하고, `curl`과 일반 HTTP 클라이언트로 테스트할 수 있게 한다는 것이다.
+워크샵이 Lab 3 목표로 내건 항목은 다섯이다. ingress-nginx 컨트롤러로 HTTP 로드밸런싱과 라우팅을 붙이고, vLLM API의 공개 엔드포인트를 만들고, 경로 기반 라우팅으로 트래픽을 8080 포트의 vLLM Service로 보내고, 개발·테스트용 최소 설정을 유지하고, `curl`과 일반 HTTP 클라이언트로 테스트할 수 있게 한다는 것이다.
 
 세 번째 항목이 "경로 기반 라우팅"으로 적혀 있지만, 실제로 적용하는 규칙은 `/` 하나다. Lab 3에서 확보되는 것은 경로로 분기시킬 수 있는 **계층**이고, 이번 Lab에서 분기 자체를 만들지는 않는다.
 
-만들어지는 것은 크게 둘이다. 하나는 Helm 차트가 설치하는 ingress-nginx 컨트롤러 일습(Deployment, Service, IngressClass, RBAC, admission webhook 등)이고, 다른 하나는 직접 작성하는 `vllm-ingress-simple` Ingress 한 장이다. 순서도 그대로다. 컨트롤러를 먼저 올리고, 그다음에 규칙을 적용한다.
+만들어지는 것은 크게 둘이다. 하나는 Helm 차트가 설치하는 ingress-nginx 컨트롤러 일습(Deployment, Service, IngressClass, RBAC, 그리고 잘못된 Ingress 매니페스트를 적용 단계에서 거르는 admission webhook 등)이고, 다른 하나는 직접 작성하는 `vllm-ingress-simple` Ingress 한 장이다. 순서도 그대로다. 컨트롤러를 먼저 올리고, 그다음에 규칙을 적용한다.
 
 ## 세 오브젝트의 역할 분담
 
@@ -105,13 +105,15 @@ spec:
               number: 8080
 ```
 
-`port.number: 8080`은 Service의 `spec.ports[].port`를 가리키는 값이다. [08-03-02편의 8080을 쓰는 이유]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}#8080을-쓰는-이유)에서 정리한 것처럼 이 Service는 앞뒤 포트를 모두 8080으로 맞춰 두었으므로, 결과적으로 컨트롤러가 붙는 파드 쪽 포트도 8080이 된다.
+`port.number: 8080`은 Service의 `spec.ports[].port`를 가리키는 값이다. [8.3.2편의 8080을 쓰는 이유]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}#8080을-쓰는-이유)에서 정리한 것처럼 이 Service는 앞뒤 포트를 모두 8080으로 맞춰 두었으므로, 결과적으로 컨트롤러가 붙는 파드 쪽 포트도 8080이 된다.
 
 ### pathType Prefix
 
 `Prefix`는 문자열 접두 매칭이 아니다. 쿠버네티스 문서는 URL 경로를 `/`로 쪼갠 **경로 요소(path element) 단위**로 매칭하며 대소문자를 구분한다고 적는다. 그래서 `/foo/bar`는 `/foo/bar/baz`에 매칭되지만 `/foo/barbaz`에는 매칭되지 않는다.
 
 이번 규칙의 `path`는 `/`라서 결과적으로 모든 경로에 매칭된다. 문서의 예시 표 첫 줄이 정확히 이 조합(`Prefix` + `/` + 모든 경로 → 매칭)이다. 즉 `/v1/models`도 `/v1/chat/completions`도 같은 백엔드로 간다.
+
+같은 이유로 vLLM이 내보내는 `/metrics`도 이 규칙에 걸린다. 인증을 거는 설정이 없으므로 이 시점의 CLB는 추론 API와 지표 엔드포인트를 모두 인터넷에 공개한 상태다. 워크샵이 개발·테스트용 최소 설정을 목표로 내걸었기 때문에 그대로 두지만, 같은 구성을 운영에 옮길 때 확인할 지점이다.
 
 세 가지 `pathType`의 차이는 이렇다.
 
@@ -139,13 +141,13 @@ ingress-nginx 쪽에서는 host 없는 규칙이 NGINX의 catch-all 서버(`serv
 - 첫째, 프록시 지시어를 만드는 `buildProxyPass()`가 `path`와 rewrite 타깃이 같으면 특별 처리 없이 곧바로 기본 `proxy_pass`를 반환한다. 여기서 `path`는 `/`, 타깃도 `/`라 첫 분기에서 걸리고, `rewrite` 지시어 자체가 생성되지 않는다.
 - 둘째, location 수식자도 바뀌지 않는다. `needsRewrite()`는 타깃이 비어 있지 않으면서 `path`와 **다를 때만** 참이 되는데, 여기서는 같으므로 거짓이다. `use-regex`도 쓰지 않았으므로 정규식 강제가 걸리지 않고, location은 `~* "^/"`가 아니라 평범한 `"/"`로 만들어진다.
 
-정리하면 이 어노테이션을 지워도 생성되는 NGINX 설정이 같다. 어노테이션이 실제로 일하려면 경로에 정규식 캡처 그룹이 있어야 한다. ingress-nginx 문서가 드는 형태는 `path: /api(/|$)(.*)` + `rewrite-target: /$2` 조합이고, 이때 `rewrite "(?i)<path>" <target> break;` 같은 지시어가 만들어져 `/api/v1/models` 요청이 백엔드에는 `/v1/models`로 전달된다.
+정리하면 이 어노테이션을 지워도 생성되는 NGINX 설정이 같다. 어노테이션이 일을 하는 조건은 캡처 그룹이 아니라 **타깃이 `path`와 다른 값일 것** 하나다. 예를 들어 `path: /api`에 `rewrite-target: /`를 주면 캡처 그룹 없이도 `rewrite "(?i)/api" / break;`가 생성된다. 다만 이 형태는 `/api` 뒤에 붙은 나머지 경로를 백엔드로 넘기지 못한다. 뒷부분을 보존하려면 경로에 정규식 캡처 그룹이 필요하다. ingress-nginx 문서의 예시는 `path: /something(/|$)(.*)` + `rewrite-target: /$2`에 `use-regex: "true"`와 `pathType: ImplementationSpecific`을 함께 붙인 형태이고, 이때 만들어지는 `rewrite "(?i)<path>" <target> break;` 지시어가 `/something/v1/models` 요청을 백엔드에 `/v1/models`로 전달한다.
 
-부수 효과도 하나 알아 둘 만하다. `rewrite-target`이 경로와 다른 값으로 쓰이면, 그 Host의 **모든** 경로에 대소문자 무시 정규식 location 수식자가 강제된다. 같은 host를 쓰는 다른 Ingress에 정의된 경로까지 함께 영향을 받는다는 것이 문서에 명시돼 있다. 이번처럼 타깃이 경로와 같아 아무 일도 하지 않는 상태에서는 이 효과도 발생하지 않지만, 타깃만 바꾸면 다른 경로들의 매칭 방식이 함께 달라진다.
+부수 효과도 하나 알아 둘 만하다. 문서는 `use-regex` 또는 `rewrite-target` 어노테이션이 어느 Ingress에든 쓰이면 그 Host의 **모든** 경로에 대소문자 무시 정규식 location 수식자가 강제된다고 적는다. 같은 host를 쓰는 다른 Ingress에 정의된 경로까지 함께 영향을 받는다는 뜻이다. 다만 소스의 실제 판정은 한 단계 좁다. `enforceRegexModifier()`가 참이 되는 조건이 `needsRewrite()` 또는 `use-regex`인데, 앞에서 본 대로 `needsRewrite()`는 타깃이 `path`와 다를 때만 참이다. 이번처럼 타깃이 경로와 같으면 어노테이션이 붙어 있어도 이 강제가 걸리지 않는다. 타깃만 바꾸면 다른 경로들의 매칭 방식이 함께 달라진다.
 
 ## 클러스터 밖에서 파드까지의 경로
 
-[08-03-02편의 클라이언트에서 파드까지의 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}#클라이언트에서-파드까지의-경로)에서 확인한 Lab 2 경로는 클라이언트 → CLB:8080 → 노드:32233 → kube-proxy → 파드:8080이었다. Lab 3의 경로는 노드 안에서 홉이 하나 늘어난다.
+[8.3.2편의 클라이언트에서 파드까지의 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}#클라이언트에서-파드까지의-경로)에서 확인한 Lab 2 경로는 클라이언트 → CLB:8080 → 노드:32233 → kube-proxy → 파드:8080이었다. Lab 3의 경로는 노드 안에서 홉이 하나 늘어난다.
 
 ```mermaid
 flowchart LR
@@ -256,6 +258,8 @@ If TLS is enabled for the Ingress, a Secret containing the certificate and key m
 
 컨트롤러 파드가 뜰 때까지 기다린 뒤 릴리스와 파드를 확인한다. 차트 버전은 `ingress-nginx-4.15.1`, 앱 버전은 `1.15.1`이다.
 
+이 버전에 대해 알아 둘 점이 있다. 차트 4.15.1과 컨트롤러 1.15.1은 2026년 3월 19일 릴리스이고, Helm 저장소 인덱스 기준으로 그 뒤에 나온 버전이 없다. 쿠버네티스 프로젝트가 ingress-nginx 은퇴를 공지했고, 2026년 3월 이후로는 신규 릴리스도 버그 수정도 보안 패치도 제공되지 않는다. 이번 실습은 워크샵이 지정한 구성을 그대로 따르지만, 운영 환경에 같은 구성을 올릴 때는 [은퇴 공지](https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/)를 먼저 확인해야 한다.
+
 ```shell
 # 컨트롤러 파드가 Ready가 될 때까지 대기
 ubuntu@ip-10-0-1-100:~/workshop$ kubectl wait --namespace ingress-nginx \
@@ -314,7 +318,7 @@ status:
 
 `managed-by: Helm` 라벨이 출처를 그대로 알려 준다. 이 Service를 만든 것은 사용자가 아니라 차트다. 차트 4.15.1의 `values.yaml`은 `controller.service.type`의 기본값을 `LoadBalancer`로 두고 있고, Service 템플릿은 조건 분기 없이 그 값을 그대로 찍는다. 설치 명령에 `--set`도 `-f`도 없었으므로 기본값이 그대로 적용됐다.
 
-그 뒤는 [08-03-02편의 로드밸런서 타입 선택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}#로드밸런서-타입-선택)에서 정리한 것과 같은 메커니즘이다. 로드밸런서 종류를 고르는 어노테이션이 하나도 없으면 `cloud-provider-aws`의 service controller가 처리하고, 그 기본 산출물이 Classic Load Balancer다. AWS Load Balancer Controller가 설치돼 있지 않으므로 이번에도 ALB나 NLB가 아니라 CLB가 나왔다.
+그 뒤는 [8.3.2편의 로드밸런서 타입 선택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}#로드밸런서-타입-선택)에서 정리한 것과 같은 메커니즘이다. 로드밸런서 종류를 고르는 어노테이션이 하나도 없으면 `cloud-provider-aws`의 service controller가 처리하고, 그 기본 산출물이 Classic Load Balancer다. AWS Load Balancer Controller가 설치돼 있지 않으므로 이번에도 ALB나 NLB가 아니라 CLB가 나왔다.
 
 ![EC2 콘솔의 로드밸런서 목록과 새로 생긴 CLB의 리스너]({{site.url}}/assets/images/llmso-aws-workshop-ingress-lb.png){: .align-center}
 
@@ -332,7 +336,7 @@ Ingress 규칙의 `number: 8080`과는 계층이 다르다. 80/443은 클라이�
 
 <center><sup>직접 캡처. 새 CLB의 상세 화면이다. 유형이 클래식이고 체계가 internet-facing이며, 리스너 두 줄의 인스턴스 포트가 kubectl이 보여준 NodePort와 같은 값이다.</sup></center>
 
-[08-03-02편의 리스너와 NodePort 매핑]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}#리스너와-nodeport-매핑)에서 본 Lab 2 CLB는 리스너가 `TCP:8080 → TCP:32233` 한 줄이었다. 이번 CLB는 두 줄이고, 그중 443 줄이 있다는 것이 뒤의 HTTPS 동작 차이로 이어진다.
+[8.3.2편의 리스너와 NodePort 매핑]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}#리스너와-nodeport-매핑)에서 본 Lab 2 CLB는 리스너가 `TCP:8080 → TCP:32233` 한 줄이었다. 이번 CLB는 두 줄이고, 그중 443 줄이 있다는 것이 뒤의 HTTPS 동작 차이로 이어진다.
 
 ## CLB 두 개의 역할 분담
 
@@ -399,7 +403,7 @@ Events:
 ```
 
 네 가지 사항을 집중적으로 확인한다.
-1. **`Backends` 칸이 `vllm-service:8080 (10.0.5.203:8080)` 형태다.** 괄호 앞은 매니페스트에 적은 Service 이름과 포트이고, **괄호 안이 실제로 프록시되는 엔드포인트**다. `10.0.5.203`은 [08-03-01편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})에서 올린 vLLM 파드의 IP다. 앞에서 정리한 "ClusterIP가 아니라 파드 엔드포인트로 간다"가 이 출력에 그대로 보인다.
+1. **`Backends` 칸이 `vllm-service:8080 (10.0.5.203:8080)` 형태다.** 괄호 앞은 매니페스트에 적은 Service 이름과 포트이고, **괄호 안이 실제로 프록시되는 엔드포인트**다. `10.0.5.203`은 [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})에서 올린 vLLM 파드의 IP다. 앞에서 정리한 "ClusterIP가 아니라 파드 엔드포인트로 간다"가 이 출력에 그대로 보인다.
 2. **`Host` 칸이 `*`다.** `kubectl get`과 같은 표시이고, host 필드가 비었다는 뜻이다.
 3. **`Default backend: <default>`는 `spec.defaultBackend`를 선언하지 않았다는 표시다.** 앞에서 확인한 대로 매칭되지 않는 요청은 컨트롤러가 자체 404로 받는다.
 4. **`Address`가 채워져 있다.** 이 값은 Ingress가 자기 로드밸런서를 갖게 됐다는 뜻이 아니다. 차트가 컨트롤러에 `--publish-service` 플래그를 기본으로 넣어 두고, 컨트롤러의 status 동기화 로직이 **자기 Service의 `status.loadBalancer.ingress[].hostname`을 읽어 자기가 담당하는 모든 Ingress의 status에 복사**한다. 그래서 앞의 `kubectl get svc`가 보여준 `EXTERNAL-IP`와 같은 값이 여기 들어온다.
@@ -474,7 +478,7 @@ ubuntu@ip-10-0-1-100:~/workshop$ curl -sS "http://$INGRESS/v1/models" | jq .
 
 </details>
 
-URL에 포트가 없다. Lab 2에서는 `:8080`을 붙이지 않으면 붙지 않던 요청이, 컨트롤러 파드가 앞에 서면서 80으로 받아 뒤에서 8080으로 넘어간다.
+URL에 포트가 없다. Lab 2에서는 `:8080`을 명시하지 않으면 연결되지 않던 요청이, 컨트롤러 파드가 앞에 서면서 80으로 받아 뒤에서 8080으로 넘어간다.
 
 ## Ingress status에 채워진 주소
 
@@ -527,7 +531,7 @@ Lab 2에서 쓰던 명령과 달라진 것은 `VLLM_ENDPOINT`를 만드는 방�
 
 <center><sup>직접 캡처. https로 접속했을 때 뜬 Chrome 경고 화면이다. 오류 코드는 NET::ERR_CERT_AUTHORITY_INVALID이고 아래에 고급 버튼이 있다.</sup></center>
 
-접속이 막힌 것 자체는 Lab 2와 같지만, 오류 코드가 다르다. [08-03-02편의 막힘 & 해결: HTTPS 접속 실패]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}#막힘--해결-https-접속-실패)에서는 `ERR_SSL_PROTOCOL_ERROR`였는데 이번에는 `ERR_CERT_AUTHORITY_INVALID`다.
+접속이 막힌 것 자체는 Lab 2와 같지만, 오류 코드가 다르다. [8.3.2편의 막힘 & 해결: HTTPS 접속 실패]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}#막힘--해결-https-접속-실패)에서는 `ERR_SSL_PROTOCOL_ERROR`였는데 이번에는 `ERR_CERT_AUTHORITY_INVALID`다.
 
 ## 증거
 
@@ -655,7 +659,7 @@ spec:
 
 08-03-02편이 남긴 세 가지 중 둘은 닫혔다. URL에서 `:8080`이 사라졌고, TLS를 종료할 지점이 생겼다. 나머지 하나인 경로 기반 라우팅은 능력만 확보한 상태다. 컨트롤러가 L7에서 경로를 판단할 수 있게 됐지만 실제로 적용한 규칙은 `/` 하나여서, 분기시키는 동작은 이번 Lab에 없다. 이 분기는 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})에서 `/p8s` 규칙이 붙으면서 실제로 쓰인다.
 
-[08-00편의 외부 접근 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#외부-접근-경로)에서 본 아키텍처 그림의 `ELB → ingress-nginx` 화살표는 이 시점에 실제 상태가 됐다. 동시에 그림에 없던 vLLM CLB가 그대로 남아 있어, 실제 구성은 그림보다 진입점이 하나 더 많다. 지표 수집은 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})과 [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})에서 다룬다. 오토스케일링은 이후 Lab이다.
+[8.0편의 외부 접근 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#외부-접근-경로)에서 본 아키텍처 그림의 `ELB → ingress-nginx` 화살표는 이 시점에 실제 상태가 됐다. 동시에 그림에 없던 vLLM CLB가 그대로 남아 있어, 실제 구성은 그림보다 진입점이 하나 더 많다. 지표 수집은 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})과 [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})에서 다룬다. 오토스케일링은 이후 Lab이다.
 
 <br>
 
@@ -676,11 +680,11 @@ spec:
 - [AWS Certificate Manager: 도메인 소유권 검증](https://docs.aws.amazon.com/acm/latest/userguide/domain-ownership-validation.html)
 - [Let's Encrypt: Challenge Types](https://letsencrypt.org/docs/challenge-types/)
 - [cert-manager: Securing Ingress Resources](https://cert-manager.io/docs/usage/ingress/)
-- [08-00편: vLLM on Trainium 워크샵 개요]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
-- [08-01편: AWS 가속기 - Inferentia, Trainium, NeuronCore]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
-- [08-02-01편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
-- [08-02-02편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
-- [08-03-01편: init container 모델 컴파일과 S3 캐시]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
-- [08-03-02편: LoadBalancer 서비스 노출과 추론 테스트]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})
+- [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
+- [8.1편: Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
+- [8.2.1편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
+- [8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
+- [8.3.1편: init container 모델 컴파일과 S3 캐시]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
+- [8.3.2편: LoadBalancer 서비스 노출과 추론 테스트]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})
 
 <br>

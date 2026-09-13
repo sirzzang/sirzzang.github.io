@@ -4,6 +4,7 @@ excerpt: "EKS와 AWS Trainium 위에 vLLM을 올리는 워크샵의 목적과 �
 categories:
   - Kubernetes
 toc: true
+use_math: false
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
@@ -15,7 +16,7 @@ tags:
   - LLM-Serving
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-6
-last_modified_at: 2026-09-12
+last_modified_at: 2026-09-13
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.*
@@ -49,6 +50,16 @@ vLLM과 AWS Trainium(`trn1.2xlarge`)을 Amazon EKS 위에서 조합해, 운영 �
 - CPU 사용률 기반 HPA 구성 — 이후 Lab
 - llmperf 등으로 처리량과 지연 시간 검증 — 이후 Lab
 
+워크샵은 이 산출물을 Lab 단위로 나눠 진행한다. 이 시리즈의 편 번호가 그 Lab 경계를 따른다.
+
+| Lab | 범위 | 편 |
+|---|---|---|
+| Lab 1 | EKS 노드그룹 구성, Neuron device plugin과 스케줄러 확장 | [8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})(스텝 1~6, 8~9), [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})(스텝 7) |
+| Lab 2 | vLLM Deployment 배포와 Service 노출 | [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %}), [8.3.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}) |
+| Lab 3 | ingress-nginx로 L7 노출 | [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %}) |
+| Lab 4 | Prometheus 수집과 Grafana 대시보드 | [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %}), [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %}) |
+| 이후 Lab | llmperf 부하 테스트, CPU 사용률 기반 HPA | 별도 편에서 다룬다 |
+
 ## 기술 스택
 
 워크샵에서 사용하는 기술은 네 계층으로 나뉜다. 각 기술의 원리는 이미 다룬 곳이 있어, 여기서는 이 워크샵이 어느 조합을 고르는지만 정리한다.
@@ -62,7 +73,7 @@ vLLM과 AWS Trainium(`trn1.2xlarge`)을 Amazon EKS 위에서 조합해, 운영 �
 
 ## 단일 가속기 메모리 한계와 텐서 병렬 처리
 
-이 워크샵이 텐서 병렬 처리를 기본 전제로 깔고 가는 이유는 **모델 크기와 가속기 메모리의 관계** 때문이다. Llama 3.1 8B를 FP32로 올리면 가중치만 32GB다.
+이 워크샵이 텐서 병렬 처리를 기본 전제로 두는 이유는 **모델 크기와 가속기 메모리의 관계** 때문이다. Llama 3.1 8B를 FP32로 올리면 가중치만 32GB다.
 
 ![Llama 3.1 8B의 FP32 기준 메모리 구성]({{site.url}}/assets/images/llmso-aws-workshop-memory.png){: .align-center width="760"}
 
@@ -92,7 +103,7 @@ AWS는 Trainium 하드웨어 위에 대형 모델을 올리기 위한 스택을 
 
 <center><sup>출처: AWS "Scaling LLM Inference with vLLM and AWS Trainium" 워크샵 자료</sup></center>
 
-맨 아래가 Trainium과 Inferentia 인스턴스, 그 위가 AWS Neuron SDK, 그 위가 이 가속기를 실제로 굴리는 AWS 클라우드 서비스들(Parallel Cluster, SageMaker, Batch, ECS, EKS, Neuron DLC, Neuron DLAMI), 맨 위가 모델 서버(TGI, vLLM, SageMaker LMI, Triton, Ray Serve, TorchServe)다. 이 워크샵은 **세 번째 층에서 Amazon EKS를, 네 번째 층에서 vLLM을 고른 조합**이다.
+맨 아래가 Trainium과 Inferentia 인스턴스, 그 위가 AWS Neuron SDK, 그 위가 이 가속기를 실제로 구동하는 AWS 클라우드 서비스들(Parallel Cluster, SageMaker, Batch, ECS, EKS, Neuron DLC, Neuron DLAMI), 맨 위가 모델 서버(TGI, vLLM, SageMaker LMI, Triton, Ray Serve, TorchServe)다. 이 워크샵은 **세 번째 층에서 Amazon EKS를, 네 번째 층에서 vLLM을 고른 조합**이다.
 Amazon EKS와 같은 층에 있는 Neuron DLC와 Neuron DLAMI는 EKS와 택일하는 항목이 아니라, Neuron 스택을 어떤 형태로 포장해 받을지를 정하는 선택지다. 둘 중 DLC는 이 워크샵도 쓴다. vLLM 파드가 받아 오는 `public.ecr.aws/neuron/pytorch-inference-vllm-neuronx` 이미지가 AWS가 만들어 둔 Neuron DLC다. 반면 DLAMI는 쓰지 않는다. 워커 노드가 올라갈 때 쓰는 이미지는 Neuron DLAMI가 아니라 EKS 최적화 가속 컴퓨팅 AMI이기 때문이다.
 
 정리하면 커널 드라이버와 런타임은 노드 AMI가, 프레임워크와 모델 서버는 컨테이너 이미지가 맡는 구성이다. 드라이버는 호스트 커널 모듈이라 컨테이너 이미지에 넣을 수 없고, 그래서 이 경계가 생긴다.
@@ -124,12 +135,15 @@ EKS 쪽은 AWS가 컨트롤 플레인만 관리하고 데이터 플레인은 사
 | 데이터 플레인 | 관리형 노드 그룹 `neuron-trn1-2x`(`trn1.2xlarge`) | 미배포 | [8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %}) |
 | 가속기 통합 | Neuron device plugin, Neuron scheduler extension | 미배포 | [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}) |
 | 서빙 | vLLM Deployment와 init container, NxD | 미배포 | [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %}) |
-| 스토리지 | S3 모델 캐시, S3 CSI Driver, PV/PVC | 일부 사전 배포 | [8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %}) |
+| 스토리지 | S3 모델 캐시 버킷, S3 CSI Driver | 미배포 | [8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %}) |
+| 스토리지 | 모델 캐시 PV/PVC | 미배포 | [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %}) |
 | 네트워크 | vLLM Service (`LoadBalancer`) | 미배포 | [8.3.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}) |
 | 네트워크 | ingress-nginx 컨트롤러 | 미배포 | [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %}) |
-| 관측 | Prometheus, vLLM 메트릭 스크레이프 | 미배포 | [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %}) |
-| 관측 | Grafana, vLLM 대시보드 | 미배포 | [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %}) |
+| 관측 | Prometheus(클러스터 내 Helm 설치), vLLM 메트릭 스크레이프 | 미배포 | [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %}) |
+| 관측 | Grafana(클러스터 내 Helm 설치), vLLM 대시보드 | 미배포 | [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %}) |
 | 관측 | CloudWatch Container Insights | 미배포 | 다루지 않음 |
+
+그림의 AWS 관리형 서비스 칸에는 AWS Prometheus와 AWS Grafana가 그려져 있지만, 실제로 Lab이 올리는 것은 관리형 서비스가 아니라 클러스터 안에 Helm으로 설치하는 `prometheus-community`와 `grafana` 차트다. 표의 관측 행은 이 차이를 반영한 값이다.
 
 표에서 상태 열이 중요하다. 워크샵 환경에 접속해 EKS 콘솔을 열어 보면 클러스터는 이미 활성 상태인데 컴퓨팅(노드 그룹)이 비어 있다. 즉 실습의 출발점은 클러스터 생성이 아니라 **Trainium 인스턴스를 쓰는 노드 그룹을 붙이는 것**이다. 이 경계가 이후 Lab들의 순서를 결정한다.
 
@@ -139,7 +153,9 @@ EKS 쪽은 AWS가 컨트롤 플레인만 관리하고 데이터 플레인은 사
 
 클러스터 바깥에 관리용 호스트를 하나 두고 거기서만 클러스터를 조작하는 구성은 이 워크샵만의 방식이 아니다. Kubernetes the Hard Way도 첫 단계가 jumpbox를 세우는 것이고, 그 취지를 [Set Up The Jumpbox]({% post_url 2026-01-05-Kubernetes-Cluster-The-Hard-Way-02 %})에서 정리한 적이 있다. 내부 노드에 직접 접근하지 않고 한 지점을 거치게 해서 접근 경로를 좁히는 것이다.
 
-이 워크샵도 같은 구조를 따른다. kubeconfig와 AWS 자격 증명이 이 인스턴스 한 대에만 놓이고, 보안 그룹에서 SSH를 여는 대상도 이 인스턴스뿐이다. 뒤에서 워커 노드 안을 들여다볼 일이 생기는데, 그때도 워커 노드에 SSH 포트를 열지 않고 EC2 Session Manager로 붙는다.
+이 워크샵도 같은 구조를 따른다. 이후 편에서는 이 워크샵 인스턴스를 배스천(bastion)이라 부른다. kubeconfig와 AWS 자격 증명이 이 인스턴스 한 대에만 놓이고, 실습 명령도 전부 여기서 나간다. 뒤에서 워커 노드 안을 들여다볼 일이 생기는데, 그때는 SSH 대신 EC2 Session Manager로 붙는다.
+
+다만 접근 경로가 실제로 한 곳으로 좁혀진 것은 아니다. 노드그룹을 만들 때 쓴 `eksctl` 설정에는 `ssh.allow: true`가 들어 있고 `sourceSecurityGroupIds`가 없다. EKS 관리형 노드그룹은 이 조합이면 워커 노드의 22번을 `0.0.0.0/0`으로 연다. 경로를 좁히려면 `ssh:` 블록을 지우거나 `sourceSecurityGroupIds`로 배스천만 허용해야 한다.
 
 **VPC와 서브넷**은 CloudFormation 스택이 미리 만들어 둔다. 워크샵 인스턴스가 뜬 퍼블릭 서브넷은 `10.0.1.0/24`이고, VPC 대역은 `10.0.0.0/16`이다. 스택의 Outputs를 보면 서브넷이 하나가 아니라 4개 AZ에 걸친 퍼블릭/프라이빗 세트로 만들어진다. 각 서브넷의 CIDR은 Outputs에 나오지 않으므로 여기서 확정할 수 있는 대역은 워크샵 인스턴스가 속한 `10.0.1.0/24`뿐이다.
 
@@ -168,9 +184,9 @@ VPC CNI는 파드에 오버레이 대역이 아니라 VPC 대역의 주소를 �
 
 디스크 용량은 워크샵 설명 문서와 실제 매니페스트가 다르다. 문서 요약에는 500GB로 적혀 있지만 실행되는 `eksctl` 설정 파일에는 `volumeSize: 100`이 박혀 있다. 실제 배포되는 값은 100GB다.
 
-여기서 "관리형"이 무엇을 관리한다는 뜻인지가 위 설정들의 성격을 정한다. 사용자가 EC2를 직접 띄우는 것이 아니라, AWS가 Auto Scaling 그룹과 시작 템플릿을 만들어 그 위에서 노드를 찍어 낸다. 위에 적은 인스턴스 타입, AMI 계열, 볼륨 크기는 개별 인스턴스에 주는 인자가 아니라 시작 템플릿으로 번역되는 값이다.
+여기서 "관리형"이 무엇을 관리한다는 뜻인지가 위 설정들의 성격을 정한다. 사용자가 EC2를 직접 띄우는 것이 아니라, AWS가 Auto Scaling 그룹과 시작 템플릿을 만들어 그 위에서 노드를 생성한다. 위에 적은 인스턴스 타입, AMI 계열, 볼륨 크기는 개별 인스턴스에 주는 인자가 아니라 시작 템플릿으로 번역되는 값이다.
 
-그래서 설정이 잘못됐을 때 터지는 지점도 인스턴스 기동이 아니라 노드 그룹 생성 단계다. 앞에서 본 AMI 문제가 `eksctl`이 스택을 올리기도 전에 끊긴 것이 그 예다. 또 노드를 한 대 더 늘리거나 AMI를 갱신하는 일도 인스턴스를 따로 만지는 것이 아니라 노드 그룹 설정을 바꿔 ASG가 교체하게 하는 방식이 된다. ASG 위에서의 동작 방식은 [EKS 데이터 플레인 컴퓨팅]({% post_url 2026-03-12-Kubernetes-EKS-00-01-EKS-Computing-Group %}#관리형-노드-그룹)에 정리돼 있다.
+그래서 설정이 잘못됐을 때 실패하는 지점도 인스턴스 기동이 아니라 노드 그룹 생성 단계다. 앞에서 본 AMI 문제가 `eksctl`이 스택을 올리기도 전에 끊긴 것이 그 예다. 또 노드를 한 대 더 늘리거나 AMI를 갱신하는 일도 인스턴스를 따로 만지는 것이 아니라 노드 그룹 설정을 바꿔 ASG가 교체하게 하는 방식이 된다. ASG 위에서의 동작 방식은 [EKS 데이터 플레인 컴퓨팅]({% post_url 2026-03-12-Kubernetes-EKS-00-01-EKS-Computing-Group %}#관리형-노드-그룹)에 정리돼 있다.
 
 ## Trainium 자원 노출
 
@@ -195,24 +211,24 @@ flowchart TD
     end
     kubelet -- "allocatable 광고<br/>aws.amazon.com/neuron: 1<br/>aws.amazon.com/neuroncore: 2" --> api["kube-apiserver"]
     api --> sched["k8s-neuron-scheduler<br/>+ my-scheduler"]
-    sched -- "schedulerName: my-scheduler" --> pod["vLLM Pod<br/>requests: neuroncore 2"]
+    sched -- "schedulerName: my-scheduler" --> pod["vLLM Pod<br/>requests: aws.amazon.com/neuron 1<br/>tensor-parallel-size 2"]
 ```
 
 <center><sup>AI를 이용해 직접 그린 도식. AMI가 제공하는 범위와 클러스터 오브젝트가 제공하는 범위가 어디서 갈리는지 보여 준다</sup></center>
 
 ### Neuron device plugin
 
-Neuron device plugin은 노드의 Neuron 디바이스를 Kubernetes 확장 자원(extended resource)으로 광고하는 DaemonSet이다. 앞서 말한 대로 NVIDIA 환경의 device plugin과 같은 자리에 놓인다. 플러그인이 광고한 값이 노드의 allocatable에 실려 스케줄러의 자원 계산에 들어가기까지를 확장 자원 관점에서 정리한 것은 [GPU 자원과 K8s 할당]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation %}#device-plugin-동작-흐름)에 있다.
+Neuron device plugin은 노드의 Neuron 디바이스를 Kubernetes 확장 리소스(extended resource)으로 광고하는 DaemonSet이다. 앞서 말한 대로 NVIDIA 환경의 device plugin과 같은 자리에 놓인다. 플러그인이 광고한 값이 노드의 allocatable에 실려 스케줄러의 자원 계산에 들어가기까지를 확장 리소스 관점에서 정리한 것은 [GPU 자원과 K8s 할당]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation %}#device-plugin-동작-흐름)에 있다.
 
 플러그인이 없으면 어떻게 되는지도 분명하다. 노드에 가속기가 물리적으로 꽂혀 있어도 allocatable에 그 자원이 올라오지 않으므로, `aws.amazon.com/neuroncore`를 요청한 파드는 조건을 만족하는 노드를 찾지 못해 **Pending에서 멈춘다**. 하드웨어가 없어서가 아니라 하드웨어를 세어 주는 주체가 없어서 생기는 Pending이다. GPU 쪽에서 같은 증상을 만나 원인을 좁혀 간 기록이 [GPU 파드 Pending]({% post_url 2026-04-09-Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending %})에 있다.
 
-특이한 점은 광고하는 자원이 하나가 아니라는 것이다. `aws.amazon.com/neuron`(칩 단위)과 `aws.amazon.com/neuroncore`(코어 단위)를 동시에 올린다. `trn1.2xlarge` 노드에서는 각각 1과 2로 잡힌다. 칩을 통째로 잡을지 코어 단위로 쪼갤지를 파드가 선택할 수 있게 하려는 설계인데, 같은 하드웨어가 두 이름으로 세어지므로 기본 스케줄러만으로는 자원 계산이 어긋난다.
+특이한 점은 광고하는 자원이 하나가 아니라는 것이다. `aws.amazon.com/neuron`(칩 단위)과 `aws.amazon.com/neuroncore`(코어 단위)를 동시에 올린다. `trn1.2xlarge` 노드에서는 각각 1과 2로 잡힌다. 칩을 통째로 잡을지 코어 단위로 쪼갤지를 파드가 선택할 수 있게 하려는 설계인데, 같은 하드웨어가 두 이름으로 세어지므로 기본 스케줄러만으로는 자원 계산이 어긋난다. 이 이중 계정이 구체적으로 어떤 문제를 만드는지는 [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에 있다.
 
 이 플러그인이 노드 AMI에 들어 있는지 궁금했는데, **그렇지 않다**. AMI가 제공하는 범위는 Neuron 드라이버와 `/dev` 디바이스 노드까지고, device plugin은 API 서버에 등록되는 DaemonSet이라 부팅하는 워커 노드가 스스로 만들 수 없다. kubelet이 쓰는 `system:node:<name>` 권한에 DaemonSet을 만들 권한이 없기 때문이다.
 
 그런데도 워크샵에서 자동으로 떠 있는 것처럼 보이는 이유는 eksctl이다. 노드 그룹을 만들 때 eksctl이 가속 AMI와 Neuron 인스턴스 타입 조합을 감지해 ClusterRole, ServiceAccount, ClusterRoleBinding, DaemonSet을 함께 생성한다. 실제 생성 로그와 RBAC 근거는 [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에 있다.
 
-플러그인 컨테이너 이미지가 AMI에 미리 받아져 있는지는 노드에 직접 붙어 확인했다. 워커 노드에 SSH 포트를 열지 않았으므로 EC2 Session Manager로 접속해, containerd가 들고 있는 이미지를 조회했다.
+플러그인 컨테이너 이미지가 AMI에 미리 받아져 있는지는 노드에 직접 붙어 확인했다. SSH 키와 접속 경로를 따로 다루지 않아도 되는 EC2 Session Manager로 접속해, containerd가 들고 있는 이미지를 조회했다.
 
 ```shell
 # 노드에 이미 받아져 있는 컨테이너 이미지 중 neuron 관련 이미지 확인
@@ -249,7 +265,7 @@ image: public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:0.9.1-neuronx-py310-
 
 버전 조합이 태그에 그대로 노출되는 형태라, Neuron SDK 버전과 vLLM 버전을 따로 맞출 필요 없이 이미지 하나로 고정된다.
 
-init container가 하는 일은 모델 다운로드, NxD 컴파일, S3 업로드 세 가지다. 이 흐름은 [모델 캐시 스토리지](#모델-캐시-스토리지)에서 도식으로 정리한다.
+init container가 하는 일은 모델 다운로드, NxD 컴파일, 컴파일 산출물을 S3 백엔드 PVC로 복사하는 것 세 가지다. 이 흐름은 [모델 캐시 스토리지](#모델-캐시-스토리지)에서 도식으로 정리한다.
 
 `tensor-parallel-size=2`가 나오는 근거는 하드웨어 구성이다. `trn1.2xlarge`에는 Trainium 칩이 1개 있고 그 안에 NeuronCore-v2가 2개다. vLLM은 NeuronCore 하나를 디바이스 하나로 잡으므로, 이 인스턴스에서 쓸 수 있는 디바이스 수가 2가 되고 텐서 병렬 크기도 2가 된다. 앞 절에서 본 `aws.amazon.com/neuroncore: 2`가 같은 사실의 Kubernetes 쪽 표현이다.
 
@@ -285,7 +301,7 @@ flowchart TD
 
 ## 모니터링과 오토스케일링
 
-vLLM Deployment에는 readiness probe와 liveness probe가 붙고, 지표는 Prometheus와 Grafana, CloudWatch로 모은다. 오토스케일링은 CPU 사용률 기반 HPA다.
+지표는 Prometheus와 Grafana로 모은다. 아키텍처 그림에 함께 그려진 CloudWatch는 이 실습에서 배포하지 않았다. 오토스케일링은 CPU 사용률 기반 HPA다. vLLM Deployment에 readiness probe나 liveness probe는 붙지 않는다.
 
 가속기 워크로드인데 스케일 기준이 가속기 사용률이 아니라 CPU 사용률이라는 점은 이 구성의 특징으로 기억해 둘 만하다. 지표 수집 구성은 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})과 [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})에서 확인한다. 오토스케일링의 실제 동작은 이후 Lab이다.
 
@@ -497,11 +513,11 @@ workshop/
 
 ## Hugging Face 토큰 설정
 
-`workshop/.env`에는 `HF_TOKEN`이 미리 들어 있다. 다만 만료된 값이라 그대로 쓰면 모델 다운로드 단계에서 실패한다. Hugging Face에서 토큰을 직접 발급받아 교체해 둔다.
+`workshop/.env`에는 `HF_TOKEN`이 미리 들어 있다. 다만 만료된 값이다. `TinyLlama-1.1B-Chat-v1.0`은 접근 승인이 필요한 모델이 아니라 토큰 없이도 받을 수 있지만, [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})의 init container 스크립트가 `set -e` 아래에서 `huggingface-cli login --token "$HF_TOKEN"`을 먼저 실행하기 때문에 토큰이 유효하지 않으면 그 줄에서 컨테이너가 멈춘다. Hugging Face에서 토큰을 직접 발급받아 교체해 둔다.
 
 ![Hugging Face 액세스 토큰 발급 화면]({{site.url}}/assets/images/llmso-aws-workshop-hf-token.png){: .align-center width="800"}
 
-<center><sup>직접 캡처. 브라우저 크롬은 화면에 넣지 않았다. 생성된 토큰 값이 나오기 전 단계 화면이다</sup></center>
+<center><sup>직접 캡처. Hugging Face 액세스 토큰 발급 화면. 토큰 값이 만들어지기 전 단계다</sup></center>
 
 ```shell
 # 미리 들어 있는 토큰 확인 (만료된 값)
@@ -519,9 +535,9 @@ ubuntu@ip-10-0-1-100:~$ echo 'HF_TOKEN="hf_xxxxxxxxxxxxxxxxxxxx"' > /home/ubuntu
 
 - 워크샵은 `trn1.2xlarge` 위에 vLLM과 NxD로 `TinyLlama-1.1B-Chat-v1.0`을 서빙하고, 모니터링과 HPA, 부하 테스트까지 이어 간다
 - 접속 시점에 이미 만들어져 있는 것은 VPC와 서브넷, 보안 그룹, 워크샵 인스턴스, 그리고 EKS 1.33 컨트롤 플레인이다. 직접 만드는 것은 노드 그룹부터다
-- 가속기 통합은 두 축으로 나뉜다. Neuron device plugin이 칩과 코어를 확장 자원으로 광고하고, Neuron scheduler extension이 이중 회계와 연속 코어 할당을 처리한다
+- 가속기 통합은 두 축으로 나뉜다. Neuron device plugin이 칩과 코어를 확장 리소스로 광고하고, Neuron scheduler extension이 이중 회계와 연속 코어 할당을 처리한다
 - 서빙 파드는 init container로 모델을 컴파일해 S3에 올려 두고, 이후 파드는 S3 CSI Driver로 마운트한 PV에서 산출물을 재사용한다
-- 이 글에서 확정하지 않은 항목이 둘 있다. vLLM Service의 타입과 노드 AMI의 Neuron 이미지 pre-pull 여부는 각각 해당 Lab에서 매니페스트와 노드 상태를 보고 확인한다
+- 이 글에서 확정하지 않은 항목이 둘 있다. vLLM Service의 타입은 [8.3.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})에서 매니페스트로 확인한다. 노드 AMI의 Neuron 이미지 pre-pull 여부는 노드를 새로 띄운 직후에 확인해야 하는데, 이번 실습 순서에서는 그 시점을 잡지 못해 확정하지 못했다
 - 가속기와 Neuron SDK 배경은 [8.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %}), 노드 그룹 구축과 트러블슈팅은 [8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %}), Neuron 자원 노출 검증은 [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에서 이어 간다
 
 <br>
