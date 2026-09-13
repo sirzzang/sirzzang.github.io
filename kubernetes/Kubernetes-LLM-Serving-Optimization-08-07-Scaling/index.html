@@ -1,0 +1,1334 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약 - Eraser’s StudyLog</title>
+<meta name="description" content="노드도 파드도 늘릴 수 없는 환경에서 HPA Lab이 어디까지 가는지, 그리고 CPU 사용률이 추론 워크로드의 스케일 신호가 될 수 있는지 확인해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/">
+
+
+  <meta property="og:description" content="노드도 파드도 늘릴 수 없는 환경에서 HPA Lab이 어디까지 가는지, 그리고 CPU 사용률이 추론 워크로드의 스케일 신호가 될 수 있는지 확인해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-09-11T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-09-13T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약">
+    <meta itemprop="description" content="노드도 파드도 늘릴 수 없는 환경에서 HPA Lab이 어디까지 가는지, 그리고 CPU 사용률이 추론 워크로드의 스케일 신호가 될 수 있는지 확인해 보자.">
+    <meta itemprop="datePublished" content="2026-09-11T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-09-13T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-09-11T00:00:00+09:00">2026년 09월 11일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  15 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#lab-6의-목표와-자원-제약-해부">Lab 6의 목표와 자원 제약 해부</a>
+    <ul>
+      <li><a href="#워크샵이-lab-6로-내건-것">워크샵이 Lab 6로 내건 것</a></li>
+      <li><a href="#trn12xlarge-한-대의-자원과-요청-단위">trn1.2xlarge 한 대의 자원과 요청 단위</a></li>
+    </ul>
+  </li>
+  <li><a href="#적용과-관찰-metrics-server-설치와-사용량-확인">적용과 관찰: metrics-server 설치와 사용량 확인</a></li>
+  <li><a href="#검증-cpu-사용률과-스케일-신호의-불일치">검증: CPU 사용률과 스케일 신호의 불일치</a></li>
+  <li><a href="#막힘--해결-스케일링을-막은-세-겹">막힘 &amp; 해결: 스케일링을 막은 세 겹</a>
+    <ul>
+      <li><a href="#노드-증설과-vcpu-쿼터">노드 증설과 vCPU 쿼터</a></li>
+      <li><a href="#단일-노드-안의-replicas2">단일 노드 안의 replicas=2</a></li>
+      <li><a href="#keda-gpu-scaler와-nvml-전제">KEDA GPU Scaler와 NVML 전제</a></li>
+    </ul>
+  </li>
+  <li><a href="#해-보지-못한-설계와-대안-경로">해 보지 못한 설계와 대안 경로</a>
+    <ul>
+      <li><a href="#도전-과제-1-tp1로-낮춘-replica-2">도전 과제 1: TP=1로 낮춘 replica 2</a></li>
+      <li><a href="#도전-과제-2-keda-prometheus-scaler-경로">도전 과제 2: KEDA Prometheus scaler 경로</a></li>
+      <li><a href="#neuron에서-끝까지-가는-경로">Neuron에서 끝까지 가는 경로</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>Lab 6은 CPU 사용률 기반 HPA를 구성하는 Lab인데 실습이 세 겹으로 막혔다. 이 편은 막힌 지점과 그 이유, 그리고 대신 남는 것을 정리한다</li>
+  <li><code class="highlighter-rouge">eksctl scale nodegroup</code>은 ASG의 desired만 바꾸므로 <strong>명령 자체는 성공한다.</strong> 실패는 그다음 EC2 기동에서 <code class="highlighter-rouge">VcpuLimitExceeded</code>로 비동기로 온다</li>
+  <li>단일 노드 안에서 <code class="highlighter-rouge">replicas=2</code>도 안 된다. vLLM Deployment가 <code class="highlighter-rouge">aws.amazon.com/neuron: 1</code>(칩 통째)을 요청하는데 노드의 칩이 하나뿐이라 두 번째 파드가 <code class="highlighter-rouge">Unschedulable</code>이다</li>
+  <li>KEDA GPU Scaler는 NVML과 <code class="highlighter-rouge">nvidia.com/gpu.present</code> 라벨을 전제한다. Neuron 노드에 설치하면 DaemonSet이 <code class="highlighter-rouge">DESIRED 0</code>으로 뜨고 끝난다</li>
+  <li>성공한 것은 metrics-server와 <code class="highlighter-rouge">kubectl top</code>이다. 부하를 걸지 않은 상태의 vLLM 파드 CPU가 <strong>8m</strong>으로 찍혔다. request 4코어 대비 0.2%라 CPU는 스케일 신호로 삼기 어렵다</li>
+  <li>KEDA 자체는 Prometheus scaler로 쓸 수 있고, 신호로는 <code class="highlighter-rouge">vllm:num_requests_waiting</code>이 가속기 사용률보다 낫다고 볼 근거가 있다. 설계만 했고 실행하지는 않았다. <code class="highlighter-rouge">serverAddress</code>에는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/">8.5.1편</a>의 <code class="highlighter-rouge">/p8s</code>가 붙어야 한다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="lab-6의-목표와-자원-제약-해부">Lab 6의 목표와 자원 제약 해부</h1>
+
+<h2 id="워크샵이-lab-6로-내건-것">워크샵이 Lab 6로 내건 것</h2>
+
+<p>HPA(Horizontal Pod Autoscaler)를 구성해 CPU 사용률에 따라 vLLM Deployment의 파드를 자동으로 확장하는 것이 Lab 6의 목표다. <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/">8.0편</a>이 아키텍처를 정리하면서 “오토스케일링은 CPU 사용률 기반 HPA”라고 적어 둔 그 항목이다.</p>
+
+<p>결론부터 적으면 이 Lab은 실습을 완주하지 못했다. 파드를 늘리려면 늘릴 자리가 있어야 하는데, 자리를 만드는 두 방향이 각각 다른 이유로 막혔다. 그래서 이 편은 실습 기록이 아니라 <strong>어디서 왜 막혔는지, 했다면 어떻게 했을지, 그리고 운영 관점에서 남는 것</strong>을 정리한다.</p>
+
+<h2 id="trn12xlarge-한-대의-자원과-요청-단위">trn1.2xlarge 한 대의 자원과 요청 단위</h2>
+
+<p>막힌 이유는 전부 이 환경의 자원 구성에서 나온다. 세 줄로 요약된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>값</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>노드</td>
+      <td><code class="highlighter-rouge">trn1.2xlarge</code> 1대 = vCPU 8, 호스트 RAM 32 GiB</td>
+    </tr>
+    <tr>
+      <td>가속기</td>
+      <td>Trainium 칩 1개 = NeuronCore-v2 2개</td>
+    </tr>
+    <tr>
+      <td>vLLM 파드의 요청</td>
+      <td><code class="highlighter-rouge">aws.amazon.com/neuron: 1</code>(칩 통째), <code class="highlighter-rouge">cpu: 4</code>, <code class="highlighter-rouge">ephemeral-storage: 50Gi</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>칩과 코어가 두 단위로 광고되는 구조는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/#칩-하나-코어-둘">8.2.2편</a>에 정리되어 있고, vLLM Deployment가 코어가 아니라 칩 단위로 1개를 요청하는 이유는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/#칩-1개-요청과-코어-2개-텐서-병렬">8.3.1편</a>에 있다. 요청 단위가 칩이라는 이 한 줄이 뒤에서 두 번째 파드를 막는다.</p>
+
+<p>스케일아웃 방향은 둘뿐이고, 둘 다 막힌 지점이 다르다.</p>
+
+<pre><code class="language-mermaid">flowchart TD
+    A["요청 증가"] --&gt; B{"스케일아웃 방향"}
+    B --&gt;|"노드를 늘린다"| C["eksctl scale nodegroup --nodes 2"]
+    C --&gt; D["ASG desired 2로 변경&lt;br/&gt;(명령은 성공)"]
+    D --&gt; E["ASG가 EC2 기동 시도"]
+    E --&gt; X1["VcpuLimitExceeded&lt;br/&gt;Trn vCPU 쿼터 8 소진"]
+    B --&gt;|"파드를 늘린다"| F["kubectl scale deployment --replicas=2"]
+    F --&gt; G["두 번째 파드 스케줄링"]
+    G --&gt; X2["Unschedulable&lt;br/&gt;칩이 1개뿐"]
+</code></pre>
+
+<p>여기에 세 번째 층이 하나 더 있다. 방향이 아니라 <strong>신호</strong> 쪽이다. 가속기 사용률로 스케일하려고 KEDA GPU Scaler를 보면 그쪽은 NVIDIA 전용이라 Neuron 노드에서는 아예 뜨지 않는다.</p>
+
+<p><br /></p>
+
+<h1 id="적용과-관찰-metrics-server-설치와-사용량-확인">적용과 관찰: metrics-server 설치와 사용량 확인</h1>
+
+<p>이 Lab에서 끝까지 간 것은 이 부분 하나다. HPA가 CPU 사용률을 읽으려면 <code class="highlighter-rouge">metrics.k8s.io</code> API가 있어야 하고, EKS는 metrics-server를 기본으로 깔지 않는다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Install metrics server</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl apply <span class="nt">-f</span> https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+serviceaccount/metrics-server created
+clusterrole.rbac.authorization.k8s.io/system:aggregated-metrics-reader created
+clusterrole.rbac.authorization.k8s.io/system:metrics-server created
+rolebinding.rbac.authorization.k8s.io/metrics-server-auth-reader created
+clusterrolebinding.rbac.authorization.k8s.io/metrics-server:system:auth-delegator created
+clusterrolebinding.rbac.authorization.k8s.io/system:metrics-server created
+service/metrics-server created
+deployment.apps/metrics-server created
+apiservice.apiregistration.k8s.io/v1beta1.metrics.k8s.io created
+
+<span class="c"># Deployment가 available이 될 때까지 기다린다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl <span class="nb">wait</span> <span class="nt">--for</span><span class="o">=</span><span class="nv">condition</span><span class="o">=</span>available <span class="nt">--timeout</span><span class="o">=</span>300s deployment/metrics-server <span class="nt">-n</span> kube-system
+deployment.apps/metrics-server condition met
+</code></pre></div></div>
+
+<p>마지막 줄의 <code class="highlighter-rouge">apiservice.apiregistration.k8s.io/v1beta1.metrics.k8s.io</code>가 핵심이다. metrics-server는 일반 Deployment로 뜨지만, APIService로 등록되면서 <code class="highlighter-rouge">metrics.k8s.io/v1beta1</code> 그룹을 kube-apiserver에 집계(aggregation)해 붙인다. <code class="highlighter-rouge">kubectl top</code>도 HPA도 이 API를 읽는다.</p>
+
+<p>설치가 끝나면 바로 사용량을 볼 수 있다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl top nodes
+NAME                                       CPU<span class="o">(</span>cores<span class="o">)</span>   CPU<span class="o">(</span>%<span class="o">)</span>   MEMORY<span class="o">(</span>bytes<span class="o">)</span>   MEMORY<span class="o">(</span>%<span class="o">)</span>
+ip-10-0-5-100.us-west-2.compute.internal   262m         3%       10060Mi         32%
+
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl top pods <span class="nt">-n</span> default
+NAME                               CPU<span class="o">(</span>cores<span class="o">)</span>   MEMORY<span class="o">(</span>bytes<span class="o">)</span>
+vllm-deployment-64597fb8cc-hwdd9   8m           6121Mi
+</code></pre></div></div>
+
+<p>노드 전체로는 <code class="highlighter-rouge">262m</code>, 8 vCPU 대비 3%다. 그런데 그 아래 파드 줄이 이 Lab에서 가장 중요한 숫자다.</p>
+
+<p><br /></p>
+
+<h1 id="검증-cpu-사용률과-스케일-신호의-불일치">검증: CPU 사용률과 스케일 신호의 불일치</h1>
+
+<p>vLLM 파드가 쓰는 CPU는 <strong>8m</strong>, 즉 0.008 코어다. 파드가 6121Mi(약 6 GiB) 메모리를 점유한 채 모델을 서빙하고 있는데 CPU는 이 수준이다. 연산이 CPU가 아니라 NeuronCore에서 일어나기 때문이다.</p>
+
+<p>HPA가 <code class="highlighter-rouge">type: Utilization</code>으로 CPU를 볼 때 쓰는 값은 절대 코어 수가 아니라 <strong>request 대비 비율</strong>이다. 이 파드의 request는 <code class="highlighter-rouge">cpu: 4</code>, 즉 4000m이므로 비율은 이렇게 나온다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>8m / 4000m = 0.002 = 0.2%
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">targetCPUUtilizationPercentage</code>를 5~10 같은 낮은 값으로 내려도 0.2%는 그 아래다. 스케일업 조건에 닿게 하려면 목표치를 더 내리거나 request 자체를 낮춰야 한다. 어느 쪽이든 워크로드의 실제 포화도와는 무관한 숫자 맞추기가 된다.</p>
+
+<p>다만 범위를 분명히 해 둘 필요가 있다. 위 <code class="highlighter-rouge">8m</code>은 부하를 걸지 않은 상태에서 찍힌 값이고, <strong>부하 중 파드 CPU가 얼마까지 오르는지는 이번에 측정하지 않았다.</strong> <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/#부하-지속-시간과-스크레이프-간격">8.6편의 부하 지속 시간과 스크레이프 간격</a>에서 llmperf 부하를 건 구간이 14초였고, 그 구간에 <code class="highlighter-rouge">kubectl top pods</code>를 함께 돌린 기록은 없다. 그러니 “부하를 줘도 CPU가 오르지 않는다”까지는 이 데이터로 단정할 수 없고, 확인된 것은 <strong>정상 서빙 상태의 CPU 사용률이 request 대비 0.2% 수준</strong>이라는 것까지다.</p>
+
+<p>그 범위만으로도 방향은 읽힌다. 무부하 서빙 상태에서 이미 request의 0.2%라면, 이 지표로는 목표치를 잡을 수가 없다. HPA의 <code class="highlighter-rouge">averageUtilization</code>이 정수라 <strong>걸 수 있는 가장 낮은 값이 1%인데, 측정값이 그보다 아래에 있다</strong>. 연산이 NeuronCore에서 일어나는 워크로드에서 CPU 사용률이 스케일 신호로 적절한지부터 의심해야 하는 값이다. <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/#모니터링과-오토스케일링">8.0편의 모니터링과 오토스케일링</a>에서 “가속기 워크로드인데 스케일 기준이 가속기 사용률이 아니라 CPU 사용률”이라고 적어 둔 특징이 여기서 수치로 드러난다.</p>
+
+<p><br /></p>
+
+<h1 id="막힘--해결-스케일링을-막은-세-겹">막힘 &amp; 해결: 스케일링을 막은 세 겹</h1>
+
+<h2 id="노드-증설과-vcpu-쿼터">노드 증설과 vCPU 쿼터</h2>
+
+<p>파드를 늘릴 자리를 만드는 첫 번째 방향은 노드를 늘리는 것이다. 노드그룹의 desired를 2로 올린다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>eksctl scale nodegroup <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--cluster</span> my-neuron-cluster <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--name</span> neuron-trn1-2x <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--nodes</span> 2 <span class="nt">--nodes-max</span> 2 <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--region</span> us-west-2
+2026-09-12 02:34:02 <span class="o">[</span>ℹ]  scaling nodegroup <span class="s2">"neuron-trn1-2x"</span> <span class="k">in </span>cluster my-neuron-cluster
+2026-09-12 02:34:02 <span class="o">[</span>ℹ]  initiated scaling of nodegroup
+2026-09-12 02:34:02 <span class="o">[</span>ℹ]  to see the status of the scaling run <span class="sb">`</span>eksctl get nodegroup <span class="nt">--cluster</span> my-neuron-cluster <span class="nt">--region</span> us-west-2 <span class="nt">--name</span> neuron-trn1-2x<span class="sb">`</span>
+</code></pre></div></div>
+
+<p><strong>명령은 성공으로 끝난다.</strong> 에러도 경고도 없고 <code class="highlighter-rouge">initiated scaling of nodegroup</code>까지 찍힌다. 그런데 노드는 늘지 않는다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 1) 노드가 안 늘어남 (여전히 1대)</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl get nodes <span class="nt">-o</span> wide
+NAME                                       STATUS   ROLES    AGE   VERSION                INTERNAL-IP   EXTERNAL-IP     OS-IMAGE                        KERNEL-VERSION                     CONTAINER-RUNTIME
+ip-10-0-5-100.us-west-2.compute.internal   Ready    &lt;none&gt;   13h   v1.33.13-eks-cb19647   10.0.5.100    203.0.113.10    Amazon Linux 2023.12.20260831   6.12.103-127.188.amzn2023.x86_64   containerd://2.2.5+unknown
+
+<span class="c"># 2) 노드그룹 상태 확인 → 여기에는 아무 문제도 안 적힌다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>aws eks describe-nodegroup <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--cluster-name</span> my-neuron-cluster <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--nodegroup-name</span> neuron-trn1-2x <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--region</span> us-west-2 <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--query</span> <span class="s1">'nodegroup.{status:status, health:health.issues, scaling:scalingConfig}'</span>
+<span class="o">{</span>
+    <span class="s2">"status"</span>: <span class="s2">"ACTIVE"</span>,
+    <span class="s2">"health"</span>: <span class="o">[]</span>,
+    <span class="s2">"scaling"</span>: <span class="o">{</span>
+        <span class="s2">"minSize"</span>: 1,
+        <span class="s2">"maxSize"</span>: 2,
+        <span class="s2">"desiredSize"</span>: 2
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>노드그룹은 <code class="highlighter-rouge">ACTIVE</code>이고 <code class="highlighter-rouge">health.issues</code>는 빈 배열이다. <code class="highlighter-rouge">desiredSize</code>만 2로 바뀌어 있고 실제 노드는 1대다. EKS 관리형 노드그룹은 <code class="highlighter-rouge">AsgInstanceLaunchFailures</code>와 <code class="highlighter-rouge">InstanceLimitExceeded</code>를 health 이슈 코드로 정의해 두고 있으므로 이 실패가 노드그룹에 올라올 수 있는 종류이기는 하다. 다만 이번 조회 시점에는 비어 있었다. 스케일 명령부터 원복까지가 5분 남짓이라 EKS가 health를 갱신하기 전이었는지 다른 이유인지는 이 기록만으로 가릴 수 없다. 이 시점에 원인이 적혀 있던 곳은 ASG(Auto Scaling Group)의 활동 기록이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 3) 원본 에러 메시지 — 노드그룹이 아니라 ASG 활동 기록에 있다</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ ASG</span><span class="o">=</span><span class="k">$(</span>aws eks describe-nodegroup <span class="nt">--cluster-name</span> my-neuron-cluster <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--nodegroup-name</span> neuron-trn1-2x <span class="nt">--region</span> us-west-2 <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--query</span> <span class="s1">'nodegroup.resources.autoScalingGroups[0].name'</span> <span class="nt">--output</span> text<span class="k">)</span>
+ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>aws autoscaling describe-scaling-activities <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--auto-scaling-group-name</span> <span class="s2">"</span><span class="nv">$ASG</span><span class="s2">"</span> <span class="nt">--region</span> us-west-2 <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--query</span> <span class="s1">'Activities[0].{Status:StatusCode, Cause:StatusMessage}'</span>
+<span class="o">{</span>
+    <span class="s2">"Status"</span>: <span class="s2">"Failed"</span>,
+    <span class="s2">"Cause"</span>: <span class="s2">"Could not launch On-Demand Instances. VcpuLimitExceeded - You have requested more vCPU capacity than your current vCPU limit of 8 allows for the instance bucket that the specified instance type belongs to. Please visit http://aws.amazon.com/contact-us/ec2-request to request an adjustment to this limit. Launching EC2 instance failed."</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>같은 내용을 콘솔에서도 볼 수 있다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/llmso-aws-workshop-gpu-node-quota-failure.png" alt="EC2 Auto Scaling 그룹 콘솔의 활동 기록에 남은 VcpuLimitExceeded" class="align-center" /></p>
+
+<center><sup>직접 캡처. EC2 Auto Scaling 그룹 콘솔이다. 노드그룹이 만든 ASG의 원하는 용량이 2, 인스턴스는 1이고, 활동 기록 한 줄이 실패 상태로 VcpuLimitExceeded 메시지를 담고 있다.</sup></center>
+
+<p>원인은 AWS 서비스 쿼터다. Trn 인스턴스 vCPU 한도가 8로 잡혀 있고 <code class="highlighter-rouge">trn1.2xlarge</code>가 8 vCPU이므로, 이미 떠 있는 노드 한 대가 한도를 전부 쓰고 있다. 두 번째 인스턴스가 들어갈 자리가 없다.</p>
+
+<p>여기서 관찰할 만한 것은 실패 자체보다 <strong>실패가 드러나는 경로</strong>다. <code class="highlighter-rouge">eksctl scale nodegroup</code>이 하는 일은 노드그룹의 <code class="highlighter-rouge">scalingConfig</code>, 결과적으로 ASG의 desired 값을 바꾸는 것까지다. 실제 EC2 기동은 그 뒤에 ASG가 비동기로 수행한다. 그래서 명령의 종료 코드는 0이고, 쿼터 초과는 한참 뒤에 ASG 활동 기록에만 남는다. eksctl 문서도 <code class="highlighter-rouge">--wait</code>를 주지 않으면 AWS API 요청을 보낸 직후에 반환한다고 적어 둔다. 위 명령에는 <code class="highlighter-rouge">--wait</code>가 없었으므로 노드가 실제로 뜨는지까지는 기다리지 않았다. 적어도 이번 관측 창에서는 노드그룹의 <code class="highlighter-rouge">health.issues</code>도 비어 있었으니, <code class="highlighter-rouge">describe-nodegroup</code>만 보면 정상으로 읽힌다. 선언적 API에서 “명령 성공”과 “의도 달성”이 별개라는 것이 이 비대칭에 그대로 드러난다.</p>
+
+<p>쿼터를 올리지 않기로 했으므로 설정을 되돌린다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>eksctl scale nodegroup <span class="nt">--cluster</span> my-neuron-cluster <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--name</span> neuron-trn1-2x <span class="nt">--nodes</span> 1 <span class="nt">--nodes-max</span> 1 <span class="nt">--region</span> us-west-2
+2026-09-12 02:39:23 <span class="o">[</span>ℹ]  scaling nodegroup <span class="s2">"neuron-trn1-2x"</span> <span class="k">in </span>cluster my-neuron-cluster
+2026-09-12 02:39:23 <span class="o">[</span>ℹ]  initiated scaling of nodegroup
+2026-09-12 02:39:23 <span class="o">[</span>ℹ]  to see the status of the scaling run <span class="sb">`</span>eksctl get nodegroup <span class="nt">--cluster</span> my-neuron-cluster <span class="nt">--region</span> us-west-2 <span class="nt">--name</span> neuron-trn1-2x<span class="sb">`</span>
+</code></pre></div></div>
+
+<h2 id="단일-노드-안의-replicas2">단일 노드 안의 replicas=2</h2>
+
+<p>노드를 못 늘리면 관점을 바꿔 볼 수 있다. 노드 하나 안에 파드를 두 개 넣으면 된다. 노드가 광고하는 코어는 2개이니 산술적으로는 가능해 보인다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~<span class="nv">$ </span><span class="c"># 노드가 광고하는 코어 수</span>
+ubuntu@ip-10-0-1-100:~<span class="nv">$ </span>kubectl get node <span class="nt">-o</span> json | jq <span class="s1">'.items[].status.allocatable["aws.amazon.com/neuroncore"]'</span>
+<span class="s2">"2"</span>
+
+ubuntu@ip-10-0-1-100:~<span class="nv">$ </span><span class="c"># 그런데 파드가 요청하는 단위는 코어가 아니다</span>
+ubuntu@ip-10-0-1-100:~<span class="nv">$ </span>kubectl get pod <span class="nt">-o</span> json <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>vllm-server <span class="se">\</span>
+<span class="o">&gt;</span>   | jq <span class="s1">'.items[].spec.containers[].resources.requests'</span>
+<span class="o">{</span>
+  <span class="s2">"aws.amazon.com/neuron"</span>: <span class="s2">"1"</span>,
+  <span class="s2">"cpu"</span>: <span class="s2">"4"</span>,
+  <span class="s2">"ephemeral-storage"</span>: <span class="s2">"50Gi"</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>노드는 <code class="highlighter-rouge">aws.amazon.com/neuroncore</code>를 2개 광고하지만, vLLM 파드가 요청하는 것은 <code class="highlighter-rouge">aws.amazon.com/neuroncore: 2</code>가 아니라 <code class="highlighter-rouge">aws.amazon.com/neuron: 1</code>이다. 칩을 통째로 하나 잡는 요청이고, 노드에 있는 칩은 하나뿐이다.</p>
+
+<p>실제로 늘려 보면 그대로 나온다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~<span class="nv">$ </span>kubectl scale deployment vllm-deployment <span class="nt">--replicas</span><span class="o">=</span>2
+deployment.apps/vllm-deployment scaled
+
+ubuntu@ip-10-0-1-100:~<span class="nv">$ </span>kubectl get pods <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>vllm-server
+NAME                               READY   STATUS    RESTARTS   AGE
+vllm-deployment-64597fb8cc-hwdd9   1/1     Running   0          43h
+vllm-deployment-64597fb8cc-qv2zk   0/1     Pending   0          1s
+
+ubuntu@ip-10-0-1-100:~<span class="nv">$ </span><span class="c"># 스케줄링이 실패한 이유</span>
+ubuntu@ip-10-0-1-100:~<span class="nv">$ </span>kubectl get pod <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>vllm-server <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">--field-selector</span> status.phase<span class="o">=</span>Pending <span class="se">\</span>
+<span class="o">&gt;</span>   <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{range .items[*]}{.metadata.name}{"\n"}{range .status.conditions[*]}{.reason}: {.message}{"\n"}{end}{end}'</span>
+vllm-deployment-64597fb8cc-qv2zk
+Unschedulable: 0/1 nodes are available: 1 Insufficient aws.amazon.com/neuron, 1 Insufficient cpu, 1 Insufficient ephemeral-storage. preemption: 0/1 nodes are available: 1 No preemption victims found <span class="k">for </span>incoming pod.
+</code></pre></div></div>
+
+<p>부족한 자원이 하나가 아니라 셋으로 찍힌다. <code class="highlighter-rouge">aws.amazon.com/neuron</code>은 칩 하나를 이미 첫 파드가 잡고 있어서다. <code class="highlighter-rouge">cpu</code>는 파드당 request가 4코어라 두 개면 8코어인데, 노드가 8 vCPU여도 kubelet·시스템 예약을 뺀 allocatable은 그보다 작아 들어가지 않는다. <code class="highlighter-rouge">ephemeral-storage</code>도 파드당 50Gi라 두 개면 100Gi다. 셋 중 어느 하나만 풀어도 나머지가 남는 구조다.</p>
+
+<p>정리하면, 단일 노드 안의 <code class="highlighter-rouge">replicas=2</code>를 막는 근본 제약은 <strong>요청 단위가 칩이라는 점</strong>이다. <code class="highlighter-rouge">TENSOR_PARALLEL_SIZE</code>를 2로 쓰기 때문에 코어를 2개 점유한 것이 아니라, 칩 1개를 받으면 그 안의 코어 2개가 따라오는 구조다(<a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/#칩-1개-요청과-코어-2개-텐서-병렬">8.3.1편</a>).</p>
+
+<p>확인했으니 원복한다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~<span class="nv">$ </span>kubectl scale deployment vllm-deployment <span class="nt">--replicas</span><span class="o">=</span>1
+deployment.apps/vllm-deployment scaled
+ubuntu@ip-10-0-1-100:~<span class="nv">$ </span>kubectl get pods <span class="nt">-l</span> app.kubernetes.io/name<span class="o">=</span>vllm-server
+NAME                               READY   STATUS    RESTARTS   AGE
+vllm-deployment-64597fb8cc-hwdd9   1/1     Running   0          43h
+</code></pre></div></div>
+
+<h2 id="keda-gpu-scaler와-nvml-전제">KEDA GPU Scaler와 NVML 전제</h2>
+
+<p>세 번째 층은 신호 쪽이다. CPU가 스케일 신호로 맞지 않는다는 것은 앞에서 확인했으니, 가속기 사용률을 신호로 쓰는 도구를 찾게 된다. 그중 하나가 KEDA GPU Scaler다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/keda-gpu-scaler.jpeg" alt="keda-gpu-scaler 구조도" class="align-center" /></p>
+
+<center><sup>출처: keda-gpu-scaler 프로젝트 문서. GPU 노드의 DaemonSet이 NVML로 읽은 지표를 gRPC로 KEDA External Scaler에 넘기고, KEDA가 HPA를 움직여 워크로드 파드 수를 조정하는 구조다. 아래쪽은 dcgm-exporter·Prometheus·PromQL을 거치는 기존 5단 경로와의 대비다.</sup></center>
+
+<p>이 도구는 NVIDIA의 NVML(NVIDIA Management Library) C 바인딩에서 SM 사용률과 프레임 버퍼 메모리를 직접 읽어 KEDA의 External Scaler 프로토콜(gRPC)로 넘긴다. 프로젝트가 내세우는 명분은 <code class="highlighter-rouge">dcgm-exporter → Prometheus → PromQL → KEDA → HPA</code>의 5개 컴포넌트 경로를 2개로 줄이는 것이다. 근거로 드는 현상은 vLLM 파드의 CPU가 8%로 찍히는 동안 GPU는 100%라는 것이다. 가속기가 일하는 동안 CPU 숫자가 워크로드 상태를 반영하지 못한다는 지적인데, 앞에서 본 <code class="highlighter-rouge">8m</code>도 같은 지점에 있다.</p>
+
+<p>그런데 문서를 읽으면 Neuron 노드에 적용할 수 없다는 것이 세 곳에서 드러난다.</p>
+
+<ul>
+  <li>NVML C 바인딩(<code class="highlighter-rouge">libnvidia-ml.so</code>)에서 직접 읽는다 → Neuron 노드에는 이 라이브러리가 없다</li>
+  <li>DaemonSet이 <code class="highlighter-rouge">nvidia.com/gpu.present: "true"</code> 라벨이 붙은 노드에만 뜬다 → <code class="highlighter-rouge">trn1</code> 노드에는 이 라벨이 붙지 않는다</li>
+  <li>사전 준비에 “NVIDIA GPU drivers and Device Plugin”이 명시되어 있다</li>
+</ul>
+
+<p>실제로 설치해서 확인해 봤다. KEDA부터 올린다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~<span class="nv">$ </span>helm repo add kedacore https://kedacore.github.io/charts <span class="o">&amp;&amp;</span> helm repo update
+<span class="s2">"kedacore"</span> has been added to your repositories
+Update Complete. ⎈Happy Helming!⎈
+
+ubuntu@ip-10-0-1-100:~<span class="nv">$ </span>kubectl create namespace keda <span class="nt">--dry-run</span><span class="o">=</span>client <span class="nt">-o</span> yaml | kubectl apply <span class="nt">-f</span> -
+namespace/keda created
+
+ubuntu@ip-10-0-1-100:~<span class="nv">$ </span>helm install keda kedacore/keda <span class="nt">-n</span> keda <span class="nt">--wait</span>
+NAME: keda
+LAST DEPLOYED: Sun Sep 13 09:38:09 2026
+NAMESPACE: keda
+STATUS: deployed
+REVISION: 1
+</code></pre></div></div>
+
+<p>그 위에 GPU Scaler 매니페스트를 얹는다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ubuntu@ip-10-0-1-100:~<span class="nv">$ </span>kubectl apply <span class="nt">-f</span> https://raw.githubusercontent.com/pmady/keda-gpu-scaler/main/deploy/manifests.yaml
+service/keda-gpu-scaler created
+daemonset.apps/keda-gpu-scaler created
+
+ubuntu@ip-10-0-1-100:~<span class="nv">$ </span>kubectl get ds <span class="nt">-n</span> keda
+NAME              DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR                 AGE
+keda-gpu-scaler   0         0         0       0            0           nvidia.com/gpu.present<span class="o">=</span><span class="nb">true   </span>1s
+
+ubuntu@ip-10-0-1-100:~<span class="nv">$ </span>kubectl describe ds keda-gpu-scaler <span class="nt">-n</span> keda | <span class="nb">grep</span> <span class="nt">-i</span> <span class="s1">'node-selector\|desired'</span>
+Node-Selector:  nvidia.com/gpu.present<span class="o">=</span><span class="nb">true
+</span>Desired Number of Nodes Scheduled: 0
+  Node-Selectors:  nvidia.com/gpu.present<span class="o">=</span><span class="nb">true</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">DESIRED 0</code>이다. 에러도 없고 <code class="highlighter-rouge">CrashLoopBackOff</code>도 없다. nodeSelector에 맞는 노드가 하나도 없어서 스케줄러가 만들 파드가 애초에 0개인 것이다. <code class="highlighter-rouge">Desired Number of Nodes Scheduled: 0</code>이 그 증거다.</p>
+
+<p>제품 자체는 여기서 접는 것이 맞다. NVIDIA 전용이고 Neuron 지원 계획도 적혀 있지 않다. 다만 벤더와 무관하게 남는 개념이 셋 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>개념</th>
+      <th>내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>External Scaler 프로토콜</td>
+      <td><code class="highlighter-rouge">IsActive</code>·<code class="highlighter-rouge">GetMetricSpec</code>·<code class="highlighter-rouge">GetMetrics</code> gRPC 인터페이스이고, <code class="highlighter-rouge">external-push</code> 방식일 때 <code class="highlighter-rouge">StreamIsActive</code>가 더해진다. 임의의 신호로 HPA를 구동하는 KEDA의 표준 확장점이다</td>
+    </tr>
+    <tr>
+      <td>scale-to-zero</td>
+      <td>이 클러스터의 쿠버네티스 1.33에서는 <code class="highlighter-rouge">minReplicas: 0</code>을 쓸 수 없다. <code class="highlighter-rouge">HPAScaleToZero</code> 기능 게이트가 알파이고 기본 비활성이다. 게이트가 켜져도 대상은 object·external 지표뿐이라 CPU 같은 resource 지표에는 적용되지 않는다. KEDA는 버전과 무관하게 이 동작을 제공한다</td>
+    </tr>
+    <tr>
+      <td>DaemonSet과 Deployment의 배치 원칙</td>
+      <td>노드 로컬 하드웨어에 접근해야 하면 DaemonSet, 중앙에서 집계하면 Deployment다. NVML이 노드 로컬이라 DaemonSet이 된 것이다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="해-보지-못한-설계와-대안-경로">해 보지 못한 설계와 대안 경로</h1>
+
+<p>워크샵 노트에 <code class="highlighter-rouge">도전과제</code>로 적어 둔 두 가지가 있다. <strong>둘 다 끝까지 돌려 보지는 못했다.</strong> 두 번째는 KEDA와 GPU Scaler 설치까지 갔다가 앞에서 본 <code class="highlighter-rouge">DESIRED 0</code>에서 멈췄고, 첫 번째는 시간 관계로 설계만 남았다. 아래 내용은 실습 기록이 아니라 조사와 설계 단계에서 나온 것이므로, 실제로 그렇게 동작하는지는 확인하지 않았다.</p>
+
+<h2 id="도전-과제-1-tp1로-낮춘-replica-2">도전 과제 1: TP=1로 낮춘 replica 2</h2>
+
+<p><code class="highlighter-rouge">TENSOR_PARALLEL_SIZE</code>를 1로 낮추고 요청 단위를 칩이 아니라 코어로 바꾸면, 코어 2개짜리 노드에 파드 2개가 들어갈 수 있다는 발상이다. 실행했다면 이런 순서였을 것이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>단계</th>
+      <th>내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>기존 vLLM 삭제 (<code class="highlighter-rouge">kubectl delete deploy vllm-deployment</code>)</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>ConfigMap에서 <code class="highlighter-rouge">TENSOR_PARALLEL_SIZE: "1"</code>로 바꾸고 <code class="highlighter-rouge">NEURON_RT_VISIBLE_CORES</code> 제거 (device plugin이 할당한 코어를 그대로 쓰도록)</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Deployment의 resources를 <code class="highlighter-rouge">aws.amazon.com/neuroncore: 1</code>로 변경</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>배포. TP=1은 NEFF(<a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/">8.1편</a>에서 정리한 Neuron Executable File Format) 캐시가 달라 <code class="highlighter-rouge">/shared/model/cache</code>의 기존 캐시가 미적중이고 재컴파일이 필요하다. TP=2 최초 컴파일의 실측이 3분 52초였다(<a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">8.3.1편</a>)</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>HPA 생성 후 <code class="highlighter-rouge">replicas 1 → 2</code> 스케일업 확인</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td><code class="highlighter-rouge">replicas 3</code> 시도 → 코어 2개가 소진되어 Pending</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>여기에 한계가 하나 있다. <strong>TP=2를 없앤다고 스케일링이 풀리는 것이 아니다.</strong> <code class="highlighter-rouge">aws.amazon.com/neuroncore</code>는 분할 불가(non-divisible) 확장 리소스라 CPU처럼 0.5개씩 쪼갤 수 없다. 코어가 2개뿐이니 파드 2개가 상한이고, 세 번째 파드부터는 노드가 더 필요하다. 그러면 다시 Trn vCPU 쿼터 8에 막힌다. 이 설계가 얻는 것은 “스케일링이 가능해지는 것”이 아니라 <strong><code class="highlighter-rouge">replicas 1 → 2</code> 한 단계의 스케일업을 확인하고, 3에서 자원 한계에 걸리는 것을 보는 것</strong>까지다.</p>
+
+<p>실행했다면 주의했어야 할 점도 조사 단계에서 세 가지가 나왔다. 모두 미검증이다.</p>
+
+<ul>
+  <li>Neuron 사용률은 기본 HPA가 읽지 못한다. <code class="highlighter-rouge">prometheus-adapter</code> 같은 custom metrics adapter가 필요하다</li>
+  <li>메모리를 확인해야 한다. 노드 호스트 RAM이 32 GiB이고 파드 하나가 6121Mi를 쓰고 있으니 2개면 약 12 GiB에 컴파일 피크가 얹힌다. 여유는 있어 보이지만 <code class="highlighter-rouge">kubectl top pods</code>로 확인이 필요하다</li>
+  <li>재컴파일이 실습 시간의 대부분을 차지한다. TP=2 최초 컴파일 실측이 3분 52초였다는 것 말고는 TP=1의 소요를 가늠할 근거가 없다. 시간이 없으면 이 경로는 접고 개념만 정리하는 편이 낫다</li>
+</ul>
+
+<h2 id="도전-과제-2-keda-prometheus-scaler-경로">도전 과제 2: KEDA Prometheus scaler 경로</h2>
+
+<p>두 번째 도전 과제는 가속기 사용률 기준 HPA의 동작 확인이었다. KEDA GPU Scaler로는 앞에서 본 대로 갈 수 없지만, <strong>KEDA 자체는 Prometheus scaler로 쓸 수 있다.</strong></p>
+
+<p>그리고 이 경로는 이 환경에서 실제로 구성 가능한 상태였다. <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/">8.5.1편</a>에서 Prometheus를 올리고 <code class="highlighter-rouge">vllm-metrics</code> 잡이 vLLM의 <code class="highlighter-rouge">/metrics</code>를 긁고 있으며, KEDA는 위에서 이미 설치했다. 남은 것은 <code class="highlighter-rouge">ScaledObject</code> 하나였다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># 실행하지 않은 설계안이다</span>
+<span class="na">triggers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">type</span><span class="pi">:</span> <span class="s">prometheus</span>
+    <span class="na">metadata</span><span class="pi">:</span>
+      <span class="na">serverAddress</span><span class="pi">:</span> <span class="s">http://prometheus-server.monitoring.svc.cluster.local/p8s</span>
+      <span class="na">metricName</span><span class="pi">:</span> <span class="s">vllm_num_requests_waiting</span>
+      <span class="na">query</span><span class="pi">:</span> <span class="s">sum(vllm:num_requests_waiting)</span>
+      <span class="na">threshold</span><span class="pi">:</span> <span class="s2">"</span><span class="s">2"</span>
+</code></pre></div></div>
+
+<p>설계안을 그대로 옮겨 적었지만 한 줄은 지금 기준과 맞지 않는다. 현재 KEDA 문서의 Prometheus scaler 파라미터 목록에는 <code class="highlighter-rouge">metricName</code>이 없다. 필수는 <code class="highlighter-rouge">serverAddress</code>·<code class="highlighter-rouge">query</code>·<code class="highlighter-rouge">threshold</code>이고, HPA에 노출할 지표 이름은 KEDA가 만든다.</p>
+
+<p><code class="highlighter-rouge">serverAddress</code> 끝의 <code class="highlighter-rouge">/p8s</code>는 이 시리즈에서 두 번째로 나오는 같은 함정이다. <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/#route-prefix와-external-url">8.5.1편</a>에서 <code class="highlighter-rouge">--web.route-prefix=/p8s</code>를 붙이는 순간 Prometheus 프로세스의 내부 라우팅이 통째로 옮겨갔고, 그래서 ClusterIP로 직행하는 경로도 함께 바뀌었다. <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/#데이터소스-url-수정">8.5.2편</a>에서 Grafana 데이터소스 URL을 고쳐야 했던 것과 같은 이유다. KEDA도 같은 클러스터 내부 주소로 질의하므로 같은 곳에 걸린다.</p>
+
+<p>신호로 무엇을 쓸지도 이 설계의 핵심이다. <code class="highlighter-rouge">vllm:num_requests_waiting</code>은 대기 큐 길이다. 가속기 사용률보다 나은 신호로 볼 근거가 있다. 사용률은 샘플링 구간에 커널이 돌았는지만 보므로 포화 상태를 과대평가하기 쉬운 반면, 큐 길이는 처리되지 못하고 쌓인 요청 수라서 SLO 위반이 임박했다는 것을 직접 나타낸다. 이 지표는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/#수집-대상-metrics">8.5.1편의 수집 대상 /metrics</a>에서 vLLM <code class="highlighter-rouge">/metrics</code> 원본에 게이지로 노출되는 것을 이미 확인했다.</p>
+
+<p>물론 이 경로로 가도 파드가 실제로 Running이 되지는 않는다. 스케일업된 두 번째 파드는 앞에서 본 대로 칩이 없어 Pending에 머문다. 다만 <code class="highlighter-rouge">ScaledObject</code>가 큐 길이를 읽고 desired replica를 계산해 <code class="highlighter-rouge">kubectl get hpa</code>에 반영하는 것까지는 관찰 대상이 된다. 재컴파일 없이 도전 과제 2의 상당 부분을 체험할 수 있는 경로였다는 뜻이다.</p>
+
+<p><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/">8.5.1편</a>이 남겨 둔 지적 하나도 여기서 함께 정리된다. <code class="highlighter-rouge">static_configs</code>로 Service DNS 하나를 찍는 스크레이프 잡은 뒤에 파드가 여러 개가 되면 <code class="highlighter-rouge">instance</code> 라벨이 같은 문자열로 남아 파드별로 값을 나눠 볼 수 없다. 이번 구성은 두 번째 파드가 Running까지 가지 못했으므로 그 상황 자체가 만들어지지 않았고, 잡 정의를 다시 볼 필요도 생기지 않았다.</p>
+
+<h2 id="neuron에서-끝까지-가는-경로">Neuron에서 끝까지 가는 경로</h2>
+
+<p>가속기 사용률 자체를 신호로 쓰겠다면 경로는 이렇게 된다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>neuron-monitor → neuron-monitor-prometheus.py → Prometheus → KEDA Prometheus scaler → HPA
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">neuron-monitor</code>가 Neuron 런타임에서 지표를 뽑고, <code class="highlighter-rouge">neuron-monitor-prometheus.py</code>가 그것을 Prometheus 형식으로 노출하고, 그다음은 위 설계안과 같다. 공교롭게도 keda-gpu-scaler가 “5개 컴포넌트, 운영 오버헤드”라고 비판한 바로 그 모양의 경로다. NVML 같은 노드 로컬 단축 경로가 없는 쪽에서는 이것이 표준 경로가 된다.</p>
+
+<p>HAMi도 후보로 볼 수 있다. v2.7.0 릴리스 노트에 AWS Neuron 디바이스·코어 할당 지원이 들어가 있다. 다만 이번 구성은 TP=2로 칩을 통째로 쓰는 형태라 코어 단위 분할 할당이 필요한 상황이 아니었고, 그래서 적용 대상이 아니다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>질문</th>
+      <th>답</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Lab 6의 실습을 완주했나</td>
+      <td>못 했다. 노드 증설, 단일 노드 내 <code class="highlighter-rouge">replicas=2</code>, KEDA GPU Scaler 세 곳이 각각 다른 이유로 막혔다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">eksctl scale nodegroup</code>이 왜 성공하나</td>
+      <td>노드그룹의 <code class="highlighter-rouge">scalingConfig</code>, 결과적으로 ASG의 desired를 바꾸는 것까지가 이 명령의 범위다. EC2 기동은 ASG가 비동기로 한다</td>
+    </tr>
+    <tr>
+      <td>그러면 실패는 어디에 남나</td>
+      <td>이번에는 ASG 활동 기록에만 남았다. <code class="highlighter-rouge">describe-nodegroup</code>은 status가 <code class="highlighter-rouge">ACTIVE</code>, <code class="highlighter-rouge">health.issues</code>가 빈 배열이었다. EKS가 <code class="highlighter-rouge">AsgInstanceLaunchFailures</code>·<code class="highlighter-rouge">InstanceLimitExceeded</code>를 이슈 코드로 정의하고 있으므로 언제나 비어 있다고 볼 근거는 아니다</td>
+    </tr>
+    <tr>
+      <td>노드가 안 늘어난 원인</td>
+      <td>Trn 인스턴스 vCPU 서비스 쿼터가 8인데 <code class="highlighter-rouge">trn1.2xlarge</code>가 8 vCPU라 이미 소진이다. <code class="highlighter-rouge">VcpuLimitExceeded</code>가 원문 메시지다</td>
+    </tr>
+    <tr>
+      <td>단일 노드 안에 파드 2개가 왜 안 되나</td>
+      <td>vLLM 파드가 <code class="highlighter-rouge">aws.amazon.com/neuron: 1</code>, 즉 칩을 통째로 요청하는데 노드의 칩이 하나뿐이다. <code class="highlighter-rouge">cpu</code>와 <code class="highlighter-rouge">ephemeral-storage</code>도 함께 부족하다</td>
+    </tr>
+    <tr>
+      <td>TP=1로 내리면 풀리나</td>
+      <td>부분적이다. 코어 2개짜리 노드에 파드 2개까지가 상한이고 세 번째부터는 노드가 필요하다. <code class="highlighter-rouge">aws.amazon.com/neuroncore</code>는 분할 불가 확장 리소스다</td>
+    </tr>
+    <tr>
+      <td>KEDA GPU Scaler를 왜 못 쓰나</td>
+      <td>NVML(<code class="highlighter-rouge">libnvidia-ml.so</code>)과 <code class="highlighter-rouge">nvidia.com/gpu.present</code> 라벨을 전제한다. 설치하면 DaemonSet이 <code class="highlighter-rouge">DESIRED 0</code>으로 뜨고 끝난다</td>
+    </tr>
+    <tr>
+      <td>이 Lab에서 실제로 끝까지 간 것</td>
+      <td>metrics-server 설치와 <code class="highlighter-rouge">kubectl top</code>이다. APIService로 <code class="highlighter-rouge">metrics.k8s.io/v1beta1</code>이 붙어 HPA와 <code class="highlighter-rouge">kubectl top</code>이 읽을 수 있게 된다</td>
+    </tr>
+    <tr>
+      <td>vLLM 파드의 CPU 사용량</td>
+      <td><code class="highlighter-rouge">8m</code>(0.008 코어)이다. request 4000m 대비 0.2%다. 부하를 걸지 않은 상태의 값이다</td>
+    </tr>
+    <tr>
+      <td>CPU 기준 HPA가 왜 부적합한가</td>
+      <td>연산이 NeuronCore에서 일어나, 무부하 서빙 상태의 CPU가 request 대비 0.2%로 찍혔다. 목표치를 5~10%로 내려도 그 아래라 이 상태에서는 스케일업 조건에 닿지 않는다. 부하 구간의 값은 측정하지 않았다</td>
+    </tr>
+    <tr>
+      <td>Neuron에서의 대안</td>
+      <td>KEDA Prometheus scaler로 <code class="highlighter-rouge">vllm:num_requests_waiting</code>을 쓰는 경로다. 사용률과 달리 큐 길이는 SLO 위반 임박을 직접 나타낸다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">serverAddress</code>에 왜 <code class="highlighter-rouge">/p8s</code>가 붙나</td>
+      <td><code class="highlighter-rouge">--web.route-prefix</code>가 Prometheus 내부 라우팅을 옮겨 ClusterIP 경로도 함께 바뀌었기 때문이다. Grafana 데이터소스와 같은 자리다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>8장은 빈 EKS 클러스터에 Trainium 노드그룹을 붙이는 것에서 시작해 vLLM 서빙, L7 노출, 지표 수집과 대시보드, 부하 테스트를 지나 여기까지 왔다. 마지막 Lab이 실습으로 완결되지 않은 채 끝난 셈인데, 막힌 자리들이 제각기 다른 계층을 가리키고 있어서 오히려 앞의 내용이 한 번 더 정리됐다. 노드를 못 늘린 것은 계정 쿼터, 파드를 못 늘린 것은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/">8.2.2편</a>과 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">8.3.1편</a>에서 정리한 칩 단위 요청, GPU Scaler를 못 쓴 것은 Neuron과 NVIDIA 스택이 갈리는 지점이다. 워크샵이 1노드 1칩으로 구성된 이상 이 셋은 처음부터 예정된 결과였다.</p>
+
+<p>Lab 단위로 정산하면 Lab 1부터 Lab 5까지는 실습으로 끝났고, Lab 6만 metrics-server 설치와 <code class="highlighter-rouge">kubectl top</code>까지에서 멈췄다. <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/">8.0편</a>에 정리한 워크샵 산출물 일곱 개로 보면 여섯 개는 실습으로 확인했고, 남은 하나가 CPU 사용률 기반 HPA다. 모니터링 항목의 CloudWatch Container Insights는 이번 진행에서 배포하지 않았으므로 확인 범위 밖이다. 8장은 여기까지다.</p>
+
+<p>수치 쪽에서 남는 것은 <code class="highlighter-rouge">8m</code>이라는 한 줄이다. 6 GiB를 점유한 채 모델을 서빙하는 파드의 CPU가 request 대비 0.2%라면, 그 값으로 파드 수를 결정하겠다는 설계는 신호 자체가 성립하지 않는다. 가속기 워크로드의 오토스케일링이 CPU가 아니라 큐 길이나 가속기 지표를 향하는 이유가 여기에 있고, 그 경로로 가려면 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/">8.5.1편</a>에서 세운 수집 스택을 그대로 쓸 수 있다. 관측 스택을 먼저 세워 둔 순서가 마지막 Lab에서 이렇게 맞물린다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/">Kubernetes: Horizontal Pod Autoscaling</a></li>
+  <li><a href="https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/">Kubernetes: Resource metrics pipeline</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources">Kubernetes: Extended resources</a></li>
+  <li><a href="https://github.com/kubernetes-sigs/metrics-server">metrics-server (GitHub)</a></li>
+  <li><a href="https://eksctl.io/usage/nodegroups/">eksctl: Managing nodegroups</a></li>
+  <li><a href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-resource-limits.html">AWS: Amazon EC2 service quotas</a></li>
+  <li><a href="https://aws.amazon.com/ec2/instance-types/trn1/">Amazon EC2 Trn1 인스턴스</a></li>
+  <li><a href="https://keda.sh/docs/latest/scalers/prometheus/">KEDA: Prometheus scaler</a></li>
+  <li><a href="https://keda.sh/docs/latest/concepts/external-scalers/">KEDA: External scalers</a></li>
+  <li><a href="https://keda.sh/docs/latest/concepts/scaling-deployments/">KEDA: Scaling deployments</a></li>
+  <li><a href="https://github.com/pmady/keda-gpu-scaler">keda-gpu-scaler (GitHub)</a></li>
+  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/tools/neuron-sys-tools/neuron-monitor-user-guide.html#neuron-monitor-prometheus-py">AWS Neuron: neuron-monitor User Guide</a></li>
+  <li><a href="https://github.com/Project-HAMi/HAMi/releases/tag/v2.7.0">HAMi v2.7.0 릴리스 노트 (GitHub)</a></li>
+  <li><a href="https://docs.vllm.ai/en/latest/design/metrics.html">vLLM: Metrics 설계 문서</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/">8.0편: 개요와 워크샵 아키텍처</a>
+<br /></li>
+</ul>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#autoscaling" class="page__taxonomy-item" rel="tag">Autoscaling</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#eks" class="page__taxonomy-item" rel="tag">EKS</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study-week-6" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study-Week-6</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hpa" class="page__taxonomy-item" rel="tag">HPA</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#keda" class="page__taxonomy-item" rel="tag">KEDA</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#metrics-server" class="page__taxonomy-item" rel="tag">Metrics-Server</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#neuron" class="page__taxonomy-item" rel="tag">Neuron</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#trainium" class="page__taxonomy-item" rel="tag">Trainium</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#vllm" class="page__taxonomy-item" rel="tag">vLLM</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-09-13">September 13, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BLLM%5D+LLM+%EC%84%9C%EB%B9%99%EA%B3%BC+%EC%B5%9C%EC%A0%81%ED%99%94%3A+vLLM+on+Trainium+%EC%9B%8C%ED%81%AC%EC%83%B5+-+8.7.+HPA%EC%99%80+%EC%8A%A4%EC%BC%80%EC%9D%BC%EB%A7%81+%EC%A0%9C%EC%95%BD%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-07-Scaling%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-07-Scaling%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-07-Scaling%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-LLM-Serving-Optimization-08-07-Scaling?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/" class="pagination--pager" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.6. 부하 테스트와 llmperf 벤치마크
+">이전</a>
+    
+    
+      <a href="#" class="pagination--pager disabled">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.6. 부하 테스트와 llmperf 벤치마크
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  37 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">자작 스크립트와 llmperf로 vLLM에 부하를 걸고, 두 도구가 낸 수치를 나란히 놓을 수 있는지 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.2. 데이터소스 프로비저닝과 vLLM 대시보드
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  26 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Grafana를 서브패스로 노출하고 Prometheus 데이터소스를 프로비저닝한 뒤, ConfigMap으로 넣은 vLLM 대시보드가 언제 목록에 뜨는지 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.1. vLLM 메트릭 수집과 서브패스 노출
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  20 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Helm으로 Prometheus를 올려 vLLM의 /metrics를 수집하고, Ingress 서브패스로 웹 UI를 열었을 때 무엇이 함께 바뀌는지 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.4. ingress-nginx L7 노출과 자체 서명 인증서
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  20 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">ingress-nginx를 올려 URL에서 포트를 떼어내고, CLB가 두 개가 된 구조와 브라우저 인증서 경고가 바뀐 이유를 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>

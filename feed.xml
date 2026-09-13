@@ -1,4 +1,515 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-09-13T21:37:44+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.6. 부하 테스트와 llmperf 벤치마크</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.6. 부하 테스트와 llmperf 벤치마크" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-09-13T23:55:47+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Lab 6은 CPU 사용률 기반 HPA를 구성하는 Lab인데 실습이 세 겹으로 막혔다. 이 편은 막힌 지점과 그 이유, 그리고 대신 남는 것을 정리한다&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;eksctl scale nodegroup&lt;/code&gt;은 ASG의 desired만 바꾸므로 &lt;strong&gt;명령 자체는 성공한다.&lt;/strong&gt; 실패는 그다음 EC2 기동에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;VcpuLimitExceeded&lt;/code&gt;로 비동기로 온다&lt;/li&gt;
+  &lt;li&gt;단일 노드 안에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;replicas=2&lt;/code&gt;도 안 된다. vLLM Deployment가 &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuron: 1&lt;/code&gt;(칩 통째)을 요청하는데 노드의 칩이 하나뿐이라 두 번째 파드가 &lt;code class=&quot;highlighter-rouge&quot;&gt;Unschedulable&lt;/code&gt;이다&lt;/li&gt;
+  &lt;li&gt;KEDA GPU Scaler는 NVML과 &lt;code class=&quot;highlighter-rouge&quot;&gt;nvidia.com/gpu.present&lt;/code&gt; 라벨을 전제한다. Neuron 노드에 설치하면 DaemonSet이 &lt;code class=&quot;highlighter-rouge&quot;&gt;DESIRED 0&lt;/code&gt;으로 뜨고 끝난다&lt;/li&gt;
+  &lt;li&gt;성공한 것은 metrics-server와 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl top&lt;/code&gt;이다. 부하를 걸지 않은 상태의 vLLM 파드 CPU가 &lt;strong&gt;8m&lt;/strong&gt;으로 찍혔다. request 4코어 대비 0.2%라 CPU는 스케일 신호로 삼기 어렵다&lt;/li&gt;
+  &lt;li&gt;KEDA 자체는 Prometheus scaler로 쓸 수 있고, 신호로는 &lt;code class=&quot;highlighter-rouge&quot;&gt;vllm:num_requests_waiting&lt;/code&gt;이 가속기 사용률보다 낫다고 볼 근거가 있다. 설계만 했고 실행하지는 않았다. &lt;code class=&quot;highlighter-rouge&quot;&gt;serverAddress&lt;/code&gt;에는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/&quot;&gt;8.5.1편&lt;/a&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;/p8s&lt;/code&gt;가 붙어야 한다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;lab-6의-목표와-자원-제약-해부&quot;&gt;Lab 6의 목표와 자원 제약 해부&lt;/h1&gt;
+
+&lt;h2 id=&quot;워크샵이-lab-6로-내건-것&quot;&gt;워크샵이 Lab 6로 내건 것&lt;/h2&gt;
+
+&lt;p&gt;HPA(Horizontal Pod Autoscaler)를 구성해 CPU 사용률에 따라 vLLM Deployment의 파드를 자동으로 확장하는 것이 Lab 6의 목표다. &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편&lt;/a&gt;이 아키텍처를 정리하면서 “오토스케일링은 CPU 사용률 기반 HPA”라고 적어 둔 그 항목이다.&lt;/p&gt;
+
+&lt;p&gt;결론부터 적으면 이 Lab은 실습을 완주하지 못했다. 파드를 늘리려면 늘릴 자리가 있어야 하는데, 자리를 만드는 두 방향이 각각 다른 이유로 막혔다. 그래서 이 편은 실습 기록이 아니라 &lt;strong&gt;어디서 왜 막혔는지, 했다면 어떻게 했을지, 그리고 운영 관점에서 남는 것&lt;/strong&gt;을 정리한다.&lt;/p&gt;
+
+&lt;h2 id=&quot;trn12xlarge-한-대의-자원과-요청-단위&quot;&gt;trn1.2xlarge 한 대의 자원과 요청 단위&lt;/h2&gt;
+
+&lt;p&gt;막힌 이유는 전부 이 환경의 자원 구성에서 나온다. 세 줄로 요약된다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;항목&lt;/th&gt;
+      &lt;th&gt;값&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;노드&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt; 1대 = vCPU 8, 호스트 RAM 32 GiB&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;가속기&lt;/td&gt;
+      &lt;td&gt;Trainium 칩 1개 = NeuronCore-v2 2개&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;vLLM 파드의 요청&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuron: 1&lt;/code&gt;(칩 통째), &lt;code class=&quot;highlighter-rouge&quot;&gt;cpu: 4&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;ephemeral-storage: 50Gi&lt;/code&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;칩과 코어가 두 단위로 광고되는 구조는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/#칩-하나-코어-둘&quot;&gt;8.2.2편&lt;/a&gt;에 정리되어 있고, vLLM Deployment가 코어가 아니라 칩 단위로 1개를 요청하는 이유는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/#칩-1개-요청과-코어-2개-텐서-병렬&quot;&gt;8.3.1편&lt;/a&gt;에 있다. 요청 단위가 칩이라는 이 한 줄이 뒤에서 두 번째 파드를 막는다.&lt;/p&gt;
+
+&lt;p&gt;스케일아웃 방향은 둘뿐이고, 둘 다 막힌 지점이 다르다.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart TD
+    A[&quot;요청 증가&quot;] --&amp;gt; B{&quot;스케일아웃 방향&quot;}
+    B --&amp;gt;|&quot;노드를 늘린다&quot;| C[&quot;eksctl scale nodegroup --nodes 2&quot;]
+    C --&amp;gt; D[&quot;ASG desired 2로 변경&amp;lt;br/&amp;gt;(명령은 성공)&quot;]
+    D --&amp;gt; E[&quot;ASG가 EC2 기동 시도&quot;]
+    E --&amp;gt; X1[&quot;VcpuLimitExceeded&amp;lt;br/&amp;gt;Trn vCPU 쿼터 8 소진&quot;]
+    B --&amp;gt;|&quot;파드를 늘린다&quot;| F[&quot;kubectl scale deployment --replicas=2&quot;]
+    F --&amp;gt; G[&quot;두 번째 파드 스케줄링&quot;]
+    G --&amp;gt; X2[&quot;Unschedulable&amp;lt;br/&amp;gt;칩이 1개뿐&quot;]
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;여기에 세 번째 층이 하나 더 있다. 방향이 아니라 &lt;strong&gt;신호&lt;/strong&gt; 쪽이다. 가속기 사용률로 스케일하려고 KEDA GPU Scaler를 보면 그쪽은 NVIDIA 전용이라 Neuron 노드에서는 아예 뜨지 않는다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;적용과-관찰-metrics-server-설치와-사용량-확인&quot;&gt;적용과 관찰: metrics-server 설치와 사용량 확인&lt;/h1&gt;
+
+&lt;p&gt;이 Lab에서 끝까지 간 것은 이 부분 하나다. HPA가 CPU 사용률을 읽으려면 &lt;code class=&quot;highlighter-rouge&quot;&gt;metrics.k8s.io&lt;/code&gt; API가 있어야 하고, EKS는 metrics-server를 기본으로 깔지 않는다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# Install metrics server&lt;/span&gt;
+ubuntu@ip-10-0-1-100:~/workshop&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl apply &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+serviceaccount/metrics-server created
+clusterrole.rbac.authorization.k8s.io/system:aggregated-metrics-reader created
+clusterrole.rbac.authorization.k8s.io/system:metrics-server created
+rolebinding.rbac.authorization.k8s.io/metrics-server-auth-reader created
+clusterrolebinding.rbac.authorization.k8s.io/metrics-server:system:auth-delegator created
+clusterrolebinding.rbac.authorization.k8s.io/system:metrics-server created
+service/metrics-server created
+deployment.apps/metrics-server created
+apiservice.apiregistration.k8s.io/v1beta1.metrics.k8s.io created
+
+&lt;span class=&quot;c&quot;&gt;# Deployment가 available이 될 때까지 기다린다&lt;/span&gt;
+ubuntu@ip-10-0-1-100:~/workshop&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl &lt;span class=&quot;nb&quot;&gt;wait&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--for&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;condition&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;available &lt;span class=&quot;nt&quot;&gt;--timeout&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;300s deployment/metrics-server &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; kube-system
+deployment.apps/metrics-server condition met
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;마지막 줄의 &lt;code class=&quot;highlighter-rouge&quot;&gt;apiservice.apiregistration.k8s.io/v1beta1.metrics.k8s.io&lt;/code&gt;가 핵심이다. metrics-server는 일반 Deployment로 뜨지만, APIService로 등록되면서 &lt;code class=&quot;highlighter-rouge&quot;&gt;metrics.k8s.io/v1beta1&lt;/code&gt; 그룹을 kube-apiserver에 집계(aggregation)해 붙인다. &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl top&lt;/code&gt;도 HPA도 이 API를 읽는다.&lt;/p&gt;
+
+&lt;p&gt;설치가 끝나면 바로 사용량을 볼 수 있다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ubuntu@ip-10-0-1-100:~/workshop&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl top nodes
+NAME                                       CPU&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;cores&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;   CPU&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;   MEMORY&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;bytes&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;   MEMORY&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;%&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+ip-10-0-5-100.us-west-2.compute.internal   262m         3%       10060Mi         32%
+
+ubuntu@ip-10-0-1-100:~/workshop&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl top pods &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; default
+NAME                               CPU&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;cores&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;   MEMORY&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;bytes&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+vllm-deployment-64597fb8cc-hwdd9   8m           6121Mi
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;노드 전체로는 &lt;code class=&quot;highlighter-rouge&quot;&gt;262m&lt;/code&gt;, 8 vCPU 대비 3%다. 그런데 그 아래 파드 줄이 이 Lab에서 가장 중요한 숫자다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;검증-cpu-사용률과-스케일-신호의-불일치&quot;&gt;검증: CPU 사용률과 스케일 신호의 불일치&lt;/h1&gt;
+
+&lt;p&gt;vLLM 파드가 쓰는 CPU는 &lt;strong&gt;8m&lt;/strong&gt;, 즉 0.008 코어다. 파드가 6121Mi(약 6 GiB) 메모리를 점유한 채 모델을 서빙하고 있는데 CPU는 이 수준이다. 연산이 CPU가 아니라 NeuronCore에서 일어나기 때문이다.&lt;/p&gt;
+
+&lt;p&gt;HPA가 &lt;code class=&quot;highlighter-rouge&quot;&gt;type: Utilization&lt;/code&gt;으로 CPU를 볼 때 쓰는 값은 절대 코어 수가 아니라 &lt;strong&gt;request 대비 비율&lt;/strong&gt;이다. 이 파드의 request는 &lt;code class=&quot;highlighter-rouge&quot;&gt;cpu: 4&lt;/code&gt;, 즉 4000m이므로 비율은 이렇게 나온다.&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;8m / 4000m = 0.002 = 0.2%
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;targetCPUUtilizationPercentage&lt;/code&gt;를 5~10 같은 낮은 값으로 내려도 0.2%는 그 아래다. 스케일업 조건에 닿게 하려면 목표치를 더 내리거나 request 자체를 낮춰야 한다. 어느 쪽이든 워크로드의 실제 포화도와는 무관한 숫자 맞추기가 된다.&lt;/p&gt;
+
+&lt;p&gt;다만 범위를 분명히 해 둘 필요가 있다. 위 &lt;code class=&quot;highlighter-rouge&quot;&gt;8m&lt;/code&gt;은 부하를 걸지 않은 상태에서 찍힌 값이고, &lt;strong&gt;부하 중 파드 CPU가 얼마까지 오르는지는 이번에 측정하지 않았다.&lt;/strong&gt; &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/#부하-지속-시간과-스크레이프-간격&quot;&gt;8.6편의 부하 지속 시간과 스크레이프 간격&lt;/a&gt;에서 llmperf 부하를 건 구간이 14초였고, 그 구간에 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl top pods&lt;/code&gt;를 함께 돌린 기록은 없다. 그러니 “부하를 줘도 CPU가 오르지 않는다”까지는 이 데이터로 단정할 수 없고, 확인된 것은 &lt;strong&gt;정상 서빙 상태의 CPU 사용률이 request 대비 0.2% 수준&lt;/strong&gt;이라는 것까지다.&lt;/p&gt;
+
+&lt;p&gt;그 범위만으로도 방향은 읽힌다. 무부하 서빙 상태에서 이미 request의 0.2%라면, 이 지표로는 목표치를 잡을 수가 없다. HPA의 &lt;code class=&quot;highlighter-rouge&quot;&gt;averageUtilization&lt;/code&gt;이 정수라 &lt;strong&gt;걸 수 있는 가장 낮은 값이 1%인데, 측정값이 그보다 아래에 있다&lt;/strong&gt;. 연산이 NeuronCore에서 일어나는 워크로드에서 CPU 사용률이 스케일 신호로 적절한지부터 의심해야 하는 값이다. &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/#모니터링과-오토스케일링&quot;&gt;8.0편의 모니터링과 오토스케일링&lt;/a&gt;에서 “가속기 워크로드인데 스케일 기준이 가속기 사용률이 아니라 CPU 사용률”이라고 적어 둔 특징이 여기서 수치로 드러난다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;막힘--해결-스케일링을-막은-세-겹&quot;&gt;막힘 &amp;amp; 해결: 스케일링을 막은 세 겹&lt;/h1&gt;
+
+&lt;h2 id=&quot;노드-증설과-vcpu-쿼터&quot;&gt;노드 증설과 vCPU 쿼터&lt;/h2&gt;
+
+&lt;p&gt;파드를 늘릴 자리를 만드는 첫 번째 방향은 노드를 늘리는 것이다. 노드그룹의 desired를 2로 올린다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ubuntu@ip-10-0-1-100:~/workshop&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;eksctl scale nodegroup &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;--cluster&lt;/span&gt; my-neuron-cluster &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;--name&lt;/span&gt; neuron-trn1-2x &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;--nodes&lt;/span&gt; 2 &lt;span class=&quot;nt&quot;&gt;--nodes-max&lt;/span&gt; 2 &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;--region&lt;/span&gt; us-west-2
+2026-09-12 02:34:02 &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;ℹ]  scaling nodegroup &lt;span class=&quot;s2&quot;&gt;&quot;neuron-trn1-2x&quot;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;in &lt;/span&gt;cluster my-neuron-cluster
+2026-09-12 02:34:02 &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;ℹ]  initiated scaling of nodegroup
+2026-09-12 02:34:02 &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;ℹ]  to see the status of the scaling run &lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;eksctl get nodegroup &lt;span class=&quot;nt&quot;&gt;--cluster&lt;/span&gt; my-neuron-cluster &lt;span class=&quot;nt&quot;&gt;--region&lt;/span&gt; us-west-2 &lt;span class=&quot;nt&quot;&gt;--name&lt;/span&gt; neuron-trn1-2x&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;strong&gt;명령은 성공으로 끝난다.&lt;/strong&gt; 에러도 경고도 없고 &lt;code class=&quot;highlighter-rouge&quot;&gt;initiated scaling of nodegroup&lt;/code&gt;까지 찍힌다. 그런데 노드는 늘지 않는다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 1) 노드가 안 늘어남 (여전히 1대)&lt;/span&gt;
+ubuntu@ip-10-0-1-100:~/workshop&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get nodes &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; wide
+NAME                                       STATUS   ROLES    AGE   VERSION                INTERNAL-IP   EXTERNAL-IP     OS-IMAGE                        KERNEL-VERSION                     CONTAINER-RUNTIME
+ip-10-0-5-100.us-west-2.compute.internal   Ready    &amp;lt;none&amp;gt;   13h   v1.33.13-eks-cb19647   10.0.5.100    203.0.113.10    Amazon Linux 2023.12.20260831   6.12.103-127.188.amzn2023.x86_64   containerd://2.2.5+unknown
+
+&lt;span class=&quot;c&quot;&gt;# 2) 노드그룹 상태 확인 → 여기에는 아무 문제도 안 적힌다&lt;/span&gt;
+ubuntu@ip-10-0-1-100:~/workshop&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;aws eks describe-nodegroup &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;--cluster-name&lt;/span&gt; my-neuron-cluster &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;--nodegroup-name&lt;/span&gt; neuron-trn1-2x &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;--region&lt;/span&gt; us-west-2 &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;--query&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'nodegroup.{status:status, health:health.issues, scaling:scalingConfig}'&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;s2&quot;&gt;&quot;status&quot;&lt;/span&gt;: &lt;span class=&quot;s2&quot;&gt;&quot;ACTIVE&quot;&lt;/span&gt;,
+    &lt;span class=&quot;s2&quot;&gt;&quot;health&quot;&lt;/span&gt;: &lt;span class=&quot;o&quot;&gt;[]&lt;/span&gt;,
+    &lt;span class=&quot;s2&quot;&gt;&quot;scaling&quot;&lt;/span&gt;: &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;s2&quot;&gt;&quot;minSize&quot;&lt;/span&gt;: 1,
+        &lt;span class=&quot;s2&quot;&gt;&quot;maxSize&quot;&lt;/span&gt;: 2,
+        &lt;span class=&quot;s2&quot;&gt;&quot;desiredSize&quot;&lt;/span&gt;: 2
+    &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;노드그룹은 &lt;code class=&quot;highlighter-rouge&quot;&gt;ACTIVE&lt;/code&gt;이고 &lt;code class=&quot;highlighter-rouge&quot;&gt;health.issues&lt;/code&gt;는 빈 배열이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;desiredSize&lt;/code&gt;만 2로 바뀌어 있고 실제 노드는 1대다. EKS 관리형 노드그룹은 &lt;code class=&quot;highlighter-rouge&quot;&gt;AsgInstanceLaunchFailures&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;InstanceLimitExceeded&lt;/code&gt;를 health 이슈 코드로 정의해 두고 있으므로 이 실패가 노드그룹에 올라올 수 있는 종류이기는 하다. 다만 이번 조회 시점에는 비어 있었다. 스케일 명령부터 원복까지가 5분 남짓이라 EKS가 health를 갱신하기 전이었는지 다른 이유인지는 이 기록만으로 가릴 수 없다. 이 시점에 원인이 적혀 있던 곳은 ASG(Auto Scaling Group)의 활동 기록이다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 3) 원본 에러 메시지 — 노드그룹이 아니라 ASG 활동 기록에 있다&lt;/span&gt;
+ubuntu@ip-10-0-1-100:~/workshop&lt;span class=&quot;nv&quot;&gt;$ ASG&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;$(&lt;/span&gt;aws eks describe-nodegroup &lt;span class=&quot;nt&quot;&gt;--cluster-name&lt;/span&gt; my-neuron-cluster &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;--nodegroup-name&lt;/span&gt; neuron-trn1-2x &lt;span class=&quot;nt&quot;&gt;--region&lt;/span&gt; us-west-2 &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;--query&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'nodegroup.resources.autoScalingGroups[0].name'&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--output&lt;/span&gt; text&lt;span class=&quot;k&quot;&gt;)&lt;/span&gt;
+ubuntu@ip-10-0-1-100:~/workshop&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;aws autoscaling describe-scaling-activities &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;--auto-scaling-group-name&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$ASG&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--region&lt;/span&gt; us-west-2 &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;--query&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'Activities[0].{Status:StatusCode, Cause:StatusMessage}'&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;s2&quot;&gt;&quot;Status&quot;&lt;/span&gt;: &lt;span class=&quot;s2&quot;&gt;&quot;Failed&quot;&lt;/span&gt;,
+    &lt;span class=&quot;s2&quot;&gt;&quot;Cause&quot;&lt;/span&gt;: &lt;span class=&quot;s2&quot;&gt;&quot;Could not launch On-Demand Instances. VcpuLimitExceeded - You have requested more vCPU capacity than your current vCPU limit of 8 allows for the instance bucket that the specified instance type belongs to. Please visit http://aws.amazon.com/contact-us/ec2-request to request an adjustment to this limit. Launching EC2 instance failed.&quot;&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;같은 내용을 콘솔에서도 볼 수 있다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-aws-workshop-gpu-node-quota-failure.png&quot; alt=&quot;EC2 Auto Scaling 그룹 콘솔의 활동 기록에 남은 VcpuLimitExceeded&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;직접 캡처. EC2 Auto Scaling 그룹 콘솔이다. 노드그룹이 만든 ASG의 원하는 용량이 2, 인스턴스는 1이고, 활동 기록 한 줄이 실패 상태로 VcpuLimitExceeded 메시지를 담고 있다.&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;원인은 AWS 서비스 쿼터다. Trn 인스턴스 vCPU 한도가 8로 잡혀 있고 &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;가 8 vCPU이므로, 이미 떠 있는 노드 한 대가 한도를 전부 쓰고 있다. 두 번째 인스턴스가 들어갈 자리가 없다.&lt;/p&gt;
+
+&lt;p&gt;여기서 관찰할 만한 것은 실패 자체보다 &lt;strong&gt;실패가 드러나는 경로&lt;/strong&gt;다. &lt;code class=&quot;highlighter-rouge&quot;&gt;eksctl scale nodegroup&lt;/code&gt;이 하는 일은 노드그룹의 &lt;code class=&quot;highlighter-rouge&quot;&gt;scalingConfig&lt;/code&gt;, 결과적으로 ASG의 desired 값을 바꾸는 것까지다. 실제 EC2 기동은 그 뒤에 ASG가 비동기로 수행한다. 그래서 명령의 종료 코드는 0이고, 쿼터 초과는 한참 뒤에 ASG 활동 기록에만 남는다. eksctl 문서도 &lt;code class=&quot;highlighter-rouge&quot;&gt;--wait&lt;/code&gt;를 주지 않으면 AWS API 요청을 보낸 직후에 반환한다고 적어 둔다. 위 명령에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;--wait&lt;/code&gt;가 없었으므로 노드가 실제로 뜨는지까지는 기다리지 않았다. 적어도 이번 관측 창에서는 노드그룹의 &lt;code class=&quot;highlighter-rouge&quot;&gt;health.issues&lt;/code&gt;도 비어 있었으니, &lt;code class=&quot;highlighter-rouge&quot;&gt;describe-nodegroup&lt;/code&gt;만 보면 정상으로 읽힌다. 선언적 API에서 “명령 성공”과 “의도 달성”이 별개라는 것이 이 비대칭에 그대로 드러난다.&lt;/p&gt;
+
+&lt;p&gt;쿼터를 올리지 않기로 했으므로 설정을 되돌린다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ubuntu@ip-10-0-1-100:~/workshop&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;eksctl scale nodegroup &lt;span class=&quot;nt&quot;&gt;--cluster&lt;/span&gt; my-neuron-cluster &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;--name&lt;/span&gt; neuron-trn1-2x &lt;span class=&quot;nt&quot;&gt;--nodes&lt;/span&gt; 1 &lt;span class=&quot;nt&quot;&gt;--nodes-max&lt;/span&gt; 1 &lt;span class=&quot;nt&quot;&gt;--region&lt;/span&gt; us-west-2
+2026-09-12 02:39:23 &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;ℹ]  scaling nodegroup &lt;span class=&quot;s2&quot;&gt;&quot;neuron-trn1-2x&quot;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;in &lt;/span&gt;cluster my-neuron-cluster
+2026-09-12 02:39:23 &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;ℹ]  initiated scaling of nodegroup
+2026-09-12 02:39:23 &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;ℹ]  to see the status of the scaling run &lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;eksctl get nodegroup &lt;span class=&quot;nt&quot;&gt;--cluster&lt;/span&gt; my-neuron-cluster &lt;span class=&quot;nt&quot;&gt;--region&lt;/span&gt; us-west-2 &lt;span class=&quot;nt&quot;&gt;--name&lt;/span&gt; neuron-trn1-2x&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;단일-노드-안의-replicas2&quot;&gt;단일 노드 안의 replicas=2&lt;/h2&gt;
+
+&lt;p&gt;노드를 못 늘리면 관점을 바꿔 볼 수 있다. 노드 하나 안에 파드를 두 개 넣으면 된다. 노드가 광고하는 코어는 2개이니 산술적으로는 가능해 보인다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;c&quot;&gt;# 노드가 광고하는 코어 수&lt;/span&gt;
+ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get node &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; json | jq &lt;span class=&quot;s1&quot;&gt;'.items[].status.allocatable[&quot;aws.amazon.com/neuroncore&quot;]'&lt;/span&gt;
+&lt;span class=&quot;s2&quot;&gt;&quot;2&quot;&lt;/span&gt;
+
+ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;c&quot;&gt;# 그런데 파드가 요청하는 단위는 코어가 아니다&lt;/span&gt;
+ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get pod &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; json &lt;span class=&quot;nt&quot;&gt;-l&lt;/span&gt; app.kubernetes.io/name&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;vllm-server &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   | jq &lt;span class=&quot;s1&quot;&gt;'.items[].spec.containers[].resources.requests'&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;aws.amazon.com/neuron&quot;&lt;/span&gt;: &lt;span class=&quot;s2&quot;&gt;&quot;1&quot;&lt;/span&gt;,
+  &lt;span class=&quot;s2&quot;&gt;&quot;cpu&quot;&lt;/span&gt;: &lt;span class=&quot;s2&quot;&gt;&quot;4&quot;&lt;/span&gt;,
+  &lt;span class=&quot;s2&quot;&gt;&quot;ephemeral-storage&quot;&lt;/span&gt;: &lt;span class=&quot;s2&quot;&gt;&quot;50Gi&quot;&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;노드는 &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuroncore&lt;/code&gt;를 2개 광고하지만, vLLM 파드가 요청하는 것은 &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuroncore: 2&lt;/code&gt;가 아니라 &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuron: 1&lt;/code&gt;이다. 칩을 통째로 하나 잡는 요청이고, 노드에 있는 칩은 하나뿐이다.&lt;/p&gt;
+
+&lt;p&gt;실제로 늘려 보면 그대로 나온다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl scale deployment vllm-deployment &lt;span class=&quot;nt&quot;&gt;--replicas&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;2
+deployment.apps/vllm-deployment scaled
+
+ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get pods &lt;span class=&quot;nt&quot;&gt;-l&lt;/span&gt; app.kubernetes.io/name&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;vllm-server
+NAME                               READY   STATUS    RESTARTS   AGE
+vllm-deployment-64597fb8cc-hwdd9   1/1     Running   0          43h
+vllm-deployment-64597fb8cc-qv2zk   0/1     Pending   0          1s
+
+ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;c&quot;&gt;# 스케줄링이 실패한 이유&lt;/span&gt;
+ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get pod &lt;span class=&quot;nt&quot;&gt;-l&lt;/span&gt; app.kubernetes.io/name&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;vllm-server &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;--field-selector&lt;/span&gt; status.phase&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;Pending &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;jsonpath&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'{range .items[*]}{.metadata.name}{&quot;\n&quot;}{range .status.conditions[*]}{.reason}: {.message}{&quot;\n&quot;}{end}{end}'&lt;/span&gt;
+vllm-deployment-64597fb8cc-qv2zk
+Unschedulable: 0/1 nodes are available: 1 Insufficient aws.amazon.com/neuron, 1 Insufficient cpu, 1 Insufficient ephemeral-storage. preemption: 0/1 nodes are available: 1 No preemption victims found &lt;span class=&quot;k&quot;&gt;for &lt;/span&gt;incoming pod.
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;부족한 자원이 하나가 아니라 셋으로 찍힌다. &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuron&lt;/code&gt;은 칩 하나를 이미 첫 파드가 잡고 있어서다. &lt;code class=&quot;highlighter-rouge&quot;&gt;cpu&lt;/code&gt;는 파드당 request가 4코어라 두 개면 8코어인데, 노드가 8 vCPU여도 kubelet·시스템 예약을 뺀 allocatable은 그보다 작아 들어가지 않는다. &lt;code class=&quot;highlighter-rouge&quot;&gt;ephemeral-storage&lt;/code&gt;도 파드당 50Gi라 두 개면 100Gi다. 셋 중 어느 하나만 풀어도 나머지가 남는 구조다.&lt;/p&gt;
+
+&lt;p&gt;정리하면, 단일 노드 안의 &lt;code class=&quot;highlighter-rouge&quot;&gt;replicas=2&lt;/code&gt;를 막는 근본 제약은 &lt;strong&gt;요청 단위가 칩이라는 점&lt;/strong&gt;이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;TENSOR_PARALLEL_SIZE&lt;/code&gt;를 2로 쓰기 때문에 코어를 2개 점유한 것이 아니라, 칩 1개를 받으면 그 안의 코어 2개가 따라오는 구조다(&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/#칩-1개-요청과-코어-2개-텐서-병렬&quot;&gt;8.3.1편&lt;/a&gt;).&lt;/p&gt;
+
+&lt;p&gt;확인했으니 원복한다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl scale deployment vllm-deployment &lt;span class=&quot;nt&quot;&gt;--replicas&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;1
+deployment.apps/vllm-deployment scaled
+ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get pods &lt;span class=&quot;nt&quot;&gt;-l&lt;/span&gt; app.kubernetes.io/name&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;vllm-server
+NAME                               READY   STATUS    RESTARTS   AGE
+vllm-deployment-64597fb8cc-hwdd9   1/1     Running   0          43h
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;keda-gpu-scaler와-nvml-전제&quot;&gt;KEDA GPU Scaler와 NVML 전제&lt;/h2&gt;
+
+&lt;p&gt;세 번째 층은 신호 쪽이다. CPU가 스케일 신호로 맞지 않는다는 것은 앞에서 확인했으니, 가속기 사용률을 신호로 쓰는 도구를 찾게 된다. 그중 하나가 KEDA GPU Scaler다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/keda-gpu-scaler.jpeg&quot; alt=&quot;keda-gpu-scaler 구조도&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;출처: keda-gpu-scaler 프로젝트 문서. GPU 노드의 DaemonSet이 NVML로 읽은 지표를 gRPC로 KEDA External Scaler에 넘기고, KEDA가 HPA를 움직여 워크로드 파드 수를 조정하는 구조다. 아래쪽은 dcgm-exporter·Prometheus·PromQL을 거치는 기존 5단 경로와의 대비다.&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;이 도구는 NVIDIA의 NVML(NVIDIA Management Library) C 바인딩에서 SM 사용률과 프레임 버퍼 메모리를 직접 읽어 KEDA의 External Scaler 프로토콜(gRPC)로 넘긴다. 프로젝트가 내세우는 명분은 &lt;code class=&quot;highlighter-rouge&quot;&gt;dcgm-exporter → Prometheus → PromQL → KEDA → HPA&lt;/code&gt;의 5개 컴포넌트 경로를 2개로 줄이는 것이다. 근거로 드는 현상은 vLLM 파드의 CPU가 8%로 찍히는 동안 GPU는 100%라는 것이다. 가속기가 일하는 동안 CPU 숫자가 워크로드 상태를 반영하지 못한다는 지적인데, 앞에서 본 &lt;code class=&quot;highlighter-rouge&quot;&gt;8m&lt;/code&gt;도 같은 지점에 있다.&lt;/p&gt;
+
+&lt;p&gt;그런데 문서를 읽으면 Neuron 노드에 적용할 수 없다는 것이 세 곳에서 드러난다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;NVML C 바인딩(&lt;code class=&quot;highlighter-rouge&quot;&gt;libnvidia-ml.so&lt;/code&gt;)에서 직접 읽는다 → Neuron 노드에는 이 라이브러리가 없다&lt;/li&gt;
+  &lt;li&gt;DaemonSet이 &lt;code class=&quot;highlighter-rouge&quot;&gt;nvidia.com/gpu.present: &quot;true&quot;&lt;/code&gt; 라벨이 붙은 노드에만 뜬다 → &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1&lt;/code&gt; 노드에는 이 라벨이 붙지 않는다&lt;/li&gt;
+  &lt;li&gt;사전 준비에 “NVIDIA GPU drivers and Device Plugin”이 명시되어 있다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;실제로 설치해서 확인해 봤다. KEDA부터 올린다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;helm repo add kedacore https://kedacore.github.io/charts &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; helm repo update
+&lt;span class=&quot;s2&quot;&gt;&quot;kedacore&quot;&lt;/span&gt; has been added to your repositories
+Update Complete. ⎈Happy Helming!⎈
+
+ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl create namespace keda &lt;span class=&quot;nt&quot;&gt;--dry-run&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;client &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; yaml | kubectl apply &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; -
+namespace/keda created
+
+ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;helm install keda kedacore/keda &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; keda &lt;span class=&quot;nt&quot;&gt;--wait&lt;/span&gt;
+NAME: keda
+LAST DEPLOYED: Sun Sep 13 09:38:09 2026
+NAMESPACE: keda
+STATUS: deployed
+REVISION: 1
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;그 위에 GPU Scaler 매니페스트를 얹는다.&lt;/p&gt;
+
+&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl apply &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; https://raw.githubusercontent.com/pmady/keda-gpu-scaler/main/deploy/manifests.yaml
+service/keda-gpu-scaler created
+daemonset.apps/keda-gpu-scaler created
+
+ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl get ds &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; keda
+NAME              DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR                 AGE
+keda-gpu-scaler   0         0         0       0            0           nvidia.com/gpu.present&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;true   &lt;/span&gt;1s
+
+ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl describe ds keda-gpu-scaler &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; keda | &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'node-selector\|desired'&lt;/span&gt;
+Node-Selector:  nvidia.com/gpu.present&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;true
+&lt;/span&gt;Desired Number of Nodes Scheduled: 0
+  Node-Selectors:  nvidia.com/gpu.present&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;true&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;DESIRED 0&lt;/code&gt;이다. 에러도 없고 &lt;code class=&quot;highlighter-rouge&quot;&gt;CrashLoopBackOff&lt;/code&gt;도 없다. nodeSelector에 맞는 노드가 하나도 없어서 스케줄러가 만들 파드가 애초에 0개인 것이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;Desired Number of Nodes Scheduled: 0&lt;/code&gt;이 그 증거다.&lt;/p&gt;
+
+&lt;p&gt;제품 자체는 여기서 접는 것이 맞다. NVIDIA 전용이고 Neuron 지원 계획도 적혀 있지 않다. 다만 벤더와 무관하게 남는 개념이 셋 있다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;개념&lt;/th&gt;
+      &lt;th&gt;내용&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;External Scaler 프로토콜&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;IsActive&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;GetMetricSpec&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;GetMetrics&lt;/code&gt; gRPC 인터페이스이고, &lt;code class=&quot;highlighter-rouge&quot;&gt;external-push&lt;/code&gt; 방식일 때 &lt;code class=&quot;highlighter-rouge&quot;&gt;StreamIsActive&lt;/code&gt;가 더해진다. 임의의 신호로 HPA를 구동하는 KEDA의 표준 확장점이다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;scale-to-zero&lt;/td&gt;
+      &lt;td&gt;이 클러스터의 쿠버네티스 1.33에서는 &lt;code class=&quot;highlighter-rouge&quot;&gt;minReplicas: 0&lt;/code&gt;을 쓸 수 없다. &lt;code class=&quot;highlighter-rouge&quot;&gt;HPAScaleToZero&lt;/code&gt; 기능 게이트가 알파이고 기본 비활성이다. 게이트가 켜져도 대상은 object·external 지표뿐이라 CPU 같은 resource 지표에는 적용되지 않는다. KEDA는 버전과 무관하게 이 동작을 제공한다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;DaemonSet과 Deployment의 배치 원칙&lt;/td&gt;
+      &lt;td&gt;노드 로컬 하드웨어에 접근해야 하면 DaemonSet, 중앙에서 집계하면 Deployment다. NVML이 노드 로컬이라 DaemonSet이 된 것이다&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;해-보지-못한-설계와-대안-경로&quot;&gt;해 보지 못한 설계와 대안 경로&lt;/h1&gt;
+
+&lt;p&gt;워크샵 노트에 &lt;code class=&quot;highlighter-rouge&quot;&gt;도전과제&lt;/code&gt;로 적어 둔 두 가지가 있다. &lt;strong&gt;둘 다 끝까지 돌려 보지는 못했다.&lt;/strong&gt; 두 번째는 KEDA와 GPU Scaler 설치까지 갔다가 앞에서 본 &lt;code class=&quot;highlighter-rouge&quot;&gt;DESIRED 0&lt;/code&gt;에서 멈췄고, 첫 번째는 시간 관계로 설계만 남았다. 아래 내용은 실습 기록이 아니라 조사와 설계 단계에서 나온 것이므로, 실제로 그렇게 동작하는지는 확인하지 않았다.&lt;/p&gt;
+
+&lt;h2 id=&quot;도전-과제-1-tp1로-낮춘-replica-2&quot;&gt;도전 과제 1: TP=1로 낮춘 replica 2&lt;/h2&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;TENSOR_PARALLEL_SIZE&lt;/code&gt;를 1로 낮추고 요청 단위를 칩이 아니라 코어로 바꾸면, 코어 2개짜리 노드에 파드 2개가 들어갈 수 있다는 발상이다. 실행했다면 이런 순서였을 것이다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;단계&lt;/th&gt;
+      &lt;th&gt;내용&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;1&lt;/td&gt;
+      &lt;td&gt;기존 vLLM 삭제 (&lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl delete deploy vllm-deployment&lt;/code&gt;)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;2&lt;/td&gt;
+      &lt;td&gt;ConfigMap에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;TENSOR_PARALLEL_SIZE: &quot;1&quot;&lt;/code&gt;로 바꾸고 &lt;code class=&quot;highlighter-rouge&quot;&gt;NEURON_RT_VISIBLE_CORES&lt;/code&gt; 제거 (device plugin이 할당한 코어를 그대로 쓰도록)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;3&lt;/td&gt;
+      &lt;td&gt;Deployment의 resources를 &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuroncore: 1&lt;/code&gt;로 변경&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;4&lt;/td&gt;
+      &lt;td&gt;배포. TP=1은 NEFF(&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/&quot;&gt;8.1편&lt;/a&gt;에서 정리한 Neuron Executable File Format) 캐시가 달라 &lt;code class=&quot;highlighter-rouge&quot;&gt;/shared/model/cache&lt;/code&gt;의 기존 캐시가 미적중이고 재컴파일이 필요하다. TP=2 최초 컴파일의 실측이 3분 52초였다(&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편&lt;/a&gt;)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;5&lt;/td&gt;
+      &lt;td&gt;HPA 생성 후 &lt;code class=&quot;highlighter-rouge&quot;&gt;replicas 1 → 2&lt;/code&gt; 스케일업 확인&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;6&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;replicas 3&lt;/code&gt; 시도 → 코어 2개가 소진되어 Pending&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;여기에 한계가 하나 있다. &lt;strong&gt;TP=2를 없앤다고 스케일링이 풀리는 것이 아니다.&lt;/strong&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuroncore&lt;/code&gt;는 분할 불가(non-divisible) 확장 리소스라 CPU처럼 0.5개씩 쪼갤 수 없다. 코어가 2개뿐이니 파드 2개가 상한이고, 세 번째 파드부터는 노드가 더 필요하다. 그러면 다시 Trn vCPU 쿼터 8에 막힌다. 이 설계가 얻는 것은 “스케일링이 가능해지는 것”이 아니라 &lt;strong&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;replicas 1 → 2&lt;/code&gt; 한 단계의 스케일업을 확인하고, 3에서 자원 한계에 걸리는 것을 보는 것&lt;/strong&gt;까지다.&lt;/p&gt;
+
+&lt;p&gt;실행했다면 주의했어야 할 점도 조사 단계에서 세 가지가 나왔다. 모두 미검증이다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Neuron 사용률은 기본 HPA가 읽지 못한다. &lt;code class=&quot;highlighter-rouge&quot;&gt;prometheus-adapter&lt;/code&gt; 같은 custom metrics adapter가 필요하다&lt;/li&gt;
+  &lt;li&gt;메모리를 확인해야 한다. 노드 호스트 RAM이 32 GiB이고 파드 하나가 6121Mi를 쓰고 있으니 2개면 약 12 GiB에 컴파일 피크가 얹힌다. 여유는 있어 보이지만 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl top pods&lt;/code&gt;로 확인이 필요하다&lt;/li&gt;
+  &lt;li&gt;재컴파일이 실습 시간의 대부분을 차지한다. TP=2 최초 컴파일 실측이 3분 52초였다는 것 말고는 TP=1의 소요를 가늠할 근거가 없다. 시간이 없으면 이 경로는 접고 개념만 정리하는 편이 낫다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;도전-과제-2-keda-prometheus-scaler-경로&quot;&gt;도전 과제 2: KEDA Prometheus scaler 경로&lt;/h2&gt;
+
+&lt;p&gt;두 번째 도전 과제는 가속기 사용률 기준 HPA의 동작 확인이었다. KEDA GPU Scaler로는 앞에서 본 대로 갈 수 없지만, &lt;strong&gt;KEDA 자체는 Prometheus scaler로 쓸 수 있다.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;그리고 이 경로는 이 환경에서 실제로 구성 가능한 상태였다. &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/&quot;&gt;8.5.1편&lt;/a&gt;에서 Prometheus를 올리고 &lt;code class=&quot;highlighter-rouge&quot;&gt;vllm-metrics&lt;/code&gt; 잡이 vLLM의 &lt;code class=&quot;highlighter-rouge&quot;&gt;/metrics&lt;/code&gt;를 긁고 있으며, KEDA는 위에서 이미 설치했다. 남은 것은 &lt;code class=&quot;highlighter-rouge&quot;&gt;ScaledObject&lt;/code&gt; 하나였다.&lt;/p&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# 실행하지 않은 설계안이다&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;triggers&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;prometheus&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;metadata&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;serverAddress&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;http://prometheus-server.monitoring.svc.cluster.local/p8s&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;metricName&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;vllm_num_requests_waiting&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;query&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;sum(vllm:num_requests_waiting)&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;threshold&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;2&quot;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;설계안을 그대로 옮겨 적었지만 한 줄은 지금 기준과 맞지 않는다. 현재 KEDA 문서의 Prometheus scaler 파라미터 목록에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;metricName&lt;/code&gt;이 없다. 필수는 &lt;code class=&quot;highlighter-rouge&quot;&gt;serverAddress&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;query&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;threshold&lt;/code&gt;이고, HPA에 노출할 지표 이름은 KEDA가 만든다.&lt;/p&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;serverAddress&lt;/code&gt; 끝의 &lt;code class=&quot;highlighter-rouge&quot;&gt;/p8s&lt;/code&gt;는 이 시리즈에서 두 번째로 나오는 같은 함정이다. &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/#route-prefix와-external-url&quot;&gt;8.5.1편&lt;/a&gt;에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;--web.route-prefix=/p8s&lt;/code&gt;를 붙이는 순간 Prometheus 프로세스의 내부 라우팅이 통째로 옮겨갔고, 그래서 ClusterIP로 직행하는 경로도 함께 바뀌었다. &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/#데이터소스-url-수정&quot;&gt;8.5.2편&lt;/a&gt;에서 Grafana 데이터소스 URL을 고쳐야 했던 것과 같은 이유다. KEDA도 같은 클러스터 내부 주소로 질의하므로 같은 곳에 걸린다.&lt;/p&gt;
+
+&lt;p&gt;신호로 무엇을 쓸지도 이 설계의 핵심이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;vllm:num_requests_waiting&lt;/code&gt;은 대기 큐 길이다. 가속기 사용률보다 나은 신호로 볼 근거가 있다. 사용률은 샘플링 구간에 커널이 돌았는지만 보므로 포화 상태를 과대평가하기 쉬운 반면, 큐 길이는 처리되지 못하고 쌓인 요청 수라서 SLO 위반이 임박했다는 것을 직접 나타낸다. 이 지표는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/#수집-대상-metrics&quot;&gt;8.5.1편의 수집 대상 /metrics&lt;/a&gt;에서 vLLM &lt;code class=&quot;highlighter-rouge&quot;&gt;/metrics&lt;/code&gt; 원본에 게이지로 노출되는 것을 이미 확인했다.&lt;/p&gt;
+
+&lt;p&gt;물론 이 경로로 가도 파드가 실제로 Running이 되지는 않는다. 스케일업된 두 번째 파드는 앞에서 본 대로 칩이 없어 Pending에 머문다. 다만 &lt;code class=&quot;highlighter-rouge&quot;&gt;ScaledObject&lt;/code&gt;가 큐 길이를 읽고 desired replica를 계산해 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl get hpa&lt;/code&gt;에 반영하는 것까지는 관찰 대상이 된다. 재컴파일 없이 도전 과제 2의 상당 부분을 체험할 수 있는 경로였다는 뜻이다.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/&quot;&gt;8.5.1편&lt;/a&gt;이 남겨 둔 지적 하나도 여기서 함께 정리된다. &lt;code class=&quot;highlighter-rouge&quot;&gt;static_configs&lt;/code&gt;로 Service DNS 하나를 찍는 스크레이프 잡은 뒤에 파드가 여러 개가 되면 &lt;code class=&quot;highlighter-rouge&quot;&gt;instance&lt;/code&gt; 라벨이 같은 문자열로 남아 파드별로 값을 나눠 볼 수 없다. 이번 구성은 두 번째 파드가 Running까지 가지 못했으므로 그 상황 자체가 만들어지지 않았고, 잡 정의를 다시 볼 필요도 생기지 않았다.&lt;/p&gt;
+
+&lt;h2 id=&quot;neuron에서-끝까지-가는-경로&quot;&gt;Neuron에서 끝까지 가는 경로&lt;/h2&gt;
+
+&lt;p&gt;가속기 사용률 자체를 신호로 쓰겠다면 경로는 이렇게 된다.&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;neuron-monitor → neuron-monitor-prometheus.py → Prometheus → KEDA Prometheus scaler → HPA
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-monitor&lt;/code&gt;가 Neuron 런타임에서 지표를 뽑고, &lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-monitor-prometheus.py&lt;/code&gt;가 그것을 Prometheus 형식으로 노출하고, 그다음은 위 설계안과 같다. 공교롭게도 keda-gpu-scaler가 “5개 컴포넌트, 운영 오버헤드”라고 비판한 바로 그 모양의 경로다. NVML 같은 노드 로컬 단축 경로가 없는 쪽에서는 이것이 표준 경로가 된다.&lt;/p&gt;
+
+&lt;p&gt;HAMi도 후보로 볼 수 있다. v2.7.0 릴리스 노트에 AWS Neuron 디바이스·코어 할당 지원이 들어가 있다. 다만 이번 구성은 TP=2로 칩을 통째로 쓰는 형태라 코어 단위 분할 할당이 필요한 상황이 아니었고, 그래서 적용 대상이 아니다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;질문&lt;/th&gt;
+      &lt;th&gt;답&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Lab 6의 실습을 완주했나&lt;/td&gt;
+      &lt;td&gt;못 했다. 노드 증설, 단일 노드 내 &lt;code class=&quot;highlighter-rouge&quot;&gt;replicas=2&lt;/code&gt;, KEDA GPU Scaler 세 곳이 각각 다른 이유로 막혔다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;eksctl scale nodegroup&lt;/code&gt;이 왜 성공하나&lt;/td&gt;
+      &lt;td&gt;노드그룹의 &lt;code class=&quot;highlighter-rouge&quot;&gt;scalingConfig&lt;/code&gt;, 결과적으로 ASG의 desired를 바꾸는 것까지가 이 명령의 범위다. EC2 기동은 ASG가 비동기로 한다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;그러면 실패는 어디에 남나&lt;/td&gt;
+      &lt;td&gt;이번에는 ASG 활동 기록에만 남았다. &lt;code class=&quot;highlighter-rouge&quot;&gt;describe-nodegroup&lt;/code&gt;은 status가 &lt;code class=&quot;highlighter-rouge&quot;&gt;ACTIVE&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;health.issues&lt;/code&gt;가 빈 배열이었다. EKS가 &lt;code class=&quot;highlighter-rouge&quot;&gt;AsgInstanceLaunchFailures&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;InstanceLimitExceeded&lt;/code&gt;를 이슈 코드로 정의하고 있으므로 언제나 비어 있다고 볼 근거는 아니다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;노드가 안 늘어난 원인&lt;/td&gt;
+      &lt;td&gt;Trn 인스턴스 vCPU 서비스 쿼터가 8인데 &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;가 8 vCPU라 이미 소진이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;VcpuLimitExceeded&lt;/code&gt;가 원문 메시지다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;단일 노드 안에 파드 2개가 왜 안 되나&lt;/td&gt;
+      &lt;td&gt;vLLM 파드가 &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuron: 1&lt;/code&gt;, 즉 칩을 통째로 요청하는데 노드의 칩이 하나뿐이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;cpu&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;ephemeral-storage&lt;/code&gt;도 함께 부족하다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;TP=1로 내리면 풀리나&lt;/td&gt;
+      &lt;td&gt;부분적이다. 코어 2개짜리 노드에 파드 2개까지가 상한이고 세 번째부터는 노드가 필요하다. &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuroncore&lt;/code&gt;는 분할 불가 확장 리소스다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;KEDA GPU Scaler를 왜 못 쓰나&lt;/td&gt;
+      &lt;td&gt;NVML(&lt;code class=&quot;highlighter-rouge&quot;&gt;libnvidia-ml.so&lt;/code&gt;)과 &lt;code class=&quot;highlighter-rouge&quot;&gt;nvidia.com/gpu.present&lt;/code&gt; 라벨을 전제한다. 설치하면 DaemonSet이 &lt;code class=&quot;highlighter-rouge&quot;&gt;DESIRED 0&lt;/code&gt;으로 뜨고 끝난다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;이 Lab에서 실제로 끝까지 간 것&lt;/td&gt;
+      &lt;td&gt;metrics-server 설치와 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl top&lt;/code&gt;이다. APIService로 &lt;code class=&quot;highlighter-rouge&quot;&gt;metrics.k8s.io/v1beta1&lt;/code&gt;이 붙어 HPA와 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl top&lt;/code&gt;이 읽을 수 있게 된다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;vLLM 파드의 CPU 사용량&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;8m&lt;/code&gt;(0.008 코어)이다. request 4000m 대비 0.2%다. 부하를 걸지 않은 상태의 값이다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;CPU 기준 HPA가 왜 부적합한가&lt;/td&gt;
+      &lt;td&gt;연산이 NeuronCore에서 일어나, 무부하 서빙 상태의 CPU가 request 대비 0.2%로 찍혔다. 목표치를 5~10%로 내려도 그 아래라 이 상태에서는 스케일업 조건에 닿지 않는다. 부하 구간의 값은 측정하지 않았다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Neuron에서의 대안&lt;/td&gt;
+      &lt;td&gt;KEDA Prometheus scaler로 &lt;code class=&quot;highlighter-rouge&quot;&gt;vllm:num_requests_waiting&lt;/code&gt;을 쓰는 경로다. 사용률과 달리 큐 길이는 SLO 위반 임박을 직접 나타낸다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;serverAddress&lt;/code&gt;에 왜 &lt;code class=&quot;highlighter-rouge&quot;&gt;/p8s&lt;/code&gt;가 붙나&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;--web.route-prefix&lt;/code&gt;가 Prometheus 내부 라우팅을 옮겨 ClusterIP 경로도 함께 바뀌었기 때문이다. Grafana 데이터소스와 같은 자리다&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;8장은 빈 EKS 클러스터에 Trainium 노드그룹을 붙이는 것에서 시작해 vLLM 서빙, L7 노출, 지표 수집과 대시보드, 부하 테스트를 지나 여기까지 왔다. 마지막 Lab이 실습으로 완결되지 않은 채 끝난 셈인데, 막힌 자리들이 제각기 다른 계층을 가리키고 있어서 오히려 앞의 내용이 한 번 더 정리됐다. 노드를 못 늘린 것은 계정 쿼터, 파드를 못 늘린 것은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편&lt;/a&gt;과 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편&lt;/a&gt;에서 정리한 칩 단위 요청, GPU Scaler를 못 쓴 것은 Neuron과 NVIDIA 스택이 갈리는 지점이다. 워크샵이 1노드 1칩으로 구성된 이상 이 셋은 처음부터 예정된 결과였다.&lt;/p&gt;
+
+&lt;p&gt;Lab 단위로 정산하면 Lab 1부터 Lab 5까지는 실습으로 끝났고, Lab 6만 metrics-server 설치와 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl top&lt;/code&gt;까지에서 멈췄다. &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편&lt;/a&gt;에 정리한 워크샵 산출물 일곱 개로 보면 여섯 개는 실습으로 확인했고, 남은 하나가 CPU 사용률 기반 HPA다. 모니터링 항목의 CloudWatch Container Insights는 이번 진행에서 배포하지 않았으므로 확인 범위 밖이다. 8장은 여기까지다.&lt;/p&gt;
+
+&lt;p&gt;수치 쪽에서 남는 것은 &lt;code class=&quot;highlighter-rouge&quot;&gt;8m&lt;/code&gt;이라는 한 줄이다. 6 GiB를 점유한 채 모델을 서빙하는 파드의 CPU가 request 대비 0.2%라면, 그 값으로 파드 수를 결정하겠다는 설계는 신호 자체가 성립하지 않는다. 가속기 워크로드의 오토스케일링이 CPU가 아니라 큐 길이나 가속기 지표를 향하는 이유가 여기에 있고, 그 경로로 가려면 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/&quot;&gt;8.5.1편&lt;/a&gt;에서 세운 수집 스택을 그대로 쓸 수 있다. 관측 스택을 먼저 세워 둔 순서가 마지막 Lab에서 이렇게 맞물린다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/&quot;&gt;Kubernetes: Horizontal Pod Autoscaling&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/&quot;&gt;Kubernetes: Resource metrics pipeline&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources&quot;&gt;Kubernetes: Extended resources&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/kubernetes-sigs/metrics-server&quot;&gt;metrics-server (GitHub)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://eksctl.io/usage/nodegroups/&quot;&gt;eksctl: Managing nodegroups&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-resource-limits.html&quot;&gt;AWS: Amazon EC2 service quotas&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://aws.amazon.com/ec2/instance-types/trn1/&quot;&gt;Amazon EC2 Trn1 인스턴스&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://keda.sh/docs/latest/scalers/prometheus/&quot;&gt;KEDA: Prometheus scaler&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://keda.sh/docs/latest/concepts/external-scalers/&quot;&gt;KEDA: External scalers&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://keda.sh/docs/latest/concepts/scaling-deployments/&quot;&gt;KEDA: Scaling deployments&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/pmady/keda-gpu-scaler&quot;&gt;keda-gpu-scaler (GitHub)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/tools/neuron-sys-tools/neuron-monitor-user-guide.html#neuron-monitor-prometheus-py&quot;&gt;AWS Neuron: neuron-monitor User Guide&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/Project-HAMi/HAMi/releases/tag/v2.7.0&quot;&gt;HAMi v2.7.0 릴리스 노트 (GitHub)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://docs.vllm.ai/en/latest/design/metrics.html&quot;&gt;vLLM: Metrics 설계 문서&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;
+&lt;br /&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="vLLM" /><category term="HPA" /><category term="Autoscaling" /><category term="KEDA" /><category term="Metrics-Server" /><category term="Trainium" /><category term="Neuron" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">노드도 파드도 늘릴 수 없는 환경에서 HPA Lab이 어디까지 가는지, 그리고 CPU 사용률이 추론 워크로드의 스케일 신호가 될 수 있는지 확인해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.6. 부하 테스트와 llmperf 벤치마크</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.6. 부하 테스트와 llmperf 벤치마크" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -1421,7 +1932,7 @@ namespace &lt;span class=&quot;s2&quot;&gt;&quot;performance-testing&quot;&lt;/s
 
 &lt;p&gt;수치 해석에서 얻은 것은 도구가 찍는 숫자의 이름과 그 산출식을 따로 봐야 한다는 쪽이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;Tokens per Second&lt;/code&gt;가 처리량이 아니고, &lt;code class=&quot;highlighter-rouge&quot;&gt;Average Tokens per Response&lt;/code&gt;가 토큰 수가 아니고, P99가 백분위가 아니고, &lt;code class=&quot;highlighter-rouge&quot;&gt;inter_token_latency_s&lt;/code&gt;가 디코드 스텝 시간이 아니었다. 네 경우 모두 산출식을 읽고서야 무엇을 재고 있는지 알 수 있었다.&lt;/p&gt;
 
-&lt;p&gt;남은 Lab은 CPU 사용률 기반 HPA다. 부하를 거는 쪽까지는 이 편에서 확인했고, 그 부하에 파드 수가 반응하는지는 이후 Lab이다. 이번 데이터로 판정하지 못한 &lt;code class=&quot;highlighter-rouge&quot;&gt;vllm:num_requests_running&lt;/code&gt;과 &lt;code class=&quot;highlighter-rouge&quot;&gt;vllm:num_requests_waiting&lt;/code&gt;도 부하 지속 시간을 스크레이프 간격보다 길게 잡아 다시 볼 대상이다.&lt;/p&gt;
+&lt;p&gt;남은 Lab은 CPU 사용률 기반 HPA다. 부하를 거는 쪽까지는 이 편에서 확인했고, 그 부하에 파드 수가 반응하는지는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/&quot;&gt;8.7편&lt;/a&gt;에서 다룬다. 다만 그 편에서 확인되는 것은 파드 수가 늘어나는 장면이 아니라 노드도 파드도 늘릴 수 없는 자원 제약 쪽이다. 이번 데이터로 판정하지 못한 &lt;code class=&quot;highlighter-rouge&quot;&gt;vllm:num_requests_running&lt;/code&gt;과 &lt;code class=&quot;highlighter-rouge&quot;&gt;vllm:num_requests_waiting&lt;/code&gt;도 부하 지속 시간을 스크레이프 간격보다 길게 잡아 다시 볼 대상이다. 뒤쪽 지표는 8.7편에서 CPU를 대신할 스케일 신호 후보로 다시 나온다.&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -1441,18 +1952,9 @@ namespace &lt;span class=&quot;s2&quot;&gt;&quot;performance-testing&quot;&lt;/s
   &lt;li&gt;&lt;a href=&quot;https://aws.amazon.com/ec2/instance-types/trn1/&quot;&gt;Amazon EC2 Trn1 인스턴스&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://docs.locust.io/&quot;&gt;Locust Documentation&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://pypi.org/project/asyncio/&quot;&gt;PyPI: asyncio&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/&quot;&gt;8.1편: Trainium·Inferentia와 Neuron 스택&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편: Trainium 노드그룹 구성&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편: init container 모델 컴파일과 S3 캐시&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/&quot;&gt;8.3.2편: LoadBalancer 서비스 노출과 추론 테스트&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/&quot;&gt;8.4편: ingress-nginx L7 노출과 자체 서명 인증서&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/&quot;&gt;8.5.1편: vLLM 메트릭 수집과 서브패스 노출&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/&quot;&gt;8.5.2편: 데이터소스 프로비저닝과 vLLM 대시보드&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="vLLM" /><category term="llmperf" /><category term="Ray" /><category term="Benchmark" /><category term="Load-Testing" /><category term="Trainium" /><category term="Observability" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">자작 스크립트와 llmperf로 vLLM에 부하를 걸고, 두 도구가 낸 수치를 나란히 놓을 수 있는지 확인해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.2. 데이터소스 프로비저닝과 vLLM 대시보드</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.2. 데이터소스 프로비저닝과 vLLM 대시보드" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;
+&lt;br /&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="vLLM" /><category term="llmperf" /><category term="Ray" /><category term="Benchmark" /><category term="Load-Testing" /><category term="Trainium" /><category term="Observability" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">자작 스크립트와 llmperf로 vLLM에 부하를 걸고, 두 도구가 낸 수치를 나란히 놓을 수 있는지 확인해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.2. 데이터소스 프로비저닝과 vLLM 대시보드</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.2. 데이터소스 프로비저닝과 vLLM 대시보드" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -2790,7 +3292,7 @@ grafana-bf745454-nmsv8   1/1   Terminating       0     11m
   &lt;/tbody&gt;
 &lt;/table&gt;
 
-&lt;p&gt;Lab 4에서 만든 것은 수집과 화면까지다. Prometheus가 vLLM 메트릭을 긁고, Grafana가 그것을 읽고, 대시보드 한 장이 값을 표시한다. 부하를 실제로 걸어 이 패널들이 움직이는지는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/&quot;&gt;8.6편&lt;/a&gt;에서 확인한다. CPU 사용률 기반 오토스케일링은 이후 Lab이다.&lt;/p&gt;
+&lt;p&gt;Lab 4에서 만든 것은 수집과 화면까지다. Prometheus가 vLLM 메트릭을 긁고, Grafana가 그것을 읽고, 대시보드 한 장이 값을 표시한다. 부하를 실제로 걸어 이 패널들이 움직이는지는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/&quot;&gt;8.6편&lt;/a&gt;에서 확인한다. CPU 사용률 기반 오토스케일링은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/&quot;&gt;8.7편&lt;/a&gt;에서 다룬다.&lt;/p&gt;
 
 &lt;p&gt;보관에 대해 알아 둘 점도 하나 있다. Prometheus에 PV가 없어서 &lt;code class=&quot;highlighter-rouge&quot;&gt;prometheus-server&lt;/code&gt; 파드가 교체될 때마다 기존 시계열이 사라진다. Lab 진행 중 그 파드가 교체됐으므로, 대시보드에서 그 이전 구간을 조회하면 그때는 정말로 비어 있다.&lt;/p&gt;
 
@@ -2811,17 +3313,9 @@ grafana-bf745454-nmsv8   1/1   Terminating       0     11m
   &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/&quot;&gt;Kubernetes: Annotations&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/concepts/services-networking/ingress/#path-types&quot;&gt;Kubernetes: Ingress - Path types&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://docs.vllm.ai/&quot;&gt;vLLM Documentation&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/&quot;&gt;8.1편: Trainium·Inferentia와 Neuron 스택&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편: Trainium 노드그룹 구성&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편: init container 모델 컴파일과 S3 캐시&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/&quot;&gt;8.3.2편: LoadBalancer 서비스 노출과 추론 테스트&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/&quot;&gt;8.4편: ingress-nginx L7 노출과 자체 서명 인증서&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/&quot;&gt;8.5.1편: vLLM 메트릭 수집과 서브패스 노출&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="Grafana" /><category term="Prometheus" /><category term="Helm" /><category term="Ingress" /><category term="ConfigMap" /><category term="vLLM" /><category term="Observability" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">Grafana를 서브패스로 노출하고 Prometheus 데이터소스를 프로비저닝한 뒤, ConfigMap으로 넣은 vLLM 대시보드가 언제 목록에 뜨는지 확인해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.1. vLLM 메트릭 수집과 서브패스 노출</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.1. vLLM 메트릭 수집과 서브패스 노출" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;
+&lt;br /&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="Grafana" /><category term="Prometheus" /><category term="Helm" /><category term="Ingress" /><category term="ConfigMap" /><category term="vLLM" /><category term="Observability" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">Grafana를 서브패스로 노출하고 Prometheus 데이터소스를 프로비저닝한 뒤, ConfigMap으로 넣은 vLLM 대시보드가 언제 목록에 뜨는지 확인해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.1. vLLM 메트릭 수집과 서브패스 노출</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.1. vLLM 메트릭 수집과 서브패스 노출" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -3553,17 +4047,9 @@ Annotations:  &amp;lt;none&amp;gt;
   &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/&quot;&gt;Kubernetes: DNS for Services and Pods&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/concepts/services-networking/ingress/#path-types&quot;&gt;Kubernetes: Ingress - Path types&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://docs.vllm.ai/en/latest/usage/metrics.html&quot;&gt;vLLM: Production Metrics&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/&quot;&gt;8.1편: Trainium·Inferentia와 Neuron 스택&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편: Trainium 노드그룹 구성&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편: init container 모델 컴파일과 S3 캐시&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/&quot;&gt;8.3.2편: LoadBalancer 서비스 노출과 추론 테스트&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/&quot;&gt;8.4편: ingress-nginx L7 노출과 자체 서명 인증서&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/&quot;&gt;8.5.2편: 데이터소스 프로비저닝과 vLLM 대시보드&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="Prometheus" /><category term="PromQL" /><category term="Helm" /><category term="Ingress" /><category term="vLLM" /><category term="Observability" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">Helm으로 Prometheus를 올려 vLLM의 /metrics를 수집하고, Ingress 서브패스로 웹 UI를 열었을 때 무엇이 함께 바뀌는지 확인해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.4. ingress-nginx L7 노출과 자체 서명 인증서</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.4. ingress-nginx L7 노출과 자체 서명 인증서" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;
+&lt;br /&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="Prometheus" /><category term="PromQL" /><category term="Helm" /><category term="Ingress" /><category term="vLLM" /><category term="Observability" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">Helm으로 Prometheus를 올려 vLLM의 /metrics를 수집하고, Ingress 서브패스로 웹 UI를 열었을 때 무엇이 함께 바뀌는지 확인해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.4. ingress-nginx L7 노출과 자체 서명 인증서</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.4. ingress-nginx L7 노출과 자체 서명 인증서" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -4332,7 +4818,7 @@ ubuntu@ip-10-0-1-100:~/workshop&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&
 
 &lt;p&gt;08-03-02편이 남긴 세 가지 중 둘은 닫혔다. URL에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;:8080&lt;/code&gt;이 사라졌고, TLS를 종료할 지점이 생겼다. 나머지 하나인 경로 기반 라우팅은 능력만 확보한 상태다. 컨트롤러가 L7에서 경로를 판단할 수 있게 됐지만 실제로 적용한 규칙은 &lt;code class=&quot;highlighter-rouge&quot;&gt;/&lt;/code&gt; 하나여서, 분기시키는 동작은 이번 Lab에 없다. 이 분기는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/&quot;&gt;8.5.1편&lt;/a&gt;에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;/p8s&lt;/code&gt; 규칙이 붙으면서 실제로 쓰인다.&lt;/p&gt;
 
-&lt;p&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/#외부-접근-경로&quot;&gt;8.0편의 외부 접근 경로&lt;/a&gt;에서 본 아키텍처 그림의 &lt;code class=&quot;highlighter-rouge&quot;&gt;ELB → ingress-nginx&lt;/code&gt; 화살표는 이 시점에 실제 상태가 됐다. 동시에 그림에 없던 vLLM CLB가 그대로 남아 있어, 실제 구성은 그림보다 진입점이 하나 더 많다. 지표 수집은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/&quot;&gt;8.5.1편&lt;/a&gt;과 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/&quot;&gt;8.5.2편&lt;/a&gt;에서 다룬다. 오토스케일링은 이후 Lab이다.&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/#외부-접근-경로&quot;&gt;8.0편의 외부 접근 경로&lt;/a&gt;에서 본 아키텍처 그림의 &lt;code class=&quot;highlighter-rouge&quot;&gt;ELB → ingress-nginx&lt;/code&gt; 화살표는 이 시점에 실제 상태가 됐다. 동시에 그림에 없던 vLLM CLB가 그대로 남아 있어, 실제 구성은 그림보다 진입점이 하나 더 많다. 지표 수집은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/&quot;&gt;8.5.1편&lt;/a&gt;과 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/&quot;&gt;8.5.2편&lt;/a&gt;에서 다룬다. 오토스케일링은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/&quot;&gt;8.7편&lt;/a&gt;에서 다룬다.&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -4354,15 +4840,9 @@ ubuntu@ip-10-0-1-100:~/workshop&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&
   &lt;li&gt;&lt;a href=&quot;https://docs.aws.amazon.com/acm/latest/userguide/domain-ownership-validation.html&quot;&gt;AWS Certificate Manager: 도메인 소유권 검증&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://letsencrypt.org/docs/challenge-types/&quot;&gt;Let’s Encrypt: Challenge Types&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://cert-manager.io/docs/usage/ingress/&quot;&gt;cert-manager: Securing Ingress Resources&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/&quot;&gt;8.1편: Trainium·Inferentia와 Neuron 스택&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편: Trainium 노드그룹 구성&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편: init container 모델 컴파일과 S3 캐시&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/&quot;&gt;8.3.2편: LoadBalancer 서비스 노출과 추론 테스트&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="Ingress" /><category term="ingress-nginx" /><category term="Helm" /><category term="LoadBalancer" /><category term="TLS" /><category term="vLLM" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">ingress-nginx를 올려 URL에서 포트를 떼어내고, CLB가 두 개가 된 구조와 브라우저 인증서 경고가 바뀐 이유를 확인해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.2. LoadBalancer 서비스 노출과 추론 테스트</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.2. LoadBalancer 서비스 노출과 추론 테스트" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;
+&lt;br /&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="Ingress" /><category term="ingress-nginx" /><category term="Helm" /><category term="LoadBalancer" /><category term="TLS" /><category term="vLLM" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">ingress-nginx를 올려 URL에서 포트를 떼어내고, CLB가 두 개가 된 구조와 브라우저 인증서 경고가 바뀐 이유를 확인해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.2. LoadBalancer 서비스 노출과 추론 테스트</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.2. LoadBalancer 서비스 노출과 추론 테스트" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -5121,14 +5601,9 @@ http://&amp;lt;elb-id&amp;gt;.us-west-2.elb.amazonaws.com:8080/v1/models
   &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/nxd-inference/developer_guides/vllm-user-guide.html&quot;&gt;AWS Neuron: NxD Inference vLLM User Guide&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml&quot;&gt;IANA Service Name and Transport Protocol Port Number Registry&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0&quot;&gt;TinyLlama-1.1B-Chat-v1.0 모델 카드&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/&quot;&gt;8.1편: Trainium·Inferentia와 Neuron 스택&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편: Trainium 노드그룹 구성&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편: init container 모델 컴파일과 S3 캐시&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="vLLM" /><category term="Service" /><category term="LoadBalancer" /><category term="NodePort" /><category term="Trainium" /><category term="Neuron" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">vLLM Service를 LoadBalancer로 노출했을 때 만들어지는 CLB의 리스너 구조를 확인하고, 추론 요청이 실제로 왕복하는지 검증해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.1. init container 모델 컴파일과 S3 캐시</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.1. init container 모델 컴파일과 S3 캐시" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;
+&lt;br /&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="vLLM" /><category term="Service" /><category term="LoadBalancer" /><category term="NodePort" /><category term="Trainium" /><category term="Neuron" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">vLLM Service를 LoadBalancer로 노출했을 때 만들어지는 CLB의 리스너 구조를 확인하고, 추론 요청이 실제로 왕복하는지 검증해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.1. init container 모델 컴파일과 S3 캐시</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.1. init container 모델 컴파일과 S3 캐시" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -6644,15 +7119,10 @@ I0911 14:06:06.615552       1 main.go:80] Mount options has been received from /
   &lt;li&gt;&lt;a href=&quot;https://github.com/awslabs/mountpoint-s3-csi-driver/blob/main/docs/ARCHITECTURE.md&quot;&gt;Mountpoint for Amazon S3 CSI Driver: Architecture&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://github.com/awslabs/mountpoint-s3-csi-driver/blob/main/examples/kubernetes/static_provisioning/static_provisioning.yaml&quot;&gt;Mountpoint for Amazon S3 CSI Driver: static provisioning 예제&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://docs.aws.amazon.com/eks/latest/userguide/s3-csi.html&quot;&gt;AWS: Mountpoint for Amazon S3 CSI driver on EKS&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/&quot;&gt;8.1편: Trainium·Inferentia와 Neuron 스택&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편: Trainium 노드그룹 구성&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/&quot;&gt;8.3.2편: LoadBalancer 서비스 노출과 추론 테스트&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/&quot;&gt;[GenAI] GPU 자원 개요와 K8s 할당 메커니즘&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="vLLM" /><category term="Trainium" /><category term="Neuron" /><category term="Init-Container" /><category term="ConfigMap" /><category term="S3-CSI-Driver" /><category term="Mountpoint-for-S3" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">vLLM Deployment를 init container 패턴으로 올리고, Neuron 컴파일 산출물이 S3 캐시를 거쳐 메인 컨테이너로 전달되는 경로를 확인해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;
+&lt;br /&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="vLLM" /><category term="Trainium" /><category term="Neuron" /><category term="Init-Container" /><category term="ConfigMap" /><category term="S3-CSI-Driver" /><category term="Mountpoint-for-S3" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">vLLM Deployment를 init container 패턴으로 올리고, Neuron 컴파일 산출물이 S3 캐시를 거쳐 메인 컨테이너로 전달되는 경로를 확인해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -8476,9 +8946,6 @@ ip-10-0-5-100.us-west-2.compute.internal   2
   &lt;li&gt;&lt;a href=&quot;https://github.com/aws-neuron/neuron-helm-charts&quot;&gt;aws-neuron/neuron-helm-charts&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://eksctl.io/&quot;&gt;eksctl&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://helm.sh/docs/faq/&quot;&gt;Helm: FAQ&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/&quot;&gt;8.1편: Trainium·Inferentia와 Neuron 스택&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편: Trainium 노드그룹 구성&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/&quot;&gt;[Kubernetes] NVIDIA Device Plugin 동작 원리&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;/dev/Dev-Kubernetes-GPU-Setting/&quot;&gt;[Kubernetes] Kubernetes 환경에서 NVIDIA GPU 사용하기 - NVIDIA Device Plugin&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;/cs/CS-Container-Device-Injection/&quot;&gt;[Container] 컨테이너 장치 주입: OCI Runtime Hook과 CDI&lt;/a&gt;&lt;/li&gt;
@@ -8489,9 +8956,9 @@ ip-10-0-5-100.us-west-2.compute.internal   2
   &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/&quot;&gt;[GenAI] GPU 자원 개요와 K8s 할당 메커니즘&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-GPU-Time-Slicing-2/&quot;&gt;[Kubernetes] GPU Sharing: Time Slicing - 2. 설정&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending/&quot;&gt;[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 1. Device Plugin 비활성화&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="Neuron" /><category term="Trainium" /><category term="Device-Plugin" /><category term="containerd" /><category term="Scheduler-Extender" /><category term="Helm" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">칩 하나에 리소스가 둘 광고되는 이유를 커널 디바이스 노드와 device plugin 소켓까지 내려가 확인하고, NVIDIA와 갈리는 지점을 정리해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;
+&lt;br /&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="Neuron" /><category term="Trainium" /><category term="Device-Plugin" /><category term="containerd" /><category term="Scheduler-Extender" /><category term="Helm" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">칩 하나에 리소스가 둘 광고되는 이유를 커널 디바이스 노드와 device plugin 소켓까지 내려가 확인하고, NVIDIA와 갈리는 지점을 정리해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -9450,15 +9917,12 @@ ami-0e08c07b0376ba3f8   amazon-eks-node-al2023-x86_64-neuron-1.33-v20260903     
   &lt;li&gt;&lt;a href=&quot;https://github.com/awslabs/mountpoint-s3-csi-driver&quot;&gt;awslabs/mountpoint-s3-csi-driver&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/&quot;&gt;AWS Neuron Documentation&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/&quot;&gt;Kubernetes: Device Plugins&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/&quot;&gt;8.1편: Trainium·Inferentia와 Neuron 스택&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/&quot;&gt;GenAI on K8s 10.1편: GPU 자원 개요와 K8s 할당 메커니즘&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-EKS-01-01-05-EKS-Cluster-Worker-Node-Result/&quot;&gt;EKS 클러스터 워커 노드 구성 결과&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending/&quot;&gt;EKS GPU 트러블슈팅 3.1편: Device Plugin 비활성화 시 파드 Pending&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="AWS" /><category term="Trainium" /><category term="Neuron" /><category term="eksctl" /><category term="vLLM" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">EKS 컨트롤 플레인만 있는 상태에서 trn1.2xlarge 관리형 노드그룹을 붙이고, 미리 박혀 있던 AMI ID 때문에 막힌 지점을 풀어 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.1. Trainium·Inferentia와 Neuron 스택</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.1. Trainium·Inferentia와 Neuron 스택" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;
+&lt;br /&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="AWS" /><category term="Trainium" /><category term="Neuron" /><category term="eksctl" /><category term="vLLM" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">EKS 컨트롤 플레인만 있는 상태에서 trn1.2xlarge 관리형 노드그룹을 붙이고, 미리 박혀 있던 AMI ID 때문에 막힌 지점을 풀어 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.1. Trainium·Inferentia와 Neuron 스택</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.1. Trainium·Inferentia와 Neuron 스택" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -10873,7 +11337,6 @@ pip install &lt;span class=&quot;nt&quot;&gt;--extra-index-url&lt;/span&gt;&lt;s
 &lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
 
 &lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/&quot;&gt;AWS Neuron Documentation&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/trainium.html&quot;&gt;Trainium Architecture&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/trainium2.html&quot;&gt;Trainium2 Architecture&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/inferentia2.html&quot;&gt;Inferentia2 Architecture&lt;/a&gt;&lt;/li&gt;
@@ -10887,672 +11350,6 @@ pip install &lt;span class=&quot;nt&quot;&gt;--extra-index-url&lt;/span&gt;&lt;s
   &lt;li&gt;&lt;a href=&quot;https://github.com/vllm-project/vllm-neuron&quot;&gt;vllm-project/vllm-neuron&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia.html&quot;&gt;AWS DLAMI: Inferentia 튜토리얼&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://github.com/aws-neuron/deep-learning-containers&quot;&gt;aws-neuron/deep-learning-containers&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Trainium" /><category term="Inferentia" /><category term="AWS-Neuron" /><category term="NeuronCore" /><category term="NKI" /><category term="NxD-Inference" /><category term="vLLM" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">워크샵이 쓰는 Trainium이 어떤 칩인지, Neuron SDK가 어떤 스택인지, NVIDIA 스택과 어디까지 대응되는지 정리해 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.0. 개요와 워크샵 아키텍처</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.0. 개요와 워크샵 아키텍처" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;6주차는 AWS가 제공하는 “Scaling LLM Inference with vLLM and AWS Trainium” 워크샵을 따라간다. &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt; 인스턴스 위에 vLLM을 올려 &lt;code class=&quot;highlighter-rouge&quot;&gt;TinyLlama-1.1B-Chat-v1.0&lt;/code&gt;을 서빙하는 구성이다&lt;/li&gt;
-  &lt;li&gt;워크샵 환경에 접속하면 EKS 1.33 컨트롤 플레인까지는 이미 배포돼 있고 워커 노드 그룹이 비어 있다. 실습은 노드 그룹(&lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-trn1-2x&lt;/code&gt;)을 만드는 것부터 시작한다&lt;/li&gt;
-  &lt;li&gt;Trainium을 파드가 쓰려면 자원 노출과 배치가 따로 필요하다. 노출은 Neuron device plugin이, 배치는 Neuron scheduler extension이 맡는다&lt;/li&gt;
-  &lt;li&gt;모델 컴파일 산출물은 init container가 S3에 올려 두고, S3 CSI Driver로 마운트한 PV를 통해 이후 파드가 재사용한다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;워크샵-개요&quot;&gt;워크샵 개요&lt;/h1&gt;
-
-&lt;p&gt;이번 주차는 AWS가 제공하는 “Scaling LLM Inference with vLLM and AWS Trainium” 워크샵을 따라간다. 감사하게도 스터디 멤버 한 분이 워크샵 환경을 열어 준 덕분에, 개인 계정으로는 준비하기 번거로운 Trainium 인스턴스를 직접 다뤄 볼 수 있었다.&lt;/p&gt;
-
-&lt;h2 id=&quot;목표와-산출물&quot;&gt;목표와 산출물&lt;/h2&gt;
-
-&lt;p&gt;vLLM과 AWS Trainium(&lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;)을 Amazon EKS 위에서 조합해, 운영 환경을 가정한 LLM 추론 서빙 인프라를 구축하는 핸즈온 워크샵이다. 서빙 대상은 &lt;code class=&quot;highlighter-rouge&quot;&gt;TinyLlama-1.1B-Chat-v1.0&lt;/code&gt;이고, 이 모델을 NeuronX Distributed(NxD)로 컴파일해 배포한 뒤 모니터링과 오토스케일링, 부하 테스트까지 이어 간다.&lt;/p&gt;
-
-&lt;p&gt;워크샵이 목표로 하는 최종 산출물은 일곱 개다. 각 항목이 이 시리즈의 어디에 해당하는지 함께 적는다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Trainium(&lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;) 기반 EKS 클러스터 구성 — &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;vLLM과 NxD로 TinyLlama-1.1B 모델 서빙 배포 — &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;init container 기반 모델 컴파일과 S3 캐싱 패턴 구현 — &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;ingress-nginx로 외부 접근과 로드밸런싱 구성 — &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/&quot;&gt;8.4편&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;Prometheus와 Grafana로 모니터링 구축 — &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/&quot;&gt;8.5.1편&lt;/a&gt;, &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/&quot;&gt;8.5.2편&lt;/a&gt; (CloudWatch는 배포하지 않았다)&lt;/li&gt;
-  &lt;li&gt;CPU 사용률 기반 HPA 구성 — 이후 Lab&lt;/li&gt;
-  &lt;li&gt;llmperf 등으로 처리량과 지연 시간 검증 — &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/&quot;&gt;8.6편&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;워크샵은 이 산출물을 Lab 단위로 나눠 진행한다. 이 시리즈의 편 번호가 그 Lab 경계를 따른다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;Lab&lt;/th&gt;
-      &lt;th&gt;범위&lt;/th&gt;
-      &lt;th&gt;편&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Lab 1&lt;/td&gt;
-      &lt;td&gt;EKS 노드그룹 구성, Neuron device plugin과 스케줄러 확장&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편&lt;/a&gt;(스텝 1~6, 8~9), &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편&lt;/a&gt;(스텝 7)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Lab 2&lt;/td&gt;
-      &lt;td&gt;vLLM Deployment 배포와 Service 노출&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편&lt;/a&gt;, &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/&quot;&gt;8.3.2편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Lab 3&lt;/td&gt;
-      &lt;td&gt;ingress-nginx로 L7 노출&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/&quot;&gt;8.4편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Lab 4&lt;/td&gt;
-      &lt;td&gt;Prometheus 수집과 Grafana 대시보드&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/&quot;&gt;8.5.1편&lt;/a&gt;, &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/&quot;&gt;8.5.2편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Lab 5&lt;/td&gt;
-      &lt;td&gt;llmperf 부하 테스트와 성능 측정&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/&quot;&gt;8.6편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;이후 Lab&lt;/td&gt;
-      &lt;td&gt;CPU 사용률 기반 HPA&lt;/td&gt;
-      &lt;td&gt;별도 편에서 다룬다&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;h2 id=&quot;기술-스택&quot;&gt;기술 스택&lt;/h2&gt;
-
-&lt;p&gt;워크샵에서 사용하는 기술은 네 계층으로 나뉜다. 각 기술의 원리는 이미 다룬 곳이 있어, 여기서는 이 워크샵이 어느 조합을 고르는지만 정리한다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;계층&lt;/th&gt;
-      &lt;th&gt;이 워크샵의 선택&lt;/th&gt;
-      &lt;th&gt;참고&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;서빙 엔진&lt;/td&gt;
-      &lt;td&gt;vLLM. continuous batching, PagedAttention, OpenAI 호환 API, Neuron 백엔드&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/#continuous-batching&quot;&gt;6.1편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;모델 병렬화&lt;/td&gt;
-      &lt;td&gt;NeuronX Distributed(NxD). 텐서/파이프라인/데이터/컨텍스트 병렬, speculative decoding, 양자화, multi-LoRA&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview/#7장의-지도-네-가지-기법&quot;&gt;7.1편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;오케스트레이션&lt;/td&gt;
-      &lt;td&gt;Amazon EKS 1.33. 관리형 컨트롤 플레인, HPA, 로드밸런싱, IAM 통합&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-EKS-00-00-EKS-Overview/&quot;&gt;EKS 개요&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;AWS 서비스&lt;/td&gt;
-      &lt;td&gt;EC2(&lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;), EKS, S3, IAM, VPC, CloudWatch, Neuron SDK&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/&quot;&gt;8.1편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;h2 id=&quot;단일-가속기-메모리-한계와-텐서-병렬-처리&quot;&gt;단일 가속기 메모리 한계와 텐서 병렬 처리&lt;/h2&gt;
-
-&lt;p&gt;이 워크샵이 텐서 병렬 처리를 기본 전제로 두는 이유는 &lt;strong&gt;모델 크기와 가속기 메모리의 관계&lt;/strong&gt; 때문이다. Llama 3.1 8B를 FP32로 올리면 가중치만 32GB다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-aws-workshop-memory.png&quot; alt=&quot;Llama 3.1 8B의 FP32 기준 메모리 구성&quot; class=&quot;align-center&quot; width=&quot;760&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: AWS &quot;Scaling LLM Inference with vLLM and AWS Trainium&quot; 워크샵 자료&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;파라미터 80억 개에 FP32 4바이트를 곱하면 32GB이고, 여기에 KV cache와 부가 메모리 오버헤드가 더 얹힌다. 정밀도를 FP16이나 BF16으로 낮추면 절반, INT8이면 4분의 1로 줄지만, 모델이 커질수록 단일 가속기의 HBM 용량을 넘어서는 지점이 온다는 구조 자체는 그대로다. 모델 크기와 가속기 메모리 용량의 관계는 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-02-LLM-Serving-Challenge-GPU-Compute-Memory/#용량-모델-적재&quot;&gt;5.2편&lt;/a&gt;에서 정리했다.&lt;/p&gt;
-
-&lt;p&gt;한 장에 안 들어가면 여러 장에 나눠 올려야 한다. 텐서 병렬 처리(tensor parallelism)는 가중치 텐서 자체를 여러 가속기에 쪼개 올려 두고, 각 가속기가 자기 몫을 계산한 뒤 결과를 합치는 병렬화 기법이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-aws-workshop-tensor-parallelism.png&quot; alt=&quot;가중치 텐서를 Neuron 디바이스 여러 개에 분할한 구조&quot; class=&quot;align-center&quot; width=&quot;760&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: AWS &quot;Scaling LLM Inference with vLLM and AWS Trainium&quot; 워크샵 자료&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;동작은 세 단계다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;가중치 텐서를 여러 Neuron 디바이스에 분할한다&lt;/li&gt;
-  &lt;li&gt;각 디바이스가 할당받은 부분을 병렬로 계산한다&lt;/li&gt;
-  &lt;li&gt;부분 출력을 결합해 최종 결과를 만든다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;이 워크샵의 배포 매니페스트에 &lt;code class=&quot;highlighter-rouge&quot;&gt;tensor-parallel-size=2&lt;/code&gt;가 등장하는 근거가 여기에 있다. 값이 왜 2인지는 &lt;a href=&quot;#vllm-서빙-구성&quot;&gt;vLLM 서빙 구성&lt;/a&gt;에서 다시 본다. 병렬화 방식을 어느 인터커넥트 계층에 배치하느냐에 따라 통신 비용이 달라지는 문제는 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/#병렬화-배치와-인터커넥트-계층&quot;&gt;5.3편&lt;/a&gt;에서 다뤘다.&lt;/p&gt;
-
-&lt;h2 id=&quot;aws-추론-스택과-amazon-eks&quot;&gt;AWS 추론 스택과 Amazon EKS&lt;/h2&gt;
-
-&lt;p&gt;AWS는 Trainium 하드웨어 위에 대형 모델을 올리기 위한 스택을 네 층으로 제공한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-aws-workshop-overview.png&quot; alt=&quot;AWS 추론 스택 4계층&quot; class=&quot;align-center&quot; width=&quot;760&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: AWS &quot;Scaling LLM Inference with vLLM and AWS Trainium&quot; 워크샵 자료&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;맨 아래가 Trainium과 Inferentia 인스턴스, 그 위가 AWS Neuron SDK, 그 위가 이 가속기를 실제로 구동하는 AWS 클라우드 서비스들(Parallel Cluster, SageMaker, Batch, ECS, EKS, Neuron DLC, Neuron DLAMI), 맨 위가 모델 서버(TGI, vLLM, SageMaker LMI, Triton, Ray Serve, TorchServe)다. 이 워크샵은 &lt;strong&gt;세 번째 층에서 Amazon EKS를, 네 번째 층에서 vLLM을 고른 조합&lt;/strong&gt;이다.
-Amazon EKS와 같은 층에 있는 Neuron DLC와 Neuron DLAMI는 EKS와 택일하는 항목이 아니라, Neuron 스택을 어떤 형태로 포장해 받을지를 정하는 선택지다. 둘 중 DLC는 이 워크샵도 쓴다. vLLM 파드가 받아 오는 &lt;code class=&quot;highlighter-rouge&quot;&gt;public.ecr.aws/neuron/pytorch-inference-vllm-neuronx&lt;/code&gt; 이미지가 AWS가 만들어 둔 Neuron DLC다. 반면 DLAMI는 쓰지 않는다. 워커 노드가 올라갈 때 쓰는 이미지는 Neuron DLAMI가 아니라 EKS 최적화 가속 컴퓨팅 AMI이기 때문이다.&lt;/p&gt;
-
-&lt;p&gt;정리하면 커널 드라이버와 런타임은 노드 AMI가, 프레임워크와 모델 서버는 컨테이너 이미지가 맡는 구성이다. 드라이버는 호스트 커널 모듈이라 컨테이너 이미지에 넣을 수 없고, 그래서 이 경계가 생긴다.&lt;/p&gt;
-
-&lt;p&gt;아래 두 층인 Trainium·Inferentia 하드웨어와 Neuron SDK는 이 글에서 이름만 짚고 넘어간다. 워크샵을 따라가는 데 필요한 만큼은 “Trainium은 AWS가 설계한 가속기이고, Neuron SDK가 그 위에서 컴파일러와 런타임을 맡는 계층”이라는 것까지다. 칩 안에 NeuronCore가 몇 개 들어 있는지, Neuron SDK가 CUDA 스택의 어느 자리에 대응하는지는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/&quot;&gt;8.1편&lt;/a&gt;에서 따로 다룬다. 이 칩이 전체 가속기 지형에서 어디에 놓이는지는 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/#ai-가속기-지형&quot;&gt;5.5편&lt;/a&gt;에서 정리한 적이 있다.&lt;/p&gt;
-
-&lt;p&gt;EKS 쪽은 AWS가 컨트롤 플레인만 관리하고 데이터 플레인은 사용자가 관리하는 표준 모드다. Auto Mode와의 관리 경계 차이는 &lt;a href=&quot;/kubernetes/Kubernetes-EKS-00-00-EKS-Overview/#접근-모드&quot;&gt;EKS 개요&lt;/a&gt;에 그림과 함께 정리했는데, 이 워크샵은 EKS 표준 모드를 사용하기 때문에 사용자가 직접 노드 그룹을 만들어야 한다. 그 작업이 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편&lt;/a&gt;이다.&lt;/p&gt;
-
-&lt;p&gt;실제로 클러스터에 붙어 보면 컨트롤 플레인 구성 요소가 파드로 보이지 않는다. CoreDNS까지는 보이지만 API 서버나 etcd는 사용자 계정의 노드 위에 있지 않다. 이 가시성 차이는 &lt;a href=&quot;/kubernetes/Kubernetes-EKS-01-04-EKS-vs-Vanilla-K8s/#컨트롤-플레인-소유권과-가시성&quot;&gt;EKS와 바닐라 K8s 비교&lt;/a&gt;에서 다뤘다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;워크샵-아키텍처&quot;&gt;워크샵 아키텍처&lt;/h1&gt;
-
-&lt;h2 id=&quot;전체-구성&quot;&gt;전체 구성&lt;/h2&gt;
-
-&lt;p&gt;워크샵이 제시하는 전체 아키텍처는 다음과 같다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-aws-workshop-architecture.png&quot; alt=&quot;Amazon EKS 기반 vLLM 서빙 아키텍처&quot; class=&quot;align-center&quot; width=&quot;900&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: AWS &quot;Scaling LLM Inference with vLLM and AWS Trainium&quot; 워크샵 자료&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;왼쪽부터 따라가면, 외부 클라이언트의 요청이 인터넷 게이트웨이를 지나 ELB로 들어오고, ELB가 워커 노드의 ingress-nginx 컨트롤러로 전달한다. 컨트롤러는 vLLM Service를 거쳐 vLLM 파드로 요청을 보내고, 그 파드가 노드에 붙은 Trn1 가속기를 쓴다. 파드 안에는 vLLM 컨테이너와 init container가 함께 들어 있고, 모델 캐시는 S3를 PV로 마운트한 볼륨에 있다. 오른쪽의 EKS 애드온 5종과 AWS 관리형 서비스 5종은 아래 표에서 하나씩 확인한다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;레이어&lt;/th&gt;
-      &lt;th&gt;구성 요소&lt;/th&gt;
-      &lt;th&gt;접속 시점 상태&lt;/th&gt;
-      &lt;th&gt;만드는 시점&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;인프라&lt;/td&gt;
-      &lt;td&gt;VPC, 퍼블릭 서브넷, 보안 그룹, 워크샵 인스턴스(&lt;code class=&quot;highlighter-rouge&quot;&gt;t3.2xlarge&lt;/code&gt;)&lt;/td&gt;
-      &lt;td&gt;사전 배포&lt;/td&gt;
-      &lt;td&gt;해당 없음&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;컨트롤 플레인&lt;/td&gt;
-      &lt;td&gt;EKS 1.33, VPC CNI, OIDC&lt;/td&gt;
-      &lt;td&gt;사전 배포&lt;/td&gt;
-      &lt;td&gt;해당 없음&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;데이터 플레인&lt;/td&gt;
-      &lt;td&gt;관리형 노드 그룹 &lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-trn1-2x&lt;/code&gt;(&lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;)&lt;/td&gt;
-      &lt;td&gt;미배포&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;가속기 통합&lt;/td&gt;
-      &lt;td&gt;Neuron device plugin, Neuron scheduler extension&lt;/td&gt;
-      &lt;td&gt;미배포&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;서빙&lt;/td&gt;
-      &lt;td&gt;vLLM Deployment와 init container, NxD&lt;/td&gt;
-      &lt;td&gt;미배포&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;스토리지&lt;/td&gt;
-      &lt;td&gt;S3 모델 캐시 버킷, S3 CSI Driver&lt;/td&gt;
-      &lt;td&gt;미배포&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;스토리지&lt;/td&gt;
-      &lt;td&gt;모델 캐시 PV/PVC&lt;/td&gt;
-      &lt;td&gt;미배포&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;네트워크&lt;/td&gt;
-      &lt;td&gt;vLLM Service (&lt;code class=&quot;highlighter-rouge&quot;&gt;LoadBalancer&lt;/code&gt;)&lt;/td&gt;
-      &lt;td&gt;미배포&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/&quot;&gt;8.3.2편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;네트워크&lt;/td&gt;
-      &lt;td&gt;ingress-nginx 컨트롤러&lt;/td&gt;
-      &lt;td&gt;미배포&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/&quot;&gt;8.4편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;관측&lt;/td&gt;
-      &lt;td&gt;Prometheus(클러스터 내 Helm 설치), vLLM 메트릭 스크레이프&lt;/td&gt;
-      &lt;td&gt;미배포&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/&quot;&gt;8.5.1편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;관측&lt;/td&gt;
-      &lt;td&gt;Grafana(클러스터 내 Helm 설치), vLLM 대시보드&lt;/td&gt;
-      &lt;td&gt;미배포&lt;/td&gt;
-      &lt;td&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/&quot;&gt;8.5.2편&lt;/a&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;관측&lt;/td&gt;
-      &lt;td&gt;CloudWatch Container Insights&lt;/td&gt;
-      &lt;td&gt;미배포&lt;/td&gt;
-      &lt;td&gt;다루지 않음&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;그림의 AWS 관리형 서비스 칸에는 AWS Prometheus와 AWS Grafana가 그려져 있지만, 실제로 Lab이 올리는 것은 관리형 서비스가 아니라 클러스터 안에 Helm으로 설치하는 &lt;code class=&quot;highlighter-rouge&quot;&gt;prometheus-community&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;grafana&lt;/code&gt; 차트다. 표의 관측 행은 이 차이를 반영한 값이다.&lt;/p&gt;
-
-&lt;p&gt;표에서 상태 열이 중요하다. 워크샵 환경에 접속해 EKS 콘솔을 열어 보면 클러스터는 이미 활성 상태인데 컴퓨팅(노드 그룹)이 비어 있다. 즉 실습의 출발점은 클러스터 생성이 아니라 &lt;strong&gt;Trainium 인스턴스를 쓰는 노드 그룹을 붙이는 것&lt;/strong&gt;이다. 이 경계가 이후 Lab들의 순서를 결정한다.&lt;/p&gt;
-
-&lt;h2 id=&quot;aws-인프라-레이어&quot;&gt;AWS 인프라 레이어&lt;/h2&gt;
-
-&lt;p&gt;&lt;strong&gt;워크샵 인스턴스&lt;/strong&gt;는 그림에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;Workshop Instance&lt;/code&gt;로 표시된 &lt;code class=&quot;highlighter-rouge&quot;&gt;t3.2xlarge&lt;/code&gt; EC2다. 가속기가 없는 일반 인스턴스이고, 실습 명령은 전부 여기에 SSH로 붙어서 실행한다. 클러스터의 워커 노드가 아니라, kubectl과 eksctl을 돌리는 작업 노드 겸 배스천 역할이다.&lt;/p&gt;
-
-&lt;p&gt;클러스터 바깥에 관리용 호스트를 하나 두고 거기서만 클러스터를 조작하는 구성은 이 워크샵만의 방식이 아니다. Kubernetes the Hard Way도 첫 단계가 jumpbox를 세우는 것이고, 그 취지를 &lt;a href=&quot;/kubernetes/Kubernetes-Cluster-The-Hard-Way-02/&quot;&gt;Set Up The Jumpbox&lt;/a&gt;에서 정리한 적이 있다. 내부 노드에 직접 접근하지 않고 한 지점을 거치게 해서 접근 경로를 좁히는 것이다.&lt;/p&gt;
-
-&lt;p&gt;이 워크샵도 같은 구조를 따른다. 이후 편에서는 이 워크샵 인스턴스를 배스천(bastion)이라 부른다. kubeconfig와 AWS 자격 증명이 이 인스턴스 한 대에만 놓이고, 실습 명령도 전부 여기서 나간다. 뒤에서 워커 노드 안을 들여다볼 일이 생기는데, 그때는 SSH 대신 EC2 Session Manager로 붙는다.&lt;/p&gt;
-
-&lt;p&gt;다만 접근 경로가 실제로 한 곳으로 좁혀진 것은 아니다. 노드그룹을 만들 때 쓴 &lt;code class=&quot;highlighter-rouge&quot;&gt;eksctl&lt;/code&gt; 설정에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;ssh.allow: true&lt;/code&gt;가 들어 있고 &lt;code class=&quot;highlighter-rouge&quot;&gt;sourceSecurityGroupIds&lt;/code&gt;가 없다. EKS 관리형 노드그룹은 이 조합이면 워커 노드의 22번을 &lt;code class=&quot;highlighter-rouge&quot;&gt;0.0.0.0/0&lt;/code&gt;으로 연다. 경로를 좁히려면 &lt;code class=&quot;highlighter-rouge&quot;&gt;ssh:&lt;/code&gt; 블록을 지우거나 &lt;code class=&quot;highlighter-rouge&quot;&gt;sourceSecurityGroupIds&lt;/code&gt;로 배스천만 허용해야 한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;VPC와 서브넷&lt;/strong&gt;은 CloudFormation 스택이 미리 만들어 둔다. 워크샵 인스턴스가 뜬 퍼블릭 서브넷은 &lt;code class=&quot;highlighter-rouge&quot;&gt;10.0.1.0/24&lt;/code&gt;이고, VPC 대역은 &lt;code class=&quot;highlighter-rouge&quot;&gt;10.0.0.0/16&lt;/code&gt;이다. 스택의 Outputs를 보면 서브넷이 하나가 아니라 4개 AZ에 걸친 퍼블릭/프라이빗 세트로 만들어진다. 각 서브넷의 CIDR은 Outputs에 나오지 않으므로 여기서 확정할 수 있는 대역은 워크샵 인스턴스가 속한 &lt;code class=&quot;highlighter-rouge&quot;&gt;10.0.1.0/24&lt;/code&gt;뿐이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;보안 그룹&lt;/strong&gt;은 22, 8000, 8080 인바운드를 연다. SSH 22번의 소스가 &lt;code class=&quot;highlighter-rouge&quot;&gt;0.0.0.0/0&lt;/code&gt;으로 열려 있는데, 짧게 쓰고 버리는 워크샵 환경이라 이렇게 구성된 것이고 운영 환경에 그대로 옮길 설정은 아니다.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;IAM Role&lt;/strong&gt;은 EKS, ECR, S3, CloudFormation 접근용으로 미리 준비된다. 노드 그룹에 붙는 정책 구성은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편&lt;/a&gt;의 매니페스트에서 확인하는데, 이 글 범위에서 기억해 둘 것은 모델 캐시 버킷을 읽고 쓰기 위한 S3 접근 권한이 워커 노드에 붙는다는 점이다.&lt;/p&gt;
-
-&lt;h2 id=&quot;eks-클러스터와-노드-그룹&quot;&gt;EKS 클러스터와 노드 그룹&lt;/h2&gt;
-
-&lt;p&gt;컨트롤 플레인은 Kubernetes 1.33이고, VPC CNI와 OIDC 공급자가 활성화된 상태로 이미 배포돼 있다.&lt;/p&gt;
-
-&lt;p&gt;VPC CNI는 파드에 오버레이 대역이 아니라 VPC 대역의 주소를 직접 준다. 이 워크샵에서 이 사실이 드러나는 곳이 두 군데다. 하나는 파드 IP다. 뒤에 나오는 device plugin 파드나 vLLM 파드의 주소가 워커 노드와 같은 서브넷 대역으로 찍히고, VPC 안에서 그대로 라우팅된다. 다른 하나는 노드 하나에 뜰 수 있는 파드 수다. 노드가 붙일 수 있는 ENI 개수와 ENI당 보조 IP 개수가 인스턴스 타입으로 정해져 있고, 파드마다 IP를 하나씩 쓰므로 그 상한이 곧 파드 수 상한이 된다. 오버레이 CNI였다면 노드 안에서 주소를 얼마든지 만들어 쓸 수 있어 생기지 않을 제약이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt; 한 대에 vLLM 파드 하나를 올리는 이번 구성에서는 이 상한에 걸릴 일이 없지만, 주소가 어디서 나오는지를 알아야 뒤에서 파드 IP를 읽을 때 그것이 무엇인지 알 수 있다. 주소 할당과 ENI 관리 동작은 &lt;a href=&quot;/kubernetes/Kubernetes-EKS-02-01-01-EKS-VPC-CNI/&quot;&gt;EKS VPC CNI&lt;/a&gt;에 정리했다.&lt;/p&gt;
-
-&lt;p&gt;직접 만드는 쪽은 관리형 노드 그룹 &lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-trn1-2x&lt;/code&gt;다. 주요 설정은 다음과 같다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;인스턴스 타입 &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;desiredCapacity: 1&lt;/code&gt;&lt;/li&gt;
-  &lt;li&gt;루트 볼륨 &lt;code class=&quot;highlighter-rouge&quot;&gt;volumeSize: 100&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;volumeType: gp2&lt;/code&gt;&lt;/li&gt;
-  &lt;li&gt;AMI 계열 &lt;code class=&quot;highlighter-rouge&quot;&gt;AmazonLinux2023&lt;/code&gt;. eksctl 로그에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;[AmazonLinux2023/1.33]&lt;/code&gt;로 찍히고, 자동 설치 메시지는 이를 EKS 최적화 가속 컴퓨팅 AMI라고 부른다. “Neuron 전용 AMI”라는 별도 제품이 있는 것은 아니다&lt;/li&gt;
-  &lt;li&gt;서브넷은 &lt;code class=&quot;highlighter-rouge&quot;&gt;us-west-2b&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;us-west-2d&lt;/code&gt; 두 AZ의 퍼블릭 서브넷을 지정한다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;서브넷이 2개 AZ에 걸쳐 선언돼 있지만 &lt;code class=&quot;highlighter-rouge&quot;&gt;desiredCapacity&lt;/code&gt;가 1이므로 이번 실습에서 실제로 뜨는 노드는 한 대, 즉 한 AZ에만 존재한다. 서브넷을 두 AZ로 열어 둔 것은 &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;의 제공 AZ가 제한적이어서 용량 확보에 실패할 가능성을 줄이려는 구성으로 보인다. 실제로 노드 그룹을 만들 때는 인스턴스 타입이 제공되는 AZ를 먼저 조회하고, 그 AZ 안에서 퍼블릭 서브넷을 고르는 순서를 밟는다.&lt;/p&gt;
-
-&lt;p&gt;노드 그룹 생성에서 실제로 막혔던 것은 AZ가 아니라 AMI였다. 배스천 셸에 미리 심어져 있던 &lt;code class=&quot;highlighter-rouge&quot;&gt;WORKER_AMI&lt;/code&gt; 값이 리전에 존재하지 않는 AMI를 가리켜, &lt;code class=&quot;highlighter-rouge&quot;&gt;eksctl&lt;/code&gt;이 CloudFormation 스택을 올리기도 전에 &lt;code class=&quot;highlighter-rouge&quot;&gt;InvalidAMIID.NotFound&lt;/code&gt;로 중단했다. 같은 셸에서 같은 리전을 대상으로 SSM에 조회한 값은 다른 AMI였고, 두 값이 다르다는 사실 자체가 &lt;code class=&quot;highlighter-rouge&quot;&gt;WORKER_AMI&lt;/code&gt;가 부팅 시 SSM에서 받아 심은 값이 아니라 어딘가에 하드코딩된 값이라는 증거였다. 진단과 해결 과정은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/#막힘--해결-존재하지-않는-ami&quot;&gt;8.2.1편의 막힘 &amp;amp; 해결&lt;/a&gt;에 있다.&lt;/p&gt;
-
-&lt;p&gt;디스크 용량은 워크샵 설명 문서와 실제 매니페스트가 다르다. 문서 요약에는 500GB로 적혀 있지만 실행되는 &lt;code class=&quot;highlighter-rouge&quot;&gt;eksctl&lt;/code&gt; 설정 파일에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;volumeSize: 100&lt;/code&gt;이 박혀 있다. 실제 배포되는 값은 100GB다.&lt;/p&gt;
-
-&lt;p&gt;여기서 “관리형”이 무엇을 관리한다는 뜻인지가 위 설정들의 성격을 정한다. 사용자가 EC2를 직접 띄우는 것이 아니라, AWS가 Auto Scaling 그룹과 시작 템플릿을 만들어 그 위에서 노드를 생성한다. 위에 적은 인스턴스 타입, AMI 계열, 볼륨 크기는 개별 인스턴스에 주는 인자가 아니라 시작 템플릿으로 번역되는 값이다.&lt;/p&gt;
-
-&lt;p&gt;그래서 설정이 잘못됐을 때 실패하는 지점도 인스턴스 기동이 아니라 노드 그룹 생성 단계다. 앞에서 본 AMI 문제가 &lt;code class=&quot;highlighter-rouge&quot;&gt;eksctl&lt;/code&gt;이 스택을 올리기도 전에 끊긴 것이 그 예다. 또 노드를 한 대 더 늘리거나 AMI를 갱신하는 일도 인스턴스를 따로 만지는 것이 아니라 노드 그룹 설정을 바꿔 ASG가 교체하게 하는 방식이 된다. ASG 위에서의 동작 방식은 &lt;a href=&quot;/kubernetes/Kubernetes-EKS-00-01-EKS-Computing-Group/#관리형-노드-그룹&quot;&gt;EKS 데이터 플레인 컴퓨팅&lt;/a&gt;에 정리돼 있다.&lt;/p&gt;
-
-&lt;h2 id=&quot;trainium-자원-노출&quot;&gt;Trainium 자원 노출&lt;/h2&gt;
-
-&lt;p&gt;워크샵이 사용하는 하드웨어 사실부터 정리하면, &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;에는 Trainium 칩이 1개 있고 그 칩 안에 NeuronCore-v2가 2개, HBM이 32GB 들어 있다. 칩당 연산 성능과 메모리 대역폭 수치는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/&quot;&gt;8.1편&lt;/a&gt;에서 공식 문서와 대조해 정리한다.&lt;/p&gt;
-
-&lt;p&gt;Trainium을 파드가 쓰려면 두 가지가 따로 필요하다. &lt;strong&gt;노출&lt;/strong&gt;은 Neuron device plugin이, &lt;strong&gt;배치&lt;/strong&gt;는 Neuron scheduler extension이 맡는다. 일반적인 NVIDIA GPU 환경이라면 device plugin 하나로 끝나는데, Neuron은 칩과 코어를 둘 다 광고하기 때문에 기본 스케줄러가 같은 하드웨어를 이중으로 세는 문제가 생긴다. 그래서 스케줄러 쪽 확장이 추가로 붙는다.
-device plugin이라는 장치 자체는 Trainium 고유의 것이 아니다. Kubernetes가 CPU와 메모리 외의 하드웨어를 다루는 표준 통로이고, NVIDIA GPU도 같은 방식으로 붙는다. 플러그인을 올려 GPU를 쓸 수 있게 만드는 절차는 &lt;a href=&quot;/dev/Dev-Kubernetes-GPU-Setting/&quot;&gt;NVIDIA Device Plugin&lt;/a&gt;에, 그 플러그인이 kubelet과 무엇을 주고받는지는 &lt;a href=&quot;/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/&quot;&gt;NVIDIA Device Plugin 동작 원리&lt;/a&gt;에 정리했다.&lt;/p&gt;
-
-&lt;p&gt;바로 아래 도식의 흐름도 그 글들에서 본 것과 같은 구조다. 노드에 드라이버와 디바이스 노드가 있고, DaemonSet으로 뜬 플러그인이 kubelet에 소켓을 등록하고, kubelet이 그 정보를 노드 상태에 실어 API 서버로 올린다. 이름이 &lt;code class=&quot;highlighter-rouge&quot;&gt;nvidia.com/gpu&lt;/code&gt;에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuron&lt;/code&gt;으로 바뀌었을 뿐이다. Neuron 쪽에서 갈라지는 지점은 하나인데, &lt;strong&gt;광고하는 자원 이름이 하나가 아니라 둘이라는 것&lt;/strong&gt;이다.&lt;/p&gt;
-
-&lt;p&gt;자원이 파드까지 닿는 경로는 다음과 같다.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart TD
-    subgraph node[&quot;trn1.2xlarge 워커 노드&quot;]
-        ami[&quot;EKS 최적화 가속 AMI&amp;lt;br/&amp;gt;Neuron 드라이버 + /dev 디바이스 노드&quot;]
-        dp[&quot;neuron-device-plugin&amp;lt;br/&amp;gt;DaemonSet Pod&quot;]
-        kubelet[&quot;kubelet&quot;]
-        ami --&amp;gt; dp
-        dp -- &quot;gRPC 소켓 등록&quot; --&amp;gt; kubelet
-    end
-    kubelet -- &quot;allocatable 광고&amp;lt;br/&amp;gt;aws.amazon.com/neuron: 1&amp;lt;br/&amp;gt;aws.amazon.com/neuroncore: 2&quot; --&amp;gt; api[&quot;kube-apiserver&quot;]
-    api --&amp;gt; sched[&quot;k8s-neuron-scheduler&amp;lt;br/&amp;gt;+ my-scheduler&quot;]
-    sched -- &quot;schedulerName: my-scheduler&quot; --&amp;gt; pod[&quot;vLLM Pod&amp;lt;br/&amp;gt;requests: aws.amazon.com/neuron 1&amp;lt;br/&amp;gt;tensor-parallel-size 2&quot;]
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. AMI가 제공하는 범위와 클러스터 오브젝트가 제공하는 범위가 어디서 갈리는지 보여 준다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;h3 id=&quot;neuron-device-plugin&quot;&gt;Neuron device plugin&lt;/h3&gt;
-
-&lt;p&gt;Neuron device plugin은 노드의 Neuron 디바이스를 Kubernetes 확장 리소스(extended resource)으로 광고하는 DaemonSet이다. 앞서 말한 대로 NVIDIA 환경의 device plugin과 같은 자리에 놓인다. 플러그인이 광고한 값이 노드의 allocatable에 실려 스케줄러의 자원 계산에 들어가기까지를 확장 리소스 관점에서 정리한 것은 &lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/#device-plugin-동작-흐름&quot;&gt;GPU 자원과 K8s 할당&lt;/a&gt;에 있다.&lt;/p&gt;
-
-&lt;p&gt;플러그인이 없으면 어떻게 되는지도 분명하다. 노드에 가속기가 물리적으로 꽂혀 있어도 allocatable에 그 자원이 올라오지 않으므로, &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuroncore&lt;/code&gt;를 요청한 파드는 조건을 만족하는 노드를 찾지 못해 &lt;strong&gt;Pending에서 멈춘다&lt;/strong&gt;. 하드웨어가 없어서가 아니라 하드웨어를 세어 주는 주체가 없어서 생기는 Pending이다. GPU 쪽에서 같은 증상을 만나 원인을 좁혀 간 기록이 &lt;a href=&quot;/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending/&quot;&gt;GPU 파드 Pending&lt;/a&gt;에 있다.&lt;/p&gt;
-
-&lt;p&gt;특이한 점은 광고하는 자원이 하나가 아니라는 것이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuron&lt;/code&gt;(칩 단위)과 &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuroncore&lt;/code&gt;(코어 단위)를 동시에 올린다. &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt; 노드에서는 각각 1과 2로 잡힌다. 칩을 통째로 잡을지 코어 단위로 쪼갤지를 파드가 선택할 수 있게 하려는 설계인데, 같은 하드웨어가 두 이름으로 세어지므로 기본 스케줄러만으로는 자원 계산이 어긋난다. 이 이중 계정이 구체적으로 어떤 문제를 만드는지는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편&lt;/a&gt;에 있다.&lt;/p&gt;
-
-&lt;p&gt;이 플러그인이 노드 AMI에 들어 있는지 궁금했는데, &lt;strong&gt;그렇지 않다&lt;/strong&gt;. AMI가 제공하는 범위는 Neuron 드라이버와 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev&lt;/code&gt; 디바이스 노드까지고, device plugin은 API 서버에 등록되는 DaemonSet이라 부팅하는 워커 노드가 스스로 만들 수 없다. kubelet이 쓰는 &lt;code class=&quot;highlighter-rouge&quot;&gt;system:node:&amp;lt;name&amp;gt;&lt;/code&gt; 권한에 DaemonSet을 만들 권한이 없기 때문이다.&lt;/p&gt;
-
-&lt;p&gt;그런데도 워크샵에서 자동으로 떠 있는 것처럼 보이는 이유는 eksctl이다. 노드 그룹을 만들 때 eksctl이 가속 AMI와 Neuron 인스턴스 타입 조합을 감지해 ClusterRole, ServiceAccount, ClusterRoleBinding, DaemonSet을 함께 생성한다. 실제 생성 로그와 RBAC 근거는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편&lt;/a&gt;에 있다.&lt;/p&gt;
-
-&lt;p&gt;플러그인 컨테이너 이미지가 AMI에 미리 받아져 있는지는 노드에 직접 붙어 확인했다. SSH 키와 접속 경로를 따로 다루지 않아도 되는 EC2 Session Manager로 접속해, containerd가 들고 있는 이미지를 조회했다.&lt;/p&gt;
-
-&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 노드에 이미 받아져 있는 컨테이너 이미지 중 neuron 관련 이미지 확인&lt;/span&gt;
-&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;ec2-user@ip-10-0-5-100 ~]&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;sudo &lt;/span&gt;ctr &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; k8s.io images &lt;span class=&quot;nb&quot;&gt;ls&lt;/span&gt; | &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; neuron
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과 (이미지 이름과 크기만 남기고 다이제스트·플랫폼 열은 생략)&lt;/span&gt;
-public.ecr.aws/neuron/neuron-device-plugin:2.23.30.0                      82.9 MiB
-public.ecr.aws/neuron/neuron-device-plugin:2.32.0.0                       49.0 MiB
-public.ecr.aws/neuron/neuron-scheduler:2.32.0.0                           48.4 MiB
-public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:0.9.1-neuronx-...    7.9 GiB
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;네 종류가 이미 노드에 있다. device plugin이 두 버전, 스케줄러 확장이 한 버전, 그리고 7.9 GiB짜리 vLLM 추론 이미지다. 마지막 것이 실습 진행에는 가장 크게 작용한다. vLLM 파드를 처음 띄울 때 8 GiB에 가까운 이미지를 받느라 기다리지 않아도 된다는 뜻이기 때문이다.&lt;/p&gt;
-
-&lt;p&gt;다만 이 출력만으로는 이미지가 &lt;strong&gt;AMI에 구워져 있던 것인지, 노드가 뜬 뒤 실습을 진행하는 동안 받아진 것인지 갈리지 않는다&lt;/strong&gt;. 오히려 device plugin 이미지가 두 버전이라는 점은 후자를 시사한다. &lt;code class=&quot;highlighter-rouge&quot;&gt;2.23.30.0&lt;/code&gt;은 노드 그룹을 만들 때 eksctl이 올린 버전이고 &lt;code class=&quot;highlighter-rouge&quot;&gt;2.32.0.0&lt;/code&gt;은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편&lt;/a&gt;에서 Helm으로 다시 설치하며 받은 버전이라, 서로 다른 시점에 pull된 흔적으로 읽힌다. 확정하려면 노드를 새로 띄운 직후, 아무것도 설치하기 전에 같은 명령을 실행해 봐야 한다.&lt;/p&gt;
-
-&lt;h3 id=&quot;neuron-scheduler-extension&quot;&gt;Neuron scheduler extension&lt;/h3&gt;
-
-&lt;p&gt;배치를 맡는 쪽은 &lt;code class=&quot;highlighter-rouge&quot;&gt;k8s-neuron-scheduler&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;my-scheduler&lt;/code&gt; 두 Deployment다. 파드가 이 스케줄러를 타려면 스펙에 &lt;code class=&quot;highlighter-rouge&quot;&gt;schedulerName: my-scheduler&lt;/code&gt;를 명시해야 한다. 기본 kube-scheduler를 그대로 두고 확장 스케줄러를 나란히 띄운 뒤, 필요한 워크로드만 이름으로 지정해 보내는 형태다.&lt;/p&gt;
-
-&lt;p&gt;이 확장이 필요한 이유는 두 가지다. 앞에서 본 칩과 코어의 이중 회계를 정확히 처리해야 하고, 텐서 병렬로 여러 코어를 묶어 쓸 때 연속된 코어를 할당해야 한다. 스케줄러 파드의 실제 로그와 배치 결과는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편&lt;/a&gt;에서 확인한다.&lt;/p&gt;
-
-&lt;h2 id=&quot;vllm-서빙-구성&quot;&gt;vLLM 서빙 구성&lt;/h2&gt;
-
-&lt;p&gt;서빙은 Deployment 하나로 배포되고, 파드 안에 컨테이너가 둘이다. init container가 먼저 돌아 모델을 준비하고, 그다음 vLLM 컨테이너가 서버를 띄운다.&lt;/p&gt;
-
-&lt;p&gt;컨테이너 이미지는 AWS가 공개 ECR에 올려 둔 Neuron용 vLLM 추론 이미지를 쓴다.&lt;/p&gt;
-
-&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# vLLM Deployment가 쓰는 이미지 태그&lt;/span&gt;
-&lt;span class=&quot;c1&quot;&gt;# 태그 안에 vLLM 버전(0.9.1), Python 버전(py310), Neuron SDK 버전(sdk2.25.0), 베이스 OS가 모두 박혀 있다&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;image&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:0.9.1-neuronx-py310-sdk2.25.0-ubuntu22.04&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;버전 조합이 태그에 그대로 노출되는 형태라, Neuron SDK 버전과 vLLM 버전을 따로 맞출 필요 없이 이미지 하나로 고정된다.&lt;/p&gt;
-
-&lt;p&gt;init container가 하는 일은 모델 다운로드, NxD 컴파일, 컴파일 산출물을 S3 백엔드 PVC로 복사하는 것 세 가지다. 이 흐름은 &lt;a href=&quot;#모델-캐시-스토리지&quot;&gt;모델 캐시 스토리지&lt;/a&gt;에서 도식으로 정리한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;tensor-parallel-size=2&lt;/code&gt;가 나오는 근거는 하드웨어 구성이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;에는 Trainium 칩이 1개 있고 그 안에 NeuronCore-v2가 2개다. vLLM은 NeuronCore 하나를 디바이스 하나로 잡으므로, 이 인스턴스에서 쓸 수 있는 디바이스 수가 2가 되고 텐서 병렬 크기도 2가 된다. 앞 절에서 본 &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuroncore: 2&lt;/code&gt;가 같은 사실의 Kubernetes 쪽 표현이다.&lt;/p&gt;
-
-&lt;p&gt;워크샵 문서는 이 구성이 쓰는 최적화 기법으로 continuous batching, OpenAI 호환 API, 텐서/파이프라인 병렬, 메모리 풀링, speculative decoding을 든다. 각 기법의 원리는 LLMSO 스터디를 진행해 오면서 이미 정리했다. continuous batching은 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/#continuous-batching&quot;&gt;6.1편&lt;/a&gt;, 병렬화 전반은 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview/#7장의-지도-네-가지-기법&quot;&gt;7.1편&lt;/a&gt;, speculative decoding은 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/&quot;&gt;7.2.1편&lt;/a&gt;에 있다.&lt;/p&gt;
-
-&lt;h2 id=&quot;모델-캐시-스토리지&quot;&gt;모델 캐시 스토리지&lt;/h2&gt;
-
-&lt;p&gt;Neuron 백엔드는 모델을 그대로 올려 쓰는 것이 아니라 NxD로 컴파일한 산출물을 쓴다. 이 컴파일이 느려서, 파드가 뜰 때마다 다시 컴파일하면 기동 시간이 그만큼 늘어난다. 워크샵이 init container와 S3를 묶어 쓰는 이유가 여기에 있다.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart TD
-    start([&quot;vLLM Pod 기동&quot;]) --&amp;gt; mount[&quot;S3 CSI Driver로 PV 마운트&amp;lt;br/&amp;gt;100Gi, ReadWriteMany&quot;]
-    mount --&amp;gt; check{&quot;마운트된 캐시 디렉터리가&amp;lt;br/&amp;gt;비어 있는가&quot;}
-    check -- &quot;비어 있음&quot; --&amp;gt; hf[&quot;Hugging Face에서&amp;lt;br/&amp;gt;TinyLlama-1.1B-Chat-v1.0 다운로드&quot;]
-    hf --&amp;gt; compile[&quot;NxD로 Neuron 컴파일&amp;lt;br/&amp;gt;tensor-parallel-size=2&quot;]
-    compile --&amp;gt; copy[&quot;산출물을 캐시 디렉터리로 복사&amp;lt;br/&amp;gt;마운트를 통해 S3에 반영&quot;]
-    copy --&amp;gt; serve
-    check -- &quot;비어 있지 않음&quot; --&amp;gt; skip[&quot;컴파일 건너뜀&amp;lt;br/&amp;gt;마운트된 산출물을 그대로 사용&quot;]
-    skip --&amp;gt; serve[&quot;vLLM 컨테이너 기동&amp;lt;br/&amp;gt;OpenAI 호환 API 서빙&quot;]
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. PV 마운트는 분기와 무관하게 항상 일어나고, 캐시가 비었는지에 따라 컴파일 여부만 갈린다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;마운트는 분기의 한쪽이 아니라 &lt;strong&gt;분기보다 먼저 일어나는 전제&lt;/strong&gt;다. 캐시가 있든 없든 파드는 PV를 먼저 마운트하고, 그다음에 마운트된 디렉터리가 비었는지를 보고 컴파일 여부를 정한다. 캐시가 있으면 그 디렉터리에서 바로 읽어 쓰고, 없으면 컴파일한 산출물을 그 디렉터리에 써서 다음 파드가 쓸 수 있게 남긴다. 판정 기준이 S3 API 호출이 아니라 마운트된 디렉터리를 보는 것이라, 캐시 판정 자체가 마운트가 정상이라는 전제 위에 있다. 실제 매니페스트와 init container 스크립트에서 이 분기가 어떻게 구현돼 있는지는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편&lt;/a&gt;에서 확인한다.&lt;/p&gt;
-
-&lt;p&gt;캐시 버킷 이름은 &lt;code class=&quot;highlighter-rouge&quot;&gt;vllm-models-cache-&amp;lt;ACCOUNT_ID&amp;gt;&lt;/code&gt; 형태다. 이 버킷을 Mountpoint for Amazon S3 CSI Driver로 100Gi, &lt;code class=&quot;highlighter-rouge&quot;&gt;ReadWriteMany&lt;/code&gt; PV로 마운트한다. &lt;code class=&quot;highlighter-rouge&quot;&gt;ReadWriteMany&lt;/code&gt;라서 여러 파드가 같은 캐시를 동시에 읽을 수 있고, HPA로 파드가 늘어나는 이후 Lab 시나리오에서 이 구조가 의미를 갖는다. 새로 뜬 파드가 컴파일을 건너뛰고 바로 서버를 올릴 수 있기 때문이다.&lt;/p&gt;
-
-&lt;h2 id=&quot;외부-접근-경로&quot;&gt;외부 접근 경로&lt;/h2&gt;
-
-&lt;p&gt;외부 요청은 인터넷 게이트웨이와 ELB를 거쳐 클러스터로 들어온다. 클러스터 안에서는 ingress-nginx 컨트롤러가 경로 기반 라우팅(&lt;code class=&quot;highlighter-rouge&quot;&gt;/&lt;/code&gt;)으로 vLLM Service에 연결하고, Service가 vLLM 파드로 전달한다. vLLM 서버가 듣는 포트는 8080이다.&lt;/p&gt;
-
-&lt;p&gt;아키텍처 그림에서 ELB의 화살표는 vLLM Service가 아니라 워커 노드의 ingress-nginx 쪽으로 들어간다. 그렇다면 LoadBalancer 타입 Service는 vLLM이 아니라 ingress-nginx 컨트롤러 쪽일 가능성이 높은데, 매니페스트를 확인하지 않아 단정하지 않는다. 실제 매니페스트를 확인한 결과는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/&quot;&gt;8.3.2편&lt;/a&gt;에 있다 — Lab 2 시점의 외부 진입점은 vLLM Service 자신이고, ingress-nginx는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/&quot;&gt;8.4편&lt;/a&gt;에서 올라간다.&lt;/p&gt;
-
-&lt;h2 id=&quot;모니터링과-오토스케일링&quot;&gt;모니터링과 오토스케일링&lt;/h2&gt;
-
-&lt;p&gt;지표는 Prometheus와 Grafana로 모은다. 아키텍처 그림에 함께 그려진 CloudWatch는 이 실습에서 배포하지 않았다. 오토스케일링은 CPU 사용률 기반 HPA다. vLLM Deployment에 readiness probe나 liveness probe는 붙지 않는다.&lt;/p&gt;
-
-&lt;p&gt;가속기 워크로드인데 스케일 기준이 가속기 사용률이 아니라 CPU 사용률이라는 점은 이 구성의 특징으로 기억해 둘 만하다. 지표 수집 구성은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/&quot;&gt;8.5.1편&lt;/a&gt;과 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/&quot;&gt;8.5.2편&lt;/a&gt;에서 확인한다. 오토스케일링의 실제 동작은 이후 Lab이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;실습-환경-접속&quot;&gt;실습 환경 접속&lt;/h1&gt;
-
-&lt;p&gt;여기서부터는 워크샵 환경에 실제로 붙는 과정이다. 이후 Lab은 모두 워크샵 인스턴스에 접속한 상태를 전제로 시작한다.&lt;/p&gt;
-
-&lt;h2 id=&quot;사전-준비&quot;&gt;사전 준비&lt;/h2&gt;
-
-&lt;p&gt;워크샵에 Join하면 AWS 콘솔을 열 수 있다. 리전은 &lt;code class=&quot;highlighter-rouge&quot;&gt;us-west-2&lt;/code&gt;이고, 콘솔에서 EKS로 들어가면 클러스터 하나가 이미 활성 상태로 떠 있다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-aws-workshop-environment-cluster.png&quot; alt=&quot;EKS 콘솔의 클러스터 목록&quot; class=&quot;align-center&quot; width=&quot;860&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;직접 캡처. EKS 콘솔의 클러스터 목록. 상태가 활성이고 쿠버네티스 버전이 1.33이다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;버전이 1.33, 상태가 활성으로 표시된다. 컴퓨팅 탭을 열어 보면 노드 그룹이 비어 있는데, 앞에서 정리한 대로 여기서부터가 실습 범위다.&lt;/p&gt;
-
-&lt;p&gt;그다음 워크샵 포털에서 SSH 개인 키를 내려받는다. 좌측 메뉴의 Get EC2 SSH key를 누르면 키 다운로드 창이 열린다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-aws-workshop-ssh-key.png&quot; alt=&quot;워크샵 포털의 EC2 SSH key 화면&quot; class=&quot;align-center&quot; width=&quot;860&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;직접 캡처. 워크샵 포털에서 EC2 SSH 키를 내려받는 화면이다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;로컬 PC에 VS Code와 Remote-SSH 확장을 깔아 두면 편하지만 필수는 아니다. 터미널에서 ssh로 붙어도 실습 진행에는 차이가 없다.&lt;/p&gt;
-
-&lt;p&gt;내려받은 키는 권한이 열려 있으면 ssh가 거부하므로 소유자 읽기 전용으로 낮춘다.&lt;/p&gt;
-
-&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 내려받은 개인 키 확인&lt;/span&gt;
-~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;ls&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-al&lt;/span&gt;
-total 8
-drwxr-xr-x   3 user  staff    96  9 11 20:55 &lt;span class=&quot;nb&quot;&gt;.&lt;/span&gt;
-drwxr-xr-x@ 12 user  staff   384  9 11 20:55 ..
-&lt;span class=&quot;nt&quot;&gt;-rw-r--r--&lt;/span&gt;@  1 user  staff  1678  9 11 20:55 ws-default-keypair.pem
-
-&lt;span class=&quot;c&quot;&gt;# 소유자 읽기 전용(400)으로 권한 축소&lt;/span&gt;
-~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;chmod 400 ws-default-keypair.pem
-~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;ls&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-al&lt;/span&gt; ws-default-keypair.pem
-&lt;span class=&quot;nt&quot;&gt;-r--------&lt;/span&gt;@  1 user  staff  1678  9 11 20:55 ws-default-keypair.pem
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h2 id=&quot;워크샵-인스턴스-접속&quot;&gt;워크샵 인스턴스 접속&lt;/h2&gt;
-
-&lt;p&gt;접속할 IP는 CloudFormation 스택의 Outputs에 있다. 워크샵 첫 페이지에서 바로 볼 수 있는 화면이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-aws-workshop-outputs.png&quot; alt=&quot;CloudFormation 스택 Outputs&quot; class=&quot;align-center&quot; width=&quot;860&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;직접 캡처. CloudFormation 스택의 Outputs. 워크샵 인스턴스 접속에 쓰는 PublicIP가 여기에 있다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;Key 열을 보면 이 스택이 EKS 클러스터 ARN과 이름, 엔드포인트, 인터넷 게이트웨이 ID, 워크샵 인스턴스 ID와 Public IP, 그리고 4개 AZ의 퍼블릭/프라이빗 서브넷 ID를 출력한다. 앞서 인프라 레이어에서 서브넷이 하나가 아니라고 적은 근거가 이 목록이다.&lt;/p&gt;
-
-&lt;p&gt;PublicIP 값을 복사해 SSH로 붙는다.&lt;/p&gt;
-
-&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 다운로드한 개인 키로 워크샵 인스턴스에 접속&lt;/span&gt;
-~&lt;span class=&quot;nv&quot;&gt;$ MYEC2IP&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;203.0.113.20   &lt;span class=&quot;c&quot;&gt;# Outputs의 PublicIP 값으로 교체&lt;/span&gt;
-~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;ssh &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; ws-default-keypair.pem ubuntu@&lt;span class=&quot;nv&quot;&gt;$MYEC2IP&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;붙은 뒤 인스턴스가 어떤 장비인지 확인한다.&lt;/p&gt;
-
-&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;whoami
-ubuntu
-
-ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;hostnamectl
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과 (식별자 행은 제외)&lt;/span&gt;
- Static hostname: ip-10-0-1-100
-       Icon name: computer-vm
-         Chassis: vm
-  Virtualization: amazon
-Operating System: Ubuntu 22.04.5 LTS
-          Kernel: Linux 6.8.0-1035-aws
-    Architecture: x86-64
- Hardware Vendor: Amazon EC2
-  Hardware Model: t3.2xlarge      &lt;span class=&quot;c&quot;&gt;# 아키텍처 그림의 Workshop Instance와 같은 타입&lt;/span&gt;
-
-ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;df &lt;span class=&quot;nt&quot;&gt;-hT&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과 (루트 파일 시스템만 발췌)&lt;/span&gt;
-Filesystem      Type      Size  Used Avail Use% Mounted on
-/dev/root       ext4      117G  2.9G  114G   3% /
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;htop&lt;/code&gt;으로 보면 vCPU 8개, 메모리 31GB다. &lt;code class=&quot;highlighter-rouge&quot;&gt;t3.2xlarge&lt;/code&gt; 스펙과 일치한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-aws-workshop-bastion-htop.png&quot; alt=&quot;워크샵 인스턴스의 htop 출력&quot; class=&quot;align-center&quot; width=&quot;800&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;직접 캡처. htop으로 확인한 워크샵 인스턴스. vCPU 8개와 메모리 31GB다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;네트워크 인터페이스를 보면 &lt;code class=&quot;highlighter-rouge&quot;&gt;ens5&lt;/code&gt;(VPC 인터페이스)와 함께 &lt;code class=&quot;highlighter-rouge&quot;&gt;docker0&lt;/code&gt; 브리지가 이미 올라와 있고, Docker Engine도 설치돼 있다. 이 인스턴스가 클러스터 워커 노드가 아니라 이미지 빌드와 도구 실행을 위한 작업 노드라는 뜻이다.&lt;/p&gt;
-
-&lt;details&gt;
-  &lt;summary&gt;&lt;b&gt;ip -c addr 전체 출력&lt;/b&gt;&lt;/summary&gt;
-
-  &lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;ip &lt;span class=&quot;nt&quot;&gt;-c&lt;/span&gt; addr
-1: lo: &amp;lt;LOOPBACK,UP,LOWER_UP&amp;gt; mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
-    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
-    inet 127.0.0.1/8 scope host lo
-       valid_lft forever preferred_lft forever
-    inet6 ::1/128 scope host
-       valid_lft forever preferred_lft forever
-2: ens5: &amp;lt;BROADCAST,MULTICAST,UP,LOWER_UP&amp;gt; mtu 9001 qdisc mq state UP group default qlen 1000
-    link/ether 02:xx:xx:xx:xx:xx brd ff:ff:ff:ff:ff:ff
-    altname enp0s5
-    inet 10.0.1.100/24 metric 100 brd 10.0.1.255 scope global dynamic ens5
-       valid_lft 3384sec preferred_lft 3384sec
-    inet6 fe80::xx:xxff:fexx:xxxx/64 scope link
-       valid_lft forever preferred_lft forever
-3: docker0: &amp;lt;NO-CARRIER,BROADCAST,MULTICAST,UP&amp;gt; mtu 1500 qdisc noqueue state DOWN group default
-    link/ether 02:xx:xx:xx:xx:xx brd ff:ff:ff:ff:ff:ff
-    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
-       valid_lft forever preferred_lft forever
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;  &lt;/div&gt;
-
-&lt;/details&gt;
-
-&lt;details&gt;
-  &lt;summary&gt;&lt;b&gt;docker info 전체 출력&lt;/b&gt;&lt;/summary&gt;
-
-  &lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;docker info
-Client: Docker Engine - Community
- Version:    29.8.0
- Context:    default
- Debug Mode: &lt;span class=&quot;nb&quot;&gt;false
- &lt;/span&gt;Plugins:
-  buildx: Docker Buildx &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;Docker Inc.&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
-    Version:  v0.37.0
-    Path:     /usr/libexec/docker/cli-plugins/docker-buildx
-  compose: Docker Compose &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;Docker Inc.&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
-    Version:  v5.5.1
-    Path:     /usr/libexec/docker/cli-plugins/docker-compose
-  model: Docker Model Runner &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;Docker Inc.&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
-    Version:  v1.2.6
-    Path:     /usr/libexec/docker/cli-plugins/docker-model
-
-Server:
- Containers: 0
-  Running: 0
-  Paused: 0
-  Stopped: 0
- Images: 0
- Server Version: 29.8.0
- Storage Driver: overlayfs
-  driver-type: io.containerd.snapshotter.v1
- Logging Driver: json-file
- Cgroup Driver: systemd
- Cgroup Version: 2
- Plugins:
-  Volume: &lt;span class=&quot;nb&quot;&gt;local
-  &lt;/span&gt;Network: bridge host ipvlan macvlan null overlay
-  Log: awslogs fluentd gcplogs gelf journald json-file &lt;span class=&quot;nb&quot;&gt;local &lt;/span&gt;splunk syslog
- CDI spec directories:
-  /etc/cdi
-  /var/run/cdi
- Swarm: inactive
- Runtimes: io.containerd.runc.v2 runc
- Default Runtime: runc
- Init Binary: docker-init
- containerd version: 1294c24a7da8e5a793ed378161673abe94118892
- runc version: v1.5.1-0-g8f2685a4
- init version: de40ad0
- Security Options:
-  apparmor
-   Profile: default
-  seccomp
-   Profile: &lt;span class=&quot;nb&quot;&gt;builtin
-  &lt;/span&gt;cgroupns
- Kernel Version: 6.8.0-1035-aws
- Operating System: Ubuntu 22.04.5 LTS
- OSType: linux
- Architecture: x86_64
- CPUs: 8
- Total Memory: 30.98GiB
- Name: ip-10-0-1-100
- ID: &amp;lt;docker-id&amp;gt;
- Docker Root Dir: /var/lib/docker
- Debug Mode: &lt;span class=&quot;nb&quot;&gt;false
- &lt;/span&gt;Experimental: &lt;span class=&quot;nb&quot;&gt;false
- &lt;/span&gt;Insecure Registries:
-  ::1/128
-  127.0.0.0/8
- Live Restore Enabled: &lt;span class=&quot;nb&quot;&gt;false
- &lt;/span&gt;Firewall Backend: iptables
-  EnableUserlandProxy: &lt;span class=&quot;nb&quot;&gt;true
-  &lt;/span&gt;UserlandProxyPath: /usr/bin/docker-proxy
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;  &lt;/div&gt;
-
-&lt;/details&gt;
-
-&lt;p&gt;홈 디렉터리에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;workshop/&lt;/code&gt; 디렉터리가 하나 있고, 그 안에 &lt;code class=&quot;highlighter-rouge&quot;&gt;.env&lt;/code&gt; 파일 하나만 들어 있다. 실습에 쓸 도구로 &lt;code class=&quot;highlighter-rouge&quot;&gt;tree&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;jq&lt;/code&gt;를 설치해 두면 이후 확인 작업이 편하다.&lt;/p&gt;
-
-&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 실습용 도구 설치&lt;/span&gt;
-ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;sudo &lt;/span&gt;apt update &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;sudo &lt;/span&gt;apt install tree jq &lt;span class=&quot;nt&quot;&gt;-y&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# 워크샵 디렉터리 구조 확인&lt;/span&gt;
-ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;tree &lt;span class=&quot;nt&quot;&gt;-a&lt;/span&gt; workshop/
-workshop/
-└── .env
-
-0 directories, 1 file
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h2 id=&quot;hugging-face-토큰-설정&quot;&gt;Hugging Face 토큰 설정&lt;/h2&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;workshop/.env&lt;/code&gt;에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;HF_TOKEN&lt;/code&gt;이 미리 들어 있다. 다만 만료된 값이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;TinyLlama-1.1B-Chat-v1.0&lt;/code&gt;은 접근 승인이 필요한 모델이 아니라 토큰 없이도 받을 수 있지만, &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편&lt;/a&gt;의 init container 스크립트가 &lt;code class=&quot;highlighter-rouge&quot;&gt;set -e&lt;/code&gt; 아래에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;huggingface-cli login --token &quot;$HF_TOKEN&quot;&lt;/code&gt;을 먼저 실행하기 때문에 토큰이 유효하지 않으면 그 줄에서 컨테이너가 멈춘다. Hugging Face에서 토큰을 직접 발급받아 교체해 둔다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-aws-workshop-hf-token.png&quot; alt=&quot;Hugging Face 액세스 토큰 발급 화면&quot; class=&quot;align-center&quot; width=&quot;800&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;직접 캡처. Hugging Face 액세스 토큰 발급 화면. 토큰 값이 만들어지기 전 단계다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;div class=&quot;language-shell highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 미리 들어 있는 토큰 확인 (만료된 값)&lt;/span&gt;
-ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;cat &lt;/span&gt;workshop/.env
-&lt;span class=&quot;nv&quot;&gt;HF_TOKEN&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;hf_xxxxxxxxxxxxxxxxxxxx&quot;&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# 직접 발급받은 토큰으로 교체&lt;/span&gt;
-ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;rm &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; /home/ubuntu/workshop/.env
-ubuntu@ip-10-0-1-100:~&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;echo&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'HF_TOKEN=&quot;hf_xxxxxxxxxxxxxxxxxxxx&quot;'&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; /home/ubuntu/workshop/.env
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;워크샵은 &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt; 위에 vLLM과 NxD로 &lt;code class=&quot;highlighter-rouge&quot;&gt;TinyLlama-1.1B-Chat-v1.0&lt;/code&gt;을 서빙하고, 모니터링과 HPA, 부하 테스트까지 이어 간다&lt;/li&gt;
-  &lt;li&gt;접속 시점에 이미 만들어져 있는 것은 VPC와 서브넷, 보안 그룹, 워크샵 인스턴스, 그리고 EKS 1.33 컨트롤 플레인이다. 직접 만드는 것은 노드 그룹부터다&lt;/li&gt;
-  &lt;li&gt;가속기 통합은 두 축으로 나뉜다. Neuron device plugin이 칩과 코어를 확장 리소스로 광고하고, Neuron scheduler extension이 이중 회계와 연속 코어 할당을 처리한다&lt;/li&gt;
-  &lt;li&gt;서빙 파드는 init container로 모델을 컴파일해 S3에 올려 두고, 이후 파드는 S3 CSI Driver로 마운트한 PV에서 산출물을 재사용한다&lt;/li&gt;
-  &lt;li&gt;이 글에서 확정하지 않은 항목이 둘 있다. vLLM Service의 타입은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/&quot;&gt;8.3.2편&lt;/a&gt;에서 매니페스트로 확인한다. 노드 AMI의 Neuron 이미지 pre-pull 여부는 노드를 새로 띄운 직후에 확인해야 하는데, 이번 실습 순서에서는 그 시점을 잡지 못해 확정하지 못했다&lt;/li&gt;
-  &lt;li&gt;가속기와 Neuron SDK 배경은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/&quot;&gt;8.1편&lt;/a&gt;, 노드 그룹 구축과 트러블슈팅은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편&lt;/a&gt;, Neuron 자원 노출 검증은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편&lt;/a&gt;에서 이어 간다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/&quot;&gt;AWS Neuron Documentation&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://github.com/aws-neuron/neuronx-distributed&quot;&gt;neuronx-distributed (GitHub)&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.vllm.ai/&quot;&gt;vLLM Documentation&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://github.com/awslabs/mountpoint-s3-csi-driver&quot;&gt;Mountpoint for Amazon S3 CSI Driver (GitHub)&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.aws.amazon.com/ko_kr/eks/latest/userguide/what-is-eks.html&quot;&gt;Amazon EKS User Guide: What is Amazon EKS&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-EKS-00-00-EKS-Overview/&quot;&gt;EKS 개요&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-EKS-00-01-EKS-Computing-Group/&quot;&gt;EKS 데이터 플레인 컴퓨팅&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-EKS-01-04-EKS-vs-Vanilla-K8s/&quot;&gt;EKS와 바닐라 K8s 비교&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-EKS-02-01-01-EKS-VPC-CNI/&quot;&gt;EKS VPC CNI&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending/&quot;&gt;GPU 파드 Pending 트러블슈팅&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/&quot;&gt;GPU 자원과 K8s 할당&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="vLLM" /><category term="Trainium" /><category term="Neuron" /><category term="LLM-Serving" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">EKS와 AWS Trainium 위에 vLLM을 올리는 워크샵의 목적과 클러스터 아키텍처를 살펴보자.</summary></entry></feed>
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;
+&lt;br /&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><author><name>Eraser</name></author><category term="Trainium" /><category term="Inferentia" /><category term="AWS-Neuron" /><category term="NeuronCore" /><category term="NKI" /><category term="NxD-Inference" /><category term="vLLM" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">워크샵이 쓰는 Trainium이 어떤 칩인지, Neuron SDK가 어떤 스택인지, NVIDIA 스택과 어디까지 대응되는지 정리해 보자.</summary></entry></feed>
