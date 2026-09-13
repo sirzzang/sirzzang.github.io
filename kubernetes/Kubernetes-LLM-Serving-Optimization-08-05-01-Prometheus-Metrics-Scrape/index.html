@@ -332,7 +332,7 @@
 
 
 
-  21 분 소요
+  20 분 소요
 
 
             
@@ -400,15 +400,12 @@
 <h1 id="tldr">TL;DR</h1>
 
 <ul>
-  <li>이 Lab이 쓰는 것은 kube-prometheus-stack이 아니다. <code class="highlighter-rouge">prometheus-community/prometheus</code> 차트 29.28.1(앱 v3.14.0) 하나이고, <strong>prometheus-operator가 의존 서브차트에 없다.</strong> 오퍼레이터가 없으니 <code class="highlighter-rouge">ServiceMonitor</code>·<code class="highlighter-rouge">PodMonitor</code> 같은 CRD도 없다. 대상을 늘리려면 Prometheus 설정 파일에 잡을 직접 적거나, 차트 기본 잡이 이미 돌리고 있는 <code class="highlighter-rouge">prometheus.io/scrape</code> 어노테이션 디스커버리에 태워야 한다. 이 Lab이 고른 것은 앞쪽이다</li>
-  <li>vLLM 수집은 values의 <code class="highlighter-rouge">serverFiles.prometheus.yml.scrape_configs</code>에 적은 <code class="highlighter-rouge">static_configs</code> 잡 하나다. 서비스 디스커버리를 쓰지 않고, Prometheus가 하는 일은 <code class="highlighter-rouge">vllm-service.default.svc.cluster.local</code>을 DNS로 푸는 것뿐이다</li>
-  <li>그 경로는 Ingress를 거치지 않는다. non-headless Service의 A 레코드는 ClusterIP 하나이므로 스크레이프는 <strong>ClusterIP → kube-proxy → 파드</strong>로 간다. <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/">8.4편</a>에서 만든 ELB와 ingress-nginx는 이 수집에 관여하지 않는다</li>
-  <li>values에 적은 <code class="highlighter-rouge">nodeExporter:</code>와 <code class="highlighter-rouge">kubeStateMetrics:</code> 두 블록은 차트 29.28.1이 읽는 키가 아니다. 실제 키는 <code class="highlighter-rouge">prometheus-node-exporter:</code>와 <code class="highlighter-rouge">kube-state-metrics:</code>이고, <code class="highlighter-rouge">values.schema.json</code>에 <code class="highlighter-rouge">additionalProperties</code> 제약이 없어 오타가 검증에 걸리지 않고 조용히 버려진다. 두 파드가 뜬 것은 <strong>서브차트 기본값이 이미 <code class="highlighter-rouge">enabled: true</code></strong>이기 때문이지 저 두 줄 때문이 아니다</li>
-  <li>values의 <code class="highlighter-rouge">scrape_configs</code>는 차트 기본 잡을 대체하지 않고 뒤에 이어 붙는다. 최종 설정에는 기본 잡 열 개와 <code class="highlighter-rouge">vllm-metrics</code>가 함께 들어간다</li>
-  <li><code class="highlighter-rouge">alertmanager: enabled: false</code>는 파드를 안 띄우는 데서 끝나지 않는다. <code class="highlighter-rouge">prometheus.yml</code>의 <code class="highlighter-rouge">alerting:</code> 블록이 통째로 생략되는데, 그 블록이 alertmanager 파드를 찾으려고 <code class="highlighter-rouge">role: pod</code> 디스커버리를 돌리던 자리다</li>
-  <li><code class="highlighter-rouge">--web.route-prefix=/p8s</code>는 리버스 프록시 쪽 설정이 아니라 <strong>Prometheus 프로세스 자신의 내부 라우팅 프리픽스</strong>다. <code class="highlighter-rouge">/api/v1</code>뿐 아니라 Prometheus 자신의 <code class="highlighter-rouge">/metrics</code>와 <code class="highlighter-rouge">/-/ready</code>까지 <code class="highlighter-rouge">/p8s</code> 아래로 옮겨간다</li>
-  <li>그 결과 차트 기본 <code class="highlighter-rouge">prometheus</code> 잡이 자기 자신을 긁다가 404로 DOWN이 됐다. 자기 메트릭은 <code class="highlighter-rouge">/p8s/metrics</code>로 옮겨갔는데 잡의 <code class="highlighter-rouge">metrics_path</code>는 <code class="highlighter-rouge">/metrics</code>로 남아 있다. 프로브 경로는 차트가 함께 옮겨 주지만 스크레이프 잡은 건드리지 않는다</li>
-  <li><code class="highlighter-rouge">vllm-metrics</code> 잡은 UP이고, PromQL 결과에 붙은 <code class="highlighter-rouge">instance</code>·<code class="highlighter-rouge">job</code> 라벨에 수집 경로가 그대로 남는다. <code class="highlighter-rouge">/metrics</code> 응답의 값과 조회 결과 값이 일치한다</li>
+  <li>이 Lab이 쓰는 것은 kube-prometheus-stack이 아니다. <code class="highlighter-rouge">prometheus-community/prometheus</code> 차트 하나이고 <strong>오퍼레이터가 없어 <code class="highlighter-rouge">ServiceMonitor</code>·<code class="highlighter-rouge">PodMonitor</code> CRD도 없다</strong></li>
+  <li>그래서 vLLM 수집은 values에 직접 적은 <code class="highlighter-rouge">static_configs</code> 잡 하나다. 서비스 디스커버리 없이 서비스 DNS를 풀 뿐이라 Ingress를 거치지 않고 <strong>ClusterIP → 파드</strong>로 간다</li>
+  <li>values의 <code class="highlighter-rouge">nodeExporter:</code>와 <code class="highlighter-rouge">kubeStateMetrics:</code>는 차트가 읽는 키가 아니다. <code class="highlighter-rouge">additionalProperties</code> 제약이 없어 오타가 조용히 버려졌고, 두 파드가 뜬 것은 <strong>서브차트 기본값</strong> 때문이다</li>
+  <li>values의 <code class="highlighter-rouge">scrape_configs</code>는 차트 기본 잡을 대체하지 않고 뒤에 이어 붙는다. 반면 <code class="highlighter-rouge">alertmanager: enabled: false</code>는 <code class="highlighter-rouge">alerting:</code> 블록을 통째로 지운다</li>
+  <li><code class="highlighter-rouge">--web.route-prefix=/p8s</code>는 리버스 프록시 설정이 아니라 <strong>Prometheus 자신의 내부 라우팅 프리픽스</strong>다. <code class="highlighter-rouge">/api/v1</code>뿐 아니라 자신의 <code class="highlighter-rouge">/metrics</code>와 <code class="highlighter-rouge">/-/ready</code>까지 옮겨간다</li>
+  <li>그 결과 기본 <code class="highlighter-rouge">prometheus</code> 잡이 자기 자신을 긁다 404로 DOWN이 됐다. 프로브 경로는 차트가 함께 옮겨 주지만 스크레이프 잡은 건드리지 않기 때문이다</li>
 </ul>
 
 <p><br /></p>
@@ -1403,7 +1400,7 @@ Annotations:  &lt;none&gt;
 
 
 
-  21 분 소요
+  20 분 소요
 
 
       

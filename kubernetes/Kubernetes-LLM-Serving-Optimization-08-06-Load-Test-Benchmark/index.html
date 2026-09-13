@@ -370,21 +370,25 @@
       </li>
     </ul>
   </li>
-  <li><a href="#적용과-관찰-러너-파드와-기본-부하-테스트">적용과 관찰: 러너 파드와 기본 부하 테스트</a>
+  <li><a href="#적용과-관찰-두-도구로-부하-걸기">적용과 관찰: 두 도구로 부하 걸기</a>
     <ul>
-      <li><a href="#네임스페이스와-러너-파드">네임스페이스와 러너 파드</a></li>
-      <li><a href="#환경-변수와-엔드포인트">환경 변수와 엔드포인트</a></li>
-      <li><a href="#패키지-설치">패키지 설치</a></li>
-      <li><a href="#기본-부하-테스트-실행">기본 부하 테스트 실행</a></li>
-      <li><a href="#neuron-top과-grafana-관찰">neuron-top과 Grafana 관찰</a></li>
-    </ul>
-  </li>
-  <li><a href="#적용과-관찰-llmperf-토큰-벤치마크">적용과 관찰: llmperf 토큰 벤치마크</a>
-    <ul>
-      <li><a href="#llmperf-설치">llmperf 설치</a></li>
-      <li><a href="#벤치마크-실행과-요약-지표">벤치마크 실행과 요약 지표</a></li>
-      <li><a href="#ray-object-store-경고">Ray object store 경고</a></li>
-      <li><a href="#부하-이후의-대시보드-상태">부하 이후의 대시보드 상태</a></li>
+      <li><a href="#러너-파드와-기본-부하-테스트">러너 파드와 기본 부하 테스트</a>
+        <ul>
+          <li><a href="#네임스페이스와-러너-파드">네임스페이스와 러너 파드</a></li>
+          <li><a href="#환경-변수와-엔드포인트">환경 변수와 엔드포인트</a></li>
+          <li><a href="#패키지-설치">패키지 설치</a></li>
+          <li><a href="#기본-부하-테스트-실행">기본 부하 테스트 실행</a></li>
+          <li><a href="#neuron-top과-grafana-관찰">neuron-top과 Grafana 관찰</a></li>
+        </ul>
+      </li>
+      <li><a href="#llmperf-토큰-벤치마크">llmperf 토큰 벤치마크</a>
+        <ul>
+          <li><a href="#llmperf-설치">llmperf 설치</a></li>
+          <li><a href="#벤치마크-실행과-요약-지표">벤치마크 실행과 요약 지표</a></li>
+          <li><a href="#ray-object-store-경고">Ray object store 경고</a></li>
+          <li><a href="#부하-이후의-대시보드-상태">부하 이후의 대시보드 상태</a></li>
+        </ul>
+      </li>
     </ul>
   </li>
   <li><a href="#검증-측정값-해석과-대시보드-대조">검증: 측정값 해석과 대시보드 대조</a>
@@ -397,7 +401,7 @@
       <li><a href="#출력-토큰-100만-개당-비용">출력 토큰 100만 개당 비용</a></li>
     </ul>
   </li>
-  <li><a href="#리소스-정리와-남는-자원">리소스 정리와 남는 자원</a>
+  <li><a href="#삭제-범위와-남는-자원">삭제 범위와 남는 자원</a>
     <ul>
       <li><a href="#정리-명령이-지우는-범위">정리 명령이 지우는 범위</a></li>
       <li><a href="#남아-있는-자원">남아 있는 자원</a></li>
@@ -420,17 +424,12 @@
 <h1 id="tldr">TL;DR</h1>
 
 <ul>
-  <li>Lab 5가 클러스터에 만드는 것은 <code class="highlighter-rouge">performance-testing</code> 네임스페이스와 러너 파드 하나뿐이다. 부하는 그 파드 안에서 자작 스크립트 <code class="highlighter-rouge">basic_load_test.py</code>와 llmperf 두 도구로 건다. 워크샵 목표 문구에 적힌 CloudWatch 지표 수집과 확장 행동은 이 편에서 하지 않았다</li>
-  <li><code class="highlighter-rouge">pip install</code>로 깔린 일곱 개 중 스크립트가 실제로 쓰는 것은 <code class="highlighter-rouge">requests</code> 하나다. locust 2.46.0은 깔리지만 locustfile이 없어 한 번도 돌지 않고, PyPI <code class="highlighter-rouge">asyncio</code> 4.0.0은 배포 설명에 “Do not install this package.”라고 적힌 코드 없는 폐기 패키지다. asyncio는 Python 3.4부터 표준 라이브러리다</li>
-  <li><code class="highlighter-rouge">basic_load_test.py</code>가 찍는 <code class="highlighter-rouge">Tokens per Second: 54.1</code>은 처리량이 아니다. 분모가 월클록이 아니라 지연 시간의 <strong>합</strong>이라 동시성을 올려도 이 값은 오르지 않는다. 분자인 “tokens”도 토큰이 아니라 <code class="highlighter-rouge">text.split()</code>으로 센 공백 분할 단어 수이고, P99는 표본 30개에서 인덱스 29를 집으므로 최댓값 그 자체다</li>
-  <li>llmperf는 <code class="highlighter-rouge">--num-concurrent-requests</code> 수만큼 Ray actor를 띄워 <code class="highlighter-rouge">/chat/completions</code>를 스트리밍으로 친다. 자작 스크립트는 레거시 <code class="highlighter-rouge">/completions</code>를 비스트리밍으로 친다. 두 테스트가 vLLM의 서로 다른 엔드포인트를 친다</li>
-  <li>llmperf가 내려받는 파일 네 개는 모델 가중치가 아니라 소스에 하드코딩된 <code class="highlighter-rouge">hf-internal-testing/llama-tokenizer</code>다. <code class="highlighter-rouge">--model</code> 값은 요청 body의 <code class="highlighter-rouge">model</code> 필드로만 실리고 토큰 계산에는 쓰이지 않는다. 여러 모델을 같은 기준으로 재려는 의도가 소스 주석에 적혀 있다</li>
-  <li>1차 실행 결과는 완료 50건 / 에러 0건, TTFT mean 0.254초, E2E mean 1.184초, 요청당 85.14 tok/s, 전체 335.40 tok/s다. 사람이 읽는 요약 출력과 결과 JSON의 값은 소수점 15자리까지 일치한다</li>
-  <li><code class="highlighter-rouge">335.40 / 85.14 = 3.94</code>, <code class="highlighter-rouge">3.37 req/s × 1.184초 = 3.99</code>로 유효 동시성이 4 부근에 잡힌다. 다만 Little’s Law의 L은 <strong>클라이언트 측 in-flight</strong>라 이 숫자만으로 서버 병목을 판정할 수 없다. 러너 파드 CPU 상한이 2코어라는 클라이언트 측 원인도 같은 값을 만든다. 판정에는 <code class="highlighter-rouge">vllm:num_requests_running</code>과 <code class="highlighter-rouge">vllm:num_requests_waiting</code>이 필요하다</li>
-  <li>두 도구의 처리량 수치는 <strong>나란히 놓을 수 없다.</strong> 분모(지연 시간 합 vs 월클록), 분자(단어 수 vs 토큰 수), 워크로드(고정 프롬프트 vs 가우시안 샘플링)가 모두 다르다. 배치 효과를 재려면 llmperf의 동시성만 바꾼 대조가 필요한데 이번에 하지 않았다</li>
-  <li>부하 직후 대시보드 캡처 어디에도 게이지가 값을 물고 있는 장면이 없다. llmperf 부하가 14초인데 vLLM 잡의 스크레이프 간격이 10초라 표본이 한두 개고, 캡처 시점에 게이지는 이미 0으로 돌아와 있다. counter 패널만 계단으로 올라 그 높이에 머문다</li>
-  <li>llmperf가 보낸 50건은 전부 <code class="highlighter-rouge">finished_reason="length"</code>로 끝났다. <code class="highlighter-rouge">stop</code> 계열은 22에서 움직이지 않고 <code class="highlighter-rouge">length</code>만 47에서 101로 오른다. <code class="highlighter-rouge">sum()</code>이 빠진 패널에서 두 칸 중 한 칸만 움직이는 이유가 이것이다</li>
-  <li>디코드 스텝은 초당 약 107회, HBM 소비는 약 235 GB/s로 Trainium 칩 820 GB/s의 약 29%다. 출력 토큰 100만 개당 비용은 인스턴스 요금만 세면 약 <code class="highlighter-rouge">$1.11</code>이다</li>
+  <li>Lab 5가 클러스터에 만드는 것은 <code class="highlighter-rouge">performance-testing</code> 네임스페이스와 러너 파드 하나뿐이다. 부하는 그 파드 안에서 자작 스크립트 <code class="highlighter-rouge">basic_load_test.py</code>와 llmperf 두 도구로 건다</li>
+  <li><code class="highlighter-rouge">basic_load_test.py</code>가 찍는 <code class="highlighter-rouge">Tokens per Second: 54.1</code>은 처리량이 아니다. 분모가 월클록이 아니라 지연 시간의 <strong>합</strong>이라 동시성을 올려도 오르지 않고, 분자도 토큰이 아니라 <code class="highlighter-rouge">text.split()</code>으로 센 단어 수다. P99는 표본 30개에서 인덱스 29를 집으므로 최댓값 그 자체다</li>
+  <li>두 도구는 vLLM의 <strong>서로 다른 엔드포인트</strong>를 친다. llmperf는 Ray actor로 <code class="highlighter-rouge">/chat/completions</code>를 스트리밍으로, 자작 스크립트는 레거시 <code class="highlighter-rouge">/completions</code>를 비스트리밍으로 친다. llmperf가 내려받는 파일도 모델 가중치가 아니라 소스에 하드코딩된 토크나이저다</li>
+  <li>1차 실행은 완료 50건 / 에러 0건, TTFT mean 0.254초, E2E mean 1.184초, 전체 335.40 tok/s다. 유효 동시성은 4 부근에 잡히는데, Little’s Law의 L은 <strong>클라이언트 측 in-flight</strong>라 이 값만으로 서버 병목을 판정할 수 없다</li>
+  <li>두 도구의 처리량 수치는 <strong>나란히 놓을 수 없다.</strong> 분모(지연 시간 합 vs 월클록), 분자(단어 수 vs 토큰 수), 워크로드(고정 프롬프트 vs 가우시안 샘플링)가 모두 다르다</li>
+  <li>부하 직후 대시보드 어디에도 게이지가 값을 물고 있는 장면이 없다. 14초 부하를 10초 간격으로 긁어 표본이 한두 개고 counter만 계단으로 남는다. 디코드 스텝은 초당 약 107회로 HBM 820 GiB/s의 약 27%, 출력 토큰 100만 개당 약 <code class="highlighter-rouge">$1.11</code>이다</li>
 </ul>
 
 <p><br /></p>
@@ -602,7 +601,7 @@ basic_load_test.py
 <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="s">"tokens"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">"choices"</span><span class="p">,</span> <span class="p">[{}])[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">"text"</span><span class="p">,</span> <span class="s">""</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">()),</span>
 </code></pre></div></div>
 
-<p><code class="highlighter-rouge">text.split()</code>은 공백으로 쪼갠 결과이므로 여기서 세는 것은 <strong>단어 수</strong>다. 요청 페이로드의 <code class="highlighter-rouge">max_tokens</code>가 100인데 출력의 <code class="highlighter-rouge">Average Tokens per Response</code>가 50.5로 찍히는 이유가 이것이다. 토큰이 100개 생성돼도 영어 문장에서 토큰은 대체로 단어보다 잘게 쪼개지므로 공백 기준 단어 수는 그 절반쯤이 된다. 모델 토크나이저를 태워 센 값이 아니다.</p>
+<p><code class="highlighter-rouge">text.split()</code>은 공백으로 쪼갠 결과이므로 여기서 세는 것은 <strong>단어 수</strong>다. 요청 페이로드의 <code class="highlighter-rouge">max_tokens</code>가 100인데 출력의 <code class="highlighter-rouge">Average Tokens per Response</code>가 50.5로 찍히는 데에는 이것이 크게 작용한다. 토큰이 100개 생성돼도 영어 문장에서 토큰은 대체로 단어보다 잘게 쪼개지므로 공백 기준 단어 수는 그 절반쯤이 된다. 다만 이것만이 원인은 아니다. 뒤의 <a href="#부하-이후의-대시보드-상태">부하 이후의 대시보드 상태</a>에서 보듯 기본 부하 테스트에서는 <code class="highlighter-rouge">finished_reason="stop"</code> 계열도 함께 올랐으므로, 100토큰을 채우지 못하고 먼저 끝난 응답이 섞여 있다. 어느 쪽이든 이 값이 모델 토크나이저를 태워 센 값이 아니라는 점은 그대로다.</p>
 
 <p><strong>둘. 처리량의 분모가 월클록이 아니다.</strong></p>
 
@@ -613,7 +612,7 @@ basic_load_test.py
 
 <p><code class="highlighter-rouge">sum(latencies)</code>는 요청 30건의 지연 시간을 전부 더한 값이다. 다섯 스레드가 병렬로 돌아 실제 경과 시간이 짧아져도 이 합은 줄지 않는다. 즉 이 수치는 <strong>요청을 하나씩 순차로 돌렸다고 가정했을 때의 환산값</strong>이고, 동시성을 올려도 값이 오르지 않는 구조다.</p>
 
-<p>실제 출력으로 검산하면 맞아떨어진다. 응답당 단어 50.5개 × 30건 = 1515, 평균 지연 0.93초 × 30건 ≈ 28.0초, <code class="highlighter-rouge">1515 / 28.0 = 54.1</code>이다. 뒤에서 볼 1차 실행의 <code class="highlighter-rouge">Tokens per Second: 54.1</code>이 정확히 이 값이다.</p>
+<p>실제 출력으로 검산하면 맞아떨어진다. 응답당 단어 50.5개 × 30건 = 1515, 평균 지연 0.93초 × 30건 = 27.9초다. 출력의 <code class="highlighter-rouge">Total Time</code>이 28.0초이므로 <code class="highlighter-rouge">1515 / 28.0 = 54.1</code>이 된다. 0.93은 소수 둘째 자리까지 반올림된 표시값이라 27.9와 28.0의 차이가 여기서 생긴다. 뒤에서 볼 1차 실행의 <code class="highlighter-rouge">Tokens per Second: 54.1</code>이 정확히 이 값이다.</p>
 
 <p><strong>셋. 표본 30개의 P99는 최댓값이다.</strong></p>
 
@@ -621,7 +620,7 @@ basic_load_test.py
 <span class="k">print</span><span class="p">(</span><span class="n">f</span><span class="s">"99th Percentile: {sorted(latencies)[int(len(latencies)*0.99)]:.2f}s"</span><span class="p">)</span>
 </code></pre></div></div>
 
-<p><code class="highlighter-rouge">int(30 * 0.99)</code>은 29이고, 30개짜리 리스트의 마지막 인덱스도 29다. 보간도 하지 않으므로 P99는 정렬된 지연 시간의 마지막 원소, 즉 최댓값 그 자체가 된다. 실행 결과에서 P99와 Max가 1차는 둘 다 <code class="highlighter-rouge">1.66</code>, 2차는 둘 다 <code class="highlighter-rouge">1.91</code>로 같은 것이 그 결과다. 표본이 100개 미만이면 이 식의 P99는 항상 최댓값이다.</p>
+<p><code class="highlighter-rouge">int(30 * 0.99)</code>은 29이고, 30개짜리 리스트의 마지막 인덱스도 29다. 보간도 하지 않으므로 P99는 정렬된 지연 시간의 마지막 원소, 즉 최댓값 그 자체가 된다. 실행 결과에서 P99와 Max가 1차는 둘 다 <code class="highlighter-rouge">1.66</code>, 2차는 둘 다 <code class="highlighter-rouge">1.91</code>로 같은 것이 그 결과다. 표본이 100개 이하면 이 식의 P99는 항상 최댓값이다. <code class="highlighter-rouge">int(n × 0.99)</code>가 <code class="highlighter-rouge">n - 1</code>과 같아지는 조건이 <code class="highlighter-rouge">n ≤ 100</code>이다.</p>
 
 <details>
   <summary><b>basic_load_test.py 전문</b></summary>
@@ -789,7 +788,9 @@ basic_load_test.py
 <ul>
   <li><code class="highlighter-rouge">--num-concurrent-requests N</code>만큼 파이썬 스레드를 띄운다</li>
   <li>각 스레드가 <code class="highlighter-rouge">@ray.remote</code>로 선언된 <code class="highlighter-rouge">OpenAIChatCompletionsClient</code> actor를 하나씩 만든다</li>
-  <li>그 actor들을 <code class="highlighter-rouge">ray.util.ActorPool</code>에 넣고, 하나가 끝나면 다음 요청을 채워 넣는 방식으로 굴린다</li>
+  <li>정확히는 actor 하나만 담은 <code class="highlighter-rouge">ray.util.ActorPool</code>을 스레드마다 따로 만든다. actor 여러 개를 공유 풀에 넣는 구조가 아니다</li>
+  <li>그래서 스레드 하나가 물고 있는 요청은 항상 한 건이고, 그 한 건이 끝나야 다음 건이 들어간다. 전체 in-flight가 <code class="highlighter-rouge">--num-concurrent-requests</code>로 고정되는 것이 이 구조의 결과다</li>
+  <li>결과를 거둬 가는 <code class="highlighter-rouge">get_next_ready()</code>는 기본이 논블로킹이라, 응답이 오지 않은 동안에도 스레드가 빈 결과를 받아 루프를 계속 돈다. 대기하는 동안 CPU를 쓴다는 뜻이다</li>
   <li>actor가 실제 HTTP 호출을 하는데, 이때 <code class="highlighter-rouge">"stream": true</code>를 붙여 SSE 청크를 하나씩 받으며 첫 청크 도착 시각으로 TTFT를 잰다</li>
 </ul>
 
@@ -812,7 +813,7 @@ basic_load_test.py
 
 <p>흉내내지 못하는 것도 하나 있다. 이 도구는 도착 과정(arrival process)이 없는 <strong>폐루프(closed-loop)</strong> 부하 생성기다. in-flight 요청 수가 항상 <code class="highlighter-rouge">--num-concurrent-requests</code>로 고정되므로, 요청 하나가 끝나야 다음 하나가 들어간다. 서버가 느려지면 부하도 따라 줄어든다는 뜻이다. 실제 트래픽은 개루프(open-loop)에 가까워서 서버가 느려져도 요청이 계속 도착하고 큐가 쌓인다. 폐루프 측정에서는 그 큐 폭증이 재현되지 않는다.</p>
 
-<p>프롬프트 집합 자체는 매번 같다. 소스에 <code class="highlighter-rouge">random.seed(11111)</code>이 하드코딩돼 있어 같은 플래그로 돌리면 같은 길이 수열이 나온다. 이번에 두 번 돌린 결과가 그 증거다. 두 실행의 <code class="highlighter-rouge">number_input_tokens</code> 백분위가 소수점 끝까지 일치한다 — p90 <code class="highlighter-rouge">326.7</code>, p95 <code class="highlighter-rouge">353.44999999999993</code>, p99 <code class="highlighter-rouge">406.72999999999996</code>에 min <code class="highlighter-rouge">131</code>, max <code class="highlighter-rouge">418</code>까지 같다. 두 실행의 평균이 259.78과 260.52로 조금 다른 것은 실제 토크나이즈된 길이가 목표 길이와 정확히 같지는 않기 때문이다.</p>
+<p>프롬프트 집합 자체는 매번 같다. 소스에 <code class="highlighter-rouge">random.seed(11111)</code>이 하드코딩돼 있어 같은 플래그로 돌리면 같은 길이 수열이 나온다. 이번에 두 번 돌린 결과가 그 증거다. 두 실행의 <code class="highlighter-rouge">number_input_tokens</code> 백분위가 소수점 끝까지 일치한다 — p90 <code class="highlighter-rouge">326.7</code>, p95 <code class="highlighter-rouge">353.44999999999993</code>, p99 <code class="highlighter-rouge">406.72999999999996</code>에 min <code class="highlighter-rouge">131</code>, max <code class="highlighter-rouge">418</code>까지 같다. 두 실행의 평균이 259.78과 260.52로 조금 다른 것은 토크나이즈 오차 때문이 아니다. <code class="highlighter-rouge">number_input_tokens</code>는 완성된 프롬프트를 다시 센 값이 아니라 <code class="highlighter-rouge">sample_random_positive_int</code>가 뽑은 <strong>목표 정수 그 자체</strong>다. 소스에서 <code class="highlighter-rouge">randomly_sample_sonnet_lines_prompt</code>가 프롬프트와 뽑은 정수를 함께 돌려주고, 클라이언트가 그 정수를 <code class="highlighter-rouge">number_input_tokens</code>에 그대로 싣는다. min이 <code class="highlighter-rouge">131</code>, max가 <code class="highlighter-rouge">418</code>로 정수인 것도 그래서다. 그렇다면 남는 설명은 어떤 프롬프트가 실제로 쓰였는지가 실행마다 달랐다는 쪽이다. 각 스레드는 <code class="highlighter-rouge">request_index</code>를 동시성 수만큼 건너뛰며 도는데, 50건을 채우는 순간 나머지 스레드의 진행이 잘리므로 스레드별 완료 건수가 매번 같지 않다. 다만 2차 실행의 개별 응답을 남기지 않아 이 설명을 실측으로 확인하지는 못했다.</p>
 
 <h3 id="토크나이저-고정과-모델-미적재">토크나이저 고정과 모델 미적재</h3>
 
@@ -833,9 +834,11 @@ basic_load_test.py
 
 <p><br /></p>
 
-<h1 id="적용과-관찰-러너-파드와-기본-부하-테스트">적용과 관찰: 러너 파드와 기본 부하 테스트</h1>
+<h1 id="적용과-관찰-두-도구로-부하-걸기">적용과 관찰: 두 도구로 부하 걸기</h1>
 
-<h2 id="네임스페이스와-러너-파드">네임스페이스와 러너 파드</h2>
+<h2 id="러너-파드와-기본-부하-테스트">러너 파드와 기본 부하 테스트</h2>
+
+<h3 id="네임스페이스와-러너-파드">네임스페이스와 러너 파드</h3>
 
 <p>부하를 거는 주체는 클러스터 안의 파드 하나다. 배스천에서 직접 쏘지 않고 파드를 두는 것은 부하 생성기와 서버 사이의 네트워크 경로를 클러스터 안으로 넣기 위해서인데, 이번 구성에서는 그 파드가 다시 외부 ELB 주소를 치므로 경로가 클러스터 밖으로 한 번 나갔다 돌아온다.</p>
 
@@ -883,7 +886,7 @@ performance-test-runner   1/1     Running   0          37s
 
 <p><code class="highlighter-rouge">emptyDir</code>도 마찬가지다. llmperf 클론과 벤치마크 결과 JSON이 전부 여기 들어가므로, 파드를 지우면 결과 파일도 같이 없어진다.</p>
 
-<h2 id="환경-변수와-엔드포인트">환경 변수와 엔드포인트</h2>
+<h3 id="환경-변수와-엔드포인트">환경 변수와 엔드포인트</h3>
 
 <p>워크샵은 시작에서 변수 여섯 개를 export한다.</p>
 
@@ -902,7 +905,7 @@ vLLM Endpoint: http://&lt;elb-id&gt;.us-west-2.elb.amazonaws.com:8080/v1
 
 <p>주소도 확인해 둘 필요가 있다. <code class="highlighter-rouge">VLLM_URL</code>이 가리키는 것은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/">8.3.2편</a>에서 만든 <code class="highlighter-rouge">vllm-service</code>의 CLB이고 포트가 8080이다. <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/">8.4편</a>에서 포트 없는 접근 경로를 만들어 뒀지만 이번 부하는 그쪽을 쓰지 않는다. 즉 부하 트래픽은 ingress-nginx 컨트롤러를 거치지 않고 <code class="highlighter-rouge">vllm-service</code> CLB로 직행한다.</p>
 
-<h2 id="패키지-설치">패키지 설치</h2>
+<h3 id="패키지-설치">패키지 설치</h3>
 
 <p>파드 안에서 <code class="highlighter-rouge">pip install</code>을 돌린다. 출력에서 결론에 해당하는 부분만 보면 이렇다.</p>
 
@@ -1004,7 +1007,7 @@ ubuntu@ip-10-0-1-100:~/workshop<span class="nv">$ </span>kubectl <span class="nb
 basic_load_test.py
 </code></pre></div></div>
 
-<h2 id="기본-부하-테스트-실행">기본 부하 테스트 실행</h2>
+<h3 id="기본-부하-테스트-실행">기본 부하 테스트 실행</h3>
 
 <p>요청 30건, 워커 5개로 돌린다.</p>
 
@@ -1095,7 +1098,7 @@ Tokens per Second: 54.1
 
 <p>P99와 Max가 1차 <code class="highlighter-rouge">1.66</code>, 2차 <code class="highlighter-rouge">1.91</code>로 각각 같은 것도 앞에서 본 인덱스 계산 그대로다.</p>
 
-<h2 id="neuron-top과-grafana-관찰">neuron-top과 Grafana 관찰</h2>
+<h3 id="neuron-top과-grafana-관찰">neuron-top과 Grafana 관찰</h3>
 
 <p>부하가 도는 동안 노드에서 <code class="highlighter-rouge">neuron-top</code>을 띄우면 NeuronCore 사용률이 움직인다.</p>
 
@@ -1125,11 +1128,9 @@ Tokens per Second: 54.1
 
 <p>화면 위쪽 네 패널 중 두 번째와 세 번째는 캡처에 제목이 보이지 않는다. 이 둘을 <code class="highlighter-rouge">Running Requests</code>와 <code class="highlighter-rouge">Waiting Requests</code>로 지목한 근거는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/#패널과-쿼리">8.5.2편의 패널과 쿼리</a>에서 정리한 대시보드 JSON의 <code class="highlighter-rouge">gridPos</code> 배치다. 위쪽 행이 <code class="highlighter-rouge">x: 0</code> Total Successful Requests, <code class="highlighter-rouge">x: 6</code> Running Requests, <code class="highlighter-rouge">x: 12</code> Waiting Requests, <code class="highlighter-rouge">x: 18</code> KV Cache Usage 순이고, 맨 오른쪽 게이지가 KV Cache Usage인 것이 화면과 맞는다. 첫 패널에 <code class="highlighter-rouge">Total Requests</code>라는 글자가 두 번 찍힌 것도 그 JSON의 <code class="highlighter-rouge">legendFormat</code> 값이 <code class="highlighter-rouge">Total Requests</code>이기 때문이다.</p>
 
-<p><br /></p>
+<h2 id="llmperf-토큰-벤치마크">llmperf 토큰 벤치마크</h2>
 
-<h1 id="적용과-관찰-llmperf-토큰-벤치마크">적용과 관찰: llmperf 토큰 벤치마크</h1>
-
-<h2 id="llmperf-설치">llmperf 설치</h2>
+<h3 id="llmperf-설치">llmperf 설치</h3>
 
 <p>같은 파드 안에 git을 깔고 레포를 클론한 뒤 editable 모드로 설치한다.</p>
 
@@ -1193,7 +1194,7 @@ Successfully installed LLMPerf-0.1.0 annotated-doc-0.0.5 annotated-types-0.8.0 a
 
 </details>
 
-<h2 id="벤치마크-실행과-요약-지표">벤치마크 실행과 요약 지표</h2>
+<h3 id="벤치마크-실행과-요약-지표">벤치마크 실행과 요약 지표</h3>
 
 <p>실행 명령은 이렇다.</p>
 
@@ -1393,7 +1394,7 @@ Completed Requests Per Minute: 202.3737797988183
 
 <p>같은 설정으로 한 번 더 돌리면 <code class="highlighter-rouge">Overall Output Throughput: 340.6702900640951</code>이 나온다. 1차 대비 1.6% 차이라 실행 간 편차 범위다. 플래그를 바꾼 대조가 아니므로 이 편에서는 1차를 주 사례로 쓴다.</p>
 
-<h2 id="ray-object-store-경고">Ray object store 경고</h2>
+<h3 id="ray-object-store-경고">Ray object store 경고</h3>
 
 <p>실행 로그 중간에 붙은 경고 한 줄은 따로 읽어 둘 만하다.</p>
 
@@ -1410,7 +1411,7 @@ Completed Requests Per Minute: 202.3737797988183
 
 <p>경고가 제안하는 해결책도 이 환경에는 그대로 들어맞지 않는다. <code class="highlighter-rouge">docker run --shm-size=1.18gb</code>는 도커 런타임의 플래그이고, 쿠버네티스 파드에는 그런 필드가 없다. 파드에서 같은 효과를 내려면 <code class="highlighter-rouge">emptyDir</code>에 <code class="highlighter-rouge">medium: Memory</code>를 주고 <code class="highlighter-rouge">/dev/shm</code>에 마운트하는 방식이 알려져 있는데, 이번에 적용해 보지 않았으므로 <strong>[미검증]</strong>이다.</p>
 
-<h2 id="부하-이후의-대시보드-상태">부하 이후의 대시보드 상태</h2>
+<h3 id="부하-이후의-대시보드-상태">부하 이후의 대시보드 상태</h3>
 
 <p>Prometheus UI에서 <code class="highlighter-rouge">vllm:request_success_total</code>을 직접 조회하면 두 번의 부하가 계단 두 개로 남아 있다.</p>
 
@@ -1432,7 +1433,7 @@ Completed Requests Per Minute: 202.3737797988183
 
 <p><code class="highlighter-rouge">Total Successful Requests</code> stat 패널의 두 칸이 101과 22인 것도 Prometheus 그래프의 두 계열 최종값 그대로다. <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/#패널과-쿼리">8.5.2편의 패널과 쿼리</a>에서 짚은 대로 쿼리에 <code class="highlighter-rouge">sum()</code>이 없어 <code class="highlighter-rouge">finished_reason</code> 시리즈가 따로 표시되는데, 그 덕에 두 칸 중 한 칸만 움직이는 장면이 그대로 보인다. <code class="highlighter-rouge">sum()</code>이 붙어 있었다면 123 하나로 합쳐져 <code class="highlighter-rouge">length</code>만 늘었다는 사실이 화면에서 사라졌을 것이다.</p>
 
-<p>여기서도 게이지 셋은 0이다. 부하가 방금 끝난 직후인데 Running도 Waiting도 0이고 KV Cache Usage도 0%다.</p>
+<p>여기서도 게이지 셋은 0이다. 부하가 방금 끝난 직후인데 Running도 Waiting도 0이고 KV Cache Usage도 0%다. 이 중 <code class="highlighter-rouge">KV Cache Usage</code>는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/">8.5.2편</a>에서 정리한 대로 Neuron에서 동시 시퀀스 슬롯 네 칸 중 몇 칸이 찼는지를 재므로 0·25·50·75·100%로만 움직인다. 이 패널이 가질 수 있는 값 자체가 다섯 개다.</p>
 
 <p>두 대시보드 캡처를 나란히 볼 때 주의할 점이 하나 있다. 조회 창이 다르다 — 기본 부하 테스트 쪽은 <code class="highlighter-rouge">02:19</code>부터 <code class="highlighter-rouge">02:33</code>까지 약 14분 창이고, llmperf 쪽은 <code class="highlighter-rouge">Last 3 minutes</code>다. llmperf 쪽 그래프의 기울기가 완만해 보이는 것은 부하가 느슨해서가 아니라 가로축이 다섯 배 가까이 확대돼 있기 때문이다.</p>
 
@@ -1609,13 +1610,13 @@ Completed Requests Per Minute: 202.3737797988183
 
 <p>대시보드에서 눈에 걸린 것이 셋이었다. 게이지가 0이고, counter 그래프가 안 내려오고, stat 패널이 두 칸이다. 셋 다 같은 자리에서 설명된다.</p>
 
-<p><strong>부하가 스크레이프 간격에 비해 짧다.</strong> <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/">8.5.1편</a>에서 vLLM 잡의 <code class="highlighter-rouge">scrape_interval</code>을 전역 15초를 덮어 10초로 내려 뒀는데, llmperf 부하는 진행바에 찍힌 대로 14초다. 10초 간격으로 긁으면 부하 구간에 걸리는 표본이 <strong>한두 개</strong>다. 기본 부하 테스트는 더 짧다. 월클록이 출력에 없어 정확한 값은 알 수 없지만, 지연 시간 총합 28.0초를 유효 동시성 4~5로 나누면 6~7초 정도로 추정된다(<strong>[미검증]</strong> — 스크립트가 경과 시간을 찍지 않아 확인할 수단이 없다). 그렇다면 표본이 한 개 잡힐까 말까다.</p>
+<p><strong>부하가 스크레이프 간격에 비해 짧다.</strong> <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/">8.5.1편</a>에서 vLLM 잡의 <code class="highlighter-rouge">scrape_interval</code>을 전역 15초를 덮어 10초로 내려 뒀는데, llmperf 부하는 진행바에 찍힌 대로 14초다. 10초 간격으로 긁으면 부하 구간에 걸리는 표본이 <strong>한두 개</strong>다. 기본 부하 테스트는 더 짧다. 월클록이 출력에 없어 정확한 값은 알 수 없지만, 지연 시간 총합 28.0초를 유효 동시성 4~5로 나누면 5.6~7초 정도로 추정된다(<strong>[미검증]</strong> — 스크립트가 경과 시간을 찍지 않아 확인할 수단이 없다). 그렇다면 표본이 한 개 잡힐까 말까다.</p>
 
 <p><strong>게이지는 캡처 시점에 이미 0으로 돌아와 있다.</strong> <code class="highlighter-rouge">vllm:num_requests_running</code>과 <code class="highlighter-rouge">vllm:num_requests_waiting</code>, <code class="highlighter-rouge">vllm:gpu_cache_usage_perc</code>는 스크레이프 순간의 상태를 그대로 찍는 순간값이다. 부하가 끝나면 즉시 0이 되고, stat 패널은 창의 마지막 값을 보여주므로 0이 나온다. 두 패널의 스파크라인에 남은 뾰족한 자국이 부하 구간에 잡힌 그 한두 개 표본이다. 짧은 부하를 10초 간격으로 긁으면 이렇게 보인다. 부하를 실제로 걸면 이 패널들이 움직이는지 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/">8.5.2편</a>이 다음 편으로 넘겨 둔 물음의 답이 이것이다. 움직이기는 하는데, 이 해상도에서는 스파이크 한 점으로만 남는다.</p>
 
 <p><strong>counter는 내려오지 않는 것이 정상이다.</strong> <code class="highlighter-rouge">vllm:request_success_total</code>과 토큰 계열은 단조 증가하는 누적값이라 한 번 오르면 그 높이에 머문다. <code class="highlighter-rouge">Request Success Over Time</code>과 <code class="highlighter-rouge">Token Generation Over Time</code>이 계단 모양으로 올라 평평해진 것은 부하가 계속되고 있어서가 아니라 counter를 원시값 그대로 그렸기 때문이다. 변화율을 보려면 <code class="highlighter-rouge">rate()</code>를 씌워야 한다. 8.5.2편이 “누적값도 요청 9건분이라 15분 창에서 평평하다”고 적은 것과 같은 성질의 반대편이다. 그때는 올라간 적이 없어서 평평했고, 지금은 올라간 뒤라 평평하다.</p>
 
-<p><strong><code class="highlighter-rouge">sum()</code>이 없어 두 칸으로 나뉜다.</strong> <code class="highlighter-rouge">vllm:request_success_total</code>은 <code class="highlighter-rouge">finished_reason</code> 라벨로 시리즈가 둘인데, 8.5.2편의 대시보드 JSON은 stat 패널과 시계열 패널 <strong>양쪽 다</strong> <code class="highlighter-rouge">sum()</code>을 걸지 않았다. 이번에는 그 덕에 llmperf 요청이 전부 <code class="highlighter-rouge">length</code>로 끝났다는 사실이 화면에 그대로 드러났지만, 총 성공 건수를 한 숫자로 읽으려던 패널로서는 의도한 동작이 아니다.</p>
+<p><strong><code class="highlighter-rouge">sum()</code>이 없어 두 칸으로 나뉜다.</strong> <code class="highlighter-rouge">vllm:request_success_total</code>은 <code class="highlighter-rouge">finished_reason</code> 라벨로 시리즈가 둘인데, <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/#패널과-쿼리">8.5.2편의 패널과 쿼리</a>의 대시보드 JSON은 stat 패널과 시계열 패널 <strong>양쪽 다</strong> <code class="highlighter-rouge">sum()</code>을 걸지 않았다. 이번에는 그 덕에 llmperf 요청이 전부 <code class="highlighter-rouge">length</code>로 끝났다는 사실이 화면에 그대로 드러났지만, 총 성공 건수를 한 숫자로 읽으려던 패널로서는 의도한 동작이 아니다.</p>
 
 <p>이 창 문제를 피하려면 부하를 스크레이프 간격보다 충분히 길게 끌거나 스크레이프 간격을 내려야 하는데, 어느 쪽도 이번에 시도하지 않았다.</p>
 
@@ -1649,12 +1650,12 @@ Completed Requests Per Minute: 202.3737797988183
 <p>디코딩은 스텝마다 가중치 전체를 HBM에서 한 번 읽는 메모리 대역폭 바운드 연산이다. TinyLlama 1.1B를 BF16으로 올리면 약 2.2 GB이므로 소비 대역폭은 이렇게 추정된다.</p>
 
 <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>2.2 GB × 107 steps/s = 약 235 GB/s
-Trainium 칩 HBM 대역폭 820 GB/s 대비 약 29%
+Trainium 칩 HBM 대역폭 820 GiB/s (= 약 880 GB/s) 대비 약 27%
 </code></pre></div></div>
 
-<p>대역폭이 70% 넘게 남아 있다는 뜻이다. 디코드가 대역폭 바운드인데 29%만 쓰고 있다면 배치를 키워 스텝 한 번에 처리하는 시퀀스 수를 늘릴 여지가 있다. 작은 모델에서 이런 그림이 나오는 이유는 가중치 스트리밍보다 스텝당 고정 오버헤드가 커서다. <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">8.3.1편</a>에서 확인한 대로 <code class="highlighter-rouge">enable_bucketing: false</code>에 <code class="highlighter-rouge">seq_len: 1024</code>라 어텐션이 항상 1024 길이로 계산되고, 커널 디스패치 비용도 매 스텝 붙는다.</p>
+<p>대역폭이 70% 넘게 남아 있다는 뜻이다. 디코드는 원리상 대역폭에 먼저 걸리는 연산인데 실측 소비가 27%에 그쳤다는 것은, 이 구성에서 스텝 속도를 묶고 있는 것이 대역폭이 아니라는 뜻이 된다. 그렇다면 스텝 한 번에 처리하는 시퀀스 수를 늘려 같은 대역폭으로 더 많은 토큰을 낼 여지가 있다. 작은 모델에서 이런 그림이 나오는 이유는 가중치 스트리밍보다 스텝당 고정 오버헤드가 커서다. <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">8.3.1편</a>에서 확인한 대로 <code class="highlighter-rouge">enable_bucketing: false</code>에 <code class="highlighter-rouge">seq_len: 1024</code>라 어텐션이 항상 1024 길이로 계산되고, 커널 디스패치 비용도 매 스텝 붙는다.</p>
 
-<p>다만 이것도 클라이언트 측 값으로 서버 내부를 추정한 것이다. 서버 측 정답에 해당하는 것은 vLLM이 이미 내보내고 있는 <code class="highlighter-rouge">vllm:time_per_output_token_seconds</code> 히스토그램이다. 이 값은 프리필을 빼고 디코드 스텝만 재므로, 위 계산이 맞는지 직접 대조할 수 있다. 8.5.2편의 대시보드에 이 패널이 없어 이번에는 조회하지 않았다.</p>
+<p>다만 이것도 클라이언트 측 값으로 서버 내부를 추정한 것이다. 서버 측 정답에 해당하는 것은 vLLM이 이미 내보내고 있는 <code class="highlighter-rouge">vllm:time_per_output_token_seconds</code> 히스토그램이다. 이 값은 프리필을 빼고 디코드 스텝만 재므로, 위 계산이 맞는지 직접 대조할 수 있다. <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/#패널과-쿼리">8.5.2편의 패널과 쿼리</a>에 이 패널이 없어 이번에는 조회하지 않았다.</p>
 
 <h2 id="출력-토큰-100만-개당-비용">출력 토큰 100만 개당 비용</h2>
 
@@ -1665,6 +1666,8 @@ trn1.2xlarge 온디맨드 (us-west-2) = $1.34/hr
 100만 토큰당      = 1.34 / 1.20744 = 약 $1.11 / 1M output tokens
 </code></pre></div></div>
 
+<p>단가는 2026년 9월 us-west-2 온디맨드(Linux, 공유 테넌시) 기준 <code class="highlighter-rouge">$1.34375/hr</code>을 반올림한 값이다. 리전과 시점에 따라 바뀌므로 다시 계산할 때는 조회 시점의 값을 쓰는 편이 맞다.</p>
+
 <p>이 숫자에 붙는 한정이 둘이다.</p>
 
 <p>첫째, <strong>인스턴스 요금만 센 값이다.</strong> EKS 컨트롤 플레인, CLB 두 대, S3 모델 캐시, 워크샵 배스천 인스턴스가 전부 빠져 있다. 실제로 무엇이 계속 과금되는지는 <a href="#남아-있는-자원">남아 있는 자원</a>에 정리한다.</p>
@@ -1673,7 +1676,7 @@ trn1.2xlarge 온디맨드 (us-west-2) = $1.34/hr
 
 <p><br /></p>
 
-<h1 id="리소스-정리와-남는-자원">리소스 정리와 남는 자원</h1>
+<h1 id="삭제-범위와-남는-자원">삭제 범위와 남는 자원</h1>
 
 <h2 id="정리-명령이-지우는-범위">정리 명령이 지우는 범위</h2>
 
@@ -1736,8 +1739,8 @@ namespace <span class="s2">"performance-testing"</span> deleted
     </tr>
     <tr>
       <td>Prometheus / Grafana 시계열과 대시보드</td>
-      <td>파드와 함께 사라진다</td>
-      <td>PV를 비활성으로 설치해 EBS 볼륨이 따로 없다</td>
+      <td>남는다 (파드가 교체되면 사라진다)</td>
+      <td>이 정리 명령의 대상이 아니다. PV를 비활성으로 설치해 EBS 볼륨이 따로 없다</td>
     </tr>
   </tbody>
 </table>
@@ -1836,6 +1839,8 @@ namespace <span class="s2">"performance-testing"</span> deleted
 <p>8.5.2편이 다음 편으로 넘겨 둔 물음은 부하를 걸면 이 패널들이 실제로 움직이는가였다. 움직였다. 다만 확인된 방식이 예상과 달랐다. 게이지는 부하가 끝난 뒤의 캡처에 0으로 찍혔고, 부하의 흔적은 스파크라인의 스파이크와 counter 계단으로만 남았다. 14초짜리 부하를 10초 간격으로 긁는 조합에서는 이것이 정상 동작이다. 관측 스택을 세운 것과 그 스택으로 무언가를 판정할 수 있는 것 사이에 간격이 있고, 이번 데이터에서는 그 간격이 유효 동시성 3.94를 서버 병목으로 귀속시킬 수 없다는 형태로 드러났다.</p>
 
 <p>수치 해석에서 얻은 것은 도구가 찍는 숫자의 이름과 그 산출식을 따로 봐야 한다는 쪽이다. <code class="highlighter-rouge">Tokens per Second</code>가 처리량이 아니고, <code class="highlighter-rouge">Average Tokens per Response</code>가 토큰 수가 아니고, P99가 백분위가 아니고, <code class="highlighter-rouge">inter_token_latency_s</code>가 디코드 스텝 시간이 아니었다. 네 경우 모두 산출식을 읽고서야 무엇을 재고 있는지 알 수 있었다.</p>
+
+<p>남은 Lab은 CPU 사용률 기반 HPA다. 부하를 거는 쪽까지는 이 편에서 확인했고, 그 부하에 파드 수가 반응하는지는 이후 Lab이다. 이번 데이터로 판정하지 못한 <code class="highlighter-rouge">vllm:num_requests_running</code>과 <code class="highlighter-rouge">vllm:num_requests_waiting</code>도 부하 지속 시간을 스크레이프 간격보다 길게 잡아 다시 볼 대상이다.</p>
 
 <p><br /></p>
 
@@ -2044,7 +2049,7 @@ namespace <span class="s2">"performance-testing"</span> deleted
 
 
 
-  27 분 소요
+  26 분 소요
 
 
       
@@ -2089,7 +2094,7 @@ namespace <span class="s2">"performance-testing"</span> deleted
 
 
 
-  21 분 소요
+  20 분 소요
 
 
       
@@ -2134,7 +2139,7 @@ namespace <span class="s2">"performance-testing"</span> deleted
 
 
 
-  21 분 소요
+  20 분 소요
 
 
       

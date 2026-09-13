@@ -332,7 +332,7 @@
 
 
 
-  21 분 소요
+  20 분 소요
 
 
             
@@ -408,14 +408,12 @@
 <h1 id="tldr">TL;DR</h1>
 
 <ul>
-  <li>ingress-nginx 차트를 값 오버라이드 없이 설치하면 컨트롤러 Service가 <code class="highlighter-rouge">type: LoadBalancer</code>로 만들어진다. 매니페스트에 적은 적이 없는데 CLB가 하나 더 생긴 것은 <strong>차트 기본값</strong> <code class="highlighter-rouge">controller.service.type: LoadBalancer</code> 때문이다. Ingress 오브젝트가 만든 것이 아니다</li>
-  <li>이 시점에 CLB가 <strong>두 개</strong>다. Lab 2의 <code class="highlighter-rouge">vllm-service</code> CLB(<code class="highlighter-rouge">TCP:8080 → 32233</code>)와 이번 <code class="highlighter-rouge">ingress-nginx-controller</code> CLB(<code class="highlighter-rouge">TCP:80 → 31875</code>, <code class="highlighter-rouge">TCP:443 → 32278</code>)가 같은 워커 노드 한 대를 서로 다른 NodePort로 가리킨다</li>
-  <li>리스너가 80/443인 것은 Ingress에 적은 포트와 무관하다. 차트의 <code class="highlighter-rouge">controller.service.ports.http</code>와 <code class="highlighter-rouge">.https</code> 기본값이 각각 80과 443이다. NodePort 두 개는 <code class="highlighter-rouge">nodePorts</code> 기본값이 빈 문자열이라 쿠버네티스가 자동 할당했다</li>
-  <li>Ingress 규칙 한 장은 “<code class="highlighter-rouge">/</code> 이하 전부를 <code class="highlighter-rouge">vllm-service:8080</code>으로”가 맞다. 다만 셋이 함께 붙는다 — <code class="highlighter-rouge">host</code>를 생략해 Host 헤더를 가리지 않고, <code class="highlighter-rouge">pathType: Prefix</code> + <code class="highlighter-rouge">path: /</code>라 모든 경로에 매칭되며, <code class="highlighter-rouge">spec.defaultBackend</code>를 선언하지 않아 매칭 없는 요청은 컨트롤러의 자체 404로 가게 되어 있다. 다만 <code class="highlighter-rouge">/</code> 규칙이 전부를 가져가므로 실제로 그리 떨어지는 요청은 없다</li>
-  <li><code class="highlighter-rouge">nginx.ingress.kubernetes.io/rewrite-target: /</code>는 이 구성에서 <strong>아무 일도 하지 않는다.</strong> 컨트롤러 소스는 <code class="highlighter-rouge">path</code>와 rewrite 타깃 문자열이 같으면 <code class="highlighter-rouge">rewrite</code> 지시어를 만들지 않고, 정규식 location 수식자도 붙이지 않는다. 지운 것과 같은 설정이 나온다</li>
-  <li>Ingress 오브젝트 자체는 AWS에 아무것도 만들지 않는다. 실제 진입점을 만든 것은 <strong>컨트롤러의 Service</strong>이고, Ingress는 그 컨트롤러가 읽는 라우팅 규칙 문서다</li>
-  <li>URL에서 <code class="highlighter-rouge">:8080</code>이 사라진 것은 홉이 하나 늘어난 결과다. 클라이언트 → CLB:80 → 노드:31875 → 컨트롤러 파드:80 → vLLM 파드:8080이고, 마지막 구간은 Service ClusterIP를 거치지 않고 <strong>엔드포인트(파드 IP:8080)로 직접</strong> 간다</li>
-  <li><code class="highlighter-rouge">https://</code>로 붙으면 오류가 <code class="highlighter-rouge">ERR_SSL_PROTOCOL_ERROR</code>에서 <strong><code class="highlighter-rouge">ERR_CERT_AUTHORITY_INVALID</code>로 바뀐다.</strong> 443 리스너가 생겨 TLS 핸드셰이크는 성공했고, ingress-nginx가 기본 제공하는 자체 서명 인증서(<code class="highlighter-rouge">CN=Kubernetes Ingress Controller Fake Certificate</code>)를 브라우저가 신뢰하지 않은 것이다. TLS 종료 지점은 생겼지만 신뢰되는 인증서는 여전히 없다</li>
+  <li>ingress-nginx 차트를 값 오버라이드 없이 설치하면 컨트롤러 Service가 <code class="highlighter-rouge">type: LoadBalancer</code>로 만들어져 <strong>CLB가 하나 더 생긴다.</strong> 차트 기본값 때문이지 Ingress 오브젝트가 만든 것이 아니다</li>
+  <li>Ingress는 AWS에 아무것도 만들지 않는다. 실제 진입점을 만든 것은 <strong>컨트롤러의 Service</strong>이고, Ingress는 그 컨트롤러가 읽는 라우팅 규칙 문서다</li>
+  <li>이 시점에 CLB가 <strong>두 개</strong>다. Lab 2의 <code class="highlighter-rouge">vllm-service</code>(<code class="highlighter-rouge">TCP:8080 → 32233</code>)와 이번 컨트롤러(<code class="highlighter-rouge">TCP:80 → 31875</code>, <code class="highlighter-rouge">TCP:443 → 32278</code>)가 같은 워커 노드를 다른 NodePort로 가리킨다</li>
+  <li>Ingress 규칙 한 장은 <code class="highlighter-rouge">host</code> 생략 + <code class="highlighter-rouge">pathType: Prefix</code> + <code class="highlighter-rouge">path: /</code>라 모든 경로를 <code class="highlighter-rouge">vllm-service:8080</code>으로 보낸다. <code class="highlighter-rouge">rewrite-target: /</code>는 <code class="highlighter-rouge">path</code>와 타깃이 같아 <strong>아무 일도 하지 않는다</strong></li>
+  <li>URL에서 <code class="highlighter-rouge">:8080</code>이 사라진 것은 홉이 하나 늘어난 결과다. 클라이언트 → CLB:80 → 노드:31875 → 컨트롤러 파드:80 → vLLM 파드:8080이고, 마지막 구간은 ClusterIP를 거치지 않는다</li>
+  <li><code class="highlighter-rouge">https://</code>로 붙으면 오류가 <code class="highlighter-rouge">ERR_SSL_PROTOCOL_ERROR</code>에서 <strong><code class="highlighter-rouge">ERR_CERT_AUTHORITY_INVALID</code>로 바뀐다.</strong> 443 리스너가 생겨 핸드셰이크는 됐지만 자체 서명 인증서라 신뢰되지 않는다</li>
 </ul>
 
 <p><br /></p>
