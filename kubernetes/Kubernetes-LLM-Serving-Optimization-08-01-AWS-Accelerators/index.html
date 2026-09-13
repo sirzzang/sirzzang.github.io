@@ -37,7 +37,7 @@
 
 
 
-  <meta property="article:modified_time" content="2026-09-12T00:00:00+09:00">
+  <meta property="article:modified_time" content="2026-09-13T00:00:00+09:00">
 
 
 
@@ -312,7 +312,7 @@
     <meta itemprop="headline" content="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.1. Trainium·Inferentia와 Neuron 스택">
     <meta itemprop="description" content="워크샵이 쓰는 Trainium이 어떤 칩인지, Neuron SDK가 어떤 스택인지, NVIDIA 스택과 어디까지 대응되는지 정리해 보자.">
     <meta itemprop="datePublished" content="2026-09-11T00:00:00+09:00">
-    <meta itemprop="dateModified" content="2026-09-12T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-09-13T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
@@ -332,7 +332,7 @@
 
 
 
-  27 분 소요
+  28 분 소요
 
 
             
@@ -427,7 +427,7 @@
 <ul>
   <li>워크샵이 쓰는 <code class="highlighter-rouge">trn1.2xlarge</code>는 Trainium 칩 1개짜리 인스턴스이고, 그 칩 안에 NeuronCore-v2가 2개 들어 있다. 실습의 텐서 병렬 크기 2가 곧 이 코어 2개다</li>
   <li>“학습용 칩 / 추론용 칩”의 구분은 Inferentia1까지만 하드웨어 수준의 구분이었다. Trainium1과 Inferentia2는 같은 NeuronCore-v2를 쓰고, 차이는 인스턴스 주변 장치(EFA·NVMe·최대 칩 수)와 가격으로 옮겨 갔다</li>
-  <li>Neuron SDK는 CUDA 자리에 놓이는 소프트웨어 계층이지만 구조가 같지는 않다. 컴파일이 AOT 전용이고, 산출물(NEFF)이 커널 바이너리가 아니라 그래프 전체의 실행 계획이며, 커널 라이브러리 선택이 런타임 dispatch가 아니라 컴파일 타임 결정이다</li>
+  <li>Neuron SDK는 CUDA 자리에 놓이는 소프트웨어 계층이지만 구조가 같지는 않다. 서빙 경로가 AOT 컴파일을 전제로 하고, 산출물(NEFF)이 커널 바이너리가 아니라 그래프 전체의 실행 계획이며, 커널 라이브러리 선택이 런타임 dispatch가 아니라 컴파일 타임 결정이다</li>
   <li>NKI의 대응물은 CUDA C++가 아니라 Triton·Pallas다. 타일 단위로 쓰고 MLIR로 컴파일된다</li>
   <li>Neuron 위 추론 경로는 세 갈래(vLLM + NxDI 플러그인 / vLLM Neuron 베타 / NxDI 직접)이고, 갈리는 기준은 vLLM의 모델 지원 여부가 아니라 모델이 NxD Inference에 온보딩돼 있는가다</li>
 </ul>
@@ -517,7 +517,7 @@ Activation (배치/시퀀스 비례)    : 수십 GB
 
 <p>throughput은 단위 시간당 처리한 작업량인데, “작업 1건”을 무엇으로 세는지가 학습과 추론에서 갈린다. 학습은 <code class="highlighter-rouge">tokens/sec</code>나 <code class="highlighter-rouge">samples/sec</code>로 세고, 추론은 <code class="highlighter-rouge">output tokens/sec</code>나 <code class="highlighter-rouge">req/sec</code>로 센다.</p>
 
-<p>세는 단위만 다른 것이 아니라 판단 기준도 다르다. 학습에서는 처리량 절댓값만으로 좋고 나쁨을 알 수 없어, 하드웨어 이론 최대 성능 대비 얼마를 실제로 썼는지로 환산한 MFU(Model FLOPs Utilization)를 함께 본다. 근거가 되는 근사식이 6ND rule이다. forward 1 토큰이 약 <code class="highlighter-rouge">2N</code> FLOPs(N은 파라미터 수)이고 backward가 그 2배인 <code class="highlighter-rouge">4N</code>이라, 학습은 합계 <code class="highlighter-rouge">6N</code>이고 추론은 forward만이므로 <code class="highlighter-rouge">2N</code>이다. 앞 표의 “학습 연산량이 추론의 3배”가 여기서 나온다.</p>
+<p>세는 단위만 다른 것이 아니라 판단 기준도 다르다. 학습에서는 처리량 절댓값만으로 좋고 나쁨을 알 수 없어, 하드웨어 이론 최대 성능 대비 얼마를 실제로 썼는지로 환산한 MFU(Model FLOPs Utilization)를 함께 본다. 근거가 되는 근사식이 6ND rule이다. 파라미터 수 <code class="highlighter-rouge">N</code>, 학습 토큰 수 <code class="highlighter-rouge">D</code>일 때 학습 연산량을 약 <code class="highlighter-rouge">6ND</code> FLOPs로 잡는 어림인데, 토큰 하나 기준으로 보면 forward가 약 <code class="highlighter-rouge">2N</code>, backward가 그 2배인 <code class="highlighter-rouge">4N</code>이라 합계가 <code class="highlighter-rouge">6N</code>이고 추론은 forward만이므로 <code class="highlighter-rouge">2N</code>이다. 앞 표의 “학습 연산량이 추론의 3배”가 여기서 나온다. 다만 이건 가중치 행렬곱만 센 어림이라 어텐션·softmax·LayerNorm을 빼고 있고, 컨텍스트가 길어질수록 오차가 커진다. activation recomputation을 쓰면 forward를 한 번 더 돌리므로 <code class="highlighter-rouge">6N</code>도 성립하지 않는다.</p>
 
 <details>
   <summary><b>Trainium 기준 MFU 계산 예시</b></summary>
@@ -646,7 +646,7 @@ Activation (배치/시퀀스 비례)    : 수십 GB
 
 <h2 id="inferentia1-하드웨어-수준의-추론-전용">Inferentia1: 하드웨어 수준의 추론 전용</h2>
 
-<p>Inferentia1(Inf1 인스턴스)은 <em>진짜로</em> 추론 전용 칩이다.</p>
+<p>Inferentia1(Inf1 인스턴스)은 이름 그대로 추론 전용 칩이다.</p>
 
 <ul>
   <li>칩당 NeuronCore-v1 4개</li>
@@ -766,25 +766,25 @@ Activation (배치/시퀀스 비례)    : 수십 GB
       <td>HBM 대역폭</td>
       <td>820 GB/s</td>
       <td>2.9 TB/s</td>
-      <td>3.6배</td>
+      <td>3.5배</td>
     </tr>
     <tr>
       <td>FP8</td>
       <td>cFP8 190 TFLOPS</td>
       <td>1,299 TFLOPS</td>
-      <td>6.7배</td>
+      <td>6.8배</td>
     </tr>
     <tr>
       <td>BF16 / FP16 / TF32</td>
       <td>190 TFLOPS</td>
       <td>667 TFLOPS</td>
-      <td>3.4배</td>
+      <td>3.5배</td>
     </tr>
     <tr>
       <td>FP32</td>
       <td>47.5 TFLOPS</td>
       <td>181 TFLOPS</td>
-      <td>3.7배</td>
+      <td>3.8배</td>
     </tr>
     <tr>
       <td>희소 연산</td>
@@ -836,9 +836,9 @@ Activation (배치/시퀀스 비례)    : 수십 GB
 <p>배율이 큰 순서로 축을 짚으면 개선의 성격이 보인다.</p>
 
 <ol>
-  <li><strong>메모리 용량 3배, 대역폭 3.6배</strong> — decode는 산술 강도가 낮아 HBM 대역폭이 상한이다(<a href="/dev/Dev-Roofline-Model-LLM-Serving/">roofline 정리</a>). 이 축이 LLM 추론 성능에 가장 직접 닿는다</li>
+  <li><strong>메모리 용량 3배, 대역폭 3.5배</strong> — decode는 산술 강도가 낮아 HBM 대역폭이 상한이다(<a href="/dev/Dev-Roofline-Model-LLM-Serving/">roofline 정리</a>). 이 축이 LLM 추론 성능에 가장 직접 닿는다</li>
   <li><strong>칩당 코어 2개에서 8개로</strong> — 칩 경계를 넘지 않고 칩 하나 안에서 텐서 병렬을 8까지 걸 수 있다</li>
-  <li><strong>FP8 6.7배와 희소 연산 신규</strong> — 양자화 추론 경로에 집중 투자한 흔적이다</li>
+  <li><strong>FP8 6.8배와 희소 연산 신규</strong> — 양자화 추론 경로에 집중 투자한 흔적이다</li>
   <li><strong>NeuronLink-v2에서 v3로, UltraServer 64칩 도메인</strong> — TP/EP를 걸 수 있는 범위가 인스턴스 밖으로 확장됐다. <a href="/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/#랙-스케일-확장">5.5편</a>에서 정리한 랙 스케일 확장과 같은 방향이다</li>
   <li><strong>CC-Core 6개에서 16개로</strong> — collective를 전담하는 코어가 늘어 연산과 통신을 겹칠 여력이 커졌다</li>
   <li><strong>Logical NeuronCore Config</strong> — 여러 물리 코어의 자원을 논리 코어 하나로 묶어 쓸 수 있다</li>
@@ -848,7 +848,7 @@ Activation (배치/시퀀스 비례)    : 수십 GB
 
 <h2 id="nvidia의-sku-분화">NVIDIA의 SKU 분화</h2>
 
-<p>NVIDIA는 아키텍처 레벨에서 학습용과 추론용이 나뉘지 않는다. CUDA 아키텍처 자체는 단일 계보(Ampere → Hopper → Blackwell)이고, 같은 아키텍처를 다이 크기·메모리·인터커넥트·정밀도 유닛으로 조절해 여러 제품 SKU로 분화시킨다.</p>
+<p>NVIDIA는 아키텍처 레벨에서 학습용과 추론용이 나뉘지 않는다. 같은 CUDA 프로그래밍 모델 위에서 다이 크기·메모리·인터커넥트·정밀도 유닛을 조절해 여러 제품 SKU로 분화시킨다. 다만 계보가 하나인 것은 아니다. 데이터센터 대형 다이가 Ampere → Hopper → Blackwell로 이어지는 동안, 아래 표의 추론 지향 SKU는 T4가 Turing, L4·L40S가 Ada로 그래픽 계열 아키텍처에서 갈라져 나온다.</p>
 
 <table>
   <thead>
@@ -862,7 +862,7 @@ Activation (배치/시퀀스 비례)    : 수십 GB
     <tr>
       <td>메모리 종류</td>
       <td>HBM (80~192 GB, 3~8 TB/s)</td>
-      <td>GDDR6 (16~48 GB, 약 0.9 TB/s)</td>
+      <td>GDDR6 (16~48 GB, 0.3~0.86 TB/s)</td>
     </tr>
     <tr>
       <td>인터커넥트</td>
@@ -902,7 +902,7 @@ Activation (배치/시퀀스 비례)    : 수십 GB
 <ol>
   <li><strong>모델이 단일 칩 메모리를 초과했다.</strong> <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/">8.0편</a>에서 정리한 워크샵 Fundamentals의 첫 문제의식이 이것이다. Llama 3.1 8B가 FP32면 32 GB를 넘는다. 추론조차 텐서 병렬이 필수가 되었고, TP는 곧 인터커넥트를 요구한다. 인터커넥트는 원래 학습용 하드웨어의 특징이었다</li>
   <li><strong>KV 캐시가 메모리 대역폭을 지배한다.</strong> LLM decode는 토큰 1개당 전체 가중치와 KV 캐시를 다시 읽는다. 산술 강도가 극도로 낮아 연산 성능이 아니라 HBM 대역폭이 병목이다. HBM 역시 학습용 칩의 전유물이었다</li>
-  <li><strong>MoE가 Expert Parallelism을 요구한다.</strong> 전문가를 여러 칩에 흩뿌려야 하므로 다중 칩 토폴로지가 추론에서도 기본이 된다</li>
+  <li><strong>MoE가 Expert Parallelism을 요구한다.</strong> 전문가를 여러 칩에 나눠 배치해야 하므로 다중 칩 토폴로지가 추론에서도 기본이 된다</li>
   <li><strong>추론의 총 연산 소비량이 학습을 넘어섰다.</strong> 모델은 한 번 학습되지만 수십억 번 서빙된다. 규모의 경제 때문에 가장 좋은 칩을 추론에 투입하는 편이 오히려 경제적이다</li>
   <li><strong>추론이 더 이상 순수 forward가 아니다.</strong> <a href="/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/">speculative decoding</a>의 draft-verify 이중 모델, 에이전틱 워크플로, 추론 시점 RL/RLHF 루프가 들어온다. AWS Neuron 문서도 Neuron의 지원 범위를 소개하며 “에이전트형 AI 및 강화 학습 워크로드에 대한 비용 최적화 추론”을 명시한다</li>
 </ol>
@@ -956,7 +956,7 @@ Activation (배치/시퀀스 비례)    : 수십 GB
 
 <center><sup>출처: AWS Neuron Documentation, Trainium Architecture</sup></center>
 
-<p>AWS 문서는 Trn1 인스턴스의 구성을 이렇게 못박는다.</p>
+<p>AWS 문서는 Trn1 인스턴스의 구성을 이렇게 적는다.</p>
 
 <blockquote>
   <p>At the heart of the Trn1 instance are 16 x Trainium chips (each Trainium include 2 x NeuronCore-v2)</p>
@@ -1013,8 +1013,8 @@ Activation (배치/시퀀스 비례)    : 수십 GB
 
 <pre><code class="language-mermaid">flowchart TD
     INST["trn1.2xlarge 인스턴스"] --&gt; CHIP["Trainium 칩 1개 = NeuronDevice&lt;br/&gt;/dev/neuron0"]
-    CHIP --&gt; CORE0["NeuronCore-v2 0번&lt;br/&gt;/dev/ng0n1"]
-    CHIP --&gt; CORE1["NeuronCore-v2 1번&lt;br/&gt;/dev/ng1n1"]
+    CHIP --&gt; CORE0["NeuronCore-v2 0번&lt;br/&gt;런타임 코어 인덱스 0"]
+    CHIP --&gt; CORE1["NeuronCore-v2 1번&lt;br/&gt;런타임 코어 인덱스 1"]
     CHIP --&gt; HBM["HBM 32 GiB @ 820 GiB/s&lt;br/&gt;두 코어가 공유"]
     CORE0 --&gt; ENG0["Tensor / Vector / Scalar / GPSIMD 엔진"]
     CORE0 --&gt; SB0["SBUF 24 MiB + PSUM 2 MiB&lt;br/&gt;컴파일러가 배치"]
@@ -1043,7 +1043,7 @@ Activation (배치/시퀀스 비례)    : 수십 GB
     <tr>
       <td>디바이스 노드</td>
       <td><code class="highlighter-rouge">/dev</code></td>
-      <td><code class="highlighter-rouge">neuron0</code> 1개, <code class="highlighter-rouge">ng0n1</code>·<code class="highlighter-rouge">ng1n1</code> 2개</td>
+      <td><code class="highlighter-rouge">neuron0</code> 1개. 코어는 별도 노드로 나뉘지 않는다</td>
     </tr>
     <tr>
       <td>Neuron 도구</td>
@@ -1110,7 +1110,7 @@ Activation (배치/시퀀스 비례)    : 수십 GB
   </tbody>
 </table>
 
-<p>엔진 구성을 학습·추론 관점으로 읽으면 학습 지향의 흔적이 남아 있다. GPSIMD-Engine은 <a href="#nki">NKI</a> 커스텀 오퍼레이터의 실행 기반이고, 새 옵티마이저·새 loss·새 어텐션 변형을 하드웨어에 얹을 수 있게 하는 유연성 장치다. 여기에 Trainium 고유 기능으로 하드웨어 stochastic rounding(BF16 누적 시 편향 제거)과 연산·통신 오버랩용 collective 엔진이 들어 있다. GPSIMD와 stochastic rounding은 추론만 할 것이라면 굳이 없어도 되는 기능들이다.</p>
+<p>엔진 구성을 학습·추론 관점으로 읽으면 학습 지향의 흔적이 남아 있다. GPSIMD-Engine은 정형 연산에서 벗어난 커스텀 오퍼레이터를 얹을 수 있게 하는 유연성 장치다. <a href="#nki">NKI</a>로 작성한 커널은 이 엔진만이 아니라 Tensor·Vector·Scalar·GpSimd 네 엔진 전부를 타깃으로 할 수 있다. 여기에 Trainium 고유 기능으로 하드웨어 stochastic rounding(BF16 누적 시 편향 제거)과 연산·통신 오버랩용 collective 엔진이 들어 있다. GPSIMD와 stochastic rounding은 추론만 할 것이라면 굳이 없어도 되는 기능들이다.</p>
 
 <h2 id="메모리-계층">메모리 계층</h2>
 
@@ -1157,9 +1157,9 @@ Activation (배치/시퀀스 비례)    : 수십 GB
 
 <center><sup>출처: AWS Neuron Documentation, Amazon EC2 Inf2 Architecture</sup></center>
 
-<p>NeuronLink는 Trainium과 Inferentia2가 같은 아키텍처를 쓴다. PCIe를 경유하지 않고 칩끼리 전용 링크로 직접 통신한다는 점에서 NVLink와 같은 자리에 놓인다. 다만 대역폭의 급이 다르다. Trainium1은 칩당 384 GB/s이고, NVLink 4세대는 GPU당 900 GB/s다. 토폴로지도 다르다. <code class="highlighter-rouge">trn1.32xlarge</code>의 16칩은 스위치가 아니라 2D Torus로 엮여 있어, 홉 수가 노드 내 위치에 따라 달라진다.</p>
+<p>NeuronLink는 Trainium과 Inferentia2가 같은 아키텍처를 쓴다. PCIe를 경유하지 않고 칩끼리 전용 링크로 직접 통신한다는 점에서 NVLink와 같은 자리에 놓인다. 대역폭을 비교할 때는 방향 기준을 맞춰야 한다. NVLink 4세대의 GPU당 900 GB/s는 양방향 합산값이고, AWS가 Inf2에 대해 적은 값은 칩당 192 GiB/s다. Trainium1은 링크가 넷이라 여기서 384 GB/s가 나오는데, EC2 Trn1 제품 페이지는 같은 칩의 NeuronLink 대역폭을 최대 768 GB/s로 적는다. 어느 값을 쓰느냐에 따라 격차가 크게 달라지므로 한쪽 숫자만 들어 급을 단정하기는 어렵다. 토폴로지도 다르다. <code class="highlighter-rouge">trn1.32xlarge</code>의 16칩은 스위치가 아니라 2D Torus로 엮여 있어, 홉 수가 노드 내 위치에 따라 달라진다.</p>
 
-<p>학습 throughput을 깎아 먹는 요인 중 하나가 collective 통신이 연산과 겹치지 않아 생기는 idle 시간인데, Trainium은 NeuronLink-v2와 전용 collective 엔진으로 이 오버랩을 하드웨어에서 지원한다.</p>
+<p>학습 throughput을 떨어뜨리는 요인 중 하나가 collective 통신이 연산과 겹치지 않아 생기는 idle 시간인데, Trainium은 NeuronLink-v2와 전용 collective 엔진으로 이 오버랩을 하드웨어에서 지원한다.</p>
 
 <p><br /></p>
 
@@ -1186,17 +1186,19 @@ Activation (배치/시퀀스 비례)    : 수십 GB
 
 <h2 id="컴파일러와-런타임">컴파일러와 런타임</h2>
 
-<p><code class="highlighter-rouge">neuronx-cc</code>는 <code class="highlighter-rouge">nvcc</code>나 XLA/TorchInductor가 놓이는 자리에 있지만 동작이 다르다. JIT 경로 없이 AOT(ahead-of-time) 전용이다. 모델 그래프를 미리 컴파일해 두어야 실행할 수 있고, 그래서 정적 shape이 전제가 된다. 실습에서 <code class="highlighter-rouge">MAX_MODEL_LEN</code>이나 버킷 설정을 미리 고정하는 이유가 여기에 있다.</p>
+<p><code class="highlighter-rouge">neuronx-cc</code>는 <code class="highlighter-rouge">nvcc</code>나 XLA/TorchInductor가 놓이는 자리에 있지만 동작이 다르다. 서빙 경로가 AOT(ahead-of-time) 컴파일을 전제로 한다. 모델 그래프를 미리 컴파일해 두어야 실행할 수 있고, 그래서 정적 shape이 전제가 된다. 실습에서 <code class="highlighter-rouge">MAX_MODEL_LEN</code>이나 버킷 설정을 미리 고정하는 이유가 여기에 있다.</p>
+
+<p>다만 Neuron에 JIT 경로가 아예 없는 것은 아니다. AWS 문서는 XLA Lazy Tensor 방식이 Neuron 실행에 JIT 컴파일을 쓴다고 적는다. 없는 것은 cuBLAS·cuDNN처럼 <strong>커널 단위로 런타임에 구현을 고르는 dispatch</strong>이지 JIT 컴파일 자체가 아니다.</p>
 
 <p>컴파일 산출물은 NEFF(Neuron Executable File Format)다. NEFF는 커널 하나의 바이너리가 아니라 그래프 전체의 실행 계획이다. 어느 명령이 어느 엔진에서 언제 도는지, SBUF에 어떤 타일이 언제 올라가는지가 컴파일 타임에 확정돼 그 안에 박힌다. 컴파일이 느린 대신 NEFF를 캐싱해 두면 재기동이 빨라진다.</p>
 
-<p>런타임은 <code class="highlighter-rouge">libnrt.so</code>이고 CUDA Driver API(<code class="highlighter-rouge">libcuda.so</code>)와 같은 자리다. 디바이스 열기, NEFF 적재, 실행 요청 큐잉, collective 통신을 담당한다. EFA를 런타임이 직접 통합하고 있어 NCCL과 EFA 사이를 잇는 별도 플러그인 계층이 없다.</p>
+<p>런타임은 <code class="highlighter-rouge">libnrt.so</code>이고 CUDA Driver API(<code class="highlighter-rouge">libcuda.so</code>)와 같은 자리다. 디바이스 열기, NEFF 적재, 실행 요청 큐잉, collective 통신을 담당한다. EFA 연동에 필요한 OFI 플러그인이 <code class="highlighter-rouge">aws-neuronx-collectives</code> 패키지 안에 미리 빌드되어 들어 있어, NCCL과 EFA를 잇는 플러그인을 따로 받아 빌드하는 단계가 없다.</p>
 
 <h2 id="nki">NKI</h2>
 
 <p>커널은 가속기에서 실행되도록 컴파일된 함수다. <code class="highlighter-rouge">matmul</code>, <code class="highlighter-rouge">softmax</code>, <code class="highlighter-rouge">layernorm</code>, flash attention 각각이 하나의 커널이다. 프레임워크 사용자는 보통 <code class="highlighter-rouge">torch.nn.functional.softmax</code> 형태로 호출하고 그 아래에서 어떤 커널이 선택되는지는 신경 쓰지 않는다. NKI(Neuron Kernel Interface)는 그 아래 계층을 직접 작성할 수 있게 열어 주는 인터페이스다. NeuronISA(NISA) 명령어 세트, 메모리 할당, 실행 스케줄링에 직접 접근할 수 있다.</p>
 
-<p>굳이 커널 레벨까지 내려가야 하는 이유는 하드웨어 쪽에 이미 슬롯이 있기 때문이다. <a href="#neuroncore-v2의-네-엔진">GPSIMD-Engine</a>은 커스텀 오퍼레이터의 실행 기반이고, NKI는 소프트웨어 편의 기능이 아니라 그 유연성 슬롯을 노출하는 창구다. 실제로 필요해지는 시나리오는 네 가지 정도다.</p>
+<p>굳이 커널 레벨까지 내려가야 하는 이유는 하드웨어 쪽에 이미 슬롯이 있기 때문이다. <a href="#neuroncore-v2의-네-엔진">GPSIMD-Engine</a>이 정형 연산 밖의 커스텀 오퍼레이터를 받아 주고, NKI는 소프트웨어 편의 기능이 아니라 네 엔진을 직접 겨냥할 수 있게 열어 주는 창구다. 실제로 필요해지는 시나리오는 네 가지 정도다.</p>
 
 <ol>
   <li><strong>새 어텐션 변형</strong> — 논문이 나왔는데 컴파일러가 패턴을 인식하지 못해 비효율적으로 분해되는 경우</li>
@@ -1247,7 +1249,7 @@ Activation (배치/시퀀스 비례)    : 수십 GB
 <ul>
   <li><strong>DLAMI</strong> — AWS가 딥러닝 환경을 미리 구워 둔 AMI. 컨테이너 추상화 없이 EC2 VM 레벨에서 바로 쓴다</li>
   <li><strong>Neuron DLAMI</strong> — DLAMI에 <code class="highlighter-rouge">aws-neuronx-dkms</code>(커널 드라이버), Neuron Runtime, <code class="highlighter-rouge">neuronx-cc</code>, <code class="highlighter-rouge">torch-neuronx</code> venv가 미리 들어 있다</li>
-  <li><strong>EKS Neuron optimized AMI</strong> — EKS 워커노드용이고 Neuron 드라이버를 포함한다. <code class="highlighter-rouge">/aws/service/eks/optimized-ami/1.33/amazon-linux-2023/x86_64/neuron/recommended/image_id</code> SSM 파라미터로 조회한다. 이 AMI를 썼기 때문에 워커노드에서 <code class="highlighter-rouge">lsmod</code> 결과에 neuron 모듈이 이미 올라와 있고 <code class="highlighter-rouge">/dev/neuron0</code>이 존재한다</li>
+  <li><strong>EKS Neuron optimized AMI</strong> — EKS 워커 노드용이고 Neuron 드라이버를 포함한다. <code class="highlighter-rouge">/aws/service/eks/optimized-ami/1.33/amazon-linux-2023/x86_64/neuron/recommended/image_id</code> SSM 파라미터로 조회한다. 이 AMI를 썼기 때문에 워커 노드에서 <code class="highlighter-rouge">lsmod</code> 결과에 neuron 모듈이 이미 올라와 있고 <code class="highlighter-rouge">/dev/neuron0</code>이 존재한다</li>
   <li><strong>DLC(Deep Learning Container)</strong> — AWS가 공식 제공하는 딥러닝 컨테이너 베이스 이미지. 프레임워크와 서빙 스택이 계층별로 미리 들어 있다</li>
 </ul>
 
@@ -1352,7 +1354,7 @@ Activation (배치/시퀀스 비례)    : 수십 GB
     <tr>
       <td>NeuronLink-v2</td>
       <td>NVLink</td>
-      <td>역할은 정확히 대응. 대역폭은 칩당 384 GB/s 대 900 GB/s로 급이 다르다</td>
+      <td>역할은 정확히 대응. 대역폭은 문서마다 기준이 달라(칩당 384 GB/s ~ 768 GB/s 대 GPU당 900 GB/s 양방향) 직접 비교에 주의가 필요하다</td>
     </tr>
     <tr>
       <td>NeuronLink 토폴로지 (trn1.32xlarge 2D Torus)</td>
@@ -1456,9 +1458,9 @@ Activation (배치/시퀀스 비례)    : 수십 GB
       <td>정확히 대응</td>
     </tr>
     <tr>
-      <td>불필요 (런타임이 EFA를 직접 통합)</td>
+      <td><code class="highlighter-rouge">aws-neuronx-collectives</code>에 OFI 플러그인 내장</td>
       <td><code class="highlighter-rouge">aws-ofi-nccl</code></td>
-      <td>계층 소멸</td>
+      <td>별도 설치·빌드 단계가 없다</td>
     </tr>
     <tr>
       <td>불필요 (표준 runc + device plugin)</td>
@@ -1560,7 +1562,7 @@ Activation (배치/시퀀스 비례)    : 수십 GB
     <tr>
       <td><code class="highlighter-rouge">neuron-bench</code></td>
       <td>마이크로벤치마크</td>
-      <td>연산 피크 측정</td>
+      <td>NEFF를 반복 실행해 종단 지연·처리량 통계 측정</td>
     </tr>
   </tbody>
 </table>
@@ -1587,13 +1589,13 @@ Activation (배치/시퀀스 비례)    : 수십 GB
 
 <h3 id="컴파일-시점">컴파일 시점</h3>
 
-<p><code class="highlighter-rouge">nvcc</code>는 AOT 컴파일과 런타임 JIT 경로를 함께 갖고, cuBLAS·cuDNN은 런타임에 입력 shape을 보고 커널을 고른다. Neuron에서는 이 결정이 전부 컴파일 타임으로 옮겨간다. <code class="highlighter-rouge">neuronx-cc</code>는 AOT 전용이고, NEFF는 그래프 전체의 실행 계획이며, 어떤 커널을 쓸지도 컴파일 시점에 정해진다. 정적 shape을 미리 확정해야 하는 제약이 여기서 나오고, 대신 NEFF 캐시로 재기동 비용을 줄일 수 있다.</p>
+<p><code class="highlighter-rouge">nvcc</code>는 AOT 컴파일과 런타임 JIT 경로를 함께 갖고, cuBLAS·cuDNN은 런타임에 입력 shape을 보고 커널을 고른다. Neuron에서는 이 결정이 컴파일 타임으로 옮겨간다. NEFF는 그래프 전체의 실행 계획이고, 어떤 커널을 쓸지도 컴파일 시점에 정해진다. 정적 shape을 미리 확정해야 하는 제약이 여기서 나오고, 대신 NEFF 캐시로 재기동 비용을 줄일 수 있다.</p>
 
 <p>프로파일 성격도 이 차이를 그대로 반영한다. Nsight Systems 프로파일은 런타임에 CUDA 스트림으로 던져진 커널 런처의 시계열이다. 반면 Neuron 프로파일은 컴파일러가 정적으로 확정한 실행 계획의 재생이다. 타임라인 축이 스트림이 아니라 엔진별(Tensor / Vector / Scalar / GPSIMD / Sync / Collective)로 나오고, NEFF와 프로파일이 거의 1:1로 대응하므로 “왜 이 명령이 여기 있나”를 컴파일러 결정까지 역추적할 수 있다. 반대로 <a href="/dev/Dev-Nsight-Profiling-03-Nsys/">nsys</a>에서 보던 “런타임에 다른 커널이 스케줄되었나” 같은 변동성 분석은 할 것이 별로 없다.</p>
 
 <h3 id="계층-소멸">계층 소멸</h3>
 
-<p>NVIDIA 스택에 있던 층 둘이 Neuron에는 없다. NCCL과 EFA를 잇는 <code class="highlighter-rouge">aws-ofi-nccl</code> 플러그인은 런타임이 EFA를 직접 통합하고 있어 불필요하다. 컨테이너에 GPU를 노출하는 <code class="highlighter-rouge">nvidia-container-toolkit</code>도 필요 없고, 표준 runc와 device plugin만으로 처리된다(<a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/#device-plugin-동작-흐름">device plugin 동작 흐름</a>, <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/#커스텀-가속기">커스텀 가속기</a>).</p>
+<p>NVIDIA 스택에 있던 층 둘이 Neuron에는 없다. NCCL과 EFA를 잇는 <code class="highlighter-rouge">aws-ofi-nccl</code>에 대응하는 OFI 플러그인은 <code class="highlighter-rouge">aws-neuronx-collectives</code>에 미리 빌드되어 들어 있어 따로 설치할 것이 없다. 컨테이너에 GPU를 노출하는 <code class="highlighter-rouge">nvidia-container-toolkit</code>도 필요 없고, 표준 runc와 device plugin만으로 처리된다(<a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/#device-plugin-동작-흐름">device plugin 동작 흐름</a>, <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/#커스텀-가속기">커스텀 가속기</a>).</p>
 
 <p><br /></p>
 
@@ -1614,7 +1616,7 @@ Activation (배치/시퀀스 비례)    : 수십 GB
   <li><strong>NxD Inference(NxDI)</strong> — NxD Core 위에 올라가는 PyTorch 기반 오픈소스 라이브러리. 밀집 LLM, MoE LLM, 이미지 생성 모델의 참조 구현을 제공한다. 다양한 어텐션 기법, Tensor Parallel·Expert Parallelism 같은 분산 전략, speculative decoding, 널리 쓰이는 아키텍처를 위한 NKI 커널이 들어 있다</li>
 </ul>
 
-<p>NxDI가 제공하는 기능 목록은 이 시리즈에서 이미 다룬 것들이 라이브러리 수준으로 내려온 형태다. <a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/">continuous batching과 prefix caching, 양자화</a>, <a href="/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/">speculative decoding</a>, <a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/#병렬화-배치와-인터커넥트-계층">텐서 병렬</a>이 그대로 옵션으로 노출된다. 병렬화 축도 TP·PP·DP·Context Parallelism 네 가지를 지원하고, multi-LoRA 서빙까지 포함한다.</p>
+<p>NxDI가 제공하는 기능 목록은 이 시리즈에서 이미 다룬 것들이 라이브러리 수준으로 내려온 형태다. <a href="/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/">continuous batching과 prefix caching, 양자화</a>, <a href="/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/">speculative decoding</a>, <a href="/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/#병렬화-배치와-인터커넥트-계층">텐서 병렬</a>이 그대로 옵션으로 노출된다. 병렬화 축은 텐서 병렬을 기본으로 시퀀스 병렬과 expert 병렬을 지원하고, 파이프라인 병렬은 문서상 향후 지원으로 적혀 있다. multi-LoRA 서빙까지 포함한다.</p>
 
 <p>NVIDIA 생태계에서 NxDI 하나에 대응하는 제품은 없고 층별로 나뉜다.</p>
 
@@ -1693,7 +1695,7 @@ Activation (배치/시퀀스 비례)    : 수십 GB
   <thead>
     <tr>
       <th> </th>
-      <th>vLLM + NxD Inference (권장)</th>
+      <th>vLLM + NxD Inference</th>
       <th>vLLM Neuron (베타)</th>
     </tr>
   </thead>
@@ -1705,7 +1707,7 @@ Activation (배치/시퀀스 비례)    : 수십 GB
     </tr>
     <tr>
       <td>지원 인스턴스</td>
-      <td>Inf2, Trn1, Trn2</td>
+      <td>Trn1, Trn2, Trn3, Inf2</td>
       <td>Trn2, Trn3</td>
     </tr>
     <tr>
@@ -1720,8 +1722,8 @@ Activation (배치/시퀀스 비례)    : 수십 GB
     </tr>
     <tr>
       <td>특징</td>
-      <td>안정 경로. 모델이 NxDI에 온보딩돼 있어야 한다</td>
-      <td>분산 추론, chunked prefill, EAGLE3 speculative decoding</td>
+      <td>모델이 NxDI에 온보딩돼 있어야 한다. 업스트림 표기는 <code class="highlighter-rouge">Maintenance</code>다</td>
+      <td>segmented prefill, disaggregated inference, EAGLE3 speculative decoding. 업스트림이 권장 서빙 경로로 적는 쪽이다. chunked prefill은 아직 미지원</td>
     </tr>
   </tbody>
 </table>
@@ -1810,7 +1812,7 @@ pip install <span class="nt">--extra-index-url</span><span class="o">=</span>htt
   <li><code class="highlighter-rouge">VLLM_NEURON_FRAMEWORK=neuronx-distributed-inference</code>로 (a)-1 경로를 명시적으로 선언한다</li>
 </ol>
 
-<p>이 환경변수 하나가 “vLLM 플러그인이 NxD Inference를 모델 실행 백엔드로 쓴다”는 선언이다. 이것을 포함한 실습 환경변수의 값과 의미는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/">8.2.1편</a>에서 다룬다.</p>
+<p>이 환경변수 하나가 “vLLM 플러그인이 NxD Inference를 모델 실행 백엔드로 쓴다”는 선언이다. 이것을 포함한 vLLM ConfigMap 키들의 값과 의미는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">8.3.1편</a>에서 다룬다.</p>
 
 <p><br /></p>
 
@@ -1824,6 +1826,8 @@ pip install <span class="nt">--extra-index-url</span><span class="o">=</span>htt
 
 <p><a href="/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/#ai-가속기-지형">5.5편</a>에서 하드웨어 스펙을 읽는 법과 병목을 판별하는 직관은 칩이 바뀌어도 유효하다고 정리했는데, Trainium과 Neuron 스택이 그 주장의 시험대가 된다. 용량 → 대역폭 → 인터커넥트 순으로 읽는 방식과 산술 강도로 병목을 판정하는 방식은 그대로 통했다. 반면 프로그래밍 모델과 컴파일 시점은 CUDA의 어휘를 그대로 옮기면 어긋난다. 이름의 대응표가 아니라 그 자리에서 무엇이 언제 결정되는지를 봐야 스택을 제대로 읽을 수 있다.</p>
 
+<p>여기까지가 칩과 스택 쪽 배경이다. 이 하드웨어를 실제로 쓰는 클러스터를 만드는 작업은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/">8.2.1편</a>에서, 칩과 코어가 쿠버네티스 리소스로 광고되는 경로는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/">8.2.2편</a>에서 이어 간다.</p>
+
 <p><br /></p>
 
 <h1 id="참고-링크">참고 링크</h1>
@@ -1834,15 +1838,15 @@ pip install <span class="nt">--extra-index-url</span><span class="o">=</span>htt
   <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/trainium2.html">Trainium2 Architecture</a></li>
   <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/inferentia2.html">Inferentia2 Architecture</a></li>
   <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/inf2-arch.html">Amazon EC2 Inf2 Architecture</a></li>
-  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/neuroncore-v2.html">NeuronCore-v2 Architecture</a></li>
-  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/nki/index.html">NKI (Neuron Kernel Interface)</a></li>
-  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/nki/arch/trainium_inferentia2_arch.html">Trainium Memory Hierarchy</a></li>
-  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/inference/index.html">Inference on Neuron</a></li>
+  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/neuron-core-v2.html">NeuronCore-v2 Architecture</a></li>
+  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/index.html">NKI (Neuron Kernel Interface)</a></li>
+  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/get-started/about/index.html">NKI: Trainium·Inferentia2 아키텍처 가이드</a></li>
+  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/frameworks/torch/torch-neuronx/programming-guide/inference/index.html">Inference on Neuron (torch-neuronx)</a></li>
   <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/nxd-inference/index.html">NxD Inference</a></li>
   <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/nxd-inference/vllm/index.html">vLLM on Neuron</a></li>
   <li><a href="https://github.com/vllm-project/vllm-neuron">vllm-project/vllm-neuron</a></li>
-  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/dlami/index.html">Neuron DLAMI</a></li>
-  <li><a href="https://awsdocs-neuron.readthedocs-hosted.com/en/latest/containers/index.html">Neuron Deep Learning Containers</a></li>
+  <li><a href="https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia.html">AWS DLAMI: Inferentia 튜토리얼</a></li>
+  <li><a href="https://github.com/aws-neuron/deep-learning-containers">aws-neuron/deep-learning-containers</a></li>
 </ul>
 
 <p><br /></p>
@@ -1930,7 +1934,7 @@ pip install <span class="nt">--extra-index-url</span><span class="o">=</span>htt
 
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-09-12">September 12, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-09-13">September 13, 2026</time></p>
         
       </footer>
 
@@ -2016,7 +2020,7 @@ pip install <span class="nt">--extra-index-url</span><span class="o">=</span>htt
 
 
 
-  27 분 소요
+  28 분 소요
 
 
       
@@ -2061,7 +2065,7 @@ pip install <span class="nt">--extra-index-url</span><span class="o">=</span>htt
 
 
 
-  20 분 소요
+  21 분 소요
 
 
       
@@ -2106,7 +2110,7 @@ pip install <span class="nt">--extra-index-url</span><span class="o">=</span>htt
 
 
 
-  21 분 소요
+  22 분 소요
 
 
       
@@ -2151,7 +2155,7 @@ pip install <span class="nt">--extra-index-url</span><span class="o">=</span>htt
 
 
 
-  21 분 소요
+  22 분 소요
 
 
       

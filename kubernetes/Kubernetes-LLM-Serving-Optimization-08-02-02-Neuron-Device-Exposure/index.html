@@ -37,7 +37,7 @@
 
 
 
-  <meta property="article:modified_time" content="2026-09-12T00:00:00+09:00">
+  <meta property="article:modified_time" content="2026-09-13T00:00:00+09:00">
 
 
 
@@ -312,7 +312,7 @@
     <meta itemprop="headline" content="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로">
     <meta itemprop="description" content="칩 하나에 리소스가 둘 광고되는 이유를 커널 디바이스 노드와 device plugin 소켓까지 내려가 확인하고, NVIDIA와 갈리는 지점을 정리해 보자.">
     <meta itemprop="datePublished" content="2026-09-11T00:00:00+09:00">
-    <meta itemprop="dateModified" content="2026-09-12T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-09-13T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
@@ -332,7 +332,7 @@
 
 
 
-  31 분 소요
+  32 분 소요
 
 
             
@@ -354,7 +354,7 @@
   <li><a href="#리소스가-두-개-광고되는-이유">리소스가 두 개 광고되는 이유</a>
     <ul>
       <li><a href="#칩-하나-코어-둘">칩 하나, 코어 둘</a></li>
-      <li><a href="#무엇이-독립이고-무엇이-공유인가">무엇이 독립이고 무엇이 공유인가</a></li>
+      <li><a href="#코어별-독립-자원과-칩-단위-공유-자원">코어별 독립 자원과 칩 단위 공유 자원</a></li>
       <li><a href="#성능-수치가-귀속되는-단위">성능 수치가 귀속되는 단위</a></li>
       <li><a href="#요청-단위를-고르는-기준">요청 단위를 고르는 기준</a></li>
       <li><a href="#칩과-코어를-따로-세면-생기는-일">칩과 코어를 따로 세면 생기는 일</a></li>
@@ -409,7 +409,7 @@
 
 <ul>
   <li><code class="highlighter-rouge">aws.amazon.com/neuron: 1</code>과 <code class="highlighter-rouge">aws.amazon.com/neuroncore: 2</code>는 서로 다른 하드웨어가 아니다. 같은 Trainium 칩 하나를 <strong>칩 단위와 코어 단위로 두 번 광고</strong>한 것이다</li>
-  <li>그 근거는 device plugin이 만들어 낸 논리적 숫자가 아니라 커널에 있다. <code class="highlighter-rouge">/dev/neuron0</code> 하나와 <code class="highlighter-rouge">/dev/ng0n1</code>·<code class="highlighter-rouge">/dev/ng1n1</code> 둘이 이미 분리되어 있고, <code class="highlighter-rouge">lspci</code>에는 PCI BDF가 하나만 잡힌다</li>
+  <li>커널이 만드는 디바이스 노드는 칩 단위 <code class="highlighter-rouge">/dev/neuron0</code> 하나뿐이고 <code class="highlighter-rouge">lspci</code>에도 PCI BDF가 하나만 잡힌다. 코어가 둘이라는 사실은 <code class="highlighter-rouge">/dev</code> 노드가 아니라 <code class="highlighter-rouge">neuron-ls</code>·<code class="highlighter-rouge">neuron-top</code>이 드라이버에 질의해 보고하는 값에서 확인된다</li>
   <li>device plugin 소켓이 두 개인 것은 코어가 둘이라서가 아니라 <strong>광고하는 리소스 이름이 둘</strong>이기 때문이다. Device Plugin API의 <code class="highlighter-rouge">Register</code>가 리소스 이름 하나에 endpoint 하나만 받는다. 이 소켓은 kubelet과 플러그인 사이의 제어 채널이지 코어 간 데이터 경로가 아니다</li>
   <li>containerd 설정에 Neuron 전용 런타임이 없다. 컨테이너 안으로 옮겨 심어야 할 유저스페이스 파일이 없어서 <code class="highlighter-rouge">/dev</code> 노드만 넣어 주면 되고, 그건 runc 표준 동작이다. NVIDIA가 래퍼 런타임을 필요로 하는 이유와 정확히 반대편에 있다</li>
   <li>사전 설치되어 있던 device plugin을 지우고 Helm으로 다시 까는 이유는 설정을 바꾸려는 게 아니라 <strong>Helm에 소유권을 넘기기 위해서</strong>다. 그 device plugin은 AMI가 아니라 eksctl이 노드그룹 생성 중에 깔았다</li>
@@ -420,7 +420,7 @@
 
 <h1 id="리소스가-두-개-광고되는-이유">리소스가 두 개 광고되는 이유</h1>
 
-<p><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/">08-02-01편</a>에서 <code class="highlighter-rouge">trn1.2xlarge</code> 노드그룹을 붙이고 나니 노드가 <code class="highlighter-rouge">Ready</code>로 올라왔고, <code class="highlighter-rouge">kubectl describe node</code>의 Capacity에 리소스 두 종류가 함께 찍혔다. 칩은 인스턴스에 하나뿐인데 리소스는 둘이다.</p>
+<p><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/">8.2.1편</a>에서 <code class="highlighter-rouge">trn1.2xlarge</code> 노드그룹을 붙이고 나니 노드가 <code class="highlighter-rouge">Ready</code>로 올라왔고, <code class="highlighter-rouge">kubectl describe node</code>의 Capacity에 리소스 두 종류가 함께 찍혔다. 칩은 인스턴스에 하나뿐인데 리소스는 둘이다.</p>
 
 <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Capacity:
   aws.amazon.com/neuron:      1            # 칩(디바이스) 개수
@@ -432,7 +432,7 @@
 
 <p>결론부터 말하면 둘은 서로 다른 하드웨어가 아니다. Neuron device plugin이 <strong>같은 하드웨어를 두 가지 단위(granularity)로 동시에 노출</strong>하기 때문에 이름이 둘로 갈린 것이다. extended resource가 무엇이고 노드 capacity에 어떻게 올라오는지는 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/#device-plugin-동작-흐름">GPU 자원 개요와 K8s 할당 메커니즘</a>에 정리해 두었다.</p>
 
-<p>이 글은 워크샵 Lab 1의 스텝 7(Neuron device plugin 재설치와 스케줄러 확장 설치)에 해당한다. 앞부분은 스텝 5에서 확인한 노드 상태를 출발점으로 삼는다. Trainium 칩과 NeuronCore, NeuronLink 자체의 하드웨어 배경은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/">08-01편</a>에 있다.</p>
+<p>이 글은 워크샵 Lab 1의 스텝 7(Neuron device plugin 재설치와 스케줄러 확장 설치)에 해당한다. 앞부분은 스텝 5에서 확인한 노드 상태를 출발점으로 삼는다. Trainium 칩과 NeuronCore, NeuronLink 자체의 하드웨어 배경은 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/">8.1편</a>에 있다.</p>
 
 <h2 id="칩-하나-코어-둘">칩 하나, 코어 둘</h2>
 
@@ -450,20 +450,20 @@
         ├─ DMA 엔진 (1 TB/s, 인라인 압축/해제)
         ├─ NeuronLink-v2 인터페이스        &lt;- 칩이 1개뿐이라 이번 실습에선 미사용
         │
-        ├─ [NeuronCore-v2 #0]            &lt;- /dev/ng0n1
+        ├─ [NeuronCore-v2 #0]            &lt;- NEURON_RT_VISIBLE_CORES 인덱스 0
         │     ├─ Tensor Engine
         │     ├─ Vector Engine
         │     ├─ Scalar Engine
         │     ├─ GPSIMD Engine (8 DSP 코어)
         │     └─ SBUF: 온칩 SRAM 24 MB (소프트웨어 관리)
         │
-        └─ [NeuronCore-v2 #1]            &lt;- /dev/ng1n1
+        └─ [NeuronCore-v2 #1]            &lt;- NEURON_RT_VISIBLE_CORES 인덱스 1
               └─ (위와 완전히 동일한 4엔진 + SBUF)
                                               ^
                                 합쳐서 aws.amazon.com/neuroncore: 2
 </code></pre></div></div>
 
-<h2 id="무엇이-독립이고-무엇이-공유인가">무엇이 독립이고 무엇이 공유인가</h2>
+<h2 id="코어별-독립-자원과-칩-단위-공유-자원">코어별 독립 자원과 칩 단위 공유 자원</h2>
 
 <p>AWS는 NeuronCore-v2를 이렇게 정의한다.</p>
 
@@ -584,7 +584,7 @@
   </tbody>
 </table>
 
-<p>어느 쪽을 요청하느냐에 따라 배치 결과와 컨테이너에 보이는 코어 가시성이 달라진다. 실제 배포가 어느 쪽을 쓰는지는 vLLM 배포 편에서 확인한다.</p>
+<p>어느 쪽을 요청하느냐에 따라 배치 결과와 컨테이너에 보이는 코어 가시성이 달라진다. 실제 배포는 칩 단위(<code class="highlighter-rouge">aws.amazon.com/neuron: 1</code>)를 요청하는데, 그 근거는 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">8.3.1편</a>에 있다.</p>
 
 <h2 id="칩과-코어를-따로-세면-생기는-일">칩과 코어를 따로 세면 생기는 일</h2>
 
@@ -634,7 +634,7 @@
   </tbody>
 </table>
 
-<p>2단계에서 스케줄러의 장부에는 아무 모순이 없다. <code class="highlighter-rouge">neuron</code> 장부는 0이고 <code class="highlighter-rouge">neuroncore</code> 장부는 2이기 때문이다. 그런데 <code class="highlighter-rouge">neuron: 1</code>을 받은 Pod A는 이미 <code class="highlighter-rouge">/dev/ng0n1</code>과 <code class="highlighter-rouge">/dev/ng1n1</code>을 둘 다 쥐고 있다. 하나의 물리 자원이 두 장부에 중복 계상되는 것, 이것이 이중 회계다.</p>
+<p>2단계에서 스케줄러의 장부에는 아무 모순이 없다. <code class="highlighter-rouge">neuron</code> 장부는 0이고 <code class="highlighter-rouge">neuroncore</code> 장부는 2이기 때문이다. 그런데 <code class="highlighter-rouge">neuron: 1</code>을 받은 Pod A는 이미 칩 안의 코어 0과 1을 둘 다 쥐고 있다. 하나의 물리 자원이 두 장부에 중복 계상되는 것, 이것이 이중 회계다.</p>
 
 <p>두 리소스 이름을 섞어 쓸 때만 생기는 문제도 아니다. 노드가 여럿이고 칩이 여럿인 구성에서는 <code class="highlighter-rouge">neuroncore</code>만 쓰더라도 <strong>어느 칩의 어느 코어를 줬는지</strong>를 추적하는 주체가 없다. 스케줄러는 코어 개수만 세고, 그 코어들이 같은 칩 안에 있는지 흩어져 있는지는 세지 않는다.</p>
 
@@ -646,7 +646,7 @@
 
 <h1 id="노드-안에서-본-neuron-디바이스-해부">노드 안에서 본 Neuron 디바이스 해부</h1>
 
-<p>리소스 두 개가 device plugin이 임의로 만든 논리적 숫자인지, 아니면 그 아래에 근거가 있는지를 노드에 직접 들어가 확인할 수 있다. 결론부터 말하면 근거는 커널에 있다. <code class="highlighter-rouge">/dev</code> 노드가 이미 칩과 코어를 분리해 노출하고 있고, device plugin은 그걸 세어서 그대로 광고한다.</p>
+<p>리소스 두 개가 device plugin이 임의로 만든 논리적 숫자인지, 아니면 그 아래에 근거가 있는지를 노드에 직접 들어가 확인할 수 있다. 결론부터 말하면 커널이 만드는 노드는 칩 단위 하나뿐이다. 코어가 둘이라는 사실은 <code class="highlighter-rouge">/dev</code>가 아니라 <code class="highlighter-rouge">neuron-ls</code>·<code class="highlighter-rouge">neuron-top</code>이 드라이버에 질의해 보고하는 값에서 확인되고, device plugin도 같은 정보를 읽어 두 가지 단위로 광고한다.</p>
 
 <h2 id="커널-모듈과-디바이스-노드">커널 모듈과 디바이스 노드</h2>
 
@@ -657,7 +657,7 @@
 
 <p>접속하면 <code class="highlighter-rouge">ssm-user</code>로 떨어진다. <code class="highlighter-rouge">ec2-user</code>로 전환한 뒤 PCI, 커널 모듈, 디바이스 파일을 차례로 확인했다.</p>
 
-<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 세션 매니저 접속 직후의 사용자는 ssm-user다. ec2-user로 전환한다</span>
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Session Manager 접속 직후의 사용자는 ssm-user다. ec2-user로 전환한다</span>
 sh-5.2<span class="nv">$ </span>whoami
 ssm-user
 sh-5.2<span class="nv">$ </span><span class="nb">sudo </span>su ec2-user
@@ -684,21 +684,20 @@ neuron                491520  0
 <span class="o">[</span>ec2-user@ip-10-0-5-100 ~]<span class="nv">$ </span><span class="nb">ls</span> <span class="nt">-l</span> /dev/neuron0
 crw-rw-rw-. 1 root root 243, 0 Sep 11 12:37 /dev/neuron0
 
-<span class="c"># 코어 단위 디바이스 노드. 네이밍은 ng&lt;device_index&gt;n&lt;core_index&gt; 형태다</span>
-<span class="c"># root 전용(crw-------)으로 잠겨 있고, device plugin이 컨테이너에 넣어 줄 때 권한이 열린다</span>
+<span class="c"># 처음에는 이 노드들을 코어 단위 노드로 읽었는데, 아니었다. 아래 본문 참고</span>
 <span class="o">[</span>ec2-user@ip-10-0-5-100 ~]<span class="nv">$ </span><span class="nb">ls</span> <span class="nt">-l</span> /dev/ng<span class="k">*</span>
 crw-------. 1 root root 246, 0 Sep 11 12:37 /dev/ng0n1
 crw-------. 1 root root 246, 1 Sep 11 12:37 /dev/ng1n1
 </code></pre></div></div>
 
-<p><code class="highlighter-rouge">neuron: 1</code>과 <code class="highlighter-rouge">neuroncore: 2</code>가 device plugin이 지어낸 숫자가 아니라는 커널 레벨 증거가 이것이다. 캐릭터 디바이스가 이미 칩 하나와 코어 둘로 갈라져 있다.</p>
+<p>여기서 확인되는 것은 칩 쪽뿐이다. <code class="highlighter-rouge">/dev/neuron0</code> 하나가 칩 하나에 대응하고, 코어 2개는 별도의 노드로 나뉘어 있지 않다.</p>
 
 <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>crw-rw-rw-  243, 0   /dev/neuron0     # 칩 전체 (1개)
-crw-------  246, 0   /dev/ng0n1       # 코어 0
-crw-------  246, 1   /dev/ng1n1       # 코어 1
 </code></pre></div></div>
 
-<p>메이저 번호가 243과 246으로 다른 것도 같은 이야기다. 같은 <code class="highlighter-rouge">neuron</code> 커널 모듈이 성격이 다른 두 종류의 캐릭터 디바이스를 등록해 둔 것이다. 캐릭터 디바이스와 메이저/마이너 번호, 커널 모듈이 디바이스 노드를 만드는 3계층 구조는 <a href="/cs/CS-Linux-Device-Driver/#문자-장치-character-device">디바이스 드라이버: 3계층 구조</a>에 정리해 두었다.</p>
+<p><code class="highlighter-rouge">/dev/ng0n1</code>·<code class="highlighter-rouge">/dev/ng1n1</code>은 Neuron과 무관하다. <code class="highlighter-rouge">ng&lt;컨트롤러&gt;n&lt;네임스페이스&gt;</code>는 NVMe 네임스페이스의 generic character device 네이밍이고, 바로 위 <code class="highlighter-rouge">lspci</code> 출력에 NVMe 컨트롤러가 정확히 둘(<code class="highlighter-rouge">00:04.0</code> EBS, <code class="highlighter-rouge">00:1f.0</code> 인스턴스 스토어 SSD) 잡혀 있는 것이 그 대응이다. 코어 단위 노드였다면 칩이 하나이므로 <code class="highlighter-rouge">ng0n0</code>·<code class="highlighter-rouge">ng0n1</code>이 나왔어야 하는데 실제 출력은 <code class="highlighter-rouge">ng0n1</code>·<code class="highlighter-rouge">ng1n1</code>이다. 메이저 번호가 243과 246으로 갈린 것도 한 모듈이 두 종류를 등록해서가 아니라, <code class="highlighter-rouge">neuron</code> 모듈과 NVMe generic 쪽이 각각 <code class="highlighter-rouge">alloc_chrdev_region</code>으로 동적 메이저를 받아 갔기 때문이다. 캐릭터 디바이스와 메이저/마이너 번호, 커널 모듈이 디바이스 노드를 만드는 3계층 구조는 <a href="/cs/CS-Linux-Device-Driver/#문자-장치-character-device">디바이스 드라이버: 3계층 구조</a>에 정리해 두었다.</p>
+
+<p>그러면 <code class="highlighter-rouge">neuroncore: 2</code>의 근거는 어디에 있나. <code class="highlighter-rouge">/dev</code>가 아니라 드라이버다. 다음 절의 <code class="highlighter-rouge">neuron-ls</code> 출력이 그 값을 보여 준다.</p>
 
 <p>노드에는 Neuron 진단·모니터링 도구도 함께 깔려 있다. <code class="highlighter-rouge">neuron-ls</code>, <code class="highlighter-rouge">neuron-top</code>, <code class="highlighter-rouge">neuron-monitor</code>, <code class="highlighter-rouge">neuron-profile</code> 등이 전부 <code class="highlighter-rouge">/opt/aws/neuron/bin</code> 아래에 있다.</p>
 
@@ -795,7 +794,7 @@ instance-id: i-0abc1234def56789
   </tbody>
 </table>
 
-<p><code class="highlighter-rouge">PCI BDF</code>가 하나라는 사실이 물리적으로 카드 2장이 아니라는 결정적 근거다. <code class="highlighter-rouge">lspci</code>에도 <code class="highlighter-rouge">00:1e.0</code> 하나만 잡혔다. 커널이 코어별 디바이스 노드를 두 개 만든 것은 PCIe 함수가 둘이라서가 아니라, 하나의 칩 내부를 코어 단위로 나눠 쓸 수 있게 드라이버가 갈라 놓은 것이다.</p>
+<p><code class="highlighter-rouge">PCI BDF</code>가 하나라는 사실이 물리적으로 카드 2장이 아니라는 결정적 근거다. <code class="highlighter-rouge">lspci</code>에도 <code class="highlighter-rouge">00:1e.0</code> 하나만 잡혔다. <code class="highlighter-rouge">neuron-ls</code>가 코어를 둘로 세는 것은 PCIe 함수가 둘이라서가 아니라, 드라이버가 하나의 칩 내부를 코어 인덱스로 나눠 쓸 수 있게 열어 두고 있어서다.</p>
 
 <p><code class="highlighter-rouge">neuron-top</code>을 띄우면 같은 구조가 화면으로 보인다. 디바이스는 <code class="highlighter-rouge">ND0</code> 하나인데 그 아래 사용률 막대가 <code class="highlighter-rouge">NC0</code>, <code class="highlighter-rouge">NC1</code> 둘이다.</p>
 
@@ -828,7 +827,7 @@ srwxr-xr-x. 1 root root     0 Sep 11 12:39 neuroncore-devplugin.sock   <span cla
     participant A as kube-apiserver
 
     Note over P: /var/lib/kubelet/device-plugins 를 hostPath 로 마운트
-    P-&gt;&gt;D: /dev/neuron0, /dev/ng0n1, /dev/ng1n1 스캔
+    P-&gt;&gt;D: /dev/neuron0 스캔, 드라이버에 코어 수 질의
     P-&gt;&gt;P: neuron-devplugin.sock 생성
     P-&gt;&gt;P: neuroncore-devplugin.sock 생성
     P-&gt;&gt;K: kubelet.sock 으로 Register aws.amazon.com/neuron, neuron-devplugin.sock
@@ -836,11 +835,11 @@ srwxr-xr-x. 1 root root     0 Sep 11 12:39 neuroncore-devplugin.sock   <span cla
     K-&gt;&gt;P: ListAndWatch 호출 - neuron-devplugin.sock
     P--&gt;&gt;K: devices = neuron0
     K-&gt;&gt;P: ListAndWatch 호출 - neuroncore-devplugin.sock
-    P--&gt;&gt;K: devices = ng0n1, ng1n1
+    P--&gt;&gt;K: devices = nc0, nc1
     K-&gt;&gt;A: node.status.capacity 갱신 - neuron 1, neuroncore 2
     Note over K,A: 파드가 이 노드에 배치된 뒤
     K-&gt;&gt;P: Allocate 호출 - neuroncore-devplugin.sock
-    P--&gt;&gt;K: devices = host_path /dev/ng0n1, /dev/ng1n1
+    P--&gt;&gt;K: devices = host_path /dev/neuron0, envs = NEURON_RT_VISIBLE_CORES
     K-&gt;&gt;K: CRI LinuxContainerConfig.devices 에 그대로 전달
 </code></pre>
 
@@ -879,7 +878,7 @@ srwxr-xr-x. 1 root root     0 Sep 11 12:39 neuroncore-devplugin.sock   <span cla
   </tbody>
 </table>
 
-<p>TCP가 아니라 Unix domain socket을 쓰는 이유는 세 가지로 정리된다. 파일시스템 스코프라 네트워크에 노출되지 않고, 퍼미션을 파일 모드로 걸 수 있으며, 플러그인이 죽으면 소켓 파일이 사라져서 kubelet이 곧바로 감지한다.</p>
+<p>TCP가 아니라 Unix domain socket을 쓰는 이유는 두 가지로 정리된다. 파일시스템 스코프라 네트워크에 노출되지 않고, 퍼미션을 파일 모드로 걸 수 있다. 소켓 파일은 생사 판정에도 쓰이는데 방향이 반대다 — kubelet이 재시작하면 이 디렉터리의 소켓을 전부 지우고, 플러그인이 자기 소켓이 사라진 것을 감지해 다시 등록한다. 반대로 kubelet이 플러그인 이상을 아는 경로는 소켓 파일이 아니라 <code class="highlighter-rouge">ListAndWatch</code> 스트림이 끊기는 것이다.</p>
 
 <p>그래서 DaemonSet은 <code class="highlighter-rouge">/var/lib/kubelet/device-plugins</code>를 hostPath로 마운트해야 한다. 파드 스펙에 실제로 그렇게 적혀 있다.</p>
 
@@ -1050,7 +1049,7 @@ libcudadebugger.so.595.71.05::...
    = 커널 모듈 하나뿐 └──────────────────────────────────┘
 </code></pre></div></div>
 
-<p>정확 일치가 필요한 것이 커널 모듈 하나뿐이고, 그것이 경계선 아래에 온전히 들어가 있다. 그래서 옮겨 심을 파일이 아예 없고, <code class="highlighter-rouge">/dev/ng0n1</code>을 OCI 런타임 스펙의 <code class="highlighter-rouge">linux.devices</code>에 넣어 주는 표준 동작만 하면 끝나서 <code class="highlighter-rouge">runc</code>로 충분하다.</p>
+<p>정확 일치가 필요한 것이 커널 모듈 하나뿐이고, 그것이 경계선 아래에 온전히 들어가 있다. 그래서 옮겨 심을 파일이 아예 없고, <code class="highlighter-rouge">/dev/neuron0</code>을 OCI 런타임 스펙의 <code class="highlighter-rouge">linux.devices</code>에 넣어 주는 표준 동작만 하면 끝나서 <code class="highlighter-rouge">runc</code>로 충분하다. 넣어 줄 노드가 칩당 하나뿐이라는 점이 이 구조를 더 단순하게 만든다.</p>
 
 <p>정리할 때 주의할 점이 하나 있다. 두 벤더의 차이를 정확 일치 대 범위 호환으로 나누면 틀린다.</p>
 
@@ -1061,15 +1060,16 @@ libcudadebugger.so.595.71.05::...
 
 <h2 id="allocate-응답에서-갈리는-지점">Allocate() 응답에서 갈리는 지점</h2>
 
-<p>경계선 차이는 Device Plugin API의 <code class="highlighter-rouge">Allocate()</code> 응답에서 그대로 드러난다. 응답에 담을 수 있는 필드는 네 가지다.</p>
+<p>경계선 차이는 Device Plugin API의 <code class="highlighter-rouge">Allocate()</code> 응답에서 그대로 드러난다. 응답에 담을 수 있는 필드는 다섯 가지다. 마지막 <code class="highlighter-rouge">cdi_devices</code>는 나중에 추가된 것이라 벤더별 구현에 따라 쓰이기도 하고 비어 있기도 하다.</p>
 
-<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">message</span><span class="x"> </span><span class="n">ContainerAllocateResponse</span><span class="x"> </span><span class="p">{</span><span class="x">
-  </span><span class="k">map</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="x"> </span><span class="kt">string</span><span class="o">&gt;</span><span class="x"> </span><span class="n">envs</span><span class="x">        </span><span class="o">=</span><span class="x"> </span><span class="m">1</span><span class="p">;</span><span class="x">  </span><span class="c">// 환경변수</span><span class="x">
-  </span><span class="n">repeated</span><span class="x"> </span><span class="n">DeviceSpec</span><span class="x"> </span><span class="n">devices</span><span class="x">     </span><span class="o">=</span><span class="x"> </span><span class="m">2</span><span class="p">;</span><span class="x">  </span><span class="c">// 디바이스 노드 (host_path, container_path, permissions)</span><span class="x">
-  </span><span class="n">repeated</span><span class="x"> </span><span class="n">Mount</span><span class="x"> </span><span class="n">mounts</span><span class="x">           </span><span class="o">=</span><span class="x"> </span><span class="m">3</span><span class="p">;</span><span class="x">  </span><span class="c">// bind-mount</span><span class="x">
-  </span><span class="k">map</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="x"> </span><span class="kt">string</span><span class="o">&gt;</span><span class="x"> </span><span class="n">annotations</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="m">4</span><span class="p">;</span><span class="x">  </span><span class="c">// CRI에 전달할 annotation</span><span class="x">
-</span><span class="p">}</span><span class="x">
-</span></code></pre></div></div>
+<div class="language-proto highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">message</span> <span class="nc">ContainerAllocateResponse</span> <span class="p">{</span>
+  <span class="n">map</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span> <span class="kt">string</span><span class="err">&gt;</span> <span class="na">envs</span>        <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>  <span class="c1">// 환경변수
+</span>  <span class="k">repeated</span> <span class="n">Mount</span> <span class="na">mounts</span>           <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>  <span class="c1">// bind-mount
+</span>  <span class="k">repeated</span> <span class="n">DeviceSpec</span> <span class="na">devices</span>     <span class="o">=</span> <span class="mi">3</span><span class="p">;</span>  <span class="c1">// 디바이스 노드 (container_path, host_path, permissions)
+</span>  <span class="n">map</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span> <span class="kt">string</span><span class="err">&gt;</span> <span class="na">annotations</span> <span class="o">=</span> <span class="mi">4</span><span class="p">;</span>  <span class="c1">// CRI에 전달할 annotation
+</span>  <span class="k">repeated</span> <span class="n">CDIDevice</span> <span class="na">cdi_devices</span>  <span class="o">=</span> <span class="mi">5</span><span class="p">;</span>  <span class="c1">// CDI 디바이스 이름 (Kubernetes 1.31에서 GA)
+</span><span class="p">}</span>
+</code></pre></div></div>
 
 <p>두 벤더는 이 중 <strong>서로 다른 필드를 쓴다.</strong></p>
 
@@ -1144,7 +1144,7 @@ neuron-device-plugin-vfwks   1/1     Running   0          23m
       <td>O</td>
     </tr>
     <tr>
-      <td><code class="highlighter-rouge">/dev/neuron0</code>, <code class="highlighter-rouge">/dev/ng0n1</code></td>
+      <td><code class="highlighter-rouge">/dev/neuron0</code></td>
       <td>노드 커널이 생성</td>
       <td>O</td>
     </tr>
@@ -1247,7 +1247,7 @@ neuron-device-plugin-vfwks   1/1     Running   0          23m
   <li>정말로 원하는 건 스케줄러 확장(<code class="highlighter-rouge">scheduler.enabled=true</code>)인데, 그게 device plugin과 같은 차트(<code class="highlighter-rouge">neuron-helm-chart</code>) 안에 있다</li>
   <li>그 차트는 device plugin도 같이 만든다. <code class="highlighter-rouge">devicePlugin.enabled</code>의 기본값이 <code class="highlighter-rouge">true</code>이고, 이름이 <code class="highlighter-rouge">fullnameOverride: neuron-device-plugin</code>, <code class="highlighter-rouge">namespaceOverride: kube-system</code>으로 고정되어 있다</li>
   <li>그 이름의 오브젝트가 이미 있다. eksctl이 DaemonSet, ClusterRole, ServiceAccount, ClusterRoleBinding 4개를 만들어 뒀다</li>
-  <li>Helm은 자기가 만들지 않은 오브젝트를 인수하지 못한다. <code class="highlighter-rouge">meta.helm.sh/release-name</code>·<code class="highlighter-rouge">release-namespace</code> annotation과 <code class="highlighter-rouge">app.kubernetes.io/managed-by: Helm</code> 라벨이 없으면 소유권을 주장할 수 없다고 판단하고 멈춘다</li>
+  <li>Helm은 기본 동작으로는 자기가 만들지 않은 오브젝트를 인수하지 않는다. <code class="highlighter-rouge">meta.helm.sh/release-name</code>·<code class="highlighter-rouge">release-namespace</code> annotation과 <code class="highlighter-rouge">app.kubernetes.io/managed-by: Helm</code> 라벨이 없으면 소유권을 주장할 수 없다고 판단하고 멈춘다. 우회로는 둘이다 — 기존 오브젝트에 그 라벨·annotation을 직접 붙이거나, Helm 3.17 이상에서 <code class="highlighter-rouge">--take-ownership</code> 플래그를 주는 것이다. 워크샵은 둘 다 쓰지 않았다</li>
   <li>그래서 지우고 다시 깐다</li>
 </ol>
 
@@ -2071,7 +2071,7 @@ kind: Deployment
   name: k8s-neuron-scheduler
 </code></pre></div></div>
 
-<p><code class="highlighter-rouge">my-scheduler</code>의 이미지 태그가 <code class="highlighter-rouge">v1.31.12</code>로 고정되어 있어서 API 서버(1.33)보다 2 마이너 낮은 스케줄러가 돈다. Kubernetes 버전 스큐 정책상 허용 범위이고 이 실습 규모에서는 문제되지 않았다. 운영 환경에서 이 태그를 클러스터 버전에 맞춰 올려야 하는지는 직접 확인하지 않았다.</p>
+<p><code class="highlighter-rouge">my-scheduler</code>의 이미지 태그가 <code class="highlighter-rouge">v1.31.12</code>로 고정되어 있어서 API 서버(1.33)보다 2 마이너 낮은 스케줄러가 돈다. 버전 스큐 정책상 <code class="highlighter-rouge">kube-scheduler</code>는 <code class="highlighter-rouge">kube-apiserver</code>보다 1 마이너까지만 낮을 수 있으므로, 이 조합은 문서상 지원 범위 밖이다. 3 마이너까지 허용되는 것은 <code class="highlighter-rouge">kubelet</code>·<code class="highlighter-rouge">kube-proxy</code> 쪽 규칙이다. 이번 실습 규모에서는 동작에 문제가 없었지만, 운영 환경이라면 차트의 <code class="highlighter-rouge">customScheduler.image.tag</code>를 클러스터 버전에 맞춰 올리는 편이 안전하다. 다만 그렇게 올렸을 때 익스텐더와의 호환이 유지되는지는 직접 확인하지 않았다.</p>
 
 <h2 id="스케줄러-확장이-개입하는-지점">스케줄러 확장이 개입하는 지점</h2>
 
@@ -2181,7 +2181,7 @@ ip-10-0-5-100.us-west-2.compute.internal   2
     </tr>
     <tr>
       <td>그 수치의 근거는 어디인가</td>
-      <td>커널이다. <code class="highlighter-rouge">/dev/neuron0</code> 1개와 <code class="highlighter-rouge">/dev/ng0n1</code>·<code class="highlighter-rouge">/dev/ng1n1</code> 2개가 이미 분리되어 있고, PCI BDF는 하나다</td>
+      <td>칩 쪽은 커널이다. <code class="highlighter-rouge">/dev/neuron0</code> 하나이고 PCI BDF도 하나다. 코어 쪽은 <code class="highlighter-rouge">/dev</code>가 아니라 드라이버이고, <code class="highlighter-rouge">neuron-ls</code>·<code class="highlighter-rouge">neuron-top</code>이 그 값을 읽어 보고한다</td>
     </tr>
     <tr>
       <td>왜 소켓이 두 개인가</td>
@@ -2210,6 +2210,8 @@ ip-10-0-5-100.us-west-2.compute.internal   2
   </tbody>
 </table>
 
+<p>Lab 1은 여기까지다. 노드가 칩과 코어를 광고하고, 그 자원을 나눠 줄 플러그인과 배치할 스케줄러가 모두 클러스터 안에 있다. 이 자원을 실제로 요청하는 워크로드를 올리는 것이 <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/">8.3.1편</a>이다.</p>
+
 <p><br /></p>
 
 <h1 id="참고-링크">참고 링크</h1>
@@ -2223,9 +2225,9 @@ ip-10-0-5-100.us-west-2.compute.internal   2
   <li><a href="https://github.com/aws-neuron/neuron-helm-charts">aws-neuron/neuron-helm-charts</a></li>
   <li><a href="https://eksctl.io/">eksctl</a></li>
   <li><a href="https://helm.sh/docs/faq/">Helm: FAQ</a></li>
-  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/">08-00편: vLLM on Trainium 워크샵 개요와 아키텍처</a></li>
-  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/">08-01편: AWS 가속기 - Trainium·Inferentia와 Neuron 스택</a></li>
-  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/">08-02-01편: Trainium 노드그룹 구성</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/">8.0편: 개요와 워크샵 아키텍처</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/">8.1편: Trainium·Inferentia와 Neuron 스택</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/">8.2.1편: Trainium 노드그룹 구성</a></li>
   <li><a href="/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/">[Kubernetes] NVIDIA Device Plugin 동작 원리</a></li>
   <li><a href="/dev/Dev-Kubernetes-GPU-Setting/">[Kubernetes] Kubernetes 환경에서 NVIDIA GPU 사용하기 - NVIDIA Device Plugin</a></li>
   <li><a href="/cs/CS-Container-Device-Injection/">[Container] 컨테이너 장치 주입: OCI Runtime Hook과 CDI</a></li>
@@ -2327,7 +2329,7 @@ ip-10-0-5-100.us-west-2.compute.internal   2
 
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-09-12">September 12, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-09-13">September 13, 2026</time></p>
         
       </footer>
 
@@ -2413,7 +2415,7 @@ ip-10-0-5-100.us-west-2.compute.internal   2
 
 
 
-  27 분 소요
+  28 분 소요
 
 
       
@@ -2458,7 +2460,7 @@ ip-10-0-5-100.us-west-2.compute.internal   2
 
 
 
-  20 분 소요
+  21 분 소요
 
 
       
@@ -2503,7 +2505,7 @@ ip-10-0-5-100.us-west-2.compute.internal   2
 
 
 
-  21 분 소요
+  22 분 소요
 
 
       
@@ -2548,7 +2550,7 @@ ip-10-0-5-100.us-west-2.compute.internal   2
 
 
 
-  21 분 소요
+  22 분 소요
 
 
       
