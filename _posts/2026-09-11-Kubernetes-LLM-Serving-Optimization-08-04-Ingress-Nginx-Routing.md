@@ -27,14 +27,12 @@ last_modified_at: 2026-09-13
 
 # TL;DR
 
-- ingress-nginx 차트를 값 오버라이드 없이 설치하면 컨트롤러 Service가 `type: LoadBalancer`로 만들어진다. 매니페스트에 적은 적이 없는데 CLB가 하나 더 생긴 것은 **차트 기본값** `controller.service.type: LoadBalancer` 때문이다. Ingress 오브젝트가 만든 것이 아니다
-- 이 시점에 CLB가 **두 개**다. Lab 2의 `vllm-service` CLB(`TCP:8080 → 32233`)와 이번 `ingress-nginx-controller` CLB(`TCP:80 → 31875`, `TCP:443 → 32278`)가 같은 워커 노드 한 대를 서로 다른 NodePort로 가리킨다
-- 리스너가 80/443인 것은 Ingress에 적은 포트와 무관하다. 차트의 `controller.service.ports.http`와 `.https` 기본값이 각각 80과 443이다. NodePort 두 개는 `nodePorts` 기본값이 빈 문자열이라 쿠버네티스가 자동 할당했다
-- Ingress 규칙 한 장은 "`/` 이하 전부를 `vllm-service:8080`으로"가 맞다. 다만 셋이 함께 붙는다 — `host`를 생략해 Host 헤더를 가리지 않고, `pathType: Prefix` + `path: /`라 모든 경로에 매칭되며, `spec.defaultBackend`를 선언하지 않아 매칭 없는 요청은 컨트롤러의 자체 404로 가게 되어 있다. 다만 `/` 규칙이 전부를 가져가므로 실제로 그리 떨어지는 요청은 없다
-- `nginx.ingress.kubernetes.io/rewrite-target: /`는 이 구성에서 **아무 일도 하지 않는다.** 컨트롤러 소스는 `path`와 rewrite 타깃 문자열이 같으면 `rewrite` 지시어를 만들지 않고, 정규식 location 수식자도 붙이지 않는다. 지운 것과 같은 설정이 나온다
-- Ingress 오브젝트 자체는 AWS에 아무것도 만들지 않는다. 실제 진입점을 만든 것은 **컨트롤러의 Service**이고, Ingress는 그 컨트롤러가 읽는 라우팅 규칙 문서다
-- URL에서 `:8080`이 사라진 것은 홉이 하나 늘어난 결과다. 클라이언트 → CLB:80 → 노드:31875 → 컨트롤러 파드:80 → vLLM 파드:8080이고, 마지막 구간은 Service ClusterIP를 거치지 않고 **엔드포인트(파드 IP:8080)로 직접** 간다
-- `https://`로 붙으면 오류가 `ERR_SSL_PROTOCOL_ERROR`에서 **`ERR_CERT_AUTHORITY_INVALID`로 바뀐다.** 443 리스너가 생겨 TLS 핸드셰이크는 성공했고, ingress-nginx가 기본 제공하는 자체 서명 인증서(`CN=Kubernetes Ingress Controller Fake Certificate`)를 브라우저가 신뢰하지 않은 것이다. TLS 종료 지점은 생겼지만 신뢰되는 인증서는 여전히 없다
+- ingress-nginx 차트를 값 오버라이드 없이 설치하면 컨트롤러 Service가 `type: LoadBalancer`로 만들어져 **CLB가 하나 더 생긴다.** 차트 기본값 때문이지 Ingress 오브젝트가 만든 것이 아니다
+- Ingress는 AWS에 아무것도 만들지 않는다. 실제 진입점을 만든 것은 **컨트롤러의 Service**이고, Ingress는 그 컨트롤러가 읽는 라우팅 규칙 문서다
+- 이 시점에 CLB가 **두 개**다. Lab 2의 `vllm-service`(`TCP:8080 → 32233`)와 이번 컨트롤러(`TCP:80 → 31875`, `TCP:443 → 32278`)가 같은 워커 노드를 다른 NodePort로 가리킨다
+- Ingress 규칙 한 장은 `host` 생략 + `pathType: Prefix` + `path: /`라 모든 경로를 `vllm-service:8080`으로 보낸다. `rewrite-target: /`는 `path`와 타깃이 같아 **아무 일도 하지 않는다**
+- URL에서 `:8080`이 사라진 것은 홉이 하나 늘어난 결과다. 클라이언트 → CLB:80 → 노드:31875 → 컨트롤러 파드:80 → vLLM 파드:8080이고, 마지막 구간은 ClusterIP를 거치지 않는다
+- `https://`로 붙으면 오류가 `ERR_SSL_PROTOCOL_ERROR`에서 **`ERR_CERT_AUTHORITY_INVALID`로 바뀐다.** 443 리스너가 생겨 핸드셰이크는 됐지만 자체 서명 인증서라 신뢰되지 않는다
 
 <br>
 

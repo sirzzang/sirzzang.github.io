@@ -15,6 +15,7 @@ tags:
   - sidecar
   - tmpfs
 hidden: true
+last_modified_at: 2026-09-13
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 9장의 학습 내용을 기반으로 합니다.*
@@ -54,8 +55,6 @@ hidden: true
 이전 글에서 만든 quiz Pod에 `emptyDir` 볼륨을 추가하여, MongoDB 컨테이너가 재시작될 때 데이터가 손실되지 않도록 만든다.
 
 ## Pod에 emptyDir 볼륨 추가하기
-
-![quiz Pod에 emptyDir 볼륨이 추가된 모습]({{site.url}}/assets/images/k8s-vol-02-emptydir-added.png){: .align-center}
 
 `quiz-data`라는 이름의 emptyDir 볼륨을 `spec.volumes`에 정의하고, mongo 컨테이너의 `/data/db`에 마운트한다.
 
@@ -116,8 +115,6 @@ kubectl exec -i quiz -c mongo -- mongosh kiada --quiet --eval "db.questions.coun
 컨테이너를 재시작해도 더 이상 파일이 사라지지 않는다. 파일이 컨테이너의 파일시스템이 아닌 **볼륨에 저장**되기 때문이다.
 
 ## emptyDir 볼륨의 파일 저장 위치
-
-![emptyDir 볼륨 파일이 호스트 노드의 파일시스템에 저장되는 모습]({{site.url}}/assets/images/k8s-vol-02-emptydir-storage-location.png){: .align-center}
 
 emptyDir 볼륨의 파일은 호스트 노드의 파일시스템에 있는 디렉토리에 저장된다. 일반적으로 다음 위치에 있다.
 
@@ -188,8 +185,6 @@ volumes:
 emptyDir 볼륨은 항상 비어 있으므로, **init 컨테이너**를 사용해 Pod 시작 시 자동으로 데이터를 채울 수 있다.
 
 ## init 컨테이너로 emptyDir 볼륨 초기화하기
-
-![init 컨테이너가 emptyDir 볼륨에 초기화 스크립트를 복사하는 구조]({{site.url}}/assets/images/k8s-vol-02-emptydir-init-container.png){: .align-center}
 
 quiz 문제를 JSON 파일에 저장하고, init 컨테이너가 이 파일을 공유 볼륨에 복사하여 MongoDB가 시작할 때 읽을 수 있도록 한다. MongoDB의 `/docker-entrypoint-initdb.d/` 메커니즘을 활용한다. 이 디렉토리에 `.js` 파일을 넣으면 MongoDB가 첫 시작 시 자동으로 실행한다.
 
@@ -287,8 +282,6 @@ emptyDir 볼륨을 여러 메인 컨테이너에 동시에 마운트하여 파�
 ## quote Pod를 멀티 컨테이너 Pod로 변환
 
 이전 장에서 `fortune` 커맨드를 실행하기 위해 post-start hook을 사용했던 `quote` Pod를 변경한다. Nginx는 웹 서버로 유지하되, post-start hook을 매분 새 quote를 생성하는 `quote-writer` 컨테이너로 대체한다.
-
-![quote Pod의 멀티 컨테이너 구조: quote-writer와 nginx가 emptyDir를 공유]({{site.url}}/assets/images/k8s-vol-02-quote-pod-multi-container.png){: .align-center}
 
 ```yaml
 # pod.quote.yaml

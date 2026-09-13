@@ -176,7 +176,7 @@ Trainium2(Trn2)는 이름이 학습용이지만 실제 투입처는 추론 쪽�
 | --- | --- | --- | --- |
 | 칩당 코어 수 | 2 | 8 | 4배 |
 | HBM 용량 | 32 GiB | 96 GiB | 3배 |
-| HBM 대역폭 | 820 GB/s | 2.9 TB/s | 3.5배 |
+| HBM 대역폭 | 820 GiB/s | 2.9 TB/s | 3.5배 |
 | FP8 | cFP8 190 TFLOPS | 1,299 TFLOPS | 6.8배 |
 | BF16 / FP16 / TF32 | 190 TFLOPS | 667 TFLOPS | 3.5배 |
 | FP32 | 47.5 TFLOPS | 181 TFLOPS | 3.8배 |

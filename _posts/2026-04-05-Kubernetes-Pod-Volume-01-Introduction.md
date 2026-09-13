@@ -16,6 +16,7 @@ tags:
   - hostPath
   - ephemeral-volume
 hidden: true
+last_modified_at: 2026-09-13
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 9장의 학습 내용을 기반으로 합니다.*
@@ -159,15 +160,9 @@ volumeMounts:
 - 실행 중인 프로세스가 파일을 수정하거나 새 파일을 생성할 수 있다
 - 하지만 컨테이너가 종료되고 재시작되면 모든 변경 사항이 사라진다
 
-![볼륨이 컨테이너에 마운트되는 기본 그림]({{site.url}}/assets/images/k8s-vol-01-volume-mount-basic.png){: .align-center}
-
 ## Quiz 서비스 소개
 
 Kiada 웹 어플리케이션, Quote 서비스에 이어 Quiz 서비스를 만든다. Quiz 서비스는 Kiada 웹 어플리케이션에서 표시할 객관식 문제를 제공하고, 답변도 저장한다.
-
-![kiada web app 구성: quote service, quiz service]({{site.url}}/assets/images/k8s-vol-01-kiada-architecture.png){: .align-center}
-
-![Quiz 서비스 구조: RESTful API + MongoDB]({{site.url}}/assets/images/k8s-vol-01-quiz-service-architecture.png){: .align-center}
 
 Quiz 서비스는 RESTful API 프론트엔드와 MongoDB 데이터베이스 백엔드로 구성된다. 처음에는 이 두 컴포넌트를 동일한 Pod의 별도 컨테이너에서 실행한다.
 
@@ -252,8 +247,6 @@ Kubernetes의 설계 철학은 컨테이너를 **일회용(disposable), 불변(i
 
 컨테이너와 마찬가지로, 볼륨은 Pod나 노드처럼 최상위 리소스가 아니라 **Pod 내부의 구성 요소**이며, 따라서 **Pod와 수명 주기를 공유**한다.
 
-![볼륨이 Pod 내부의 구성 요소로 존재하는 모습]({{site.url}}/assets/images/k8s-vol-01-volume-in-pod.png){: .align-center}
-
 - `volumes:`는 항상 Pod spec 안에 정의된다. `kubectl get volume` 같은 건 없다
 - Ephemeral volume (emptyDir 등): Pod 삭제 시 **데이터 자체가 사라진다**
 - Persistent volume (PVC/PV): Pod 삭제 시 **마운트 연결만 끊기고**, 데이터는 PV에 그대로 남는다
@@ -261,8 +254,6 @@ Kubernetes의 설계 철학은 컨테이너를 **일회용(disposable), 불변(i
 ## 컨테이너 재시작 시 파일 유지
 
 Pod의 모든 볼륨은 Pod가 설정될 때 생성되며, **컨테이너가 시작되기 전에 만들어진다.** Pod가 종료되면 볼륨도 함께 제거된다. 컨테이너가 (재)시작될 때마다, 컨테이너가 사용하도록 구성된 볼륨이 컨테이너의 파일시스템에 마운트된다.
-
-![컨테이너 재시작 시에도 볼륨 데이터가 유지되는 모습]({{site.url}}/assets/images/k8s-vol-01-volume-container-restart.png){: .align-center}
 
 | **상황** | **볼륨** | **데이터** |
 | --- | --- | --- |
@@ -282,11 +273,7 @@ Pod의 모든 볼륨은 Pod가 설정될 때 생성되며, **컨테이너가 시
 
 Pod는 여러 볼륨을 가질 수 있으며, 각 컨테이너는 이 볼륨들 중 0개, 1개 또는 여러 개를 **서로 다른 위치에 마운트할 수 있다.**
 
-![하나의 Pod에 여러 볼륨이 서로 다른 컨테이너에 마운트되는 모습]({{site.url}}/assets/images/k8s-vol-01-volume-multiple-mounts.png){: .align-center}
-
 하나의 볼륨을 둘 이상의 컨테이너에 마운트하여 파일을 공유할 수도 있다. 예를 들어, 사이드카 컨테이너가 웹 서버 로그를 처리하거나, 콘텐츠 생성 에이전트가 만든 파일을 웹 서버가 제공하는 경우다.
-
-![사이드카 패턴에서 볼륨을 통한 파일 공유]({{site.url}}/assets/images/k8s-vol-01-volume-sidecar-sharing.png){: .align-center}
 
 동일한 볼륨을 각 컨테이너의 필요에 따라 **서로 다른 경로에 마운트**할 수 있으며, 각 컨테이너의 볼륨 마운트를 **읽기/쓰기** 또는 **읽기 전용**으로 구성할 수 있다.
 
@@ -294,15 +281,11 @@ Pod는 여러 볼륨을 가질 수 있으며, 각 컨테이너는 이 볼륨들 
 
 볼륨은 Pod의 수명 주기에 연결되어 있으나, 볼륨 타입에 따라 Pod와 볼륨이 사라진 후에도 볼륨 내 파일이 온전하게 남아 있을 수 있다.
 
-![Pod 외부의 영구 스토리지에 매핑된 볼륨]({{site.url}}/assets/images/k8s-vol-01-volume-persistent-storage.png){: .align-center}
-
 Pod 볼륨이 NAS(Network Attached Storage) 같은 외부 영구 스토리지에 매핑되면, Pod가 다른 워커 노드에서 실행되는 새 Pod로 교체된 후에도 이전 인스턴스가 저장한 데이터에 접근할 수 있다.
 
 ## Pod 간 데이터 공유
 
 외부 스토리지 볼륨을 제공하는 기술에 따라, 동일한 외부 볼륨을 여러 Pod에 동시에 연결하여 데이터를 공유할 수 있다.
-
-![세 개의 Pod가 동일한 외부 영구 스토리지 볼륨에 매핑]({{site.url}}/assets/images/k8s-vol-01-volume-shared-pods.png){: .align-center}
 
 - NFS 같은 기술은 여러 머신에서 읽기/쓰기 모드로 볼륨을 마운트하는 것을 지원한다
 - GCE Persistent Disk 같은 클라우드 기술은 단일 노드에서만 읽기/쓰기가 가능하고, 여러 노드에서는 읽기 전용만 지원한다

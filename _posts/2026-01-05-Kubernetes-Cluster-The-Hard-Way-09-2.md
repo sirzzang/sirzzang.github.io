@@ -11,6 +11,7 @@ tags:
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-1
 
+last_modified_at: 2026-09-13
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 On-Premise K8s Hands-on Study 1주차 학습 내용을 기반으로 합니다.*
@@ -30,7 +31,34 @@ tags:
 
 
 
-![kubernetes-the-hard-way-cluster-structure-9]({{site.url}}/assets/images/kubernetes-the-hard-way-cluster-structure-9.png)
+```mermaid
+flowchart LR
+  subgraph NET["192.168.10.0/24 (Private Network)"]
+    JB["jumpbox<br/>192.168.10.10<br/><br/>downloads/worker/<br/>units/<br/>configs/"]
+    subgraph SRV["server (Control Plane)<br/>192.168.10.100"]
+      ETCD["etcd.service (:2379)"]
+      API["kube-apiserver.service (:6443)"]
+      SCH["kube-scheduler.service"]
+      CM["kube-controller-manager.service"]
+    end
+    subgraph N0["node-0 (Worker Node)<br/>192.168.10.101"]
+      C0["containerd.service"]
+      K0["kubelet.service"]
+      P0["kube-proxy.service"]
+      I0["CNI plugins"]
+    end
+    subgraph N1["node-1 (Worker Node)<br/>192.168.10.102"]
+      C1["containerd.service"]
+      K1["kubelet.service"]
+      P1["kube-proxy.service"]
+      I1["CNI plugins"]
+    end
+  end
+  JB -->|"바이너리 / unit / 설정 파일"| N0
+  JB -->|"바이너리 / unit / 설정 파일"| N1
+  K0 -->|"노드 등록"| API
+  K1 -->|"노드 등록"| API
+```
 
 <br>
 

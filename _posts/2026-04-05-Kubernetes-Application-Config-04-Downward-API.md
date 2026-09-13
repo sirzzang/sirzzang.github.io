@@ -14,6 +14,7 @@ tags:
   - resourceFieldRef
   - metadata
 hidden: true
+last_modified_at: 2026-09-13
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 8장의 학습 내용을 기반으로 합니다.*
@@ -48,7 +49,6 @@ Downward API는 파드와 컨테이너의 메타데이터를 환경 변수 또�
 
 Downward API는 어플리케이션이 호출해야 하는 REST 엔드포인트가 아니다. 파드 매니페스트의 `metadata`, `spec`, `status` 필드의 값을 컨테이너 **아래로(down)** 내려주는 방식이다.
 
-![Downward API가 Pod object의 메타데이터를 환경 변수와 볼륨 파일로 컨테이너에 전달하는 구조]({{site.url}}/assets/images/k8s-in-action-book-figure-downward-api.png){: .align-center}
 *출처: Kubernetes in Action 2nd Edition*
 
 Kubernetes 아키텍처 관점에서 **위(up)**는 Kubernetes API 서버(컨트롤 플레인)이고, **아래(down)**는 컨테이너(워크로드)다.

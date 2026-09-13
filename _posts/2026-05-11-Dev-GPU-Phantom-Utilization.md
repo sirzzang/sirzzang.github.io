@@ -18,7 +18,7 @@ tags:
   - Kubernetes
   - Troubleshooting
   - NCCL
-last_modified_at: 2026-08-31
+last_modified_at: 2026-09-13
 ---
 
 <br>
@@ -280,7 +280,7 @@ SIGKILL을 받으면 프로세스는 즉시 종료된다. `atexit`도, `try/fina
 ## 발생 메커니즘
 
 
-![phantom GPU utilization 발생 메커니즘 추정]({{site.url}}/assets/images/phantom-gpu-utiliazation-mechanism.png){: .align-center}
+![phantom GPU utilization 발생 메커니즘 추정]({{site.url}}/assets/images/phantom-gpu-utilization-mechanism.png){: .align-center}
 
 RayJob이 FAILED로 종료되면 kubelet이 Pod를 terminate한다. 이때 Pod 안의 GPU worker 프로세스에 일어나는 일은 두 가지 경로로 나뉘는 것으로 추정된다.
 

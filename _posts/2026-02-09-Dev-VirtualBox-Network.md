@@ -13,6 +13,7 @@ tags:
   - NAT
   - Host-Only
 
+last_modified_at: 2026-09-13
 ---
 
 <br>
@@ -396,8 +397,34 @@ flannel_interface: enp0s9
 
 # 전체 구조 요약
 
-```
-![VirtualBox Network Architecture](/assets/images/virtualbox-network-diagram.png)
+```mermaid
+flowchart LR
+  INET(("인터넷"))
+  subgraph HOST["호스트 (macOS)"]
+    NATENG["VirtualBox NAT 엔진<br/>(VM마다 독립)"]
+    HIF["가상 인터페이스<br/>bridge100 / vboxnet0<br/>192.168.10.1"]
+  end
+  subgraph V1["admin"]
+    A1["NAT<br/>10.0.2.15"]
+    B1["Host-Only<br/>192.168.10.10"]
+  end
+  subgraph V2["k8s-node1"]
+    A2["NAT<br/>10.0.2.15"]
+    B2["Host-Only<br/>192.168.10.11"]
+  end
+  subgraph V3["k8s-node2"]
+    A3["NAT<br/>10.0.2.15"]
+    B3["Host-Only<br/>192.168.10.12"]
+  end
+  A1 --> NATENG
+  A2 --> NATENG
+  A3 --> NATENG
+  NATENG --> INET
+  HIF <--> B1
+  HIF <--> B2
+  HIF <--> B3
+  B1 <--> B2
+  B2 <--> B3
 ```
 
 <br>

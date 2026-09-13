@@ -16,6 +16,7 @@ tags:
   - args
   - environment-variable
 hidden: true
+last_modified_at: 2026-09-13
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 8장의 학습 내용을 기반으로 합니다.*
@@ -266,9 +267,7 @@ Kubernetes는 Docker의 두 지시어에 대응하는 두 필드를 제공한다
 
 Pod spec에서 `command`나 `args`를 지정하면 각각 이미지에 정의된 `ENTRYPOINT`와 `CMD`를 오버라이드한다.
 
-![Kubernetes command/args와 Docker ENTRYPOINT/CMD 오버라이드 관계]({{site.url}}/assets/images/k8s-in-action-book-ref-dockerfile-override.png){: .align-center}
 *출처: Kubernetes in Action 2nd Edition*
-
 
 ```yaml
 # args만 지정: CMD 오버라이드 (ENTRYPOINT는 이미지 그대로)
@@ -453,7 +452,6 @@ spec:
 
 컨테이너화된 어플리케이션은 환경 변수를 이용해 설정하는 경우가 많다. ([Kubernetes 공식 문서: Define Environment Variables for a Container](https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/)) 커맨드와 인자처럼, 환경 변수도 파드 내 각 컨테이너 별로 설정할 수 있다.
 
-![환경 변수가 컨테이너 단위로 설정되는 구조]({{site.url}}/assets/images/k8s-in-action-book-ref-dockerfile-env-container.png){: .align-center}
 *출처: Kubernetes in Action 2nd Edition*
 
 환경 변수는 **컨테이너 단위로만 설정 가능**하다. 파드 전체에 공통 환경 변수를 설정하고 모든 컨테이너가 상속받는 방식은 지원되지 않는다.
