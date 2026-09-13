@@ -18,7 +18,7 @@ tags:
   - Observability
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-6
-last_modified_at: 2026-09-12
+last_modified_at: 2026-09-13
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.*
@@ -27,12 +27,12 @@ last_modified_at: 2026-09-12
 
 # TL;DR
 
-- 이 Lab이 쓰는 것은 kube-prometheus-stack이 아니다. `prometheus-community/prometheus` 차트 29.28.1(앱 v3.14.0) 하나이고, **prometheus-operator가 의존 서브차트에 없다.** 오퍼레이터가 없으니 `ServiceMonitor`·`PodMonitor` 같은 CRD도 없다. 스크레이프 대상을 늘리는 방법은 Prometheus 설정 파일에 잡을 적는 것뿐이다
+- 이 Lab이 쓰는 것은 kube-prometheus-stack이 아니다. `prometheus-community/prometheus` 차트 29.28.1(앱 v3.14.0) 하나이고, **prometheus-operator가 의존 서브차트에 없다.** 오퍼레이터가 없으니 `ServiceMonitor`·`PodMonitor` 같은 CRD도 없다. 대상을 늘리려면 Prometheus 설정 파일에 잡을 직접 적거나, 차트 기본 잡이 이미 돌리고 있는 `prometheus.io/scrape` 어노테이션 디스커버리에 태워야 한다. 이 Lab이 고른 것은 앞쪽이다
 - vLLM 수집은 values의 `serverFiles.prometheus.yml.scrape_configs`에 적은 `static_configs` 잡 하나다. 서비스 디스커버리를 쓰지 않고, Prometheus가 하는 일은 `vllm-service.default.svc.cluster.local`을 DNS로 푸는 것뿐이다
-- 그 경로는 Ingress를 거치지 않는다. non-headless Service의 A 레코드는 ClusterIP 하나이므로 스크레이프는 **ClusterIP → kube-proxy → 파드**로 간다. 8.4편에서 만든 ELB와 ingress-nginx는 이 수집에 관여하지 않는다
+- 그 경로는 Ingress를 거치지 않는다. non-headless Service의 A 레코드는 ClusterIP 하나이므로 스크레이프는 **ClusterIP → kube-proxy → 파드**로 간다. [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})에서 만든 ELB와 ingress-nginx는 이 수집에 관여하지 않는다
 - values에 적은 `nodeExporter:`와 `kubeStateMetrics:` 두 블록은 차트 29.28.1이 읽는 키가 아니다. 실제 키는 `prometheus-node-exporter:`와 `kube-state-metrics:`이고, `values.schema.json`에 `additionalProperties` 제약이 없어 오타가 검증에 걸리지 않고 조용히 버려진다. 두 파드가 뜬 것은 **서브차트 기본값이 이미 `enabled: true`**이기 때문이지 저 두 줄 때문이 아니다
 - values의 `scrape_configs`는 차트 기본 잡을 대체하지 않고 뒤에 이어 붙는다. 최종 설정에는 기본 잡 열 개와 `vllm-metrics`가 함께 들어간다
-- `alertmanager: enabled: false`는 파드를 안 띄우는 데서 끝나지 않는다. `prometheus.yml`의 `alerting:` 블록이 통째로 생략되는데, 공교롭게도 그 블록이 이 설정에서 유일하게 `kubernetes_sd_configs`를 쓰던 자리다
+- `alertmanager: enabled: false`는 파드를 안 띄우는 데서 끝나지 않는다. `prometheus.yml`의 `alerting:` 블록이 통째로 생략되는데, 그 블록이 alertmanager 파드를 찾으려고 `role: pod` 디스커버리를 돌리던 자리다
 - `--web.route-prefix=/p8s`는 리버스 프록시 쪽 설정이 아니라 **Prometheus 프로세스 자신의 내부 라우팅 프리픽스**다. `/api/v1`뿐 아니라 Prometheus 자신의 `/metrics`와 `/-/ready`까지 `/p8s` 아래로 옮겨간다
 - 그 결과 차트 기본 `prometheus` 잡이 자기 자신을 긁다가 404로 DOWN이 됐다. 자기 메트릭은 `/p8s/metrics`로 옮겨갔는데 잡의 `metrics_path`는 `/metrics`로 남아 있다. 프로브 경로는 차트가 함께 옮겨 주지만 스크레이프 잡은 건드리지 않는다
 - `vllm-metrics` 잡은 UP이고, PromQL 결과에 붙은 `instance`·`job` 라벨에 수집 경로가 그대로 남는다. `/metrics` 응답의 값과 조회 결과 값이 일치한다
@@ -41,7 +41,7 @@ last_modified_at: 2026-09-12
 
 # Prometheus 차트 값과 스크레이프 설정 해부
 
-[08-04편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})에서 ingress-nginx 컨트롤러가 올라가고 `/` 규칙 한 장이 붙었다. Lab 4는 그 뒤에 관측 스택을 붙여, vLLM이 이미 내보내고 있던 지표를 모으는 Lab이다. 이 편은 그중 Prometheus까지를 다룬다.
+[8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})에서 ingress-nginx 컨트롤러가 올라가고 `/` 규칙 한 장이 붙었다. Lab 4는 그 뒤에 관측 스택을 붙여, vLLM이 이미 내보내고 있던 지표를 모으는 Lab이다. 이 편은 그중 Prometheus까지를 다룬다.
 
 이 글의 모든 출력에서 호스트명, IP, ELB DNS 이름은 예시 값으로 치환했다.
 
@@ -66,7 +66,7 @@ prometheus    monitoring    1          deployed   prometheus-29.28.1       v3.14
 
 `prometheus-community/prometheus` 차트 29.28.1이고 앱 버전이 v3.14.0이다. 이 차트의 `Chart.yaml`이 선언한 의존 서브차트는 `alertmanager`, `kube-state-metrics`, `prometheus-node-exporter`, `prometheus-pushgateway` 넷뿐이다. **prometheus-operator가 없고, 차트가 `CustomResourceDefinition`을 만들지도 않는다.**
 
-이 사실이 뒤의 설명을 전부 가른다. 오퍼레이터가 없으면 `ServiceMonitor`·`PodMonitor`·`Prometheus` 같은 CRD가 존재하지 않으므로, 스크레이프 대상을 늘리는 방법은 커스텀 리소스를 만드는 것이 아니라 Prometheus 설정 파일 `prometheus.yml`에 잡을 적는 것뿐이다. 차트는 그 설정 파일을 ConfigMap으로 렌더해 파드에 마운트한다.
+이 사실이 뒤의 설명을 전부 가른다. 오퍼레이터가 없으면 `ServiceMonitor`·`PodMonitor`·`Prometheus` 같은 CRD가 존재하지 않으므로, 스크레이프 대상을 커스텀 리소스로 선언할 수 없다. 남는 방법은 둘이다. 하나는 Prometheus 설정 파일 `prometheus.yml`에 잡을 직접 적는 것이고, 다른 하나는 차트 기본 잡 `kubernetes-pods`와 `kubernetes-service-endpoints`에 태우는 것이다. 이 두 잡은 `__meta_kubernetes_pod_annotation_prometheus_io_scrape`를 `keep` 조건으로 걸고 `prometheus.io/port`로 `__address__`를 다시 쓰므로, 파드나 서비스에 `prometheus.io/scrape: "true"`와 `prometheus.io/port: "8080"`만 붙여도 설정 파일을 건드리지 않고 대상이 늘어난다. 이 Lab은 앞쪽을 골랐다. 차트는 설정 파일을 ConfigMap으로 렌더해 파드에 마운트한다.
 
 네 서브차트 중 values로 끈 것은 `alertmanager` 하나다. 나머지 셋은 차트 기본값이 `enabled: true`라 그대로 올라온다.
 
@@ -114,11 +114,13 @@ serverFiles:
       scrape_interval: 10s
 ```
 
-`server.persistentVolume.enabled: false`는 PVC를 만들지 않고 `emptyDir`로 돌리겠다는 뜻이다. 설치 NOTES가 큰 경고 박스로 알려 주는 상태가 이것이고, 뒤에서 값을 바꿔 `helm upgrade`를 할 때마다 파드가 교체되면서 그때까지 모은 시계열이 사라진다. `retention: "15d"`는 그 위에 얹히는 설정이라, 보존 기간을 15일로 적어 두어도 파드 수명을 넘기지는 못한다.
+`server.persistentVolume.enabled: false`는 PVC를 만들지 않고 `emptyDir`로 돌리겠다는 뜻이다. 설치 NOTES가 큰 경고 박스로 알려 주는 상태가 이것이고, 뒤에서 값을 바꿔 `helm upgrade`를 할 때마다 파드가 교체되면서 그때까지 모은 시계열이 사라진다. `retention: "15d"`는 차트 기본값과 같은 값이라 그 자체로 바뀌는 것이 없고, 어차피 그 위에 퍼시스턴스 설정이 얹히므로 보존 기간을 15일로 적어 두어도 파드 수명을 넘기지는 못한다.
 
 `server.global`의 두 줄은 차트 기본값을 덮는다. 차트 기본 `scrape_interval`이 `1m`이므로 15초로 내린 것이고, `scrape_timeout`은 적지 않았으니 차트 기본값 `10s`가 그대로 남는다. Helm이 values 맵을 깊게 병합하기 때문에, 같은 블록 안의 다른 키를 적었다고 해서 안 적은 키가 지워지지는 않는다.
 
-`alertmanager: enabled: false`의 효과는 둘이다. 하나는 서브차트 설치가 막히는 것이고 — `Chart.yaml`의 `condition: alertmanager.enabled`가 false가 되어 alertmanager 차트가 렌더되지 않는다 — 다른 하나는 렌더되는 `prometheus.yml`에서 `alerting:` 블록 자체가 사라지는 것이다. ConfigMap 템플릿이 그 블록을 `alertmanager.enabled`로 감싸고 있다. 공교롭게도 그 블록이 이 설정에서 **유일하게 `kubernetes_sd_configs`를 쓰던 자리**다. alertmanager 파드를 찾기 위해 `role: pod` 디스커버리를 돌리는 코드였는데, 끄면서 함께 없어졌다.
+`alertmanager: enabled: false`의 효과는 둘이다. 하나는 서브차트 설치가 막히는 것이고 — `Chart.yaml`의 `condition: alertmanager.enabled`가 false가 되어 alertmanager 차트가 렌더되지 않는다 — 다른 하나는 렌더되는 `prometheus.yml`에서 `alerting:` 블록 자체가 사라지는 것이다. ConfigMap 템플릿이 그 블록을 `alertmanager.enabled`와 `server.alertmanagers` 둘 중 하나라도 참일 때만 렌더하도록 감싸고 있는데, 후자를 적지 않았으니 alertmanager를 끈 것만으로 블록이 통째로 빠진다. 그 블록은 alertmanager 파드를 찾기 위해 `role: pod` 디스커버리를 돌리는 코드였다.
+
+다만 이것이 설정에서 유일한 서비스 디스커버리는 아니다. 뒤에서 볼 차트 기본 잡 열 개 중 아홉 개가 `kubernetes_sd_configs`를 쓰고, `static_configs`만 쓰는 것은 자기 자신을 긁는 `prometheus` 잡 하나뿐이다.
 
 values에는 실제로 읽히지 않는 블록이 둘 있다. `nodeExporter:`와 `kubeStateMetrics:`는 차트 29.28.1이 읽는 키 이름이 아니다. 실제 키는 서브차트 이름 그대로 `prometheus-node-exporter:`와 `kube-state-metrics:`다. 차트의 `values.schema.json`에는 `additionalProperties` 제약이 없어서, 스키마가 열거하지 않은 키를 적어도 값 검증에 걸리지 않고 통과한다. 즉 이 두 블록은 어디에서도 읽히지 않은 채 조용히 버려진다.
 
@@ -137,7 +139,7 @@ values에는 실제로 읽히지 않는 블록이 둘 있다. `nodeExporter:`와
 ```shell
 ubuntu@ip-10-0-1-100:~/workshop$ curl http://<ingress-elb-id>.us-west-2.elb.amazonaws.com/metrics
 
-# 실행 결과 (발췌). 게이지 네 종, 카운터 세 종, 히스토그램 두 종만 남기고 잘랐다
+# 실행 결과 (발췌). 게이지 세 종, 카운터 세 종, 히스토그램 두 종만 남기고 잘랐다
 # HELP vllm:num_requests_running Number of requests currently running on GPU.
 # TYPE vllm:num_requests_running gauge
 vllm:num_requests_running{model_name="tinyLlama/TinyLlama-1.1B-Chat-v1.0"} 0.0
@@ -268,18 +270,18 @@ vllm:request_params_max_tokens_count{model_name="tinyLlama/TinyLlama-1.1B-Chat-v
 
 </details>
 
-브라우저로 같은 주소를 열어도 같은 텍스트가 나온다.
+브라우저로 같은 주소를 열어도 같은 형식의 텍스트가 나온다. 캡처 시점이 조금 뒤라 엔진 스텝 단위 누적값 하나만 차이가 있다.
 
 ![브라우저로 연 vLLM의 /metrics 응답]({{site.url}}/assets/images/llmso-aws-workshop-vllm-metrics.png){: .align-center}
 
 <center><sup>직접 캡처. 브라우저로 연 vLLM의 /metrics 응답이다. vllm: 접두사가 붙은 Prometheus 노출 형식 메트릭이 텍스트로 나온다.</sup></center>
 
 세 가지를 확인해 봐야 한다.
-1. **누적 카운터에는 값이 있다.** 프롬프트 토큰 210개, 생성 토큰 2371개이고, `vllm:request_success_total`은 `finished_reason` 라벨에 따라 `length` 3건과 `stop` 6건으로 나뉜다. 합치면 성공한 요청이 9건이고, 히스토그램 계열의 `_count`가 전부 9인 것과 맞는다.
-2. **게이지는 전부 0이다.** `num_requests_running`도 `num_requests_waiting`도 `gpu_cache_usage_perc`도 0인데, 지금 진행 중인 요청이 없어서다. 
+1. **누적 카운터에는 값이 있다.** 프롬프트 토큰 210개, 생성 토큰 2371개이고, `vllm:request_success_total`은 `finished_reason` 라벨에 따라 `length` 3건과 `stop` 6건으로 나뉜다. 합치면 성공한 요청이 9건이고, 요청 단위 히스토그램(`e2e_request_latency_seconds`, `request_queue_time_seconds`, `request_prompt_tokens` 등)의 `_count`가 전부 9인 것과 맞는다. 관측 단위가 요청이 아닌 것은 값이 다르다. `iteration_tokens_total`은 엔진 스텝마다 한 번씩 관측해 `_count`가 3205이고, `time_per_output_token_seconds`는 출력 토큰마다 관측해 2362다.
+2. **발췌한 게이지 세 종은 전부 0이다.** `num_requests_running`도 `num_requests_waiting`도 `gpu_cache_usage_perc`도 0인데, 지금 진행 중인 요청이 없어서다. 이름과 `# HELP` 문구에 `GPU`가 붙어 있지만 이 파드가 올라간 곳은 Trainium 노드다. vLLM이 백엔드와 무관하게 같은 메트릭 이름을 쓰기 때문이고, Neuron에서 이 값이 실제로 세는 것은 [8.3.2편에서 서버 로그로 확인한]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %}#서버-로그에-남은-요청-처리) `max_num_seqs=4` 중 몇 자리가 찼는지다. 전문의 `vllm:cache_config_info`에 `block_size="1024"`, `num_gpu_blocks="4"`로 그 근거가 함께 실려 있다.
 3. **히스토그램은 `_sum`·`_count`와 `le` 라벨이 붙은 `_bucket` 행으로 쪼개져 나온다.** 이 형태가 뒤에서 PromQL 자동완성 목록에 그대로 드러난다.
 
-한 가지 짚어 둘 것이 있다. 여기서 친 주소는 8.4편에서 만든 ingress-nginx CLB다. Prometheus가 나중에 긁을 주소와 다르다.
+한 가지 짚어 둘 것이 있다. 여기서 친 주소는 [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})에서 만든 ingress-nginx CLB다. Prometheus가 나중에 긁을 주소와 다르다.
 
 ## Prometheus가 vLLM에 닿는 경로
 
@@ -297,7 +299,7 @@ vllm:request_params_max_tokens_count{model_name="tinyLlama/TinyLlama-1.1B-Chat-v
 
 `kubernetes_sd_configs`가 아니라 `static_configs`다. 즉 서비스 디스커버리를 아예 쓰지 않는다. 타깃이 고정 문자열 하나이므로 Prometheus가 스크레이프마다 하는 일은 그 호스트명을 일반 DNS로 푸는 것뿐이고, `role: pod`이든 `role: service`이든 어느 디스커버리도 관여하지 않는다.
 
-그다음이 쿠버네티스 DNS 규격이다. `vllm-service`는 `default` 네임스페이스의 non-headless Service이고 ClusterIP가 `172.20.144.130`이다([08-03-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})에서 확인한 값이다). non-headless Service의 A 레코드는 ClusterIP 하나로 해석된다고 문서에 명시돼 있다. 따라서 스크레이프는 ClusterIP를 거쳐 kube-proxy가 고른 파드로 간다.
+그다음이 쿠버네티스 DNS 규격이다. `vllm-service`는 `default` 네임스페이스의 non-headless Service이고 ClusterIP가 `172.20.144.130`이다([8.3.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})에서 확인한 값이다). non-headless Service의 A 레코드는 ClusterIP 하나로 해석된다고 문서에 명시돼 있다. 따라서 스크레이프는 ClusterIP를 거쳐 kube-proxy가 고른 파드로 간다.
 
 헷갈리기 쉬운 지점이 하나 있다. 바로 앞 절에서 `/metrics`를 눈으로 확인한 경로와 Prometheus가 긁는 경로는 서로 다른 경로다.
 
@@ -322,7 +324,7 @@ flowchart LR
 
 <center><sup>AI를 이용해 직접 그린 도식. 실선이 Prometheus의 스크레이프 경로, 점선이 브라우저로 /metrics를 확인한 경로다. 둘은 마지막 파드 구간에서만 겹친다.</sup></center>
 
-점선 쪽은 [08-04편의 클러스터 밖에서 파드까지의 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %}#클러스터-밖에서-파드까지의-경로)에서 정리한 그대로다. 컨트롤러가 붙는 대상이 Service의 ClusterIP가 아니라 파드 엔드포인트여서, 이 경로는 kube-proxy와 ClusterIP를 건너뛴다. 실선 쪽은 반대로 ClusterIP를 탄다. **같은 `/metrics`를 보는데 중간 구간이 서로 다르다.** ingress-nginx는 이 스크레이프에 관여하지 않으므로, 앞으로 Ingress 쪽을 어떻게 손대든 vLLM 메트릭 수집은 영향을 받지 않는다.
+점선 쪽은 [8.4편의 클러스터 밖에서 파드까지의 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %}#클러스터-밖에서-파드까지의-경로)에서 정리한 그대로다. 컨트롤러가 붙는 대상이 Service의 ClusterIP가 아니라 파드 엔드포인트여서, 이 경로는 kube-proxy와 ClusterIP를 건너뛴다. 실선 쪽은 반대로 ClusterIP를 탄다. **같은 `/metrics`를 보는데 중간 구간이 서로 다르다.** ingress-nginx는 이 스크레이프에 관여하지 않으므로, 앞으로 Ingress 쪽을 어떻게 손대든 vLLM 메트릭 수집은 영향을 받지 않는다.
 
 대신 이 구성에는 확인하지 않은 범위가 하나 있다. `static_configs`로 Service DNS를 찍는 방식은 뒤에 있는 파드가 한 개일 때만 지금처럼 보인다. 레플리카가 늘면 스크레이프마다 kube-proxy가 백엔드 하나를 고르는데 `instance` 라벨은 계속 같은 문자열이라, 파드별로 값을 나눠 보기 어려워진다. 이번 Lab에서는 파드가 한 개여서 그 상황을 만들어 보지 않았다. 오토스케일링을 붙이는 구성이라면 이 잡 정의를 다시 볼 지점이다.
 
@@ -390,7 +392,7 @@ https://prometheus.io/
 
 </details>
 
-NOTES가 알려 주는 두 가지가 뒤에서 쓰인다. 하나는 클러스터 안에서 Prometheus에 붙는 주소가 `prometheus-server.monitoring.svc.cluster.local`이고 포트가 80이라는 것이고 — 8.5.2편에서 Grafana 데이터소스에 적을 값이 이것이다 — 다른 하나는 퍼시스턴스가 꺼져 있다는 경고다.
+NOTES가 알려 주는 두 가지가 뒤에서 쓰인다. 하나는 클러스터 안에서 Prometheus에 붙는 주소가 `prometheus-server.monitoring.svc.cluster.local`이고 포트가 80이라는 것이고 — [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})에서 Grafana 데이터소스에 적을 값이 이것이다 — 다른 하나는 퍼시스턴스가 꺼져 있다는 경고다.
 
 ## 파드 네 개와 엔드포인트
 
@@ -428,7 +430,7 @@ prometheus-server-7f57d49c54-jwpg2                  2/2     Running   0         
 
 ## Ingress /p8s 추가
 
-웹 UI를 열기 위해 Ingress를 붙인다. 8.4편에서 설치한 컨트롤러의 IngressClass가 그대로 있다.
+웹 UI를 열기 위해 Ingress를 붙인다. [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})에서 설치한 컨트롤러의 IngressClass가 그대로 있다.
 
 ```shell
 ubuntu@ip-10-0-1-100:~/workshop$ kubectl get ingressclasses.networking.k8s.io
@@ -563,9 +565,9 @@ Annotations:  <none>
 
 우선 서브패스가 동작한다. 포트 없는 ELB 주소에 `/p8s/targets`를 붙여 Prometheus UI가 열렸고, 정적 자산이 깨지지 않았다. Ingress 규칙과 `--web.route-prefix`가 같은 값을 가리키고 있어서다.
 
-화면에 보이는 카드는 셋이다. 이번 Lab이 추가한 `vllm-metrics` 잡은 `1/1 up`이고, 엔드포인트가 `http://vllm-service.default.svc.cluster.local:8080/metrics`다. values에 적은 타깃 문자열이 그대로 찍혔다. 라벨은 `instance="vllm-service.default.svc.cluster.local:8080"`과 `job="vllm-metrics"` 둘이고, 마지막 스크레이프는 2초 전, 응답에 5ms가 걸렸다. `prometheus-pushgateway`도 `1/1 up`인데, 차트 기본 잡이 서브차트로 함께 올라온 pushgateway를 긁고 있는 것이다.
+잡 카드는 이름순으로 늘어서고, 캡처는 그중 뒤쪽 셋을 잡은 것이다. `kubernetes-`로 시작하는 차트 기본 잡들은 화면 위쪽에 있다. 이번 Lab이 추가한 `vllm-metrics` 잡은 `1/1 up`이고, 엔드포인트가 `http://vllm-service.default.svc.cluster.local:8080/metrics`다. values에 적은 타깃 문자열이 그대로 찍혔다. 라벨은 `instance="vllm-service.default.svc.cluster.local:8080"`과 `job="vllm-metrics"` 둘이고, 마지막 스크레이프는 2초 전, 응답에 5ms가 걸렸다. `prometheus-pushgateway`도 `1/1 up`인데, 차트 기본 잡이 서브차트로 함께 올라온 pushgateway를 긁고 있는 것이다.
 
-남은 하나가 `prometheus`다. `0/1 up`이고 `DOWN`이며, 카드 아래 에러 줄에 404가 적혀 있다. 이건 [막힘 & 해결](#막힘--해결-route-prefix-이후-self-scrape-404) 섹션에서 따로 본다.
+캡처에 잡힌 셋 중 하나가 `prometheus`다. `0/1 up`이고 `DOWN`이며, 카드 아래 에러 줄에 404가 적혀 있다. 이건 [막힘 & 해결](#막힘--해결-route-prefix-이후-self-scrape-404) 섹션에서 따로 본다.
 
 ## PromQL 조회 결과와 /metrics 원본 대조
 
@@ -634,7 +636,7 @@ Error scraping target: server returned HTTP status 404 Not Found
 
 - 차트 기본 잡의 경로를 맞춘다. values의 `scrapeConfigs.prometheus`에 `metrics_path: /p8s/metrics`를 추가하는 방식이다. ConfigMap 템플릿이 그 맵의 키를 `enabled`와 `job_name`만 빼고 그대로 잡 정의에 넣으므로 반영될 자리는 있다
 - 자기 수집이 필요 없으면 `scrapeConfigs.prometheus.enabled: false`로 잡 자체를 끈다
-- 서브패스를 애플리케이션에 알리지 않고 Ingress 쪽에서 경로를 다시 쓰는 방향도 있다. 다만 이 경우 `--web.route-prefix`를 빼야 하는데, 그러면 8.5.2편에서 Grafana 데이터소스에 적는 URL도 함께 달라진다
+- 서브패스를 애플리케이션에 알리지 않고 Ingress 쪽에서 경로를 다시 쓰는 방향도 있다. 다만 이 경우 `--web.route-prefix`를 빼야 하는데, 그러면 [8.5.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})에서 Grafana 데이터소스에 적는 URL도 함께 달라진다
 
 어느 쪽이든 서브패스 노출을 유지하는 한 "프로세스가 받는 경로"와 "긁으러 가는 경로"를 같이 움직여야 한다는 점은 같다. 적용 시에는 `metrics_path`가 차트 버전별로 어느 키 아래 놓이는지 먼저 확인하는 편이 안전하다.
 
@@ -646,7 +648,7 @@ Error scraping target: server returned HTTP status 404 Not Found
 |---|---|
 | 이 Lab의 스택이 kube-prometheus-stack인가 | 아니다. `prometheus-community/prometheus` 29.28.1 단일 차트이고 오퍼레이터도 CRD도 없다 |
 | vLLM 수집을 ServiceMonitor로 정의했나 | 아니다. CRD가 없다. values의 `serverFiles.prometheus.yml.scrape_configs`에 적은 `static_configs` 잡 하나다 |
-| 어떤 서비스 디스커버리를 쓰나 | 쓰지 않는다. 타깃이 고정 문자열이고 Prometheus는 그것을 DNS로 풀 뿐이다 |
+| vLLM 수집 잡은 어떤 서비스 디스커버리를 쓰나 | 쓰지 않는다. 타깃이 고정 문자열이고 Prometheus는 그것을 DNS로 풀 뿐이다. 차트 기본 잡 아홉 개는 `kubernetes_sd_configs`를 쓴다 |
 | 스크레이프가 Ingress를 거치나 | 거치지 않는다. non-headless Service의 A 레코드가 ClusterIP이므로 ClusterIP를 거쳐 파드로 간다 |
 | `nodeExporter`와 `kubeStateMetrics`를 켜서 파드가 떴나 | 아니다. 키 이름이 틀려 무시됐고, 서브차트 기본값이 `enabled: true`라 떴다 |
 | values의 `scrape_configs`가 차트 기본 잡을 대체하나 | 아니다. 뒤에 이어 붙는다. 최종 설정은 기본 잡 열 개에 `vllm-metrics`를 더한 열한 개다 |
@@ -679,13 +681,13 @@ Error scraping target: server returned HTTP status 404 Not Found
 - [Kubernetes: DNS for Services and Pods](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/)
 - [Kubernetes: Ingress - Path types](https://kubernetes.io/docs/concepts/services-networking/ingress/#path-types)
 - [vLLM: Production Metrics](https://docs.vllm.ai/en/latest/usage/metrics.html)
-- [08-00편: vLLM on Trainium 워크샵 개요]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
-- [08-01편: AWS 가속기 - Inferentia, Trainium, NeuronCore]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
-- [08-02-01편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
-- [08-02-02편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
-- [08-03-01편: init container 모델 컴파일과 S3 캐시]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
-- [08-03-02편: LoadBalancer 서비스 노출과 추론 테스트]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})
-- [08-04편: ingress-nginx L7 노출과 자체 서명 인증서]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})
-- [08-05-02편: 데이터소스 프로비저닝과 vLLM 대시보드]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})
+- [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
+- [8.1편: Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
+- [8.2.1편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
+- [8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
+- [8.3.1편: init container 모델 컴파일과 S3 캐시]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
+- [8.3.2편: LoadBalancer 서비스 노출과 추론 테스트]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})
+- [8.4편: ingress-nginx L7 노출과 자체 서명 인증서]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})
+- [8.5.2편: 데이터소스 프로비저닝과 vLLM 대시보드]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard %})
 
 <br>

@@ -17,7 +17,7 @@ tags:
   - vLLM
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-6
-last_modified_at: 2026-09-12
+last_modified_at: 2026-09-13
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.*
@@ -28,7 +28,7 @@ last_modified_at: 2026-09-12
 
 - 워크샵이 만들어 둔 것은 EKS 컨트롤 플레인까지다. `trn1.2xlarge` 관리형 노드그룹은 실습자가 `eksctl`로 직접 붙인다. `coredns` 파드 2개가 8시간째 `Pending`인 것이 그 상태의 증거였다
 - 노드그룹 네트워킹은 세 단계 필터로 정해진다 — 컨트롤 플레인과 같은 VPC → 인스턴스 타입이 제공되는 가용 영역(AZ) → 그 AZ에 있는 퍼블릭 서브넷. 인스턴스 타입이 AZ를 고르고 AZ가 서브넷을 고르므로 순서를 뒤집으면 안 된다
-- 워크샵 셸에 미리 세팅돼 있던 `WORKER_AMI`가 이미 deregister된 AMI ID라 첫 배포가 `InvalidAMIID.NotFound`로 실패했다. 같은 셸에서 SSM을 직접 조회한 값과 환경변수 값이 다르다는 것 자체가, 그 값의 출처가 SSM이 아니라는 증거다
+- 워크샵 셸에 미리 세팅돼 있던 `WORKER_AMI`가 지금은 조회되지 않는 AMI ID라 첫 배포가 `InvalidAMIID.NotFound`로 실패했다. 같은 셸에서 SSM을 직접 조회한 값과 환경변수 값이 다르다는 것 자체가, 그 값의 출처가 SSM이 아니라는 증거다
 - 교훈은 두 줄이다 — AMI ID는 매번 SSM 파라미터에서 조회한다, 워크샵 환경에 미리 세팅된 값은 실제 값과 대조하고 쓴다
 - 노드가 `Ready`가 되면 `aws.amazon.com/neuron: 1`과 `aws.amazon.com/neuroncore: 2`가 함께 광고된다. 칩 하나에 리소스가 왜 두 개인지는 [다음 편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에서 다룬다
 - `kubectl label`이 내놓는 `not labeled`는 실패가 아니라 no-op이다. `eksctl`이 노드 join 시점에 같은 라벨을 이미 심어 두기 때문이다
@@ -37,7 +37,7 @@ last_modified_at: 2026-09-12
 
 # 실습 환경
 
-이 글은 워크샵 Lab 1의 스텝 1~6과 8~9에 해당한다. 스텝 7(Neuron device plugin 재설치와 스케줄러 확장 설치)은 성격이 달라 [08-02-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에서 따로 다룬다. 워크샵 전체 구성과 아키텍처는 [08-00편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}), Trainium과 NeuronCore 배경지식은 [08-01편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})에 있다.
+이 글은 워크샵 Lab 1의 스텝 1~6과 8~9에 해당한다. 스텝 7(Neuron device plugin 재설치와 스케줄러 확장 설치)은 성격이 달라 [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에서 따로 다룬다. 워크샵 전체 구성과 아키텍처는 [8.0편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}), Trainium과 NeuronCore 배경지식은 [8.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})에 있다.
 
 작업은 전부 워크샵이 제공하는 배스천(bastion) 인스턴스에 SSH로 붙어서 진행한다. 아래 출력의 셸 프롬프트 `ubuntu@ip-10-0-1-100`이 그 인스턴스다. 이 글의 모든 출력에서 계정 ID, 클러스터명, VPC·서브넷·인스턴스 ID, 호스트명, IP는 예시 값으로 치환했다. 다만 **AMI ID 두 개(`ami-08695d32a8bb6c5a5`, `ami-0e08c07b0376ba3f8`)는 그대로 뒀다** — 두 값이 다르다는 사실 자체가 이 글 후반부 트러블슈팅의 증거이기 때문이다.
 
@@ -104,9 +104,9 @@ users:
 </details>
 
 ![EKS 컨트롤 플레인만 생성되어 있는 상태]({{site.url}}/assets/images/llmso-aws-workshop-lab1-eks-control-plane.png){: .align-center}
-<center><sup>직접 캡처. 컴퓨팅 탭이 노드 0개, 노드 그룹 0개 상태다</sup></center>
+<center><sup>직접 캡처. 컴퓨팅 탭이 노드 0개, 노드그룹 0개 상태다</sup></center>
 
-콘솔에서도 같은 상태가 보인다. 클러스터는 활성이고 쿠버네티스 버전은 1.33인데, 노드와 노드 그룹은 둘 다 0이다. 노드 목록에 뜬 `Unauthorized`는 콘솔 로그인 주체가 클러스터의 access entry에 없어서 나는 것이고, 배스천 셸의 `kubectl`은 정상 동작한다.
+콘솔에서도 같은 상태가 보인다. 클러스터는 활성이고 쿠버네티스 버전은 1.33인데, 노드와 노드그룹은 둘 다 0이다. 노드 목록에 뜬 `Unauthorized`는 콘솔 로그인 주체가 클러스터의 access entry에 없어서 나는 것이고, 배스천 셸의 `kubectl`은 정상 동작한다.
 
 ## 도구 설치
 
@@ -120,7 +120,7 @@ users:
 | python3-pip, unzip | `apt install` | - |
 | kubectl 자동완성 | `source <(kubectl completion bash)` + `~/.bashrc` 추가 | - |
 
-`apt update` 자체는 배스천이 퍼블릭 서브넷에 있어 그대로 통과한다. 여기서 설치하는 Helm은 뒤에서 S3 CSI 드라이버를 깔 때, 그리고 [08-02-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에서 Neuron device plugin을 다시 깔 때 쓴다.
+`apt update` 자체는 배스천이 퍼블릭 서브넷에 있어 그대로 통과한다. 여기서 설치하는 Helm은 뒤에서 S3 CSI 드라이버를 깔 때, 그리고 [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에서 Neuron device plugin을 다시 깔 때 쓴다.
 
 ## 미리 세팅된 환경변수
 
@@ -181,20 +181,22 @@ my-neuron-cluster ami-08695d32a8bb6c5a5 123456789012 vllm-models-cache-123456789
 
 # 클러스터 네트워킹 해부
 
-노드그룹을 붙이려면 VPC ID, 서브넷 ID, 보안그룹 ID를 `ClusterConfig`에 사람이 직접 채워 넣어야 한다. 세 값은 각각 다른 이유로 필요하고, 구하는 순서도 정해져 있다 — **VPC는 클러스터에서 캐내고, AZ는 인스턴스 타입이 정하고, 서브넷은 그 AZ 안에서 고른다.**
+노드그룹을 붙이려면 VPC ID, 서브넷 ID, 보안그룹 ID를 `ClusterConfig`에 사람이 직접 채워 넣어야 한다. 세 값은 각각 다른 이유로 필요하고, 구하는 순서도 정해져 있다 — **VPC는 클러스터에서 조회하고, AZ는 인스턴스 타입이 정하고, 서브넷은 그 AZ 안에서 고른다.**
 
 ## 클러스터와 같은 VPC에 붙어야 하는 이유
 
-EKS 컨트롤 플레인은 사용자 VPC의 서브넷에 cross-account ENI를 꽂아 워커 노드와 통신한다. 노드가 다른 VPC에 있으면 kubelet이 API 서버에 등록되지 못한다. 그래서 노드그룹은 반드시 클러스터와 같은 VPC 안에 만들어야 한다.
+EKS 컨트롤 플레인은 클러스터 생성 시 지정한 서브넷에 cross-account ENI를 만들어 두고, 이 ENI로 컨트롤 플레인에서 노드로 가는 트래픽(`kubectl exec`·`logs`·`port-forward`가 쓰는 kubelet API)을 보낸다. 반대 방향인 kubelet의 클러스터 등록은 이 ENI가 아니라 EKS API 서버 엔드포인트로 나간다.
+
+노드그룹이 같은 VPC여야 하는 직접적인 근거는 통신 경로가 아니라 EKS API의 검증이다. 관리형 노드그룹에 지정하는 서브넷은 클러스터와 같은 VPC 안에 있어야 하고, EKS가 생성 시점에 그 조건을 확인한다. 다만 클러스터 생성 시 지정하지 않았던 서브넷이어도 같은 VPC이기만 하면 된다.
 
 여기에 이 실습 특유의 사정이 하나 더 붙는다. 이 클러스터는 `eksctl`이 만든 것이 아니라 워크샵의 CloudFormation이 미리 만든 것이다. `eksctl`은 자기가 만든 스택이 없으면 VPC를 추론할 근거가 없으므로, `vpc.id`·`vpc.subnets`·`vpc.securityGroup`을 설정 파일로 받아야 한다. 그래서 클러스터에서 직접 조회한다.
 
 ```shell
-# 클러스터가 쓰고 있는 VPC를 캐낸다
+# 클러스터가 쓰고 있는 VPC를 조회한다
 ubuntu@ip-10-0-1-100:~/workshop$ VPC_ID=$(aws eks describe-cluster --name $CLUSTER_NAME --region $AWS_REGION \
 >   --query 'cluster.resourcesVpcConfig.vpcId' --output text)
 
-# 0.0.0.0/0 기본 경로를 가진 라우트 테이블 = 인터넷 게이트웨이로 나가는 경로
+# 0.0.0.0/0 기본 경로를 가진 라우트 테이블
 ubuntu@ip-10-0-1-100:~/workshop$ PUBLIC_ROUTE_TABLE=$(aws ec2 describe-route-tables \
 >   --filters "Name=vpc-id,Values=$VPC_ID" "Name=route.destination-cidr-block,Values=0.0.0.0/0" \
 >   --query 'RouteTables[0].RouteTableId' --output text)
@@ -256,7 +258,7 @@ us-west-2b us-west-2d
 - SSM — Session Manager로 노드에 접속
 - S3, Hugging Face — 모델 가중치와 컴파일 캐시
 
-앞서 `PUBLIC_ROUTE_TABLE`을 `route.destination-cidr-block=0.0.0.0/0`으로 찾은 것은 인터넷 게이트웨이(IGW) 기본 경로가 있는 라우트 테이블을 고른 것이다. 노드에 퍼블릭 IP를 직접 붙여 IGW로 내보내는 구성이고, 실제로 그렇게 됐다는 증거는 뒤에서 볼 [노드 등록 결과](#노드-등록-결과)에 있다 — `ExternalIP`와 `ExternalDNS`가 채워져 있다. 프라이빗 서브넷 + NAT 게이트웨이 구성이었다면 이 필드가 비어 있다.
+앞서 `PUBLIC_ROUTE_TABLE`을 찾을 때 쓴 `route.destination-cidr-block=0.0.0.0/0` 필터는 기본 경로가 있는 라우트 테이블을 고를 뿐, 그 경로의 타겟이 인터넷 게이트웨이(IGW)인지 NAT 게이트웨이인지는 구분하지 않는다. IGW만 가려내려면 `Name=route.gateway-id,Values=igw-*` 조건이 따로 필요하다. 이 실습에서 퍼블릭 서브넷을 실제로 고른 조건은 위의 `map-public-ip-on-launch=true`이고, 노드에 퍼블릭 IP를 직접 붙여 IGW로 내보내는 구성이 맞다는 증거는 뒤에서 볼 [노드 등록 결과](#노드-등록-결과)에 있다 — `ExternalIP`와 `ExternalDNS`가 채워져 있다. 프라이빗 서브넷 + NAT 게이트웨이 구성이었다면 이 필드가 비어 있다.
 
 > 이 VPC에 NAT 게이트웨이가 아예 없는지는 직접 조회하지 않았다. 확인한 범위는 "노드에 퍼블릭 IP가 붙었고 IGW 경로가 있는 서브넷을 골랐다"까지다.
 
@@ -354,7 +356,7 @@ ubuntu@ip-10-0-1-100:~/workshop$ cat > eks_nodegroup.yaml <<EOF
 > EOF
 ```
 
-heredoc은 작성 시점의 변수 값을 그대로 굽는다. 즉 `$WORKER_AMI`가 낡은 값이면 그 값이 YAML에 박히고, 나중에 환경변수만 고쳐도 파일은 바뀌지 않는다.
+heredoc은 작성 시점의 변수 값을 그대로 확장해 파일에 쓴다. 즉 `$WORKER_AMI`가 낡은 값이면 그 값이 YAML에 박히고, 나중에 환경변수만 고쳐도 파일은 바뀌지 않는다.
 
 </details>
 
@@ -378,7 +380,7 @@ ubuntu@ip-10-0-1-100:~/workshop$ eksctl create nodegroup --config-file=eks_nodeg
 
 첫 줄의 `[!]` 경고는 정상이다. 컨트롤 플레인이 `eksctl`이 아니라 워크샵 CloudFormation으로 만들어졌기 때문에 나오는 것이고, 노드그룹 생성 자체는 그대로 진행된다.
 
-눈여겨볼 것은 `install Neuron device plugin`이다. `eksctl`이 노드그룹을 만든 뒤 Neuron device plugin을 알아서 설치했다. 메시지 문구는 `inf1 instance type`이라고 쓰지만 실제 인스턴스 타입은 `trn1.2xlarge`이고, `--install-neuron-plugin=false`로 끌 수 있다고 안내한다. 이 자동 설치분이 나중에 Helm으로 다시 까는 쪽과 충돌하는데, 그 이야기는 [08-02-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에서 다룬다.
+눈여겨볼 것은 `install Neuron device plugin`이다. `eksctl`이 노드그룹을 만든 뒤 Neuron device plugin을 알아서 설치했다. 메시지 문구는 `inf1 instance type`이라고 쓰지만 실제 인스턴스 타입은 `trn1.2xlarge`이고, `--install-neuron-plugin=false`로 끌 수 있다고 안내한다. 이 자동 설치분이 나중에 Helm으로 다시 까는 쪽과 충돌하는데, 그 이야기는 [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에서 다룬다.
 
 <details markdown="1">
 <summary><b>eksctl create nodegroup 전체 출력</b></summary>
@@ -464,7 +466,7 @@ Allocatable:
   pods:                       58
 ```
 
-칩 하나짜리 노드인데 확장 리소스(extended resource)가 두 종류 광고된다. `aws.amazon.com/neuron`이 1, `aws.amazon.com/neuroncore`가 2다. 왜 두 개인지, 그리고 이 둘을 섞어 쓰면 어떤 문제가 생기는지는 [08-02-02편의 "리소스가 두 개 광고되는 이유"]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#리소스가-두-개-광고되는-이유)에서 다룬다. 확장 리소스와 device plugin 할당 메커니즘 자체가 낯설다면 [GenAI on K8s 10.1편]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation %})이 배경이 된다.
+칩 하나짜리 노드인데 확장 리소스(extended resource)가 두 종류 광고된다. `aws.amazon.com/neuron`이 1, `aws.amazon.com/neuroncore`가 2다. 왜 두 개인지, 그리고 이 둘을 섞어 쓰면 어떤 문제가 생기는지는 [8.2.2편의 "리소스가 두 개 광고되는 이유"]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#리소스가-두-개-광고되는-이유)에서 다룬다. 확장 리소스와 device plugin 할당 메커니즘 자체가 낯설다면 [GenAI on K8s 10.1편]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation %})이 배경이 된다.
 
 <details markdown="1">
 <summary><b>kubectl describe node 전체 출력</b></summary>
@@ -587,8 +589,8 @@ Events:
 
 노드그룹 자체는 콘솔에서도 확인할 수 있다.
 
-![eksctl이 생성한 관리형 노드 그룹]({{site.url}}/assets/images/llmso-aws-workshop-lab1-eks-node-group.png){: .align-center}
-<center><sup>직접 캡처. 노드 그룹 <code>neuron-trn1-2x</code>가 원하는 크기 1, AMI 릴리스 버전 <code>ami-0e08c07b0376ba3f8</code>로 활성 상태다</sup></center>
+![eksctl이 생성한 관리형 노드그룹]({{site.url}}/assets/images/llmso-aws-workshop-lab1-eks-node-group.png){: .align-center}
+<center><sup>직접 캡처. 노드그룹 <code>neuron-trn1-2x</code>가 원하는 크기 1, AMI 릴리스 버전 <code>ami-0e08c07b0376ba3f8</code>로 활성 상태다</sup></center>
 
 EKS 워커 노드가 등록될 때 노드 쪽에서 어떤 파일과 프로세스가 관여하는지는 [EKS 워커 노드 구성 결과]({% post_url 2026-03-12-Kubernetes-EKS-01-01-05-EKS-Cluster-Worker-Node-Result %})에 정리해 둔 것이 있다.
 
@@ -702,7 +704,7 @@ CURRENT   NAME                                                       CLUSTER    
 |---|---|---|
 | Base EKS Cluster (Kubernetes 1.33) | `kubectl get nodes`의 `v1.33.13-eks-cb19647` | VPC CNI는 `aws-node` 파드로, OIDC는 워크샵 CFN이 설정 |
 | Neuron 관리형 노드그룹 (`trn1.2xlarge`) | 노드 1개 `Ready`, `instance-type=trn1.2xlarge` | 워크샵 요약문은 스토리지를 500GB라고 적지만, 이 실습의 `ClusterConfig`는 `volumeSize: 100`이다. `ephemeral-storage` 약 100GiB가 그 결과 |
-| Neuron device plugin | `aws.amazon.com/neuron`·`neuroncore`가 광고됨 | `eksctl`이 자동 설치한 것. 교체는 [08-02-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}) |
+| Neuron device plugin | `aws.amazon.com/neuron`·`neuroncore`가 광고됨 | `eksctl`이 자동 설치한 것. 교체는 [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}) |
 | S3 모델 캐시 | `aws s3 ls`의 버킷 + `s3-csi-*` 파드 `Running` | StorageClass는 아직 `gp2`뿐이고, S3 볼륨을 PV·PVC로 붙이는 것은 [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})이다 |
 
 반대 방향의 확인도 해 두면 좋다. device plugin이 죽으면 `allocatable`에서 확장 리소스가 사라지고 파드가 `Pending`에 머무는데, 그 케이스는 [EKS GPU 트러블슈팅 3.1편]({% post_url 2026-04-09-Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending %})에 정리해 둔 것이 있다.
@@ -751,7 +753,7 @@ Error: unable to find image "ami-08695d32a8bb6c5a5": operation error EC2: Descri
 
 (c)를 1순위로 보는 근거는 같은 환경에 독립적인 증거가 하나 더 있다는 점이다. 워크샵 환경의 `.env`에 들어 있던 Hugging Face 토큰도 만료되어 있어 새로 발급해야 했다. 토큰과 AMI ID는 서로 아무 관계가 없는 값인데, **환경 구축 시점에 박혀서 그 후로 갱신되지 않았다**는 동일한 실패 양상을 보인다. 리전 불일치 가설로는 토큰 만료를 설명할 수 없지만, 템플릿 노후화 가설은 둘을 한 번에 설명한다.
 
-여기서 "워크샵이 설계된 시점과 지금이 다르다"가 가리키는 것이 분명해진다. 워크샵 환경 템플릿이 만들어진 시점의 AWS 리소스 스냅샷이 그대로 굳어 있는데, 그 뒤 AWS 쪽에서만 시간이 흘렀다는 뜻이다. `/aws/service/eks/optimized-ami/1.33/.../recommended/image_id`가 가리키는 AMI는 새 릴리스마다 바뀌고 구버전은 일정 기간 후 deregister되므로, 굳어 있던 값은 언젠가 반드시 깨진다.
+여기서 "워크샵이 설계된 시점과 지금이 다르다"가 가리키는 것이 분명해진다. 워크샵 환경 템플릿이 만들어진 시점의 AWS 리소스 스냅샷이 그대로 굳어 있는데, 그 뒤 AWS 쪽에서만 시간이 흘렀다는 뜻이다. `/aws/service/eks/optimized-ami/1.33/.../recommended/image_id`가 가리키는 AMI는 새 릴리스마다 바뀌고 구버전은 시간이 지나면 조회되지 않는 상태로 넘어가므로, 굳어 있던 값은 언젠가 반드시 깨진다.
 
 결국 이 사고의 본질은 불일치다. 워크샵 문서 본문은 `aws ssm get-parameter`로 AMI를 조회하라고 지시하는데, 환경 부트스트랩은 그 지시를 따르지 않고 값을 박아 뒀다.
 
@@ -808,11 +810,11 @@ ami-0e08c07b0376ba3f8   amazon-eks-node-al2023-x86_64-neuron-1.33-v20260903     
 | 네트워킹 | VPC → 인스턴스 타입 제공 AZ → 퍼블릭 서브넷 순으로 값 확보 | 서로 다른 AZ의 퍼블릭 서브넷 2개 |
 | 노드그룹 | `eksctl create nodegroup`으로 `trn1.2xlarge` 1대 | 노드 `Ready`, `ExternalIP` 부여됨 |
 | 스토리지 | 모델 캐시 버킷 + Mountpoint S3 CSI 드라이버 | `s3-csi-controller`·`s3-csi-node` `Running` |
-| 막힘 | 미리 박힌 `WORKER_AMI`가 deregister된 AMI | SSM 조회값과 환경변수값의 불일치 |
+| 막힘 | 미리 박힌 `WORKER_AMI`가 지금은 조회되지 않는 AMI | SSM 조회값과 환경변수값의 불일치 |
 
 이 편에서 확보한 것은 vLLM 배포를 받을 수 있는 클러스터 상태다. 노드가 `Ready`이고, Neuron 확장 리소스가 광고되고, 모델 캐시용 스토리지가 붙어 있다.
 
-남은 질문은 광고된 리소스 쪽에 있다. 칩 하나짜리 노드인데 `aws.amazon.com/neuron: 1`과 `aws.amazon.com/neuroncore: 2`가 함께 나온다. 이 둘이 같은 하드웨어를 두 가지 단위로 센 것이라면, 스케줄러는 그 사실을 어떻게 아는가. [08-02-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에서 노드 안으로 들어가 커널 디바이스 노드와 device plugin 소켓까지 확인한다.
+남은 질문은 광고된 리소스 쪽에 있다. 칩 하나짜리 노드인데 `aws.amazon.com/neuron: 1`과 `aws.amazon.com/neuroncore: 2`가 함께 나온다. 이 둘이 같은 하드웨어를 두 가지 단위로 센 것이라면, 스케줄러는 그 사실을 어떻게 아는가. [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에서 노드 안으로 들어가 커널 디바이스 노드와 device plugin 소켓까지 확인한다.
 
 <br>
 
@@ -824,9 +826,9 @@ ami-0e08c07b0376ba3f8   amazon-eks-node-al2023-x86_64-neuron-1.33-v20260903     
 - [awslabs/mountpoint-s3-csi-driver](https://github.com/awslabs/mountpoint-s3-csi-driver)
 - [AWS Neuron Documentation](https://awsdocs-neuron.readthedocs-hosted.com/)
 - [Kubernetes: Device Plugins](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/)
-- [08-00편: vLLM on Trainium 워크샵 개요]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
-- [08-01편: AWS 가속기 - Inferentia, Trainium, NeuronCore]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
-- [08-02-02편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
+- [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
+- [8.1편: Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
+- [8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
 - [GenAI on K8s 10.1편: GPU 자원 개요와 K8s 할당 메커니즘]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation %})
 - [EKS 클러스터 워커 노드 구성 결과]({% post_url 2026-03-12-Kubernetes-EKS-01-01-05-EKS-Cluster-Worker-Node-Result %})
 - [EKS GPU 트러블슈팅 3.1편: Device Plugin 비활성화 시 파드 Pending]({% post_url 2026-04-09-Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending %})

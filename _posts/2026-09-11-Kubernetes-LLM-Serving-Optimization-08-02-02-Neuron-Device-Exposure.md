@@ -18,7 +18,7 @@ tags:
   - Helm
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-6
-last_modified_at: 2026-09-12
+last_modified_at: 2026-09-13
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.*
@@ -28,7 +28,7 @@ last_modified_at: 2026-09-12
 # TL;DR
 
 - `aws.amazon.com/neuron: 1`과 `aws.amazon.com/neuroncore: 2`는 서로 다른 하드웨어가 아니다. 같은 Trainium 칩 하나를 **칩 단위와 코어 단위로 두 번 광고**한 것이다
-- 그 근거는 device plugin이 만들어 낸 논리적 숫자가 아니라 커널에 있다. `/dev/neuron0` 하나와 `/dev/ng0n1`·`/dev/ng1n1` 둘이 이미 분리되어 있고, `lspci`에는 PCI BDF가 하나만 잡힌다
+- 커널이 만드는 디바이스 노드는 칩 단위 `/dev/neuron0` 하나뿐이고 `lspci`에도 PCI BDF가 하나만 잡힌다. 코어가 둘이라는 사실은 `/dev` 노드가 아니라 `neuron-ls`·`neuron-top`이 드라이버에 질의해 보고하는 값에서 확인된다
 - device plugin 소켓이 두 개인 것은 코어가 둘이라서가 아니라 **광고하는 리소스 이름이 둘**이기 때문이다. Device Plugin API의 `Register`가 리소스 이름 하나에 endpoint 하나만 받는다. 이 소켓은 kubelet과 플러그인 사이의 제어 채널이지 코어 간 데이터 경로가 아니다
 - containerd 설정에 Neuron 전용 런타임이 없다. 컨테이너 안으로 옮겨 심어야 할 유저스페이스 파일이 없어서 `/dev` 노드만 넣어 주면 되고, 그건 runc 표준 동작이다. NVIDIA가 래퍼 런타임을 필요로 하는 이유와 정확히 반대편에 있다
 - 사전 설치되어 있던 device plugin을 지우고 Helm으로 다시 까는 이유는 설정을 바꾸려는 게 아니라 **Helm에 소유권을 넘기기 위해서**다. 그 device plugin은 AMI가 아니라 eksctl이 노드그룹 생성 중에 깔았다
@@ -38,7 +38,7 @@ last_modified_at: 2026-09-12
 
 # 리소스가 두 개 광고되는 이유
 
-[08-02-01편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})에서 `trn1.2xlarge` 노드그룹을 붙이고 나니 노드가 `Ready`로 올라왔고, `kubectl describe node`의 Capacity에 리소스 두 종류가 함께 찍혔다. 칩은 인스턴스에 하나뿐인데 리소스는 둘이다.
+[8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})에서 `trn1.2xlarge` 노드그룹을 붙이고 나니 노드가 `Ready`로 올라왔고, `kubectl describe node`의 Capacity에 리소스 두 종류가 함께 찍혔다. 칩은 인스턴스에 하나뿐인데 리소스는 둘이다.
 
 ```text
 Capacity:
@@ -51,7 +51,7 @@ Capacity:
 
 결론부터 말하면 둘은 서로 다른 하드웨어가 아니다. Neuron device plugin이 **같은 하드웨어를 두 가지 단위(granularity)로 동시에 노출**하기 때문에 이름이 둘로 갈린 것이다. extended resource가 무엇이고 노드 capacity에 어떻게 올라오는지는 [GPU 자원 개요와 K8s 할당 메커니즘]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation %}#device-plugin-동작-흐름)에 정리해 두었다.
 
-이 글은 워크샵 Lab 1의 스텝 7(Neuron device plugin 재설치와 스케줄러 확장 설치)에 해당한다. 앞부분은 스텝 5에서 확인한 노드 상태를 출발점으로 삼는다. Trainium 칩과 NeuronCore, NeuronLink 자체의 하드웨어 배경은 [08-01편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})에 있다.
+이 글은 워크샵 Lab 1의 스텝 7(Neuron device plugin 재설치와 스케줄러 확장 설치)에 해당한다. 앞부분은 스텝 5에서 확인한 노드 상태를 출발점으로 삼는다. Trainium 칩과 NeuronCore, NeuronLink 자체의 하드웨어 배경은 [8.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})에 있다.
 
 ## 칩 하나, 코어 둘
 
@@ -70,20 +70,20 @@ Capacity:
         ├─ DMA 엔진 (1 TB/s, 인라인 압축/해제)
         ├─ NeuronLink-v2 인터페이스        <- 칩이 1개뿐이라 이번 실습에선 미사용
         │
-        ├─ [NeuronCore-v2 #0]            <- /dev/ng0n1
+        ├─ [NeuronCore-v2 #0]            <- NEURON_RT_VISIBLE_CORES 인덱스 0
         │     ├─ Tensor Engine
         │     ├─ Vector Engine
         │     ├─ Scalar Engine
         │     ├─ GPSIMD Engine (8 DSP 코어)
         │     └─ SBUF: 온칩 SRAM 24 MB (소프트웨어 관리)
         │
-        └─ [NeuronCore-v2 #1]            <- /dev/ng1n1
+        └─ [NeuronCore-v2 #1]            <- NEURON_RT_VISIBLE_CORES 인덱스 1
               └─ (위와 완전히 동일한 4엔진 + SBUF)
                                               ^
                                 합쳐서 aws.amazon.com/neuroncore: 2
 ```
 
-## 무엇이 독립이고 무엇이 공유인가
+## 코어별 독립 자원과 칩 단위 공유 자원
 
 AWS는 NeuronCore-v2를 이렇게 정의한다.
 
@@ -128,7 +128,7 @@ MFU = 달성 FLOPS / (칩 수 x 칩당 피크 FLOPS)
 | `aws.amazon.com/neuron: 1` | 칩을 통째로 점유 (코어 2개 전부) | Tensor Parallel로 코어를 묶어 쓸 때 |
 | `aws.amazon.com/neuroncore: 1` | 코어 1개만 점유 | 작은 모델을 코어 단위로 쪼개 여러 파드에 나눠 줄 때 |
 
-어느 쪽을 요청하느냐에 따라 배치 결과와 컨테이너에 보이는 코어 가시성이 달라진다. 실제 배포가 어느 쪽을 쓰는지는 vLLM 배포 편에서 확인한다.
+어느 쪽을 요청하느냐에 따라 배치 결과와 컨테이너에 보이는 코어 가시성이 달라진다. 실제 배포는 칩 단위(`aws.amazon.com/neuron: 1`)를 요청하는데, 그 근거는 [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})에 있다.
 
 ## 칩과 코어를 따로 세면 생기는 일
 
@@ -143,7 +143,7 @@ MFU = 달성 FLOPS / (칩 수 x 칩당 피크 FLOPS)
 | 2 | Pod B | `neuroncore: 2` | 코어 2개가 남은 것으로 보여 배치 허용 | 남은 코어 0개 |
 | 3 | - | - | `neuron: 0`, `neuroncore: 0` | A와 B가 같은 코어를 각자 자기 것으로 간주 |
 
-2단계에서 스케줄러의 장부에는 아무 모순이 없다. `neuron` 장부는 0이고 `neuroncore` 장부는 2이기 때문이다. 그런데 `neuron: 1`을 받은 Pod A는 이미 `/dev/ng0n1`과 `/dev/ng1n1`을 둘 다 쥐고 있다. 하나의 물리 자원이 두 장부에 중복 계상되는 것, 이것이 이중 회계다.
+2단계에서 스케줄러의 장부에는 아무 모순이 없다. `neuron` 장부는 0이고 `neuroncore` 장부는 2이기 때문이다. 그런데 `neuron: 1`을 받은 Pod A는 이미 칩 안의 코어 0과 1을 둘 다 쥐고 있다. 하나의 물리 자원이 두 장부에 중복 계상되는 것, 이것이 이중 회계다.
 
 두 리소스 이름을 섞어 쓸 때만 생기는 문제도 아니다. 노드가 여럿이고 칩이 여럿인 구성에서는 `neuroncore`만 쓰더라도 **어느 칩의 어느 코어를 줬는지**를 추적하는 주체가 없다. 스케줄러는 코어 개수만 세고, 그 코어들이 같은 칩 안에 있는지 흩어져 있는지는 세지 않는다.
 
@@ -155,7 +155,7 @@ MFU = 달성 FLOPS / (칩 수 x 칩당 피크 FLOPS)
 
 # 노드 안에서 본 Neuron 디바이스 해부
 
-리소스 두 개가 device plugin이 임의로 만든 논리적 숫자인지, 아니면 그 아래에 근거가 있는지를 노드에 직접 들어가 확인할 수 있다. 결론부터 말하면 근거는 커널에 있다. `/dev` 노드가 이미 칩과 코어를 분리해 노출하고 있고, device plugin은 그걸 세어서 그대로 광고한다.
+리소스 두 개가 device plugin이 임의로 만든 논리적 숫자인지, 아니면 그 아래에 근거가 있는지를 노드에 직접 들어가 확인할 수 있다. 결론부터 말하면 커널이 만드는 노드는 칩 단위 하나뿐이다. 코어가 둘이라는 사실은 `/dev`가 아니라 `neuron-ls`·`neuron-top`이 드라이버에 질의해 보고하는 값에서 확인되고, device plugin도 같은 정보를 읽어 두 가지 단위로 광고한다.
 
 ## 커널 모듈과 디바이스 노드
 
@@ -167,7 +167,7 @@ MFU = 달성 FLOPS / (칩 수 x 칩당 피크 FLOPS)
 접속하면 `ssm-user`로 떨어진다. `ec2-user`로 전환한 뒤 PCI, 커널 모듈, 디바이스 파일을 차례로 확인했다.
 
 ```shell
-# 세션 매니저 접속 직후의 사용자는 ssm-user다. ec2-user로 전환한다
+# Session Manager 접속 직후의 사용자는 ssm-user다. ec2-user로 전환한다
 sh-5.2$ whoami
 ssm-user
 sh-5.2$ sudo su ec2-user
@@ -194,22 +194,21 @@ neuron                491520  0
 [ec2-user@ip-10-0-5-100 ~]$ ls -l /dev/neuron0
 crw-rw-rw-. 1 root root 243, 0 Sep 11 12:37 /dev/neuron0
 
-# 코어 단위 디바이스 노드. 네이밍은 ng<device_index>n<core_index> 형태다
-# root 전용(crw-------)으로 잠겨 있고, device plugin이 컨테이너에 넣어 줄 때 권한이 열린다
+# 처음에는 이 노드들을 코어 단위 노드로 읽었는데, 아니었다. 아래 본문 참고
 [ec2-user@ip-10-0-5-100 ~]$ ls -l /dev/ng*
 crw-------. 1 root root 246, 0 Sep 11 12:37 /dev/ng0n1
 crw-------. 1 root root 246, 1 Sep 11 12:37 /dev/ng1n1
 ```
 
-`neuron: 1`과 `neuroncore: 2`가 device plugin이 지어낸 숫자가 아니라는 커널 레벨 증거가 이것이다. 캐릭터 디바이스가 이미 칩 하나와 코어 둘로 갈라져 있다.
+여기서 확인되는 것은 칩 쪽뿐이다. `/dev/neuron0` 하나가 칩 하나에 대응하고, 코어 2개는 별도의 노드로 나뉘어 있지 않다.
 
 ```text
 crw-rw-rw-  243, 0   /dev/neuron0     # 칩 전체 (1개)
-crw-------  246, 0   /dev/ng0n1       # 코어 0
-crw-------  246, 1   /dev/ng1n1       # 코어 1
 ```
 
-메이저 번호가 243과 246으로 다른 것도 같은 이야기다. 같은 `neuron` 커널 모듈이 성격이 다른 두 종류의 캐릭터 디바이스를 등록해 둔 것이다. 캐릭터 디바이스와 메이저/마이너 번호, 커널 모듈이 디바이스 노드를 만드는 3계층 구조는 [디바이스 드라이버: 3계층 구조]({% post_url 2026-02-01-CS-Linux-Device-Driver %}#문자-장치-character-device)에 정리해 두었다.
+`/dev/ng0n1`·`/dev/ng1n1`은 Neuron과 무관하다. `ng<컨트롤러>n<네임스페이스>`는 NVMe 네임스페이스의 generic character device 네이밍이고, 바로 위 `lspci` 출력에 NVMe 컨트롤러가 정확히 둘(`00:04.0` EBS, `00:1f.0` 인스턴스 스토어 SSD) 잡혀 있는 것이 그 대응이다. 코어 단위 노드였다면 칩이 하나이므로 `ng0n0`·`ng0n1`이 나왔어야 하는데 실제 출력은 `ng0n1`·`ng1n1`이다. 메이저 번호가 243과 246으로 갈린 것도 한 모듈이 두 종류를 등록해서가 아니라, `neuron` 모듈과 NVMe generic 쪽이 각각 `alloc_chrdev_region`으로 동적 메이저를 받아 갔기 때문이다. 캐릭터 디바이스와 메이저/마이너 번호, 커널 모듈이 디바이스 노드를 만드는 3계층 구조는 [디바이스 드라이버: 3계층 구조]({% post_url 2026-02-01-CS-Linux-Device-Driver %}#문자-장치-character-device)에 정리해 두었다.
+
+그러면 `neuroncore: 2`의 근거는 어디에 있나. `/dev`가 아니라 드라이버다. 다음 절의 `neuron-ls` 출력이 그 값을 보여 준다.
 
 노드에는 Neuron 진단·모니터링 도구도 함께 깔려 있다. `neuron-ls`, `neuron-top`, `neuron-monitor`, `neuron-profile` 등이 전부 `/opt/aws/neuron/bin` 아래에 있다.
 
@@ -285,7 +284,7 @@ instance-id: i-0abc1234def56789
 | `PCI BDF 0000:00:1e.0` | 코어 2개가 하나의 PCIe 함수를 공유한다 |
 | `CPU AFFINITY 0-7` | vCPU 8개 전부 |
 
-`PCI BDF`가 하나라는 사실이 물리적으로 카드 2장이 아니라는 결정적 근거다. `lspci`에도 `00:1e.0` 하나만 잡혔다. 커널이 코어별 디바이스 노드를 두 개 만든 것은 PCIe 함수가 둘이라서가 아니라, 하나의 칩 내부를 코어 단위로 나눠 쓸 수 있게 드라이버가 갈라 놓은 것이다.
+`PCI BDF`가 하나라는 사실이 물리적으로 카드 2장이 아니라는 결정적 근거다. `lspci`에도 `00:1e.0` 하나만 잡혔다. `neuron-ls`가 코어를 둘로 세는 것은 PCIe 함수가 둘이라서가 아니라, 드라이버가 하나의 칩 내부를 코어 인덱스로 나눠 쓸 수 있게 열어 두고 있어서다.
 
 `neuron-top`을 띄우면 같은 구조가 화면으로 보인다. 디바이스는 `ND0` 하나인데 그 아래 사용률 막대가 `NC0`, `NC1` 둘이다.
 
@@ -320,7 +319,7 @@ sequenceDiagram
     participant A as kube-apiserver
 
     Note over P: /var/lib/kubelet/device-plugins 를 hostPath 로 마운트
-    P->>D: /dev/neuron0, /dev/ng0n1, /dev/ng1n1 스캔
+    P->>D: /dev/neuron0 스캔, 드라이버에 코어 수 질의
     P->>P: neuron-devplugin.sock 생성
     P->>P: neuroncore-devplugin.sock 생성
     P->>K: kubelet.sock 으로 Register aws.amazon.com/neuron, neuron-devplugin.sock
@@ -328,11 +327,11 @@ sequenceDiagram
     K->>P: ListAndWatch 호출 - neuron-devplugin.sock
     P-->>K: devices = neuron0
     K->>P: ListAndWatch 호출 - neuroncore-devplugin.sock
-    P-->>K: devices = ng0n1, ng1n1
+    P-->>K: devices = nc0, nc1
     K->>A: node.status.capacity 갱신 - neuron 1, neuroncore 2
     Note over K,A: 파드가 이 노드에 배치된 뒤
     K->>P: Allocate 호출 - neuroncore-devplugin.sock
-    P-->>K: devices = host_path /dev/ng0n1, /dev/ng1n1
+    P-->>K: devices = host_path /dev/neuron0, envs = NEURON_RT_VISIBLE_CORES
     K->>K: CRI LinuxContainerConfig.devices 에 그대로 전달
 ```
 
@@ -346,7 +345,7 @@ Kubernetes Device Plugin API는 **Unix domain socket 위의 gRPC**다. 같은 �
 | `neuron-devplugin.sock` | 플러그인 | kubelet | `ListAndWatch`(디바이스 목록 스트림 → 노드 capacity·allocatable), `Allocate`(컨테이너에 넣을 envs·devices·mounts·annotations) |
 | `neuroncore-devplugin.sock` | 플러그인 | kubelet | 위와 같다. 단위만 코어다 |
 
-TCP가 아니라 Unix domain socket을 쓰는 이유는 세 가지로 정리된다. 파일시스템 스코프라 네트워크에 노출되지 않고, 퍼미션을 파일 모드로 걸 수 있으며, 플러그인이 죽으면 소켓 파일이 사라져서 kubelet이 곧바로 감지한다.
+TCP가 아니라 Unix domain socket을 쓰는 이유는 두 가지로 정리된다. 파일시스템 스코프라 네트워크에 노출되지 않고, 퍼미션을 파일 모드로 걸 수 있다. 소켓 파일은 생사 판정에도 쓰이는데 방향이 반대다 — kubelet이 재시작하면 이 디렉터리의 소켓을 전부 지우고, 플러그인이 자기 소켓이 사라진 것을 감지해 다시 등록한다. 반대로 kubelet이 플러그인 이상을 아는 경로는 소켓 파일이 아니라 `ListAndWatch` 스트림이 끊기는 것이다.
 
 그래서 DaemonSet은 `/var/lib/kubelet/device-plugins`를 hostPath로 마운트해야 한다. 파드 스펙에 실제로 그렇게 적혀 있다.
 
@@ -503,7 +502,7 @@ Neuron 쪽은 `libnrt.so`가 이미지 안에 들어가 있어도 문제가 없�
    = 커널 모듈 하나뿐 └──────────────────────────────────┘
 ```
 
-정확 일치가 필요한 것이 커널 모듈 하나뿐이고, 그것이 경계선 아래에 온전히 들어가 있다. 그래서 옮겨 심을 파일이 아예 없고, `/dev/ng0n1`을 OCI 런타임 스펙의 `linux.devices`에 넣어 주는 표준 동작만 하면 끝나서 `runc`로 충분하다.
+정확 일치가 필요한 것이 커널 모듈 하나뿐이고, 그것이 경계선 아래에 온전히 들어가 있다. 그래서 옮겨 심을 파일이 아예 없고, `/dev/neuron0`을 OCI 런타임 스펙의 `linux.devices`에 넣어 주는 표준 동작만 하면 끝나서 `runc`로 충분하다. 넣어 줄 노드가 칩당 하나뿐이라는 점이 이 구조를 더 단순하게 만든다.
 
 정리할 때 주의할 점이 하나 있다. 두 벤더의 차이를 정확 일치 대 범위 호환으로 나누면 틀린다.
 
@@ -512,14 +511,15 @@ Neuron 쪽은 `libnrt.so`가 이미지 안에 들어가 있어도 문제가 없�
 
 ## Allocate() 응답에서 갈리는 지점
 
-경계선 차이는 Device Plugin API의 `Allocate()` 응답에서 그대로 드러난다. 응답에 담을 수 있는 필드는 네 가지다.
+경계선 차이는 Device Plugin API의 `Allocate()` 응답에서 그대로 드러난다. 응답에 담을 수 있는 필드는 다섯 가지다. 마지막 `cdi_devices`는 나중에 추가된 것이라 벤더별 구현에 따라 쓰이기도 하고 비어 있기도 하다.
 
-```go
+```proto
 message ContainerAllocateResponse {
   map<string, string> envs        = 1;  // 환경변수
-  repeated DeviceSpec devices     = 2;  // 디바이스 노드 (host_path, container_path, permissions)
-  repeated Mount mounts           = 3;  // bind-mount
+  repeated Mount mounts           = 2;  // bind-mount
+  repeated DeviceSpec devices     = 3;  // 디바이스 노드 (container_path, host_path, permissions)
   map<string, string> annotations = 4;  // CRI에 전달할 annotation
+  repeated CDIDevice cdi_devices  = 5;  // CDI 디바이스 이름 (Kubernetes 1.31에서 GA)
 }
 ```
 
@@ -569,7 +569,7 @@ eksctl은 가속기 AMI와 Neuron 인스턴스 타입을 감지하면 노드그�
 | 항목 | 어디에 존재하는가 | AMI가 담당 가능한가 |
 | --- | --- | --- |
 | `neuron` 커널 모듈 (`aws-neuronx-dkms`) | 노드 디스크 | O |
-| `/dev/neuron0`, `/dev/ng0n1` | 노드 커널이 생성 | O |
+| `/dev/neuron0` | 노드 커널이 생성 | O |
 | `/opt/aws/neuron/bin/*` (`neuron-ls` 등) | 노드 디스크 | O |
 | `neuron-device-plugin` DaemonSet | etcd (클러스터 오브젝트) | - |
 
@@ -621,7 +621,7 @@ AMI가 담당하는 범위는 커널 드라이버, `/dev` 노드, `/opt/aws/neur
 1. 정말로 원하는 건 스케줄러 확장(`scheduler.enabled=true`)인데, 그게 device plugin과 같은 차트(`neuron-helm-chart`) 안에 있다
 2. 그 차트는 device plugin도 같이 만든다. `devicePlugin.enabled`의 기본값이 `true`이고, 이름이 `fullnameOverride: neuron-device-plugin`, `namespaceOverride: kube-system`으로 고정되어 있다
 3. 그 이름의 오브젝트가 이미 있다. eksctl이 DaemonSet, ClusterRole, ServiceAccount, ClusterRoleBinding 4개를 만들어 뒀다
-4. Helm은 자기가 만들지 않은 오브젝트를 인수하지 못한다. `meta.helm.sh/release-name`·`release-namespace` annotation과 `app.kubernetes.io/managed-by: Helm` 라벨이 없으면 소유권을 주장할 수 없다고 판단하고 멈춘다
+4. Helm은 기본 동작으로는 자기가 만들지 않은 오브젝트를 인수하지 않는다. `meta.helm.sh/release-name`·`release-namespace` annotation과 `app.kubernetes.io/managed-by: Helm` 라벨이 없으면 소유권을 주장할 수 없다고 판단하고 멈춘다. 우회로는 둘이다 — 기존 오브젝트에 그 라벨·annotation을 직접 붙이거나, Helm 3.17 이상에서 `--take-ownership` 플래그를 주는 것이다. 워크샵은 둘 다 쓰지 않았다
 5. 그래서 지우고 다시 깐다
 
 즉 재설치는 device plugin 설정을 바꾸려는 게 아니라, 소유권을 Helm에 넘기려고 지웠다가 다시 까는 것이다.
@@ -1377,7 +1377,7 @@ kind: Deployment
   name: k8s-neuron-scheduler
 ```
 
-`my-scheduler`의 이미지 태그가 `v1.31.12`로 고정되어 있어서 API 서버(1.33)보다 2 마이너 낮은 스케줄러가 돈다. Kubernetes 버전 스큐 정책상 허용 범위이고 이 실습 규모에서는 문제되지 않았다. 운영 환경에서 이 태그를 클러스터 버전에 맞춰 올려야 하는지는 직접 확인하지 않았다.
+`my-scheduler`의 이미지 태그가 `v1.31.12`로 고정되어 있어서 API 서버(1.33)보다 2 마이너 낮은 스케줄러가 돈다. 버전 스큐 정책상 `kube-scheduler`는 `kube-apiserver`보다 1 마이너까지만 낮을 수 있으므로, 이 조합은 문서상 지원 범위 밖이다. 3 마이너까지 허용되는 것은 `kubelet`·`kube-proxy` 쪽 규칙이다. 이번 실습 규모에서는 동작에 문제가 없었지만, 운영 환경이라면 차트의 `customScheduler.image.tag`를 클러스터 버전에 맞춰 올리는 편이 안전하다. 다만 그렇게 올렸을 때 익스텐더와의 호환이 유지되는지는 직접 확인하지 않았다.
 
 ## 스케줄러 확장이 개입하는 지점
 
@@ -1448,13 +1448,15 @@ ip-10-0-5-100.us-west-2.compute.internal   2
 | 질문 | 답 |
 | --- | --- |
 | 왜 리소스가 두 개인가 | 같은 칩을 칩 단위와 코어 단위로 두 번 광고한다. 서로 다른 하드웨어가 아니다 |
-| 그 수치의 근거는 어디인가 | 커널이다. `/dev/neuron0` 1개와 `/dev/ng0n1`·`/dev/ng1n1` 2개가 이미 분리되어 있고, PCI BDF는 하나다 |
+| 그 수치의 근거는 어디인가 | 칩 쪽은 커널이다. `/dev/neuron0` 하나이고 PCI BDF도 하나다. 코어 쪽은 `/dev`가 아니라 드라이버이고, `neuron-ls`·`neuron-top`이 그 값을 읽어 보고한다 |
 | 왜 소켓이 두 개인가 | 리소스 이름이 둘이라서다. `Register`가 이름 하나에 endpoint 하나만 받는다. 코어 수와는 무관하다 |
 | 그 소켓으로 코어끼리 통신하나 | 아니다. kubelet과 플러그인 사이의 제어 채널이다. 코어 간 통신은 칩 내부의 공유 HBM과 DMA 엔진에서 일어난다 |
 | 왜 containerd에 Neuron 런타임이 없나 | 컨테이너 안으로 옮겨 심을 유저스페이스 파일이 없어서다. `/dev` 노드 주입은 runc 표준 동작이다 |
 | device plugin은 누가 깔았나 | eksctl이다. 노드그룹 생성 로그에 찍혀 있다. AMI가 담당하는 범위는 드라이버와 `/dev` 노드, `/opt/aws/neuron`까지다 |
 | 왜 지웠다가 다시 까나 | 설정을 바꾸려는 게 아니라 Helm에 소유권을 넘기기 위해서다 |
 | 스케줄러 확장은 무엇을 하나 | 두 카운터가 독립적으로 세어지며 생기는 이중 회계와 연속 코어 배정을 다룬다. 기본 스케줄러를 교체하지 않고 `schedulerName`으로 opt-in한다 |
+
+Lab 1은 여기까지다. 노드가 칩과 코어를 광고하고, 그 자원을 나눠 줄 플러그인과 배치할 스케줄러가 모두 클러스터 안에 있다. 이 자원을 실제로 요청하는 워크로드를 올리는 것이 [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})이다.
 
 <br>
 
@@ -1468,9 +1470,9 @@ ip-10-0-5-100.us-west-2.compute.internal   2
 - [aws-neuron/neuron-helm-charts](https://github.com/aws-neuron/neuron-helm-charts)
 - [eksctl](https://eksctl.io/)
 - [Helm: FAQ](https://helm.sh/docs/faq/)
-- [08-00편: vLLM on Trainium 워크샵 개요와 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
-- [08-01편: AWS 가속기 - Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
-- [08-02-01편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
+- [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
+- [8.1편: Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
+- [8.2.1편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
 - [[Kubernetes] NVIDIA Device Plugin 동작 원리]({% post_url 2024-07-23-Dev-Kubernetes-NVIDIA-GPU-Mechanism %})
 - [[Kubernetes] Kubernetes 환경에서 NVIDIA GPU 사용하기 - NVIDIA Device Plugin]({% post_url 2024-07-19-Dev-Kubernetes-GPU-Setting %})
 - [[Container] 컨테이너 장치 주입: OCI Runtime Hook과 CDI]({% post_url 2026-02-02-CS-Container-Device-Injection %})

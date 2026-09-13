@@ -18,7 +18,7 @@ tags:
   - Neuron
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-6
-last_modified_at: 2026-09-12
+last_modified_at: 2026-09-13
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.*
@@ -39,9 +39,9 @@ last_modified_at: 2026-09-12
 
 # Service LoadBalancer 해부
 
-[08-00편의 외부 접근 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#외부-접근-경로)는 아키텍처 그림에서 ELB 화살표가 vLLM Service가 아니라 ingress-nginx 쪽으로 들어가는 것을 보고, `type: LoadBalancer` Service가 ingress-nginx 컨트롤러 쪽일 가능성을 언급하면서 판단은 매니페스트 확인 시점으로 미뤘다. Lab 2의 매니페스트가 그 답이다. **vLLM Service 자신이 `type: LoadBalancer`이고, 이 Service가 CLB를 직접 만든다.** ingress-nginx는 [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})에서 따로 올라온다. 즉 아키텍처 그림은 최종 상태를 그린 것이고, Lab 2 시점의 외부 진입점은 vLLM Service다.
+[8.0편의 외부 접근 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#외부-접근-경로)는 아키텍처 그림에서 ELB 화살표가 vLLM Service가 아니라 ingress-nginx 쪽으로 들어가는 것을 보고, `type: LoadBalancer` Service가 ingress-nginx 컨트롤러 쪽일 가능성을 언급하면서 판단은 매니페스트 확인 시점으로 미뤘다. Lab 2의 매니페스트가 그 답이다. **vLLM Service 자신이 `type: LoadBalancer`이고, 이 Service가 CLB를 직접 만든다.** ingress-nginx는 [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})에서 따로 올라온다. 즉 아키텍처 그림은 최종 상태를 그린 것이고, Lab 2 시점의 외부 진입점은 vLLM Service다.
 
-모델을 물고 있는 파드까지는 [08-03-01편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})에서 확인했다. 이 편은 그 파드를 클러스터 밖으로 노출하고 추론 요청을 실제로 왕복시키는 부분을 다룬다.
+모델을 물고 있는 파드까지는 [8.3.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})에서 확인했다. 이 편은 그 파드를 클러스터 밖으로 노출하고 추론 요청을 실제로 왕복시키는 부분을 다룬다.
 
 이 글의 모든 출력에서 계정 ID, 버킷명, 호스트명, IP, ELB DNS 이름은 예시 값으로 치환했다.
 
@@ -126,7 +126,7 @@ ALB와 NLB로 갈라지기 전의 구세대 로드밸런서다. AWS 문서는 "E
 
 L4 로드밸런서다. 초고성능이 필요하거나 고정 IP가 필요할 때 고른다.
 
-`cloud-provider-aws`에게 NLB를 만들게 하는 어노테이션은 `service.beta.kubernetes.io/aws-load-balancer-type: nlb`인데, **이것은 구형 표기다.** AWS Load Balancer Controller를 기준으로 한 현재 권장 표기는 `"external"`이다. EKS 문서는 `aws-load-balancer-type`의 `external` 값이 "AWS 클라우드 프로바이더 로드밸런서 컨트롤러가 아니라 AWS Load Balancer Controller가 NLB를 만들게 하는 원인"이라고 적는다. 타겟 타입은 별도로 `aws-load-balancer-nlb-target-type`으로 지정한다.
+`cloud-provider-aws`에게 NLB를 만들게 하는 어노테이션은 `service.beta.kubernetes.io/aws-load-balancer-type: nlb`다. 같은 어노테이션에 `"external"`을 넣는 경우가 자주 보이는데, 이건 `nlb`의 신형 표기가 아니라 **어느 컨트롤러가 이 Service를 맡을지 고르는 스위치**다. `external`을 주면 인트리 컨트롤러가 로드밸런서 생성을 건너뛰고 AWS Load Balancer Controller가 대신 만든다. 이때 타겟 타입은 별도로 `aws-load-balancer-nlb-target-type`으로 지정한다. 참고로 EKS 문서가 하위 호환용으로 남겨 뒀다고 적은 값은 `nlb`가 아니라 `nlb-ip`다.
 
 두 컨트롤러의 역할도 갈려 있다. `cloud-provider-aws`는 기본으로 CLB를 만들고 NLB도 만들 수 있지만 앞으로는 중대한 버그 수정만 받는다. AWS Load Balancer Controller는 NLB를 만들고 CLB는 만들지 않는다.
 
@@ -145,20 +145,20 @@ L7 로드밸런서로, 경로와 호스트 기반 라우팅이 된다. 다만 **
 1. Service를 만들면 API 서버가 ClusterIP(`172.20.144.130`)와 NodePort(`32233`)를 할당한다
 2. 클라우드 컨트롤러가 이를 보고 **비동기로** 실제 ELB를 프로비저닝한다. 이벤트 `EnsuringLoadBalancer` → `EnsuredLoadBalancer`가 그 두 단계다
 3. 완료되면 `status.loadBalancer.ingress[0].hostname`에 DNS 이름이 채워지고 `kubectl get svc`의 `EXTERNAL-IP`에 보인다
-4. 데이터패스는 클라이언트 → ELB:8080 → 워커 노드:32233 → kube-proxy → 파드:8080이다
+4. 데이터패스는 클라이언트 → ELB:8080 → 워커 노드:32233 → 노드 커널의 DNAT 규칙 → 파드:8080이다. ClusterIP를 경유하지 않고, 전달도 kube-proxy 프로세스가 아니라 그것이 심어 둔 규칙이 한다
 
 ```mermaid
 flowchart LR
     C["클라이언트<br/>브라우저 또는 curl"]
     ELB["Classic Load Balancer<br/>리스너 TCP:8080"]
     N["워커 노드<br/>NodePort TCP:32233"]
-    KP["kube-proxy<br/>ClusterIP 172.20.144.130"]
+    NF["노드 커널 netfilter<br/>kube-proxy가 심어 둔 DNAT 규칙"]
     P["vLLM 파드<br/>containerPort 8080 = http-vllm"]
 
     C -->|"ELB DNS 이름 + 포트 8080"| ELB
     ELB -->|"TCP 패스스루"| N
-    N --> KP
-    KP -->|"targetPort http-vllm"| P
+    N --> NF
+    NF -->|"파드 IP의 targetPort http-vllm으로 DNAT"| P
     ELB -.->|"헬스체크 TCP:32233"| N
 ```
 
@@ -166,7 +166,7 @@ flowchart LR
 
 여기서 주의할 점이 하나 있다. ELB가 타겟으로 잡는 것은 **파드가 아니라 노드**다. 노드 안에서 파드까지 보내는 것은 kube-proxy가 프로그래밍한 규칙이고, 헬스체크도 파드가 아니라 NodePort(`TCP:32233`)로 간다. 노드가 `OutOfService`로 보인다면 그 헬스체크가 실패한 것이다.
 
-그래서 기본값에서는 홉이 하나 더 생기고 클라이언트 IP가 보존되지 않는다. `spec.externalTrafficPolicy`가 이 동작을 가르는 필드인데, 기본값 `Cluster`는 분산이 고르지만 소스 IP를 가리고 2차 홉이 생기고, `Local`은 소스 IP를 보존하고 2차 홉이 없는 대신 분산이 치우칠 수 있다. 이번 Service는 아무것도 지정하지 않았으므로 `Cluster`다. 이 선택의 흔적은 뒤의 [서버 로그](#서버-로그에-남은-요청-처리)에 그대로 남는다.
+그래서 기본값에서는 홉이 하나 더 생기고 클라이언트 IP가 보존되지 않는다. `spec.externalTrafficPolicy`가 이 동작을 가르는 필드인데, 기본값 `Cluster`는 분산이 고르지만 소스 IP를 가리고 2차 홉이 생기고, `Local`은 소스 IP를 보존하고 2차 홉이 없는 대신 분산이 치우칠 수 있다. 다만 이 구성에서는 `Local`로 바꿔도 파드가 보는 소스 IP가 클라이언트 것이 되지는 않는다. CLB는 TCP 리스너에서도 연결을 자기가 종단하고 새 연결로 뒤에 전달하므로, 보존되는 것은 CLB의 IP다. 원래 클라이언트 IP까지 받으려면 Proxy Protocol을 따로 켜야 한다. 이번 Service는 아무것도 지정하지 않았으므로 `Cluster`다. 이 선택의 흔적은 뒤의 [서버 로그](#서버-로그에-남은-요청-처리)에 그대로 남는다.
 
 <br>
 
@@ -216,9 +216,9 @@ kubectl get endpointslices -l kubernetes.io/service-name=vllm-service
 
 EC2 콘솔의 로드밸런서 목록에서 확인할 것은 두 가지다. 첫째, 목록의 **Type 컬럼이 `classic`**인지. 어노테이션 없이 만든 결과가 CLB라는 직접 증거다. 둘째, 콘솔의 DNS name이 `kubectl`의 `EXTERNAL-IP`와 같은 값인지. 두 값이 같아야 이 Service가 만든 로드밸런서가 맞다.
 
-![EC2 콘솔의 Classic Load Balancer 목록]({{site.url}}/assets/images/llmso-aws-workshop-loadbalancer-1.png){: .align-center}
+![EC2 콘솔의 Classic Load Balancer 목록]({{site.url}}/assets/images/llmso-aws-workshop-loadbalancer-2.png){: .align-center}
 
-<center><sup>직접 캡처. EC2 콘솔의 로드밸런서 목록이다. 유형 컬럼이 classic이다.</sup></center>
+<center><sup>직접 캡처. EC2 콘솔의 로드밸런서 목록과 대상 인스턴스 탭이다. 유형 컬럼이 classic이고, 워커 노드 한 대가 서비스 중으로 등록돼 있다.</sup></center>
 
 `EXTERNAL-IP`에 나온 값은 `status`에서 직접 뽑아도 같다.
 
@@ -235,9 +235,9 @@ ubuntu@ip-10-0-1-100:~/workshop$ kubectl get svc vllm-service \
 
 리스너 상세에서 볼 것은 한 줄이다. LB 쪽 프로토콜·포트가 `TCP:8080`이고, 인스턴스 쪽 프로토콜·포트가 `TCP:32233`이다.
 
-![Classic Load Balancer의 리스너 상세]({{site.url}}/assets/images/llmso-aws-workshop-loadbalancer-2.png){: .align-center}
+![Classic Load Balancer의 리스너 상세]({{site.url}}/assets/images/llmso-aws-workshop-loadbalancer-1.png){: .align-center}
 
-<center><sup>직접 캡처. CLB의 리스너 상세다. 로드밸런서 쪽이 TCP:8080, 인스턴스 쪽이 TCP:32233이다.</sup></center>
+<center><sup>직접 캡처. CLB 상세 화면의 리스너 탭이다. 로드 밸런서 유형이 클래식, 체계가 Internet-facing이고, 리스너는 로드밸런서 쪽 TCP:8080, 인스턴스 쪽 TCP:32233 한 줄이다.</sup></center>
 
 앞 숫자 8080은 Service의 `port`, 뒤 숫자 32233은 자동 할당된 NodePort다. `kubectl get svc`가 `8080:32233/TCP`로 보여준 쌍이 콘솔에서는 리스너 한 줄로 보인다. 리스너가 하나뿐이고 프로토콜이 TCP라는 점이 뒤의 [HTTPS 접속 실패](#막힘--해결-https-접속-실패)로 이어진다.
 
@@ -245,7 +245,7 @@ ubuntu@ip-10-0-1-100:~/workshop$ kubectl get svc vllm-service \
 
 나머지 메타데이터에서 확인할 것은 셋이다.
 
-- **Scheme**: `internet-facing`. 외부에서 붙어야 하므로 퍼블릭 서브넷이 필요하고, [08-02-01편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})에서 확보해 둔 퍼블릭 서브넷 두 개가 여기서 쓰인다
+- **Scheme**: `internet-facing`. 외부에서 붙어야 하므로 퍼블릭 서브넷이 필요하다. 다만 여기 붙은 서브넷은 [8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})에서 노드그룹에 지정한 퍼블릭 서브넷 두 개가 아니다. 콘솔에는 가용 영역이 네 개로 잡혀 있다. 서비스 컨트롤러가 노드그룹 설정이 아니라 VPC의 퍼블릭 서브넷을 가용 영역마다 하나씩 골라 붙이기 때문이고, 서브넷에 `kubernetes.io/role/elb` 태그가 없으면 라우트 테이블을 보고 퍼블릭 여부를 판별한다
 - **Instances**: 워커 노드 1대가 `InService`인지. `OutOfService`면 헬스체크(`TCP:32233`)가 실패한 것이고 트래픽이 흐르지 않는다
 - **AZ/Subnet**: 노드가 있는 가용 영역이 포함돼 있는지
 
@@ -495,17 +495,17 @@ AI: Certainly, I'd be happy to offer a translation into Korean!
 
 의심해 볼 수 있는 것은 넷이다. 모델 자체가 한국어를 못 하거나, chat template이 적용되지 않았거나, 샘플링 설정이 느슨하거나, 생성 길이 상한이 너무 크거나다.
 
-이 중 chat template은 배제된다. 앞의 서버 로그가 `Detected the chat template content format to be 'string'`을 찍었고, 프롬프트도 `'<|user|>\n...\n<|assistant|>\n'` 형태로 정상 적용된 것을 보여준다. 템플릿이 빠졌다면 나왔을 증상이 아니다.
+이 중 chat template은 배제된다. 근거는 앞의 서버 로그에 찍힌 프롬프트 `'<|user|>\n...\n<|assistant|>\n'`이다. TinyLlama의 chat template이 렌더한 결과와 같은 형태이므로 템플릿이 적용된 것이 맞다. 같은 로그의 `Detected the chat template content format to be 'string'`은 근거로 쓰지 않는다. 이 줄은 메시지 `content`를 문자열로 읽을지 파트 리스트로 읽을지를 고른 결과일 뿐이고, 템플릿이 없거나 파싱에 실패했을 때도 같은 `'string'`이 폴백으로 찍힌다.
 
 남는 셋은 서로 겹쳐 있다.
 
 - **첫째, 모델이 영어 전용이다.** `TinyLlama-1.1B-Chat-v1.0`은 SlimPajama와 StarCoder 데이터로 사전학습한 1.1B 모델이고, 모델 카드의 언어 표기가 English다. 그 위에 영어 대화 데이터로 SFT 한 체크포인트다. 영어 질문에는 멀쩡한 문단이 나오고 한국어 질문에서만 무너지는 것이 이 사실과 맞는다.
-- **둘째, 샘플링 설정이 1.1B 모델에 느슨하다.** 스크립트가 `temperature=1.0`과 `top_k=50`을 쓰고 `top_p` 컷이 없다. 1.1B 모델의 확률분포는 상위 후보 뒤로 금방 평평해지므로, 50번째 후보까지 온도 보정 없이 열어 두면 몇 토큰 만에 주제와 언어가 이탈한다. 참고로 앞의 `curl` 테스트는 `temperature=0.7`이었고 결과가 상대적으로 나았다.
+- **둘째, 온도가 높다.** 스크립트는 `temperature=1.0`이고, 결과가 상대적으로 나았던 앞의 `curl` 테스트는 `temperature=0.7`이었다. 온도가 1.0이면 모델이 낸 확률분포를 보정 없이 그대로 쓰므로 낮은 확률의 후보도 뽑힐 여지가 커진다. 한 가지 덧붙이면, 스크립트가 함께 준 `top_k=50`은 느슨한 쪽이 아니다. `curl` 요청의 로그에 찍힌 `top_k=0`은 후보 수를 제한하지 않는다는 뜻이라 오히려 더 넓다. 두 요청 사이에서 느슨한 방향으로 갈린 것은 온도뿐이다.
 - **셋째, `max_tokens=900`이 이탈을 길게 방치한다.** 모델이 EOS를 내지 않으면 vLLM은 상한까지 계속 생성한다. 포르투갈어 응답이 같은 문장을 수십 번 되풀이한 것이 그 형태다. 서버의 `max_model_len`이 1024이므로 프롬프트에 900토큰을 더하면 컨텍스트 상한에 거의 닿는다.
 
 원인은 여기까지고, 고치려 할 때 걸리는 제약이 하나 있다. NxD Inference의 on-device sampling은 기본 활성이고, AWS 문서는 지원 파라미터가 `temperature`, `top_k`, `top_p` 셋뿐이며 그 외 샘플링 파라미터는 on-device sampling으로 지원되지 않는다고 적는다. 실제로 서버 로그의 `SamplingParams`에도 `presence_penalty=0.0, frequency_penalty=0.0, repetition_penalty=1.0`이 기본값 그대로 실려 있다. 다만 **이 구성에서 `repetition_penalty`를 올려 반복을 줄일 수 있는지는 직접 값을 바꿔 재현해 보지 않았으므로 단정하지 않는다.**
 
-결론적으로 "모델이 작아서"만으로 정리하면 부정확하다. 같은 모델이 영어에는 정상적인 답을 냈기 때문이다. 사실에 가장 가까운 요약은 영어 전용 1.1B 모델에 한국어를 물었고, 샘플링이 느슨했으며, 생성 길이 상한이 컸다는 셋의 합이다.
+결론적으로 "모델이 작아서"만으로 정리하면 부정확하다. 같은 모델이 영어에는 정상적인 답을 냈기 때문이다. 사실에 가장 가까운 요약은 영어 전용 1.1B 모델에 한국어를 물었고, 온도가 1.0이었으며, 생성 길이 상한이 컸다는 셋의 합이다.
 
 ## 문제가 생겼을 때 확인할 것
 
@@ -535,7 +535,7 @@ LAST SEEN   TYPE     REASON                 OBJECT                 MESSAGE
 
 ## 증상
 
-ELB DNS 이름을 브라우저 주소창에 입력하고 들어가면 접속이 되지 않고 `ERR_SSL_PROTOCOL_ERROR` 화면이 뜬다.
+ELB 주소를 브라우저 주소창에 입력하고 들어가면 접속이 되지 않고 `ERR_SSL_PROTOCOL_ERROR` 화면이 뜬다. 주소창에 남은 것은 `<elb-id>.us-west-2.elb.amazonaws.com:8080/v1/models`로, `curl`로 두드리던 것과 같은 주소다.
 
 ![브라우저의 ERR_SSL_PROTOCOL_ERROR 화면]({{site.url}}/assets/images/llmso-aws-workshop-loadbalancer-https-ssl-protocol-error.png){: .align-center}
 
@@ -564,7 +564,7 @@ CLB에 리스너가 `TCP:8080 → TCP:32233` 하나뿐이다. 443 리스너도, 
 
 ## 원인
 
-브라우저가 `https://`로 접속했기 때문이다. 주소창에 도메인만 입력하면 Chrome이 HTTPS-First 정책으로 `https://`를 먼저 시도한다. 그런데 443으로 TLS ClientHello를 보내도 받아 줄 리스너 자체가 없고, 8080으로 보냈더라도 그쪽은 평문 HTTP만 말하는 포트라 핸드셰이크가 깨진다.
+브라우저가 `https://`로 접속했기 때문이다. 주소창에 스킴 없이 주소를 입력하면 Chrome은 `https://`를 먼저 시도한다. Chrome 90부터의 주소창 기본 동작이고, 설정에 있는 "항상 보안 연결 사용"(HTTPS-First Mode)을 켜지 않아도 이렇게 움직인다. 이번 주소는 포트가 `:8080`이므로 8080으로 TLS ClientHello가 갔는데, 그쪽은 평문 HTTP만 말하는 포트라 핸드셰이크가 깨진다. 포트를 떼고 도메인만 입력했더라도 443에는 받아 줄 리스너 자체가 없다.
 
 vLLM 쪽도 마찬가지다. `python -m vllm.entrypoints.openai.api_server --port=$PORT`는 평문 HTTP만 서빙하고 TLS를 자기가 종료하지 않는다. 이 구조에서 HTTPS를 쓰려면 TLS를 종료할 지점을 따로 만들어야 한다.
 
@@ -574,7 +574,7 @@ vLLM 쪽도 마찬가지다. `python -m vllm.entrypoints.openai.api_server --por
 | Ingress 컨트롤러에서 종료 | Ingress의 `tls:` 블록 + 인증서 Secret |
 | vLLM에서 직접 종료 | `--ssl-keyfile`과 `--ssl-certfile` (워크샵은 쓰지 않는다) |
 
-세 방법 모두 도메인 소유권 확인이 필요한 인증서를 요구하는데, ELB가 내주는 `*.elb.amazonaws.com` 도메인으로는 인증서를 발급받을 수 없다. 워크샵이 HTTPS를 열어 두지 않은 것은 생략이 아니라 이 구성에서 할 수 없는 일에 가깝다. 제대로 하려면 Route 53에 보유 도메인을 얹고 ACM 인증서를 발급받는 단계가 추가로 들어간다.
+세 방법 모두 인증서가 필요하고, 공개 신뢰 CA가 내주는 인증서는 도메인 소유권 확인을 요구하는데 ELB가 내주는 `*.elb.amazonaws.com` 도메인으로는 그 확인을 통과할 수 없다. 소유권 확인이 필요 없는 자체 서명 인증서라면 브라우저 경고를 감수하고 쓸 수는 있다. [8.4편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing %})에서 ingress-nginx가 기본으로 들고 있는 자체 서명 인증서가 정확히 그 경우다. 워크샵이 HTTPS를 열어 두지 않은 것은 생략이 아니라 이 구성에서 할 수 없는 일에 가깝다. 제대로 하려면 Route 53에 보유 도메인을 얹고 ACM 인증서를 발급받는 단계가 추가로 들어간다.
 
 ## 해결
 
@@ -628,10 +628,10 @@ URL에 `:8080`이 남는 것과 TLS 종료 지점이 없는 것은 같은 원인
 - [AWS Neuron: NxD Inference vLLM User Guide](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/nxd-inference/developer_guides/vllm-user-guide.html)
 - [IANA Service Name and Transport Protocol Port Number Registry](https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml)
 - [TinyLlama-1.1B-Chat-v1.0 모델 카드](https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0)
-- [08-00편: vLLM on Trainium 워크샵 개요]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
-- [08-01편: AWS 가속기 - Inferentia, Trainium, NeuronCore]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
-- [08-02-01편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
-- [08-02-02편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
-- [08-03-01편: init container 모델 컴파일과 S3 캐시]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
+- [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
+- [8.1편: Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
+- [8.2.1편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
+- [8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
+- [8.3.1편: init container 모델 컴파일과 S3 캐시]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment %})
 
 <br>

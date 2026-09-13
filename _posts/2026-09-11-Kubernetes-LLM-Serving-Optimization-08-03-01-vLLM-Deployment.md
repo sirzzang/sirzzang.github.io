@@ -19,7 +19,7 @@ tags:
   - Mountpoint-for-S3
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-6
-last_modified_at: 2026-09-12
+last_modified_at: 2026-09-13
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.*
@@ -41,7 +41,7 @@ last_modified_at: 2026-09-12
 
 ## Lab 2가 만드는 오브젝트
 
-[08-02-01편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})에서 `trn1.2xlarge` 노드그룹과 S3 캐시 버킷을 만들었고, [08-02-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에서 Neuron device plugin과 스케줄러 확장까지 올렸다. Lab 2는 그 위에 실제 워크로드를 얹는다.
+[8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})에서 `trn1.2xlarge` 노드그룹과 S3 캐시 버킷을 만들었고, [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에서 Neuron device plugin과 스케줄러 확장까지 올렸다. Lab 2는 그 위에 실제 워크로드를 얹는다.
 
 | 오브젝트 | 이름 | 역할 |
 | --- | --- | --- |
@@ -51,7 +51,7 @@ last_modified_at: 2026-09-12
 | PersistentVolumeClaim | `s3-model-cache-pvc` | 위 PV를 `volumeName`으로 직접 지목 |
 | Deployment | `vllm-deployment` | init container `model-prep` + 메인 컨테이너 `vllm-server` |
 
-이 다섯 개까지가 이 글의 범위다. 서버를 외부로 노출하는 `type: LoadBalancer` Service와 추론 요청 왕복은 [08-03-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})에서 다룬다.
+이 다섯 개까지가 이 글의 범위다. 서버를 외부로 노출하는 `type: LoadBalancer` Service와 추론 요청 왕복은 [8.3.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})에서 다룬다.
 
 작업은 앞 편들과 같이 워크샵이 제공하는 배스천 인스턴스에서 진행한다. 아래 출력의 셸 프롬프트 `ubuntu@ip-10-0-1-100`이 그 인스턴스이고, `[ec2-user@ip-10-0-5-100 ~]$`은 세션 매니저로 붙은 `trn1.2xlarge` 워커 노드다. 이 글의 모든 출력에서 계정 ID, 클러스터명, 버킷명, 인스턴스 ID, 호스트명, IP, 토큰은 예시 값으로 치환했다. AMI ID `ami-0e08c07b0376ba3f8`만 앞 편과의 정합을 위해 그대로 뒀다.
 
@@ -59,7 +59,7 @@ last_modified_at: 2026-09-12
 
 init container는 파드의 메인 컨테이너보다 먼저 순서대로 실행되고, 전부 성공 종료해야 메인 컨테이너가 시작되는 컨테이너다. 메인 컨테이너와 같은 볼륨을 붙일 수 있으면서 생명주기는 분리되어 있어서, 준비 작업과 서비스 실행을 다른 프로세스로 쪼갤 때 쓴다.
 
-여기서 쪼개려는 준비 작업은 Neuron 컴파일이다. Neuron 백엔드는 모델 가중치를 그대로 올려 쓰지 않고 NxD Inference로 컴파일한 산출물을 쓴다. 컴파일 자체가 분 단위로 걸리므로, 파드가 뜰 때마다 다시 컴파일하면 그 시간이 기동 시간에 그대로 얹힌다. 산출물을 S3에 남겨 두고 다음 파드는 읽기만 하게 만드는 것이 이 패턴의 목적이다. 캐시 분기 구조 자체는 [08-00편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#모델-캐시-스토리지)에 정리해 두었다.
+여기서 쪼개려는 준비 작업은 Neuron 컴파일이다. Neuron 백엔드는 모델 가중치를 그대로 올려 쓰지 않고 NxD Inference로 컴파일한 산출물을 쓴다. 컴파일 자체가 분 단위로 걸리므로, 파드가 뜰 때마다 다시 컴파일하면 그 시간이 기동 시간에 그대로 얹힌다. 산출물을 S3에 남겨 두고 다음 파드는 읽기만 하게 만드는 것이 이 패턴의 목적이다. 캐시 분기 구조 자체는 [8.0편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#모델-캐시-스토리지)에 정리해 두었다.
 
 매니페스트에서 눈에 띄는 것은 같은 PVC를 두 컨테이너가 **다른 권한으로** 받는다는 점이다. init container는 `/shared/model`을 읽고 쓸 수 있고, 메인 컨테이너는 `readOnly: true`로 받는다. 서빙 프로세스가 캐시를 건드릴 수 없게 막아 두는 구성이다.
 
@@ -105,7 +105,7 @@ NAME              TYPE     DATA   AGE
 hf-token-secret   Opaque   1      3s
 ```
 
-토큰 발급 절차는 [08-00편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#hugging-face-토큰-설정)에 있다.
+토큰 발급 절차는 [8.0편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#hugging-face-토큰-설정)에 있다.
 
 ## ConfigMap의 키 14개
 
@@ -177,15 +177,15 @@ ubuntu@ip-10-0-1-100:~/workshop$ aws s3 ls s3://$BUCKET_NAME --recursive --human
 
 `MODEL_NAME`, `MAX_NUM_SEQS`, `MAX_MODEL_LEN`, `TENSOR_PARALLEL_SIZE`, `PORT` 다섯 개는 Neuron과 무관하게 vLLM을 띄울 때 정하는 값이다. 이름이 vLLM 규약인 것도 아니다. 컨테이너 `args`의 셸이 `--model=$MODEL_NAME` 형태로 전개하려고 만든 변수이므로, 이름을 다르게 지어도 `args`만 맞추면 동작한다.
 
-`PORT: "8080"`은 vLLM 기본값이 아니다. vLLM의 기본 포트는 8000이고, 8080은 워크샵이 명시적으로 덮어쓴 값이다. 왜 8080인지는 Service 포트와 묶어 [08-03-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})에서 다룬다.
+`PORT: "8080"`은 vLLM 기본값이 아니다. vLLM의 기본 포트는 8000이고, 8080은 워크샵이 명시적으로 덮어쓴 값이다. 왜 8080인지는 Service 포트와 묶어 [8.3.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})에서 다룬다.
 
-`TENSOR_PARALLEL_SIZE: "2"`가 2인 근거는 `trn1.2xlarge` 칩 하나 안에 NeuronCore가 둘이라는 것이다. 칩과 코어의 계층은 [08-02-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#칩-하나-코어-둘)에 정리되어 있다.
+`TENSOR_PARALLEL_SIZE: "2"`가 2인 근거는 `trn1.2xlarge` 칩 하나 안에 NeuronCore가 둘이라는 것이다. 칩과 코어의 계층은 [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#칩-하나-코어-둘)에 정리되어 있다.
 
 ### Neuron 런타임 전용 설정
 
 `NEURON_`으로 시작하는 다섯 개와 `VLLM_NEURON_FRAMEWORK`는 CLI 인자로 전개되지 않고 프로세스가 환경변수로 직접 읽는다.
 
-- `VLLM_NEURON_FRAMEWORK: neuronx-distributed-inference` — vLLM이 Neuron에서 쓸 백엔드를 고른다. vLLM과 Neuron이 이어지는 두 갈래 경로는 [08-01편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %}#vllm-통합-두-갈래)에 있다
+- `VLLM_NEURON_FRAMEWORK: neuronx-distributed-inference` — vLLM이 Neuron에서 쓸 백엔드를 고른다. vLLM과 Neuron이 이어지는 두 갈래 경로는 [8.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %}#vllm-통합-두-갈래)에 있다
 - `NEURON_COMPILED_ARTIFACTS` — 이 경로에 사전 컴파일 산출물이 있으면 그대로 로드하고, vLLM API로 넘어온 모델 설정이 달라도 재컴파일을 트리거하지 않는다
 - `NEURON_COMPILE_CACHE_URL` — `neuronx-cc`의 영속 캐시 위치다. 기본값은 `/var/tmp/neuron-compile-cache`인데, 여기서는 위와 같은 PVC 경로로 돌려 놓았다
 - `NEURON_RT_VISIBLE_CORES: 0-1` — 런타임에 노출할 코어 범위다. 범위는 연속이어야 한다
@@ -195,7 +195,7 @@ ubuntu@ip-10-0-1-100:~/workshop$ aws s3 ls s3://$BUCKET_NAME --recursive --human
 
 ## S3 PV와 PVC
 
-Mountpoint for Amazon S3 CSI 드라이버는 [08-02-01편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %}#s3-csi-드라이버-설치)에서 이미 깔았고, 캐시용 버킷도 [같은 편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %}#모델-캐시용-s3-버킷)에서 만들어 뒀다. 여기서는 그 버킷을 PV로 선언하고 PVC로 물린다.
+Mountpoint for Amazon S3 CSI 드라이버는 [8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %}#s3-csi-드라이버-설치)에서 이미 깔았고, 캐시용 버킷도 [같은 편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %}#모델-캐시용-s3-버킷)에서 만들어 뒀다. 여기서는 그 버킷을 PV로 선언하고 PVC로 물린다.
 
 ```yaml
 # vllm-storage.yaml
@@ -249,7 +249,7 @@ persistentvolume/s3-model-cache-pv   100Gi      RWX            Retain           
 
 Deployment 하나에 `replicas: 1`, 그 안에 init container 하나와 메인 컨테이너 하나가 들어간다. 두 컨테이너는 같은 이미지를 쓰고 같은 ConfigMap과 Secret을 받는다. 달라지는 것은 실행하는 명령과 볼륨 권한뿐이다.
 
-이미지 `public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:0.9.1-neuronx-py310-sdk2.25.0-ubuntu22.04`는 AWS가 배포하는 Neuron용 vLLM 컨테이너다. 태그 구조와 이 이미지가 서빙 스택에서 차지하는 위치는 [08-00편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#vllm-서빙-구성)에 있다.
+이미지 `public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:0.9.1-neuronx-py310-sdk2.25.0-ubuntu22.04`는 AWS가 배포하는 Neuron용 vLLM 컨테이너다. 태그 구조와 이 이미지가 서빙 스택에서 차지하는 위치는 [8.0편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %}#vllm-서빙-구성)에 있다.
 
 ### schedulerName과 nodeSelector
 
@@ -266,7 +266,7 @@ spec:
       effect: "NoSchedule"      # 8GB 이미지를 받는 동안 disk-pressure가 걸려도 쫓겨나지 않게 한다
 ```
 
-`schedulerName: my-scheduler`는 [08-02-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#스케줄러-확장이-개입하는-지점)에서 배포한 두 번째 스케줄러를 지목한다. EKS는 기본 스케줄러 설정 변경을 지원하지 않으므로 스케줄러를 따로 띄우고 파드가 이름으로 opt-in하는 구조다. 이 한 줄이 실제로 반영됐는지는 [schedulerName이 적용됐는지](#schedulername이-적용됐는지)에서 확인한다.
+`schedulerName: my-scheduler`는 [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#스케줄러-확장이-개입하는-지점)에서 배포한 두 번째 스케줄러를 지목한다. EKS는 기본 스케줄러 설정 변경을 지원하지 않으므로 스케줄러를 따로 띄우고 파드가 이름으로 opt-in하는 구조다. 이 한 줄이 실제로 반영됐는지는 [schedulerName이 적용됐는지](#schedulername이-적용됐는지)에서 확인한다.
 
 `nodeSelector`가 쓰는 라벨은 `neuron.amazonaws.com/present=true`가 아니라 `alpha.eksctl.io/nodegroup-name`이다. Neuron 디바이스 유무가 아니라 특정 노드그룹을 지목하는 셈이라, 노드그룹 이름이 바뀌면 같이 고쳐야 한다.
 
@@ -371,7 +371,7 @@ resources:
     cpu: "4000m"
 ```
 
-요청 단위는 칩(`aws.amazon.com/neuron`)이라 1이고, `TENSOR_PARALLEL_SIZE`는 그 칩 안의 코어 수라 2다. 서로 다른 리소스를 두 개 요청한 것이 아니라, 칩 1개를 받으면 그 안의 코어 2개가 따라온다. 리소스 이름이 둘인 이유와 요청 단위를 고르는 기준은 [08-02-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#리소스가-두-개-광고되는-이유)에 정리해 두었다.
+요청 단위는 칩(`aws.amazon.com/neuron`)이라 1이고, `TENSOR_PARALLEL_SIZE`는 그 칩 안의 코어 수라 2다. 서로 다른 리소스를 두 개 요청한 것이 아니라, 칩 1개를 받으면 그 안의 코어 2개가 따라온다. 리소스 이름이 둘인 이유와 요청 단위를 고르는 기준은 [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#리소스가-두-개-광고되는-이유)에 정리해 두었다.
 
 `ephemeral-storage: 50Gi`는 8GB대 이미지와 `/tmp/cache`에 쌓이는 컴파일 중간 산출물을 감안한 값이다. CPU는 `requests` 4코어, `limits` 8코어로 잡혀 있어 QoS 클래스가 `Burstable`이 된다.
 
@@ -518,7 +518,7 @@ Allocated resources:
   aws.amazon.com/neuroncore  0           0
 ```
 
-노드 전체 출력과 Capacity 해석은 [08-02-01편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %}#검증-vllm-배포를-받을-수-있는-상태)에 있다. 여기 뜬 파드 9개 중 이 배포에 직접 관여하는 넷은 [컨트롤러 파드 로그](#컨트롤러-파드-로그)에서 다시 본다.
+노드 전체 출력과 Capacity 해석은 [8.2.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %}#검증-vllm-배포를-받을-수-있는-상태)에 있다. 여기 뜬 파드 9개 중 이 배포에 직접 관여하는 넷은 [컨트롤러 파드 로그](#컨트롤러-파드-로그)에서 다시 본다.
 
 ```shell
 ubuntu@ip-10-0-1-100:~/workshop$ kubectl apply -f vllm-deployment.yaml
@@ -649,7 +649,7 @@ INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 ```
 
-`0.0.0.0:8080`으로 바인딩하므로 파드 IP로 들어오는 요청을 받는다. `/v1/chat/completions`와 `/v1/models`가 OpenAI 호환 API이고, `/metrics`는 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})에서 Prometheus 수집 대상이 된다. `Application startup complete.`까지 와야 Service의 엔드포인트로 붙는다.
+`0.0.0.0:8080`으로 바인딩하므로 파드 IP로 들어오는 요청을 받는다. `/v1/chat/completions`와 `/v1/models`가 OpenAI 호환 API이고, `/metrics`는 [8.5.1편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape %})에서 Prometheus 수집 대상이 된다. 다만 이 Deployment에는 `readinessProbe`가 없다. 준비 상태 프로브를 지정하지 않으면 기본값이 Success라, 컨테이너가 Running이 되는 순간 파드가 Ready가 되고 Service 엔드포인트에도 올라간다. 로그의 시각을 보면 메인 컨테이너는 14:12:53에 시작해 14:13:22에 `Application startup complete.`를 찍었으므로, 그 사이 30초 가까이는 아직 서버가 뜨는 중인데도 엔드포인트에 올라 있었던 셈이다.
 
 ## 기동 로그에 남은 경고
 
@@ -738,7 +738,7 @@ instance-id: i-0abc1234def56789
 +--------+--------+----------+--------+--------------+-------+----------+------+------------------------------------------+---------+
 ```
 
-칩 하나에 코어 둘, 코어 ID `0-1`이 잡힌 것은 `NEURON_RT_VISIBLE_CORES: "0-1"`과 일치한다. `neuron-ls` 출력 각 열의 의미는 [08-02-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#neuron-ls-한-줄이-담은-정보)에 정리해 두었다.
+칩 하나에 코어 둘, 코어 ID `0-1`이 잡힌 것은 `NEURON_RT_VISIBLE_CORES: "0-1"`과 일치한다. `neuron-ls` 출력 각 열의 의미는 [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#neuron-ls-한-줄이-담은-정보)에 정리해 두었다.
 
 눈에 띄는 것은 PID다. `ps -ef`가 보여 준 API 서버는 36890인데 `neuron-ls`의 PID 열에는 37021이 찍힌다. COMMAND 열도 `api_server`가 아니라 `python -c from multipr...`로 잘려 있다. 디바이스를 실제로 연 것은 API 서버 프로세스가 아니라 그것이 `multiprocessing`으로 띄운 별도 프로세스라는 뜻이다. 기동 로그의 `Started engine process with PID 45`도 같은 구조를 가리킨다 — 컨테이너 안 PID 45가 엔진 프로세스이고, 노드에서는 다른 번호로 보인다. 다만 36890과 37021의 부모 자식 관계를 직접 확인하지는 않았다.
 
@@ -769,7 +769,7 @@ CSI 드라이버 v2는 Mountpoint 프로세스를 호스트 systemd가 아니라
 
 `type fuse`가 이 마운트의 성격을 말해 준다. FUSE(Filesystem in Userspace)는 파일 시스템 구현을 커널이 아니라 유저스페이스 프로세스에 두는 커널 인터페이스다. 컨테이너 안의 프로세스가 `/shared/model/cache/model.pt`를 열면 그 시스템 콜이 커널 FUSE 계층을 거쳐 `mount-s3` 프로세스로 전달되고, 그 프로세스가 S3의 `GetObject`, `PutObject`, `ListObjectsV2` 호출로 번역한다.
 
-블록 디바이스가 없으므로 `df`에 파일 시스템처럼 보여도 실제로 디스크가 붙은 것은 아니다. 마운트 옵션의 `allow_other`와 `default_permissions`는 마운트를 띄운 사용자가 아닌 다른 사용자도 접근할 수 있게 하는 설정인데, `mount-s3`가 `ec2-user`로 도는데 vLLM 프로세스는 `root`인 이 구성에서 필요한 옵션이다.
+블록 디바이스가 없으므로 `df`에 파일 시스템처럼 보여도 실제로 디스크가 붙은 것은 아니다. 마운트 옵션 둘은 역할이 다르다. `allow_other`는 마운트를 띄운 사용자가 아닌 다른 사용자도 파일에 접근할 수 있게 여는 설정이고, `default_permissions`는 권한 판정을 파일 시스템 구현에 맡기지 않고 커널이 mode 비트와 uid·gid로 직접 수행하게 하는 설정이다. `mount-s3`는 `ec2-user`로 도는데 vLLM 프로세스는 `root`인 이 구성에서, 접근을 열어 주는 쪽은 `allow_other`다.
 
 ## PV capacity가 강제되지 않는 이유
 
@@ -820,7 +820,7 @@ Mountpoint for S3는 이 중 어느 것도 제공하지 않는다. 공식 SEMANT
 
 ## schedulerName이 적용됐는지
 
-[08-02-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#스케줄러-확장이-개입하는-지점)에서 두 번째 스케줄러를 띄워 놓고도 이번 실습 구성에서는 차이가 드러나지 않는다고 적었다. 그 스케줄러가 실제로 이 파드를 잡았는지는 세 군데에서 확인된다.
+[8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#스케줄러-확장이-개입하는-지점)에서 두 번째 스케줄러를 띄워 놓고도 이번 실습 구성에서는 차이가 드러나지 않는다고 적었다. 그 스케줄러가 실제로 이 파드를 잡았는지는 세 군데에서 확인된다.
 
 ```shell
 # 파드 스펙에 지정된 스케줄러 이름
@@ -948,9 +948,10 @@ ConfigMap과 CLI 인자가 어디로 흘러 들어갔는지만 추리면 이렇�
 | `seq_len`, `max_length`, `max_context_length`, `n_positions` | `1024` | `MAX_MODEL_LEN=1024` |
 | `buckets` | `[1024]` | `enable_bucketing: false`의 결과. 길이 구간이 하나뿐이다 |
 | `enable_bucketing` | `false` | `--override-neuron-config` |
-| `torch_dtype`, `overrides_torch_dtype` | `bfloat16`, `true` | 기동 로그의 `dtype=torch.bfloat16`. 체크포인트가 float32라 변환 경고가 대량으로 뜬 이유이기도 하다 |
+| `torch_dtype`, `overrides_torch_dtype` | `bfloat16`, `true` | 기동 로그의 `dtype=torch.bfloat16`. `overrides_torch_dtype: true`는 NxD Inference가 체크포인트 설정을 그대로 따르지 않고 컴파일 시점에 dtype을 확정했다는 표시다 |
 | `is_continuous_batching` | `true` | vLLM continuous batching 사용 |
-| `is_chunked_prefill`, `is_prefix_caching` | `false` | 이번 구성에서 쓰지 않는 최적화 |
+| `is_chunked_prefill` | `false` | Neuron 백엔드가 아직 지원하지 않는다 |
+| `is_prefix_caching` | `false` | Neuron 백엔드가 지원하지만 이번 구성에서 켜지 않았다 |
 | `ctx_batch_size` | `1` | prefill은 배치 1, decode는 배치 4. 컴파일 모듈이 둘로 갈린 이유 |
 | `pa_num_blocks`, `pa_block_size` | `4`, `1024` | 기동 로그의 `# neuron blocks: 4`와 `Maximum concurrency ... 4.00x` |
 | `logical_nc_config` | `1` | device plugin이 주입한 `NEURON_LOGICAL_NC_CONFIG=1` |
@@ -1227,7 +1228,7 @@ ubuntu@ip-10-0-1-100:~/workshop$ kubectl exec -it deploy/vllm-deployment -c vllm
 ]
 ```
 
-`id`가 ConfigMap의 `MODEL_NAME`과 같고 `max_model_len`이 1024다. 이 응답이 나오면 파드 안쪽은 끝난 상태이고, 남은 것은 밖에서 여기까지 트래픽을 보내는 경로다. 그 경로는 [08-03-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})에서 만든다.
+`id`가 ConfigMap의 `MODEL_NAME`과 같고 `max_model_len`이 1024다. 이 응답이 나오면 파드 안쪽은 끝난 상태이고, 남은 것은 밖에서 여기까지 트래픽을 보내는 경로다. 그 경로는 [8.3.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})에서 만든다.
 
 ## 컨트롤러 파드 로그
 
@@ -1255,7 +1256,7 @@ neuron-device-plugin: 2026/09/11 14:06:03 Mounting /dev/neuron0 to container as 
 세 가지를 확인할 수 있다.
 1. 요청이 칩 1개라 스케줄러 확장 경로를 타지 않고 단순 할당으로 끝났다(`neuron scheduler extension flow not needed`).
 2. `NEURON_LOGICAL_NC_CONFIG:1`을 환경변수로 함께 주입한다 — 앞에서 `env`에 보인 그 값이다. 
-3. 컨테이너에 들어가는 것은 `/dev/neuron0` 하나다. device plugin의 `Allocate()` 응답이 NVIDIA와 갈리는 지점은 [08-02-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#allocate-응답에서-갈리는-지점)에 있다.
+3. 컨테이너에 들어가는 것은 `/dev/neuron0` 하나다. device plugin의 `Allocate()` 응답이 NVIDIA와 갈리는 지점은 [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#allocate-응답에서-갈리는-지점)에 있다.
 
 ### k8s-neuron-scheduler의 bind
 
@@ -1273,7 +1274,7 @@ ubuntu@ip-10-0-1-100:~/workshop$ kubectl logs -n kube-system -l app.kubernetes.i
 2026/09/11 14:06:03 Finished executing Bind Request...
 ```
 
-칩 카운터와 코어 카운터를 따로 관리하는 모습이 그대로 보인다. `resourceCount 1`이 칩, `resourceCount 2`가 코어다. 칩 0번을 할당하면서 코어 `[0 1]` 둘을 함께 잡고 두 맵을 동시에 갱신한다. 칩과 코어를 따로 세면 생기는 문제는 [08-02-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#칩과-코어를-따로-세면-생기는-일)에 정리해 두었다.
+칩 카운터와 코어 카운터를 따로 관리하는 모습이 그대로 보인다. `resourceCount 1`이 칩, `resourceCount 2`가 코어다. 칩 0번을 할당하면서 코어 `[0 1]` 둘을 함께 잡고 두 맵을 동시에 갱신한다. 칩과 코어를 따로 세면 생기는 문제는 [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %}#칩과-코어를-따로-세면-생기는-일)에 정리해 두었다.
 
 로그 마지막에 Mountpoint 파드 생성까지 찍힌다.
 
@@ -1314,7 +1315,7 @@ I0911 14:06:06.615552       1 main.go:80] Mount options has been received from /
 | 기동 로그에서 가장 중요한 줄은 | `device type=neuron is not supported by the V1 Engine. Falling back to V0.`와 `Successfully loaded precompiled model artifacts from /shared/model/cache` 두 줄이다 |
 | `schedulerName`은 실제로 먹었나 | 먹었다. Events의 `From` 열이 `my-scheduler`이고, 스케줄러 자신의 로그에 `Successfully bound pod to node`가 남았다 |
 
-파드 안쪽은 여기까지다. `/v1/models`가 응답하고 컴파일 산출물이 S3에 남았으므로, 남은 것은 클러스터 밖에서 이 파드까지 요청을 보내는 경로다. `type: LoadBalancer` Service가 만드는 CLB와 그 리스너 구조, 그리고 실제 추론 요청 왕복은 [08-03-02편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})에서 확인한다.
+파드 안쪽은 여기까지다. `/v1/models`가 응답하고 컴파일 산출물이 S3에 남았으므로, 남은 것은 클러스터 밖에서 이 파드까지 요청을 보내는 경로다. `type: LoadBalancer` Service가 만드는 CLB와 그 리스너 구조, 그리고 실제 추론 요청 왕복은 [8.3.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})에서 확인한다.
 
 <br>
 
@@ -1324,7 +1325,7 @@ I0911 14:06:06.615552       1 main.go:80] Mount options has been received from /
 - [Kubernetes: Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/)
 - [Kubernetes: Configure Multiple Schedulers](https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/)
 - [AWS Neuron: vLLM User Guide for NxD Inference](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/nxd-inference/developer_guides/vllm-user-guide.html)
-- [AWS Neuron: Runtime Configuration](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-runtime/nrt-configurable-parameters.html)
+- [AWS Neuron: Runtime Configuration](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-runtime/guides/configuration-guide.html)
 - [AWS Neuron: Persistent Cache](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-features/neuron-caching.html)
 - [AWS Neuron: Logical NeuronCore Configuration](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/about-neuron/arch/neuron-features/logical-neuroncore-config.html)
 - [AWS Neuron: Kubernetes device plugin](https://docs.aws.amazon.com/eks/latest/userguide/device-management-neuron.html)
@@ -1333,11 +1334,11 @@ I0911 14:06:06.615552       1 main.go:80] Mount options has been received from /
 - [Mountpoint for Amazon S3 CSI Driver: Architecture](https://github.com/awslabs/mountpoint-s3-csi-driver/blob/main/docs/ARCHITECTURE.md)
 - [Mountpoint for Amazon S3 CSI Driver: static provisioning 예제](https://github.com/awslabs/mountpoint-s3-csi-driver/blob/main/examples/kubernetes/static_provisioning/static_provisioning.yaml)
 - [AWS: Mountpoint for Amazon S3 CSI driver on EKS](https://docs.aws.amazon.com/eks/latest/userguide/s3-csi.html)
-- [08-00편: vLLM on Trainium 워크샵 개요와 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
-- [08-01편: AWS 가속기 - Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
-- [08-02-01편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
-- [08-02-02편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
-- [08-03-02편: LoadBalancer 서비스 노출과 추론 테스트]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})
+- [8.0편: 개요와 워크샵 아키텍처]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview %})
+- [8.1편: Trainium·Inferentia와 Neuron 스택]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators %})
+- [8.2.1편: Trainium 노드그룹 구성]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup %})
+- [8.2.2편: Trainium 디바이스가 쿠버네티스에 노출되는 경로]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})
+- [8.3.2편: LoadBalancer 서비스 노출과 추론 테스트]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer %})
 - [[GenAI] GPU 자원 개요와 K8s 할당 메커니즘]({% post_url 2026-06-07-Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation %})
 
 <br>
