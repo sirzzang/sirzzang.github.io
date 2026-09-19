@@ -1,0 +1,1600 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Envoy] Envoy 프록시 구조와 확장: llm-d가 Envoy를 쓰는 방식 - Eraser’s StudyLog</title>
+<meta name="description" content="Envoy의 구조와 xDS 동적 설정, ext_proc 확장을 정리하고, llm-d Router가 ext_proc으로 Envoy에 붙는 방식을 살펴 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Envoy] Envoy 프록시 구조와 확장: llm-d가 Envoy를 쓰는 방식">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-Envoy-Proxy-LLM-Serving/">
+
+
+  <meta property="og:description" content="Envoy의 구조와 xDS 동적 설정, ext_proc 확장을 정리하고, llm-d Router가 ext_proc으로 Envoy에 붙는 방식을 살펴 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-09-19T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-09-19T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-Envoy-Proxy-LLM-Serving/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Envoy] Envoy 프록시 구조와 확장: llm-d가 Envoy를 쓰는 방식">
+    <meta itemprop="description" content="Envoy의 구조와 xDS 동적 설정, ext_proc 확장을 정리하고, llm-d Router가 ext_proc으로 Envoy에 붙는 방식을 살펴 보자.">
+    <meta itemprop="datePublished" content="2026-09-19T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-09-19T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Envoy] Envoy 프록시 구조와 확장: llm-d가 Envoy를 쓰는 방식
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-09-19T00:00:00+09:00">2026년 09월 19일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#envoy-개요">Envoy 개요</a>
+    <ul>
+      <li><a href="#등장-배경과-설계-원칙">등장 배경과 설계 원칙</a></li>
+      <li><a href="#프록시로서의-역할">프록시로서의 역할</a></li>
+      <li><a href="#주요-기능">주요 기능</a></li>
+    </ul>
+  </li>
+  <li><a href="#envoy-구조와-설정">Envoy 구조와 설정</a>
+    <ul>
+      <li><a href="#주요-용어">주요 용어</a></li>
+      <li><a href="#요청-처리-흐름">요청 처리 흐름</a></li>
+      <li><a href="#정적-설정">정적 설정</a></li>
+      <li><a href="#동적-설정-xds">동적 설정: xDS</a></li>
+    </ul>
+  </li>
+  <li><a href="#envoy-확장">Envoy 확장</a>
+    <ul>
+      <li><a href="#filter-chain과-http-connection-manager">filter chain과 HTTP connection manager</a></li>
+      <li><a href="#코어를-수정하지-않는-확장-방식">코어를 수정하지 않는 확장 방식</a></li>
+      <li><a href="#external-processing-동작-방식">External Processing 동작 방식</a></li>
+    </ul>
+  </li>
+  <li><a href="#llm-서빙과-envoy">LLM 서빙과 Envoy</a>
+    <ul>
+      <li><a href="#추론-요청의-라우팅-조건">추론 요청의 라우팅 조건</a></li>
+      <li><a href="#llm-d-router의-envoy-설정-해부">llm-d Router의 Envoy 설정 해부</a>
+        <ul>
+          <li><a href="#listener와-http-filter-chain">Listener와 HTTP filter chain</a></li>
+          <li><a href="#original_dst-cluster">ORIGINAL_DST Cluster</a></li>
+          <li><a href="#epp로-가는-cluster">EPP로 가는 Cluster</a></li>
+        </ul>
+      </li>
+      <li><a href="#배포-모드와-gateway-구현체">배포 모드와 Gateway 구현체</a></li>
+      <li><a href="#agent-router-구-envoy-ai-gateway">Agent Router (구 Envoy AI Gateway)</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Hands-On LLM Serving and Optimization Study (LLMSO) 7주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>Envoy는 Lyft가 만든 C++ L4/L7 프록시다. downstream 연결을 Listener로 받아 filter chain으로 처리하고, Route가 고른 Cluster의 Endpoint(upstream)로 요청을 보낸다</li>
+  <li>설정은 정적 YAML로도 줄 수 있지만, 핵심은 재시작 없이 설정을 바꾸는 xDS(LDS, RDS, CDS, EDS 등) 동적 설정이다. Istio, Envoy Gateway 같은 컨트롤 플레인이 이 API를 구현한다</li>
+  <li>기능 확장의 중심은 HTTP filter chain이다. ext_proc 필터를 쓰면 Envoy 코어를 고치지 않고 요청·응답 처리를 외부 gRPC 서버에 맡길 수 있다</li>
+  <li>llm-d Router의 EPP(Endpoint Picker)가 바로 이 ext_proc 서버다. EPP가 요청마다 추론 서버 상태를 보고 파드를 고른 뒤 <code class="highlighter-rouge">x-gateway-destination-endpoint</code> 헤더로 돌려주면, Envoy는 <code class="highlighter-rouge">ORIGINAL_DST</code> Cluster로 그 파드에 직접 연결한다</li>
+  <li>llm-d의 EPP와 프록시를 잇는 것은 Envoy라는 제품이 아니라 ext_proc 프로토콜이다. Standalone 모드는 Envoy를 직접 띄우고, Gateway 모드는 <code class="highlighter-rouge">InferencePool</code>을 지원하고 ext_proc으로 EPP와 통신하는 Gateway 구현체에 붙는다. 구현체는 Envoy 기반이 많지만 NGINX, agentgateway처럼 Envoy가 아닌 것도 있다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="envoy-개요">Envoy 개요</h1>
+
+<p>llm-d는 vLLM, SGLang 같은 모델 서버 위에서 요청 라우팅, KV cache 관리, PD 분리 등을 맡는 쿠버네티스 기반 분산 추론 서빙 스택이다. 이번 주차는 llm-d가 추론 요청을 라우팅할 때 Envoy를 쓴다는 점에서 출발했다. Envoy의 구조와 확장 방식을 먼저 살펴본 뒤, 그 확장 지점 위에서 동작하는 추론 라우팅(llm-d, Gateway API Inference Extension)과 AI 게이트웨이(Agent Router)로 넘어갔다.</p>
+
+<h2 id="등장-배경과-설계-원칙">등장 배경과 설계 원칙</h2>
+
+<p>Envoy는 분산 시스템을 만들 때 생기는 애플리케이션 네트워킹 문제를 풀기 위해 Lyft가 C++로 개발한 고성능 프록시다. 2016년 9월 오픈소스로 공개됐고, 2017년 9월 CNCF(Cloud Native Computing Foundation)에 합류했다.</p>
+
+<p>설계 원칙은 <a href="https://www.envoyproxy.io/docs/envoy/latest/intro/what_is_envoy">Envoy 소개 문서(What is Envoy)</a>의 두 문장으로 요약된다.</p>
+
+<blockquote>
+  <p><em>The network should be transparent to applications. When network and application problems do occur it should be easy to determine the source of the problem.</em></p>
+
+  <p>애플리케이션에게 네트워크는 투명해야 한다. 네트워크나 애플리케이션 문제가 생기면 원인을 쉽게 파악할 수 있어야 한다.</p>
+</blockquote>
+
+<p>앞 문장은 애플리케이션이 재시도, 타임아웃, TLS 같은 네트워크 기능을 직접 구현하지 않아도 된다는 뜻이고, 뒤 문장은 프록시가 통과하는 트래픽을 관측할 수 있어야 한다는 뜻이다.</p>
+
+<h2 id="프록시로서의-역할">프록시로서의 역할</h2>
+
+<p>프록시는 클라이언트와 서버 사이에 놓이는 중개 구성 요소다. 같은 서비스를 여러 인스턴스로 띄웠을 때, 프록시가 단일 주소를 노출하면 클라이언트는 인스턴스 목록을 몰라도 된다. 이런 리버스 프록시는 인스턴스 간 부하를 나누고, 헬스 체크로 장애 인스턴스를 우회시킨다.</p>
+
+<p>리버스 프록시로서 Envoy가 갖는 차이는 <strong>L7 프로토콜을 해석한다</strong>는 점이다. 연결만 보는 L3/L4 프록시는 요청 단위 타임아웃, 재시도, 서킷 브레이커를 구현할 수 없다. 연결 단위로는 그 안의 요청 경계를 구분하지 않기 때문이다. Envoy는 HTTP/1.1, HTTP/2, gRPC를 기본으로 파싱하므로 요청 단위로 이런 동작을 걸 수 있고, 요청마다 지연 시간, 처리량, 오류율 같은 텔레메트리도 수집한다. 필터를 추가해 MongoDB, Redis, Kafka 같은 프로토콜도 해석하게 할 수 있다.</p>
+
+<p>Envoy는 애플리케이션 밖에서 동작하므로 언어나 프레임워크와 무관하게 이 기능을 쓸 수 있다. 배치 방식도 여러 가지다.</p>
+
+<ul>
+  <li><strong>에지 프록시</strong>: 외부에서 들어오는 트래픽을 진입점에서 받는다</li>
+  <li><strong>공유 프록시</strong>: 여러 서비스가 하나의 프록시를 함께 쓴다</li>
+  <li><strong>서비스별 프록시(사이드카)</strong>: 서비스 인스턴스마다 하나씩 붙는다. Istio의 사이드카 모드가 이 방식이다(ambient 모드는 노드별 L4 프록시와, 필요하면 L7 처리용 Envoy waypoint 프록시를 쓴다)</li>
+</ul>
+
+<h2 id="주요-기능">주요 기능</h2>
+
+<p>Envoy의 핵심 기능은 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>기능</th>
+      <th>내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>서비스 디스커버리</td>
+      <td>디스커버리 API에서 Endpoint 목록을 받는다. 목록이 궁극적으로(eventually) 일관된다고 가정하고, 능동·수동 헬스 체크로 보완한다</td>
+    </tr>
+    <tr>
+      <td>로드 밸런싱</td>
+      <td>가중치 라운드 로빈, 최소 요청(least request), 링 해시와 Maglev(일관된 해싱), 랜덤. 가용 영역을 고려하는 지역 인식(locality-aware) 분산도 지원한다</td>
+    </tr>
+    <tr>
+      <td>요청 라우팅</td>
+      <td>가상 호스트, 경로, 헤더 기준으로 요청을 특정 Cluster로 보낸다. 재시도, 타임아웃, 오류 주입도 Route 단위로 건다</td>
+    </tr>
+    <tr>
+      <td>트래픽 분할과 섀도잉</td>
+      <td>가중치 기반으로 트래픽을 나누거나(카나리 배포), 복사본을 보내고 응답은 버린다(fire and forget)</td>
+    </tr>
+    <tr>
+      <td>복원력</td>
+      <td>요청 타임아웃, 재시도(재시도 폭증을 막는 제한 포함), 동시 연결·요청 수 임계값, 이상값 감지(outlier detection)로 오동작 Endpoint 퇴출</td>
+    </tr>
+    <tr>
+      <td>HTTP/2와 gRPC</td>
+      <td>downstream과 upstream 양쪽에서 HTTP/1.1과 HTTP/2를 상호 변환하며 프록시한다</td>
+    </tr>
+    <tr>
+      <td>관측성</td>
+      <td>counter, gauge, histogram 통계와 분산 트레이싱 스팬을 내보내고, 요청 추적용 <code class="highlighter-rouge">x-request-id</code>를 생성한다</td>
+    </tr>
+    <tr>
+      <td>TLS 종료와 시작</td>
+      <td>downstream TLS를 종료(terminate)하고, 애플리케이션 대신 upstream으로 TLS·mTLS를 시작(originate)한다</td>
+    </tr>
+    <tr>
+      <td>속도 제한</td>
+      <td>외부 전역 속도 제한 서비스와 연동해 연결 단위·요청 단위로 제한한다</td>
+    </tr>
+    <tr>
+      <td>확장</td>
+      <td>C++ 필터를 바이너리에 넣거나, Lua, Wasm, 동적 모듈, 외부 처리(ext_proc)로 코어 수정 없이 확장한다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="envoy-구조와-설정">Envoy 구조와 설정</h1>
+
+<h2 id="주요-용어">주요 용어</h2>
+
+<p>Envoy 설정과 문서에는 아래 용어가 반복해서 나온다. Istio, Envoy Gateway, llm-d의 설정 파일에서도 같은 이름이 그대로 쓰인다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>용어</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Downstream</td>
+      <td>Envoy에 연결해 요청을 보내는 쪽. 보통 클라이언트다</td>
+    </tr>
+    <tr>
+      <td>Upstream</td>
+      <td>Envoy가 요청을 전달하는 쪽. 사이드카의 인바운드 트래픽이라면 같은 파드의 애플리케이션이고, 아웃바운드 트래픽이나 에지 프록시라면 원격 백엔드다</td>
+    </tr>
+    <tr>
+      <td>Listener</td>
+      <td>IP와 포트에 바인딩해 downstream 연결을 받는 지점</td>
+    </tr>
+    <tr>
+      <td>Filter</td>
+      <td>Listener가 받은 바이트나 요청을 처리하는 단계. 여러 개가 순서대로 이어져 filter chain을 이룬다</td>
+    </tr>
+    <tr>
+      <td>Route</td>
+      <td>요청을 어느 Cluster로 보낼지 정하는 규칙. 예를 들어 <code class="highlighter-rouge">/catalog</code>로 시작하면 catalog Cluster로 보낸다</td>
+    </tr>
+    <tr>
+      <td>Cluster</td>
+      <td>트래픽을 보낼 논리적 서비스. 같은 역할을 하는 Endpoint의 묶음이다</td>
+    </tr>
+    <tr>
+      <td>Endpoint</td>
+      <td>Cluster를 이루는 실제 주소(IP와 포트)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>트래픽은 downstream에서 upstream 방향으로 흐른다. 용어를 요청 경로 위에 놓으면 다음과 같다.</p>
+
+<pre><code class="language-mermaid">flowchart LR
+    D["Downstream&lt;br/&gt;(클라이언트)"] --&gt; L["Listener&lt;br/&gt;(IP:포트)"]
+    subgraph FC["Filter chain"]
+        direction LR
+        NF["network filter"] --&gt; HCM["HTTP connection manager"]
+        HCM --&gt; HF["HTTP filter"] --&gt; R["router filter"]
+    end
+    L --&gt; NF
+    R --&gt;|"Route 매칭"| C["Cluster"]
+    C --&gt; E1["Endpoint A"]
+    C --&gt; E2["Endpoint B"]
+    E1 --&gt; U["Upstream&lt;br/&gt;(백엔드)"]
+    E2 --&gt; U
+</code></pre>
+
+<center><sup>AI를 이용해 직접 그린 도식. Listener가 받은 요청이 filter chain 끝의 router filter에서 Route 매칭을 거쳐 Cluster의 Endpoint 중 하나로 간다</sup></center>
+
+<h2 id="요청-처리-흐름">요청 처리 흐름</h2>
+
+<p>Envoy 공식 문서의 <a href="https://www.envoyproxy.io/docs/envoy/latest/intro/life_of_a_request">Life of a Request</a>는 요청 하나가 Envoy 안에서 거치는 경로를 단계별로 설명한다. 전체 구조는 아래 그림과 같다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/envoy-life-of-a-request-architecture.svg" alt="Envoy 요청 처리 구조" class="align-center" width="600" /></p>
+
+<center><sup>출처: Envoy 공식 문서 Life of a Request. 워커 스레드 안에서 요청은 Listener 쪽(downstream 처리)과 Cluster 쪽(upstream 연결)을 거치고, 둘을 HTTP router filter가 잇는다</sup></center>
+
+<p>문서의 12단계를 줄이면 다음과 같다.</p>
+
+<ol>
+  <li>워커 스레드에서 도는 Listener가 downstream의 TCP 연결을 받는다</li>
+  <li>listener filter(예: TLS inspector)가 SNI 같은 TLS 이전 정보를 뽑고, 이 값으로 연결에 적용할 network filter chain을 고른다. SNI로 filter chain과 인증서를 고르는 동작은 <a href="/cs/CS-TLS-SNI-SAN/#서버-측-sni-매칭과-default-인증서">TLS SNI 글</a>에서 정리했다</li>
+  <li>TLS transport socket이 수신 데이터를 복호화한다</li>
+  <li>network filter chain이 실행된다. HTTP 트래픽에서는 chain의 마지막 network filter인 <strong>HTTP connection manager(HCM)</strong>가 바이트 스트림을 요청·응답 단위의 HTTP 스트림으로 나눈다</li>
+  <li>스트림마다 HTTP filter chain이 실행된다. chain 끝의 <strong>router filter</strong>가 Route를 매칭해 Cluster를 고른다</li>
+  <li>Cluster의 로드 밸런서가 Endpoint를 고르고, 서킷 브레이커를 확인한 뒤 연결 풀에서 upstream 연결을 얻어 요청을 보낸다</li>
+  <li>응답은 HTTP filter를 요청과 <strong>반대 순서</strong>로 거쳐 downstream으로 돌아간다. 스트림이 끝나면 통계, 액세스 로그, 트레이스 스팬이 마무리된다</li>
+</ol>
+
+<p><a href="#external-processing-동작-방식">External Processing 동작 방식</a>에서 다룰 ext_proc 필터는 5단계의 HTTP filter chain에 들어간다. <a href="#llm-d-router의-envoy-설정-해부">llm-d</a>가 목적지를 바꾸는 지점은 6단계, 즉 Cluster가 Endpoint를 고르는 부분이다.</p>
+
+<h2 id="정적-설정">정적 설정</h2>
+
+<p>Envoy는 JSON이나 YAML 설정 파일로 구동된다. 현재 설정 API는 v3이며 v1, v2는 더 이상 쓰지 않는다. 아래는 15001 포트로 받은 모든 요청을 httpbin 서비스로 보내는 완전한 정적 설정이다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">static_resources</span><span class="pi">:</span>
+  <span class="na">listeners</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">httpbin-demo</span>
+    <span class="na">address</span><span class="pi">:</span>
+      <span class="na">socket_address</span><span class="pi">:</span> <span class="pi">{</span> <span class="nv">address</span><span class="pi">:</span> <span class="nv">0.0.0.0</span><span class="pi">,</span> <span class="nv">port_value</span><span class="pi">:</span> <span class="nv">15001</span> <span class="pi">}</span>   <span class="c1"># Listener: 15001 포트에서 연결을 받는다</span>
+    <span class="na">filter_chains</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">filters</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">envoy.filters.network.http_connection_manager</span>    <span class="c1"># network filter: HCM</span>
+        <span class="na">typed_config</span><span class="pi">:</span>
+          <span class="s2">"</span><span class="s">@type"</span><span class="pi">:</span> <span class="s">type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager</span>
+          <span class="na">stat_prefix</span><span class="pi">:</span> <span class="s">ingress_http</span>
+          <span class="na">http_filters</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">envoy.filters.http.router</span>                     <span class="c1"># HTTP filter chain의 마지막: router</span>
+            <span class="na">typed_config</span><span class="pi">:</span>                                       <span class="c1"># 확장은 type URL로 찾으므로 비어 있어도 @type이 필요하다</span>
+              <span class="s2">"</span><span class="s">@type"</span><span class="pi">:</span> <span class="s">type.googleapis.com/envoy.extensions.filters.http.router.v3.Router</span>
+          <span class="na">route_config</span><span class="pi">:</span>                                         <span class="c1"># Route: 어느 Cluster로 보낼지</span>
+            <span class="na">name</span><span class="pi">:</span> <span class="s">httpbin_local_route</span>
+            <span class="na">virtual_hosts</span><span class="pi">:</span>
+            <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">httpbin_local_service</span>
+              <span class="na">domains</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">*"</span><span class="pi">]</span>                                    <span class="c1"># 모든 호스트명에 매칭</span>
+              <span class="na">routes</span><span class="pi">:</span>
+              <span class="pi">-</span> <span class="na">match</span><span class="pi">:</span> <span class="pi">{</span> <span class="nv">prefix</span><span class="pi">:</span> <span class="s2">"</span><span class="s">/"</span> <span class="pi">}</span>                          <span class="c1"># 모든 경로를</span>
+                <span class="na">route</span><span class="pi">:</span>
+                  <span class="na">auto_host_rewrite</span><span class="pi">:</span> <span class="no">true</span>
+                  <span class="na">cluster</span><span class="pi">:</span> <span class="s">httpbin_service</span>                      <span class="c1"># httpbin_service Cluster로</span>
+  <span class="na">clusters</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">httpbin_service</span>                                     <span class="c1"># Cluster: upstream 서비스</span>
+      <span class="na">connect_timeout</span><span class="pi">:</span> <span class="s">5s</span>
+      <span class="na">type</span><span class="pi">:</span> <span class="s">LOGICAL_DNS</span>                                         <span class="c1"># Endpoint를 DNS 조회로 찾는다</span>
+      <span class="na">dns_lookup_family</span><span class="pi">:</span> <span class="s">V4_ONLY</span>
+      <span class="na">lb_policy</span><span class="pi">:</span> <span class="s">ROUND_ROBIN</span>                                    <span class="c1"># Endpoint 선택 알고리즘</span>
+      <span class="na">load_assignment</span><span class="pi">:</span>
+        <span class="na">cluster_name</span><span class="pi">:</span> <span class="s">httpbin</span>
+        <span class="na">endpoints</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">lb_endpoints</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="na">endpoint</span><span class="pi">:</span>                                           <span class="c1"># Endpoint: httpbin:8000</span>
+              <span class="na">address</span><span class="pi">:</span>
+                <span class="na">socket_address</span><span class="pi">:</span>
+                  <span class="na">address</span><span class="pi">:</span> <span class="s">httpbin</span>
+                  <span class="na">port_value</span><span class="pi">:</span> <span class="s">8000</span>
+</code></pre></div></div>
+
+<p><a href="#주요-용어">주요 용어</a>의 이름이 설정 키로 그대로 나온다. Listener → filter chain(HCM → router) → Route → Cluster → Endpoint 순서다. 이 설정의 Route에 <code class="highlighter-rouge">timeout</code>이나 <code class="highlighter-rouge">retry_policy</code>(예: <code class="highlighter-rouge">retry_on: 5xx</code>, <code class="highlighter-rouge">num_retries: 3</code>)를 더하면, 애플리케이션 대신 Envoy가 타임아웃과 재시도를 처리한다.</p>
+
+<h2 id="동적-설정-xds">동적 설정: xDS</h2>
+
+<p>정적 설정은 프록시 수가 적고 구성이 고정일 때만 쓸 만하다. Envoy는 <strong>xDS</strong>라고 부르는 디스커버리 API 묶음으로 설정을 런타임에 받아, 재시작이나 다운타임 없이 반영한다. NGINX는 설정 파일이 바뀌면 reload해야 하지만, Envoy는 새 설정을 스트림으로 받아 바로 적용한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>API</th>
+      <th>내려 주는 설정</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>LDS (Listener Discovery Service)</td>
+      <td>어떤 Listener를 열지</td>
+    </tr>
+    <tr>
+      <td>RDS (Route Discovery Service)</td>
+      <td>Listener가 쓸 Route</td>
+    </tr>
+    <tr>
+      <td>CDS (Cluster Discovery Service)</td>
+      <td>Cluster 목록과 각 Cluster 설정</td>
+    </tr>
+    <tr>
+      <td>EDS (Endpoint Discovery Service)</td>
+      <td>Cluster별 Endpoint 목록</td>
+    </tr>
+    <tr>
+      <td>SDS (Secret Discovery Service)</td>
+      <td>인증서 등 시크릿</td>
+    </tr>
+    <tr>
+      <td>ADS (Aggregated Discovery Service)</td>
+      <td>위 API의 변경 사항을 하나의 스트림으로 순서대로 전달</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>전부 써야 하는 것은 아니고 필요한 것만 조합한다. 전달은 주로 gRPC 스트리밍으로 이뤄진다. 서버가 변경 사항을 푸시하므로 프록시가 주기적으로 폴링할 필요가 없다.</p>
+
+<p>알아 둘 점은 xDS가 <strong>궁극적 일관성</strong>(eventual consistency)을 전제로 설계됐다는 것이다. 예를 들어 RDS로 “Cluster foo로 보내라”는 Route가 먼저 도착했는데 foo를 정의하는 CDS 업데이트가 아직 오지 않았다면, 그 사이의 요청은 라우팅 오류가 난다. 이런 순서 문제를 없애려고 도입한 것이 ADS다. 모든 변경을 한 스트림에서 순서대로 보내므로, 컨트롤 플레인이 의존 관계에 맞는 순서를 보장할 수 있다.</p>
+
+<p><a href="https://www.envoyproxy.io/docs/envoy/latest/start/quick-start/configuration-dynamic-control-plane">Envoy 공식 문서의 동적 설정 예시</a>를 보면, 부트스트랩에 정적으로 남는 것은 xDS 서버(컨트롤 플레인)로 가는 Cluster 하나뿐이다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Envoy 공식 문서의 동적 설정 예시 (envoy-dynamic-control-plane-demo.yaml, admin 블록 생략)</span>
+<span class="na">node</span><span class="pi">:</span>
+  <span class="na">cluster</span><span class="pi">:</span> <span class="s">test-cluster</span>
+  <span class="na">id</span><span class="pi">:</span> <span class="s">test-id</span>                          <span class="c1"># 컨트롤 플레인이 이 프록시를 식별하는 값</span>
+<span class="na">dynamic_resources</span><span class="pi">:</span>
+  <span class="na">ads_config</span><span class="pi">:</span>
+    <span class="na">api_type</span><span class="pi">:</span> <span class="s">GRPC</span>
+    <span class="na">grpc_services</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">envoy_grpc</span><span class="pi">:</span>
+        <span class="na">cluster_name</span><span class="pi">:</span> <span class="s">xds_cluster</span>      <span class="c1"># 아래 정적 Cluster로 xDS 서버에 접속한다</span>
+  <span class="na">cds_config</span><span class="pi">:</span>
+    <span class="na">ads</span><span class="pi">:</span> <span class="pi">{}</span>                            <span class="c1"># Cluster는 ADS로 받는다</span>
+  <span class="na">lds_config</span><span class="pi">:</span>
+    <span class="na">ads</span><span class="pi">:</span> <span class="pi">{}</span>                            <span class="c1"># Listener도 ADS로 받는다</span>
+<span class="na">static_resources</span><span class="pi">:</span>
+  <span class="na">clusters</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">xds_cluster</span>                  <span class="c1"># 정적으로 두는 유일한 Cluster: xDS 서버 주소</span>
+    <span class="na">type</span><span class="pi">:</span> <span class="s">STRICT_DNS</span>
+    <span class="na">typed_extension_protocol_options</span><span class="pi">:</span>
+      <span class="s">envoy.extensions.upstreams.http.v3.HttpProtocolOptions</span><span class="pi">:</span>
+        <span class="s2">"</span><span class="s">@type"</span><span class="pi">:</span> <span class="s">type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions</span>
+        <span class="na">explicit_http_config</span><span class="pi">:</span>
+          <span class="na">http2_protocol_options</span><span class="pi">:</span> <span class="pi">{}</span>   <span class="c1"># xDS는 gRPC라 HTTP/2로 접속한다</span>
+    <span class="na">load_assignment</span><span class="pi">:</span>
+      <span class="na">cluster_name</span><span class="pi">:</span> <span class="s">xds_cluster</span>
+      <span class="na">endpoints</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">lb_endpoints</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">endpoint</span><span class="pi">:</span>
+            <span class="na">address</span><span class="pi">:</span>
+              <span class="na">socket_address</span><span class="pi">:</span>
+                <span class="na">address</span><span class="pi">:</span> <span class="s">my-control-plane</span>
+                <span class="na">port_value</span><span class="pi">:</span> <span class="s">18000</span>
+</code></pre></div></div>
+
+<p>Istio에서는 컨트롤 플레인 컴포넌트 istiod가 이 xDS 서버 역할을 한다. istiod는 쿠버네티스 API에서 VirtualService 같은 Istio 리소스와 서비스 레지스트리를 읽어 Envoy 설정으로 변환한 뒤 xDS로 내려 준다. 실제 사이드카의 부트스트랩에는 SDS 접속과 통계 노출용 정적 Cluster가 몇 개 더 있지만, 애플리케이션 트래픽용 Listener와 Cluster를 xDS로 받는 구조는 같다. Envoy Gateway도 쿠버네티스 Gateway API 리소스(<code class="highlighter-rouge">Gateway</code>, <code class="highlighter-rouge">HTTPRoute</code> 등)를 같은 방식으로 변환해 Envoy에 내려 주는 컨트롤 플레인이다. 적용된 결과는 Envoy의 Admin API(<code class="highlighter-rouge">/config_dump</code>, <code class="highlighter-rouge">/listeners</code>, <code class="highlighter-rouge">/clusters</code>, <code class="highlighter-rouge">/stats</code>)로 확인할 수 있다.</p>
+
+<p><br /></p>
+
+<h1 id="envoy-확장">Envoy 확장</h1>
+
+<h2 id="filter-chain과-http-connection-manager">filter chain과 HTTP connection manager</h2>
+
+<p>Envoy의 코어는 <strong>L3/L4 프록시</strong>다. 네트워크 연결에서 바이트를 읽어 처리하는 것이 기본 동작이고, <a href="#프록시로서의-역할">프록시로서의 역할</a>에서 본 L7 기능은 그 위에 얹는 필터에서 나온다.</p>
+
+<p>가장 기본적인 필터는 바이트 스트림을 인코딩·디코딩하는 <strong>network filter</strong>다. MongoDB, Redis, Thrift, Kafka용 network filter가 있고, 가장 많이 쓰이는 것이 <strong>HCM</strong>이다. HCM은 바이트 스트림을 HTTP 헤더, 본문, 트레일러로 바꾸는 일(HTTP/1.1, HTTP/2, HTTP/3, gRPC)을 추상화하고, 라우팅, 액세스 로그, 헤더 조작도 맡는다.</p>
+
+<p>HCM 안에는 다시 <strong>HTTP filter chain</strong>이 있다. 기본 제공 HTTP 필터로는 CORS, CSRF, 외부 인가(ext_authz), 속도 제한, 오류 주입, gRPC-JSON 변환, 압축, Lua, RBAC, Tap, Wasm, router 등이 있다. HTTP filter chain은 요청을 upstream Cluster로 보내는 <strong>터미널 필터로 끝나야</strong> 하며, 그 역할을 router filter가 맡는다. <a href="#정적-설정">정적 설정</a>의 <code class="highlighter-rouge">http_filters</code>에 router 하나만 있던 것이 가장 짧은 형태다.</p>
+
+<p>필터를 직접 C++로 작성해 Envoy 바이너리에 넣을 수도 있다. Istio가 배포하는 프록시(istio-proxy)도 Envoy에 필터를 추가한 커스텀 빌드다. 다만 커스텀 빌드는 유지 보수 부담이 크고, 개발자가 C++를 써야 한다.</p>
+
+<h2 id="코어를-수정하지-않는-확장-방식">코어를 수정하지 않는 확장 방식</h2>
+
+<p>바이너리를 다시 빌드하지 않고 HTTP 처리를 확장하는 대표 수단은 다음과 같다.</p>
+
+<ul>
+  <li><strong>외부 처리(ext_proc)</strong>: 요청·응답 처리를 Envoy 밖의 gRPC 서버에 맡긴다</li>
+  <li><strong>Lua</strong>: 설정에 넣은 Lua 스크립트로 요청·응답을 조작한다</li>
+  <li><strong>Wasm</strong>: WebAssembly 모듈을 샌드박스 안에서 실행한다</li>
+  <li><strong><a href="https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules">동적 모듈</a>(dynamic modules)</strong>: C++, Go, Rust SDK로 만든 공유 라이브러리를 런타임에 로드해 HTTP 필터 등으로 쓴다</li>
+</ul>
+
+<p>ext_authz(외부 인가)나 속도 제한 서비스 연동도 외부 서비스를 부른다는 점에서 비슷하지만, 용도가 정해져 있다. ext_proc은 용도를 정하지 않은 범용 외부 호출이다.</p>
+
+<p><a href="#agent-router-구-envoy-ai-gateway">AI 게이트웨이</a>와 <a href="#llm-d-router의-envoy-설정-해부">llm-d</a>는 모두 ext_proc을 핵심 확장 지점으로 쓴다. 추론 관련 로직을 Envoy 코어에 넣지 않고 별도 프로세스로 분리할 수 있기 때문이다.</p>
+
+<h2 id="external-processing-동작-방식">External Processing 동작 방식</h2>
+
+<p>ext_proc(<code class="highlighter-rouge">envoy.filters.http.ext_proc</code>)은 HTTP 요청·응답 처리를 Envoy 프로세스 밖의 gRPC 서버, 즉 <strong>external processor</strong>에 위임하는 HTTP 필터다. 처리 로직을 C++ 필터로 만들어 넣는 대신, 어떤 언어로든 gRPC 서비스만 구현하면 트래픽을 보고 바꿀 수 있다.</p>
+
+<p>프로토콜은 양방향 gRPC 스트림이다. Envoy는 HTTP 요청·응답의 각 이벤트(요청 헤더, 요청 본문, 요청 트레일러, 응답 헤더, 응답 본문, 응답 트레일러)마다 <code class="highlighter-rouge">ProcessingRequest</code>를 보내고, 프로세서는 이벤트마다 <code class="highlighter-rouge">ProcessingResponse</code>로 답한다. 답은 셋 중 하나다.</p>
+
+<ul>
+  <li>그대로 통과(<code class="highlighter-rouge">CONTINUE</code>)</li>
+  <li>헤더나 본문을 수정해서 통과 (헤더 추가·삭제, 본문 교체)</li>
+  <li>즉시 응답(<code class="highlighter-rouge">ImmediateResponse</code>)으로 요청을 여기서 끝낸다. 예를 들어 401이나 429를 바로 돌려준다</li>
+</ul>
+
+<p>어떤 이벤트를 프로세서에 보낼지는 <code class="highlighter-rouge">processing_mode</code>로 정한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>필드</th>
+      <th>값</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">request_header_mode</code>, <code class="highlighter-rouge">response_header_mode</code></td>
+      <td><code class="highlighter-rouge">SEND</code>, <code class="highlighter-rouge">SKIP</code></td>
+      <td>헤더를 보낼지</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">request_body_mode</code>, <code class="highlighter-rouge">response_body_mode</code></td>
+      <td><code class="highlighter-rouge">NONE</code>(기본), <code class="highlighter-rouge">STREAMED</code>, <code class="highlighter-rouge">BUFFERED</code>, <code class="highlighter-rouge">BUFFERED_PARTIAL</code>, <code class="highlighter-rouge">FULL_DUPLEX_STREAMED</code></td>
+      <td>본문을 보내지 않을지, 조각으로 흘려보낼지, 모아서 한 번에 보낼지</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">request_trailer_mode</code>, <code class="highlighter-rouge">response_trailer_mode</code></td>
+      <td><code class="highlighter-rouge">SEND</code>, <code class="highlighter-rouge">SKIP</code></td>
+      <td>트레일러를 보낼지</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><a href="#llm-d-router의-envoy-설정-해부">llm-d의 Envoy 설정</a>이 쓰는 값은 <code class="highlighter-rouge">FULL_DUPLEX_STREAMED</code>다. 이 모드에서 Envoy는 본문 조각을 도착하는 대로 프로세서에 흘려보내고, 프로세서가 되돌려 준 조각을 upstream이나 downstream으로 보낸다. 즉 본문이 프로세서를 거쳐 간다. 프로세서는 조각마다 바로 처리해도 되고, 헤더와 본문 전체를 모아서 본 뒤에 처음 응답해도 된다. 이 모드를 쓰려면 대응하는 트레일러 모드를 <code class="highlighter-rouge">SEND</code>로 둬야 한다.</p>
+
+<p>ext_proc은 다음과 같은 곳에 쓰인다.</p>
+
+<ul>
+  <li>커스텀 토큰 검증 같은 인증·인가</li>
+  <li>헤더 삽입, 본문 재작성 같은 요청·응답 변환</li>
+  <li>본문 내용을 보고 라우팅 결정</li>
+  <li>모더레이션, 개인정보(PII) 마스킹 같은 콘텐츠 검사</li>
+  <li>AI 게이트웨이: OpenAI 호환 요청 본문을 파싱해 모델명 기반 라우팅, 토큰 기반 속도 제한, 사용량 계측</li>
+</ul>
+
+<p>단점도 있다. 요청마다 gRPC 왕복이 추가되므로 지연 시간이 늘고, 본문까지 보내면 프로세서가 처리할 데이터 양도 커진다.</p>
+
+<p><br /></p>
+
+<h1 id="llm-서빙과-envoy">LLM 서빙과 Envoy</h1>
+
+<blockquote>
+  <p>이 절의 설정 및 동작에 대한 해석은 llm-d, Gateway API Inference Extension 저장소의 설정 파일과 문서에 근거하며, 직접 실행해 확인하지는 않았다.</p>
+</blockquote>
+
+<h2 id="추론-요청의-라우팅-조건">추론 요청의 라우팅 조건</h2>
+
+<p>일반적인 HTTP 로드 밸런싱은 헤더와 경로만 보고 판단해도 충분하다. 추론 요청은 두 가지가 다르다.</p>
+
+<p>첫째, 판단에 필요한 정보가 <strong>본문</strong>에 있다. OpenAI 호환 API에서 모델명(<code class="highlighter-rouge">model</code>)과 프롬프트(<code class="highlighter-rouge">messages</code>)는 JSON 본문에 들어 있다. 헤더만 봐서는 어느 모델로 가는 요청인지, 프롬프트 앞부분이 이미 캐시된 요청과 겹치는지 알 수 없다.</p>
+
+<p>둘째, 요청마다 비용 차이가 크고, <strong>백엔드 상태</strong>가 지연 시간을 좌우한다. 프롬프트 길이와 출력 길이에 따라 요청 하나의 처리 시간이 크게 달라지고, 같은 프리픽스의 KV cache를 이미 가진 파드로 보내면 그 프리픽스 부분의 prefill 계산을 건너뛸 수 있다. 4주차에 다룬 <a href="/dev/Dev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview/">7.1편</a>의 cache-aware routing(캐시 인지 라우팅)이 이 신호를 쓰는 라우팅이다.</p>
+
+<p>기존 로드 밸런서는 이 정보를 보지 않는다. kube-proxy는 연결 단위로 파드를 고르므로, keep-alive 연결 위의 요청은 전부 처음 고른 파드로 간다. <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/#클러스터-밖에서-파드까지의-경로">8.4편</a>에서 본 ingress-nginx는 Service를 거치지 않고 파드 엔드포인트로 직접 보내지만, 엔드포인트는 기본값인 라운드 로빈으로 고른다. Envoy의 최소 요청 알고리즘도 진행 중인 요청 수만 센다. 세 방식 모두 파드별 대기열 길이와 KV cache 보유 여부를 선택 기준에 넣지 않는다.</p>
+
+<h2 id="llm-d-router의-envoy-설정-해부">llm-d Router의 Envoy 설정 해부</h2>
+
+<p>llm-d는 요청을 어느 파드로 보낼지 정하는 일을 <strong><a href="https://github.com/llm-d/llm-d-router">llm-d Router</a></strong>에 맡긴다. llm-d Router는 프록시(예: Envoy)와 <strong>EPP(Endpoint Picker)</strong>를 합친 것을 가리키는 이름이다. 예전 이름은 Inference Scheduler였다. EPP는 요청마다 KV cache 위치, 현재 부하, 우선순위를 평가해 보낼 파드를 고르는 컴포넌트이고, 프록시와는 ext_proc 프로토콜로 통신한다. 즉 EPP가 <a href="#external-processing-동작-방식">external processor</a>다.</p>
+
+<p>llm-d의 <a href="https://github.com/llm-d/llm-d/blob/main/guides/no-kubernetes-deployment/router/envoy/envoy.yaml">no-kubernetes 배포 가이드</a>에 있는 Envoy 설정은 Helm으로 배포하는 standalone 프리셋(<a href="#배포-모드와-gateway-구현체">배포 모드</a> 참고)에서 쿠버네티스 전용 부분만 뺀 것이다. 설정이 짧아 llm-d가 Envoy에 요구하는 것이 그대로 드러난다. 세 부분으로 나눠 보자.</p>
+
+<h3 id="listener와-http-filter-chain">Listener와 HTTP filter chain</h3>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># llm-d guides/no-kubernetes-deployment/router/envoy/envoy.yaml 발췌</span>
+<span class="c1"># (@type, HTTP/2 옵션, 헬스 체크 주기 등 일부 필드 생략. 전체는 원본 참고)</span>
+<span class="na">listeners</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">vllm</span>
+    <span class="na">address</span><span class="pi">:</span>
+      <span class="na">socket_address</span><span class="pi">:</span> <span class="pi">{</span> <span class="nv">address</span><span class="pi">:</span> <span class="nv">0.0.0.0</span><span class="pi">,</span> <span class="nv">port_value</span><span class="pi">:</span> <span class="nv">8081</span> <span class="pi">}</span>   <span class="c1"># 클라이언트가 붙는 포트</span>
+    <span class="na">filter_chains</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">filters</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">envoy.filters.network.http_connection_manager</span>
+            <span class="na">typed_config</span><span class="pi">:</span>
+              <span class="na">route_config</span><span class="pi">:</span>
+                <span class="na">virtual_hosts</span><span class="pi">:</span>
+                  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">vllm-default</span>
+                    <span class="na">domains</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">*"</span><span class="pi">]</span>
+                    <span class="na">routes</span><span class="pi">:</span>
+                      <span class="pi">-</span> <span class="na">match</span><span class="pi">:</span> <span class="pi">{</span> <span class="nv">prefix</span><span class="pi">:</span> <span class="s2">"</span><span class="s">/"</span> <span class="pi">}</span>
+                        <span class="na">route</span><span class="pi">:</span>
+                          <span class="na">cluster</span><span class="pi">:</span> <span class="s">original_destination_cluster</span>   <span class="c1"># 모든 요청을 ORIGINAL_DST Cluster로</span>
+                          <span class="na">timeout</span><span class="pi">:</span> <span class="s">86400s</span>                          <span class="c1"># 긴 생성 요청을 끊지 않도록 24시간</span>
+              <span class="na">http_filters</span><span class="pi">:</span>
+                <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">envoy.filters.http.ext_proc</span>                <span class="c1"># 먼저 EPP에게 묻고</span>
+                  <span class="na">typed_config</span><span class="pi">:</span>
+                    <span class="na">grpc_service</span><span class="pi">:</span>
+                      <span class="na">envoy_grpc</span><span class="pi">:</span>
+                        <span class="na">cluster_name</span><span class="pi">:</span> <span class="s">ext_proc</span>                     <span class="c1"># EPP로 가는 Cluster (아래 ext_proc Cluster)</span>
+                      <span class="na">timeout</span><span class="pi">:</span> <span class="s">10s</span>
+                    <span class="na">processing_mode</span><span class="pi">:</span>
+                      <span class="na">request_header_mode</span><span class="pi">:</span> <span class="s">SEND</span>
+                      <span class="na">response_header_mode</span><span class="pi">:</span> <span class="s">SEND</span>
+                      <span class="na">request_body_mode</span><span class="pi">:</span> <span class="s">FULL_DUPLEX_STREAMED</span>      <span class="c1"># 요청 본문을 EPP에 스트리밍</span>
+                      <span class="na">response_body_mode</span><span class="pi">:</span> <span class="s">FULL_DUPLEX_STREAMED</span>     <span class="c1"># 응답 본문도 스트리밍</span>
+                      <span class="na">request_trailer_mode</span><span class="pi">:</span> <span class="s">SEND</span>                   <span class="c1"># FULL_DUPLEX_STREAMED의 필수 조건</span>
+                      <span class="na">response_trailer_mode</span><span class="pi">:</span> <span class="s">SEND</span>
+                    <span class="na">message_timeout</span><span class="pi">:</span> <span class="s">1000s</span>
+                <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">envoy.filters.http.router</span>                  <span class="c1"># 그다음 router가 upstream으로 보낸다</span>
+</code></pre></div></div>
+
+<p>HTTP filter chain은 ext_proc 다음에 router가 오는 두 단계다. 요청 본문을 EPP에 보내는 이유는 <a href="#추론-요청의-라우팅-조건">추론 요청의 라우팅 조건</a>에서 본 대로, 모델명과 프롬프트가 본문에 있기 때문이다. 응답 본문도 EPP를 거친다. Envoy는 EPP가 되돌려 준 본문 조각을 클라이언트로 보내므로, EPP가 조각을 받는 즉시 되돌려 주면 vLLM의 SSE(Server-Sent Events) 스트리밍 응답이 토큰 단위로 전달된다. <code class="highlighter-rouge">BUFFERED</code>였다면 응답 전체가 모일 때까지 클라이언트는 첫 토큰을 받지 못한다. Envoy를 직접 구성할 때 llm-d가 지원하는 본문 모드도 <code class="highlighter-rouge">FULL_DUPLEX_STREAMED</code> 하나뿐이다. 트레일러 모드가 <code class="highlighter-rouge">SEND</code>인 것도 <a href="#external-processing-동작-방식">External Processing 동작 방식</a>에서 본 이 모드의 필수 조건이다.</p>
+
+<h3 id="original_dst-cluster">ORIGINAL_DST Cluster</h3>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">clusters</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">original_destination_cluster</span>
+    <span class="na">type</span><span class="pi">:</span> <span class="s">ORIGINAL_DST</span>              <span class="c1"># 고정된 Endpoint 목록이 없는 Cluster</span>
+    <span class="na">lb_policy</span><span class="pi">:</span> <span class="s">CLUSTER_PROVIDED</span>     <span class="c1"># Endpoint 선택을 Cluster 타입에 맡긴다</span>
+    <span class="na">circuit_breakers</span><span class="pi">:</span>
+      <span class="na">thresholds</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">max_connections</span><span class="pi">:</span> <span class="s">40000</span>    <span class="c1"># Envoy 기본값(각 1024)보다 크게 둔다 (standalone 프리셋과 같은 값)</span>
+          <span class="na">max_pending_requests</span><span class="pi">:</span> <span class="s">40000</span>
+          <span class="na">max_requests</span><span class="pi">:</span> <span class="s">40000</span>
+    <span class="na">original_dst_lb_config</span><span class="pi">:</span>
+      <span class="na">use_http_header</span><span class="pi">:</span> <span class="no">true</span>                            <span class="c1"># 목적지를 HTTP 헤더에서 읽는다</span>
+      <span class="na">http_header_name</span><span class="pi">:</span> <span class="s">x-gateway-destination-endpoint</span> <span class="c1"># EPP가 채워 주는 헤더</span>
+</code></pre></div></div>
+
+<p>이 Cluster에는 Endpoint가 하나도 적혀 있지 않다. <code class="highlighter-rouge">ORIGINAL_DST</code>는 본래 iptables REDIRECT나 TPROXY로 가로챈 연결을 원래 목적지로 보내는 Cluster 타입이다. 여기에 <code class="highlighter-rouge">use_http_header: true</code>를 주면 목적지를 요청 헤더에서 읽는다. 결국 <a href="#요청-처리-흐름">요청 처리 흐름</a>의 6단계, 즉 Endpoint 선택을 Envoy의 로드 밸런싱 알고리즘이 아니라 <strong>EPP가 요청마다 채워 주는 헤더 값</strong>이 결정한다.</p>
+
+<p>EPP와 프록시가 지켜야 할 규칙은 쿠버네티스 Gateway API를 추론 워크로드용으로 확장하는 프로젝트인 Gateway API Inference Extension(GIE)의 <a href="https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/004-endpoint-picker-protocol">Endpoint Picker Protocol</a>에 정의돼 있다.</p>
+
+<ul>
+  <li>EPP는 Envoy의 ext_proc 서비스 프로토콜을 구현해야 한다</li>
+  <li>고른 파드 주소는 <code class="highlighter-rouge">x-gateway-destination-endpoint</code> 헤더와 ext_proc 응답의 dynamic metadata(<code class="highlighter-rouge">envoy.lb</code>) 두 경로로 알리고, 두 값은 같아야 한다. 프록시마다 지원하는 경로가 다를 수 있기 때문이다. 값은 <code class="highlighter-rouge">&lt;ip:port&gt;</code> 형식이고, 쉼표로 여러 개를 주면 앞에서부터 쓰고 재시도 시 다음 것으로 넘어간다. 다만 위 standalone 설정의 <code class="highlighter-rouge">ORIGINAL_DST</code>는 헤더 값을 단일 <code class="highlighter-rouge">ip:port</code>로만 해석한다</li>
+  <li>보낼 곳이 없으면 즉시 응답으로 끝낸다. 준비된 파드가 없으면 503, 부하 때문에 요청을 버려야 하면 429다</li>
+  <li>응답 쪽에서는 프록시가 실제로 요청을 처리한 파드 주소를 <code class="highlighter-rouge">x-gateway-destination-endpoint-served</code> 메타데이터로 EPP에 돌려준다</li>
+</ul>
+
+<h3 id="epp로-가는-cluster">EPP로 가는 Cluster</h3>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">ext_proc</span>
+    <span class="na">type</span><span class="pi">:</span> <span class="s">STATIC</span>
+    <span class="na">lb_policy</span><span class="pi">:</span> <span class="s">LEAST_REQUEST</span>
+    <span class="na">health_checks</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">grpc_health_check</span><span class="pi">:</span>
+          <span class="na">service_name</span><span class="pi">:</span> <span class="s2">"</span><span class="s">envoy.service.ext_proc.v3.ExternalProcessor"</span>   <span class="c1"># EPP의 gRPC 헬스 체크</span>
+    <span class="na">load_assignment</span><span class="pi">:</span>
+      <span class="na">cluster_name</span><span class="pi">:</span> <span class="s">ext_proc</span>
+      <span class="na">endpoints</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">lb_endpoints</span><span class="pi">:</span>
+            <span class="pi">-</span> <span class="na">endpoint</span><span class="pi">:</span>
+                <span class="na">address</span><span class="pi">:</span>
+                  <span class="na">socket_address</span><span class="pi">:</span> <span class="pi">{</span> <span class="nv">address</span><span class="pi">:</span> <span class="nv">127.0.0.1</span><span class="pi">,</span> <span class="nv">port_value</span><span class="pi">:</span> <span class="nv">9002</span> <span class="pi">}</span>   <span class="c1"># 같은 호스트의 EPP</span>
+</code></pre></div></div>
+
+<p>Envoy 설정에서 EPP는 평범한 upstream Cluster 하나다. 이 가이드는 Envoy와 EPP를 같은 호스트에 두므로 주소가 <code class="highlighter-rouge">127.0.0.1:9002</code>이고, 같은 이유로 이 구간의 TLS도 생략돼 있다.</p>
+
+<p>세 부분을 합치면 요청 하나의 흐름은 다음과 같다.</p>
+
+<pre><code class="language-mermaid">sequenceDiagram
+    participant C as 클라이언트
+    participant E as Envoy
+    participant P as EPP (ext_proc 서버)
+    participant V as vLLM 파드
+    C-&gt;&gt;E: POST /v1/chat/completions
+    E-&gt;&gt;P: 요청 헤더와 본문 (gRPC 스트림)
+    Note over P: model, 프롬프트와&lt;br/&gt;파드별 KV cache, 부하로 대상 선택
+    P--&gt;&gt;E: 헤더 추가 x-gateway-destination-endpoint = ip:port, 요청 본문 반환
+    E-&gt;&gt;V: ORIGINAL_DST Cluster가 헤더의 주소로 직접 연결
+    V--&gt;&gt;E: 응답 (SSE 스트림)
+    E-&gt;&gt;P: 응답 헤더와 본문 조각
+    P--&gt;&gt;E: 본문 조각 반환
+    E--&gt;&gt;C: 응답 스트림
+</code></pre>
+
+<center><sup>AI를 이용해 직접 그린 도식. Envoy가 요청을 EPP에 보내고, EPP가 헤더로 돌려준 파드 주소로 Envoy가 요청을 직접 전달한다. 요청과 응답 본문은 모두 EPP를 거친다</sup></center>
+
+<h2 id="배포-모드와-gateway-구현체">배포 모드와 Gateway 구현체</h2>
+
+<p>위 설정은 llm-d Router의 두 배포 모드 중 <strong>Standalone 모드</strong>에 해당한다. 두 모드는 다음과 같다.</p>
+
+<ul>
+  <li><strong>Standalone 모드</strong>: Gateway API 인프라 없이 Envoy를 직접 관리한다. Envoy가 EPP 파드 안에 같이 뜨는 사이드카 방식(기본값)과, Envoy를 별도 Deployment와 Service로 띄워 따로 확장하는 service 방식이 있다</li>
+  <li><strong>Gateway 모드(Inference Gateway)</strong>: llm-d Router 문서가 운영 환경에 권장하는 모드다. 쿠버네티스 Gateway API를 쓴다. <code class="highlighter-rouge">Gateway</code>에 붙은 <code class="highlighter-rouge">HTTPRoute</code>가 <code class="highlighter-rouge">InferencePool</code>(모델 서버 파드 집합을 나타내는 Gateway API 확장 리소스)을 백엔드로 가리키고, <code class="highlighter-rouge">InferencePool</code>은 <code class="highlighter-rouge">endpointPickerRef</code> 필드로 EPP를 지정한다</li>
+</ul>
+
+<p><code class="highlighter-rouge">InferencePool</code> API를 정의한 곳이 GIE다. EPP와 BBR(Body Based Router)은 원래 GIE 저장소에 있었지만, 지금은 각각 <code class="highlighter-rouge">llm-d/llm-d-router</code>와 <code class="highlighter-rouge">llm-d/llm-d-inference-payload-processor</code>로 옮겨졌다. BBR은 지금 Inference Payload Processor라는 이름으로, 요청 본문에서 모델명 같은 값을 꺼내 헤더에 넣는 ext_proc 서비스다. EPP가 풀 안의 파드를 고른다면, BBR은 요청을 어느 풀로 보낼지 정하는 데 쓰인다. GIE 저장소에는 <code class="highlighter-rouge">InferencePool</code> API, Endpoint Picker Protocol 정의, 적합성(conformance) 테스트용 경량 EPP가 남는다.</p>
+
+<p>Gateway 모드에서 EPP와 통신하는 프록시는 Gateway 구현체의 데이터 플레인이다. <a href="https://gateway-api-inference-extension.sigs.k8s.io/implementations/gateways/">GIE 적합 구현체 목록</a>에는 Istio와 Higress(둘 다 Envoy 기반), Alibaba Cloud ACK 외에 Rust로 작성된 agentgateway와 NGINX를 데이터 플레인으로 쓰는 NGINX Gateway Fabric도 있다. Envoy Gateway, kgateway, GKE Gateway도 ext_proc을 지원하는 게이트웨이다. <strong>EPP는 Envoy의 ext_proc 프로토콜을 인터페이스로 삼는다. Standalone 모드는 Envoy를 직접 쓰고, Gateway 모드는 <code class="highlighter-rouge">InferencePool</code>을 지원하고 그 프로토콜로 EPP와 통신하는 게이트웨이라면 Envoy가 아니어도 된다.</strong></p>
+
+<h2 id="agent-router-구-envoy-ai-gateway">Agent Router (구 Envoy AI Gateway)</h2>
+
+<p>Agent Router는 CNCF Envoy의 하위 프로젝트로 시작한 <strong>Envoy AI Gateway</strong>의 새 이름이다. 2026년 9월 10일부로 독립 프로젝트가 되어 Agentic AI Foundation으로 옮겨 갔다. 이름이 바뀐 것은 Envoy AI Gateway 프로젝트이고 Envoy 프록시 자체가 아니다. <a href="https://theagentrouter.ai/blog/envoy-ai-gateway-is-now-agent-router">공지</a>에도 Agent Router는 여전히 Envoy와 Envoy Gateway 위에 만들어진다고 적혀 있다.</p>
+
+<p>Agent Router는 <strong>AI 게이트웨이</strong>다. AI 게이트웨이는 여러 모델 제공자(OpenAI, Bedrock 등) 앞에서 다음 역할을 한 곳에 모으는 게이트웨이다.</p>
+
+<ul>
+  <li>OpenAI 호환 형식의 통합 API</li>
+  <li>제공자 API 키 보관과 앱별 키 발급</li>
+  <li>재시도와 제공자 간 장애 조치</li>
+  <li>토큰 기반 속도 제한과 사용량·비용 관측</li>
+  <li>가드레일</li>
+</ul>
+
+<p>팀마다 따로 구현하던 제공자별 인증, 재시도, 키 관리, 로깅을 AI 게이트웨이가 API 게이트웨이처럼 한 곳에서 처리한다.</p>
+
+<p>구조는 xDS 기반 컨트롤 플레인과 ext_proc 데이터 플레인의 조합이다.</p>
+
+<ul>
+  <li><strong>컨트롤 플레인</strong>: Agent Router 컨트롤러가 AI 전용 리소스(<code class="highlighter-rouge">AIGatewayRoute</code>, <code class="highlighter-rouge">AIServiceBackend</code>, <code class="highlighter-rouge">BackendSecurityPolicy</code>)를 감시해 Envoy Gateway 설정을 만든다. Envoy Gateway가 이를 xDS로 변환하면, Agent Router 컨트롤러가 Envoy Gateway의 extension server(Envoy Gateway가 xDS를 Envoy에 보내기 전에 외부 gRPC 서버가 수정할 수 있게 하는 확장 지점)로 그 xDS를 한 번 더 조정한다</li>
+  <li><strong>데이터 플레인</strong>: Envoy 프록시 옆에 AI Gateway external processor(ext_proc)와 속도 제한 서비스가 붙는다. 모델 선택, 제공자별 요청·응답 형식 변환, 응답에서 토큰 사용량 추출을 ext_proc이 맡는다</li>
+</ul>
+
+<p>Agent Router의 레퍼런스 아키텍처는 게이트웨이를 두 층으로 나눈다. Tier 1은 중앙 게이트웨이이며, 외부 모델 제공자나 내부 모델 서빙 클러스터로 요청을 보낸다. Tier 2는 자체 호스팅 모델 서빙 클러스터 안에서 내부 라우팅과 로드 밸런싱을 맡는다. 역할로 보면 llm-d Router가 하는 일은 Tier 2에 해당한다. 두 층이 완전히 분리된 것은 아니어서, Agent Router도 2025년 7월부터 <code class="highlighter-rouge">AIGatewayRoute</code>나 <code class="highlighter-rouge">HTTPRoute</code>의 백엔드로 <code class="highlighter-rouge">InferencePool</code>을 지정해 <a href="https://theagentrouter.ai/blog/endpoint-picker-for-inference-routing">EPP와 연동</a>할 수 있다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<ul>
+  <li>Envoy는 Listener → filter chain → Route → Cluster → Endpoint로 요청을 처리하는 L4/L7 프록시다. L7 기능은 HCM과 그 안의 HTTP filter chain으로 얹힌다</li>
+  <li>설정은 xDS로 런타임에 받는다. Istio와 Envoy Gateway는 Envoy 설정을 만들어 xDS로 내려 주는 컨트롤 플레인이고, Agent Router는 Envoy Gateway의 extension server로 그 xDS를 조정한다</li>
+  <li>ext_proc은 요청·응답 처리를 외부 gRPC 서버에 맡기는 HTTP 필터다. 추론 전용 로직을 Envoy 코어 밖에 두는 수단이 이것이다</li>
+  <li>llm-d Router의 Envoy 설정에서 Envoy 개념은 다음과 같이 쓰인다</li>
+</ul>
+
+<table>
+  <thead>
+    <tr>
+      <th>Envoy 개념</th>
+      <th>llm-d Router 설정(no-kubernetes 가이드)에서의 쓰임</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Listener</td>
+      <td><code class="highlighter-rouge">:8081</code>에서 클라이언트 요청을 받는다</td>
+    </tr>
+    <tr>
+      <td>HTTP filter chain</td>
+      <td>ext_proc → router. ext_proc 필터가 요청을 EPP에 보낸다</td>
+    </tr>
+    <tr>
+      <td>Cluster</td>
+      <td><code class="highlighter-rouge">original_destination_cluster</code>(ORIGINAL_DST, 추론 서버용)와 <code class="highlighter-rouge">ext_proc</code>(STATIC, EPP용)</td>
+    </tr>
+    <tr>
+      <td>Endpoint</td>
+      <td>설정에 없다. EPP가 요청마다 <code class="highlighter-rouge">x-gateway-destination-endpoint</code> 헤더로 지정한다</td>
+    </tr>
+    <tr>
+      <td>로드 밸런싱</td>
+      <td>Envoy 알고리즘 대신 EPP가 KV cache 위치, 부하, 우선순위로 결정한다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>“llm-d가 Envoy를 쓴다”는 설명은 Standalone 모드에서는 그대로 맞다. 하지만 EPP와 프록시를 잇는 것은 ext_proc 프로토콜이고, Gateway 모드에서는 프록시가 Envoy일 필요가 없다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://www.envoyproxy.io/docs/envoy/latest/intro/what_is_envoy">Envoy 공식 문서: What is Envoy</a></li>
+  <li><a href="https://www.envoyproxy.io/docs/envoy/latest/intro/life_of_a_request">Envoy 공식 문서: Life of a Request</a></li>
+  <li><a href="https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/intro/terminology">Envoy 공식 문서: Terminology</a></li>
+  <li><a href="https://www.envoyproxy.io/docs/envoy/latest/api-docs/xds_protocol">Envoy 공식 문서: xDS REST and gRPC protocol</a></li>
+  <li><a href="https://www.envoyproxy.io/docs/envoy/latest/start/quick-start/configuration-dynamic-control-plane">Envoy 공식 문서: Dynamic configuration (control plane)</a></li>
+  <li><a href="https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter">Envoy 공식 문서: External Processing 필터</a></li>
+  <li><a href="https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/service_discovery">Envoy 공식 문서: Service discovery (Original destination)</a></li>
+  <li><a href="https://www.manning.com/books/istio-in-action">Istio in Action (Christian Posta, Rinor Maloku, Manning)</a></li>
+  <li><a href="https://github.com/llm-d/llm-d">llm-d</a></li>
+  <li><a href="https://github.com/llm-d/llm-d/blob/main/guides/no-kubernetes-deployment/router/envoy/envoy.yaml">llm-d: no-kubernetes 배포 가이드의 envoy.yaml</a></li>
+  <li><a href="https://github.com/llm-d/llm-d-router">llm-d Router</a></li>
+  <li><a href="https://github.com/kubernetes-sigs/gateway-api-inference-extension">Gateway API Inference Extension</a></li>
+  <li><a href="https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/004-endpoint-picker-protocol">Gateway API Inference Extension: Endpoint Picker Protocol</a></li>
+  <li><a href="https://gateway-api-inference-extension.sigs.k8s.io/implementations/gateways/">Gateway API Inference Extension: Gateway Implementations</a></li>
+  <li><a href="https://theagentrouter.ai/blog/envoy-ai-gateway-is-now-agent-router">Agent Router 블로그: Envoy AI Gateway is becoming Agent Router</a></li>
+  <li><a href="https://theagentrouter.ai/blog/envoy-ai-gateway-reference-architecture">Agent Router 블로그: A Reference Architecture for Adopters of Envoy AI Gateway</a></li>
+  <li><a href="https://theagentrouter.ai/docs/concepts/architecture/">Agent Router 문서: Architecture</a></li>
+  <li><a href="https://tech.inflab.com/20260825-ai-gateway/">인프랩 기술 블로그: 사내 LLM 요청을 한곳으로 모은 AI Gateway 구축기</a></li>
+  <li><a href="/cs/CS-TLS-SNI-SAN/">SNI와 SAN: 개념, 차이, 그리고 인증서 디버깅 팁</a></li>
+  <li><a href="/dev/Dev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview/">LLM 서빙과 최적화: 고급 최적화 기법 - 7.1. 개요: 단일 GPU 너머의 네 기법</a></li>
+  <li><a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/">LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.4. ingress-nginx L7 노출과 자체 서명 인증서</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#envoy" class="page__taxonomy-item" rel="tag">Envoy</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#ext-proc" class="page__taxonomy-item" rel="tag">ext_proc</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gateway-api" class="page__taxonomy-item" rel="tag">Gateway-API</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study-week-7" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study-Week-7</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#hands-on-llm-serving-and-optimization-study" class="page__taxonomy-item" rel="tag">Hands-On-LLM-Serving-and-Optimization-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#llm-d" class="page__taxonomy-item" rel="tag">llm-d</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#llm-serving" class="page__taxonomy-item" rel="tag">LLM-Serving</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#xds" class="page__taxonomy-item" rel="tag">xDS</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-09-19">September 19, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BEnvoy%5D+Envoy+%ED%94%84%EB%A1%9D%EC%8B%9C+%EA%B5%AC%EC%A1%B0%EC%99%80+%ED%99%95%EC%9E%A5%3A+llm-d%EA%B0%80+Envoy%EB%A5%BC+%EC%93%B0%EB%8A%94+%EB%B0%A9%EC%8B%9D%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Envoy-Proxy-LLM-Serving%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Envoy-Proxy-LLM-Serving%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Envoy-Proxy-LLM-Serving%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-Envoy-Proxy-LLM-Serving?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/" class="pagination--pager" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약
+">이전</a>
+    
+    
+      <a href="#" class="pagination--pager disabled">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  15 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">노드도 파드도 늘릴 수 없는 환경에서 HPA Lab이 어디까지 가는지, 그리고 CPU 사용률이 추론 워크로드의 스케일 신호가 될 수 있는지 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.6. 부하 테스트와 llmperf 벤치마크
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  37 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">자작 스크립트와 llmperf로 vLLM에 부하를 걸고, 두 도구가 낸 수치를 나란히 놓을 수 있는지 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.2. 데이터소스 프로비저닝과 vLLM 대시보드
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  26 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Grafana를 서브패스로 노출하고 Prometheus 데이터소스를 프로비저닝한 뒤, ConfigMap으로 넣은 vLLM 대시보드가 언제 목록에 뜨는지 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.1. vLLM 메트릭 수집과 서브패스 노출
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  20 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Helm으로 Prometheus를 올려 vLLM의 /metrics를 수집하고, Ingress 서브패스로 웹 UI를 열었을 때 무엇이 함께 바뀌는지 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-Envoy-Proxy-LLM-Serving/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-Envoy-Proxy-LLM-Serving"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>

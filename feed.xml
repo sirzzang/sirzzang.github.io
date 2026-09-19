@@ -1,4 +1,649 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-09-13T23:55:47+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-09-19T19:44:30+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[Envoy] Envoy 프록시 구조와 확장: llm-d가 Envoy를 쓰는 방식</title><link href="https://sirzzang.github.io//dev/Dev-Envoy-Proxy-LLM-Serving/" rel="alternate" type="text/html" title="[Envoy] Envoy 프록시 구조와 확장: llm-d가 Envoy를 쓰는 방식" /><published>2026-09-19T00:00:00+09:00</published><updated>2026-09-19T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-Envoy-Proxy-LLM-Serving</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-Envoy-Proxy-LLM-Serving/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 7주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Envoy는 Lyft가 만든 C++ L4/L7 프록시다. downstream 연결을 Listener로 받아 filter chain으로 처리하고, Route가 고른 Cluster의 Endpoint(upstream)로 요청을 보낸다&lt;/li&gt;
+  &lt;li&gt;설정은 정적 YAML로도 줄 수 있지만, 핵심은 재시작 없이 설정을 바꾸는 xDS(LDS, RDS, CDS, EDS 등) 동적 설정이다. Istio, Envoy Gateway 같은 컨트롤 플레인이 이 API를 구현한다&lt;/li&gt;
+  &lt;li&gt;기능 확장의 중심은 HTTP filter chain이다. ext_proc 필터를 쓰면 Envoy 코어를 고치지 않고 요청·응답 처리를 외부 gRPC 서버에 맡길 수 있다&lt;/li&gt;
+  &lt;li&gt;llm-d Router의 EPP(Endpoint Picker)가 바로 이 ext_proc 서버다. EPP가 요청마다 추론 서버 상태를 보고 파드를 고른 뒤 &lt;code class=&quot;highlighter-rouge&quot;&gt;x-gateway-destination-endpoint&lt;/code&gt; 헤더로 돌려주면, Envoy는 &lt;code class=&quot;highlighter-rouge&quot;&gt;ORIGINAL_DST&lt;/code&gt; Cluster로 그 파드에 직접 연결한다&lt;/li&gt;
+  &lt;li&gt;llm-d의 EPP와 프록시를 잇는 것은 Envoy라는 제품이 아니라 ext_proc 프로토콜이다. Standalone 모드는 Envoy를 직접 띄우고, Gateway 모드는 &lt;code class=&quot;highlighter-rouge&quot;&gt;InferencePool&lt;/code&gt;을 지원하고 ext_proc으로 EPP와 통신하는 Gateway 구현체에 붙는다. 구현체는 Envoy 기반이 많지만 NGINX, agentgateway처럼 Envoy가 아닌 것도 있다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;envoy-개요&quot;&gt;Envoy 개요&lt;/h1&gt;
+
+&lt;p&gt;llm-d는 vLLM, SGLang 같은 모델 서버 위에서 요청 라우팅, KV cache 관리, PD 분리 등을 맡는 쿠버네티스 기반 분산 추론 서빙 스택이다. 이번 주차는 llm-d가 추론 요청을 라우팅할 때 Envoy를 쓴다는 점에서 출발했다. Envoy의 구조와 확장 방식을 먼저 살펴본 뒤, 그 확장 지점 위에서 동작하는 추론 라우팅(llm-d, Gateway API Inference Extension)과 AI 게이트웨이(Agent Router)로 넘어갔다.&lt;/p&gt;
+
+&lt;h2 id=&quot;등장-배경과-설계-원칙&quot;&gt;등장 배경과 설계 원칙&lt;/h2&gt;
+
+&lt;p&gt;Envoy는 분산 시스템을 만들 때 생기는 애플리케이션 네트워킹 문제를 풀기 위해 Lyft가 C++로 개발한 고성능 프록시다. 2016년 9월 오픈소스로 공개됐고, 2017년 9월 CNCF(Cloud Native Computing Foundation)에 합류했다.&lt;/p&gt;
+
+&lt;p&gt;설계 원칙은 &lt;a href=&quot;https://www.envoyproxy.io/docs/envoy/latest/intro/what_is_envoy&quot;&gt;Envoy 소개 문서(What is Envoy)&lt;/a&gt;의 두 문장으로 요약된다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;em&gt;The network should be transparent to applications. When network and application problems do occur it should be easy to determine the source of the problem.&lt;/em&gt;&lt;/p&gt;
+
+  &lt;p&gt;애플리케이션에게 네트워크는 투명해야 한다. 네트워크나 애플리케이션 문제가 생기면 원인을 쉽게 파악할 수 있어야 한다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;앞 문장은 애플리케이션이 재시도, 타임아웃, TLS 같은 네트워크 기능을 직접 구현하지 않아도 된다는 뜻이고, 뒤 문장은 프록시가 통과하는 트래픽을 관측할 수 있어야 한다는 뜻이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;프록시로서의-역할&quot;&gt;프록시로서의 역할&lt;/h2&gt;
+
+&lt;p&gt;프록시는 클라이언트와 서버 사이에 놓이는 중개 구성 요소다. 같은 서비스를 여러 인스턴스로 띄웠을 때, 프록시가 단일 주소를 노출하면 클라이언트는 인스턴스 목록을 몰라도 된다. 이런 리버스 프록시는 인스턴스 간 부하를 나누고, 헬스 체크로 장애 인스턴스를 우회시킨다.&lt;/p&gt;
+
+&lt;p&gt;리버스 프록시로서 Envoy가 갖는 차이는 &lt;strong&gt;L7 프로토콜을 해석한다&lt;/strong&gt;는 점이다. 연결만 보는 L3/L4 프록시는 요청 단위 타임아웃, 재시도, 서킷 브레이커를 구현할 수 없다. 연결 단위로는 그 안의 요청 경계를 구분하지 않기 때문이다. Envoy는 HTTP/1.1, HTTP/2, gRPC를 기본으로 파싱하므로 요청 단위로 이런 동작을 걸 수 있고, 요청마다 지연 시간, 처리량, 오류율 같은 텔레메트리도 수집한다. 필터를 추가해 MongoDB, Redis, Kafka 같은 프로토콜도 해석하게 할 수 있다.&lt;/p&gt;
+
+&lt;p&gt;Envoy는 애플리케이션 밖에서 동작하므로 언어나 프레임워크와 무관하게 이 기능을 쓸 수 있다. 배치 방식도 여러 가지다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;에지 프록시&lt;/strong&gt;: 외부에서 들어오는 트래픽을 진입점에서 받는다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;공유 프록시&lt;/strong&gt;: 여러 서비스가 하나의 프록시를 함께 쓴다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;서비스별 프록시(사이드카)&lt;/strong&gt;: 서비스 인스턴스마다 하나씩 붙는다. Istio의 사이드카 모드가 이 방식이다(ambient 모드는 노드별 L4 프록시와, 필요하면 L7 처리용 Envoy waypoint 프록시를 쓴다)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;주요-기능&quot;&gt;주요 기능&lt;/h2&gt;
+
+&lt;p&gt;Envoy의 핵심 기능은 다음과 같다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;기능&lt;/th&gt;
+      &lt;th&gt;내용&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;서비스 디스커버리&lt;/td&gt;
+      &lt;td&gt;디스커버리 API에서 Endpoint 목록을 받는다. 목록이 궁극적으로(eventually) 일관된다고 가정하고, 능동·수동 헬스 체크로 보완한다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;로드 밸런싱&lt;/td&gt;
+      &lt;td&gt;가중치 라운드 로빈, 최소 요청(least request), 링 해시와 Maglev(일관된 해싱), 랜덤. 가용 영역을 고려하는 지역 인식(locality-aware) 분산도 지원한다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;요청 라우팅&lt;/td&gt;
+      &lt;td&gt;가상 호스트, 경로, 헤더 기준으로 요청을 특정 Cluster로 보낸다. 재시도, 타임아웃, 오류 주입도 Route 단위로 건다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;트래픽 분할과 섀도잉&lt;/td&gt;
+      &lt;td&gt;가중치 기반으로 트래픽을 나누거나(카나리 배포), 복사본을 보내고 응답은 버린다(fire and forget)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;복원력&lt;/td&gt;
+      &lt;td&gt;요청 타임아웃, 재시도(재시도 폭증을 막는 제한 포함), 동시 연결·요청 수 임계값, 이상값 감지(outlier detection)로 오동작 Endpoint 퇴출&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;HTTP/2와 gRPC&lt;/td&gt;
+      &lt;td&gt;downstream과 upstream 양쪽에서 HTTP/1.1과 HTTP/2를 상호 변환하며 프록시한다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;관측성&lt;/td&gt;
+      &lt;td&gt;counter, gauge, histogram 통계와 분산 트레이싱 스팬을 내보내고, 요청 추적용 &lt;code class=&quot;highlighter-rouge&quot;&gt;x-request-id&lt;/code&gt;를 생성한다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;TLS 종료와 시작&lt;/td&gt;
+      &lt;td&gt;downstream TLS를 종료(terminate)하고, 애플리케이션 대신 upstream으로 TLS·mTLS를 시작(originate)한다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;속도 제한&lt;/td&gt;
+      &lt;td&gt;외부 전역 속도 제한 서비스와 연동해 연결 단위·요청 단위로 제한한다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;확장&lt;/td&gt;
+      &lt;td&gt;C++ 필터를 바이너리에 넣거나, Lua, Wasm, 동적 모듈, 외부 처리(ext_proc)로 코어 수정 없이 확장한다&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;envoy-구조와-설정&quot;&gt;Envoy 구조와 설정&lt;/h1&gt;
+
+&lt;h2 id=&quot;주요-용어&quot;&gt;주요 용어&lt;/h2&gt;
+
+&lt;p&gt;Envoy 설정과 문서에는 아래 용어가 반복해서 나온다. Istio, Envoy Gateway, llm-d의 설정 파일에서도 같은 이름이 그대로 쓰인다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;용어&lt;/th&gt;
+      &lt;th&gt;의미&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Downstream&lt;/td&gt;
+      &lt;td&gt;Envoy에 연결해 요청을 보내는 쪽. 보통 클라이언트다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Upstream&lt;/td&gt;
+      &lt;td&gt;Envoy가 요청을 전달하는 쪽. 사이드카의 인바운드 트래픽이라면 같은 파드의 애플리케이션이고, 아웃바운드 트래픽이나 에지 프록시라면 원격 백엔드다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Listener&lt;/td&gt;
+      &lt;td&gt;IP와 포트에 바인딩해 downstream 연결을 받는 지점&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Filter&lt;/td&gt;
+      &lt;td&gt;Listener가 받은 바이트나 요청을 처리하는 단계. 여러 개가 순서대로 이어져 filter chain을 이룬다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Route&lt;/td&gt;
+      &lt;td&gt;요청을 어느 Cluster로 보낼지 정하는 규칙. 예를 들어 &lt;code class=&quot;highlighter-rouge&quot;&gt;/catalog&lt;/code&gt;로 시작하면 catalog Cluster로 보낸다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Cluster&lt;/td&gt;
+      &lt;td&gt;트래픽을 보낼 논리적 서비스. 같은 역할을 하는 Endpoint의 묶음이다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Endpoint&lt;/td&gt;
+      &lt;td&gt;Cluster를 이루는 실제 주소(IP와 포트)&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;트래픽은 downstream에서 upstream 방향으로 흐른다. 용어를 요청 경로 위에 놓으면 다음과 같다.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart LR
+    D[&quot;Downstream&amp;lt;br/&amp;gt;(클라이언트)&quot;] --&amp;gt; L[&quot;Listener&amp;lt;br/&amp;gt;(IP:포트)&quot;]
+    subgraph FC[&quot;Filter chain&quot;]
+        direction LR
+        NF[&quot;network filter&quot;] --&amp;gt; HCM[&quot;HTTP connection manager&quot;]
+        HCM --&amp;gt; HF[&quot;HTTP filter&quot;] --&amp;gt; R[&quot;router filter&quot;]
+    end
+    L --&amp;gt; NF
+    R --&amp;gt;|&quot;Route 매칭&quot;| C[&quot;Cluster&quot;]
+    C --&amp;gt; E1[&quot;Endpoint A&quot;]
+    C --&amp;gt; E2[&quot;Endpoint B&quot;]
+    E1 --&amp;gt; U[&quot;Upstream&amp;lt;br/&amp;gt;(백엔드)&quot;]
+    E2 --&amp;gt; U
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. Listener가 받은 요청이 filter chain 끝의 router filter에서 Route 매칭을 거쳐 Cluster의 Endpoint 중 하나로 간다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;h2 id=&quot;요청-처리-흐름&quot;&gt;요청 처리 흐름&lt;/h2&gt;
+
+&lt;p&gt;Envoy 공식 문서의 &lt;a href=&quot;https://www.envoyproxy.io/docs/envoy/latest/intro/life_of_a_request&quot;&gt;Life of a Request&lt;/a&gt;는 요청 하나가 Envoy 안에서 거치는 경로를 단계별로 설명한다. 전체 구조는 아래 그림과 같다.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/envoy-life-of-a-request-architecture.svg&quot; alt=&quot;Envoy 요청 처리 구조&quot; class=&quot;align-center&quot; width=&quot;600&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;sup&gt;출처: Envoy 공식 문서 Life of a Request. 워커 스레드 안에서 요청은 Listener 쪽(downstream 처리)과 Cluster 쪽(upstream 연결)을 거치고, 둘을 HTTP router filter가 잇는다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;p&gt;문서의 12단계를 줄이면 다음과 같다.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;워커 스레드에서 도는 Listener가 downstream의 TCP 연결을 받는다&lt;/li&gt;
+  &lt;li&gt;listener filter(예: TLS inspector)가 SNI 같은 TLS 이전 정보를 뽑고, 이 값으로 연결에 적용할 network filter chain을 고른다. SNI로 filter chain과 인증서를 고르는 동작은 &lt;a href=&quot;/cs/CS-TLS-SNI-SAN/#서버-측-sni-매칭과-default-인증서&quot;&gt;TLS SNI 글&lt;/a&gt;에서 정리했다&lt;/li&gt;
+  &lt;li&gt;TLS transport socket이 수신 데이터를 복호화한다&lt;/li&gt;
+  &lt;li&gt;network filter chain이 실행된다. HTTP 트래픽에서는 chain의 마지막 network filter인 &lt;strong&gt;HTTP connection manager(HCM)&lt;/strong&gt;가 바이트 스트림을 요청·응답 단위의 HTTP 스트림으로 나눈다&lt;/li&gt;
+  &lt;li&gt;스트림마다 HTTP filter chain이 실행된다. chain 끝의 &lt;strong&gt;router filter&lt;/strong&gt;가 Route를 매칭해 Cluster를 고른다&lt;/li&gt;
+  &lt;li&gt;Cluster의 로드 밸런서가 Endpoint를 고르고, 서킷 브레이커를 확인한 뒤 연결 풀에서 upstream 연결을 얻어 요청을 보낸다&lt;/li&gt;
+  &lt;li&gt;응답은 HTTP filter를 요청과 &lt;strong&gt;반대 순서&lt;/strong&gt;로 거쳐 downstream으로 돌아간다. 스트림이 끝나면 통계, 액세스 로그, 트레이스 스팬이 마무리된다&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;a href=&quot;#external-processing-동작-방식&quot;&gt;External Processing 동작 방식&lt;/a&gt;에서 다룰 ext_proc 필터는 5단계의 HTTP filter chain에 들어간다. &lt;a href=&quot;#llm-d-router의-envoy-설정-해부&quot;&gt;llm-d&lt;/a&gt;가 목적지를 바꾸는 지점은 6단계, 즉 Cluster가 Endpoint를 고르는 부분이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;정적-설정&quot;&gt;정적 설정&lt;/h2&gt;
+
+&lt;p&gt;Envoy는 JSON이나 YAML 설정 파일로 구동된다. 현재 설정 API는 v3이며 v1, v2는 더 이상 쓰지 않는다. 아래는 15001 포트로 받은 모든 요청을 httpbin 서비스로 보내는 완전한 정적 설정이다.&lt;/p&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;na&quot;&gt;static_resources&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;listeners&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;httpbin-demo&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;socket_address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;0.0.0.0&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;port_value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;15001&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;}&lt;/span&gt;   &lt;span class=&quot;c1&quot;&gt;# Listener: 15001 포트에서 연결을 받는다&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;filter_chains&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;filters&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;envoy.filters.network.http_connection_manager&lt;/span&gt;    &lt;span class=&quot;c1&quot;&gt;# network filter: HCM&lt;/span&gt;
+        &lt;span class=&quot;na&quot;&gt;typed_config&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+          &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;@type&quot;&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager&lt;/span&gt;
+          &lt;span class=&quot;na&quot;&gt;stat_prefix&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;ingress_http&lt;/span&gt;
+          &lt;span class=&quot;na&quot;&gt;http_filters&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+          &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;envoy.filters.http.router&lt;/span&gt;                     &lt;span class=&quot;c1&quot;&gt;# HTTP filter chain의 마지막: router&lt;/span&gt;
+            &lt;span class=&quot;na&quot;&gt;typed_config&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;                                       &lt;span class=&quot;c1&quot;&gt;# 확장은 type URL로 찾으므로 비어 있어도 @type이 필요하다&lt;/span&gt;
+              &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;@type&quot;&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;type.googleapis.com/envoy.extensions.filters.http.router.v3.Router&lt;/span&gt;
+          &lt;span class=&quot;na&quot;&gt;route_config&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;                                         &lt;span class=&quot;c1&quot;&gt;# Route: 어느 Cluster로 보낼지&lt;/span&gt;
+            &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;httpbin_local_route&lt;/span&gt;
+            &lt;span class=&quot;na&quot;&gt;virtual_hosts&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;httpbin_local_service&lt;/span&gt;
+              &lt;span class=&quot;na&quot;&gt;domains&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;*&quot;&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;]&lt;/span&gt;                                    &lt;span class=&quot;c1&quot;&gt;# 모든 호스트명에 매칭&lt;/span&gt;
+              &lt;span class=&quot;na&quot;&gt;routes&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+              &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;match&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;prefix&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;/&quot;&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;}&lt;/span&gt;                          &lt;span class=&quot;c1&quot;&gt;# 모든 경로를&lt;/span&gt;
+                &lt;span class=&quot;na&quot;&gt;route&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                  &lt;span class=&quot;na&quot;&gt;auto_host_rewrite&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;no&quot;&gt;true&lt;/span&gt;
+                  &lt;span class=&quot;na&quot;&gt;cluster&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;httpbin_service&lt;/span&gt;                      &lt;span class=&quot;c1&quot;&gt;# httpbin_service Cluster로&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;clusters&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;httpbin_service&lt;/span&gt;                                     &lt;span class=&quot;c1&quot;&gt;# Cluster: upstream 서비스&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;connect_timeout&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;5s&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;LOGICAL_DNS&lt;/span&gt;                                         &lt;span class=&quot;c1&quot;&gt;# Endpoint를 DNS 조회로 찾는다&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;dns_lookup_family&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;V4_ONLY&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;lb_policy&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;ROUND_ROBIN&lt;/span&gt;                                    &lt;span class=&quot;c1&quot;&gt;# Endpoint 선택 알고리즘&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;load_assignment&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;na&quot;&gt;cluster_name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;httpbin&lt;/span&gt;
+        &lt;span class=&quot;na&quot;&gt;endpoints&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;lb_endpoints&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+          &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;endpoint&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;                                           &lt;span class=&quot;c1&quot;&gt;# Endpoint: httpbin:8000&lt;/span&gt;
+              &lt;span class=&quot;na&quot;&gt;address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                &lt;span class=&quot;na&quot;&gt;socket_address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                  &lt;span class=&quot;na&quot;&gt;address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;httpbin&lt;/span&gt;
+                  &lt;span class=&quot;na&quot;&gt;port_value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;8000&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;a href=&quot;#주요-용어&quot;&gt;주요 용어&lt;/a&gt;의 이름이 설정 키로 그대로 나온다. Listener → filter chain(HCM → router) → Route → Cluster → Endpoint 순서다. 이 설정의 Route에 &lt;code class=&quot;highlighter-rouge&quot;&gt;timeout&lt;/code&gt;이나 &lt;code class=&quot;highlighter-rouge&quot;&gt;retry_policy&lt;/code&gt;(예: &lt;code class=&quot;highlighter-rouge&quot;&gt;retry_on: 5xx&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;num_retries: 3&lt;/code&gt;)를 더하면, 애플리케이션 대신 Envoy가 타임아웃과 재시도를 처리한다.&lt;/p&gt;
+
+&lt;h2 id=&quot;동적-설정-xds&quot;&gt;동적 설정: xDS&lt;/h2&gt;
+
+&lt;p&gt;정적 설정은 프록시 수가 적고 구성이 고정일 때만 쓸 만하다. Envoy는 &lt;strong&gt;xDS&lt;/strong&gt;라고 부르는 디스커버리 API 묶음으로 설정을 런타임에 받아, 재시작이나 다운타임 없이 반영한다. NGINX는 설정 파일이 바뀌면 reload해야 하지만, Envoy는 새 설정을 스트림으로 받아 바로 적용한다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;API&lt;/th&gt;
+      &lt;th&gt;내려 주는 설정&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;LDS (Listener Discovery Service)&lt;/td&gt;
+      &lt;td&gt;어떤 Listener를 열지&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;RDS (Route Discovery Service)&lt;/td&gt;
+      &lt;td&gt;Listener가 쓸 Route&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;CDS (Cluster Discovery Service)&lt;/td&gt;
+      &lt;td&gt;Cluster 목록과 각 Cluster 설정&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;EDS (Endpoint Discovery Service)&lt;/td&gt;
+      &lt;td&gt;Cluster별 Endpoint 목록&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;SDS (Secret Discovery Service)&lt;/td&gt;
+      &lt;td&gt;인증서 등 시크릿&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;ADS (Aggregated Discovery Service)&lt;/td&gt;
+      &lt;td&gt;위 API의 변경 사항을 하나의 스트림으로 순서대로 전달&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;전부 써야 하는 것은 아니고 필요한 것만 조합한다. 전달은 주로 gRPC 스트리밍으로 이뤄진다. 서버가 변경 사항을 푸시하므로 프록시가 주기적으로 폴링할 필요가 없다.&lt;/p&gt;
+
+&lt;p&gt;알아 둘 점은 xDS가 &lt;strong&gt;궁극적 일관성&lt;/strong&gt;(eventual consistency)을 전제로 설계됐다는 것이다. 예를 들어 RDS로 “Cluster foo로 보내라”는 Route가 먼저 도착했는데 foo를 정의하는 CDS 업데이트가 아직 오지 않았다면, 그 사이의 요청은 라우팅 오류가 난다. 이런 순서 문제를 없애려고 도입한 것이 ADS다. 모든 변경을 한 스트림에서 순서대로 보내므로, 컨트롤 플레인이 의존 관계에 맞는 순서를 보장할 수 있다.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://www.envoyproxy.io/docs/envoy/latest/start/quick-start/configuration-dynamic-control-plane&quot;&gt;Envoy 공식 문서의 동적 설정 예시&lt;/a&gt;를 보면, 부트스트랩에 정적으로 남는 것은 xDS 서버(컨트롤 플레인)로 가는 Cluster 하나뿐이다.&lt;/p&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# Envoy 공식 문서의 동적 설정 예시 (envoy-dynamic-control-plane-demo.yaml, admin 블록 생략)&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;node&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;cluster&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;test-cluster&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;id&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;test-id&lt;/span&gt;                          &lt;span class=&quot;c1&quot;&gt;# 컨트롤 플레인이 이 프록시를 식별하는 값&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;dynamic_resources&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;ads_config&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;api_type&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;GRPC&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;grpc_services&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;envoy_grpc&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;na&quot;&gt;cluster_name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;xds_cluster&lt;/span&gt;      &lt;span class=&quot;c1&quot;&gt;# 아래 정적 Cluster로 xDS 서버에 접속한다&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;cds_config&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;ads&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;{}&lt;/span&gt;                            &lt;span class=&quot;c1&quot;&gt;# Cluster는 ADS로 받는다&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;lds_config&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;ads&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;{}&lt;/span&gt;                            &lt;span class=&quot;c1&quot;&gt;# Listener도 ADS로 받는다&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;static_resources&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;clusters&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;xds_cluster&lt;/span&gt;                  &lt;span class=&quot;c1&quot;&gt;# 정적으로 두는 유일한 Cluster: xDS 서버 주소&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;STRICT_DNS&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;typed_extension_protocol_options&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;s&quot;&gt;envoy.extensions.upstreams.http.v3.HttpProtocolOptions&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;@type&quot;&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions&lt;/span&gt;
+        &lt;span class=&quot;na&quot;&gt;explicit_http_config&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+          &lt;span class=&quot;na&quot;&gt;http2_protocol_options&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;{}&lt;/span&gt;   &lt;span class=&quot;c1&quot;&gt;# xDS는 gRPC라 HTTP/2로 접속한다&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;load_assignment&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;cluster_name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;xds_cluster&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;endpoints&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;lb_endpoints&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;endpoint&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;na&quot;&gt;address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+              &lt;span class=&quot;na&quot;&gt;socket_address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                &lt;span class=&quot;na&quot;&gt;address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;my-control-plane&lt;/span&gt;
+                &lt;span class=&quot;na&quot;&gt;port_value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;18000&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Istio에서는 컨트롤 플레인 컴포넌트 istiod가 이 xDS 서버 역할을 한다. istiod는 쿠버네티스 API에서 VirtualService 같은 Istio 리소스와 서비스 레지스트리를 읽어 Envoy 설정으로 변환한 뒤 xDS로 내려 준다. 실제 사이드카의 부트스트랩에는 SDS 접속과 통계 노출용 정적 Cluster가 몇 개 더 있지만, 애플리케이션 트래픽용 Listener와 Cluster를 xDS로 받는 구조는 같다. Envoy Gateway도 쿠버네티스 Gateway API 리소스(&lt;code class=&quot;highlighter-rouge&quot;&gt;Gateway&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;HTTPRoute&lt;/code&gt; 등)를 같은 방식으로 변환해 Envoy에 내려 주는 컨트롤 플레인이다. 적용된 결과는 Envoy의 Admin API(&lt;code class=&quot;highlighter-rouge&quot;&gt;/config_dump&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;/listeners&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;/clusters&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;/stats&lt;/code&gt;)로 확인할 수 있다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;envoy-확장&quot;&gt;Envoy 확장&lt;/h1&gt;
+
+&lt;h2 id=&quot;filter-chain과-http-connection-manager&quot;&gt;filter chain과 HTTP connection manager&lt;/h2&gt;
+
+&lt;p&gt;Envoy의 코어는 &lt;strong&gt;L3/L4 프록시&lt;/strong&gt;다. 네트워크 연결에서 바이트를 읽어 처리하는 것이 기본 동작이고, &lt;a href=&quot;#프록시로서의-역할&quot;&gt;프록시로서의 역할&lt;/a&gt;에서 본 L7 기능은 그 위에 얹는 필터에서 나온다.&lt;/p&gt;
+
+&lt;p&gt;가장 기본적인 필터는 바이트 스트림을 인코딩·디코딩하는 &lt;strong&gt;network filter&lt;/strong&gt;다. MongoDB, Redis, Thrift, Kafka용 network filter가 있고, 가장 많이 쓰이는 것이 &lt;strong&gt;HCM&lt;/strong&gt;이다. HCM은 바이트 스트림을 HTTP 헤더, 본문, 트레일러로 바꾸는 일(HTTP/1.1, HTTP/2, HTTP/3, gRPC)을 추상화하고, 라우팅, 액세스 로그, 헤더 조작도 맡는다.&lt;/p&gt;
+
+&lt;p&gt;HCM 안에는 다시 &lt;strong&gt;HTTP filter chain&lt;/strong&gt;이 있다. 기본 제공 HTTP 필터로는 CORS, CSRF, 외부 인가(ext_authz), 속도 제한, 오류 주입, gRPC-JSON 변환, 압축, Lua, RBAC, Tap, Wasm, router 등이 있다. HTTP filter chain은 요청을 upstream Cluster로 보내는 &lt;strong&gt;터미널 필터로 끝나야&lt;/strong&gt; 하며, 그 역할을 router filter가 맡는다. &lt;a href=&quot;#정적-설정&quot;&gt;정적 설정&lt;/a&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;http_filters&lt;/code&gt;에 router 하나만 있던 것이 가장 짧은 형태다.&lt;/p&gt;
+
+&lt;p&gt;필터를 직접 C++로 작성해 Envoy 바이너리에 넣을 수도 있다. Istio가 배포하는 프록시(istio-proxy)도 Envoy에 필터를 추가한 커스텀 빌드다. 다만 커스텀 빌드는 유지 보수 부담이 크고, 개발자가 C++를 써야 한다.&lt;/p&gt;
+
+&lt;h2 id=&quot;코어를-수정하지-않는-확장-방식&quot;&gt;코어를 수정하지 않는 확장 방식&lt;/h2&gt;
+
+&lt;p&gt;바이너리를 다시 빌드하지 않고 HTTP 처리를 확장하는 대표 수단은 다음과 같다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;외부 처리(ext_proc)&lt;/strong&gt;: 요청·응답 처리를 Envoy 밖의 gRPC 서버에 맡긴다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Lua&lt;/strong&gt;: 설정에 넣은 Lua 스크립트로 요청·응답을 조작한다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Wasm&lt;/strong&gt;: WebAssembly 모듈을 샌드박스 안에서 실행한다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;&lt;a href=&quot;https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules&quot;&gt;동적 모듈&lt;/a&gt;(dynamic modules)&lt;/strong&gt;: C++, Go, Rust SDK로 만든 공유 라이브러리를 런타임에 로드해 HTTP 필터 등으로 쓴다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;ext_authz(외부 인가)나 속도 제한 서비스 연동도 외부 서비스를 부른다는 점에서 비슷하지만, 용도가 정해져 있다. ext_proc은 용도를 정하지 않은 범용 외부 호출이다.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;#agent-router-구-envoy-ai-gateway&quot;&gt;AI 게이트웨이&lt;/a&gt;와 &lt;a href=&quot;#llm-d-router의-envoy-설정-해부&quot;&gt;llm-d&lt;/a&gt;는 모두 ext_proc을 핵심 확장 지점으로 쓴다. 추론 관련 로직을 Envoy 코어에 넣지 않고 별도 프로세스로 분리할 수 있기 때문이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;external-processing-동작-방식&quot;&gt;External Processing 동작 방식&lt;/h2&gt;
+
+&lt;p&gt;ext_proc(&lt;code class=&quot;highlighter-rouge&quot;&gt;envoy.filters.http.ext_proc&lt;/code&gt;)은 HTTP 요청·응답 처리를 Envoy 프로세스 밖의 gRPC 서버, 즉 &lt;strong&gt;external processor&lt;/strong&gt;에 위임하는 HTTP 필터다. 처리 로직을 C++ 필터로 만들어 넣는 대신, 어떤 언어로든 gRPC 서비스만 구현하면 트래픽을 보고 바꿀 수 있다.&lt;/p&gt;
+
+&lt;p&gt;프로토콜은 양방향 gRPC 스트림이다. Envoy는 HTTP 요청·응답의 각 이벤트(요청 헤더, 요청 본문, 요청 트레일러, 응답 헤더, 응답 본문, 응답 트레일러)마다 &lt;code class=&quot;highlighter-rouge&quot;&gt;ProcessingRequest&lt;/code&gt;를 보내고, 프로세서는 이벤트마다 &lt;code class=&quot;highlighter-rouge&quot;&gt;ProcessingResponse&lt;/code&gt;로 답한다. 답은 셋 중 하나다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;그대로 통과(&lt;code class=&quot;highlighter-rouge&quot;&gt;CONTINUE&lt;/code&gt;)&lt;/li&gt;
+  &lt;li&gt;헤더나 본문을 수정해서 통과 (헤더 추가·삭제, 본문 교체)&lt;/li&gt;
+  &lt;li&gt;즉시 응답(&lt;code class=&quot;highlighter-rouge&quot;&gt;ImmediateResponse&lt;/code&gt;)으로 요청을 여기서 끝낸다. 예를 들어 401이나 429를 바로 돌려준다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;어떤 이벤트를 프로세서에 보낼지는 &lt;code class=&quot;highlighter-rouge&quot;&gt;processing_mode&lt;/code&gt;로 정한다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;필드&lt;/th&gt;
+      &lt;th&gt;값&lt;/th&gt;
+      &lt;th&gt;의미&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;request_header_mode&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;response_header_mode&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;SEND&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;SKIP&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;헤더를 보낼지&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;request_body_mode&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;response_body_mode&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NONE&lt;/code&gt;(기본), &lt;code class=&quot;highlighter-rouge&quot;&gt;STREAMED&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;BUFFERED&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;BUFFERED_PARTIAL&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;FULL_DUPLEX_STREAMED&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;본문을 보내지 않을지, 조각으로 흘려보낼지, 모아서 한 번에 보낼지&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;request_trailer_mode&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;response_trailer_mode&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;SEND&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;SKIP&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;트레일러를 보낼지&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;a href=&quot;#llm-d-router의-envoy-설정-해부&quot;&gt;llm-d의 Envoy 설정&lt;/a&gt;이 쓰는 값은 &lt;code class=&quot;highlighter-rouge&quot;&gt;FULL_DUPLEX_STREAMED&lt;/code&gt;다. 이 모드에서 Envoy는 본문 조각을 도착하는 대로 프로세서에 흘려보내고, 프로세서가 되돌려 준 조각을 upstream이나 downstream으로 보낸다. 즉 본문이 프로세서를 거쳐 간다. 프로세서는 조각마다 바로 처리해도 되고, 헤더와 본문 전체를 모아서 본 뒤에 처음 응답해도 된다. 이 모드를 쓰려면 대응하는 트레일러 모드를 &lt;code class=&quot;highlighter-rouge&quot;&gt;SEND&lt;/code&gt;로 둬야 한다.&lt;/p&gt;
+
+&lt;p&gt;ext_proc은 다음과 같은 곳에 쓰인다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;커스텀 토큰 검증 같은 인증·인가&lt;/li&gt;
+  &lt;li&gt;헤더 삽입, 본문 재작성 같은 요청·응답 변환&lt;/li&gt;
+  &lt;li&gt;본문 내용을 보고 라우팅 결정&lt;/li&gt;
+  &lt;li&gt;모더레이션, 개인정보(PII) 마스킹 같은 콘텐츠 검사&lt;/li&gt;
+  &lt;li&gt;AI 게이트웨이: OpenAI 호환 요청 본문을 파싱해 모델명 기반 라우팅, 토큰 기반 속도 제한, 사용량 계측&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;단점도 있다. 요청마다 gRPC 왕복이 추가되므로 지연 시간이 늘고, 본문까지 보내면 프로세서가 처리할 데이터 양도 커진다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;llm-서빙과-envoy&quot;&gt;LLM 서빙과 Envoy&lt;/h1&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;이 절의 설정 및 동작에 대한 해석은 llm-d, Gateway API Inference Extension 저장소의 설정 파일과 문서에 근거하며, 직접 실행해 확인하지는 않았다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;h2 id=&quot;추론-요청의-라우팅-조건&quot;&gt;추론 요청의 라우팅 조건&lt;/h2&gt;
+
+&lt;p&gt;일반적인 HTTP 로드 밸런싱은 헤더와 경로만 보고 판단해도 충분하다. 추론 요청은 두 가지가 다르다.&lt;/p&gt;
+
+&lt;p&gt;첫째, 판단에 필요한 정보가 &lt;strong&gt;본문&lt;/strong&gt;에 있다. OpenAI 호환 API에서 모델명(&lt;code class=&quot;highlighter-rouge&quot;&gt;model&lt;/code&gt;)과 프롬프트(&lt;code class=&quot;highlighter-rouge&quot;&gt;messages&lt;/code&gt;)는 JSON 본문에 들어 있다. 헤더만 봐서는 어느 모델로 가는 요청인지, 프롬프트 앞부분이 이미 캐시된 요청과 겹치는지 알 수 없다.&lt;/p&gt;
+
+&lt;p&gt;둘째, 요청마다 비용 차이가 크고, &lt;strong&gt;백엔드 상태&lt;/strong&gt;가 지연 시간을 좌우한다. 프롬프트 길이와 출력 길이에 따라 요청 하나의 처리 시간이 크게 달라지고, 같은 프리픽스의 KV cache를 이미 가진 파드로 보내면 그 프리픽스 부분의 prefill 계산을 건너뛸 수 있다. 4주차에 다룬 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview/&quot;&gt;7.1편&lt;/a&gt;의 cache-aware routing(캐시 인지 라우팅)이 이 신호를 쓰는 라우팅이다.&lt;/p&gt;
+
+&lt;p&gt;기존 로드 밸런서는 이 정보를 보지 않는다. kube-proxy는 연결 단위로 파드를 고르므로, keep-alive 연결 위의 요청은 전부 처음 고른 파드로 간다. &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/#클러스터-밖에서-파드까지의-경로&quot;&gt;8.4편&lt;/a&gt;에서 본 ingress-nginx는 Service를 거치지 않고 파드 엔드포인트로 직접 보내지만, 엔드포인트는 기본값인 라운드 로빈으로 고른다. Envoy의 최소 요청 알고리즘도 진행 중인 요청 수만 센다. 세 방식 모두 파드별 대기열 길이와 KV cache 보유 여부를 선택 기준에 넣지 않는다.&lt;/p&gt;
+
+&lt;h2 id=&quot;llm-d-router의-envoy-설정-해부&quot;&gt;llm-d Router의 Envoy 설정 해부&lt;/h2&gt;
+
+&lt;p&gt;llm-d는 요청을 어느 파드로 보낼지 정하는 일을 &lt;strong&gt;&lt;a href=&quot;https://github.com/llm-d/llm-d-router&quot;&gt;llm-d Router&lt;/a&gt;&lt;/strong&gt;에 맡긴다. llm-d Router는 프록시(예: Envoy)와 &lt;strong&gt;EPP(Endpoint Picker)&lt;/strong&gt;를 합친 것을 가리키는 이름이다. 예전 이름은 Inference Scheduler였다. EPP는 요청마다 KV cache 위치, 현재 부하, 우선순위를 평가해 보낼 파드를 고르는 컴포넌트이고, 프록시와는 ext_proc 프로토콜로 통신한다. 즉 EPP가 &lt;a href=&quot;#external-processing-동작-방식&quot;&gt;external processor&lt;/a&gt;다.&lt;/p&gt;
+
+&lt;p&gt;llm-d의 &lt;a href=&quot;https://github.com/llm-d/llm-d/blob/main/guides/no-kubernetes-deployment/router/envoy/envoy.yaml&quot;&gt;no-kubernetes 배포 가이드&lt;/a&gt;에 있는 Envoy 설정은 Helm으로 배포하는 standalone 프리셋(&lt;a href=&quot;#배포-모드와-gateway-구현체&quot;&gt;배포 모드&lt;/a&gt; 참고)에서 쿠버네티스 전용 부분만 뺀 것이다. 설정이 짧아 llm-d가 Envoy에 요구하는 것이 그대로 드러난다. 세 부분으로 나눠 보자.&lt;/p&gt;
+
+&lt;h3 id=&quot;listener와-http-filter-chain&quot;&gt;Listener와 HTTP filter chain&lt;/h3&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# llm-d guides/no-kubernetes-deployment/router/envoy/envoy.yaml 발췌&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;# (@type, HTTP/2 옵션, 헬스 체크 주기 등 일부 필드 생략. 전체는 원본 참고)&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;listeners&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;vllm&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;socket_address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;0.0.0.0&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;port_value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;8081&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;}&lt;/span&gt;   &lt;span class=&quot;c1&quot;&gt;# 클라이언트가 붙는 포트&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;filter_chains&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;filters&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+          &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;envoy.filters.network.http_connection_manager&lt;/span&gt;
+            &lt;span class=&quot;na&quot;&gt;typed_config&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+              &lt;span class=&quot;na&quot;&gt;route_config&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                &lt;span class=&quot;na&quot;&gt;virtual_hosts&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;vllm-default&lt;/span&gt;
+                    &lt;span class=&quot;na&quot;&gt;domains&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;*&quot;&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;]&lt;/span&gt;
+                    &lt;span class=&quot;na&quot;&gt;routes&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                      &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;match&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;prefix&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;/&quot;&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;}&lt;/span&gt;
+                        &lt;span class=&quot;na&quot;&gt;route&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                          &lt;span class=&quot;na&quot;&gt;cluster&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;original_destination_cluster&lt;/span&gt;   &lt;span class=&quot;c1&quot;&gt;# 모든 요청을 ORIGINAL_DST Cluster로&lt;/span&gt;
+                          &lt;span class=&quot;na&quot;&gt;timeout&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;86400s&lt;/span&gt;                          &lt;span class=&quot;c1&quot;&gt;# 긴 생성 요청을 끊지 않도록 24시간&lt;/span&gt;
+              &lt;span class=&quot;na&quot;&gt;http_filters&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;envoy.filters.http.ext_proc&lt;/span&gt;                &lt;span class=&quot;c1&quot;&gt;# 먼저 EPP에게 묻고&lt;/span&gt;
+                  &lt;span class=&quot;na&quot;&gt;typed_config&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                    &lt;span class=&quot;na&quot;&gt;grpc_service&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                      &lt;span class=&quot;na&quot;&gt;envoy_grpc&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                        &lt;span class=&quot;na&quot;&gt;cluster_name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;ext_proc&lt;/span&gt;                     &lt;span class=&quot;c1&quot;&gt;# EPP로 가는 Cluster (아래 ext_proc Cluster)&lt;/span&gt;
+                      &lt;span class=&quot;na&quot;&gt;timeout&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;10s&lt;/span&gt;
+                    &lt;span class=&quot;na&quot;&gt;processing_mode&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                      &lt;span class=&quot;na&quot;&gt;request_header_mode&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;SEND&lt;/span&gt;
+                      &lt;span class=&quot;na&quot;&gt;response_header_mode&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;SEND&lt;/span&gt;
+                      &lt;span class=&quot;na&quot;&gt;request_body_mode&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;FULL_DUPLEX_STREAMED&lt;/span&gt;      &lt;span class=&quot;c1&quot;&gt;# 요청 본문을 EPP에 스트리밍&lt;/span&gt;
+                      &lt;span class=&quot;na&quot;&gt;response_body_mode&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;FULL_DUPLEX_STREAMED&lt;/span&gt;     &lt;span class=&quot;c1&quot;&gt;# 응답 본문도 스트리밍&lt;/span&gt;
+                      &lt;span class=&quot;na&quot;&gt;request_trailer_mode&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;SEND&lt;/span&gt;                   &lt;span class=&quot;c1&quot;&gt;# FULL_DUPLEX_STREAMED의 필수 조건&lt;/span&gt;
+                      &lt;span class=&quot;na&quot;&gt;response_trailer_mode&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;SEND&lt;/span&gt;
+                    &lt;span class=&quot;na&quot;&gt;message_timeout&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;1000s&lt;/span&gt;
+                &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;envoy.filters.http.router&lt;/span&gt;                  &lt;span class=&quot;c1&quot;&gt;# 그다음 router가 upstream으로 보낸다&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;HTTP filter chain은 ext_proc 다음에 router가 오는 두 단계다. 요청 본문을 EPP에 보내는 이유는 &lt;a href=&quot;#추론-요청의-라우팅-조건&quot;&gt;추론 요청의 라우팅 조건&lt;/a&gt;에서 본 대로, 모델명과 프롬프트가 본문에 있기 때문이다. 응답 본문도 EPP를 거친다. Envoy는 EPP가 되돌려 준 본문 조각을 클라이언트로 보내므로, EPP가 조각을 받는 즉시 되돌려 주면 vLLM의 SSE(Server-Sent Events) 스트리밍 응답이 토큰 단위로 전달된다. &lt;code class=&quot;highlighter-rouge&quot;&gt;BUFFERED&lt;/code&gt;였다면 응답 전체가 모일 때까지 클라이언트는 첫 토큰을 받지 못한다. Envoy를 직접 구성할 때 llm-d가 지원하는 본문 모드도 &lt;code class=&quot;highlighter-rouge&quot;&gt;FULL_DUPLEX_STREAMED&lt;/code&gt; 하나뿐이다. 트레일러 모드가 &lt;code class=&quot;highlighter-rouge&quot;&gt;SEND&lt;/code&gt;인 것도 &lt;a href=&quot;#external-processing-동작-방식&quot;&gt;External Processing 동작 방식&lt;/a&gt;에서 본 이 모드의 필수 조건이다.&lt;/p&gt;
+
+&lt;h3 id=&quot;original_dst-cluster&quot;&gt;ORIGINAL_DST Cluster&lt;/h3&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;na&quot;&gt;clusters&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;original_destination_cluster&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;ORIGINAL_DST&lt;/span&gt;              &lt;span class=&quot;c1&quot;&gt;# 고정된 Endpoint 목록이 없는 Cluster&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;lb_policy&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;CLUSTER_PROVIDED&lt;/span&gt;     &lt;span class=&quot;c1&quot;&gt;# Endpoint 선택을 Cluster 타입에 맡긴다&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;circuit_breakers&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;thresholds&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;max_connections&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;40000&lt;/span&gt;    &lt;span class=&quot;c1&quot;&gt;# Envoy 기본값(각 1024)보다 크게 둔다 (standalone 프리셋과 같은 값)&lt;/span&gt;
+          &lt;span class=&quot;na&quot;&gt;max_pending_requests&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;40000&lt;/span&gt;
+          &lt;span class=&quot;na&quot;&gt;max_requests&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;40000&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;original_dst_lb_config&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;use_http_header&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;no&quot;&gt;true&lt;/span&gt;                            &lt;span class=&quot;c1&quot;&gt;# 목적지를 HTTP 헤더에서 읽는다&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;http_header_name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;x-gateway-destination-endpoint&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;# EPP가 채워 주는 헤더&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;이 Cluster에는 Endpoint가 하나도 적혀 있지 않다. &lt;code class=&quot;highlighter-rouge&quot;&gt;ORIGINAL_DST&lt;/code&gt;는 본래 iptables REDIRECT나 TPROXY로 가로챈 연결을 원래 목적지로 보내는 Cluster 타입이다. 여기에 &lt;code class=&quot;highlighter-rouge&quot;&gt;use_http_header: true&lt;/code&gt;를 주면 목적지를 요청 헤더에서 읽는다. 결국 &lt;a href=&quot;#요청-처리-흐름&quot;&gt;요청 처리 흐름&lt;/a&gt;의 6단계, 즉 Endpoint 선택을 Envoy의 로드 밸런싱 알고리즘이 아니라 &lt;strong&gt;EPP가 요청마다 채워 주는 헤더 값&lt;/strong&gt;이 결정한다.&lt;/p&gt;
+
+&lt;p&gt;EPP와 프록시가 지켜야 할 규칙은 쿠버네티스 Gateway API를 추론 워크로드용으로 확장하는 프로젝트인 Gateway API Inference Extension(GIE)의 &lt;a href=&quot;https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/004-endpoint-picker-protocol&quot;&gt;Endpoint Picker Protocol&lt;/a&gt;에 정의돼 있다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;EPP는 Envoy의 ext_proc 서비스 프로토콜을 구현해야 한다&lt;/li&gt;
+  &lt;li&gt;고른 파드 주소는 &lt;code class=&quot;highlighter-rouge&quot;&gt;x-gateway-destination-endpoint&lt;/code&gt; 헤더와 ext_proc 응답의 dynamic metadata(&lt;code class=&quot;highlighter-rouge&quot;&gt;envoy.lb&lt;/code&gt;) 두 경로로 알리고, 두 값은 같아야 한다. 프록시마다 지원하는 경로가 다를 수 있기 때문이다. 값은 &lt;code class=&quot;highlighter-rouge&quot;&gt;&amp;lt;ip:port&amp;gt;&lt;/code&gt; 형식이고, 쉼표로 여러 개를 주면 앞에서부터 쓰고 재시도 시 다음 것으로 넘어간다. 다만 위 standalone 설정의 &lt;code class=&quot;highlighter-rouge&quot;&gt;ORIGINAL_DST&lt;/code&gt;는 헤더 값을 단일 &lt;code class=&quot;highlighter-rouge&quot;&gt;ip:port&lt;/code&gt;로만 해석한다&lt;/li&gt;
+  &lt;li&gt;보낼 곳이 없으면 즉시 응답으로 끝낸다. 준비된 파드가 없으면 503, 부하 때문에 요청을 버려야 하면 429다&lt;/li&gt;
+  &lt;li&gt;응답 쪽에서는 프록시가 실제로 요청을 처리한 파드 주소를 &lt;code class=&quot;highlighter-rouge&quot;&gt;x-gateway-destination-endpoint-served&lt;/code&gt; 메타데이터로 EPP에 돌려준다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;epp로-가는-cluster&quot;&gt;EPP로 가는 Cluster&lt;/h3&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;ext_proc&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;STATIC&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;lb_policy&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;LEAST_REQUEST&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;health_checks&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;grpc_health_check&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+          &lt;span class=&quot;na&quot;&gt;service_name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;envoy.service.ext_proc.v3.ExternalProcessor&quot;&lt;/span&gt;   &lt;span class=&quot;c1&quot;&gt;# EPP의 gRPC 헬스 체크&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;load_assignment&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;cluster_name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;ext_proc&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;endpoints&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;lb_endpoints&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;endpoint&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                &lt;span class=&quot;na&quot;&gt;address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+                  &lt;span class=&quot;na&quot;&gt;socket_address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;address&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;127.0.0.1&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;port_value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;9002&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;}&lt;/span&gt;   &lt;span class=&quot;c1&quot;&gt;# 같은 호스트의 EPP&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Envoy 설정에서 EPP는 평범한 upstream Cluster 하나다. 이 가이드는 Envoy와 EPP를 같은 호스트에 두므로 주소가 &lt;code class=&quot;highlighter-rouge&quot;&gt;127.0.0.1:9002&lt;/code&gt;이고, 같은 이유로 이 구간의 TLS도 생략돼 있다.&lt;/p&gt;
+
+&lt;p&gt;세 부분을 합치면 요청 하나의 흐름은 다음과 같다.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;sequenceDiagram
+    participant C as 클라이언트
+    participant E as Envoy
+    participant P as EPP (ext_proc 서버)
+    participant V as vLLM 파드
+    C-&amp;gt;&amp;gt;E: POST /v1/chat/completions
+    E-&amp;gt;&amp;gt;P: 요청 헤더와 본문 (gRPC 스트림)
+    Note over P: model, 프롬프트와&amp;lt;br/&amp;gt;파드별 KV cache, 부하로 대상 선택
+    P--&amp;gt;&amp;gt;E: 헤더 추가 x-gateway-destination-endpoint = ip:port, 요청 본문 반환
+    E-&amp;gt;&amp;gt;V: ORIGINAL_DST Cluster가 헤더의 주소로 직접 연결
+    V--&amp;gt;&amp;gt;E: 응답 (SSE 스트림)
+    E-&amp;gt;&amp;gt;P: 응답 헤더와 본문 조각
+    P--&amp;gt;&amp;gt;E: 본문 조각 반환
+    E--&amp;gt;&amp;gt;C: 응답 스트림
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. Envoy가 요청을 EPP에 보내고, EPP가 헤더로 돌려준 파드 주소로 Envoy가 요청을 직접 전달한다. 요청과 응답 본문은 모두 EPP를 거친다&lt;/sup&gt;&lt;/center&gt;
+
+&lt;h2 id=&quot;배포-모드와-gateway-구현체&quot;&gt;배포 모드와 Gateway 구현체&lt;/h2&gt;
+
+&lt;p&gt;위 설정은 llm-d Router의 두 배포 모드 중 &lt;strong&gt;Standalone 모드&lt;/strong&gt;에 해당한다. 두 모드는 다음과 같다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Standalone 모드&lt;/strong&gt;: Gateway API 인프라 없이 Envoy를 직접 관리한다. Envoy가 EPP 파드 안에 같이 뜨는 사이드카 방식(기본값)과, Envoy를 별도 Deployment와 Service로 띄워 따로 확장하는 service 방식이 있다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Gateway 모드(Inference Gateway)&lt;/strong&gt;: llm-d Router 문서가 운영 환경에 권장하는 모드다. 쿠버네티스 Gateway API를 쓴다. &lt;code class=&quot;highlighter-rouge&quot;&gt;Gateway&lt;/code&gt;에 붙은 &lt;code class=&quot;highlighter-rouge&quot;&gt;HTTPRoute&lt;/code&gt;가 &lt;code class=&quot;highlighter-rouge&quot;&gt;InferencePool&lt;/code&gt;(모델 서버 파드 집합을 나타내는 Gateway API 확장 리소스)을 백엔드로 가리키고, &lt;code class=&quot;highlighter-rouge&quot;&gt;InferencePool&lt;/code&gt;은 &lt;code class=&quot;highlighter-rouge&quot;&gt;endpointPickerRef&lt;/code&gt; 필드로 EPP를 지정한다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;InferencePool&lt;/code&gt; API를 정의한 곳이 GIE다. EPP와 BBR(Body Based Router)은 원래 GIE 저장소에 있었지만, 지금은 각각 &lt;code class=&quot;highlighter-rouge&quot;&gt;llm-d/llm-d-router&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;llm-d/llm-d-inference-payload-processor&lt;/code&gt;로 옮겨졌다. BBR은 지금 Inference Payload Processor라는 이름으로, 요청 본문에서 모델명 같은 값을 꺼내 헤더에 넣는 ext_proc 서비스다. EPP가 풀 안의 파드를 고른다면, BBR은 요청을 어느 풀로 보낼지 정하는 데 쓰인다. GIE 저장소에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;InferencePool&lt;/code&gt; API, Endpoint Picker Protocol 정의, 적합성(conformance) 테스트용 경량 EPP가 남는다.&lt;/p&gt;
+
+&lt;p&gt;Gateway 모드에서 EPP와 통신하는 프록시는 Gateway 구현체의 데이터 플레인이다. &lt;a href=&quot;https://gateway-api-inference-extension.sigs.k8s.io/implementations/gateways/&quot;&gt;GIE 적합 구현체 목록&lt;/a&gt;에는 Istio와 Higress(둘 다 Envoy 기반), Alibaba Cloud ACK 외에 Rust로 작성된 agentgateway와 NGINX를 데이터 플레인으로 쓰는 NGINX Gateway Fabric도 있다. Envoy Gateway, kgateway, GKE Gateway도 ext_proc을 지원하는 게이트웨이다. &lt;strong&gt;EPP는 Envoy의 ext_proc 프로토콜을 인터페이스로 삼는다. Standalone 모드는 Envoy를 직접 쓰고, Gateway 모드는 &lt;code class=&quot;highlighter-rouge&quot;&gt;InferencePool&lt;/code&gt;을 지원하고 그 프로토콜로 EPP와 통신하는 게이트웨이라면 Envoy가 아니어도 된다.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;agent-router-구-envoy-ai-gateway&quot;&gt;Agent Router (구 Envoy AI Gateway)&lt;/h2&gt;
+
+&lt;p&gt;Agent Router는 CNCF Envoy의 하위 프로젝트로 시작한 &lt;strong&gt;Envoy AI Gateway&lt;/strong&gt;의 새 이름이다. 2026년 9월 10일부로 독립 프로젝트가 되어 Agentic AI Foundation으로 옮겨 갔다. 이름이 바뀐 것은 Envoy AI Gateway 프로젝트이고 Envoy 프록시 자체가 아니다. &lt;a href=&quot;https://theagentrouter.ai/blog/envoy-ai-gateway-is-now-agent-router&quot;&gt;공지&lt;/a&gt;에도 Agent Router는 여전히 Envoy와 Envoy Gateway 위에 만들어진다고 적혀 있다.&lt;/p&gt;
+
+&lt;p&gt;Agent Router는 &lt;strong&gt;AI 게이트웨이&lt;/strong&gt;다. AI 게이트웨이는 여러 모델 제공자(OpenAI, Bedrock 등) 앞에서 다음 역할을 한 곳에 모으는 게이트웨이다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;OpenAI 호환 형식의 통합 API&lt;/li&gt;
+  &lt;li&gt;제공자 API 키 보관과 앱별 키 발급&lt;/li&gt;
+  &lt;li&gt;재시도와 제공자 간 장애 조치&lt;/li&gt;
+  &lt;li&gt;토큰 기반 속도 제한과 사용량·비용 관측&lt;/li&gt;
+  &lt;li&gt;가드레일&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;팀마다 따로 구현하던 제공자별 인증, 재시도, 키 관리, 로깅을 AI 게이트웨이가 API 게이트웨이처럼 한 곳에서 처리한다.&lt;/p&gt;
+
+&lt;p&gt;구조는 xDS 기반 컨트롤 플레인과 ext_proc 데이터 플레인의 조합이다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;컨트롤 플레인&lt;/strong&gt;: Agent Router 컨트롤러가 AI 전용 리소스(&lt;code class=&quot;highlighter-rouge&quot;&gt;AIGatewayRoute&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;AIServiceBackend&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;BackendSecurityPolicy&lt;/code&gt;)를 감시해 Envoy Gateway 설정을 만든다. Envoy Gateway가 이를 xDS로 변환하면, Agent Router 컨트롤러가 Envoy Gateway의 extension server(Envoy Gateway가 xDS를 Envoy에 보내기 전에 외부 gRPC 서버가 수정할 수 있게 하는 확장 지점)로 그 xDS를 한 번 더 조정한다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;데이터 플레인&lt;/strong&gt;: Envoy 프록시 옆에 AI Gateway external processor(ext_proc)와 속도 제한 서비스가 붙는다. 모델 선택, 제공자별 요청·응답 형식 변환, 응답에서 토큰 사용량 추출을 ext_proc이 맡는다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Agent Router의 레퍼런스 아키텍처는 게이트웨이를 두 층으로 나눈다. Tier 1은 중앙 게이트웨이이며, 외부 모델 제공자나 내부 모델 서빙 클러스터로 요청을 보낸다. Tier 2는 자체 호스팅 모델 서빙 클러스터 안에서 내부 라우팅과 로드 밸런싱을 맡는다. 역할로 보면 llm-d Router가 하는 일은 Tier 2에 해당한다. 두 층이 완전히 분리된 것은 아니어서, Agent Router도 2025년 7월부터 &lt;code class=&quot;highlighter-rouge&quot;&gt;AIGatewayRoute&lt;/code&gt;나 &lt;code class=&quot;highlighter-rouge&quot;&gt;HTTPRoute&lt;/code&gt;의 백엔드로 &lt;code class=&quot;highlighter-rouge&quot;&gt;InferencePool&lt;/code&gt;을 지정해 &lt;a href=&quot;https://theagentrouter.ai/blog/endpoint-picker-for-inference-routing&quot;&gt;EPP와 연동&lt;/a&gt;할 수 있다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Envoy는 Listener → filter chain → Route → Cluster → Endpoint로 요청을 처리하는 L4/L7 프록시다. L7 기능은 HCM과 그 안의 HTTP filter chain으로 얹힌다&lt;/li&gt;
+  &lt;li&gt;설정은 xDS로 런타임에 받는다. Istio와 Envoy Gateway는 Envoy 설정을 만들어 xDS로 내려 주는 컨트롤 플레인이고, Agent Router는 Envoy Gateway의 extension server로 그 xDS를 조정한다&lt;/li&gt;
+  &lt;li&gt;ext_proc은 요청·응답 처리를 외부 gRPC 서버에 맡기는 HTTP 필터다. 추론 전용 로직을 Envoy 코어 밖에 두는 수단이 이것이다&lt;/li&gt;
+  &lt;li&gt;llm-d Router의 Envoy 설정에서 Envoy 개념은 다음과 같이 쓰인다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Envoy 개념&lt;/th&gt;
+      &lt;th&gt;llm-d Router 설정(no-kubernetes 가이드)에서의 쓰임&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Listener&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;:8081&lt;/code&gt;에서 클라이언트 요청을 받는다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;HTTP filter chain&lt;/td&gt;
+      &lt;td&gt;ext_proc → router. ext_proc 필터가 요청을 EPP에 보낸다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Cluster&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;original_destination_cluster&lt;/code&gt;(ORIGINAL_DST, 추론 서버용)와 &lt;code class=&quot;highlighter-rouge&quot;&gt;ext_proc&lt;/code&gt;(STATIC, EPP용)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Endpoint&lt;/td&gt;
+      &lt;td&gt;설정에 없다. EPP가 요청마다 &lt;code class=&quot;highlighter-rouge&quot;&gt;x-gateway-destination-endpoint&lt;/code&gt; 헤더로 지정한다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;로드 밸런싱&lt;/td&gt;
+      &lt;td&gt;Envoy 알고리즘 대신 EPP가 KV cache 위치, 부하, 우선순위로 결정한다&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;“llm-d가 Envoy를 쓴다”는 설명은 Standalone 모드에서는 그대로 맞다. 하지만 EPP와 프록시를 잇는 것은 ext_proc 프로토콜이고, Gateway 모드에서는 프록시가 Envoy일 필요가 없다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.envoyproxy.io/docs/envoy/latest/intro/what_is_envoy&quot;&gt;Envoy 공식 문서: What is Envoy&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.envoyproxy.io/docs/envoy/latest/intro/life_of_a_request&quot;&gt;Envoy 공식 문서: Life of a Request&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/intro/terminology&quot;&gt;Envoy 공식 문서: Terminology&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.envoyproxy.io/docs/envoy/latest/api-docs/xds_protocol&quot;&gt;Envoy 공식 문서: xDS REST and gRPC protocol&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.envoyproxy.io/docs/envoy/latest/start/quick-start/configuration-dynamic-control-plane&quot;&gt;Envoy 공식 문서: Dynamic configuration (control plane)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter&quot;&gt;Envoy 공식 문서: External Processing 필터&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/service_discovery&quot;&gt;Envoy 공식 문서: Service discovery (Original destination)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.manning.com/books/istio-in-action&quot;&gt;Istio in Action (Christian Posta, Rinor Maloku, Manning)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/llm-d/llm-d&quot;&gt;llm-d&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/llm-d/llm-d/blob/main/guides/no-kubernetes-deployment/router/envoy/envoy.yaml&quot;&gt;llm-d: no-kubernetes 배포 가이드의 envoy.yaml&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/llm-d/llm-d-router&quot;&gt;llm-d Router&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/kubernetes-sigs/gateway-api-inference-extension&quot;&gt;Gateway API Inference Extension&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/004-endpoint-picker-protocol&quot;&gt;Gateway API Inference Extension: Endpoint Picker Protocol&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://gateway-api-inference-extension.sigs.k8s.io/implementations/gateways/&quot;&gt;Gateway API Inference Extension: Gateway Implementations&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://theagentrouter.ai/blog/envoy-ai-gateway-is-now-agent-router&quot;&gt;Agent Router 블로그: Envoy AI Gateway is becoming Agent Router&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://theagentrouter.ai/blog/envoy-ai-gateway-reference-architecture&quot;&gt;Agent Router 블로그: A Reference Architecture for Adopters of Envoy AI Gateway&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://theagentrouter.ai/docs/concepts/architecture/&quot;&gt;Agent Router 문서: Architecture&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://tech.inflab.com/20260825-ai-gateway/&quot;&gt;인프랩 기술 블로그: 사내 LLM 요청을 한곳으로 모은 AI Gateway 구축기&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/cs/CS-TLS-SNI-SAN/&quot;&gt;SNI와 SAN: 개념, 차이, 그리고 인증서 디버깅 팁&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview/&quot;&gt;LLM 서빙과 최적화: 고급 최적화 기법 - 7.1. 개요: 단일 GPU 너머의 네 기법&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/&quot;&gt;LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.4. ingress-nginx L7 노출과 자체 서명 인증서&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Envoy" /><category term="xDS" /><category term="ext_proc" /><category term="llm-d" /><category term="Gateway-API" /><category term="LLM-Serving" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-7" /><summary type="html">Envoy의 구조와 xDS 동적 설정, ext_proc 확장을 정리하고, llm-d Router가 ext_proc으로 Envoy에 붙는 방식을 살펴 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -9922,1434 +10567,4 @@ ami-0e08c07b0376ba3f8   amazon-eks-node-al2023-x86_64-neuron-1.33-v20260903     
   &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending/&quot;&gt;EKS GPU 트러블슈팅 3.1편: Device Plugin 비활성화 시 파드 Pending&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;
 &lt;br /&gt;&lt;/li&gt;
-&lt;/ul&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="AWS" /><category term="Trainium" /><category term="Neuron" /><category term="eksctl" /><category term="vLLM" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">EKS 컨트롤 플레인만 있는 상태에서 trn1.2xlarge 관리형 노드그룹을 붙이고, 미리 박혀 있던 AMI ID 때문에 막힌 지점을 풀어 보자.</summary></entry><entry><title type="html">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.1. Trainium·Inferentia와 Neuron 스택</title><link href="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/" rel="alternate" type="text/html" title="[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.1. Trainium·Inferentia와 Neuron 스택" /><published>2026-09-11T00:00:00+09:00</published><updated>2026-09-13T00:00:00+09:00</updated><id>https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators</id><content type="html" xml:base="https://sirzzang.github.io//kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;워크샵이 쓰는 &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;는 Trainium 칩 1개짜리 인스턴스이고, 그 칩 안에 NeuronCore-v2가 2개 들어 있다. 실습의 텐서 병렬 크기 2가 곧 이 코어 2개다&lt;/li&gt;
-  &lt;li&gt;“학습용 칩 / 추론용 칩”의 구분은 Inferentia1까지만 하드웨어 수준의 구분이었다. Trainium1과 Inferentia2는 같은 NeuronCore-v2를 쓰고, 차이는 인스턴스 주변 장치(EFA·NVMe·최대 칩 수)와 가격으로 옮겨 갔다&lt;/li&gt;
-  &lt;li&gt;Neuron SDK는 CUDA 자리에 놓이는 소프트웨어 계층이지만 구조가 같지는 않다. 서빙 경로가 AOT 컴파일을 전제로 하고, 산출물(NEFF)이 커널 바이너리가 아니라 그래프 전체의 실행 계획이며, 커널 라이브러리 선택이 런타임 dispatch가 아니라 컴파일 타임 결정이다&lt;/li&gt;
-  &lt;li&gt;NKI의 대응물은 CUDA C++가 아니라 Triton·Pallas다. 타일 단위로 쓰고 MLIR로 컴파일된다&lt;/li&gt;
-  &lt;li&gt;Neuron 위 추론 경로는 세 갈래(vLLM + NxDI 플러그인 / vLLM Neuron 베타 / NxDI 직접)이고, 갈리는 기준은 vLLM의 모델 지원 여부가 아니라 모델이 NxD Inference에 온보딩돼 있는가다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;학습용-칩과-추론용-칩&quot;&gt;학습용 칩과 추론용 칩&lt;/h1&gt;
-
-&lt;h2 id=&quot;워크샵의-가속기-선택&quot;&gt;워크샵의 가속기 선택&lt;/h2&gt;
-
-&lt;p&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편&lt;/a&gt;에서 정리한 워크샵의 실습 인스턴스는 &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;다. Trainium은 이름부터 학습(training)용 칩인데, 워크샵이 하려는 일은 vLLM으로 LLM을 서빙하는 추론 실습이다. 이름과 용도가 어긋난다.&lt;/p&gt;
-
-&lt;p&gt;이 어긋남이 단순한 명명 문제인지, 아니면 실제로 “학습용 칩을 추론에 전용(轉用)”하고 있는 것인지부터 확인해야 그 위에 올라가는 Neuron 스택을 제대로 읽을 수 있다. 학습과 추론이 하드웨어에 요구하는 것이 어떻게 다른지, AWS 가속기 계보에서 그 구분이 실제로 어디까지 유효한지, NVIDIA도 같은 방식으로 나뉘어 있는지 순서대로 살펴 본다.&lt;/p&gt;
-
-&lt;h2 id=&quot;연산-그래프와-메모리-요구&quot;&gt;연산 그래프와 메모리 요구&lt;/h2&gt;
-
-&lt;p&gt;같은 신경망이어도 학습과 추론은 실행되는 연산 그래프 자체가 다르다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt; &lt;/th&gt;
-      &lt;th&gt;추론(inference)&lt;/th&gt;
-      &lt;th&gt;학습(training)&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;연산 그래프&lt;/td&gt;
-      &lt;td&gt;forward만&lt;/td&gt;
-      &lt;td&gt;forward + backward + optimizer step&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;대략적 연산량&lt;/td&gt;
-      &lt;td&gt;1배&lt;/td&gt;
-      &lt;td&gt;3배 (backward가 forward의 2배)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;상태 유지&lt;/td&gt;
-      &lt;td&gt;stateless (LLM은 KV 캐시가 있긴 하다)&lt;/td&gt;
-      &lt;td&gt;activation, gradient, optimizer state 모두 유지&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;정밀도 요구&lt;/td&gt;
-      &lt;td&gt;낮음 (INT8/FP8도 가능)&lt;/td&gt;
-      &lt;td&gt;높음 (누적 오차가 발산으로 이어진다)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;성공 지표&lt;/td&gt;
-      &lt;td&gt;latency(TTFT/ITL) + throughput&lt;/td&gt;
-      &lt;td&gt;throughput + time-to-convergence&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;실행 특성&lt;/td&gt;
-      &lt;td&gt;짧고 산발적, 무한 반복&lt;/td&gt;
-      &lt;td&gt;수일~수주 연속 실행, 중단 시 손실이 크다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;통신 패턴&lt;/td&gt;
-      &lt;td&gt;모델이 크면 TP 정도&lt;/td&gt;
-      &lt;td&gt;매 step 전체 gradient all-reduce&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/&quot;&gt;prefill과 decode&lt;/a&gt;의 구분이 추론 쪽 그래프 안에서 일어나는 일이라면, 위 표는 그 바깥의 경계를 가른다.&lt;/p&gt;
-
-&lt;p&gt;차이는 메모리에서 가장 극단적으로 드러난다. 파라미터 8B 모델을 기준으로 계산하면 이렇다.&lt;/p&gt;
-
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[추론]
-가중치 BF16                  : 8B x 2B = 16 GB
-KV 캐시 (동시 요청 수에 비례)    : + 수 GB
-→ 합계 약 20 GB 내외
-
-[학습] (Adam + BF16 mixed precision)
-가중치 BF16                    : 16 GB
-FP32 마스터 가중치               : 32 GB
-Gradient                     : 16 GB
-Adam m, v (FP32 x 2)         : 64 GB
-Activation (배치/시퀀스 비례)    : 수십 GB
-→ 합계 130 GB 이상
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;같은 모델이어도 학습은 추론보다 6~10배의 메모리를 요구한다.&lt;/p&gt;
-
-&lt;h2 id=&quot;처리량-지표의-차이&quot;&gt;처리량 지표의 차이&lt;/h2&gt;
-
-&lt;p&gt;throughput은 단위 시간당 처리한 작업량인데, “작업 1건”을 무엇으로 세는지가 학습과 추론에서 갈린다. 학습은 &lt;code class=&quot;highlighter-rouge&quot;&gt;tokens/sec&lt;/code&gt;나 &lt;code class=&quot;highlighter-rouge&quot;&gt;samples/sec&lt;/code&gt;로 세고, 추론은 &lt;code class=&quot;highlighter-rouge&quot;&gt;output tokens/sec&lt;/code&gt;나 &lt;code class=&quot;highlighter-rouge&quot;&gt;req/sec&lt;/code&gt;로 센다.&lt;/p&gt;
-
-&lt;p&gt;세는 단위만 다른 것이 아니라 판단 기준도 다르다. 학습에서는 처리량 절댓값만으로 좋고 나쁨을 알 수 없어, 하드웨어 이론 최대 성능 대비 얼마를 실제로 썼는지로 환산한 MFU(Model FLOPs Utilization)를 함께 본다. 근거가 되는 근사식이 6ND rule이다. 파라미터 수 &lt;code class=&quot;highlighter-rouge&quot;&gt;N&lt;/code&gt;, 학습 토큰 수 &lt;code class=&quot;highlighter-rouge&quot;&gt;D&lt;/code&gt;일 때 학습 연산량을 약 &lt;code class=&quot;highlighter-rouge&quot;&gt;6ND&lt;/code&gt; FLOPs로 잡는 어림인데, 토큰 하나 기준으로 보면 forward가 약 &lt;code class=&quot;highlighter-rouge&quot;&gt;2N&lt;/code&gt;, backward가 그 2배인 &lt;code class=&quot;highlighter-rouge&quot;&gt;4N&lt;/code&gt;이라 합계가 &lt;code class=&quot;highlighter-rouge&quot;&gt;6N&lt;/code&gt;이고 추론은 forward만이므로 &lt;code class=&quot;highlighter-rouge&quot;&gt;2N&lt;/code&gt;이다. 앞 표의 “학습 연산량이 추론의 3배”가 여기서 나온다. 다만 이건 가중치 행렬곱만 센 어림이라 어텐션·softmax·LayerNorm을 빼고 있고, 컨텍스트가 길어질수록 오차가 커진다. activation recomputation을 쓰면 forward를 한 번 더 돌리므로 &lt;code class=&quot;highlighter-rouge&quot;&gt;6N&lt;/code&gt;도 성립하지 않는다.&lt;/p&gt;
-
-&lt;details&gt;
-  &lt;summary&gt;&lt;b&gt;Trainium 기준 MFU 계산 예시&lt;/b&gt;&lt;/summary&gt;
-
-  &lt;p&gt;7B 모델을 Trn1 칩 1개에서 학습한다고 가정한다. 실제로는 메모리가 모자라 불가능하지만 산수만 본다.&lt;/p&gt;
-
-  &lt;ul&gt;
-    &lt;li&gt;실측 2,000 tokens/sec이라면 &lt;code class=&quot;highlighter-rouge&quot;&gt;6 x 7e9 x 2000 = 8.4e13&lt;/code&gt;, 즉 84 TFLOPS&lt;/li&gt;
-    &lt;li&gt;Trn1 칩 1개의 피크 BF16은 190 TFLOPS다 (NeuronCore-v2 2개 합산)&lt;/li&gt;
-    &lt;li&gt;MFU는 &lt;code class=&quot;highlighter-rouge&quot;&gt;84 / 190&lt;/code&gt;, 약 44퍼센트&lt;/li&gt;
-  &lt;/ul&gt;
-
-  &lt;p&gt;대규모 LLM 사전 학습의 현실적인 MFU는 보통 35~55퍼센트 구간이다. 60퍼센트를 넘으면 잘 튜닝된 것이고, 20퍼센트 이하면 어딘가에 병목이 있다는 뜻이다.&lt;/p&gt;
-
-&lt;/details&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;p&gt;같은 이름의 지표라도 학습과 추론에서 가리키는 대상이 다르다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;관점&lt;/th&gt;
-      &lt;th&gt;학습&lt;/th&gt;
-      &lt;th&gt;추론&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;주 처리량 지표&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;tokens/sec&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;samples/sec&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;output tokens/sec&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;req/sec&lt;/code&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;정규화 지표&lt;/td&gt;
-      &lt;td&gt;MFU / HFU&lt;/td&gt;
-      &lt;td&gt;HBM 대역폭 활용률, KV 캐시 점유율&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;지연 지표&lt;/td&gt;
-      &lt;td&gt;없음 (&lt;code class=&quot;highlighter-rouge&quot;&gt;sec/step&lt;/code&gt;은 튜닝용)&lt;/td&gt;
-      &lt;td&gt;TTFT, ITL(TPOT), E2E latency&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;최종 성공 지표&lt;/td&gt;
-      &lt;td&gt;time-to-convergence, 목표 loss 도달 시간&lt;/td&gt;
-      &lt;td&gt;SLO를 만족한 goodput, $/1M tokens&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;goodput의 의미&lt;/td&gt;
-      &lt;td&gt;장애·체크포인트를 제외한 유효 가동률&lt;/td&gt;
-      &lt;td&gt;SLO를 준수한 요청 비율&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;주 병목&lt;/td&gt;
-      &lt;td&gt;통신, 데이터 파이프라인, pipeline bubble&lt;/td&gt;
-      &lt;td&gt;HBM 대역폭, KV 캐시 용량&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;배치 키우기&lt;/td&gt;
-      &lt;td&gt;거의 항상 이득 (critical batch size까지)&lt;/td&gt;
-      &lt;td&gt;처리량 상승과 지연 악화의 트레이드오프&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;추론의 throughput이 지연 SLO와 싸우면서 최대화하는 실시간 서비스 지표라면, 학습의 throughput은 time-to-convergence라는 최종 목표로 가는 중간 지표다. 최종 비용 지표는 &lt;code class=&quot;highlighter-rouge&quot;&gt;$/target-loss&lt;/code&gt; 또는 &lt;code class=&quot;highlighter-rouge&quot;&gt;chip-hours to convergence&lt;/code&gt; 쪽으로 놓인다. 병목의 위치도 갈린다. 추론 decode는 거의 항상 메모리 대역폭 바운드이고(&lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/#병목-판정과-최적화-방향&quot;&gt;5.4편&lt;/a&gt;), 학습은 배치가 크기 때문에 연산 바운드에 가까운 대신 분산 통신과 데이터 파이프라인이 병목이 된다.&lt;/p&gt;
-
-&lt;h2 id=&quot;하드웨어-설계-요구로의-번역&quot;&gt;하드웨어 설계 요구로의 번역&lt;/h2&gt;
-
-&lt;p&gt;위 차이를 하드웨어 요구로 번역하면, 학습용 칩은 메모리·인터커넥트·정밀도에 투자한 칩이고 추론용 칩은 저정밀도 연산당 비용과 전력에 투자한 칩이 된다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;구분&lt;/th&gt;
-      &lt;th&gt;워크로드 특성&lt;/th&gt;
-      &lt;th&gt;하드웨어 요구&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;학습&lt;/td&gt;
-      &lt;td&gt;거대한 상태&lt;/td&gt;
-      &lt;td&gt;HBM 용량을 최대한 크게&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;학습&lt;/td&gt;
-      &lt;td&gt;매 step gradient 동기화&lt;/td&gt;
-      &lt;td&gt;칩 간·노드 간 인터커넥트가 1급 시민 (NVLink, NeuronLink, EFA/InfiniBand)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;학습&lt;/td&gt;
-      &lt;td&gt;수치 안정성&lt;/td&gt;
-      &lt;td&gt;FP32/TF32 경로, stochastic rounding, ECC&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;학습&lt;/td&gt;
-      &lt;td&gt;장시간 무중단&lt;/td&gt;
-      &lt;td&gt;신뢰성, 체크포인팅 대역폭, 장애 복구&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;추론&lt;/td&gt;
-      &lt;td&gt;저지연&lt;/td&gt;
-      &lt;td&gt;작은 배치에서도 유닛을 채우는 구조, 짧은 커널 실행&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;추론&lt;/td&gt;
-      &lt;td&gt;비용·전력 지배&lt;/td&gt;
-      &lt;td&gt;저정밀도 연산 밀도(INT8/INT4/FP8), 낮은 TDP, 저렴한 메모리(GDDR도 허용)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;추론&lt;/td&gt;
-      &lt;td&gt;단일 요청 완결성&lt;/td&gt;
-      &lt;td&gt;인터커넥트 없이 한 칩 안에서 끝나는 구성&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;aws-가속기-계보&quot;&gt;AWS 가속기 계보&lt;/h1&gt;
-
-&lt;p&gt;결론부터 말하면 세대별로 답이 다르다. Inferentia1까지는 학습용과 추론용이 하드웨어로 갈렸고, Trainium1과 Inferentia2부터는 같은 코어를 쓰며 차이가 인스턴스 주변 장치로 옮겨 갔다. Trainium2에 이르면 이름만 학습용인 칩이 추론 스택의 주력이 된다.&lt;/p&gt;
-
-&lt;h2 id=&quot;inferentia1-하드웨어-수준의-추론-전용&quot;&gt;Inferentia1: 하드웨어 수준의 추론 전용&lt;/h2&gt;
-
-&lt;p&gt;Inferentia1(Inf1 인스턴스)은 이름 그대로 추론 전용 칩이다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;칩당 NeuronCore-v1 4개&lt;/li&gt;
-  &lt;li&gt;메모리는 8 GiB DRAM이고 HBM이 아니다&lt;/li&gt;
-  &lt;li&gt;지원 dtype은 FP16/BF16/INT8이고 FP32 학습 경로가 없다&lt;/li&gt;
-  &lt;li&gt;대상은 ResNet, BERT-base 급 소형 CV/NLP 모델의 대량 저비용 서빙&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;칩 간 인터커넥트가 아예 없는 것은 아니다. Inferentia1에도 NeuronLink는 있고, 여러 칩에 모델 레이어를 나눠 파이프라인으로 흘리는 NeuronCore Pipeline에 쓰인다. 다만 그 용도가 collective 통신이 아니고, 대규모 분산 학습의 gradient 동기화를 감당할 대역폭도 아니다.&lt;/p&gt;
-
-&lt;p&gt;즉 “학습에 쓰면 느리다”가 아니라 구조적으로 학습이 불가한 칩이다. 옵티마이저 상태를 올릴 메모리도, gradient를 모을 collective 경로도, 누적 정밀도도 없다. 이 시점의 “추론용 / 학습용” 구분은 진짜 하드웨어적 구분이었다.&lt;/p&gt;
-
-&lt;h2 id=&quot;trainium1과-inferentia2-같은-neuroncore-v2&quot;&gt;Trainium1과 Inferentia2: 같은 NeuronCore-v2&lt;/h2&gt;
-
-&lt;p&gt;다음 세대에서 상황이 뒤집힌다. Trainium1(Trn1)과 Inferentia2(Inf2)는 사실상 같은 코어를 쓴다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt; &lt;/th&gt;
-      &lt;th&gt;Inferentia2 (Inf2)&lt;/th&gt;
-      &lt;th&gt;Trainium1 (Trn1)&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;코어&lt;/td&gt;
-      &lt;td&gt;칩당 NeuronCore-v2 2개&lt;/td&gt;
-      &lt;td&gt;칩당 NeuronCore-v2 2개&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;HBM&lt;/td&gt;
-      &lt;td&gt;32 GiB @ 820 GiB/s&lt;/td&gt;
-      &lt;td&gt;32 GiB @ 820 GiB/s&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;인터커넥트&lt;/td&gt;
-      &lt;td&gt;NeuronLink-v2&lt;/td&gt;
-      &lt;td&gt;NeuronLink-v2&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;dtype&lt;/td&gt;
-      &lt;td&gt;FP32/TF32/BF16/FP16/cFP8&lt;/td&gt;
-      &lt;td&gt;FP32/TF32/BF16/FP16/cFP8&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;컴퓨트 코어의 마이크로아키텍처가 애초에 동일하다. 실습에서 쓰는 &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;의 칩 1개 스펙은 Inf2 칩 1개의 스펙과 그대로 일치한다 (실측 확인은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편&lt;/a&gt;에서 한다).&lt;/p&gt;
-
-&lt;p&gt;다른 것은 인스턴스 레벨의 구성이다. Trn1과 Inf2의 차이는 멀티 노드 분산 학습을 위한 네트워크·스토리지 주변 장치를 얼마나 붙였는가이지, 연산 코어 자체의 성격 차이가 아니다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt; &lt;/th&gt;
-      &lt;th&gt;Inf2&lt;/th&gt;
-      &lt;th&gt;Trn1&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;최대 칩 수&lt;/td&gt;
-      &lt;td&gt;12 (inf2.48xlarge)&lt;/td&gt;
-      &lt;td&gt;16 (trn1.32xlarge)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;노드 간 네트워크&lt;/td&gt;
-      &lt;td&gt;상대적으로 낮음&lt;/td&gt;
-      &lt;td&gt;EFA 최대 800 Gbps (Trn1n은 EFAv2 최대 1,600 Gbps)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Local NVMe&lt;/td&gt;
-      &lt;td&gt;적거나 없음&lt;/td&gt;
-      &lt;td&gt;대용량 (체크포인트·데이터셋)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;지향 토폴로지&lt;/td&gt;
-      &lt;td&gt;단일 노드 서빙&lt;/td&gt;
-      &lt;td&gt;UltraCluster 수만 칩 스케일아웃&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;가격 정책&lt;/td&gt;
-      &lt;td&gt;추론 단가 최적화&lt;/td&gt;
-      &lt;td&gt;학습 시간당 최적화&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;h2 id=&quot;trainium2와-neuroncore-v3&quot;&gt;Trainium2와 NeuronCore-v3&lt;/h2&gt;
-
-&lt;p&gt;Trainium2(Trn2)는 이름이 학습용이지만 실제 투입처는 추론 쪽이 대세다. NeuronCore-v2와 NeuronCore-v3를 항목별로 대조하면 어느 축에 투자했는지가 드러난다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt; &lt;/th&gt;
-      &lt;th&gt;NeuronCore-v2 (Trainium1 / Inferentia2)&lt;/th&gt;
-      &lt;th&gt;NeuronCore-v3 (Trainium2)&lt;/th&gt;
-      &lt;th&gt;배율&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;칩당 코어 수&lt;/td&gt;
-      &lt;td&gt;2&lt;/td&gt;
-      &lt;td&gt;8&lt;/td&gt;
-      &lt;td&gt;4배&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;HBM 용량&lt;/td&gt;
-      &lt;td&gt;32 GiB&lt;/td&gt;
-      &lt;td&gt;96 GiB&lt;/td&gt;
-      &lt;td&gt;3배&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;HBM 대역폭&lt;/td&gt;
-      &lt;td&gt;820 GiB/s&lt;/td&gt;
-      &lt;td&gt;2.9 TB/s&lt;/td&gt;
-      &lt;td&gt;3.5배&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;FP8&lt;/td&gt;
-      &lt;td&gt;cFP8 190 TFLOPS&lt;/td&gt;
-      &lt;td&gt;1,299 TFLOPS&lt;/td&gt;
-      &lt;td&gt;6.8배&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;BF16 / FP16 / TF32&lt;/td&gt;
-      &lt;td&gt;190 TFLOPS&lt;/td&gt;
-      &lt;td&gt;667 TFLOPS&lt;/td&gt;
-      &lt;td&gt;3.5배&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;FP32&lt;/td&gt;
-      &lt;td&gt;47.5 TFLOPS&lt;/td&gt;
-      &lt;td&gt;181 TFLOPS&lt;/td&gt;
-      &lt;td&gt;3.8배&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;희소 연산&lt;/td&gt;
-      &lt;td&gt;없음&lt;/td&gt;
-      &lt;td&gt;2,563 TFLOPS&lt;/td&gt;
-      &lt;td&gt;신규&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;DMA 대역폭&lt;/td&gt;
-      &lt;td&gt;1 TB/s&lt;/td&gt;
-      &lt;td&gt;3.5 TB/s&lt;/td&gt;
-      &lt;td&gt;3.5배&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;칩 간 인터커넥트&lt;/td&gt;
-      &lt;td&gt;NeuronLink-v2, 칩당 384 GB/s&lt;/td&gt;
-      &lt;td&gt;NeuronLink-v3, 칩당 1.28 TB/s&lt;/td&gt;
-      &lt;td&gt;3.3배&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Collective 코어&lt;/td&gt;
-      &lt;td&gt;CC-Core 6개&lt;/td&gt;
-      &lt;td&gt;CC-Core 16개&lt;/td&gt;
-      &lt;td&gt; &lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;코어 묶기&lt;/td&gt;
-      &lt;td&gt;없음&lt;/td&gt;
-      &lt;td&gt;Logical NeuronCore Config&lt;/td&gt;
-      &lt;td&gt;신규&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;최대 도메인&lt;/td&gt;
-      &lt;td&gt;trn1.32xlarge 16칩 / inf2.48xlarge 12칩&lt;/td&gt;
-      &lt;td&gt;trn2.48xlarge 16칩, Trn2 UltraServer 64칩&lt;/td&gt;
-      &lt;td&gt; &lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-neuroncorev3-architecture.png&quot; alt=&quot;NeuronCore-v3 아키텍처&quot; class=&quot;align-center&quot; width=&quot;720&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: AWS Neuron Documentation, NeuronCore-v3 Architecture&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-trainium2-architecture.png&quot; alt=&quot;Trainium2 칩 아키텍처&quot; class=&quot;align-center&quot; width=&quot;720&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: AWS Neuron Documentation, Trainium2 Architecture&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;배율이 큰 순서로 축을 짚으면 개선의 성격이 보인다.&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;&lt;strong&gt;메모리 용량 3배, 대역폭 3.5배&lt;/strong&gt; — decode는 산술 강도가 낮아 HBM 대역폭이 상한이다(&lt;a href=&quot;/dev/Dev-Roofline-Model-LLM-Serving/&quot;&gt;roofline 정리&lt;/a&gt;). 이 축이 LLM 추론 성능에 가장 직접 닿는다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;칩당 코어 2개에서 8개로&lt;/strong&gt; — 칩 경계를 넘지 않고 칩 하나 안에서 텐서 병렬을 8까지 걸 수 있다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;FP8 6.8배와 희소 연산 신규&lt;/strong&gt; — 양자화 추론 경로에 집중 투자한 흔적이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;NeuronLink-v2에서 v3로, UltraServer 64칩 도메인&lt;/strong&gt; — TP/EP를 걸 수 있는 범위가 인스턴스 밖으로 확장됐다. &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/#랙-스케일-확장&quot;&gt;5.5편&lt;/a&gt;에서 정리한 랙 스케일 확장과 같은 방향이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;CC-Core 6개에서 16개로&lt;/strong&gt; — collective를 전담하는 코어가 늘어 연산과 통신을 겹칠 여력이 커졌다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Logical NeuronCore Config&lt;/strong&gt; — 여러 물리 코어의 자원을 논리 코어 하나로 묶어 쓸 수 있다&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;순수 연산보다 메모리 용량·대역폭과 인터커넥트 쪽 배율이 더 크고, 그 축이 LLM decode의 병목과 정확히 겹친다. vLLM Neuron 플러그인(베타)이 Trn2·Trn3만 지원한다는 사실도 같은 방향을 가리킨다. AWS의 최신 추론 스택이 “학습용”이라는 이름을 단 칩 위에 올라가 있다.&lt;/p&gt;
-
-&lt;h2 id=&quot;nvidia의-sku-분화&quot;&gt;NVIDIA의 SKU 분화&lt;/h2&gt;
-
-&lt;p&gt;NVIDIA는 아키텍처 레벨에서 학습용과 추론용이 나뉘지 않는다. 같은 CUDA 프로그래밍 모델 위에서 다이 크기·메모리·인터커넥트·정밀도 유닛을 조절해 여러 제품 SKU로 분화시킨다. 다만 계보가 하나인 것은 아니다. 데이터센터 대형 다이가 Ampere → Hopper → Blackwell로 이어지는 동안, 아래 표의 추론 지향 SKU는 T4가 Turing, L4·L40S가 Ada로 그래픽 계열 아키텍처에서 갈라져 나온다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt; &lt;/th&gt;
-      &lt;th&gt;학습 지향 (H100/H200/B200)&lt;/th&gt;
-      &lt;th&gt;추론 지향 (T4/L4/L40S)&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;메모리 종류&lt;/td&gt;
-      &lt;td&gt;HBM (80~192 GB, 3~8 TB/s)&lt;/td&gt;
-      &lt;td&gt;GDDR6 (16~48 GB, 0.3~0.86 TB/s)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;인터커넥트&lt;/td&gt;
-      &lt;td&gt;NVLink 900 GB/s 이상 → 멀티 GPU TP 자유&lt;/td&gt;
-      &lt;td&gt;없거나 PCIe만 → 대형 모델 TP 곤란&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;FP64&lt;/td&gt;
-      &lt;td&gt;존재 (H100 약 34 TFLOPS)&lt;/td&gt;
-      &lt;td&gt;의도적으로 축소 (L40S 약 1.4 TFLOPS 미만)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;부가 기능&lt;/td&gt;
-      &lt;td&gt;MIG, ECC, 대규모 클러스터 검증&lt;/td&gt;
-      &lt;td&gt;비디오 인코더·디코더(NVENC), 그래픽 유닛&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;메모리 종류·대역폭을 읽는 법은 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-02-LLM-Serving-Challenge-GPU-Compute-Memory/#메모리-속성&quot;&gt;5.2편&lt;/a&gt;에, 인터커넥트 대역폭 계층과 폼팩터는 &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/#인트라-노드-인터커넥트&quot;&gt;5.3편&lt;/a&gt;에 정리돼 있다.&lt;/p&gt;
-
-&lt;p&gt;대표 제품은 이렇게 갈린다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;T4/L4&lt;/strong&gt;: 전형적 추론 전용 칩. 70~72W 단일 슬롯. CV·ASR·임베딩·랭킹 등 소형 모델 대량 서빙에서 비용 효율이 압도적이고, 학습은 사실상 불가하다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;L40S&lt;/strong&gt;: 추론 + 그래픽 + 소규모 파인튜닝. NVLink가 없다는 점이 결정적 제약이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;A100/H100/H200&lt;/strong&gt;: 학습·추론 양용 플래그십. 현재 LLM 추론의 실질 표준이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;GB200 NVL72&lt;/strong&gt;: 최상위 학습급 칩 72개를 하나의 NVLink 도메인으로 묶었는데, 주 세일즈 포인트가 대형 MoE 추론이다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;NVIDIA도 AWS와 같은 지점에 도달했다. 소형 모델 추론에는 전용 저가 카드가 여전히 답이지만, 대형 LLM 추론에는 학습급 하드웨어(HBM + NVLink)가 필수다. 최신 세대에서 추론 전용 라인은 사실상 성장하지 않고, 플래그십을 추론에 투입하는 흐름이 이어진다.&lt;/p&gt;
-
-&lt;h2 id=&quot;경계가-무너진-이유와-선택-기준&quot;&gt;경계가 무너진 이유와 선택 기준&lt;/h2&gt;
-
-&lt;p&gt;학습과 추론은 서로 다른 하드웨어 요구에서 출발했는데, LLM 추론이 대세가 되며 경계가 무너졌다. 이유를 다섯 가지로 정리할 수 있다.&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;&lt;strong&gt;모델이 단일 칩 메모리를 초과했다.&lt;/strong&gt; &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편&lt;/a&gt;에서 정리한 워크샵 Fundamentals의 첫 문제의식이 이것이다. Llama 3.1 8B가 FP32면 32 GB를 넘는다. 추론조차 텐서 병렬이 필수가 되었고, TP는 곧 인터커넥트를 요구한다. 인터커넥트는 원래 학습용 하드웨어의 특징이었다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;KV 캐시가 메모리 대역폭을 지배한다.&lt;/strong&gt; LLM decode는 토큰 1개당 전체 가중치와 KV 캐시를 다시 읽는다. 산술 강도가 극도로 낮아 연산 성능이 아니라 HBM 대역폭이 병목이다. HBM 역시 학습용 칩의 전유물이었다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;MoE가 Expert Parallelism을 요구한다.&lt;/strong&gt; 전문가를 여러 칩에 나눠 배치해야 하므로 다중 칩 토폴로지가 추론에서도 기본이 된다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;추론의 총 연산 소비량이 학습을 넘어섰다.&lt;/strong&gt; 모델은 한 번 학습되지만 수십억 번 서빙된다. 규모의 경제 때문에 가장 좋은 칩을 추론에 투입하는 편이 오히려 경제적이다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;추론이 더 이상 순수 forward가 아니다.&lt;/strong&gt; &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/&quot;&gt;speculative decoding&lt;/a&gt;의 draft-verify 이중 모델, 에이전틱 워크플로, 추론 시점 RL/RLHF 루프가 들어온다. AWS Neuron 문서도 Neuron의 지원 범위를 소개하며 “에이전트형 AI 및 강화 학습 워크로드에 대한 비용 최적화 추론”을 명시한다&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;워크로드별로 무엇을 고르면 되는지로 옮기면 다음과 같다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;워크로드&lt;/th&gt;
-      &lt;th&gt;적합한 선택&lt;/th&gt;
-      &lt;th&gt;이유&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;소형 CV / 임베딩 / 랭킹 대량 서빙&lt;/td&gt;
-      &lt;td&gt;Inf1, Inf2, NVIDIA T4/L4&lt;/td&gt;
-      &lt;td&gt;모델이 한 칩에 들어간다 → 비용과 전력이 유일한 지표&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;7B~13B LLM 단일 노드 서빙&lt;/td&gt;
-      &lt;td&gt;Trn1, Inf2, L40S, A100&lt;/td&gt;
-      &lt;td&gt;칩 내 TP로 충분하다 (실습 TinyLlama TP=2가 이 범주)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;70B~400B+ LLM/MoE 서빙&lt;/td&gt;
-      &lt;td&gt;Trn2 UltraServer, H100/H200, GB200 NVL72&lt;/td&gt;
-      &lt;td&gt;다중 칩 TP/EP와 고대역폭 인터커넥트가 필수&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;단일 노드 파인튜닝(LoRA 등)&lt;/td&gt;
-      &lt;td&gt;Trn1, A100/H100&lt;/td&gt;
-      &lt;td&gt;옵티마이저 상태를 감당할 수 있다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;대규모 사전학습&lt;/td&gt;
-      &lt;td&gt;Trn1n/Trn2 UltraCluster, H100 InfiniBand 클러스터&lt;/td&gt;
-      &lt;td&gt;EFA/IB 기반 노드 간 all-reduce가 성능을 결정한다&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;trainium-칩-구조&quot;&gt;Trainium 칩 구조&lt;/h1&gt;
-
-&lt;h2 id=&quot;칩과-코어의-계층-구조&quot;&gt;칩과 코어의 계층 구조&lt;/h2&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-trainium-architecture.png&quot; alt=&quot;Trainium 칩 아키텍처&quot; class=&quot;align-center&quot; width=&quot;720&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: AWS Neuron Documentation, Trainium Architecture&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;AWS 문서는 Trn1 인스턴스의 구성을 이렇게 적는다.&lt;/p&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;At the heart of the Trn1 instance are 16 x Trainium chips (each Trainium include 2 x NeuronCore-v2)&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;p&gt;Trn1 최대 구성인 &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.32xlarge&lt;/code&gt;가 칩 16개 × 코어 2개, 즉 코어 32개다. 실습의 &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;는 여기서 칩 1개만 잘라 준 구성이라 코어가 2개다.&lt;/p&gt;
-
-&lt;p&gt;Trainium 칩 1개의 스펙은 다음과 같다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;항목&lt;/th&gt;
-      &lt;th&gt;Trainium1 칩 1개&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;NeuronCore&lt;/td&gt;
-      &lt;td&gt;NeuronCore-v2 2개&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;INT8&lt;/td&gt;
-      &lt;td&gt;380 TOPS&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;FP16 / BF16 / cFP8 / TF32&lt;/td&gt;
-      &lt;td&gt;190 TFLOPS&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;FP32&lt;/td&gt;
-      &lt;td&gt;47.5 TFLOPS&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;HBM&lt;/td&gt;
-      &lt;td&gt;32 GiB @ 820 GiB/s&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;DMA 대역폭&lt;/td&gt;
-      &lt;td&gt;1 TB/s (인라인 메모리 압축·해제 포함)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;칩 간 인터커넥트&lt;/td&gt;
-      &lt;td&gt;NeuronLink-v2&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;인스턴스당 최대 칩 수&lt;/td&gt;
-      &lt;td&gt;16 (trn1.32xlarge)&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;인스턴스 → 칩 → 코어 → 엔진·온칩 메모리의 계층을 그림으로 옮기면 다음과 같다.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart TD
-    INST[&quot;trn1.2xlarge 인스턴스&quot;] --&amp;gt; CHIP[&quot;Trainium 칩 1개 = NeuronDevice&amp;lt;br/&amp;gt;/dev/neuron0&quot;]
-    CHIP --&amp;gt; CORE0[&quot;NeuronCore-v2 0번&amp;lt;br/&amp;gt;런타임 코어 인덱스 0&quot;]
-    CHIP --&amp;gt; CORE1[&quot;NeuronCore-v2 1번&amp;lt;br/&amp;gt;런타임 코어 인덱스 1&quot;]
-    CHIP --&amp;gt; HBM[&quot;HBM 32 GiB @ 820 GiB/s&amp;lt;br/&amp;gt;두 코어가 공유&quot;]
-    CORE0 --&amp;gt; ENG0[&quot;Tensor / Vector / Scalar / GPSIMD 엔진&quot;]
-    CORE0 --&amp;gt; SB0[&quot;SBUF 24 MiB + PSUM 2 MiB&amp;lt;br/&amp;gt;컴파일러가 배치&quot;]
-    CORE1 --&amp;gt; ENG1[&quot;Tensor / Vector / Scalar / GPSIMD 엔진&quot;]
-    CORE1 --&amp;gt; SB1[&quot;SBUF 24 MiB + PSUM 2 MiB&quot;]
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;칩 안에 연산 코어가 2개라는 것이지 카드가 2장이라는 뜻이 아니다. 연산 단위는 둘이고 메모리는 하나다. &lt;a href=&quot;/cs/CS-GPU-Package-Node-Boundary/#패키징-어휘&quot;&gt;칩 / 다이 / 패키지 / 카드 / 노드&lt;/a&gt;의 어휘로 옮기면, Trainium 칩 1개가 GPU 카드 1장 자리에 놓이고 NeuronCore가 그 안의 실행 단위다.&lt;/p&gt;
-
-&lt;p&gt;같은 사실이 스택의 층마다 다른 이름으로 드러난다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;계층&lt;/th&gt;
-      &lt;th&gt;확인 수단&lt;/th&gt;
-      &lt;th&gt;칩 1개 / 코어 2개가 드러나는 형태&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;PCI&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;lspci&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;NeuronDevice 1개&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;디바이스 노드&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;/dev&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;neuron0&lt;/code&gt; 1개. 코어는 별도 노드로 나뉘지 않는다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Neuron 도구&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-ls&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;DEVICE 1개, CORES 2&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Kubernetes&lt;/td&gt;
-      &lt;td&gt;노드 allocatable&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuron: 1&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;aws.amazon.com/neuroncore: 2&lt;/code&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;vLLM&lt;/td&gt;
-      &lt;td&gt;텐서 병렬 설정&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;tp_degree 2&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;world_size 2&lt;/code&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;각 층의 실제 출력과 리소스 광고 과정은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편&lt;/a&gt;에서 확인한다. &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.32xlarge&lt;/code&gt;는 같은 칩 16개를 NeuronLink-v2 2D Torus로 묶은 구성이고, 실습의 텐서 병렬 크기 2는 이 그림의 코어 2개에 대응한다.&lt;/p&gt;
-
-&lt;h2 id=&quot;neuroncore-v2의-네-엔진&quot;&gt;NeuronCore-v2의 네 엔진&lt;/h2&gt;
-
-&lt;p&gt;NeuronCore-v2는 완전히 독립적인 이종 연산 유닛이고, 4개의 주 엔진과 소프트웨어가 관리하는 온칩 SRAM을 갖는다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-neuroncorev2-architecture.png&quot; alt=&quot;NeuronCore-v2 내부 구조&quot; class=&quot;align-center&quot; width=&quot;720&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: AWS Neuron Documentation, NeuronCore-v2 Architecture&lt;/sup&gt;&lt;/center&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;엔진&lt;/th&gt;
-      &lt;th&gt;담당 연산&lt;/th&gt;
-      &lt;th&gt;코어당 성능&lt;/th&gt;
-      &lt;th&gt;학습·추론 비중&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;TensorEngine&lt;/td&gt;
-      &lt;td&gt;GEMM, convolution&lt;/td&gt;
-      &lt;td&gt;90 TFLOPS 이상 (FP16/BF16)&lt;/td&gt;
-      &lt;td&gt;양쪽 공통 주력&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;VectorEngine&lt;/td&gt;
-      &lt;td&gt;LayerNorm, Softmax, elementwise&lt;/td&gt;
-      &lt;td&gt;2.3 TFLOPS (FP32)&lt;/td&gt;
-      &lt;td&gt;학습 backward에서 특히 많이 쓰인다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;ScalarEngine&lt;/td&gt;
-      &lt;td&gt;활성함수, 제어 흐름&lt;/td&gt;
-      &lt;td&gt;2.9 TFLOPS (FP32)&lt;/td&gt;
-      &lt;td&gt;양쪽 공통&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;GPSIMD-Engine&lt;/td&gt;
-      &lt;td&gt;커스텀 오퍼레이터 실행&lt;/td&gt;
-      &lt;td&gt;512비트 프로그래머블 프로세서 8개&lt;/td&gt;
-      &lt;td&gt;새 연산을 얹을 때&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;엔진 구성을 학습·추론 관점으로 읽으면 학습 지향의 흔적이 남아 있다. GPSIMD-Engine은 정형 연산에서 벗어난 커스텀 오퍼레이터를 얹을 수 있게 하는 유연성 장치다. &lt;a href=&quot;#nki&quot;&gt;NKI&lt;/a&gt;로 작성한 커널은 이 엔진만이 아니라 Tensor·Vector·Scalar·GpSimd 네 엔진 전부를 타깃으로 할 수 있다. 여기에 Trainium 고유 기능으로 하드웨어 stochastic rounding(BF16 누적 시 편향 제거)과 연산·통신 오버랩용 collective 엔진이 들어 있다. GPSIMD와 stochastic rounding은 추론만 할 것이라면 굳이 없어도 되는 기능들이다.&lt;/p&gt;
-
-&lt;h2 id=&quot;메모리-계층&quot;&gt;메모리 계층&lt;/h2&gt;
-
-&lt;p&gt;NeuronCore의 메모리는 HBM, SBUF, PSUM 3단으로 나뉜다. 캐시가 아니라는 점이 핵심이다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;계층&lt;/th&gt;
-      &lt;th&gt;크기&lt;/th&gt;
-      &lt;th&gt;특성&lt;/th&gt;
-      &lt;th&gt;관리 주체&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;HBM&lt;/td&gt;
-      &lt;td&gt;칩당 32 GiB @ 820 GiB/s&lt;/td&gt;
-      &lt;td&gt;오프칩. 모델 가중치와 KV 캐시가 상주한다&lt;/td&gt;
-      &lt;td&gt;런타임&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;SBUF&lt;/td&gt;
-      &lt;td&gt;코어당 24 MiB&lt;/td&gt;
-      &lt;td&gt;온칩 SRAM. 128 파티션 구조의 2차원 메모리로, 타일 단위 연산의 작업 공간이다&lt;/td&gt;
-      &lt;td&gt;컴파일러가 명시적으로 배치&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;PSUM&lt;/td&gt;
-      &lt;td&gt;코어당 2 MiB&lt;/td&gt;
-      &lt;td&gt;행렬 곱셈 결과를 누산하는 전용 영역&lt;/td&gt;
-      &lt;td&gt;컴파일러&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;SBUF가 하드웨어 캐시가 아니라 컴파일러가 배치하는 스크래치패드라는 점이 프로그래밍 모델 전체를 결정한다. HBM과 SBUF 사이의 데이터 이동이 DMA로 명시되고, 그래서 NKI 커널에 &lt;code class=&quot;highlighter-rouge&quot;&gt;nl.load&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;nl.store&lt;/code&gt;가 코드에 그대로 드러난다. CUDA에서 shared memory를 수동 관리하던 일이 여기서는 선택이 아니라 전제다.&lt;/p&gt;
-
-&lt;h2 id=&quot;neuronlink-v2&quot;&gt;NeuronLink-v2&lt;/h2&gt;
-
-&lt;p&gt;NeuronLink-v2는 저지연·고대역폭의 칩 간 전용 인터커넥트다. AWS 문서는 Inf2를 설명하며 이 링크가 AllReduce·AllGather 같은 collective 통신 연산을 고성능으로 수행하게 하고, 그 덕분에 텐서 병렬 등으로 대형 모델을 여러 칩에 샤딩할 수 있다고 적는다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-inf2-architecture.png&quot; alt=&quot;Inf2 인스턴스 아키텍처&quot; class=&quot;align-center&quot; width=&quot;720&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: AWS Neuron Documentation, Amazon EC2 Inf2 Architecture&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;NeuronLink는 Trainium과 Inferentia2가 같은 아키텍처를 쓴다. PCIe를 경유하지 않고 칩끼리 전용 링크로 직접 통신한다는 점에서 NVLink와 같은 자리에 놓인다. 대역폭을 비교할 때는 방향 기준을 맞춰야 한다. NVLink 4세대의 GPU당 900 GB/s는 양방향 합산값이고, AWS가 Inf2에 대해 적은 값은 칩당 192 GiB/s다. Trainium1은 링크가 넷이라 여기서 384 GB/s가 나오는데, EC2 Trn1 제품 페이지는 같은 칩의 NeuronLink 대역폭을 최대 768 GB/s로 적는다. 어느 값을 쓰느냐에 따라 격차가 크게 달라지므로 한쪽 숫자만 들어 급을 단정하기는 어렵다. 토폴로지도 다르다. &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.32xlarge&lt;/code&gt;의 16칩은 스위치가 아니라 2D Torus로 엮여 있어, 홉 수가 노드 내 위치에 따라 달라진다.&lt;/p&gt;
-
-&lt;p&gt;학습 throughput을 떨어뜨리는 요인 중 하나가 collective 통신이 연산과 겹치지 않아 생기는 idle 시간인데, Trainium은 NeuronLink-v2와 전용 collective 엔진으로 이 오버랩을 하드웨어에서 지원한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;neuron-소프트웨어-스택&quot;&gt;Neuron 소프트웨어 스택&lt;/h1&gt;
-
-&lt;h2 id=&quot;스택-구성&quot;&gt;스택 구성&lt;/h2&gt;
-
-&lt;p&gt;AWS Neuron은 Trainium과 Inferentia에서 딥러닝·생성형 AI 워크로드를 실행하기 위한 소프트웨어 스택이다. CUDA가 NVIDIA GPU를 위한 소프트웨어 계층이듯, Neuron은 AWS 실리콘을 위한 소프트웨어 계층에 놓인다. 다만 &lt;a href=&quot;#nvidia-스택과의-대응&quot;&gt;자리가 같다는 것이 구조가 같다는 뜻은 아니다&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;구성 요소는 네 묶음이다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;컴파일러&lt;/strong&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;neuronx-cc&lt;/code&gt; — 모델 그래프를 Neuron 디바이스용 실행 계획으로 컴파일한다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;런타임&lt;/strong&gt; — 컴파일 산출물을 디바이스에 올려 실행하고, 메모리 할당·스케줄링·칩 간 통신을 관리한다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;학습·추론 라이브러리&lt;/strong&gt; — &lt;code class=&quot;highlighter-rouge&quot;&gt;torch-neuronx&lt;/code&gt;, NxD Core, NxD Training, NxD Inference, vLLM 통합&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;개발자 도구&lt;/strong&gt; — 모니터링·프로파일링·디버깅&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;PyTorch와 JAX 프레임워크, Hugging Face·vLLM·PyTorch Lightning 같은 라이브러리를 코드 수정 없이 쓸 수 있게 하는 것이 스택의 목표다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-aws-workshop-neuron-sdk-integration.png&quot; alt=&quot;워크샵 문서의 Neuron SDK 통합 구조&quot; class=&quot;align-center&quot; width=&quot;720&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: AWS 워크샵 문서. 도판의 모델은 Mistral 7B로 그려져 있어, TinyLlama를 쓰는 이번 워크샵 실습과는 모델만 다르다.&lt;/sup&gt;&lt;/center&gt;
-
-&lt;h2 id=&quot;컴파일러와-런타임&quot;&gt;컴파일러와 런타임&lt;/h2&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;neuronx-cc&lt;/code&gt;는 &lt;code class=&quot;highlighter-rouge&quot;&gt;nvcc&lt;/code&gt;나 XLA/TorchInductor가 놓이는 자리에 있지만 동작이 다르다. 서빙 경로가 AOT(ahead-of-time) 컴파일을 전제로 한다. 모델 그래프를 미리 컴파일해 두어야 실행할 수 있고, 그래서 정적 shape이 전제가 된다. 실습에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;MAX_MODEL_LEN&lt;/code&gt;이나 버킷 설정을 미리 고정하는 이유가 여기에 있다.&lt;/p&gt;
-
-&lt;p&gt;다만 Neuron에 JIT 경로가 아예 없는 것은 아니다. AWS 문서는 XLA Lazy Tensor 방식이 Neuron 실행에 JIT 컴파일을 쓴다고 적는다. 없는 것은 cuBLAS·cuDNN처럼 &lt;strong&gt;커널 단위로 런타임에 구현을 고르는 dispatch&lt;/strong&gt;이지 JIT 컴파일 자체가 아니다.&lt;/p&gt;
-
-&lt;p&gt;컴파일 산출물은 NEFF(Neuron Executable File Format)다. NEFF는 커널 하나의 바이너리가 아니라 그래프 전체의 실행 계획이다. 어느 명령이 어느 엔진에서 언제 도는지, SBUF에 어떤 타일이 언제 올라가는지가 컴파일 타임에 확정돼 그 안에 박힌다. 컴파일이 느린 대신 NEFF를 캐싱해 두면 재기동이 빨라진다.&lt;/p&gt;
-
-&lt;p&gt;런타임은 &lt;code class=&quot;highlighter-rouge&quot;&gt;libnrt.so&lt;/code&gt;이고 CUDA Driver API(&lt;code class=&quot;highlighter-rouge&quot;&gt;libcuda.so&lt;/code&gt;)와 같은 자리다. 디바이스 열기, NEFF 적재, 실행 요청 큐잉, collective 통신을 담당한다. EFA 연동에 필요한 OFI 플러그인이 &lt;code class=&quot;highlighter-rouge&quot;&gt;aws-neuronx-collectives&lt;/code&gt; 패키지 안에 미리 빌드되어 들어 있어, NCCL과 EFA를 잇는 플러그인을 따로 받아 빌드하는 단계가 없다.&lt;/p&gt;
-
-&lt;h2 id=&quot;nki&quot;&gt;NKI&lt;/h2&gt;
-
-&lt;p&gt;커널은 가속기에서 실행되도록 컴파일된 함수다. &lt;code class=&quot;highlighter-rouge&quot;&gt;matmul&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;softmax&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;layernorm&lt;/code&gt;, flash attention 각각이 하나의 커널이다. 프레임워크 사용자는 보통 &lt;code class=&quot;highlighter-rouge&quot;&gt;torch.nn.functional.softmax&lt;/code&gt; 형태로 호출하고 그 아래에서 어떤 커널이 선택되는지는 신경 쓰지 않는다. NKI(Neuron Kernel Interface)는 그 아래 계층을 직접 작성할 수 있게 열어 주는 인터페이스다. NeuronISA(NISA) 명령어 세트, 메모리 할당, 실행 스케줄링에 직접 접근할 수 있다.&lt;/p&gt;
-
-&lt;p&gt;굳이 커널 레벨까지 내려가야 하는 이유는 하드웨어 쪽에 이미 슬롯이 있기 때문이다. &lt;a href=&quot;#neuroncore-v2의-네-엔진&quot;&gt;GPSIMD-Engine&lt;/a&gt;이 정형 연산 밖의 커스텀 오퍼레이터를 받아 주고, NKI는 소프트웨어 편의 기능이 아니라 네 엔진을 직접 겨냥할 수 있게 열어 주는 창구다. 실제로 필요해지는 시나리오는 네 가지 정도다.&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;&lt;strong&gt;새 어텐션 변형&lt;/strong&gt; — 논문이 나왔는데 컴파일러가 패턴을 인식하지 못해 비효율적으로 분해되는 경우&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;연산 융합&lt;/strong&gt; — 컴파일러가 묶지 못한 여러 연산을 하나의 커널로 합쳐 SBUF와 HBM 사이 왕복을 제거&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;새 옵티마이저 / 새 loss&lt;/strong&gt; — 표준 프레임워크에 없는 연산&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;커스텀 양자화 스킴&lt;/strong&gt;&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;전형적인 NKI 커널의 골격은 다음과 같다.&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;neuronxcc.nki.language&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;as&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;nl&lt;/span&gt;
-
-&lt;span class=&quot;nd&quot;&gt;@nki.jit&lt;/span&gt;
-&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;my_kernel&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;a_hbm&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;b_hbm&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;out_hbm&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
-    &lt;span class=&quot;c&quot;&gt;# 1) HBM → SBUF로 타일을 명시적으로 적재&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;nl&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;load&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;a_hbm&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;128&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;512&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;b&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;nl&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;load&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;b_hbm&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;512&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;128&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
-
-    &lt;span class=&quot;c&quot;&gt;# 2) TensorEngine에서 연산, 결과는 PSUM에 누산&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;c&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;nl&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;matmul&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;b&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-
-    &lt;span class=&quot;c&quot;&gt;# 3) SBUF → HBM으로 되쓰기&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;nl&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;store&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;out_hbm&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;...&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;c&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;load&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;store&lt;/code&gt;가 코드에 그대로 드러나는 것이 중요하다. &lt;a href=&quot;#메모리-계층&quot;&gt;메모리 계층&lt;/a&gt;에서 본 대로 SBUF가 캐시가 아니기 때문에, 데이터 이동을 커널 작성자가 직접 쓴다.&lt;/p&gt;
-
-&lt;p&gt;다만 실무적 격차는 있다. CUDA 커널 생태계는 15년 이상 축적돼 FlashAttention·xformers·CUTLASS·Triton 커뮤니티 커널이 압도적이다. NKI는 MLIR 기반이라 설계가 현대적이고 컴파일 파이프라인 투명성(고수준 op에서 하드웨어 명령어까지 전 과정을 볼 수 있다)은 CUDA보다 오히려 낫지만, 사용자가 작성해 축적한 커널의 양이 비교가 되지 않는다. 그래서 실무에서는 대부분 &lt;code class=&quot;highlighter-rouge&quot;&gt;neuronx-cc&lt;/code&gt; 자동 컴파일과 NKI 라이브러리의 기존 커널로 해결하고, 프로파일링으로 특정 op가 병목임을 증명한 다음에야 NKI를 꺼낸다.&lt;/p&gt;
-
-&lt;h2 id=&quot;개발자-도구&quot;&gt;개발자 도구&lt;/h2&gt;
-
-&lt;p&gt;디버깅·프로파일링 유틸리티는 세 층으로 나뉜다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-monitor&lt;/code&gt;&lt;/strong&gt; — 실시간 성능 지표를 JSON 스트림으로 뽑는다. Prometheus·CloudWatch용 래퍼 스크립트가 함께 제공된다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-profile&lt;/code&gt;&lt;/strong&gt; — 타임라인 트레이싱&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Neuron Explorer&lt;/strong&gt; — &lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-profile&lt;/code&gt; 위에 얹힌 분석 도구&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;Neuron Explorer가 제공하는 것은 네 가지다. 프레임워크 계층부터 HLO 연산자, 하드웨어 명령어까지 내려가는 계층적 프로파일링. PyTorch·JAX·NKI 소스 코드와 성능 타임라인을 잇는 코드 연결과 라인별 메트릭 주석. 개발 환경 안에서 바로 프로파일을 열어 보는 VSCode 확장. 그리고 시스템 전반 지표와 장치별 실행 세부를 한 화면에서 보는 통합 인터페이스다.&lt;/p&gt;
-
-&lt;h2 id=&quot;dlami와-dlc&quot;&gt;DLAMI와 DLC&lt;/h2&gt;
-
-&lt;p&gt;Neuron 스택을 손으로 설치하는 대신 AWS가 미리 구워 둔 이미지를 쓴다. 이미지의 종류가 둘인데, 둘의 경계가 곧 커널 모듈의 경계다.&lt;/p&gt;
-
-&lt;p&gt;AMI(Amazon Machine Image)는 EC2 인스턴스를 부팅할 때 쓰는 디스크 이미지 템플릿이다. OS(커널 포함)와 파일시스템 스냅샷, 사전 설치된 패키지·드라이버, 부팅 설정을 담는다. 리전 단위 리소스라 다른 리전에서 쓰려면 복사해야 한다. 컨테이너 이미지와의 결정적 차이는 담을 수 있는 층이다. AMI는 커널까지 포함한 VM 이미지이고, 컨테이너 이미지는 호스트 커널을 공유하며 유저 스페이스만 담는다. 그래서 커널 모듈인 디바이스 드라이버는 언제나 AMI 레벨의 문제가 된다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;DLAMI&lt;/strong&gt; — AWS가 딥러닝 환경을 미리 구워 둔 AMI. 컨테이너 추상화 없이 EC2 VM 레벨에서 바로 쓴다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Neuron DLAMI&lt;/strong&gt; — DLAMI에 &lt;code class=&quot;highlighter-rouge&quot;&gt;aws-neuronx-dkms&lt;/code&gt;(커널 드라이버), Neuron Runtime, &lt;code class=&quot;highlighter-rouge&quot;&gt;neuronx-cc&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;torch-neuronx&lt;/code&gt; venv가 미리 들어 있다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;EKS Neuron optimized AMI&lt;/strong&gt; — EKS 워커 노드용이고 Neuron 드라이버를 포함한다. &lt;code class=&quot;highlighter-rouge&quot;&gt;/aws/service/eks/optimized-ami/1.33/amazon-linux-2023/x86_64/neuron/recommended/image_id&lt;/code&gt; SSM 파라미터로 조회한다. 이 AMI를 썼기 때문에 워커 노드에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;lsmod&lt;/code&gt; 결과에 neuron 모듈이 이미 올라와 있고 &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/neuron0&lt;/code&gt;이 존재한다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;DLC(Deep Learning Container)&lt;/strong&gt; — AWS가 공식 제공하는 딥러닝 컨테이너 베이스 이미지. 프레임워크와 서빙 스택이 계층별로 미리 들어 있다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;여기서 짚어 둘 것이 있다. 드라이버가 AMI에 포함돼 있다는 것과 &lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-device-plugin&lt;/code&gt;이 배포돼 있다는 것은 별개다. device plugin은 AMI에 담기는 구성 요소가 아니라 클러스터에 배포되는 DaemonSet이고, 워크샵 구성에서는 eksctl이 노드그룹을 만들 때 함께 설치한다. 배포 과정과 리소스 광고 확인은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편&lt;/a&gt;에서 다룬다.&lt;/p&gt;
-
-&lt;p&gt;DLAMI나 DLC를 고르면 스택의 어느 층까지 채워지는지는 조금씩 다르다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;계층&lt;/th&gt;
-      &lt;th&gt;어디서 오는가&lt;/th&gt;
-      &lt;th&gt;실습에서의 사례&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;[0] 커널 드라이버&lt;/td&gt;
-      &lt;td&gt;AMI(호스트) 책임. 컨테이너로는 넣을 수 없다&lt;/td&gt;
-      &lt;td&gt;EKS Neuron optimized AMI → &lt;code class=&quot;highlighter-rouge&quot;&gt;lsmod \| grep neuron&lt;/code&gt;에 이미 올라와 있다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;[1] SDK (&lt;code class=&quot;highlighter-rouge&quot;&gt;neuronx-cc&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;libnrt&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;torch-neuronx&lt;/code&gt;)&lt;/td&gt;
-      &lt;td&gt;DLAMI 또는 DLC 이미지 안에 pip로&lt;/td&gt;
-      &lt;td&gt;DLC에 미리 포함&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;[2][3] NxD Core / NxD Inference&lt;/td&gt;
-      &lt;td&gt;이미지 종류에 따라 다르다&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;pytorch-inference-vllm-neuronx&lt;/code&gt; 이미지에 포함&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;[4] vLLM + 플러그인&lt;/td&gt;
-      &lt;td&gt;용도별 DLC에만 포함&lt;/td&gt;
-      &lt;td&gt;그래서 &lt;code class=&quot;highlighter-rouge&quot;&gt;pip install&lt;/code&gt; 없이 바로 실행된다&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;DLC는 용도별로 갈린다. 아무 Neuron DLC나 고른다고 vLLM이 들어 있는 것이 아니라, 실습이 쓰는 &lt;code class=&quot;highlighter-rouge&quot;&gt;pytorch-inference-vllm-neuronx:0.9.1-...-sdk2.25.0&lt;/code&gt;처럼 vLLM이 포함된 이미지를 골라야 한다. 학습용 DLC에는 vLLM이 없을 수 있다. 이미지 전체 URI는 &lt;code class=&quot;highlighter-rouge&quot;&gt;&amp;lt;account&amp;gt;.dkr.ecr.&amp;lt;region&amp;gt;.amazonaws.com/&lt;/code&gt; 형태의 AWS 공개 레지스트리 경로를 앞에 붙인 것이다.&lt;/p&gt;
-
-&lt;p&gt;DLAMI도 변형이 여럿이라는 점은 같다. 프레임워크·OS·Base 여부로 갈리므로 &lt;strong&gt;“아무 DLAMI나 고르면 다 된다”는 아니다&lt;/strong&gt;. 다른 것은 두 가지다.&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;첫째, DLAMI는 커널 드라이버까지 책임지는 반면 DLC는 [0]층을 담을 수 없다.&lt;/li&gt;
-  &lt;li&gt;둘째, DLAMI의 프레임워크 계층은 venv 안 pip 패키지라 빠진 것을 나중에 설치해 메울 수 있는 반면, DLC는 이미지 태그가 곧 스택 구성이라 잘못 고르면 되돌릴 방법이 이미지 교체뿐이다.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;이번 실습에서는 두 층이 아예 분리돼 있다. 노드는 EKS Neuron optimized AMI로 드라이버와 런타임을 얻고, 파드는 vLLM DLC로 프레임워크와 서빙 스택을 얻는다. AMI 쪽은 드라이버가 맞는지만 보면 되고, “vLLM이 들어 있는가”라는 용도별 선택은 전적으로 DLC 쪽 문제가 된다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;nvidia-스택과의-대응&quot;&gt;NVIDIA 스택과의 대응&lt;/h1&gt;
-
-&lt;p&gt;결론부터 말하면, 층 단위로는 거의 다 대응이 되지만 정확히 1:1인 것은 드라이버·런타임·인터커넥트 정도다. 컴파일러·커널 라이브러리·코어 단위에서는 이름만 바뀌는 것이 아니라 구조가 바뀐다. 아래 표들은 “어느 자리에 놓이는가”의 대응이지 기능 동등성이 아니다.&lt;/p&gt;
-
-&lt;h2 id=&quot;하드웨어-대응&quot;&gt;하드웨어 대응&lt;/h2&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;Neuron&lt;/th&gt;
-      &lt;th&gt;NVIDIA 대응&lt;/th&gt;
-      &lt;th&gt;대응 정확도&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Trainium / Inferentia 칩 (NeuronDevice)&lt;/td&gt;
-      &lt;td&gt;GPU 카드 1장 (H100 SXM 1장)&lt;/td&gt;
-      &lt;td&gt;정확히 대응. PCI 디바이스 1개, HBM 1덩어리, &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/neuron0&lt;/code&gt; ↔ &lt;code class=&quot;highlighter-rouge&quot;&gt;/dev/nvidia0&lt;/code&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;NeuronCore-v2 (칩당 2개)&lt;/td&gt;
-      &lt;td&gt;MIG 인스턴스 또는 GPU 다이&lt;/td&gt;
-      &lt;td&gt;어긋남 주의 (아래 설명)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;TensorEngine&lt;/td&gt;
-      &lt;td&gt;Tensor Core&lt;/td&gt;
-      &lt;td&gt;유사. Tensor Core는 SM 안의 warp 단위 명령, TensorEngine은 코어 전체를 차지하는 행렬 연산 엔진&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;VectorEngine / ScalarEngine&lt;/td&gt;
-      &lt;td&gt;CUDA 코어 / SFU&lt;/td&gt;
-      &lt;td&gt;유사&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;GPSIMD-Engine&lt;/td&gt;
-      &lt;td&gt;대응물 없음&lt;/td&gt;
-      &lt;td&gt;어긋남. 커스텀 오퍼레이터를 코어 위에서 직접 돌리는 층이 NVIDIA에는 없다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;SBUF 24 MiB + PSUM 2 MiB&lt;/td&gt;
-      &lt;td&gt;Shared Memory + L2&lt;/td&gt;
-      &lt;td&gt;어긋남. 관리 주체가 하드웨어 캐시가 아니라 컴파일러&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;HBM 32 GiB @ 820 GiB/s&lt;/td&gt;
-      &lt;td&gt;VRAM(HBM)&lt;/td&gt;
-      &lt;td&gt;정확히 대응&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;NeuronLink-v2&lt;/td&gt;
-      &lt;td&gt;NVLink&lt;/td&gt;
-      &lt;td&gt;역할은 정확히 대응. 대역폭은 문서마다 기준이 달라(칩당 384 GB/s ~ 768 GB/s 대 GPU당 900 GB/s 양방향) 직접 비교에 주의가 필요하다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;NeuronLink 토폴로지 (trn1.32xlarge 2D Torus)&lt;/td&gt;
-      &lt;td&gt;NVSwitch 기반 all-to-all&lt;/td&gt;
-      &lt;td&gt;어긋남. 스위치가 아니라 토러스라 홉 수가 위치에 따라 다르다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;EFA / EFAv2&lt;/td&gt;
-      &lt;td&gt;InfiniBand / RoCE&lt;/td&gt;
-      &lt;td&gt;정확히 대응 (노드 간)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NEURON_RT_VISIBLE_CORES&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;CUDA_VISIBLE_DEVICES&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;정확히 대응&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Logical NeuronCore Config (Trainium2)&lt;/td&gt;
-      &lt;td&gt;MIG&lt;/td&gt;
-      &lt;td&gt;유사. 물리 분할이 아니라 설정으로 묶는다&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;NeuronCore를 SM(Streaming Multiprocessor)에 대응시키기 쉬운데, 이 비유는 맞지 않는다. &lt;a href=&quot;/cs/CS-GPU-SM-Microarchitecture/#sm의-구조&quot;&gt;SM은 H100 한 장에 132개&lt;/a&gt;가 들어가는 단위인 반면 NeuronCore는 칩당 2개다. 개수만 두 자릿수 차이가 나고, 독립성과 메모리 소유도 다르다. NeuronCore는 각자 SBUF를 갖고 별도 rank로 동작하는 독립 실행 단위이므로, 굳이 NVIDIA 쪽에서 대응물을 찾자면 SM보다 MIG 인스턴스나 GPU 다이 쪽이 가깝다.&lt;/p&gt;
-
-&lt;h2 id=&quot;소프트웨어-스택-대응&quot;&gt;소프트웨어 스택 대응&lt;/h2&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;Neuron&lt;/th&gt;
-      &lt;th&gt;NVIDIA 대응&lt;/th&gt;
-      &lt;th&gt;대응 정확도&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;aws-neuronx-dkms&lt;/code&gt; 커널 모듈&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;nvidia.ko&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;정확히 대응 (둘 다 AMI에 포함)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Neuron Runtime &lt;code class=&quot;highlighter-rouge&quot;&gt;libnrt.so&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;CUDA Driver API &lt;code class=&quot;highlighter-rouge&quot;&gt;libcuda.so&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;정확히 대응&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;neuronx-cc&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;nvcc&lt;/code&gt; + XLA/TorchInductor&lt;/td&gt;
-      &lt;td&gt;어긋남. AOT 전용&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;NEFF&lt;/td&gt;
-      &lt;td&gt;PTX / SASS + CUDA Graph&lt;/td&gt;
-      &lt;td&gt;어긋남. 커널 바이너리가 아니라 그래프 전체 실행 계획&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;컴파일러 자동 생성 + NKI 라이브러리&lt;/td&gt;
-      &lt;td&gt;cuBLAS / cuDNN / CUTLASS&lt;/td&gt;
-      &lt;td&gt;어긋남. 런타임 dispatch가 아니라 컴파일 타임 결정&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;collective 통신을 담당하는 Neuron 런타임 구성 요소&lt;/td&gt;
-      &lt;td&gt;NCCL&lt;/td&gt;
-      &lt;td&gt;역할이 대응&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;nccom-test&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;nccl-tests&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;정확히 대응&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;NeuronLink-v2&lt;/td&gt;
-      &lt;td&gt;NVLink / NVSwitch&lt;/td&gt;
-      &lt;td&gt;역할이 대응&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NEURON_RT_VISIBLE_CORES&lt;/code&gt;, Logical NeuronCore Config&lt;/td&gt;
-      &lt;td&gt;MIG / MPS&lt;/td&gt;
-      &lt;td&gt;유사. 분할이 환경변수·설정으로 처리된다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;NEFF 자체가 그래프&lt;/td&gt;
-      &lt;td&gt;CUDA Graphs&lt;/td&gt;
-      &lt;td&gt;개념이 흡수됐다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;비동기 실행 (&lt;code class=&quot;highlighter-rouge&quot;&gt;NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS&lt;/code&gt;)&lt;/td&gt;
-      &lt;td&gt;CUDA Stream&lt;/td&gt;
-      &lt;td&gt;유사&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;torch-neuronx&lt;/code&gt; / XLA, &lt;code class=&quot;highlighter-rouge&quot;&gt;device='neuron'&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;torch.cuda&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;device='cuda'&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;유사&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Neuron DLAMI / Neuron DLC&lt;/td&gt;
-      &lt;td&gt;DLAMI / NGC 컨테이너&lt;/td&gt;
-      &lt;td&gt;정확히 대응&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;aws-neuronx-collectives&lt;/code&gt;에 OFI 플러그인 내장&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;aws-ofi-nccl&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;별도 설치·빌드 단계가 없다&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;불필요 (표준 runc + device plugin)&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;nvidia-container-toolkit&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;계층 소멸&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;h2 id=&quot;커널-작성-계층-대응&quot;&gt;커널 작성 계층 대응&lt;/h2&gt;
-
-&lt;p&gt;NKI의 가장 정확한 대응물은 CUDA C++가 아니라 Triton과 JAX Pallas다. Python으로 쓰고, MLIR 기반으로 컴파일되며, 타일 단위로 사고한다는 점이 같다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;계층&lt;/th&gt;
-      &lt;th&gt;NVIDIA&lt;/th&gt;
-      &lt;th&gt;AWS Neuron&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;프레임워크 op&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;torch.matmul&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;torch.matmul&lt;/code&gt; (torch-neuronx)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;최적화 커널 라이브러리&lt;/td&gt;
-      &lt;td&gt;cuBLAS, cuDNN, CUTLASS&lt;/td&gt;
-      &lt;td&gt;NKI 라이브러리 (사전 구축 커널)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;컴파일러 자동 생성&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt;/TorchInductor, XLA&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;neuronx-cc&lt;/code&gt; (여기가 기본 경로)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;타일 기반 커널 DSL&lt;/td&gt;
-      &lt;td&gt;Triton, JAX Pallas&lt;/td&gt;
-      &lt;td&gt;NKI&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;저수준 커널 언어&lt;/td&gt;
-      &lt;td&gt;CUDA C++&lt;/td&gt;
-      &lt;td&gt;NKI가 이 역할까지 흡수&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;ISA / 어셈블리&lt;/td&gt;
-      &lt;td&gt;PTX → SASS&lt;/td&gt;
-      &lt;td&gt;NeuronISA(NISA), &lt;code class=&quot;highlighter-rouge&quot;&gt;nisa.*&lt;/code&gt; API로 직접 호출&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;h2 id=&quot;관측-도구-대응&quot;&gt;관측 도구 대응&lt;/h2&gt;
-
-&lt;p&gt;Neuron 도구 묶음은 NVIDIA의 여러 도구가 담당하는 역할이 섞여 있어 1:1로 매핑되지 않는다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;Neuron&lt;/th&gt;
-      &lt;th&gt;NVIDIA 대응&lt;/th&gt;
-      &lt;th&gt;역할&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-ls&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;nvidia-smi -L&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;디바이스·코어 열거&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-top&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;nvidia-smi&lt;/code&gt; / &lt;code class=&quot;highlighter-rouge&quot;&gt;nvtop&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;TUI 실시간 모니터&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-monitor&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;nvidia-smi --query&lt;/code&gt; / DCGM exporter&lt;/td&gt;
-      &lt;td&gt;메트릭을 JSON 스트림으로 추출&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-profile&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;Nsight Systems&lt;/td&gt;
-      &lt;td&gt;타임라인 트레이싱&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Neuron Explorer&lt;/td&gt;
-      &lt;td&gt;Nsight Systems + Nsight Compute + 소스 상관분석&lt;/td&gt;
-      &lt;td&gt;프레임워크 → HLO op → 하드웨어 명령어 드릴다운, 소스 라인 연결&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;nccom-test&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;nccl-tests&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;collective 통신 대역폭 벤치&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;neuron-bench&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;마이크로벤치마크&lt;/td&gt;
-      &lt;td&gt;NEFF를 반복 실행해 종단 지연·처리량 통계 측정&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;Nsight Systems와 Nsight Compute가 각각 무엇을 재는 도구인지는 &lt;a href=&quot;/dev/Dev-Nsight-Profiling-01-Concepts/#systems와-compute&quot;&gt;Nsight 개념 정리&lt;/a&gt;에 있다.&lt;/p&gt;
-
-&lt;h2 id=&quot;대응이-깨지는-세-지점&quot;&gt;대응이 깨지는 세 지점&lt;/h2&gt;
-
-&lt;p&gt;이름만 바뀌는 것이 아니라 구조가 바뀌는 자리가 셋이다.&lt;/p&gt;
-
-&lt;h3 id=&quot;프로그래밍-모델&quot;&gt;프로그래밍 모델&lt;/h3&gt;
-
-&lt;p&gt;CUDA의 프로그래밍 모델이 SIMT인 이유는 GPU의 병렬성이 수많은 독립 실행 컨텍스트에서 나오기 때문이다. 개발자는 스레드 1개짜리 스칼라 프로그램을 쓰고, 하드웨어가 32개 스레드를 warp로 묶어 같은 명령을 태우며, SM의 warp 스케줄러가 매 사이클 준비된 warp를 골라 발행해 메모리 지연을 감춘다. &lt;code class=&quot;highlighter-rouge&quot;&gt;threadIdx&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;blockIdx&lt;/code&gt;로 “이 스레드가 어느 데이터를 맡는가”를 쓰는 것도, shared memory와 &lt;code class=&quot;highlighter-rouge&quot;&gt;__syncthreads()&lt;/code&gt;로 스레드 간 협력을 명시하는 것도 전부 런타임에 스케줄되는 많은 컨텍스트를 다루기 위한 장치다.&lt;/p&gt;
-
-&lt;p&gt;NeuronCore에는 그 전제가 없다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;병렬의 단위가 스레드가 아니라 타일이다.&lt;/strong&gt; 프로그래머가 다루는 것은 “스레드 (x, y)가 무엇을 계산하나”가 아니라 “어느 타일을 SBUF에 올려 어느 엔진에 태우나”다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;런타임 스케줄러가 없다.&lt;/strong&gt; 엔진은 코어당 4개로 소수이고, 어느 명령이 언제 어느 엔진에서 도는지는 &lt;code class=&quot;highlighter-rouge&quot;&gt;neuronx-cc&lt;/code&gt;가 컴파일 타임에 확정해 NEFF에 박아 둔다. 고를 대상이 없으니 warp 스케줄러에 해당하는 것도 없다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;메모리가 캐시가 아니다.&lt;/strong&gt; SBUF는 하드웨어가 알아서 채우는 캐시가 아니라 컴파일러가 배치하는 스크래치패드다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;수천 개의 실행 컨텍스트를 런타임에 스케줄하는 구조가 아니므로, 그 위에 SIMT 추상을 얹을 이유가 없다. NKI가 CUDA C++가 아니라 Triton·Pallas를 닮은 것은 취향이 아니라 하드웨어 모델의 차이에서 온다. &lt;a href=&quot;/cs/CS-GPU-SM-Microarchitecture/#cuda-코어와-텐서-코어&quot;&gt;CUDA 코어와 텐서 코어&lt;/a&gt;의 구조와 나란히 놓고 보면 차이가 분명해진다.&lt;/p&gt;
-
-&lt;h3 id=&quot;컴파일-시점&quot;&gt;컴파일 시점&lt;/h3&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;nvcc&lt;/code&gt;는 AOT 컴파일과 런타임 JIT 경로를 함께 갖고, cuBLAS·cuDNN은 런타임에 입력 shape을 보고 커널을 고른다. Neuron에서는 이 결정이 컴파일 타임으로 옮겨간다. NEFF는 그래프 전체의 실행 계획이고, 어떤 커널을 쓸지도 컴파일 시점에 정해진다. 정적 shape을 미리 확정해야 하는 제약이 여기서 나오고, 대신 NEFF 캐시로 재기동 비용을 줄일 수 있다.&lt;/p&gt;
-
-&lt;p&gt;프로파일 성격도 이 차이를 그대로 반영한다. Nsight Systems 프로파일은 런타임에 CUDA 스트림으로 던져진 커널 런처의 시계열이다. 반면 Neuron 프로파일은 컴파일러가 정적으로 확정한 실행 계획의 재생이다. 타임라인 축이 스트림이 아니라 엔진별(Tensor / Vector / Scalar / GPSIMD / Sync / Collective)로 나오고, NEFF와 프로파일이 거의 1:1로 대응하므로 “왜 이 명령이 여기 있나”를 컴파일러 결정까지 역추적할 수 있다. 반대로 &lt;a href=&quot;/dev/Dev-Nsight-Profiling-03-Nsys/&quot;&gt;nsys&lt;/a&gt;에서 보던 “런타임에 다른 커널이 스케줄되었나” 같은 변동성 분석은 할 것이 별로 없다.&lt;/p&gt;
-
-&lt;h3 id=&quot;계층-소멸&quot;&gt;계층 소멸&lt;/h3&gt;
-
-&lt;p&gt;NVIDIA 스택에 있던 층 둘이 Neuron에는 없다. NCCL과 EFA를 잇는 &lt;code class=&quot;highlighter-rouge&quot;&gt;aws-ofi-nccl&lt;/code&gt;에 대응하는 OFI 플러그인은 &lt;code class=&quot;highlighter-rouge&quot;&gt;aws-neuronx-collectives&lt;/code&gt;에 미리 빌드되어 들어 있어 따로 설치할 것이 없다. 컨테이너에 GPU를 노출하는 &lt;code class=&quot;highlighter-rouge&quot;&gt;nvidia-container-toolkit&lt;/code&gt;도 필요 없고, 표준 runc와 device plugin만으로 처리된다(&lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/#device-plugin-동작-흐름&quot;&gt;device plugin 동작 흐름&lt;/a&gt;, &lt;a href=&quot;/kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/#커스텀-가속기&quot;&gt;커스텀 가속기&lt;/a&gt;).&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;neuron-위의-추론-경로&quot;&gt;Neuron 위의 추론 경로&lt;/h1&gt;
-
-&lt;p&gt;결론부터 말하면, 경로가 갈리는 기준은 vLLM의 모델 지원 여부가 아니라 모델이 NxD Inference에 온보딩돼 있는가와 OpenAI 호환 서빙이 필요한가다. Neuron SDK는 어느 경로를 타든 무조건 깔리는 공통 바닥 계층이다.&lt;/p&gt;
-
-&lt;h2 id=&quot;nxd-core와-nxd-inference&quot;&gt;NxD Core와 NxD Inference&lt;/h2&gt;
-
-&lt;p&gt;NeuronX Distributed(NxD)는 AWS Neuron 하드웨어에서 대규모 워크로드를 다루기 위한 분산 컴퓨팅 프레임워크이고, 추론 쪽은 두 층으로 나뉜다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-aws-workshop-neuronx.png&quot; alt=&quot;NeuronX Distributed 구성&quot; class=&quot;align-center&quot; width=&quot;720&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: AWS 워크샵 문서, NeuronX Distributed&lt;/sup&gt;&lt;/center&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;NxD Core&lt;/strong&gt; — 분산 추론을 가능하게 하는 기본 구성 요소. 병렬 선형 레이어와, PyTorch 모듈을 Neuron 모델로 컴파일하는 ModelBuilder가 여기 있다. 모델이 단일 디바이스에 다 올라가지 않을 때 쓰는 샤딩 기법의 XLA 친화적 구현을 제공한다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;NxD Inference(NxDI)&lt;/strong&gt; — NxD Core 위에 올라가는 PyTorch 기반 오픈소스 라이브러리. 밀집 LLM, MoE LLM, 이미지 생성 모델의 참조 구현을 제공한다. 다양한 어텐션 기법, Tensor Parallel·Expert Parallelism 같은 분산 전략, speculative decoding, 널리 쓰이는 아키텍처를 위한 NKI 커널이 들어 있다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;NxDI가 제공하는 기능 목록은 이 시리즈에서 이미 다룬 것들이 라이브러리 수준으로 내려온 형태다. &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/&quot;&gt;continuous batching과 prefix caching, 양자화&lt;/a&gt;, &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/&quot;&gt;speculative decoding&lt;/a&gt;, &lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/#병렬화-배치와-인터커넥트-계층&quot;&gt;텐서 병렬&lt;/a&gt;이 그대로 옵션으로 노출된다. 병렬화 축은 텐서 병렬을 기본으로 시퀀스 병렬과 expert 병렬을 지원하고, 파이프라인 병렬은 문서상 향후 지원으로 적혀 있다. multi-LoRA 서빙까지 포함한다.&lt;/p&gt;
-
-&lt;p&gt;NVIDIA 생태계에서 NxDI 하나에 대응하는 제품은 없고 층별로 나뉜다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;Neuron 쪽&lt;/th&gt;
-      &lt;th&gt;역할&lt;/th&gt;
-      &lt;th&gt;NVIDIA 대응&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;NxD Core&lt;/td&gt;
-      &lt;td&gt;병렬 선형 레이어, ModelBuilder&lt;/td&gt;
-      &lt;td&gt;TensorRT-LLM의 병렬 레이어 API, Megatron-Core의 TP/PP 레이어&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;NxD Inference&lt;/td&gt;
-      &lt;td&gt;모델 구현, 어텐션 변형, TP/EP 샤딩, KV 캐시, 최적화 커널&lt;/td&gt;
-      &lt;td&gt;TensorRT-LLM이 가장 근접&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;NEFF&lt;/td&gt;
-      &lt;td&gt;컴파일 산출물&lt;/td&gt;
-      &lt;td&gt;TensorRT 엔진 파일&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;NKI 라이브러리&lt;/td&gt;
-      &lt;td&gt;사전 구축 커널&lt;/td&gt;
-      &lt;td&gt;cuBLAS / cuDNN / CUTLASS / FlashAttention&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;vLLM + 플러그인&lt;/td&gt;
-      &lt;td&gt;서빙 계층&lt;/td&gt;
-      &lt;td&gt;vLLM(CUDA 백엔드), Triton Inference Server + TensorRT-LLM 백엔드&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Neuron DLC&lt;/td&gt;
-      &lt;td&gt;서빙 스택 패키징&lt;/td&gt;
-      &lt;td&gt;NGC 컨테이너, NIM&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;inference_demo&lt;/code&gt; CLI&lt;/td&gt;
-      &lt;td&gt;라이브러리 직접 호출 진입점&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;trtllm-build&lt;/code&gt; + &lt;code class=&quot;highlighter-rouge&quot;&gt;trtllm-serve&lt;/code&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;다만 개별 제품의 위상은 계속 움직이고 있어 2026년 9월 시점의 대략적인 대응으로 읽는 편이 맞다. 층 구조 자체에도 차이가 있다. NVIDIA 쪽은 vLLM·TensorRT-LLM·Triton·NIM이 서로 겹치면서 경쟁하는 반면, Neuron 쪽은 NxD Core → NxDI → vLLM 플러그인의 단일 계층으로 정돈돼 있다.&lt;/p&gt;
-
-&lt;h2 id=&quot;vllm-통합-두-갈래&quot;&gt;vLLM 통합 두 갈래&lt;/h2&gt;
-
-&lt;p&gt;AWS 문서는 Neuron 위 추론 배포를 두 갈래로 그린다. (a) vLLM이 지원하는 모델은 vLLM에 NxDI를 붙여 서빙하고, (b) 그렇지 않으면 NxD 추론 API를 직접 호출한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/llmso-nxd-inference-stack.png&quot; alt=&quot;NxD Inference 스택과 두 배포 경로&quot; class=&quot;align-center&quot; width=&quot;720&quot; /&gt;&lt;/p&gt;
-
-&lt;center&gt;&lt;sup&gt;출처: AWS Neuron Documentation, Inference on Neuron&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;계층으로 보면 아래 3개 층은 어느 경로를 타든 동일하고, 갈라지는 것은 맨 위 서빙 계층 하나다. 다만 위 도판에는 나오지 않는 제3의 경로가 하나 더 있다. NxD Inference에 의존하지 않고 모델 구현을 플러그인 안에 직접 담은 vLLM Neuron 베타 플러그인이다. 이 경로는 [3] 모델 구현 계층을 건너뛴다.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart BT
-    HW[&quot;하드웨어: Trn1 / Inf2 / Trn2&quot;] --&amp;gt; DRV[&quot;커널 드라이버 aws-neuronx-dkms&amp;lt;br/&amp;gt;AMI 책임, 컨테이너로 넣을 수 없다&quot;]
-    DRV --&amp;gt; SDK[&quot;Neuron SDK&amp;lt;br/&amp;gt;neuronx-cc + libnrt.so + torch-neuronx&quot;]
-    SDK --&amp;gt; NXDC[&quot;NxD Core&amp;lt;br/&amp;gt;병렬 선형 레이어, ModelBuilder&quot;]
-    NXDC --&amp;gt; NXDI[&quot;NxD Inference&amp;lt;br/&amp;gt;모델 구현, TP/EP, KV 캐시, NKI 커널&quot;]
-    NXDI --&amp;gt; PA1[&quot;(a)-1 vLLM + vllm-neuron 플러그인&amp;lt;br/&amp;gt;Inf2 / Trn1 / Trn2 - 실습 경로&quot;]
-    NXDI --&amp;gt; PB[&quot;(b) NxDI Python API 직접&amp;lt;br/&amp;gt;inference_demo, generate()&quot;]
-    SDK --&amp;gt; PA2[&quot;(a)-2 vLLM Neuron 베타&amp;lt;br/&amp;gt;모델 구현 내장, Trn2 / Trn3&quot;]
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;플러그인 두 구현체의 차이는 다음과 같다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt; &lt;/th&gt;
-      &lt;th&gt;vLLM + NxD Inference&lt;/th&gt;
-      &lt;th&gt;vLLM Neuron (베타)&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;모델 실행&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;neuronx-distributed-inference&lt;/code&gt; 라이브러리&lt;/td&gt;
-      &lt;td&gt;플러그인 안에 모델 구현 내장&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;지원 인스턴스&lt;/td&gt;
-      &lt;td&gt;Trn1, Trn2, Trn3, Inf2&lt;/td&gt;
-      &lt;td&gt;Trn2, Trn3&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;플러그인 계열&lt;/td&gt;
-      &lt;td&gt;0.5.x&lt;/td&gt;
-      &lt;td&gt;0.24.0 계열&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;지원 vLLM&lt;/td&gt;
-      &lt;td&gt;0.16&lt;/td&gt;
-      &lt;td&gt;0.24.0&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;특징&lt;/td&gt;
-      &lt;td&gt;모델이 NxDI에 온보딩돼 있어야 한다. 업스트림 표기는 &lt;code class=&quot;highlighter-rouge&quot;&gt;Maintenance&lt;/code&gt;다&lt;/td&gt;
-      &lt;td&gt;segmented prefill, disaggregated inference, EAGLE3 speculative decoding. 업스트림이 권장 서빙 경로로 적는 쪽이다. chunked prefill은 아직 미지원&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;details&gt;
-  &lt;summary&gt;&lt;b&gt;소스에서 직접 설치하는 경우&lt;/b&gt;&lt;/summary&gt;
-
-  &lt;p&gt;실습은 vLLM이 이미 들어 있는 DLC를 쓰므로 설치가 필요 없다. 소스에서 붙이는 경로는 다음과 같다.&lt;/p&gt;
-
-  &lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# (a)-1 vLLM + NxD Inference 플러그인&lt;/span&gt;
-git clone &lt;span class=&quot;nt&quot;&gt;--branch&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;0.5.3&quot;&lt;/span&gt; https://github.com/vllm-project/vllm-neuron.git
-&lt;span class=&quot;nb&quot;&gt;cd &lt;/span&gt;vllm-neuron
-pip install &lt;span class=&quot;nt&quot;&gt;--extra-index-url&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;https://pip.repos.neuron.amazonaws.com &lt;span class=&quot;nt&quot;&gt;-e&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;.&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# (a)-2 vLLM Neuron 베타 플러그인&lt;/span&gt;
-git clone &lt;span class=&quot;nt&quot;&gt;-b&lt;/span&gt; release-0.24.0.1.1.0 https://github.com/vllm-project/vllm-neuron.git
-&lt;span class=&quot;nb&quot;&gt;cd &lt;/span&gt;vllm-neuron
-pip install &lt;span class=&quot;nt&quot;&gt;--extra-index-url&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;https://pip.repos.neuron.amazonaws.com &lt;span class=&quot;nt&quot;&gt;-e&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;.&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;  &lt;/div&gt;
-
-&lt;/details&gt;
-
-&lt;h2 id=&quot;경로-선택&quot;&gt;경로 선택&lt;/h2&gt;
-
-&lt;p&gt;갈리는 지점이 둘인데 서로 다른 축이라 헷갈리기 쉽다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt; &lt;/th&gt;
-      &lt;th&gt;축 A: 도판의 (a)/(b)&lt;/th&gt;
-      &lt;th&gt;축 B: 플러그인 구현체&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;무엇을 고르는가&lt;/td&gt;
-      &lt;td&gt;서빙 계층을 vLLM으로 씌울지 여부&lt;/td&gt;
-      &lt;td&gt;vLLM 플러그인의 두 구현체 중 무엇을 쓸지&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;선택지&lt;/td&gt;
-      &lt;td&gt;(a) vLLM + 플러그인 / (b) NxDI API 직접&lt;/td&gt;
-      &lt;td&gt;0.5.x 계열 / vLLM Neuron 베타&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;판단 기준&lt;/td&gt;
-      &lt;td&gt;모델이 NxDI에 온보딩돼 있는가, OpenAI 호환 API가 필요한가&lt;/td&gt;
-      &lt;td&gt;인스턴스 세대 (Inf2·Trn1 → 0.5.x, Trn2·Trn3 → 베타도 가능)&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;“vLLM 미지원 모델”이라는 표현이 오해를 만들 수 있다. 실제로 (b)를 고르는 경우는 네 가지다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;LLM이 아닌 모델&lt;/strong&gt;: NxDI가 지원하는 이미지 생성 모델처럼, vLLM이 애초에 붙을 대상이 아닌 경우&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;커스텀 아키텍처 브링업&lt;/strong&gt;: NxDI 모듈식 API로 새 모델을 직접 구현하는 단계. 서버가 아니라 &lt;code class=&quot;highlighter-rouge&quot;&gt;generate()&lt;/code&gt; 단위로 디버깅한다&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;서버가 필요 없는 경우&lt;/strong&gt;: 오프라인 배치 추론, 평가 스크립트, 정확도 회귀 테스트&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;스케줄러를 직접 통제하고 싶은 경우&lt;/strong&gt;: vLLM의 continuous batching 스케줄러를 우회&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;(a)와 (b)를 나란히 놓아 대안처럼 보이지만, (b)는 (a)의 전 단계로도 쓰인다. NxDI 지원 모델 목록에 “Custom models onboarded to NxD Inference”가 들어 있는 이유가 이것이다. NxDI에 한 번 온보딩하면 그 모델은 다시 vLLM으로 서빙할 수 있다.&lt;/p&gt;
-
-&lt;p&gt;선택 순서를 옮기면 다음과 같다.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart TD
-    A[&quot;인스턴스 선택: Trn1 / Inf2 / Trn2&quot;] --&amp;gt; B[&quot;Neuron SDK 확보&amp;lt;br/&amp;gt;DLAMI 또는 DLC, 드라이버는 AMI 담당&quot;]
-    B --&amp;gt; C{&quot;모델이 NxD Inference에&amp;lt;br/&amp;gt;온보딩되어 있나&quot;}
-    C --&amp;gt;|아니오| D[&quot;(b) NxDI로 온보딩&amp;lt;br/&amp;gt;이후 (a)로 승격 가능&quot;]
-    C --&amp;gt;|예| E{&quot;OpenAI 호환 서빙이&amp;lt;br/&amp;gt;필요한가&quot;}
-    E --&amp;gt;|아니오| F[&quot;(b) NxDI API 직접&amp;lt;br/&amp;gt;배치 추론 / 평가 / 비LLM 모델&quot;]
-    E --&amp;gt;|예| G{&quot;인스턴스 세대&quot;}
-    G --&amp;gt;|&quot;Inf2 / Trn1&quot;| H[&quot;(a)-1 vLLM + NxDI 플러그인&quot;]
-    G --&amp;gt;|&quot;Trn2 / Trn3&quot;| I[&quot;(a)-2 vLLM Neuron 베타도 가능&quot;]
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;h2 id=&quot;워크샵이-타는-경로&quot;&gt;워크샵이 타는 경로&lt;/h2&gt;
-
-&lt;p&gt;실습도 위 순서를 그대로 밟는다.&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;인스턴스는 &lt;code class=&quot;highlighter-rouge&quot;&gt;trn1.2xlarge&lt;/code&gt;&lt;/li&gt;
-  &lt;li&gt;노드는 EKS Neuron optimized AMI, 파드는 vLLM DLC&lt;/li&gt;
-  &lt;li&gt;모델은 TinyLlama. NxDI가 지원하는 Llama 아키텍처다&lt;/li&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;VLLM_NEURON_FRAMEWORK=neuronx-distributed-inference&lt;/code&gt;로 (a)-1 경로를 명시적으로 선언한다&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;이 환경변수 하나가 “vLLM 플러그인이 NxD Inference를 모델 실행 백엔드로 쓴다”는 선언이다. 이것을 포함한 vLLM ConfigMap 키들의 값과 의미는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/&quot;&gt;8.3.1편&lt;/a&gt;에서 다룬다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
-
-&lt;p&gt;전통적 구분은 “학습은 메모리·인터커넥트·정밀도, 추론은 저정밀도 연산당 비용”이었다. AWS는 Inferentia1에서 이 구분을 하드웨어로 실현했다. 옵티마이저 상태를 올릴 메모리도, gradient를 모을 collective 경로도, 누적 정밀도도 없는 칩이었으니 학습이 구조적으로 불가했다.&lt;/p&gt;
-
-&lt;p&gt;그 구분이 Trn1/Inf2 세대에서 무너진다. 두 제품은 동일한 NeuronCore-v2를 공유하고, 차이는 인스턴스 주변 장치와 가격 정책으로 옮겨 갔다. Trainium2에 이르면 메모리 용량·대역폭과 인터커넥트 배율이 연산 배율보다 크게 늘어나는데, 그 축이 LLM decode의 병목과 정확히 겹친다. 학습용 칩이 최고의 추론 칩이 된 셈이고, Inferentia 계열이 Inf2 이후 사실상 후속 없이 Trainium 단일 라인으로 통합되는 흐름도 여기서 나온다. NVIDIA도 아키텍처는 단일 계보를 유지하며 SKU로만 분화시켜 왔고, 대형 LLM 시대에는 마찬가지로 플래그십을 추론에 투입하는 방향으로 수렴했다.&lt;/p&gt;
-
-&lt;p&gt;결국 “학습 칩 / 추론 칩”의 구분은 하드웨어보다 소프트웨어 스택과 시스템 스케일의 문제로 이동했다. 같은 Trn1 하드웨어 위에서도 학습은 &lt;code class=&quot;highlighter-rouge&quot;&gt;torch-neuronx&lt;/code&gt;와 NxD Training을, 추론은 NxD Inference와 vLLM 플러그인을 타고, 컴파일되는 그래프의 크기와 성격도 다르다. 그래서 실습에 대해서는 “학습용 칩으로 추론했다”가 아니라 “범용 Neuron 칩에 추론 소프트웨어 스택을 얹었다”가 더 정확한 서술이다.&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;/dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/#ai-가속기-지형&quot;&gt;5.5편&lt;/a&gt;에서 하드웨어 스펙을 읽는 법과 병목을 판별하는 직관은 칩이 바뀌어도 유효하다고 정리했는데, Trainium과 Neuron 스택이 그 주장의 시험대가 된다. 용량 → 대역폭 → 인터커넥트 순으로 읽는 방식과 산술 강도로 병목을 판정하는 방식은 그대로 통했다. 반면 프로그래밍 모델과 컴파일 시점은 CUDA의 어휘를 그대로 옮기면 어긋난다. 이름의 대응표가 아니라 그 자리에서 무엇이 언제 결정되는지를 봐야 스택을 제대로 읽을 수 있다.&lt;/p&gt;
-
-&lt;p&gt;여기까지가 칩과 스택 쪽 배경이다. 이 하드웨어를 실제로 쓰는 클러스터를 만드는 작업은 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/&quot;&gt;8.2.1편&lt;/a&gt;에서, 칩과 코어가 쿠버네티스 리소스로 광고되는 경로는 &lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/&quot;&gt;8.2.2편&lt;/a&gt;에서 이어 간다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/trainium.html&quot;&gt;Trainium Architecture&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/trainium2.html&quot;&gt;Trainium2 Architecture&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/inferentia2.html&quot;&gt;Inferentia2 Architecture&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/inf2-arch.html&quot;&gt;Amazon EC2 Inf2 Architecture&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/neuron-core-v2.html&quot;&gt;NeuronCore-v2 Architecture&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/index.html&quot;&gt;NKI (Neuron Kernel Interface)&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/get-started/about/index.html&quot;&gt;NKI: Trainium·Inferentia2 아키텍처 가이드&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/frameworks/torch/torch-neuronx/programming-guide/inference/index.html&quot;&gt;Inference on Neuron (torch-neuronx)&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/nxd-inference/index.html&quot;&gt;NxD Inference&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/nxd-inference/vllm/index.html&quot;&gt;vLLM on Neuron&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://github.com/vllm-project/vllm-neuron&quot;&gt;vllm-project/vllm-neuron&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia.html&quot;&gt;AWS DLAMI: Inferentia 튜토리얼&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://github.com/aws-neuron/deep-learning-containers&quot;&gt;aws-neuron/deep-learning-containers&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/&quot;&gt;8.0편: 개요와 워크샵 아키텍처&lt;/a&gt;
-&lt;br /&gt;&lt;/li&gt;
-&lt;/ul&gt;</content><author><name>Eraser</name></author><category term="Trainium" /><category term="Inferentia" /><category term="AWS-Neuron" /><category term="NeuronCore" /><category term="NKI" /><category term="NxD-Inference" /><category term="vLLM" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">워크샵이 쓰는 Trainium이 어떤 칩인지, Neuron SDK가 어떤 스택인지, NVIDIA 스택과 어디까지 대응되는지 정리해 보자.</summary></entry></feed>
+&lt;/ul&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="EKS" /><category term="AWS" /><category term="Trainium" /><category term="Neuron" /><category term="eksctl" /><category term="vLLM" /><category term="Hands-On-LLM-Serving-and-Optimization-Study" /><category term="Hands-On-LLM-Serving-and-Optimization-Study-Week-6" /><summary type="html">EKS 컨트롤 플레인만 있는 상태에서 trn1.2xlarge 관리형 노드그룹을 붙이고, 미리 박혀 있던 AMI ID 때문에 막힌 지점을 풀어 보자.</summary></entry></feed>
