@@ -1,0 +1,1902 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[MLflow] 시스템 메트릭 로깅 - 2. 플랫폼 SDK에 얹기: 이름, cgroup 수집기, 원본 무수정 확장 - Eraser’s StudyLog</title>
+<meta name="description" content="MLflow 원본을 고치지 않고 pod 내 시스템 메트릭 로깅 문제를 해결한 과정에 대해 정리해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[MLflow] 시스템 메트릭 로깅 - 2. 플랫폼 SDK에 얹기: 이름, cgroup 수집기, 원본 무수정 확장">
+<meta property="og:url" content="https://sirzzang.github.io//dev/Dev-MLflow-System-Metrics-Platform-SDK/">
+
+
+  <meta property="og:description" content="MLflow 원본을 고치지 않고 pod 내 시스템 메트릭 로깅 문제를 해결한 과정에 대해 정리해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-09-23T00:00:00+09:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//dev/Dev-MLflow-System-Metrics-Platform-SDK/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[MLflow] 시스템 메트릭 로깅 - 2. 플랫폼 SDK에 얹기: 이름, cgroup 수집기, 원본 무수정 확장">
+    <meta itemprop="description" content="MLflow 원본을 고치지 않고 pod 내 시스템 메트릭 로깅 문제를 해결한 과정에 대해 정리해 보자.">
+    <meta itemprop="datePublished" content="2026-09-23T00:00:00+09:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[MLflow] 시스템 메트릭 로깅 - 2. 플랫폼 SDK에 얹기: 이름, cgroup 수집기, 원본 무수정 확장
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-09-23T00:00:00+09:00">2026년 09월 23일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  29 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#들어가며">들어가며</a></li>
+  <li><a href="#플랫폼-쪽-고려사항">플랫폼 쪽 고려사항</a>
+    <ul>
+      <li><a href="#1-의존성">1. 의존성</a></li>
+      <li><a href="#2-활성화-지점">2. 활성화 지점</a>
+        <ul>
+          <li><a href="#환경변수">환경변수</a></li>
+          <li><a href="#sdk-함수">SDK 함수</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#설계-이름과-수집기">설계: 이름과 수집기</a>
+    <ul>
+      <li><a href="#원칙">원칙</a></li>
+      <li><a href="#범위-접두">범위 접두</a></li>
+      <li><a href="#rank-접미와-노드-단">rank 접미와 노드 단</a></li>
+      <li><a href="#cgroup-수집기">cgroup 수집기</a></li>
+      <li><a href="#working-set">working set</a></li>
+      <li><a href="#판정축">판정축</a></li>
+      <li><a href="#중복-처리">중복 처리</a></li>
+      <li><a href="#결과-표면">결과 표면</a></li>
+    </ul>
+  </li>
+  <li><a href="#구현-원본-무수정-확장">구현: 원본 무수정 확장</a>
+    <ul>
+      <li><a href="#중점">중점</a></li>
+      <li><a href="#합성과-프록시">합성과 프록시</a></li>
+      <li><a href="#확장점">확장점</a></li>
+      <li><a href="#런타임-탐지">런타임 탐지</a></li>
+      <li><a href="#계약-테스트">계약 테스트</a></li>
+      <li><a href="#실패-정책">실패 정책</a></li>
+      <li><a href="#노드-식별">노드 식별</a></li>
+      <li><a href="#파드-단위-중복-제거">파드 단위 중복 제거</a></li>
+      <li><a href="#재진입과-종료-순서">재진입과 종료 순서</a></li>
+    </ul>
+  </li>
+  <li><a href="#결과">결과</a>
+    <ul>
+      <li><a href="#배치와-계열">배치와 계열</a></li>
+      <li><a href="#노드-값과-컨테이너-값">노드 값과 컨테이너 값</a></li>
+      <li><a href="#같은-노드의-두-rank">같은 노드의 두 rank</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-자료">참고 자료</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li><a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/">이전 글</a>에서 pod 안에서 켠 CPU·메모리가 노드 값이고, 같은 노드의 rank끼리 복제된다는 것을 확인했다. 이 글은 그 위에서 플랫폼 SDK가 한 일이다</li>
+  <li>켜는 자리는 환경변수가 아니라 SDK 함수 하나로 모았다. 모니터는 <code class="highlighter-rouge">start_run</code>을 부른 프로세스마다 생겨서, 환경변수로 켜면 워커 수 + 1개가 같은 키에 섞여 쓴다</li>
+  <li>이름이 범위를 말하게 했다. 노드를 재는 계열에 <code class="highlighter-rouge">node_</code>, 컨테이너 루트 파일시스템에 <code class="highlighter-rouge">rootfs_</code>를 붙이고 rank는 이름 끝에 달았다. 여기에 cgroup 한도 대비 working set을 재는 <code class="highlighter-rouge">container_</code> 계열을 더했다. 켤 기준은 “제출인가 로컬인가”가 아니라 “cgroup 한도가 실재하는가”다</li>
+  <li>중복은 두 층이라 다르게 다뤘다. 한 파드에 rank가 여럿 뜨는 파드 중복은 <code class="highlighter-rouge">LOCAL_RANK</code>로 조율 없이 지웠고, 같은 노드의 파드끼리 겹치는 노드 중복은 이름에 노드를 한 단 끼워 보이게만 했다. 집합 연산으로 맞추는 안은 워커 하나가 늦으면 학습이 멈춰서 버렸다</li>
+  <li>MLflow 원본은 한 줄도 고치지 않는다. 수집기 리스트라는 확장점에 얹고, 이름은 프록시로 바꾸고, 문서 밖 표면 의존은 계약 테스트로 잠근다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="들어가며">들어가며</h1>
+
+<p><a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/">이전 글</a>에서 pod 안에서 켠 MLflow 시스템 메트릭이 무엇을 재는지를 따라갔다. MLflow는 재지 않고 psutil이 <code class="highlighter-rouge">/proc</code> 파일을 읽으며, <code class="highlighter-rouge">/proc/stat</code>·<code class="highlighter-rouge">/proc/meminfo</code>는 어떤 namespace로도 격리되지 않아 pod 안에서도 노드 값이 나온다.</p>
+
+<p>그 결과를 메트릭 계열별로 분류해 보면 아래와 같았다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>계열</th>
+      <th>psutil 호출</th>
+      <th>읽는 것</th>
+      <th>여는 프로세스의 namespace에 따라 내용이 다른가</th>
+      <th>재는 범위</th>
+      <th>같은 노드 rank끼리</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">cpu_utilization_percentage</code></td>
+      <td><code class="highlighter-rouge">cpu_percent()</code></td>
+      <td><code class="highlighter-rouge">/proc/stat</code></td>
+      <td><strong>아니오</strong></td>
+      <td><strong>노드</strong></td>
+      <td>같은 값</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">system_memory_usage_*</code></td>
+      <td><code class="highlighter-rouge">virtual_memory()</code></td>
+      <td><code class="highlighter-rouge">/proc/meminfo</code></td>
+      <td><strong>아니오</strong></td>
+      <td><strong>노드</strong></td>
+      <td>같은 값</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">disk_*</code></td>
+      <td><code class="highlighter-rouge">disk_usage('/')</code></td>
+      <td>컨테이너 rootfs <code class="highlighter-rouge">statvfs</code></td>
+      <td><strong>예</strong> (mount ns)</td>
+      <td><strong>컨테이너 루트 FS</strong> (노드 디스크가 backing)</td>
+      <td>같은 값</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">network_*</code></td>
+      <td><code class="highlighter-rouge">net_io_counters()</code></td>
+      <td><code class="highlighter-rouge">/proc/net/dev</code></td>
+      <td><strong>예</strong> (network ns)</td>
+      <td><strong>pod</strong></td>
+      <td>다른 값</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">gpu_0_*</code></td>
+      <td>pynvml</td>
+      <td>NVML</td>
+      <td><strong>아니오</strong> (namespace 아님 — 런타임이 넣어 준 장치 파일)</td>
+      <td><strong>그 컨테이너의 GPU</strong></td>
+      <td>다른 값</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>한 접두(<code class="highlighter-rouge">system/</code>) 아래 성질이 넷인 계열이 섞여 있고, 메트릭 이름은 그 사실을 말하지 않는다. 요구의 배경이 OOM 진단이었으므로, 노드 기준 24%를 컨테이너 기준으로 읽으면 반대 방향의 판단을 부른다고 헀다. OOM 자체는 플랫폼이 대신 막아 줄 영역이 아니지만, 어디까지 썼는지를 올바르게 보여 주는 것은 플랫폼 몫이었다.</p>
+
+<p>이 글은 그 몫을 어떻게 했는지에 대해 다룬다. 배경이 되는 플랫폼은 Kubernetes 위의 KubeRay·Ray Train이고, 실험 기록은 플랫폼 SDK가 MLflow를 감싸 제공한다. ML 엔지니어는 함수 하나를 부르고, 어느 프로세스가 어느 run에 어떤 이름으로 쓸지는 플랫폼이 정한다(<a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/#기록-표면의-분업">이전 글의 기록 표면의 분업</a>). 시스템 메트릭도 같은 분업으로 얹는다.</p>
+
+<p><strong>이 글에 나오는 선택들은 정답이 아니며, 앞 글에서 다룬 문제를 어떻게 해결할 수 있는지 하나의 예시  일 뿐이라는 점을 명확히 해 둔다.</strong> 파드 하나가 GPU 한 장이고, 워커를 어느 노드에 둘지는 Ray Train이 쥐고 있으며, MLflow는 버전을 고정해 이미지 밖에서 주입한다. 그런 제약 위에서 고른 답이라 제약이 달라지면 답도 달라진다. 실제로 채택한 안보다 검토하고 접은 안이 많고, 옳다고 보면서도 지금은 하지 않기로 한 것도 있다. 그래서 무엇을 골랐는지만큼 무엇과 견주어 골랐는지를 같이 적었다. 초도 구현이라 운영하면서 뒤집힐 수 있는 자리도 그대로 남겨 두었다.</p>
+
+<p><br /></p>
+
+<h1 id="플랫폼-쪽-고려사항">플랫폼 쪽 고려사항</h1>
+
+<p>컨테이너 안에서 켠다는 것에는 이전 글에서 다룬 측정 범위 말고도 플랫폼이 챙겨야 할 것이 둘 있다. psutil과 pynvml이 컨테이너 안에 있어야 한다는 의존성과, 누가 어디서 켜느냐는 활성화 지점이다.</p>
+
+<h2 id="1-의존성">1. 의존성</h2>
+
+<p>psutil과 nvidia-ml-py가 컨테이너 안에 있어야 한다. 이 플랫폼을 쓰는 학습 이미지를 모두 확인했는데, 이미지마다 psutil 존재 여부가 달랐다. psutil은 <code class="highlighter-rouge">CPUMonitor</code> 모듈이 import 시점에 요구하는 하드 의존이라, 없으면 <code class="highlighter-rouge">SystemMetricsMonitor</code> 자체가 만들어지지 않는다. pynvml은 소프트 의존이라 없으면 GPU 계열만 빠진다.</p>
+
+<p>학습 이미지마다 추가하는 것은 공수가 크기 때문에, <strong>플랫폼이 컨테이너 시작 시점에 주입해줄 수 있는 방법을 찾는 것이 좋다</strong>. 현재 플랫폼은 워커 컨테이너를 시작할 때 이미지 밖에서 런타임 패키지 묶음(mlflow-skinny, boto3 등)을 넣어 준다. <code class="highlighter-rouge">sitecustomize</code>가 이 묶음의 경로를 <code class="highlighter-rouge">sys.path</code> <strong>말미</strong>에 append하므로, 이미지에 이미 설치된 패키지가 있으면 그것이 우선하고 없을 때만 주입분이 채운다. 이 묶음에 psutil과 nvidia-ml-py를 추가했다.</p>
+
+<div class="language-toml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 플랫폼 SDK의 pyproject.toml — 워커 컨테이너에 주입되는 런타임 묶음</span>
+<span class="nn">[project.optional-dependencies]</span>
+<span class="py">runtime</span> <span class="p">=</span> <span class="p">[</span><span class="s">"mlflow-skinny"</span><span class="p">,</span> <span class="s">"boto3"</span><span class="p">,</span> <span class="s">"psutil"</span><span class="p">,</span> <span class="s">"nvidia-ml-py"</span><span class="p">]</span>
+</code></pre></div></div>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 주입 마운트의 boot/sitecustomize.py (간략화)</span>
+<span class="c"># 차트가 PYTHONPATH=&lt;mount&gt;/boot 를 걸어 두어, 컨테이너 안 모든 python 프로세스가 기동 시 이 파일을 지난다</span>
+<span class="n">deps</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">_ROOT</span><span class="p">,</span> <span class="s">'deps'</span><span class="p">,</span> <span class="n">f</span><span class="s">'cp{sys.version_info[0]}{sys.version_info[1]}'</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">deps</span><span class="p">):</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">deps</span><span class="p">)</span>   <span class="c"># 말미에 붙인다. 이미지에 이미 있는 패키지가 항상 이긴다</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<p>어느 쪽이 쓰였는지 감사해야 할 필요를 대비해 psutil이 import된 경로가 주입 마운트 아래인지로 판정해 MLflow run 태그로 남긴다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mlplatform.sysmetrics.deps = image      # psutil과 pynvml 둘 다 이미지에 있던 것
+                           = injected   # 둘 다 주입분
+                           = mixed      # 하나는 이미지, 하나는 주입분
+</code></pre></div></div>
+
+<p>그런데 태그에 <code class="highlighter-rouge">image</code> 값이 남았다고 해서 곧 “이미지가 설치했다”는 뜻은 아니다. 제출 경로의 워커는 전부 Ray 위에서 도는데, Ray는 psutil을 자기 <code class="highlighter-rouge">thirdparty_files/</code> 아래에 벤더링해 두고 그 경로를 <code class="highlighter-rouge">sys.path</code> <strong>맨 앞</strong>에 넣는다. 주입분은 말미에 붙으니 순서가 이렇게 된다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sys.path  [0]   &lt;ray&gt;/thirdparty_files/    ← Ray가 벤더링한 psutil. 항상 여기서 잡힌다
+          [...] 이미지의 site-packages
+          [-1]  &lt;주입 마운트&gt;/deps/cp310/     ← 주입분. psutil은 여기까지 내려오지 않는다
+</code></pre></div></div>
+
+<p>그러니 이미지에 psutil이 있든 없든, 주입분이 있든 없든, 제출 경로에서 import되는 psutil은 Ray의 사본이다. 프로브 run에서 <code class="highlighter-rouge">psutil.__file__</code>을 찍어 확인했다. 주입이 이 경로에서 실제로 메우는 구멍은 nvidia-ml-py 쪽뿐인 셈이다.</p>
+
+<p>그렇다고 psutil 주입을 걷어내도 된다는 말은 아니다. 근거가 “Ray가 벤더본을 앞에 둔다”는 성질 하나에 걸려 있어서, Ray를 거치지 않는 실행 방식 경로에서는 무너진다. 다만 태그를 붙여 두지 않았으면 이 사실 자체를 모르고 지나갔을 것이다.</p>
+
+<p>여기에는 한 가지 사소한 함정도 있다. nvidia-ml-py는 <code class="highlighter-rouge">pynvml.py</code> 옆에 top-level <code class="highlighter-rouge">example.py</code>를 같이 까는데, 주입 경로는 컨테이너 안 모든 python 프로세스의 <code class="highlighter-rouge">sys.path</code>에 붙으므로 누군가의 <code class="highlighter-rouge">import example</code>이 그 예제 파일을 집을 수 있다. 말미라 위험은 낮지만 걷어내는 비용이 한 줄이라 payload에서 지운다. 이 글에서 의존성은 여기까지만 다룬다.</p>
+
+<h2 id="2-활성화-지점">2. 활성화 지점</h2>
+
+<p>두 번째는 누가, 어디서 켜느냐다. <a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/#활성화와-기록-지표">활성화와 기록 지표</a> 절에서 본 대로 MLflow를 켜는 방법은 셋이고(함수, <code class="highlighter-rouge">start_run</code> 인자, 환경변수), <a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/#측정-위치">측정 위치</a> 절에서 본 대로 모니터는 <code class="highlighter-rouge">start_run</code>을 부른 프로세스마다 생긴다. 그런데 제출 경로에서 <code class="highlighter-rouge">start_run</code>은 <a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/#기록-표면의-분업">기록 표면의 분업</a> 절에서 본 대로 플랫폼이 부르고, 그 호출은 ML 엔지니어의 학습 함수가 시작되기 전에 끝나 있다. 켜는 방법 셋 중 둘이 <code class="highlighter-rouge">start_run</code> 시점에 걸리는데 그 시점이 이미 지나 있다는 뜻이다. 그러니 시스템 메트릭 로깅은 지금 상태로는 ML 엔지니어가 켤 수 없다. 켤 수 있으려면 그 자리를 플랫폼이 따로 마련해야 한다.</p>
+
+<h3 id="환경변수">환경변수</h3>
+
+<p>가장 먼저 떠오르는 방법은 <code class="highlighter-rouge">MLFLOW_ENABLE_SYSTEM_METRICS_LOGGING=true</code>를 워커 pod의 환경변수로 심는 것이다. 코드 변경이 없고 IR(제출 명세)에 한 줄이면 된다. 그런데 <a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/#측정-위치">측정 위치</a> 절에서 본 성질을 다시 보자. 모니터 스레드는 <strong><code class="highlighter-rouge">start_run</code>을 부른 프로세스마다</strong> 생긴다.</p>
+
+<p>제출 경로에서 <code class="highlighter-rouge">start_run</code>을 부르는 프로세스는 하나가 아니다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>누가</th>
+      <th>언제</th>
+      <th>무엇을 하나</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>driver (head)</td>
+      <td>제출 시작</td>
+      <td>run을 만든다</td>
+    </tr>
+    <tr>
+      <td>rank 0의 워커 준비 단계</td>
+      <td>워커 시작</td>
+      <td>그 run에 붙는다</td>
+    </tr>
+    <tr>
+      <td>rank 1 이상의 학습 함수</td>
+      <td>ML 엔지니어가 관례대로 <code class="highlighter-rouge">with tracking.start_run():</code>을 쓸 때</td>
+      <td>같은 run에 붙는다. SDK는 어느 rank에서 불러도 안전하도록 이 호출을 막지 않는다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>환경변수는 이 모든 <code class="highlighter-rouge">start_run</code>이 집어 든다. 워커 16개면 모니터가 17개 생기고, 접두 없는 같은 키에 독립된 step으로 섞여 쓰인다. 경고도 예외도 없다.</p>
+
+<h3 id="sdk-함수">SDK 함수</h3>
+
+<p>켜는 자리는 SDK 함수 하나로 모았다. 환경변수처럼 모든 프로세스가 집어 드는 것이 아니라 부른 쪽이 분명하고, 인자를 받을 수 있어 어느 워커가 수집할지를 그 안에서 정할 수 있다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">from</span> <span class="nn">mlplatform_sdk</span> <span class="kn">import</span> <span class="n">tracking</span>
+
+<span class="n">tracking</span><span class="o">.</span><span class="n">enable_system_metrics</span><span class="p">()</span>                  <span class="c"># 기본: 워커 하나만</span>
+<span class="n">tracking</span><span class="o">.</span><span class="n">enable_system_metrics</span><span class="p">(</span><span class="n">all_workers</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>  <span class="c"># 전 워커</span>
+<span class="n">tracking</span><span class="o">.</span><span class="n">enable_system_metrics</span><span class="p">(</span><span class="n">interval</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">samples</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>  <span class="c"># 60초당 1점</span>
+</code></pre></div></div>
+
+<p>그리고 플랫폼 진입점(driver 시작, 워커 준비 단계, 로컬 실행 진입)에서 그 환경변수를 걷어낸다. 걷어낼 때는 “무시합니다”를 로그에 남긴다. 왜 안 켜졌는지의 답이 어딘가에 남아야 하기 때문이다.</p>
+
+<p>인자가 rank 집합(<code class="highlighter-rouge">ranks=[0, 2]</code>)이 아니라 <code class="highlighter-rouge">all_workers</code> 불리언인 이유는 짧다. “몇 번 rank”는 사용자의 의도가 아니라 플랫폼의 구현이다. 사용자의 의도는 “하나만 볼래”와 “전부 볼래” 둘이고, 그것을 rank로 번역하는 답은 환경마다 다르다. 번역은 플랫폼 쪽에 두었다.</p>
+
+<p>부르는 자리에도 규칙이 있다. <strong>run이 열린 직후, 데이터로더와 모델을 만들기 전</strong>이다. 제출 경로면 학습 함수의 첫 줄이고, 로컬이면 <code class="highlighter-rouge">start_run()</code> 바로 다음이다. 늦게 부르면 그 앞 구간이 기록에서 통째로 빠지는데, 데이터셋을 여는 그 구간이 하필 메모리가 튀는 자리다. 문서에 적어 두고도 우리 예제 세 개가 전부 어기고 있었다. 셋 다 데이터와 모델을 만든 뒤에 부르고 있었고, 어기는 정도도 로컬과 제출에서 달랐다.</p>
+
+<p>주기에는 플랫폼이 건 상한이 하나 있다. 수집하는 워커가 넷을 넘으면 주기를 <code class="highlighter-rouge">10 × ⌈n/4⌉</code>초로 자동으로 올린다. 이것은 MLflow 원본에 없는 규칙이고, 원본에 있을 이유도 없었다. <code class="highlighter-rouge">mlflow/system_metrics/</code> 아래 어디에도 rank나 world_size 개념이 없다. 원본의 전제는 run 하나에 모니터 하나여서 서버로 가는 쓰기가 워커 수와 무관한데, <code class="highlighter-rouge">all_workers</code>를 플랫폼이 만들면서 그 전제가 깨졌다. 8워커면 여덟 배다. 그래서 “워커 넷까지의 부하”를 상한으로 잡는 규칙을 플랫폼 쪽에 넣었다. <code class="highlighter-rouge">n</code>은 rank 수가 아니라 실제 수집기 수다. 뒤의 <a href="#파드-단위-중복-제거">파드 단위 중복 제거</a>로 줄어든 수가 여기에 들어간다.</p>
+
+<p><br /></p>
+
+<h1 id="설계-이름과-수집기">설계: 이름과 수집기</h1>
+
+<h2 id="원칙">원칙</h2>
+
+<p><a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/#요구사항">요구사항</a> 절에서 그어 둔 경계를 다시 가져오자. OOM을 대신 막아 주는 것이 아니라, 판단의 재료를 올바르게 주는 것이 플랫폼의 몫이다. 그러면 플랫폼이 할 수 있는 일은 둘로 보였다. 노드를 재는 계열이 노드를 잰다는 사실을 <strong>이름에서</strong> 드러내고, 사용자가 실제로 원하는 숫자, 즉 “이 컨테이너가 한도 대비 얼마나 썼나”를 <strong>같은 화면에</strong> 추가하는 것이다.</p>
+
+<p>둘 다 지표 이름과 차트를 건드리는 일이라, 그보다 싼 길을 먼저 따져 봤다. <strong>이름은 그대로 두고 런북에만</strong> “CPU·메모리 계열은 노드 값입니다”라고 적는 것이다. 채택하지 않았다. 사용자가 보는 것은 런북이 아니라 차트이고, 차트에 붙은 이름은 <code class="highlighter-rouge">system_memory_usage_percentage</code>다. 그 이름을 보면서 런북을 떠올려 이면을 해석하는 사람은 드물 것이다. 해석을 사용자에게 맡기는 쪽은 피하고 싶었다. 이 플랫폼에는 런북이 안내한 MLflow 검색 필터가 문법 오류라 그대로 붙여 넣으면 400이 나는 상태로 몇 달을 살아남은 적도 있다. 코드였으면 테스트가 잡았을 오류가, 산문이라 아무도 잡지 않았다.</p>
+
+<p><a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/#레퍼런스와-검토한-대안">레퍼런스와 검토한 대안</a> 절에서 Grafana 링크로 대신하는 안을 기각했지만, Grafana를 버리는 것은 아니다. 두 화면의 역할이 다르다. 같은 노드에 뜬 이웃 pod 때문에 내 학습이 느려지고 있는지는 노드 관점에서만 보이고, 그것은 Grafana의 노드 패널이 답한다. 반면 “내 컨테이너가 한도 대비 얼마인가”라는 실험 단위의 판정은 MLflow에서 loss 곡선 옆에 있어야 한다. 그리고 두 화면의 컨테이너 사용량 숫자는 같아야 한다. 이 조건이 뒤의 <a href="#working-set">working set</a> 선택을 결정한다.</p>
+
+<h2 id="범위-접두">범위 접두</h2>
+
+<p>MLflow 원본 키 중 오독하는 계열에만 범위 접두를 붙이기로 했다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>원본 키</th>
+      <th>새 이름</th>
+      <th>이유</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">cpu_utilization_percentage</code></td>
+      <td><code class="highlighter-rouge">node_cpu_utilization_percentage</code></td>
+      <td>노드 값</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">system_memory_usage_megabytes</code></td>
+      <td><code class="highlighter-rouge">node_memory_usage_megabytes</code></td>
+      <td>노드 값. <code class="highlighter-rouge">system_</code>은 뺀다. <code class="highlighter-rouge">node_system_memory</code>는 범위 단어가 겹치고, 아래 <code class="highlighter-rouge">container_memory_</code>와 짝으로 읽혀야 한다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">system_memory_usage_percentage</code></td>
+      <td><code class="highlighter-rouge">node_memory_usage_percentage</code></td>
+      <td>같음</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">disk_usage_*</code>, <code class="highlighter-rouge">disk_available_megabytes</code></td>
+      <td><code class="highlighter-rouge">rootfs_*</code></td>
+      <td>노드가 아니라 컨테이너 루트 파일시스템. <code class="highlighter-rouge">node_disk_available</code>이라 붙이면 “노드의 체크포인트 여유”로 읽힌다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">network_*</code></td>
+      <td>그대로</td>
+      <td>pod 값</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">gpu_0_*</code></td>
+      <td>그대로</td>
+      <td>그 컨테이너의 GPU</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>접두는 리터럴 목록이 아니라 규칙이다. <code class="highlighter-rouge">cpu_</code>로 시작하면 <code class="highlighter-rouge">node_cpu_</code>, <code class="highlighter-rouge">system_memory_</code>로 시작하면 <code class="highlighter-rouge">node_memory_</code>, <code class="highlighter-rouge">disk_</code>로 시작하면 <code class="highlighter-rouge">rootfs_</code>. MLflow가 같은 계열에 키를 추가해도 규칙이 낡지 않는다. 대신 규칙에 걸리지 않는 새 계열이 생기면 접두 없이 통과하는 구멍이 남는데, 그것은 구현 절의 <a href="#계약-테스트">계약 테스트</a>가 막는다.</p>
+
+<h2 id="rank-접미와-노드-단">rank 접미와 노드 단</h2>
+
+<p>rank는 이름의 <strong>끝</strong>에 붙인다. 노드 범위 계열에는 그 앞에 노드 이름을 한 단 더 끼운다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>system/gpu_0_utilization_percentage/rank0
+system/gpu_0_utilization_percentage/rank1
+system/container_memory_usage_percentage/rank0
+system/node_memory_usage_percentage/gpu-node-1/rank0      # 노드 범위 계열에만 노드가 한 단 더
+system/rootfs_usage_percentage/gpu-node-1/rank0
+</code></pre></div></div>
+
+<p>가장 먼저 떠오르는 방법은 MLflow의 <code class="highlighter-rouge">node_id</code>를 쓰는 것이다. <code class="highlighter-rouge">node_id="rank0"</code>을 주면 원본이 <code class="highlighter-rouge">system/rank0/&lt;지표&gt;</code>로 접두를 붙여 준다. 두 가지 이유로 쓰지 않았다.</p>
+
+<p>첫째, 정렬이 반대다. “어느 GPU가 노나”는 같은 지표를 rank에 걸쳐 비교하는 일이다. 접두로 붙이면 비교하려는 네 계열이 MLflow 차트 목록에서 rank당 계열 수만큼 떨어져 흩어진다. 접미로 붙이면 사전순으로 나란히 선다.</p>
+
+<p>둘째, <code class="highlighter-rouge">node_id</code>는 문서 밖 표면이다. MLflow 시스템 메트릭 가이드에는 <code class="highlighter-rouge">node_id</code>가 등장하지 않는다. <code class="highlighter-rouge">set_system_metrics_node_id()</code> 함수는 API 레퍼런스에만 있고, 환경변수 <code class="highlighter-rouge">MLFLOW_SYSTEM_METRICS_NODE_ID</code>는 소스에만 있다. 이름을 플랫폼이 직접 만들면 이 의존이 사라진다.</p>
+
+<p>rank 표기는 워커 하나만 수집할 때도 붙인다. 안 붙이면 기본 run과 전 워커 run을 한 차트에 겹칠 수 없다.</p>
+
+<p>노드 단은 <a href="#중복-처리">중복 처리</a>에서 검토한 안 가운데 하나(⑦)다. 노드 범위 여섯 계열(<code class="highlighter-rouge">node_*</code>·<code class="highlighter-rouge">rootfs_*</code>)은 같은 노드에 뜬 rank끼리 같은 사실을 각자 재는데, <code class="highlighter-rouge">…/rank0</code>·<code class="highlighter-rouge">…/rank3</code>만으로는 그 둘이 같은 노드인지 다른 노드인지 이름에서 읽을 수 없었다. MLflow UI는 이름의 마지막 세그먼트를 떼고 나머지로 섹션을 묶어 개수를 <code class="highlighter-rouge">(N)</code>으로 보여 준다. 노드를 끼우면 헤더가 <code class="highlighter-rouge">system/node_memory_usage_percentage/gpu-node-1 (3)</code>이 되고, 그 3이 곧 그 노드에 뜬 워커 수이자 같은 사실이 몇 벌 올라와 있는지다. 중복을 없애지는 않지만 보이게 한다.</p>
+
+<p><code class="highlighter-rouge">container_*</code>·<code class="highlighter-rouge">network_*</code>·<code class="highlighter-rouge">gpu_*</code>에는 끼우지 않는다. 같은 노드라도 값이 실제로 다르므로(실측: 같은 노드·다른 파드의 <code class="highlighter-rouge">container_memory_usage_megabytes</code>가 288 step 중 0회 일치) 노드로 묶으면 중복이 아닌 것을 중복처럼 보이게 한다. 노드 이름을 못 얻으면(<code class="highlighter-rouge">NODE_NAME</code> 없음) 끼우지 않는다. <code class="highlighter-rouge">unknown</code>을 이름에 박으면 그 run의 계열 이름이 통째로 달라져 과거 run과 대조가 끊긴다.</p>
+
+<p>같은 학습 코드를 노드 단 적용 전후로 한 번씩 돌려 나란히 놓은 화면이다. 왼쪽이 전, 오른쪽이 후다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/system-metrics-comparison-3.png" alt="같은 CPU 2워커 학습의 System metrics 탭. 왼쪽은 노드 단 적용 전으로 섹션 헤더가 system/node_cpu_utilization_percentage (2)이고, 오른쪽은 적용 후로 헤더에 노드 이름이 들어가 system/node_cpu_utilization_percentage/gpu-node-3 (2)이 된다" class="align-center" /></p>
+
+<p>헤더에 노드가 남고 <code class="highlighter-rouge">(2)</code>가 그 노드에서 올라온 벌수로 읽힌다. 컨테이너·네트워크 계열의 헤더는 전후가 같다.</p>
+
+<h2 id="cgroup-수집기">cgroup 수집기</h2>
+
+<p>이름을 고쳐도 사용자가 원하는 숫자는 아직 없다. 그래서 cgroup을 읽는 수집기 하나를 추가했다. 세 계열이다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>container_memory_usage_megabytes        working set
+container_memory_usage_percentage       working set / memory.max
+container_cpu_utilization_percentage    cpu.stat usage_usec 델타 / cpu.max 쿼터
+</code></pre></div></div>
+
+<p>퍼센트의 분모가 노드 총량이 아니라 <strong>컨테이너 한도</strong>다. 100%면 OOM 직전이다. 이 이름과 분모라면 24.5%를 보고 “여유가 많다”고 읽어도 틀리지 않는다.</p>
+
+<p>이름이 <code class="highlighter-rouge">pod_</code>가 아니라 <code class="highlighter-rouge">container_</code>인 이유도 적어 둔다. <code class="highlighter-rouge">/sys/fs/cgroup/memory.max</code>는 컨테이너의 값이다. 같은 pod의 로그 수집 사이드카는 별도의 한도(예: 256Mi)를 따로 받는다. 이름이 재는 대상을 그대로 말하게 하고 싶었다.</p>
+
+<h2 id="working-set">working set</h2>
+
+<p>분자를 <code class="highlighter-rouge">memory.current</code>로 두면 이번에는 반대쪽으로 틀린다. <code class="highlighter-rouge">memory.current</code>는 익명 메모리에 page cache와 커널 메모리를 더한 값이다. 데이터셋을 NFS에서 계속 읽는 학습은 page cache가 한도까지 차서 머문다. 그 캐시는 압박이 오면 회수되므로 OOM과 무관한데, 그대로 쓰면 퍼센트가 95~100%에 붙는다. 노드 값을 그대로 보여 줬을 때와 반대 방향으로 틀린 판단(“배치를 줄여라”)을 부른다.</p>
+
+<p>그래서 분자는 <strong>working set</strong>이다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>working set = memory.current − memory.stat 의 inactive_file
+</code></pre></div></div>
+
+<p>이것은 kubelet과 cAdvisor가 쓰는 정의이고, Docker도 같은 보정을 한다.</p>
+
+<blockquote>
+  <p>The kubelet excludes inactive_file (the number of bytes of file-backed memory on the inactive LRU list) from its calculation, as it assumes that memory is reclaimable under pressure.
+— <a href="https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/">Kubernetes, Node-pressure Eviction</a></p>
+</blockquote>
+
+<blockquote>
+  <p>On Linux, the Docker CLI reports memory usage by subtracting cache usage from the total memory usage.
+— <a href="https://docs.docker.com/reference/cli/docker/container/stats/">docker container stats</a></p>
+</blockquote>
+
+<p>같은 정의를 쓰면 Grafana의 <code class="highlighter-rouge">container_memory_working_set_bytes</code> 패널과 MLflow의 <code class="highlighter-rouge">container_memory_usage_megabytes</code>가 같은 숫자를 보여 준다. 두 화면이 어긋나면 어느 쪽을 믿어야 할지 사용자가 판단해야 한다. 그것도 피하고 싶었다.</p>
+
+<p>“OOM이 났나”의 결정적 답은 퍼센트 차트가 아니라 카운터다. run이 끝날 때 <code class="highlighter-rouge">memory.events</code>의 <code class="highlighter-rouge">oom_kill</code> 횟수와 peak 메모리를 태그로 남긴다. 커널의 <code class="highlighter-rouge">memory.peak</code>는 5.19 이상에서만 있어서(이 클러스터의 학습 노드는 5.15이고, <a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/#격리되는-파일-격리되지-않는-파일">실측 pod</a> 안에 그 파일이 없는 것도 확인했다) 표본에서 본 최대 working set을 따로 기록한다. 둘은 뜻이 다르므로 다른 이름으로 남긴다.</p>
+
+<h2 id="판정축">판정축</h2>
+
+<p>이 수집기를 언제 붙이는가. 처음 떠오른 축은 “제출인가 로컬인가”였다. 채택하지 않았다. 판정축은 <strong>“cgroup 한도가 실재하는가”</strong>로 잡았다. 이유가 셋이다.</p>
+
+<ol>
+  <li>인터랙티브 세션도 pod다. “로컬처럼 쓰는 컨테이너”라서, “제출이면 컨테이너 기준”으로 갈라 놓으면 거기서 틀린다. 한도로 판정하면 베어 호스트·인터랙티브 세션·제출 세 경로가 한 코드로 맞는다</li>
+  <li>베어 호스트에서는 자동으로 꺼진다. 호스트의 <code class="highlighter-rouge">memory.max</code>는 보통 <code class="highlighter-rouge">max</code>(무제한)라 탐지가 실패하고 <code class="highlighter-rouge">container_</code> 계열이 붙지 않는다. 로컬은 별도 분기 없이 지금 모양 그대로다</li>
+  <li>환경을 추정하기보다 한도 파일을 직접 읽는 편이 확실하다. “제출인가”는 플랫폼이 심은 환경변수로 추정하는 것이고, “한도가 있나”는 그 자리에서 읽는 사실이다</li>
+</ol>
+
+<p>그리고 덮어쓰지 않고 <strong>더하기로 했다</strong>. <code class="highlighter-rouge">system_memory_usage_percentage</code>를 환경에 따라 노드 값이었다가 컨테이너 값이었다가 하게 만들면, 같은 키가 두 뜻을 갖는다. 그러면 로컬 run과 제출 run을 한 차트에 겹칠 수 없다. 노드 계열은 접두만 바꿔 그대로 두고, 컨테이너 계열 셋을 추가한다.</p>
+
+<h2 id="중복-처리">중복 처리</h2>
+
+<p>전 워커 수집에는 같은 사실이 여러 번 올라가는 중복이 있다. 두 층이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>층</th>
+      <th>언제</th>
+      <th>무엇이 겹치나</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>노드 중복</strong></td>
+      <td>rank 둘이 같은 <strong>노드</strong>의 다른 파드에 뜸. GPU 워커는 파드당 GPU 1장이라 rank마다 파드가 갈리고, 노드에는 파드가 여럿 뜬다</td>
+      <td><code class="highlighter-rouge">node_*</code>·<code class="highlighter-rouge">rootfs_*</code> 6계열</td>
+    </tr>
+    <tr>
+      <td><strong>파드 중복</strong></td>
+      <td>rank 둘이 같은 <strong>파드</strong>에 뜸. CPU 워커는 Ray Train이 rank를 한 파드에 몰아넣는다</td>
+      <td>11계열 전부. cgroup도 network namespace도 같다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>실측에서 8워커 GPU 제출이 노드 넷에 둘씩 뜬 적도, 노드 셋에 3·2·3으로 뜬 적도 있다. 몇 대에 갈리는지를 정하는 것은 GPU 수가 아니라 워커당 CPU·메모리 선언과 노드 용량이다 — 같은 4워커라도 선언이 달라지면 배치가 달라진다. 노드 중복의 “같다”는 값이 똑같다는 뜻이 아니다. 같은 노드의 두 rank가 올린 <code class="highlighter-rouge">node_memory_usage_megabytes</code>는 288 step 중 한 번도 같지 않았고 최대 7.3 GB 벌어졌다. 두 rank가 같은 호스트의 <code class="highlighter-rouge">/proc/meminfo</code>를 읽되 읽는 시각이 다르기 때문이다. 퍼센트 계열이 대체로 맞는 것은 반올림이 그 차이를 가려서다. 정확히는 <strong>같은 사실을 다른 시각에 두 번 잰다</strong>. 반면 파드 중복은 같은 컨테이너의 같은 파일을 두 번 읽는 순수 복제다.</p>
+
+<p>없애려면 각 워커가 “나 말고 누가 같은 것을 재나, 그중 내가 첫 번째인가”를 알아야 한다. 검토한 안이 일곱이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>안</th>
+      <th>판정</th>
+      <th>이유</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>①</td>
+      <td>프로세스 그룹에서 <code class="highlighter-rouge">all_gather</code>로 노드별 최소 rank를 합의한다</td>
+      <td>기각</td>
+      <td>워커 하나가 그 자리에 오지 않으면 나머지가 타임아웃(120초)까지 멈추고, 그 run의 집계 기록 기능이 함께 죽는다. 이 함수는 가장 이른 자리에서 부르라고 안내하는데 그 자리는 프로세스 그룹이 아직 없을 수도 있다. 기록 기능이 학습을 멈출 수 있는 구조는 받을 수 없다</td>
+    </tr>
+    <tr>
+      <td>②</td>
+      <td>run 태그를 게시판으로 쓴다. 자기 태그를 쓰고 남의 태그를 읽어 앞선 rank가 있으면 건너뛴다</td>
+      <td>보류</td>
+      <td>기다리지 않으니 멈추지 않고, 잘못돼도 둘 다 올릴 뿐이다. 다만 뜨는 순서에 따라 계열 수가 6개도 12개도 되어 “차트만 보고 알 수 있다”는 목표를 깎는다</td>
+    </tr>
+    <tr>
+      <td>③</td>
+      <td>rank 0 하나만 노드 계열을 수집한다</td>
+      <td>기각</td>
+      <td>rank 0이 뜬 노드 말고 나머지 노드의 CPU·메모리가 통째로 사라진다. 이웃 pod 때문에 특정 노드만 느린 것을 볼 수 없다</td>
+    </tr>
+    <tr>
+      <td>④</td>
+      <td>켤 때 API로 “이 노드 계열이 이미 있나”를 조회하고 있으면 건너뛴다</td>
+      <td>기각</td>
+      <td>MLflow에 조건부 쓰기가 없어, 두 rank가 거의 동시에 조회하면 둘 다 없다고 보고 둘 다 쓴다. 비결정적인 데다 표본마다 API 읽기가 붙어 서버 부하가 두 배가 된다</td>
+    </tr>
+    <tr>
+      <td>⑤</td>
+      <td>접미를 rank 대신 노드로 한다. 같은 노드의 rank가 같은 키에 쓴다</td>
+      <td>기각</td>
+      <td>조율은 필요 없지만 한 키에 두 rank가 각자의 표본을 쓴다. 표본 시각이 어긋나 값이 십수 %p씩 튀므로 차트가 실재하지 않는 톱니를 그린다. MLflow는 계열 하나에 선 하나라 색으로 가를 수도 없다</td>
+    </tr>
+    <tr>
+      <td>⑥</td>
+      <td><code class="highlighter-rouge">LOCAL_RANK</code>로 파드 중복만 없앤다</td>
+      <td><strong>채택</strong></td>
+      <td>한 파드의 두 번째 rank는 <code class="highlighter-rouge">LOCAL_RANK</code>가 1이다(실측. <code class="highlighter-rouge">LOCAL_WORLD_SIZE</code>도 온다). 자기 환경변수 하나로 판단이 끝나 조율이 없고, 같은 파일을 다시 읽는 것이라 잃는 정보도 없다. 11계열 전부가 사라지므로 이득도 가장 크다</td>
+    </tr>
+    <tr>
+      <td>⑦</td>
+      <td>노드 범위 계열 이름에 노드를 한 단 끼운다</td>
+      <td><strong>채택</strong></td>
+      <td>중복을 없애지는 않지만 보이게 한다. rank마다 키가 갈려 톱니가 없고, 헤더의 <code class="highlighter-rouge">(N)</code>이 곧 중복 벌수다. 조율이 없다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>⑥과 ⑦은 배타적이지 않다. ⑥이 파드 중복을 지우고, ⑦이 남은 노드 중복을 보이게 한다. 둘 다 워커들끼리 말을 맞출 필요가 없다는 것이 ①~⑤와 갈리는 지점이다.</p>
+
+<p>노드 중복을 그대로 두는 이유는 용량이 제약이 아니어서다. 시스템 메트릭은 코드가 부르지 않아도 벽시계로 쌓이는 계열이라 행 수가 커 보이지만, 기본 주기로 16 rank가 하루에 쌓는 양이 약 914 MB(행당 약 433바이트)이고 백엔드 볼륨의 여유는 8.1 TB다. 16 rank가 쉬지 않고 돌아도 채우는 데 약 24년이다. 노드 중복을 없애면 28%가 줄어 24년이 33년이 될 뿐이다. 남은 감축 근거는 차트 수다. MLflow UI는 계열마다 차트를 따로 그리므로 16워커 전수는 차트 256개가 된다. 기록량이 아니라 이 차트 수가 실제 제약이 되면 ②를 꺼낸다.</p>
+
+<p>사용자 표면은 어느 경우에도 그대로다. 인자는 <a href="#활성화-지점">활성화 지점</a> 절에서 본 대로 <code class="highlighter-rouge">all_workers</code> 하나이고 rank 집합을 노출하지 않으므로, 나중에 판단이 바뀌어도 사용자 코드는 그대로다. 노드 이름을 어디서 읽는지는 구현 절의 <a href="#노드-식별">노드 식별</a>에서, <code class="highlighter-rouge">LOCAL_RANK</code>로 파드 중복을 지우는 코드는 <a href="#파드-단위-중복-제거">파드 단위 중복 제거</a>에서 다룬다.</p>
+
+<h2 id="결과-표면">결과 표면</h2>
+
+<p>rank당 16계열이 된다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>범위</th>
+      <th>계열</th>
+      <th>개수</th>
+      <th>이름</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>노드</td>
+      <td><code class="highlighter-rouge">node_cpu_utilization_percentage</code>, <code class="highlighter-rouge">node_memory_usage_{megabytes,percentage}</code></td>
+      <td>3</td>
+      <td><code class="highlighter-rouge">…/&lt;노드&gt;/rank&lt;N&gt;</code></td>
+    </tr>
+    <tr>
+      <td>컨테이너 루트 FS</td>
+      <td><code class="highlighter-rouge">rootfs_usage_{megabytes,percentage}</code>, <code class="highlighter-rouge">rootfs_available_megabytes</code></td>
+      <td>3</td>
+      <td><code class="highlighter-rouge">…/&lt;노드&gt;/rank&lt;N&gt;</code></td>
+    </tr>
+    <tr>
+      <td>pod</td>
+      <td><code class="highlighter-rouge">network_{receive,transmit}_megabytes</code></td>
+      <td>2</td>
+      <td><code class="highlighter-rouge">…/rank&lt;N&gt;</code></td>
+    </tr>
+    <tr>
+      <td>그 컨테이너의 GPU</td>
+      <td><code class="highlighter-rouge">gpu_0_*</code></td>
+      <td>5</td>
+      <td><code class="highlighter-rouge">…/rank&lt;N&gt;</code></td>
+    </tr>
+    <tr>
+      <td>컨테이너 한도 대비</td>
+      <td><code class="highlighter-rouge">container_memory_usage_{megabytes,percentage}</code>, <code class="highlighter-rouge">container_cpu_utilization_percentage</code></td>
+      <td>3</td>
+      <td><code class="highlighter-rouge">…/rank&lt;N&gt;</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>같은 노드에 뜬 파드끼리 <code class="highlighter-rouge">node_</code>·<code class="highlighter-rouge">rootfs_</code> 계열은 노드 단이 같은 채 rank만 다르게 올라간다. 16워커·4노드면 256계열이고, MLflow UI가 계열마다 차트를 따로 그리므로 차트도 256개다.</p>
+
+<p>CPU 2워커 학습 run의 System metrics 탭이다. 이름의 마지막 단인 rank를 떼고 묶여 <code class="highlighter-rouge">container_*</code> 계열마다 <code class="highlighter-rouge">(2)</code> 섹션이 서고, 그 안에 <code class="highlighter-rouge">/rank0</code>·<code class="highlighter-rouge">/rank1</code> 차트가 나란히 선다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/system-metrics.png" alt="CPU 2워커 run의 System metrics 탭. system/container_cpu_utilization_percentage (2), system/container_memory_usage_megabytes (2), system/container_memory_usage_percentage (2) 섹션이 있고, 각 섹션 안에 /rank0과 /rank1 차트가 나란히 있다" class="align-center" /></p>
+
+<p>읽을 때 주의할 것 넷을 지표 사전에 같이 적었다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">_megabytes</code>는 MB(10⁶ 바이트)이지 MiB가 아니다. MLflow 원본이 <code class="highlighter-rouge">/1e6</code>으로 낸다</li>
+  <li><code class="highlighter-rouge">network_*</code>는 속도가 아니라 기록 시작 시점을 0으로 둔 <strong>누적값</strong>이다. 단조 증가가 정상이고 기울기가 속도다</li>
+  <li><code class="highlighter-rouge">gpu_0_utilization_percentage</code>는 효율이 아니다. 커널이 하나라도 올라와 있는 시간의 비율이라 100%가 잘 쓰고 있다는 뜻이 아니다. 실제로 일하는지는 <code class="highlighter-rouge">gpu_0_power_usage_watts</code>가 더 잘 말한다</li>
+  <li>OOM 판정은 <code class="highlighter-rouge">container_memory_usage_*</code>로 한다. page cache를 뺀 working set이라 kubelet이 보는 기준과 같다. 실제로 죽었는지는 run 끝에 남는 <code class="highlighter-rouge">mlplatform.sysmetrics.oom_kill</code> 태그가 답한다</li>
+</ul>
+
+<p>전수를 켜면 기록량과 차트 수가 워커 수에 비례해 는다. 그 숫자는 사용자가 <strong>켜기로 결정하기 전에</strong> 볼 수 있어야 한다고 봤다. 그래서 안내를 세 지점에 뒀다. 제출 전 preflight가 예상 시간당 행 수와 차트 수를 계산해 보여 주고, 실행 중에는 워커마다 “계열 몇 개를 수집합니다” 한 줄이 찍히고, run이 끝나면 실제로 쓴 주기와 수집기 수가 태그로 남는다. 앞의 하나만 판단 자료다. 실행 중 stdout은 이미 켠 뒤에 나오므로 영수증이지 판단 자료가 아니다.</p>
+
+<p>ML 엔지니어의 코드는 한 줄이다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">tracking</span><span class="o">.</span><span class="n">enable_system_metrics</span><span class="p">(</span><span class="n">all_workers</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h1 id="구현-원본-무수정-확장">구현: 원본 무수정 확장</h1>
+
+<h2 id="중점">중점</h2>
+
+<p>구현에서 지킨 것은 셋이다.</p>
+
+<ol>
+  <li><strong>MLflow 원본 코드를 한 줄도 수정하지 않는다.</strong> 서브클래싱도, 몽키패치도 없다. 플랫폼은 MLflow를 버전 고정해서 주입하지만 포크를 유지하고 싶지는 않다</li>
+  <li><strong>환경을 묻지 않고 그 자리에서 읽는다.</strong> cgroup이 있는지, v1인지 v2인지, GPU가 있는지를 설정이 아니라 파일과 호출 결과로 판정한다</li>
+  <li><strong>관측 실패가 학습을 막지 않는다.</strong> 시스템 메트릭은 부가 기능이다. 어떤 이유로든 실패하면 한 줄 남기고 학습은 계속 간다</li>
+</ol>
+
+<h2 id="합성과-프록시">합성과 프록시</h2>
+
+<p>MLflow 원본에는 <code class="highlighter-rouge">BaseMetricsMonitor</code>라는 수집기의 기반 클래스가 있다. 처음 떠오른 방법은 이것을 상속해 cgroup 수집기를 만드는 것이었다. 그런데 이 클래스는 문서에 없다. 원본 <code class="highlighter-rouge">SystemMetricsMonitor</code>가 수집기에 요구하는 것은 <code class="highlighter-rouge">collect_metrics()</code>, <code class="highlighter-rouge">aggregate_metrics()</code>, <code class="highlighter-rouge">clear_metrics()</code> 세 메서드와 <code class="highlighter-rouge">_metrics</code> 속성뿐이다. 그래서 상속하지 않고 <strong>덕 타이핑(duck typing)</strong>으로 그 계약만 맞춘 보통 클래스로 만들었다. 문서 밖 클래스에 대한 의존이 하나 줄어든다.</p>
+
+<p>이름 변경도 같은 원칙이다. 원본의 <code class="highlighter-rouge">publish_metrics()</code>가 <code class="highlighter-rouge">system/</code> 접두를 붙이는 자리를 고치는 대신, 각 수집기를 얇은 <strong>프록시(proxy)</strong>로 감싸서 <code class="highlighter-rouge">aggregate_metrics()</code>가 돌려주는 dict의 키만 바꾼다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 원본 수집기를 감싸 범위 접두와 rank 접미를 붙이는 프록시 (간략화)</span>
+<span class="k">class</span> <span class="nc">NamedScope</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inner</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">node</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span> <span class="o">=</span> <span class="n">inner</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_suffix</span> <span class="o">=</span> <span class="n">f</span><span class="s">'/rank{rank}'</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_node</span> <span class="o">=</span> <span class="n">node</span> <span class="k">if</span> <span class="n">node</span> <span class="ow">and</span> <span class="n">node</span> <span class="o">!=</span> <span class="s">'unknown'</span> <span class="k">else</span> <span class="bp">None</span>
+
+    <span class="k">def</span> <span class="nf">_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="n">renamed</span> <span class="o">=</span> <span class="n">scope_rename</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>                          <span class="c"># cpu_ → node_cpu_ 등</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_node</span> <span class="ow">and</span> <span class="n">renamed</span><span class="o">.</span><span class="n">startswith</span><span class="p">((</span><span class="s">'node_'</span><span class="p">,</span> <span class="s">'rootfs_'</span><span class="p">)):</span>
+            <span class="k">return</span> <span class="n">f</span><span class="s">'{renamed}/{self._node}{self._suffix}'</span>    <span class="c"># 노드 범위 계열에만 노드 단</span>
+        <span class="k">return</span> <span class="n">renamed</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_suffix</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_name</span><span class="p">(</span><span class="n">k</span><span class="p">):</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">_metrics</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+
+    <span class="k">def</span> <span class="nf">collect_metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">collect_metrics</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">aggregate_metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_name</span><span class="p">(</span><span class="n">k</span><span class="p">):</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">aggregate_metrics</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+
+    <span class="k">def</span> <span class="nf">clear_metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">clear_metrics</span><span class="p">()</span>
+</code></pre></div></div>
+
+<p>원본 <code class="highlighter-rouge">publish_metrics()</code>는 각 수집기의 <code class="highlighter-rouge">aggregate_metrics()</code> 결과에 <code class="highlighter-rouge">system/</code>을 붙여 기록하므로, 프록시가 키를 바꿔 두면 최종 이름이 <code class="highlighter-rouge">system/node_memory_usage_percentage/rank0</code>이 된다. 원본은 자기가 프록시를 들고 있는지 모른다. 이것이 <strong>상속보다 합성(composition over inheritance)</strong>을 택한 이유다. 원본의 내부 동작에 끼어들지 않고 입출력만 감싼다.</p>
+
+<h2 id="확장점">확장점</h2>
+
+<p>cgroup 수집기를 붙이는 것은 한 줄이다. 원본 <code class="highlighter-rouge">SystemMetricsMonitor</code>가 수집기를 <strong>리스트</strong>로 들고 있기 때문이다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 시스템 메트릭을 켜는 핵심 (간략화)</span>
+<span class="n">mon</span> <span class="o">=</span> <span class="n">SystemMetricsMonitor</span><span class="p">(</span><span class="n">run_id</span><span class="p">,</span> <span class="n">node_id</span><span class="o">=</span><span class="bp">None</span><span class="p">)</span>      <span class="c"># node_id는 쓰지 않는다</span>
+
+<span class="n">cg</span> <span class="o">=</span> <span class="n">CgroupMonitor</span><span class="o">.</span><span class="n">detect</span><span class="p">()</span>                           <span class="c"># v2 → v1 → None</span>
+<span class="k">if</span> <span class="n">cg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+    <span class="n">mon</span><span class="o">.</span><span class="n">monitors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cg</span><span class="p">)</span>                           <span class="c"># 확장점: 수집기 리스트</span>
+
+<span class="n">mon</span><span class="o">.</span><span class="n">monitors</span> <span class="o">=</span> <span class="p">[</span><span class="n">NamedScope</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">node</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">mon</span><span class="o">.</span><span class="n">monitors</span><span class="p">]</span>
+
+<span class="n">mon</span><span class="o">.</span><span class="n">collect_metrics</span><span class="p">()</span>                                 <span class="c"># 첫 표본 (CPU 델타 기준점)</span>
+<span class="n">keys</span> <span class="o">=</span> <span class="n">mon</span><span class="o">.</span><span class="n">collect_metrics</span><span class="p">()</span>                          <span class="c"># 계열 수와 GPU 유무를 실측</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">k</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">'gpu_'</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">):</span>
+    <span class="n">warn</span><span class="p">(</span><span class="s">'GPU 지표는 제외됩니다 — nvidia-ml-py가 없거나 NVML 초기화에 실패했습니다.'</span><span class="p">)</span>
+
+<span class="n">mon</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+</code></pre></div></div>
+
+<p>수집기 리스트는 원본이 의도한 확장점은 아니지만, 확장점으로 쓸 수 있는 모양이다. 원본 코드를 수정하지 않고 동작을 확장한다는 점에서 <strong>개방-폐쇄 원칙(open-closed principle)</strong>의 모양이고, 리스트의 각 원소가 “무엇을 어떻게 잴지”를 캡슐화한다는 점에서 전략(strategy) 목록이기도 하다.</p>
+
+<p>다만 순서가 계약이다. cgroup 수집기를 append한 <strong>뒤에</strong> 프록시로 감싸야 <code class="highlighter-rouge">container_</code> 계열에도 rank 접미가 붙고, 감싼 <strong>뒤에</strong> <code class="highlighter-rouge">collect_metrics()</code>를 불러야 계열 수가 맞는다. GPU 유무는 <code class="highlighter-rouge">len(mon.monitors)</code>가 아니라 수집 결과의 키로 판정한다. cgroup 수집기를 더한 순간 리스트 길이가 늘어나므로 길이로 판정하면 영구히 틀린다.</p>
+
+<h2 id="런타임-탐지">런타임 탐지</h2>
+
+<p>cgroup 수집기의 생성은 <code class="highlighter-rouge">detect()</code> 팩토리가 맡는다. 설정을 읽지 않고 파일을 읽는다.</p>
+
+<pre><code class="language-mermaid">flowchart TD
+  A["detect()"] --&gt; B{"cgroup.controllers&lt;br/&gt;가 있나"}
+  B -- 있다 --&gt; V2["cgroup v2"]
+  B -- 없다 --&gt; V1["cgroup v1"]
+  V2 --&gt; M2["memory.max&lt;br/&gt;'max' 면 한도 없음"]
+  V2 --&gt; C2["cpu.max&lt;br/&gt;첫 필드가 'max' 면 쿼터 없음"]
+  V1 --&gt; M1["memory.limit_in_bytes&lt;br/&gt;2^62 이상이면 무제한"]
+  V1 --&gt; C1["cpu.cfs_quota_us&lt;br/&gt;÷ cpu.cfs_period_us"]
+  M2 --&gt; D{"메모리·CPU 중&lt;br/&gt;하나라도 한도를 읽었나"}
+  C2 --&gt; D
+  M1 --&gt; D
+  C1 --&gt; D
+  D -- 예 --&gt; Y["수집기를 만들어 리스트에 얹는다"]
+  D -- 아니오 --&gt; N["None&lt;br/&gt;container_ 계열 없이 한 줄 안내"]
+</code></pre>
+
+<p>한도가 없다는 것을 두 버전이 다른 방식으로 말한다. v2는 문자열 <code class="highlighter-rouge">max</code>를, v1은 <code class="highlighter-rouge">2^62</code> 근처의 큰 수를 돌려준다. 둘 다 “무제한”이라는 뜻인데 타입이 달라서, 읽는 쪽에서 각각 걸러야 한다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 컨테이너 한도 수집기의 생성 — 설정이 아니라 파일을 읽어 판정한다 (간략화)</span>
+<span class="k">class</span> <span class="nc">CgroupMonitor</span><span class="p">:</span>
+    <span class="n">_V1_UNLIMITED</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">62</span>                 <span class="c"># v1은 무제한을 9223372036854771712 류로 돌려준다</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">detect</span><span class="p">(</span><span class="n">cls</span><span class="p">):</span>
+        <span class="n">root</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">'MLPLATFORM_CGROUP_ROOT'</span><span class="p">)</span> <span class="ow">or</span> <span class="s">'/sys/fs/cgroup'</span>
+        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="s">'cgroup.controllers'</span><span class="p">)):</span>
+            <span class="n">mem</span><span class="p">,</span> <span class="n">cpu</span> <span class="o">=</span> <span class="n">cls</span><span class="o">.</span><span class="n">_v2_mem_limit</span><span class="p">(</span><span class="n">root</span><span class="p">),</span> <span class="n">cls</span><span class="o">.</span><span class="n">_v2_cpu_quota</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">cls</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">mem</span><span class="p">,</span> <span class="n">cpu</span><span class="p">)</span> <span class="k">if</span> <span class="p">(</span><span class="n">mem</span> <span class="ow">or</span> <span class="n">cpu</span><span class="p">)</span> <span class="k">else</span> <span class="bp">None</span>
+        <span class="n">mem</span><span class="p">,</span> <span class="n">cpu</span> <span class="o">=</span> <span class="n">cls</span><span class="o">.</span><span class="n">_v1_mem_limit</span><span class="p">(</span><span class="n">root</span><span class="p">),</span> <span class="n">cls</span><span class="o">.</span><span class="n">_v1_cpu_quota</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">cls</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">mem</span><span class="p">,</span> <span class="n">cpu</span><span class="p">)</span> <span class="k">if</span> <span class="p">(</span><span class="n">mem</span> <span class="ow">or</span> <span class="n">cpu</span><span class="p">)</span> <span class="k">else</span> <span class="bp">None</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_v2_cpu_quota</span><span class="p">(</span><span class="n">root</span><span class="p">):</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="n">_read_text</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="s">'cpu.max'</span><span class="p">))</span>      <span class="c"># 예: "800000 100000"</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="p">(</span><span class="n">raw</span> <span class="ow">or</span> <span class="s">''</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">'max'</span><span class="p">:</span>             <span class="c"># "max 100000" = 쿼터 없음</span>
+            <span class="k">return</span> <span class="bp">None</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">/</span> <span class="nb">int</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>                 <span class="c"># -&gt; 8.0 코어</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">_v1_mem_limit</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">root</span><span class="p">):</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="n">_read_text</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="s">'memory'</span><span class="p">,</span> <span class="s">'memory.limit_in_bytes'</span><span class="p">))</span>
+        <span class="n">val</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw</span> <span class="k">else</span> <span class="bp">None</span>
+        <span class="k">return</span> <span class="n">val</span> <span class="k">if</span> <span class="n">val</span> <span class="ow">and</span> <span class="n">val</span> <span class="o">&lt;</span> <span class="n">cls</span><span class="o">.</span><span class="n">_V1_UNLIMITED</span> <span class="k">else</span> <span class="bp">None</span>
+</code></pre></div></div>
+
+<p><a href="#working-set">working set</a> 절에서 정한 분자도 버전마다 파일과 키가 갈린다. 빼는 값의 이름이 v2에서는 <code class="highlighter-rouge">inactive_file</code>, v1에서는 <code class="highlighter-rouge">total_inactive_file</code>이다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="c"># 분자는 memory.current가 아니라 working set이다</span>
+    <span class="k">def</span> <span class="nf">_working_set</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_version</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">used</span> <span class="o">=</span> <span class="n">_read_text</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_root</span><span class="p">,</span> <span class="s">'memory.current'</span><span class="p">))</span>
+            <span class="n">inactive</span> <span class="o">=</span> <span class="n">_read_kv</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_root</span><span class="p">,</span> <span class="s">'memory.stat'</span><span class="p">),</span> <span class="s">'inactive_file'</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">used</span> <span class="o">=</span> <span class="n">_read_text</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_root</span><span class="p">,</span> <span class="s">'memory'</span><span class="p">,</span> <span class="s">'memory.usage_in_bytes'</span><span class="p">))</span>
+            <span class="n">inactive</span> <span class="o">=</span> <span class="n">_read_kv</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_root</span><span class="p">,</span> <span class="s">'memory'</span><span class="p">,</span> <span class="s">'memory.stat'</span><span class="p">),</span>
+                                <span class="s">'total_inactive_file'</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">used</span><span class="p">)</span> <span class="o">-</span> <span class="p">(</span><span class="n">inactive</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">))</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">&lt;root&gt;</code>는 기본이 <code class="highlighter-rouge">/sys/fs/cgroup</code>이지만 환경변수 하나로 바꿀 수 있다. 이유는 테스트다. cgroup이 없는 개발 기계(macOS)에서 이 세 계열을 검증할 방법이 없기 때문에, 테스트가 임시 디렉토리에 가짜 cgroup 트리를 만들고 루트를 그쪽으로 돌린다. mock 라이브러리 없이 v1과 v2 경로를 모두 돈다. 경로를 밖에서 넣어 주는 <strong>의존성 주입(dependency injection)</strong>의 가장 작은 형태다.</p>
+
+<h2 id="계약-테스트">계약 테스트</h2>
+
+<p>원본 코드를 수정하지 않는 대신, 원본의 문서 밖 표면에 기댄다. <code class="highlighter-rouge">monitors</code> 리스트, 프록시가 흉내 내는 <code class="highlighter-rouge">_metrics</code> 속성, 정지에 쓰는 <code class="highlighter-rouge">_shutdown_event</code>, 재개 step을 심는 <code class="highlighter-rouge">_logging_step</code>, 그리고 “환경변수가 인자를 이긴다”는 우선순위 규약과 원본 키 이름 집합이다.</p>
+
+<p>이런 의존의 위험은 “안 된다”가 아니라 “조용히 안 된다”에 있다. MLflow 버전을 올렸을 때 <code class="highlighter-rouge">monitors</code>가 다른 이름이 되면 append는 아무 예외 없이 아무 일도 하지 않는다. 그래서 의존하는 이름을 테스트 파일 하나에 모아 <strong>계약 테스트(contract test)</strong>로 고정한다. <code class="highlighter-rouge">SystemMetricsMonitor.__init__</code>의 시그니처에 <code class="highlighter-rouge">node_id</code>가 있는지, <code class="highlighter-rouge">monitors</code>가 리스트이고 원소가 세 메서드를 갖는지, 원본 소스에 <code class="highlighter-rouge">env.get() or 인자</code> 형태의 우선순위가 그대로 있는지, <code class="highlighter-rouge">CPUMonitor</code>·<code class="highlighter-rouge">DiskMonitor</code>·<code class="highlighter-rouge">NetworkMonitor</code>를 실제로 돌려 나온 키 집합이 정확히 8개인지를 단언한다.</p>
+
+<p>두 개만 옮겨 본다. 앞은 확장점 자체를, 뒤는 개명 규칙이 놓칠 수 있는 구멍을 잠근다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 원본의 문서 밖 표면을 한 파일에 모아 잠근다 (발췌)</span>
+<span class="k">def</span> <span class="nf">test_monitors_is_a_mutable_list_of_collectors</span><span class="p">():</span>
+    <span class="s">"""`monitors` 리스트를 우리가 읽고 쓴다 — cgroup 추가·이름 래핑·계열 수 실측·
+    GPU 판정이 전부 이 리스트를 지난다. 무너지면 넷이 동시에, 조용히 죽는다."""</span>
+    <span class="n">mon</span> <span class="o">=</span> <span class="n">SystemMetricsMonitor</span><span class="o">.</span><span class="n">__new__</span><span class="p">(</span><span class="n">SystemMetricsMonitor</span><span class="p">)</span>
+    <span class="n">mon</span><span class="o">.</span><span class="n">monitors</span> <span class="o">=</span> <span class="p">[</span><span class="n">CPUMonitor</span><span class="p">()]</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mon</span><span class="o">.</span><span class="n">monitors</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s">'collect_metrics'</span><span class="p">,</span> <span class="s">'aggregate_metrics'</span><span class="p">,</span> <span class="s">'clear_metrics'</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="nb">callable</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">mon</span><span class="o">.</span><span class="n">monitors</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">name</span><span class="p">))</span>
+    <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">mon</span><span class="o">.</span><span class="n">monitors</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">'_metrics'</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">test_upstream_series_key_names_are_stable</span><span class="p">():</span>
+    <span class="s">"""개명이 리터럴 목록이 아니라 규칙이라, 규칙에 안 걸리는 새 키는 접두 없이
+    통과한다. 그래서 키 집합 자체를 잠근다."""</span>
+    <span class="n">seen</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">mon</span> <span class="ow">in</span> <span class="p">(</span><span class="n">CPUMonitor</span><span class="p">(),</span> <span class="n">DiskMonitor</span><span class="p">(),</span> <span class="n">NetworkMonitor</span><span class="p">()):</span>
+        <span class="n">mon</span><span class="o">.</span><span class="n">collect_metrics</span><span class="p">()</span>
+        <span class="n">seen</span> <span class="o">|=</span> <span class="nb">set</span><span class="p">(</span><span class="n">mon</span><span class="o">.</span><span class="n">_metrics</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">seen</span> <span class="o">==</span> <span class="p">{</span>
+        <span class="s">'cpu_utilization_percentage'</span><span class="p">,</span>
+        <span class="s">'system_memory_usage_megabytes'</span><span class="p">,</span> <span class="s">'system_memory_usage_percentage'</span><span class="p">,</span>
+        <span class="s">'disk_usage_megabytes'</span><span class="p">,</span> <span class="s">'disk_usage_percentage'</span><span class="p">,</span> <span class="s">'disk_available_megabytes'</span><span class="p">,</span>
+        <span class="s">'network_receive_megabytes'</span><span class="p">,</span> <span class="s">'network_transmit_megabytes'</span><span class="p">,</span>
+    <span class="p">},</span> <span class="n">f</span><span class="s">'원본 계열 키가 바뀌었다 — 개명 규칙을 다시 본다: {sorted(seen)}'</span>
+</code></pre></div></div>
+
+<p>버전을 올리면 이 테스트가 먼저 실패한다. 이 파일이 깨졌을 때 할 일은 테스트를 고치는 것이 아니라 설계를 다시 보는 것이다. 마지막 항목은 <a href="#범위-접두">범위 접두</a> 절에서 남겨 둔 구멍을 막는다. 원본 키를 소스에 리터럴로 두지 않는 대신, 키 집합은 테스트가 보유한다.</p>
+
+<h2 id="실패-정책">실패 정책</h2>
+
+<p>관측 실패가 학습을 막지 않는다는 원칙을 상황마다 다른 강도로 적용한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>상황</th>
+      <th>동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>MLflow 미설정</td>
+      <td>조용히 반환</td>
+    </tr>
+    <tr>
+      <td>psutil 없음</td>
+      <td>경고 한 줄, 시스템 메트릭 전체 포기. 이유를 run 태그 <code class="highlighter-rouge">mlplatform.sysmetrics.skipped</code>에 남긴다</td>
+    </tr>
+    <tr>
+      <td>모니터 생성 실패</td>
+      <td>경고 한 줄, 포기</td>
+    </tr>
+    <tr>
+      <td>run이 수집 주기보다 짧음</td>
+      <td>계열 0개. 콘솔 한 줄 + run 태그 <code class="highlighter-rouge">mlplatform.warn.system_metrics_empty</code>에 <code class="highlighter-rouge">run &lt; 10s</code></td>
+    </tr>
+    <tr>
+      <td>GPU 미배정 (컨테이너에 <code class="highlighter-rouge">/dev/nvidia[0-9]*</code>가 없음)</td>
+      <td>안내 한 줄(경고 아님), <strong><code class="highlighter-rouge">gpu_</code> 계열만 제외</strong>. CPU 워커에서는 정상</td>
+    </tr>
+    <tr>
+      <td>nvidia-ml-py 없음</td>
+      <td>경고 한 줄, <code class="highlighter-rouge">gpu_</code> 계열만 제외. 플랫폼 주입 문제</td>
+    </tr>
+    <tr>
+      <td>GPU가 배정됐는데 NVML이 실패</td>
+      <td>경고 한 줄에 원문 오류를 실어, <code class="highlighter-rouge">gpu_</code> 계열만 제외. 드라이버 장애 신호</td>
+    </tr>
+    <tr>
+      <td>cgroup 한도 없음</td>
+      <td>안내 한 줄, <strong><code class="highlighter-rouge">container_</code> 계열만 제외</strong></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">NODE_NAME</code> 없음</td>
+      <td>rank 태그의 노드 이름이 <code class="highlighter-rouge">unknown</code>. 같은 노드 여부를 판별할 수 없을 뿐 기록은 그대로</td>
+    </tr>
+    <tr>
+      <td>run 태그 기록 실패</td>
+      <td>삼킴</td>
+    </tr>
+    <tr>
+      <td>정지 중 오류</td>
+      <td>경고 한 줄, 계속</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>조용히 실패하지 않는다는 원칙과 짝이다. 환경변수를 걷어내면 걷어냈다고, GPU 계열이 빠지면 빠졌다고, cgroup 계열이 안 붙으면 안 붙었다고 한 줄씩 남긴다. 사용자가 “왜 이 계열이 없지”를 물었을 때 답이 로그에 있어야 한다. 로그는 파드가 사라지면 같이 사라지므로, 아예 못 켠 경우는 run 태그에도 이유를 남긴다.</p>
+
+<p>GPU 세 줄은 처음에 한 줄이었다. MLflow 원본의 문구를 따라 “nvidia-ml-py가 없거나 NVML 초기화에 실패했습니다”로 뭉갰더니, CPU 워커에서 이 경고가 찍혀 “패키지가 안 깔렸나”로 읽혔다. NVML 오류 코드로 가르려 했는데 CPU 워커에서 실제로 오는 오류는 라이브러리 자체가 없다는 것이라 모든 CPU 워커에 드라이버 경고가 찍혔다. 판별 축을 오류 코드가 아니라 <strong>이 컨테이너에 GPU가 배정됐는가</strong>로 바꿨다. 배정 여부는 장치 파일(<code class="highlighter-rouge">/dev/nvidia[0-9]*</code>)의 존재로 본다. <code class="highlighter-rouge">NVIDIA_VISIBLE_DEVICES</code>는 쓸 수 없다. CPU 워커에서도 베이스 이미지가 세워 둔 <code class="highlighter-rouge">all</code>이 그대로 들어 있어서다. <a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/#gpu">이전 글의 GPU 절</a>에서 장치 파일만이 배정을 말한다고 한 것이 여기서 판정식이 됐다.</p>
+
+<p>표에 한 줄 있는 “run이 수집 주기보다 짧음”은 실패가 아닌데 실패로 보이는 경우라 따로 적어 둔다. 원본의 수집 루프는 <code class="highlighter-rouge">samples_before_logging</code>회 수집을 <strong>다 마쳐야</strong> 기록하고, 매 표본 뒤 정지 신호를 검사해 신호가 있으면 기록 없이 반환한다. 그래서 run이 주기 한 번보다 짧으면 한 점도 안 남는 것이 구조적으로 정해진다. 기본 주기 10초에 3초짜리 예제를 돌리면 계열이 0개이고, 주기만 1초로 낮추면 같은 코드가 28계열을 남긴다. 고장이 아니라 산수다. 처음 넣은 모니터 사망 감지는 “예상 표본이 셋 이상인데 한 점도 없음”을 보는 조건이라 이 구간을 그냥 통과시켰다. 예상 표본이 둘 이하이면서 0점인 분기를 따로 만들어 콘솔 한 줄과 run 태그로 이유를 남긴다. 우리 예제에서 먼저 밟았기에 망정이지, 사용자가 먼저 밟았으면 “켰는데 아무것도 없다”로 왔을 자리다.</p>
+
+<h2 id="노드-식별">노드 식별</h2>
+
+<p><a href="#중복-처리">중복 처리</a>에서 중복은 읽는 쪽이 알아보게 두기로 했다. 그러려면 어느 rank가 어느 노드에 떴는지가 run에 남아야 한다. 각 워커가 켤 때 자기 노드 이름을 run 태그(<code class="highlighter-rouge">mlplatform.sysmetrics.rank&lt;N&gt;</code>)로 남기면 되고, 각자 자기 태그만 쓰므로 워커들끼리 말을 맞출 필요가 없다. 문제는 “자기 노드 이름”을 어디서 읽느냐였다. 후보가 셋이었고 둘은 틀렸다.</p>
+
+<p><strong><code class="highlighter-rouge">LOCAL_RANK</code>.</strong> 분산학습에서 <code class="highlighter-rouge">LOCAL_RANK</code>는 보통 “노드 안에서 몇 번째 GPU인가”라서, 같은 노드의 rank를 묶는 축으로 보인다. 그런데 이 플랫폼에서는 전 워커가 0이다. 4워커 제출에서 실측한 값이 전부 0이었다. Ray Train은 <code class="highlighter-rouge">LOCAL_RANK</code>를 Ray 노드 단위로 매기는데, KubeRay에서 Ray 노드는 raylet 하나이고 raylet 하나는 pod 하나다. pod 하나에 GPU가 한 장이니 pod 안의 로컬 인덱스는 언제나 0이다. 이 값으로 노드를 묶으면 4워커가 전부 각자 노드의 0번이 되어 아무것도 묶이지 않는다. 그래서 이 플랫폼의 rank 축은 <code class="highlighter-rouge">RANK</code> 하나다.</p>
+
+<p><strong>Ray 노드 IP.</strong> <code class="highlighter-rouge">ray.util.get_node_ip_address()</code>는 차트를 건드리지 않고 노드를 알아낼 수단으로 기대했던 것이다. 4워커에서 불러 봤더니 반환값 4개가 전부 달랐다. 실제 노드는 3대였고, 노드의 InternalIP와는 대역 자체가 달랐다. 돌아온 것은 pod IP였다. 위와 같은 이유다. Ray의 “노드”는 raylet이고 KubeRay에서 그것은 pod다. Ray의 노드 개념과 Kubernetes의 노드 개념이 다르다. 이 값을 태그에 넣으면 rank 4개가 노드 4대에 뜬 것처럼 읽힌다. 노드처럼 보이지만 노드가 아닌 값이라 이 폴백은 코드에서 지웠다. 틀린 값보다 없는 값이 낫다.</p>
+
+<p><strong><code class="highlighter-rouge">NODE_NAME</code>.</strong> 남은 수단은 Kubernetes가 pod에 알려 주는 노드 이름이다. downward API로 <code class="highlighter-rouge">spec.nodeName</code>을 환경변수에 넣으면 된다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># 워커 컨테이너에 추가하는 네 줄</span>
+<span class="na">env</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">NODE_NAME</span>
+    <span class="na">valueFrom</span><span class="pi">:</span>
+      <span class="na">fieldRef</span><span class="pi">:</span>
+        <span class="na">fieldPath</span><span class="pi">:</span> <span class="s">spec.nodeName</span>
+</code></pre></div></div>
+
+<p>이 네 줄은 차트에 이미 있었다. 다만 자리가 <a href="/dev/Dev-NCCL-GPU-Compat-CI-Runtime-Gate/#helm-통합">GPU 호환성 게이트</a>의 init container 하나뿐이라, 학습 컨테이너에서 읽으면 없다. 그래서 같은 네 줄을 워커 컨테이너에도 붙였다. 새 개념도 새 의존도 없고 패턴은 같은 차트 안에 있던 것이다. 앞의 <a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/#격리되는-파일-격리되지-않는-파일">실측 pod</a>에도 이 네 줄을 넣어 봤는데, 컨테이너 안에서 <code class="highlighter-rouge">NODE_NAME=gpu-node-1</code>로 읽혔다.</p>
+
+<p>노드 이름은 태그뿐 아니라 <a href="#rank-접미와-노드-단">노드 범위 계열의 이름</a>에도 들어간다. <code class="highlighter-rouge">NODE_NAME</code>이 없는 워커에서는 태그 값이 <code class="highlighter-rouge">unknown</code>이고 이름에는 끼우지 않는다. 기록은 그대로 되고, 같은 노드 여부만 판별할 수 없다. <code class="highlighter-rouge">unknown</code>이 오류가 아니라는 것은 문서에 적어 두었다. <a href="#실패-정책">실패 정책</a> 절의 원칙과 같다. 모르는 것은 모른다고 적고, 모른다고 해서 학습이나 기록을 막지 않는다.</p>
+
+<h2 id="파드-단위-중복-제거">파드 단위 중복 제거</h2>
+
+<p><a href="#중복-처리">중복 처리</a>에서 채택한 ⑥이다. CPU 워커는 Ray Train이 rank 여럿을 한 파드에 넣는데, 시스템 메트릭이 재는 것은 전부 프로세스 밖이다. <code class="highlighter-rouge">container_*</code>는 그 파드의 cgroup, <code class="highlighter-rouge">network_*</code>는 그 파드의 network namespace, <code class="highlighter-rouge">node_*</code>·<code class="highlighter-rouge">rootfs_*</code>는 호스트, <code class="highlighter-rouge">gpu_*</code>는 NVML이 보는 장치. 같은 파드의 두 번째 rank는 같은 파일을 다시 읽는 것이라 잃는 정보가 없다. 그리고 판단은 자기 환경변수 하나로 끝난다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 한 파드에 rank가 여럿이면 첫 번째만 수집한다. 자기 환경변수만 본다</span>
+<span class="k">if</span> <span class="n">all_workers</span> <span class="ow">and</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">'LOCAL_RANK'</span><span class="p">,</span> <span class="s">'0'</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">return</span>                                            <span class="c"># 같은 파드의 rank 0이 같은 파일을 이미 읽는다</span>
+<span class="n">n_collectors</span> <span class="o">=</span> <span class="n">world_size</span> <span class="o">//</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">'LOCAL_WORLD_SIZE'</span><span class="p">,</span> <span class="s">'1'</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">1</span><span class="p">)</span>   <span class="c"># 예상 기록량은 파드 수 기준</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">LOCAL_RANK</code>는 파드 기준이지 물리 노드 기준이 아니다. 실측에서 한 파드의 두 rank는 0·1로 갈렸고, 같은 노드에 뜬 두 파드의 rank는 둘 다 0이었다. 그래서 이것으로 지워지는 것은 파드 중복뿐이고, 노드 중복은 남는다. 못 읽으면 0으로 두어 전원이 수집하게 한다. 그러면 최악이 중복이지, 아무도 수집하지 않는 run은 생기지 않는다. CPU 2워커 학습에서 이 한 줄로 계열이 22개에서 11개로 줄었고, 안내 문구의 예상 기록량도 실제 수집기 수인 파드 수 기준으로 계산된다.</p>
+
+<h2 id="재진입과-종료-순서">재진입과 종료 순서</h2>
+
+<p>두 가지를 짧게 적어 둔다.</p>
+
+<p>같은 프로세스가 run을 여럿 여는 sweep이 있으므로 재진입 가드는 프로세스 플래그가 아니라 <strong>run_id 키</strong>다. 같은 run에서 두 번 부르면 한 줄 알리고 무시한다. 두 번째 호출을 통과시키면 첫 스레드가 아무도 세우지 않는 고아가 되어 같은 계열을 두 스레드가 같은 run에 쓰기 때문이다. 다른 run에서 부르면 이전 모니터를 정지한 뒤 새로 만든다.</p>
+
+<p>종료는 모니터 정지 → flush → run 분리 순서가 계약이다. flush가 비동기 큐를 내렸다 올리는 사이에 모니터가 기록을 시도하면 큐가 비활성 상태라는 예외로 스레드가 죽는다. 이 순서는 테스트가 호출 순서 리스트를 단언하는 방식으로 고정했다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 정지 -&gt; flush -&gt; 분리. 순서가 계약이다 (간략화)</span>
+<span class="k">def</span> <span class="nf">_stop_system_metrics</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">SYSMETRICS_STOP_TIMEOUT</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">run_id</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">_MONITORS</span><span class="p">):</span>
+        <span class="n">mon</span> <span class="o">=</span> <span class="n">_MONITORS</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">run_id</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">mon</span><span class="o">.</span><span class="n">_shutdown_event</span><span class="o">.</span><span class="nb">set</span><span class="p">()</span>          <span class="c"># 1. 먼저 세운다</span>
+            <span class="k">if</span> <span class="n">mon</span><span class="o">.</span><span class="n">_process</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">mon</span><span class="o">.</span><span class="n">_process</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>     <span class="c"># 2. 상한을 둔다</span>
+                <span class="k">if</span> <span class="n">mon</span><span class="o">.</span><span class="n">_process</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+                    <span class="k">print</span><span class="p">(</span><span class="n">f</span><span class="s">'{WARN} 모니터 정지 미완({timeout}s) — 계속 진행합니다.'</span><span class="p">)</span>
+                    <span class="k">continue</span>                   <span class="c">#    포기하고 넘어간다. 학습을 막지 않는다</span>
+            <span class="n">mon</span><span class="o">.</span><span class="n">mlflow_logger</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>          <span class="c"># 3. 스레드가 멎은 뒤에 flush</span>
+        <span class="k">except</span> <span class="nb">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">print</span><span class="p">(</span><span class="n">f</span><span class="s">'{WARN} 시스템 지표 정지 중 오류 — 계속 진행합니다: {e}'</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">join</code>에 상한을 두는 이유는, 정지 신호를 받은 뒤에도 스레드가 서버에 HTTP를 한 번 더 치기 때문이다. 서버가 응답하지 않으면 그대로 돌아오지 않는다. 이 SDK에는 같은 부류를 막는 flush 타임아웃(120초)이 이미 있었는데 그것을 재사용하지 않았다. 둘이 직렬이라 최악의 경우 종료에만 240초가 걸린다. 별도로 30초를 줬다.</p>
+
+<p><br /></p>
+
+<h1 id="결과">결과</h1>
+
+<p>스모크로 8워커 GPU 학습을 <code class="highlighter-rouge">all_workers=True</code>로 제출해 10 epoch을 돌렸다. 화면 캡처는 아래에 붙이되, 먼저 run에 남은 것을 API로 읽었다.</p>
+
+<h2 id="배치와-계열">배치와 계열</h2>
+
+<!-- TODO(실측): 아래 표·숫자는 제출 전 예측값이다. run 종료 후 MLflow API 로 확정할 것.
+     - 배치: run 태그 mlplatform.sysmetrics.rank<N> (rank -> 노드)
+     - 태그: .ranks / .interval / .samples / .deps / .oom_kill / .mem_peak_sampled_mb
+     확정되면 이 주석을 지운다. -->
+
+<p>워커 8개가 노드 넷에 둘씩 갈렸다. 한 노드에 여덟이 다 오를 수도 있었다. 이 기종은 노드당 GPU가 여덟 장이고 64코어라, 워커당 16코어 선언으로도 네 개까지는 들어간다. 그런데 스케줄러는 묶지 않고 펼쳤고, 같은 기종의 노드 두 대는 아예 쓰이지 않았다. <strong>제출한 쪽은 워커 수만 적었을 뿐 노드가 몇 대가 될지는 정하지 않았다.</strong> 이 값을 미리 알 수 없다는 것이, 노드 이름을 지표 이름에 넣어 사후에 눈으로 확인하게 만든 이유이기도 하다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>노드</th>
+      <th>rank</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>gpu-node-1</td>
+      <td>1, 5</td>
+    </tr>
+    <tr>
+      <td>gpu-node-2</td>
+      <td>3, 6</td>
+    </tr>
+    <tr>
+      <td>gpu-node-3</td>
+      <td>0, 2</td>
+    </tr>
+    <tr>
+      <td>gpu-node-4</td>
+      <td>4, 7</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>계열은 128개, 8 rank × 16이다. run 태그에는 rank마다 뜬 노드 이름, 수집 rank 수 8, 주기 20초 × 1표본, <code class="highlighter-rouge">deps = image</code>(psutil과 pynvml 둘 다 이미지에서 왔다), <code class="highlighter-rouge">oom_kill = TODO</code>, <code class="highlighter-rouge">mem_peak_sampled_mb = TODO</code>가 남았다. 주기 20초는 <a href="#활성화-지점">활성화 지점</a>에서 적은 자동 상향이다. 수집기가 넷을 넘어 <code class="highlighter-rouge">10 × ⌈8/4⌉</code>로 올라갔다. 기본값 10초로 뒀다면 같은 시간에 두 배가 쌓였을 것이다.</p>
+
+<p>MLflow는 이름의 마지막 세그먼트를 뗀 나머지로 섹션을 묶고 개수를 <code class="highlighter-rouge">(N)</code>으로 보여 준다. 노드 범위 계열의 헤더가 배치를 그대로 따라간다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>(2)  system/node_memory_usage_percentage/gpu-node-1
+(2)  system/node_memory_usage_percentage/gpu-node-2
+(2)  system/node_memory_usage_percentage/gpu-node-3
+(2)  system/node_memory_usage_percentage/gpu-node-4
+(8)  system/container_memory_usage_percentage
+(8)  system/gpu_0_utilization_percentage
+</code></pre></div></div>
+
+<p>섹션이 노드 이름으로 넷으로 갈렸다는 것이 노드 단이 먹었다는 뜻이다. 끼우지 않았다면 여덟 계열이 <code class="highlighter-rouge">(8)</code> 하나로 뭉쳤을 것이다. 각 <code class="highlighter-rouge">(2)</code>는 그 노드에 뜬 워커 수이자 노드 계열이 몇 벌 중복되는지인데, 이번 배치는 넷 다 둘이라 숫자만으로는 그것이 배치를 따라가는 값인지 고정된 값인지 갈리지 않는다. 위의 배치 표와 대조하면 읽힌다. 배치가 고르지 않은 run에서는 헤더 숫자가 그대로 갈린다. <code class="highlighter-rouge">(8)</code>은 노드로 묶이면 안 되는 계열이 안 묶였다는 뜻이다. 섹션 34개에 차트 128개다. 겹쳐 그려 주지 않고 rank마다 차트를 따로 그린다는 점은 전수를 켜기 전에 알아 두어야 한다.</p>
+
+<!-- TODO(캡처): System metrics 탭 섹션 목록(전부 접힌 기본 상태).
+     위쪽에 container_*·gpu_0_*·network_* 가 (8) 로, 아래쪽에 node_*·rootfs_* 가
+     노드별로 갈려 (2) 로 서는 구간이 한 화면에 들어오게. 두 장으로 나눠도 된다.
+     ⚠️ 화면의 실제 호스트명을 사전순 그대로 gpu-node-1~4 로 치환할 것(순서가 보존된다). run 이름 블러. -->
+
+<h2 id="노드-값과-컨테이너-값">노드 값과 컨테이너 값</h2>
+
+<!-- TODO(실측): 아래 네 행은 rank 0 의 평균·최대다. metrics/get-history 로 rank 0 계열만
+     뽑아 채운다(run 전체 범위가 아니라 rank 0 값이어야 한다). 분모도 실제 선언으로 확인:
+     노드 메모리 총량 / 워커 memory 한도 / 노드 논리 코어 수 / cpusPerWorker. -->
+
+<p>같은 rank 0에서 두 범위의 계열을 나란히 놓으면 이 글이 말한 차이가 숫자로 보인다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>계열 (rank 0)</th>
+      <th>평균</th>
+      <th>최대</th>
+      <th>분모</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">node_memory_usage_percentage/gpu-node-3</code></td>
+      <td>TODO</td>
+      <td>TODO</td>
+      <td>노드 503 GiB</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">container_memory_usage_percentage</code></td>
+      <td>TODO</td>
+      <td>TODO</td>
+      <td>워커 한도 56 GiB</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">node_cpu_utilization_percentage/gpu-node-3</code></td>
+      <td>TODO</td>
+      <td>TODO</td>
+      <td>논리 코어 64개</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">container_cpu_utilization_percentage</code></td>
+      <td>TODO</td>
+      <td>TODO</td>
+      <td>쿼터 16코어</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>노드 기준으로 보면 여유가 많아 보이지만, 컨테이너 기준으로는 그렇지 않다. 태그의 <code class="highlighter-rouge">mem_peak_sampled_mb</code>가 컨테이너 계열의 최대와 같은 값이고, 실제로 죽었는지는 <code class="highlighter-rouge">oom_kill</code>이 답한다. <a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/#오판-가능성">이전 글</a>에서 노드 값만 있을 때 반대 판단을 부른다고 한 그 두 숫자가 같은 화면에 있다.</p>
+
+<h2 id="같은-노드의-두-rank">같은 노드의 두 rank</h2>
+
+<!-- TODO(실측): gpu-node-1 의 두 rank(1·5) 를 step 별로 맞춰 일치 횟수와 최대 격차를 센다.
+     node_memory_usage_percentage / node_memory_usage_megabytes / container_memory_usage_megabytes. -->
+
+<p>gpu-node-1에 뜬 rank 1과 rank 5의 노드 계열을 step별로 맞춰 봤다. <code class="highlighter-rouge">node_memory_usage_percentage</code>는 대부분의 step에서 둘이 같은 값이고, 절대값인 <code class="highlighter-rouge">node_memory_usage_megabytes</code>는 거의 한 번도 같지 않다. 같은 <code class="highlighter-rouge">/proc/meminfo</code>를 읽되 20초 주기 안에서 읽는 시각이 어긋나기 때문이다. 퍼센트가 맞는 것은 반올림이 그 차이를 가려서다. 같은 두 rank의 <code class="highlighter-rouge">container_memory_usage_megabytes</code>는 한 번도 같지 않다. 파드마다 cgroup이 다르니 당연한 결과인데, 노드 범위 계열에만 노드 단을 끼우고 컨테이너 계열에는 끼우지 않은 이유의 실증이기도 하다.</p>
+
+<!-- TODO(캡처): node_memory_usage_megabytes 를 펼쳐 gpu-node-1 (2) 와 gpu-node-2 (2) 를 세로로 잇는다.
+     같은 노드 쌍(rank1·rank5)은 계단이 포개지고, 아래 노드 쌍(rank3·rank6)은 높이가 다르다 —
+     「같은 노드끼리만 겹친다」가 한 장에 나온다. 이어서 container_memory_usage_megabytes (8) 에서
+     같은 rank 들을 잡아 rank 마다 모양이 다른 것을 대비시킨다. 치환은 위와 같다. -->
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>플랫폼이 한 일을 정리하면 셋이다.</p>
+
+<ol>
+  <li><strong>플랫폼이 대신 해 줘야 하는 해석을 문서가 아니라 이름에 넣기로 했다.</strong> 노드를 재는 계열에 <code class="highlighter-rouge">node_</code>, 컨테이너 루트 파일시스템에 <code class="highlighter-rouge">rootfs_</code>, 그리고 한도 대비 working set을 재는 <code class="highlighter-rouge">container_</code> 계열을 더했다. 켤지 여부는 환경을 추정하지 않고 cgroup 한도의 실재로 판정한다</li>
+  <li><strong>같은 노드 워커끼리 노드 계열이 중복될 수 있는 한계는 초도 구현에서 그대로 두고, 태그로 알아볼 수 있게만 했다.</strong> 없애려면 워커들이 말을 맞춰야 하는데, 집합 연산은 학습을 멈출 수 있고 run 태그 방식은 결과가 뜨는 순서에 따라 흔들린다. 용량이 제약이 아니라 지금은 그 값어치가 없다</li>
+  <li><strong>원본을 고치지 않고 확장하는 대신, 확장점을 쓰되 그 확장점을 테스트로 잠갔다.</strong> 수집기 리스트에 얹고, 이름은 프록시로 바꾸고, 문서 밖 표면 의존은 계약 테스트 한 파일에 모은다</li>
+</ol>
+
+<p>한 가지는 아직 닫히지 않았다. 표면을 냈고 그 표면이 실제로 기록한다는 것은 플랫폼 쪽 실험으로 확정했지만, 이 기능을 요청한 ML 엔지니어가 자기 학습 코드에서 이 함수를 불러 남긴 run은 아직 못 봤다. 기능을 냈다는 것과 쓰이고 있다는 것은 다르다.</p>
+
+<p>이 문제가 도구 하나의 버그가 아니라 psutil 위에 얹힌 도구들의 공통 문제라는 것, 그리고 다른 도구와 런타임이 어떻게 대응했는지는 <a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/#더-알아보기-다른-도구의-대응">이전 글의 더 알아보기</a>에 정리했다. 클러스터 스모크 결과는 <a href="#결과">결과</a> 절에 따로 붙인다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-자료">참고 자료</h1>
+
+<ul>
+  <li><a href="https://mlflow.org/docs/latest/ml/tracking/system-metrics/">MLflow System Metrics</a> — 활성화 방법, 샘플링 주기, 추가 의존성</li>
+  <li><a href="https://mlflow.org/docs/latest/api_reference/python_api/mlflow.system_metrics.html">mlflow.system_metrics API</a> — <code class="highlighter-rouge">set_system_metrics_node_id</code></li>
+  <li><a href="https://github.com/mlflow/mlflow/tree/v3.15.1/mlflow/system_metrics">MLflow 원본 코드 v3.15.1</a> — <code class="highlighter-rouge">system_metrics_monitor.py</code>, <code class="highlighter-rouge">metrics/cpu_monitor.py</code>, <code class="highlighter-rouge">metrics/gpu_monitor.py</code>, <code class="highlighter-rouge">tracking/fluent.py</code></li>
+  <li><a href="https://github.com/wandb/wandb/blob/main/CHANGELOG.md">wandb CHANGELOG 0.27.0</a></li>
+  <li><a href="https://docs.kernel.org/admin-guide/cgroup-v2.html">Linux cgroup v2 admin guide</a> — <code class="highlighter-rouge">memory.current</code>, <code class="highlighter-rouge">memory.max</code>, <code class="highlighter-rouge">memory.stat</code>, <code class="highlighter-rouge">cpu.max</code>, <code class="highlighter-rouge">cpu.stat</code></li>
+  <li><a href="https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/">Kubernetes, Node-pressure Eviction</a> — working set 정의</li>
+  <li><a href="https://kubernetes.io/examples/admin/resource/memory-available-cgroupv2.sh">Kubernetes memory-available-cgroupv2.sh</a></li>
+  <li><a href="https://github.com/google/cadvisor/blob/v0.49.1/container/libcontainer/handler.go">cAdvisor handler.go</a> — working set 계산</li>
+  <li><a href="https://docs.docker.com/reference/cli/docker/container/stats/">docker container stats</a> — 메모리 사용량에서 cache를 빼는 규칙</li>
+  <li><a href="/dev/Dev-NCCL-GPU-Compat-CI-Runtime-Gate/">GPU 호환성 게이트: 빌드 타임과 배포 타임에서 NCCL 커널 미스매치 차단하기</a></li>
+  <li><a href="/dev/Dev-FFmpeg-CPU-04-02/">Pod CPU Limit과 FFmpeg Thread 최적 조정 - 4.2. 튜닝 실험 설계</a> — cAdvisor working set 패널 예</li>
+  <li><a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/">이전 글: [MLflow] 시스템 메트릭 로깅 - 1. 컨테이너 안에서 잰 값은 누구의 것인가: psutil, 네임스페이스, cgroup</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#cgroup" class="page__taxonomy-item" rel="tag">cgroup</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#contract-test" class="page__taxonomy-item" rel="tag">Contract-Test</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#design-pattern" class="page__taxonomy-item" rel="tag">Design-Pattern</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlflow" class="page__taxonomy-item" rel="tag">MLflow</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#ray" class="page__taxonomy-item" rel="tag">Ray</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#system-metrics" class="page__taxonomy-item" rel="tag">System-Metrics</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#dev" class="page__taxonomy-item" rel="tag">Dev</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-09-23T00:00:00+09:00">September 23, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BMLflow%5D+%EC%8B%9C%EC%8A%A4%ED%85%9C+%EB%A9%94%ED%8A%B8%EB%A6%AD+%EB%A1%9C%EA%B9%85+-+2.+%ED%94%8C%EB%9E%AB%ED%8F%BC+SDK%EC%97%90+%EC%96%B9%EA%B8%B0%3A+%EC%9D%B4%EB%A6%84%2C+cgroup+%EC%88%98%EC%A7%91%EA%B8%B0%2C+%EC%9B%90%EB%B3%B8+%EB%AC%B4%EC%88%98%EC%A0%95+%ED%99%95%EC%9E%A5%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-MLflow-System-Metrics-Platform-SDK%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-MLflow-System-Metrics-Platform-SDK%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-MLflow-System-Metrics-Platform-SDK%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fdev%2FDev-MLflow-System-Metrics-Platform-SDK?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-Envoy-Proxy-LLM-Serving/" class="pagination--pager" title="[Envoy] Envoy 프록시 구조와 확장: llm-d가 Envoy를 쓰는 방식
+">이전</a>
+    
+    
+      <a href="#" class="pagination--pager disabled">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-Envoy-Proxy-LLM-Serving/" rel="permalink">[Envoy] Envoy 프록시 구조와 확장: llm-d가 Envoy를 쓰는 방식
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 19일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  17 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Envoy의 구조와 xDS 동적 설정, ext_proc 확장을 정리하고, llm-d Router가 ext_proc으로 Envoy에 붙는 방식을 살펴 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  15 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">노드도 파드도 늘릴 수 없는 환경에서 HPA Lab이 어디까지 가는지, 그리고 CPU 사용률이 추론 워크로드의 스케일 신호가 될 수 있는지 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.6. 부하 테스트와 llmperf 벤치마크
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  37 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">자작 스크립트와 llmperf로 vLLM에 부하를 걸고, 두 도구가 낸 수치를 나란히 놓을 수 있는지 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.2. 데이터소스 프로비저닝과 vLLM 대시보드
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  26 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Grafana를 서브패스로 노출하고 Prometheus 데이터소스를 프로비저닝한 뒤, ConfigMap으로 넣은 vLLM 대시보드가 언제 목록에 뜨는지 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//dev/Dev-MLflow-System-Metrics-Platform-SDK/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/dev/Dev-MLflow-System-Metrics-Platform-SDK"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>

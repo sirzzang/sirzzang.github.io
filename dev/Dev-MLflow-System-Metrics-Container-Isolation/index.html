@@ -557,7 +557,7 @@ window.MathJax = {
   <li><code class="highlighter-rouge">/proc/net/dev</code>는 network namespace로 격리되고 NVML은 device plugin이 노출한 장치만 보지만, <code class="highlighter-rouge">/proc/stat</code>과 <code class="highlighter-rouge">/proc/meminfo</code>는 <strong>어떤 namespace로도 격리되지 않는다</strong>. pod 안에서 열어도 노드 전체 값이 나온다</li>
   <li>그래서 pod 안에서 켠 시스템 메트릭의 CPU·메모리는 그 pod가 아니라 노드 전체의 사용량이다. 요구사항의 배경이 OOM 진단이었으므로, 노드 기준 사용률(예: 24%)을 자기 컨테이너의 사용률로 읽으면 여유가 있다고 잘못 판단하게 된다</li>
   <li>분산학습에서는 한 노드에 워커 pod가 여러 개 뜬다. 그 pod들이 읽는 <code class="highlighter-rouge">/proc/meminfo</code>는 전부 같은 노드 값인데, 기록은 rank 0의 메모리, rank 3의 메모리처럼 각각의 이름으로 남는다. 노드 하나의 값이 rank 수만큼 중복 기록되는 셈이다</li>
-  <li>플랫폼 쪽 대응(지표 이름, cgroup 수집기, 원본을 고치지 않는 구현)은 다음 글에서 다룬다</li>
+  <li>플랫폼 쪽 대응(지표 이름, cgroup 수집기, 원본을 고치지 않는 구현)은 <a href="/dev/Dev-MLflow-System-Metrics-Platform-SDK/">다음 글</a>에서 다룬다</li>
 </ul>
 
 <p><br /></p>
@@ -692,7 +692,7 @@ window.MathJax = {
 
   <p>표의 rank 0 게이트는 학습 지표 이야기다. 동기 데이터 병렬에서는 rank마다 파라미터가 같고 검증 지표도 보통 rank 0이 모아서 계산하므로, 전 rank가 <code class="highlighter-rouge">log_metric</code>을 부르면 같은 키, 같은 step에 같은 값이 워커 수만큼 쌓인다. 그래서 SDK의 기록 함수는 rank 0이 아니면 아무 일도 하지 않는다. rank마다 값이 다른 지표(로컬 배치의 loss, 처리량 등)를 위해서는 전 rank가 함께 불러 mean·sum·max로 모은 뒤 rank 0이 한 번 기록하는 <code class="highlighter-rouge">log_metrics_collective</code>가 따로 있다.</p>
 
-  <p>이 글의 주제인 시스템 메트릭은 이 둘과 다르다. rank마다 값이 다를 수 있고 모을 이유도 없어서, 워커마다 자기 이름을 붙여 따로 기록한다. 같은 노드의 워커끼리 노드 값이 겹치는 문제(다음 글의 중복 처리)는 그 위에서 생기는 별개 이야기다.</p>
+  <p>이 글의 주제인 시스템 메트릭은 이 둘과 다르다. rank마다 값이 다를 수 있고 모을 이유도 없어서, 워커마다 자기 이름을 붙여 따로 기록한다. 같은 노드의 워커끼리 노드 값이 겹치는 문제(<a href="/dev/Dev-MLflow-System-Metrics-Platform-SDK/#중복-처리">다음 글의 중복 처리</a>)는 그 위에서 생기는 별개 이야기다.</p>
 </blockquote>
 
 <p>즉 “ML 엔지니어가 함수를 부르면, 어느 프로세스가 어느 run에 어떤 이름으로 쓰고 언제 정리할지는 플랫폼이 정한다”는 분업이다. 플랫폼에 제출된 run은 전부 이 표면으로 기록되고 있고, 인터랙티브 세션의 로컬 실험도 같은 함수를 쓴다.</p>
@@ -741,7 +741,7 @@ window.MathJax = {
 
 <p>그래서 MLflow가 이미 제공하는 시스템 메트릭 기능을 SDK에 얹기로 했다. 방식은 <a href="#기록-표면의-분업">앞서 본 기록 표면의 분업</a> 그대로다. ML 엔지니어는 함수 하나를 부르고, 어느 프로세스가 어느 run에 어떤 이름으로 쓸지는 플랫폼이 정한다. 함수 하나를 추가하고 켤 프로세스만 고르면 끝일 것 같았다.</p>
 
-<p>그런데 시스템 메트릭은 loss와 성질이 다르다. loss는 코드가 계산해 넘기는 값이라 어디서 부르든 같지만, 시스템 메트릭은 재는 프로세스가 어디에 있느냐에 따라 값이 달라진다. 그리고 제출 경로에서 그 프로세스는 컨테이너 안에 있다. 이 글은 여기서 마주친 문제를 다룬다. pod 안에서 잰 CPU·메모리가 왜 노드 값으로 기록되는지다. 그것을 지표 이름으로 드러내고 cgroup 수집기를 더한 설계와 구현은 다음 글에서 다룬다.</p>
+<p>그런데 시스템 메트릭은 loss와 성질이 다르다. loss는 코드가 계산해 넘기는 값이라 어디서 부르든 같지만, 시스템 메트릭은 재는 프로세스가 어디에 있느냐에 따라 값이 달라진다. 그리고 제출 경로에서 그 프로세스는 컨테이너 안에 있다. 이 글은 여기서 마주친 문제를 다룬다. pod 안에서 잰 CPU·메모리가 왜 노드 값으로 기록되는지다. 그것을 지표 이름으로 드러내고 cgroup 수집기를 더한 설계와 구현은 <a href="/dev/Dev-MLflow-System-Metrics-Platform-SDK/">다음 글</a>에서 다룬다.</p>
 
 <p><br /></p>
 
@@ -909,7 +909,7 @@ window.MathJax = {
 
 <h1 id="현상-pod-안에서-잰-값은-노드-값">현상: pod 안에서 잰 값은 노드 값</h1>
 
-<p>앞의 원리를 컨테이너 환경에 놓으면 세 가지가 걸린다. psutil과 pynvml이 컨테이너 안에 있어야 한다는 <strong>의존성</strong>, 누가 어디서 켜느냐는 <strong>활성화 지점</strong>, 그리고 컨테이너 안에서 잰 값이 누구의 것이냐는 <strong>측정 범위</strong>다. 앞의 둘은 플랫폼 쪽 문제라 다음 글에서 다루고, 이 글은 셋째를 따라간다.</p>
+<p>앞의 원리를 컨테이너 환경에 놓으면 세 가지가 걸린다. psutil과 pynvml이 컨테이너 안에 있어야 한다는 <strong>의존성</strong>, 누가 어디서 켜느냐는 <strong>활성화 지점</strong>, 그리고 컨테이너 안에서 잰 값이 누구의 것이냐는 <strong>측정 범위</strong>다. 앞의 둘은 플랫폼 쪽 문제라 <a href="/dev/Dev-MLflow-System-Metrics-Platform-SDK/#플랫폼-쪽-고려사항">다음 글</a>에서 다루고, 이 글은 셋째를 따라간다.</p>
 
 <p>컨테이너는 자원이 격리되어 보인다. 컨테이너 안에서 <code class="highlighter-rouge">nvidia-smi</code>를 치면 할당받은 GPU만 보이고, <code class="highlighter-rouge">ip addr</code>를 치면 자기 인터페이스만 보인다. 그렇다면 MLflow 시스템 메트릭이 컨테이너 안에서 켜지면 그 컨테이너의 사용량을 재는가. 달리 말해, psutil이 읽는 <code class="highlighter-rouge">/proc</code> 파일에도 같은 격리가 적용되는가.</p>
 
@@ -1301,7 +1301,7 @@ GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition <span class="o">(</span>UUID
       <td><code class="highlighter-rouge">gpu_0_*</code></td>
       <td>pynvml</td>
       <td>NVML</td>
-      <td>device plugin이 장치 노출</td>
+      <td><strong>아니오</strong> (namespace 아님 — 런타임이 넣어 준 장치 파일)</td>
       <td><strong>그 컨테이너의 GPU</strong></td>
       <td>다른 값</td>
     </tr>
@@ -1348,7 +1348,7 @@ GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition <span class="o">(</span>UUID
 
 <p>제출 경로에서 GPU를 전부 보려면 전 rank가 수집하는 것 외에 방법이 없다. 한 프로세스가 1장만 보기 때문이다. 반면 로컬에서는 컨테이너 격리가 없어 어느 계열도 rank마다 다르지 않다. rank를 늘려도 정보가 늘지 않고 복제만 는다. rank를 늘리는 것 자체가 정보를 늘리는 것이 아니라, <strong>컨테이너 격리가 프로세스마다 다른 것을 보게 만들어서</strong> 늘어나는 것이다. 그래서 플랫폼 SDK는 격리가 없는 환경에서 전 워커 수집 옵션을 받아도 한 줄 안내하고 무시한다.</p>
 
-<p>다만 제출 경로에도 남는 것이 있다. 같은 노드에 뜬 rank끼리는 노드 계열과 루트 파일시스템 계열이 같은 값이다. 이 중복을 어떻게 다루는지는 다음 글의 노드 계열의 중복에서 다룬다.</p>
+<p>다만 제출 경로에도 남는 것이 있다. 같은 노드에 뜬 rank끼리는 노드 계열과 루트 파일시스템 계열이 같은 값이다. 이 중복을 어떻게 다루는지는 <a href="/dev/Dev-MLflow-System-Metrics-Platform-SDK/#중복-처리">다음 글의 중복 처리</a>에서 다룬다.</p>
 
 <p><br /></p>
 
@@ -1426,7 +1426,7 @@ GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition <span class="o">(</span>UUID
 
 <p>설계 판단 몇 가지가 참고할 만하다. cgroup v1은 의도적으로 지원하지 않는다(“v2 has been the default in every major distro for years”). 부모 cgroup이 아니라 프로세스가 실제로 속한 leaf cgroup만 읽는다. 부모의 <code class="highlighter-rouge">memory.current</code>에는 형제 워크로드가 섞이기 때문이다. CPU는 <code class="highlighter-rouge">cpu.max</code> 쿼터와 <code class="highlighter-rouge">Cpus_allowed_list</code>의 크기 중 작은 쪽을 쓴다. 그리고 이 판단의 근거로 Go 런타임을 직접 인용한다(“The Go runtime’s cgroup-aware GOMAXPROCS makes the same call”).</p>
 
-<p>한 가지 눈에 띄는 것은, 코드는 바뀌었는데 문서는 아직이라는 점이다. W&amp;B 시스템 메트릭 레퍼런스는 2026년 9월 기준으로 Memory Percent를 “the total system memory usage as a percentage of the total available memory”로 설명하고 있고, cgroup이나 container라는 단어가 없다. 코드가 고쳐져도 이름과 문서가 따라오지 않으면 사용자는 여전히 오해한다. 다음 글에서 지표 이름에 집착하는 이유가 여기 있다.</p>
+<p>한 가지 눈에 띄는 것은, 코드는 바뀌었는데 문서는 아직이라는 점이다. W&amp;B 시스템 메트릭 레퍼런스는 2026년 9월 기준으로 Memory Percent를 “the total system memory usage as a percentage of the total available memory”로 설명하고 있고, cgroup이나 container라는 단어가 없다. 코드가 고쳐져도 이름과 문서가 따라오지 않으면 사용자는 여전히 오해한다. <a href="/dev/Dev-MLflow-System-Metrics-Platform-SDK/#범위-접두">다음 글</a>에서 지표 이름에 집착하는 이유가 여기 있다.</p>
 
 <p>Ray는 훨씬 전부터 cgroup을 읽었다. <code class="highlighter-rouge">get_system_memory()</code>가 <code class="highlighter-rouge">/sys/fs/cgroup/memory/memory.limit_in_bytes</code>(v1)와 <code class="highlighter-rouge">/sys/fs/cgroup/memory.max</code>(v2)를 확인하고, 주석에 “Try to accurately figure out the memory limit if we are in a docker container”라고 적어 두었다. Ray의 OOM 방지 메모리 모니터도 이 값을 쓴다. 흥미로운 것은 대시보드 리포터다. <code class="highlighter-rouge">_get_mem_usage()</code>는 cgroup 기준 총량을, <code class="highlighter-rouge">_get_host_mem_usage()</code>는 <code class="highlighter-rouge">psutil.virtual_memory()</code>를 쓰고, 둘을 <code class="highlighter-rouge">cgroup_mem</code>과 <code class="highlighter-rouge">host_mem</code>이라는 다른 키로 내보낸다. 두 관점을 이름으로 분리한다는 이 글의 결론을 Ray는 이미 하고 있었다.</p>
 
@@ -1460,7 +1460,7 @@ GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition <span class="o">(</span>UUID
     <tr>
       <td><strong>도구를 고친다</strong></td>
       <td>값을 재는 쪽이 <code class="highlighter-rouge">/proc</code> 대신 cgroup을 읽게 한다</td>
-      <td>W&amp;B의 자체 수집기(cgroup.go), Ray의 <code class="highlighter-rouge">get_system_memory()</code>, 다음 글의 cgroup 수집기</td>
+      <td>W&amp;B의 자체 수집기(cgroup.go), Ray의 <code class="highlighter-rouge">get_system_memory()</code>, <a href="/dev/Dev-MLflow-System-Metrics-Platform-SDK/#cgroup-수집기">다음 글의 cgroup 수집기</a></td>
       <td>도구가 내 것이거나 감쌀 수 있을 때</td>
     </tr>
     <tr>
@@ -1506,7 +1506,7 @@ GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition <span class="o">(</span>UUID
   <li><strong>이 문제는 도구 하나의 버그가 아니다.</strong> psutil이 그대로이니 그 위의 파이썬 도구들이 그대로이고, 언어 런타임들은 이미 컨테이너 인식으로 넘어갔으며, W&amp;B는 2026년에 그 선을 넘었다. 관측 도구가 런타임이 걸어간 길을 뒤늦게 걷고 있다</li>
 </ol>
 
-<p>이 위에서 플랫폼이 무엇을 했는지, 즉 노드를 재는 계열에 <code class="highlighter-rouge">node_</code>·<code class="highlighter-rouge">rootfs_</code> 접두를 붙이고 cgroup 한도 대비 working set을 재는 <code class="highlighter-rouge">container_</code> 계열을 더한 설계와, MLflow 원본을 고치지 않고 얹은 구현은 다음 글에서 다룬다. 이 글의 실측 중 GPU 격리의 기제는 호스트에서 NVML을 직접 불러 확인한 것이다.</p>
+<p>이 위에서 플랫폼이 무엇을 했는지, 즉 노드를 재는 계열에 <code class="highlighter-rouge">node_</code>·<code class="highlighter-rouge">rootfs_</code> 접두를 붙이고 cgroup 한도 대비 working set을 재는 <code class="highlighter-rouge">container_</code> 계열을 더한 설계와, MLflow 원본을 고치지 않고 얹은 구현은 <a href="/dev/Dev-MLflow-System-Metrics-Platform-SDK/">다음 글</a>에서 다룬다. 이 글의 실측 중 GPU 격리의 기제는 호스트에서 NVML을 직접 불러 확인한 것이다.</p>
 
 <p><br /></p>
 
@@ -1547,6 +1547,7 @@ GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition <span class="o">(</span>UUID
   <li><a href="/cs/CS-Container-Networking-Namespace/">컨테이너 네트워킹 기본 원리: 네임스페이스 네트워킹</a></li>
   <li><a href="/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/">NVIDIA Device Plugin 동작 원리</a></li>
   <li><a href="/dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/">NCCL Communicator 초기화 시점: Lazy vs Eager Init</a></li>
+  <li><a href="/dev/Dev-MLflow-System-Metrics-Platform-SDK/">다음 글: [MLflow] 시스템 메트릭 로깅 - 2. 플랫폼 SDK에 얹기: 이름, cgroup 수집기, 원본 무수정 확장</a></li>
 </ul>
 
 <p><br /></p>
@@ -1703,6 +1704,51 @@ GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition <span class="o">(</span>UUID
     
     <h2 class="archive__item-title" itemprop="headline">
       
+        <a href="/dev/Dev-MLflow-System-Metrics-Platform-SDK/" rel="permalink">[MLflow] 시스템 메트릭 로깅 - 2. 플랫폼 SDK에 얹기: 이름, cgroup 수집기, 원본 무수정 확장
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 23일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  29 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">MLflow 원본을 고치지 않고 pod 내 시스템 메트릭 로깅 문제를 해결한 과정에 대해 정리해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
         <a href="/dev/Dev-Envoy-Proxy-LLM-Serving/" rel="permalink">[Envoy] Envoy 프록시 구조와 확장: llm-d가 Envoy를 쓰는 방식
 </a>
       
@@ -1816,51 +1862,6 @@ GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition <span class="o">(</span>UUID
       
     </p>
     <p class="archive__item-excerpt" itemprop="description">자작 스크립트와 llmperf로 vLLM에 부하를 걸고, 두 도구가 낸 수치를 나란히 놓을 수 있는지 확인해 보자.
-</p>
-  </article>
-</div>
-
-        
-          
-
-
-
-<div class="grid__item">
-  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
-    
-      <div class="archive__item-teaser">
-        <img src=
-          
-            "/assets/images/blog-Dev.jpg"
-          
-          alt="">
-      </div>
-    
-    <h2 class="archive__item-title" itemprop="headline">
-      
-        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.2. 데이터소스 프로비저닝과 vLLM 대시보드
-</a>
-      
-    </h2>
-    <p class="page__meta">
-      
-        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
-        
-          <span class="page__meta-sep"> · </span>
-        
-      
-      
-        <i class="far fa-clock" aria-hidden="true"></i> 
-
-
-
-
-  27 분 소요
-
-
-      
-    </p>
-    <p class="archive__item-excerpt" itemprop="description">Grafana를 서브패스로 노출하고 Prometheus 데이터소스를 프로비저닝한 뒤, ConfigMap으로 넣은 vLLM 대시보드가 언제 목록에 뜨는지 확인해 보자.
 </p>
   </article>
 </div>
