@@ -3,6 +3,7 @@ title: "[GPU] SM 마이크로아키텍처: CUDA 코어·텐서 코어와 TFLOPS�
 excerpt: "스펙표의 TFLOPS가 어디서 나오는지 SM 구조로 분해해 보자."
 categories:
   - CS
+hidden: true
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -15,7 +16,7 @@ tags:
   - NVIDIA
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-3
-last_modified_at: 2026-08-22
+last_modified_at: 2026-09-28
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 중 딥다이브한 내용입니다.*

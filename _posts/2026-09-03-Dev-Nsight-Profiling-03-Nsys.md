@@ -3,6 +3,7 @@ title: "[Nsight] Nsight 프로파일러: 3. nsys 수집과 리포트 읽기"
 excerpt: "nsys로 무엇을 어떻게 수집하고, 뷰어에 뜬 리포트를 어느 순서로 읽어 병목을 판정하는지 정리해 보자."
 categories:
   - Dev
+hidden: true
 toc: true
 use_math: false
 header:
@@ -15,7 +16,7 @@ tags:
   - PyTorch
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-5
-last_modified_at: 2026-09-05
+last_modified_at: 2026-09-28
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 5주차 학습 중 딥다이브한 내용입니다.*

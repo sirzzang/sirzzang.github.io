@@ -3,6 +3,7 @@ title: "[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.2. GPU �
 excerpt: "GPU 스펙의 연산·메모리 속성을 읽고 H100 SXM과 NVL을 비교해 보자."
 categories:
   - Dev
+hidden: true
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -16,7 +17,7 @@ tags:
   - H100
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-3
-last_modified_at: 2026-08-22
+last_modified_at: 2026-09-28
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 내용을 기반으로 합니다.*

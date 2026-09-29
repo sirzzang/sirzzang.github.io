@@ -3,6 +3,7 @@ title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Train
 excerpt: "EKS 컨트롤 플레인만 있는 상태에서 trn1.2xlarge 관리형 노드그룹을 붙이고, 미리 박혀 있던 AMI ID 때문에 막힌 지점을 풀어 보자."
 categories:
   - Kubernetes
+hidden: true
 toc: true
 use_math: false
 header:
@@ -17,7 +18,7 @@ tags:
   - vLLM
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-6
-last_modified_at: 2026-09-13
+last_modified_at: 2026-09-28
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.*

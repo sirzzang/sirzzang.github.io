@@ -16,18 +16,21 @@ tags:
   - Namespace
   - psutil
   - System-Metrics
+last_modified_at: 2026-09-28
 ---
 
 <br>
 
 # TL;DR
 
-- 학습 플랫폼의 tracking SDK에 MLflow 시스템 메트릭 로깅(CPU·메모리·디스크·네트워크·GPU)을 얹으려 했다. MLflow가 이미 제공하는 기능이라 SDK 함수 하나로 열어 주면 끝일 줄 알았다
-- MLflow 시스템 메트릭은 `start_run`을 부른 **프로세스 안의 스레드**가 잰다. 제출 경로에서 그 프로세스는 워커 pod의 컨테이너 안에 있다. 그리고 MLflow는 메트릭을 직접 재지 않는다. psutil을 이용해 `/proc` 파일을 읽고, pynvml을 이용해 NVML을 부른다
-- `/proc/net/dev`는 network namespace로 격리되고 NVML은 device plugin이 노출한 장치만 보지만, `/proc/stat`과 `/proc/meminfo`는 **어떤 namespace로도 격리되지 않는다**. pod 안에서 열어도 노드 전체 값이 나온다
-- 그래서 pod 안에서 켠 시스템 메트릭의 CPU·메모리는 그 pod가 아니라 노드 전체의 사용량이다. 요구사항의 배경이 OOM 진단이었으므로, 노드 기준 사용률(예: 24%)을 자기 컨테이너의 사용률로 읽으면 여유가 있다고 잘못 판단하게 된다
-- 분산학습에서는 한 노드에 워커 pod가 여러 개 뜬다. 그 pod들이 읽는 `/proc/meminfo`는 전부 같은 노드 값인데, 기록은 rank 0의 메모리, rank 3의 메모리처럼 각각의 이름으로 남는다. 노드 하나의 값이 rank 수만큼 중복 기록되는 셈이다
-- 플랫폼 쪽 대응(지표 이름, cgroup 수집기, 원본을 고치지 않는 구현)은 [다음 글]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %})에서 다룬다
+- 학습 플랫폼 SDK에 MLflow 시스템 메트릭 로깅을 얹으려 했다. 함수 하나만 열어 주면 끝일 줄 알았다
+- MLflow는 실제 메트릭을 측정하지 않는다. `start_run`을 부른 **프로세스 안의 스레드**가 psutil로 `/proc` 파일을 읽고 pynvml로 NVML을 불러서 측정한다
+- 제출 경로에서 그 프로세스는 **워커 pod의 컨테이너 안**이다. 따라서 측정되는 값은 **그 컨테이너가 무엇을 볼 수 있느냐**로 정해진다
+- `/proc/net/dev`는 network namespace로 격리되고 NVML은 런타임이 넣어 준 장치만 세지만, `/proc/stat`과 `/proc/meminfo`는 **어떤 namespace로도 격리되지 않는다**
+- 실측 run의 `system_memory_usage_megabytes`는 워커 한도 100 GiB를 넘어 14만 MB까지 올라갔고, 두 계열로 역산한 분모는 노드 용량과 0.002%로 일치했다. pod가 아니라 노드를 잰다
+- 요구의 배경이 OOM 진단이었으므로, 노드 기준 24.5%를 자기 컨테이너 사용률로 읽으면 반대 방향의 판단을 부른다
+- 같은 노드에 뜬 rank끼리는 그 노드 값이 rank 수만큼 복제되어 각자의 이름으로 남는다
+- 플랫폼 쪽 대응은 [2편]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %}), 다른 도구와 런타임의 대응은 [3편]({% post_url 2026-09-24-Dev-MLflow-System-Metrics-Ecosystem %})에서 다룬다
 
 <br>
 
@@ -39,7 +42,9 @@ tags:
 
 > rank의 정의는 [분산학습 배경 글]({% post_url 2026-04-09-Kubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background %})에서, KubeRay와 Ray Train의 스케줄링 구조는 [Ray/KubeRay 글]({% post_url 2026-06-09-Kubernetes-GenAI-on-K8s-11-05-Ray-KubeRay-and-vLLM-Inference %})에서 다룬 적이 있다.
 
-이 대응 관계를 미리 잡아 두는 이유는 이 구조에서 **rank 하나가 컨테이너 하나에서 돌기 때문**이다. **격리의 단위는 pod가 아니라 컨테이너**다. pod는 네트워크 namespace처럼 일부를 공유하는 컨테이너 묶음이고, 같은 pod의 사이드카는 자기 cgroup 한도와 루트 파일시스템을 따로 갖는다. 그래서 어느 rank가 무엇을 보는가는 그 rank가 사는 컨테이너가 무엇을 보는가로 정해지며, 계열에 따라 컨테이너 것(GPU, cgroup 한도)과 pod 것(네트워크)으로 나뉜다. [종합](#종합-한-이름-아래-성질-넷)에서 rank마다 GPU는 다르게 보이고 CPU·메모리는 같게 보인다고 하는데, 그것이 전부 이 대응 위에 있다.
+이 대응 관계를 미리 잡아 두는 이유는 이 구조에서 **rank 하나가 컨테이너 하나에서 돌기 때문**이다. **격리의 단위는 pod가 아니라 컨테이너**다. pod는 네트워크 namespace처럼 일부를 공유하는 컨테이너 묶음이고, 같은 pod의 사이드카는 자기 cgroup 한도와 루트 파일시스템을 따로 갖는다. 그래서 어느 rank가 무엇을 보는가는 그 rank가 사는 컨테이너가 무엇을 보는가로 정해지며, 계열에 따라 컨테이너 것(GPU, cgroup 한도)과 pod 것(네트워크)으로 나뉜다. [종합](#계열별-성질-종합)에서 rank마다 GPU는 다르게 보이고 CPU·메모리는 같게 보인다고 하는데, 그것이 전부 이 대응 위에 있다.
+
+<br>
 
 ```mermaid
 graph TB
@@ -57,7 +62,7 @@ graph TB
     W0 & W1 & W2 & W3 --> M["MLflow 서버"]
 ```
 
-여기서 하나 눈여겨 볼 것은, **한 노드에 워커 pod가 여러 개 뜰 수 있다**는 점이다. 위 그림은 실제 플랫폼에서 제출된 4워커 학습의 배치 양상을 도식화한 것인데, rank 0과 rank 3이 같은 노드에 있다. 이 배치는 두 층의 스케줄링을 거쳐 나온다. 먼저 KubeRay가 만든 워커 pod를 어느 물리 노드에 놓을지는 Kubernetes 스케줄러가 자원 요청(GPU 1장, CPU, 메모리)을 보고 정한다. 그 뒤 Ray 스케줄러는 이미 노드에 놓인 pod들, 즉 Ray 노드들 위에서 일한다. Ray Train이 워커 액터를 띄우면 Ray 스케줄러가 각 액터를 GPU가 남은 Ray 노드에 배치하고 rank 번호를 매긴다. pod마다 GPU가 1장이고 워커마다 GPU 1장을 요구하므로 pod 하나에 액터 하나가 들어간다. 그래서 어느 pod가 rank 몇이 될지는 Ray가 정하지만, 그 pod가 어느 물리 노드에 있는지는 그 전에 Kubernetes가 정한 것이고 Ray는 그것을 바꾸지 못한다. 사용자는 어느 쪽도 통제하지 않는다. 이 사실은 [분산학습에서의 복제](#분산학습에서의-복제)에서 다시 나온다.
+여기서 하나 눈여겨 볼 것은, **한 노드에 워커 pod가 여러 개 뜰 수 있다**는 점이다. 위 그림은 실제 플랫폼에서 제출된 4워커 학습의 배치 양상을 도식화한 것인데, rank 0과 rank 3이 같은 노드에 있다. 이 배치는 두 층의 스케줄링을 거쳐 나온다. 먼저 KubeRay가 만든 워커 pod를 어느 물리 노드에 놓을지는 Kubernetes 스케줄러가 자원 요청(GPU 1장, CPU, 메모리)을 보고 정한다. 그 뒤로 Ray 스케줄러가 이미 노드에 놓인 pod들, 즉 Ray 노드들 위에서 일한다. Ray Train이 워커 액터를 띄우면 Ray 스케줄러가 각 액터를 GPU가 남은 Ray 노드에 배치하고 rank 번호를 매긴다. pod마다 GPU가 1장이고 워커마다 GPU 1장을 요구하므로 pod 하나에 액터 하나가 들어간다. 결과적으로 어느 pod가 rank 몇이 될지는 Ray가 정하지만, 그 pod가 어느 물리 노드에 있는지는 그 전에 Kubernetes가 정한 것이고 Ray는 그것을 바꾸지 못한다. 사용자는 어느 쪽도 통제하지 않는다. 이 사실은 [분산학습에서의 복제](#분산학습에서의-복제)에서 다시 나온다.
 
 ## 기록 표면의 분업
 
@@ -117,13 +122,17 @@ def setup_mlflow(..., rank_zero_only: bool = True):
 
 이 플랫폼의 SDK도 같다. `tracking.log_metric`류는 rank 0이 아니면 아무 일도 하지 않는다. 전 rank가 함께 불러야 하는 `log_metrics_collective`만 나머지 rank가 값을 보태는데, 그것도 모은 값을 rank 0이 한 번 쓴다. 이 분업은 [아래 표](#플랫폼이-처리하는-것-sdk가-노출하는-것)에서 정리한다. loss처럼 rank 0이 대표로 기록하면 되는 지표에는 이것으로 충분하다. 
 
-그러나 이 글의 주제인 시스템 메트릭처럼 rank마다 다른 값을 한 run에 두려면 **워커 전부가 같은 run id를 알아야 한다**. MLflow가 지원하는 채널은 환경변수 `MLFLOW_RUN_ID`다. 이 값이 있으면 `start_run()`은 새 run을 만드는 대신 그 run에 붙는다. 그 값을 워커에 실어 보내려면 워커보다 먼저 있는 driver가 run을 만들어야 하고, rank 0이 만들어 collective로 뿌리는 방법도 있다. 어느 쪽이든 rank를 의식한 배선이다. 플랫폼이 소유하지 않으면 ML 엔지니어가 학습 코드마다 이것을 직접 짜야 한다.
+이 플랫폼도 기록 함수는 같은 게이트를 쓴다. 다만 run을 만드는 주체가 rank 0이 아니라 driver인데, 그 이유는 게이트가 아니라 아래 둘째 항목에 있다.
 
 <br>
 
-둘째, **죽는 프로세스는 자기 죽음을 기록할 수 없다.** MLflow가 스스로 run에 FAILED를 쓰는 경로는 `with mlflow.start_run()` 블록을 예외로 빠져나갈 때뿐이고, 그 밖에는 코드가 `end_run(status='FAILED')`를 직접 불러야 한다. 프로세스가 정상 종료하면 atexit 훅이 FINISHED를 쓴다. cgroup 한도를 넘어 OOM으로 죽는 프로세스는 커널이 SIGKILL로 끝내므로 `finally`도 atexit도 돌지 않는다. MLflow에는 run에 대한 heartbeat나 시간 초과가 없어(3.15 기준), 그 run은 RUNNING으로 영원히 남는다. 요구사항의 배경이 된 OOM이 정확히 이 경우다. 반대 방향의 문제도 있다. 워커가 run에 붙은 채 정상 종료하면 atexit이 FINISHED를 쓴다. 전 워커를 한 run에 붙였다면 먼저 끝난 워커가 아직 도는 잡을 완주로 만든다.
+둘째, **죽는 프로세스는 자기 죽음을 기록할 수 없다.** cgroup 한도를 넘어 OOM으로 죽는 프로세스는 커널이 SIGKILL로 끝내므로 `finally`도 atexit도 돌지 않고, MLflow에는 run에 대한 heartbeat나 시간 초과가 없어(3.15 기준) 그 run은 RUNNING으로 남는다. 요구사항의 배경이 된 OOM이 정확히 이 경우다. 반대 방향도 있다. 전 워커를 한 run에 붙였다면 먼저 끝난 워커의 atexit이 아직 도는 잡을 FINISHED로 만든다. 그래서 run의 상태는 그 프로세스보다 오래 살면서 잡 전체를 보는 쪽이 써야 한다. 이 플랫폼에서는 driver가 run을 만들고 `TorchTrainer.fit()`의 결과로 FINISHED와 FAILED를 쓰며, 워커는 붙었다가 떼기만 한다.
 
-그래서 run의 상태는 그 프로세스보다 오래 살면서 잡 전체를 보는 쪽이 써야 한다. 학습 함수는 자기 프로세스의 시작과 끝만 안다. 다른 rank가 죽었다는 사실은 예외로 오지 않고, 집합 통신이 멈추거나 시간 초과로 끝나는 형태로 늦게 나타난다. Ray Train은 워커 하나가 실패하면 워커 그룹 전체를 내리고, 재시도가 남았으면 새 프로세스로 다시 띄운다. 전 rank가 끝났는지, 재시도가 소진됐는지는 `TorchTrainer.fit()`의 반환과 예외로 driver에 모이고, 잡이 밖에서 지워진 경우까지 포함한 최종 사실은 RayJob의 상태에 있다. 이 플랫폼에서는 driver가 run을 만들고 `fit()`의 결과로 FINISHED와 FAILED를 쓰며, 워커는 붙었다가 떼기만 하고 run을 닫지 않는다. driver마저 죽어 RUNNING으로 남은 run은 RayJob 상태를 읽는 정리 잡이 사후에 정정한다.
+<br>
+
+이 소유 구조에는 부수 효과가 하나 있다. driver가 run을 먼저 만들면 그 id를 워커에 실어 보낼 수 있고, MLflow는 환경변수 `MLFLOW_RUN_ID`로 그 채널을 지원한다. 이 값이 있으면 `start_run()`은 새 run을 만드는 대신 그 run에 붙는다. **전 워커가 한 run에 각자의 이름으로 기록하는 것**이 이것으로 가능해지는데, rank 0 게이트만 두는 방식으로는 안 되는 일이다.
+
+이 글이 다루는 시스템 메트릭이 그 통로를 처음으로 필요로 한 통로이기도 하다. loss는 rank 0이 대표로 써도 되지만 시스템 메트릭은 rank마다 재는 값이 다를 수 있어서, rank 0 하나만 기록하면 나머지 워커가 무엇을 쓰고 있었는지가 통째로 빠진다. 소유가 사용자 쪽에 있었다면 ML 엔지니어가 학습 코드마다 run id 전파를 직접 짜야 했을 것이다. 다른 이유로 잡아 둔 구조가 이번 요구를 그대로 받은 셈이다.
 
 ### 플랫폼이 처리하는 것, SDK가 노출하는 것
 
@@ -139,7 +148,7 @@ def setup_mlflow(..., rank_zero_only: bool = True):
 > 
 > 표의 rank 0 게이트는 학습 지표 이야기다. 동기 데이터 병렬에서는 rank마다 파라미터가 같고 검증 지표도 보통 rank 0이 모아서 계산하므로, 전 rank가 `log_metric`을 부르면 같은 키, 같은 step에 같은 값이 워커 수만큼 쌓인다. 그래서 SDK의 기록 함수는 rank 0이 아니면 아무 일도 하지 않는다. rank마다 값이 다른 지표(로컬 배치의 loss, 처리량 등)를 위해서는 전 rank가 함께 불러 mean·sum·max로 모은 뒤 rank 0이 한 번 기록하는 `log_metrics_collective`가 따로 있다. 
 > 
-> 이 글의 주제인 시스템 메트릭은 이 둘과 다르다. rank마다 값이 다를 수 있고 모을 이유도 없어서, 워커마다 자기 이름을 붙여 따로 기록한다. 같은 노드의 워커끼리 노드 값이 겹치는 문제([다음 글의 중복 처리]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %}#중복-처리))는 그 위에서 생기는 별개 이야기다.
+> 이 글의 주제인 시스템 메트릭은 이 둘과 다르다. rank마다 값이 다를 수 있고 모을 이유도 없어서, 워커마다 자기 이름을 붙여 따로 기록한다. 같은 노드의 워커끼리 노드 값이 겹치는 문제([2편의 중복 처리]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %}#중복-처리))는 그 위에서 생기는 별개 이야기다.
 
 즉 "ML 엔지니어가 함수를 부르면, 어느 프로세스가 어느 run에 어떤 이름으로 쓰고 언제 정리할지는 플랫폼이 정한다"는 분업이다. 플랫폼에 제출된 run은 전부 이 표면으로 기록되고 있고, 인터랙티브 세션의 로컬 실험도 같은 함수를 쓴다.
 
@@ -159,9 +168,12 @@ def setup_mlflow(..., rank_zero_only: bool = True):
 > wandb automatically logs system metrics every 15 seconds.
 > — [W&B System Metrics](https://docs.wandb.ai/models/ref/python/experiments/system-metrics)
 
+
+그래서 첫 번째 안은 MLflow가 이미 가진 이 기능을 그대로 켜는 것이었다. 새로 만들 것이 없고, 기록되는 자리도 학습 지표와 같은 run이다.
+
 <br>
 
-다른 안도 있었다. pod 관점의 자원 사용량은 플랫폼에서 운영 중인 Grafana의 워크로드 대시보드에 이미 있다. cAdvisor가 노출하는 `container_memory_working_set_bytes`를 pod 한도와 나란히 그리는 패널이다.
+다른 안도 검토했다. 사실 pod 관점의 자원 사용량은 플랫폼에서 운영 중인 Grafana의 워크로드 대시보드에 *이미* 있다. cAdvisor가 노출하는 `container_memory_working_set_bytes`를 pod 한도와 나란히 그리는 패널이다.
 
 > 이런 패널을 읽는 예는 [FFmpeg 튜닝 실험 글]({% post_url 2026-02-06-Dev-FFmpeg-CPU-04-02 %})에 있다.
 
@@ -174,9 +186,11 @@ def setup_mlflow(..., rank_zero_only: bool = True):
 - **보존 기간**: Grafana가 보여 주는 값은 Prometheus에 있고, 이 클러스터의 Prometheus 보존 기간은 10일이다(`--storage.tsdb.retention.time=10d`. 기본값은 15일). 며칠짜리 run을 몇 주 뒤에 다시 보면 이미 없다. Prometheus 보존 기간을 늘릴 수도 있지만, 그것은 실험 몇 개를 위해 클러스터 전체의 시계열을 다 오래 들고 있는 일이다
   - 뒤집어 말하면 **실험 기록과 시스템 메트릭의 보존 기간이 서로 맞아야 한다.** loss 곡선은 MLflow에 남는데 그 옆에 둘 자원 사용량이 열흘 뒤 사라지면, 한 달 뒤 OOM run을 다시 열었을 때 절반만 남는다. MLflow는 run 지표에 보존 기간을 두는 설정 자체가 없어서(3.15 기준. 보존 설정은 트레이스 보관에만 있고, `mlflow gc`는 삭제 표시된 run만 정리한다) run과 지표의 수명이 같다. 이 서버에서 지표를 가진 가장 오래된 run은 196일 전 것인데 시계열이 그대로 조회된다. 시스템 메트릭을 MLflow에 넣으면 이 조건이 저절로 맞는다
 
-그래서 MLflow가 이미 제공하는 시스템 메트릭 기능을 SDK에 얹기로 했다. 방식은 [앞서 본 기록 표면의 분업](#기록-표면의-분업) 그대로다. ML 엔지니어는 함수 하나를 부르고, 어느 프로세스가 어느 run에 어떤 이름으로 쓸지는 플랫폼이 정한다. 함수 하나를 추가하고 켤 프로세스만 고르면 끝일 것 같았다.
+<br>
 
-그런데 시스템 메트릭은 loss와 성질이 다르다. loss는 코드가 계산해 넘기는 값이라 어디서 부르든 같지만, 시스템 메트릭은 재는 프로세스가 어디에 있느냐에 따라 값이 달라진다. 그리고 제출 경로에서 그 프로세스는 컨테이너 안에 있다. 이 글은 여기서 마주친 문제를 다룬다. pod 안에서 잰 CPU·메모리가 왜 노드 값으로 기록되는지다. 그것을 지표 이름으로 드러내고 cgroup 수집기를 더한 설계와 구현은 [다음 글]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %})에서 다룬다.
+그래서 위에서 살펴본 것처럼 MLflow가 이미 제공하는 시스템 메트릭 기능을 SDK에 얹기로 했다. 방식은 [앞서 본 기록 표면의 분업](#기록-표면의-분업) 그대로다. ML 엔지니어는 함수 하나를 부르고, 어느 프로세스가 어느 run에 어떤 이름으로 쓸지는 플랫폼이 정한다. 함수 하나를 추가하고 켤 프로세스만 고르면 끝일 것 같았다.
+
+그런데 시스템 메트릭은 loss와 성질이 다르다. loss는 코드가 계산해 넘기는 값이라 어디서 부르든 같지만, 시스템 메트릭은 재는 프로세스가 어디에 있느냐에 따라 값이 달라진다. 그리고 제출 경로에서 그 프로세스는 컨테이너 안에 있다. 이 글은 여기서 마주친 문제를 다룬다. pod 안에서 잰 CPU·메모리가 왜 노드 값으로 기록되는지다. 그것을 지표 이름으로 드러내고 cgroup 수집기를 더한 설계와 구현은 [2편]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %})에서 다룬다.
 
 <br>
 
@@ -315,9 +329,9 @@ MLflow가 기록하는 값은 결국 "그 프로세스가 사는 곳에서 `/pro
 
 <br>
 
-# 현상: pod 안에서 잰 값은 노드 값
+# 노드 값으로 기록되는 CPU와 메모리
 
-앞의 원리를 컨테이너 환경에 놓으면 세 가지가 걸린다. psutil과 pynvml이 컨테이너 안에 있어야 한다는 **의존성**, 누가 어디서 켜느냐는 **활성화 지점**, 그리고 컨테이너 안에서 잰 값이 누구의 것이냐는 **측정 범위**다. 앞의 둘은 플랫폼 쪽 문제라 [다음 글]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %}#플랫폼-쪽-고려사항)에서 다루고, 이 글은 셋째를 따라간다.
+앞의 원리를 컨테이너 환경에 놓으면 세 가지가 걸린다. psutil과 pynvml이 컨테이너 안에 있어야 한다는 **의존성**, 누가 어디서 켜느냐는 **활성화 지점**, 그리고 컨테이너 안에서 잰 값이 누구의 것이냐는 **측정 범위**다. 앞의 둘은 플랫폼 쪽 문제라 [2편]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %}#플랫폼-쪽-고려사항)에서 다루고, 이 글은 셋째를 따라간다.
 
 컨테이너는 자원이 격리되어 보인다. 컨테이너 안에서 `nvidia-smi`를 치면 할당받은 GPU만 보이고, `ip addr`를 치면 자기 인터페이스만 보인다. 그렇다면 MLflow 시스템 메트릭이 컨테이너 안에서 켜지면 그 컨테이너의 사용량을 재는가. 달리 말해, psutil이 읽는 `/proc` 파일에도 같은 격리가 적용되는가.
 
@@ -345,7 +359,7 @@ implied total MB   median=540,576   p05=539,579   p95=541,556
 gpu-node-1 capacity = 540,565 MB   (144 논리 코어)
 ```
 
-0.002% 차이로 노드 용량과 일치한다. 이 run의 워커 pod 한도는 100GiB였고, 같은 플랫폼의 다른 레포는 64GiB(65,536 MB)를 쓴다. 어느 쪽과도 관계없는 숫자다. **`system_memory_usage_*`는 pod가 아니라 노드를 잰다.**
+0.002% 차이로 노드 용량과 일치한다. 이 run의 워커 pod 한도는 100GiB였고, 같은 플랫폼의 다른 레포는 64GiB(68,719 MB)를 쓴다. 어느 쪽과도 관계없는 숫자다. **`system_memory_usage_*`는 pod가 아니라 노드를 잰다.**
 
 ## 한도 대조
 
@@ -353,7 +367,7 @@ gpu-node-1 capacity = 540,565 MB   (144 논리 코어)
 
 | 지표 | 보이는 값 | 워커 한도가 64GiB·8코어라면 |
 | --- | --- | --- |
-| `system_memory_usage_megabytes` | 132,688 MB | 한도 65,536 MB. **한도의 2배가 넘는 값이 "사용량"으로 보인다** |
+| `system_memory_usage_megabytes` | 132,688 MB | 한도 68,719 MB. **한도의 1.9배에 이르는 값이 "사용량"으로 보인다** |
 | `system_memory_usage_percentage` | 24.5% | 분모가 노드 540 GB. 한도와 무관 |
 | `cpu_utilization_percentage` | 12.7% | 노드 144코어 대비. 환산하면 약 18코어. 예산 8코어와 비교 불가 |
 
@@ -365,13 +379,13 @@ gpu-node-1 capacity = 540,565 MB   (144 논리 코어)
 
 ## 오판 가능성
 
-문제는 이 값이 요구사항의 배경과 정면으로 부딪친다는 점이다. 
+문제는 이 값이 요구사항의 배경과 정확히 반대로 작용한다는 점이다. 
 
 노드 기준 메모리 24.5%를 보면 "여유가 많다"로 읽힌다. 배치를 올려도 되겠다는 판단으로 이어진다. 그렇게 올리면 자기 컨테이너는 64 GiB에서 죽는다. 노드 540 GB의 24.5%는 컨테이너가 도달할 수 없는 숫자다. 값 자체는 틀리지 않았지만, 지표 이름을 곧이곧대로 읽고 판단하면 정확히 반대 방향의 결론에 이른다. 
 
 요구의 출발이 OOM 진단이었다는 점을 고려해 보면, OOM을 피하려고 기록한 지표를 해석한 결과가 오히려 OOM을 부르는 쪽으로 읽히는 셈이다.
 
-메모리만의 문제도 아니다. 13계열 가운데 컨테이너 자기 몫을 재는 것은 GPU 5개와 네트워크 2개뿐이고, CPU·메모리 3개는 노드 값, 디스크 3개는 노드 디스크 값이다. 어느 계열이 무엇을 재는지는 [종합](#종합-한-이름-아래-성질-넷) 절에서 하나씩 가른다.
+메모리만의 문제도 아니다. 13계열 가운데 컨테이너 자기 몫을 재는 것은 GPU 5개와 네트워크 2개뿐이고, CPU·메모리 3개는 노드 값, 디스크 3개는 노드 디스크 값이다. 어느 계열이 무엇을 재는지는 [종합](#계열별-성질-종합) 절에서 하나씩 가른다.
 
 ## 분산학습에서의 복제
 
@@ -381,7 +395,7 @@ gpu-node-1 capacity = 540,565 MB   (144 논리 코어)
 
 <br>
 
-# 원인: CPU·메모리 통계는 격리되지 않는다
+# /proc 파일별 격리 차이
 
 왜 `/proc/meminfo`는 컨테이너 안에서도 노드 값을 보여 주는가. 이 답은 MLflow에도, Kubernetes에도 없다. 원인은 둘이다. 리눅스 커널이 `/proc`의 파일마다 격리를 다르게 하는 방식, 그리고 psutil이 그 가운데 격리되지 않는 파일을 읽고 cgroup은 읽지 않는다는 사실이다. 앞의 것부터 본다.
 
@@ -474,7 +488,7 @@ psutil은 시스템 레벨 라이브러리다. "이 프로세스가 사는 컨�
 
 <br>
 
-# 디스크와 GPU: 격리는 되지만 방식이 다르다
+# 디스크와 GPU의 격리 방식
 
 CPU·메모리는 `/proc` 가운데 격리되지 않는 파일을 읽는 문제였다. **나머지 두 계열은 격리가 되긴 하는데**, 그 방식이 `/proc` 이야기와 다르다. 디스크는 mount namespace로 격리된 자기 루트 파일시스템을 보지만 용량 숫자는 노드 디스크의 것이고, GPU는 namespace가 아니라 장치 파일로 격리된다.
 
@@ -554,9 +568,9 @@ $ CUDA_VISIBLE_DEVICES=0,2 python3 -c "import pynvml; pynvml.nvmlInit(); print(p
 
 <br>
 
-# 종합: 한 이름 아래 성질 넷
+# 계열별 성질 종합
 
-## 계열별 성질
+## 파일 기준 분류
 
 13계열을 psutil이 읽는 파일 기준으로 다시 나누면 이렇게 된다.
 
@@ -583,98 +597,18 @@ $ CUDA_VISIBLE_DEVICES=0,2 python3 -c "import pynvml; pynvml.nvmlInit(); print(p
 
 제출 경로에서 GPU를 전부 보려면 전 rank가 수집하는 것 외에 방법이 없다. 한 프로세스가 1장만 보기 때문이다. 반면 로컬에서는 컨테이너 격리가 없어 어느 계열도 rank마다 다르지 않다. rank를 늘려도 정보가 늘지 않고 복제만 는다. rank를 늘리는 것 자체가 정보를 늘리는 것이 아니라, **컨테이너 격리가 프로세스마다 다른 것을 보게 만들어서** 늘어나는 것이다. 그래서 플랫폼 SDK는 격리가 없는 환경에서 전 워커 수집 옵션을 받아도 한 줄 안내하고 무시한다.
 
-다만 제출 경로에도 남는 것이 있다. 같은 노드에 뜬 rank끼리는 노드 계열과 루트 파일시스템 계열이 같은 값이다. 이 중복을 어떻게 다루는지는 [다음 글의 중복 처리]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %}#중복-처리)에서 다룬다.
-
-<br>
-
-# 더 알아보기: 다른 도구의 대응
-
-같은 문제가 다른 도구에는 어떻게 있는지, 그리고 어떻게 대응했는지를 찾아봤다. 아래는 2026년 9월 초에 각 프로젝트의 문서·소스·이슈 트래커를 직접 확인한 내용이다. 도구들이 빠르게 바뀌는 영역이라 읽는 시점에는 달라져 있을 수 있으니, 링크에서 현재 상태를 확인하자.
-
-## psutil
-
-이 문제의 뿌리는 psutil에 있고, psutil은 알고 있다. 2022년 4월에 열린 이슈가 2026년 9월 현재도 열려 있다.
-
-> To my understanding from this ticket (#2100) and #2076, reading `/proc` from within the container returns info about the host and not the container. And that is a problem. I would say it's the container that is at fault here, but anyway.
-> — [giampaolo/psutil#2100](https://github.com/giampaolo/psutil/issues/2100), 메인테이너 코멘트 (2024-11)
-
-닫히지 않는 이유도 이슈에 있다. `/sys/fs/cgroup`을 읽자는 제안에 대해 "그 경로는 Docker 전용이고 다른 컨테이너 런타임이 있다", "컨테이너 안에 있는지, 어떤 컨테이너인지를 신뢰성 있게 감지할 표준이 없다"는 반론이 붙어 있다. 2017년에 같은 내용으로 열린 이슈는 2026년 8월에 이 이슈의 중복으로 닫혔다.
-
-psutil이 그대로이니 psutil 위에 얹힌 파이썬 도구들도 그대로다. MLflow에는 2024년 6월에 "컨테이너 안에서 psutil이 노출하는 시스템 메트릭은 학습의 실제 자원 소비를 반영하지 않는다"는 기능 요청([mlflow#12365](https://github.com/mlflow/mlflow/issues/12365))이 열렸고, 메인테이너가 긍정적으로 답했지만 구현은 없다. ClearML의 리소스 모니터와 Aim의 수집기도 `psutil.virtual_memory()`를 그대로 쓴다.
-
-이름이 정직한 예도 있다. Lightning의 `DeviceStatsMonitor`는 docstring에서 `cpu_percent`를 "System-wide CPU utilization (%)", `cpu_vm_percent`를 "System-wide virtual memory (RAM) utilization (%)"으로 적는다. 값은 노드 값이지만 이름이 그렇다고 말한다. HuggingFace Trainer의 메모리 추적은 `psutil.Process().memory_info().rss`, 즉 프로세스 RSS를 본다. 노드도 컨테이너도 아닌 제3의 관점이다.
-
-## 도구별 대응
-
-| 도구 | CPU·메모리 퍼센트의 분모 | 방식 | 확인 기준 |
-| --- | --- | --- | --- |
-| MLflow | 노드 | psutil 그대로. 키 이름이 `system_`이라 이름은 범위를 말한다 | 3.15 소스 |
-| W&B | **cgroup v2 한도** (컨테이너일 때) | 리눅스 컨테이너에서 cgroup v2 한도를 분모로. 옵트아웃 `x_stats_no_cgroup` | v0.27.0, 2026-05 |
-| Ray | cgroup 한도 (노드 메모리) / 호스트 (호스트 메모리) | 두 관점을 **다른 함수, 다른 키**로 노출 | master 소스 |
-| Lightning | 노드 | psutil 그대로. docstring이 "System-wide"라고 명시 | master 소스 |
-
-W&B의 변화가 가장 최근이다. 2026년 4월 30일에 머지된 PR이 5월 14일 0.27.0에 들어갔다.
-
-> Changed CPU and memory system metric percentages in Linux containers to use cgroup v2 resource limits instead of host node totals. Set the private `x_stats_no_cgroup` setting to `True` to opt out
-> — [wandb CHANGELOG 0.27.0](https://github.com/wandb/wandb/blob/main/CHANGELOG.md)
-
-구현 파일의 머리 주석이 문제를 이 글과 같은 말로 적고 있다.
-
-> This file detects cgroup v2 limits to use as denominators for the system memory and CPU percentages. Without these, a containerized run reports usage as a fraction of the host node, which produces misleading numbers when the cgroup limit is much smaller than the host.
-> — [wandb `core/internal/monitor/cgroup.go`](https://github.com/wandb/wandb/blob/main/core/internal/monitor/cgroup.go)
-
-설계 판단 몇 가지가 참고할 만하다. cgroup v1은 의도적으로 지원하지 않는다("v2 has been the default in every major distro for years"). 부모 cgroup이 아니라 프로세스가 실제로 속한 leaf cgroup만 읽는다. 부모의 `memory.current`에는 형제 워크로드가 섞이기 때문이다. CPU는 `cpu.max` 쿼터와 `Cpus_allowed_list`의 크기 중 작은 쪽을 쓴다. 그리고 이 판단의 근거로 Go 런타임을 직접 인용한다("The Go runtime's cgroup-aware GOMAXPROCS makes the same call").
-
-한 가지 눈에 띄는 것은, 코드는 바뀌었는데 문서는 아직이라는 점이다. W&B 시스템 메트릭 레퍼런스는 2026년 9월 기준으로 Memory Percent를 "the total system memory usage as a percentage of the total available memory"로 설명하고 있고, cgroup이나 container라는 단어가 없다. 코드가 고쳐져도 이름과 문서가 따라오지 않으면 사용자는 여전히 오해한다. [다음 글]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %}#범위-접두)에서 지표 이름에 집착하는 이유가 여기 있다.
-
-Ray는 훨씬 전부터 cgroup을 읽었다. `get_system_memory()`가 `/sys/fs/cgroup/memory/memory.limit_in_bytes`(v1)와 `/sys/fs/cgroup/memory.max`(v2)를 확인하고, 주석에 "Try to accurately figure out the memory limit if we are in a docker container"라고 적어 두었다. Ray의 OOM 방지 메모리 모니터도 이 값을 쓴다. 흥미로운 것은 대시보드 리포터다. `_get_mem_usage()`는 cgroup 기준 총량을, `_get_host_mem_usage()`는 `psutil.virtual_memory()`를 쓰고, 둘을 `cgroup_mem`과 `host_mem`이라는 다른 키로 내보낸다. 두 관점을 이름으로 분리한다는 이 글의 결론을 Ray는 이미 하고 있었다.
-
-## 런타임의 선례
-
-관측 도구보다 먼저 이 길을 걸은 것은 언어 런타임들이다.
-
-- **JVM**: JDK 10에서 컨테이너 감지와 자원 설정이 들어갔고(JDK-8146115, 8u191에도 백포트) `-XX:+UseContainerSupport`가 기본 on이다. 그 전의 JVM은 힙 크기를 "기계의 물리 메모리"에서 계산했다
-- **.NET**: GC 문서가 "If the process runs inside an environment with a set memory limit (for example, a container), that limit is treated as the total physical memory"라고 적는다. 힙 상한 기본값은 그 한도의 75%다
-- **Go**: 1.25부터 cgroup CPU 쿼터를 `GOMAXPROCS` 기본값에 반영한다. 공식 블로그는 "Before Go 1.25, Go was unaware of CPU limits set by orchestration platforms. Instead, it would set `GOMAXPROCS` to the number of cores on the machine it was deployed to"라고 적는다. 그 전에는 uber-go/automaxprocs가 사실상 표준이었다
-- **Python**: 3.13에서 `os.process_cpu_count()`와 `PYTHON_CPU_COUNT`가 추가됐다. 다만 이것은 CPU affinity(cpuset) 기준이라 `cpu.max` 쿼터는 반영하지 않는다. 메모리 쪽은 psutil 이슈가 열려 있는 채로다
-
-공통 패턴이 하나 보인다. 컨테이너 인식을 기본으로 켜되, 끄는 스위치를 남긴다. JVM의 `-XX:-UseContainerSupport`, W&B의 `x_stats_no_cgroup`, Go의 `GODEBUG=containermaxprocs=0`이 그것이다.
-
-## 세 가지 길
-
-정리하면 이 문제, 즉 **컨테이너 안에서 켠 관측 도구가 노드 값을 컨테이너 값처럼 보여 주는 것**에 대한 대응은 세 갈래다. 어느 층을 고치느냐로 나뉜다.
-
-| 길 | 무엇을 고치나 | 예 | 맞는 경우 |
-| --- | --- | --- | --- |
-| **도구를 고친다** | 값을 재는 쪽이 `/proc` 대신 cgroup을 읽게 한다 | W&B의 자체 수집기(cgroup.go), Ray의 `get_system_memory()`, [다음 글의 cgroup 수집기]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %}#cgroup-수집기) | 도구가 내 것이거나 감쌀 수 있을 때 |
-| **커널 뷰를 고친다** | 도구는 그대로 두고, 도구가 읽는 `/proc` 파일 쪽을 컨테이너 값으로 바꿔치기한다 | [원인 절의 참고](#격리되는-파일-격리되지-않는-파일)에서 언급한 lxcfs. FUSE로 `/proc/meminfo`·`/proc/stat`을 덮어써 cgroup 값을 보여 준다 | 도구를 못 고치고 노드에 손댈 수 있을 때. kubelet이 보는 값과 어긋날 수 있다 |
-| **밖에서 잰다** | 프로세스 안에서 재기를 포기하고, 노드의 에이전트가 cgroup을 읽어 다른 저장소에 보낸다 | cAdvisor → Prometheus → Grafana. GPU는 DCGM exporter | 시계열 관측 백엔드가 필요할 때. [배경 절](#레퍼런스와-검토한-대안)에서 검토한 Grafana 안이 이것이다. 실험 화면과는 분리된다 |
-
-첫째 길에서 "도구"는 psutil일 수도 있고 그 위의 관측 도구일 수도 있다. psutil이 cgroup을 읽게 고치는 것이 가장 근본적이지만 [앞 절](#psutil)에서 본 대로 그 이슈는 4년째 열려 있고, 그래서 그 위의 도구들이 각자 cgroup을 읽는 수집기를 따로 붙였다. 셋째 길은 MLflow의 시스템 메트릭을 쓰지 않는 길이다. MLflow 모니터가 밖의 값을 가져오는 것이 아니라, 관측 자체를 MLflow 밖에 두는 것이다.
-
-셋째 길을 택할 때 무엇으로 재느냐도 갈린다. `kubectl top`의 데이터 소스인 metrics-server는 README에서 "Metrics Server is meant only for autoscaling purposes. For example, don't use it to forward metrics to monitoring solutions"라고 못 박는다. 순간값을 확인하는 용도이지 시계열 저장소가 아니라는 뜻이다. pod 관점의 시계열은 cAdvisor에서 Prometheus로 가는 라인이 맞다. GPU는 NVML이 장치 파일 격리를 따르므로 컨테이너 안에서 잰 값 자체는 맞지만, 노드에서 밖으로 잴 때는 "이 GPU가 어느 pod 것인가"를 NVML이 모른다. DCGM exporter는 kubelet의 pod-resources API로 그 매핑을 얻어 `pod`·`namespace`·`container` 라벨을 붙인다.
-
-## 베스트 프랙티스
-
-위 조사를 통해 배울 수 있는 실천 원칙은 다섯이다.
-
-1. **컨테이너가 자기 한도를 알아야 하면 `/proc`이 아니라 cgroup에서 읽는다.** 2014년의 글, psutil 메인테이너의 코멘트, Docker `stats`의 구현, kubelet 문서가 전부 같은 말을 한다. 이 글의 실측 pod에서도 psutil은 540 GB를, cgroup은 64 GiB를 답했다
-2. **도구가 container-aware가 아니면, 이름으로 범위를 드러내거나 수집기를 더한다.** Lightning은 docstring에 "System-wide"라고 적어 이름으로 드러냈고, Ray는 `cgroup_mem`과 `host_mem`으로 키를 갈랐으며, W&B는 수집 자체를 cgroup 기준으로 바꿨다. 둘 다 없으면 해석이 사용자 몫으로 남는다
-3. **pod 관점의 기준값은 kubelet과 cAdvisor가 쓰는 working set이고, 자체 수집기는 그 값과 맞아야 한다.** kubelet의 eviction 판정이 이 값으로 이뤄진다. 실험 화면과 관측 화면의 숫자가 다르면 사용자가 어느 쪽을 믿을지 판단해야 한다
-4. **GPU는 장치 파일 격리를 그대로 쓰되, pod 매핑은 DCGM exporter에 맡긴다.** NVML이 `CUDA_VISIBLE_DEVICES`를 무시하고 장치 파일만 본다는 것은 이 글의 호스트 실측이고, 1차 문서로 확인한 것은 아니다
-5. **컨테이너 인식은 기본으로 켜고, 끄는 스위치는 남긴다.** JVM의 `-XX:-UseContainerSupport`, Go의 `GODEBUG=containermaxprocs=0`, W&B의 `x_stats_no_cgroup`이 같은 모양이다
+다만 제출 경로에도 남는 것이 있다. 같은 노드에 뜬 rank끼리는 노드 계열과 루트 파일시스템 계열이 같은 값이다. 이 중복을 어떻게 다루는지는 [2편의 중복 처리]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %}#중복-처리)에서 다룬다.
 
 <br>
 
 # 정리
 
-pod 안에서 켠 MLflow 시스템 메트릭이 무엇을 재는지를 따라온 결과를 정리하면 셋이다.
+pod 안에서 켠 MLflow 시스템 메트릭이 무엇을 재는지를 따라온 결과, 남는 것은 둘이다.
 
-1. **MLflow는 재지 않는다.** `start_run`을 부른 프로세스 안의 스레드가 psutil과 pynvml을 부르고, psutil은 `/proc` 파일을 읽는다. 값을 결정하는 것은 그 프로세스가 어디서 파일을 여느냐다
-2. **컨테이너 격리는 "보이는 것"과 "쓸 수 있는 것"이 따로다.** namespace는 자원 종류별로 감싸고, `/proc/stat`·`/proc/meminfo`는 어떤 namespace에도 속하지 않는다. 컨테이너의 한도는 cgroup에 있고 psutil은 그것을 읽지 않는다. 그래서 pod 안에서 켠 시스템 메트릭의 CPU·메모리는 노드 값이고, 같은 노드의 rank끼리는 그 값이 복제된다
-3. **이 문제는 도구 하나의 버그가 아니다.** psutil이 그대로이니 그 위의 파이썬 도구들이 그대로이고, 언어 런타임들은 이미 컨테이너 인식으로 넘어갔으며, W&B는 2026년에 그 선을 넘었다. 관측 도구가 런타임이 걸어간 길을 뒤늦게 걷고 있다
+1. **측정 위치가 값을 정한다.** MLflow는 재지 않고 `start_run`을 부른 프로세스 안의 스레드가 psutil과 pynvml을 부르므로, 같은 코드가 베어 호스트에 있느냐 컨테이너 안에 있느냐로 값이 갈린다
+2. **컨테이너 격리는 "보이는 것"과 "쓸 수 있는 것"이 따로다.** namespace는 자원 종류별로 감싸고 `/proc/stat`·`/proc/meminfo`는 어디에도 속하지 않는다. 한도는 cgroup에 있고 psutil은 그것을 읽지 않는다. 그래서 `system/` 하나의 접두 아래 노드·컨테이너 루트 파일시스템·pod·장치 네 범위가 섞인다
 
-이 위에서 플랫폼이 무엇을 했는지, 즉 노드를 재는 계열에 `node_`·`rootfs_` 접두를 붙이고 cgroup 한도 대비 working set을 재는 `container_` 계열을 더한 설계와, MLflow 원본을 고치지 않고 얹은 구현은 [다음 글]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %})에서 다룬다. 이 글의 실측 중 GPU 격리의 기제는 호스트에서 NVML을 직접 불러 확인한 것이다.
+이 위에서 플랫폼이 한 일, 즉 노드를 재는 계열에 `node_`·`rootfs_` 접두를 붙이고 cgroup 한도 대비 working set을 재는 `container_` 계열을 더한 설계와 구현은 [2편]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %})에서 다룬다. 이 문제가 MLflow만의 것이 아니라는 것과 다른 도구·언어 런타임의 대응은 [3편]({% post_url 2026-09-24-Dev-MLflow-System-Metrics-Ecosystem %})에서 다룬다. 이 글의 실측 중 GPU 격리의 기제는 호스트에서 NVML을 직접 불러 확인한 것이다.
 
 <br>
 
@@ -682,29 +616,14 @@ pod 안에서 켠 MLflow 시스템 메트릭이 무엇을 재는지를 따라온
 
 - [MLflow System Metrics](https://mlflow.org/docs/latest/ml/tracking/system-metrics/) — 활성화 방법, 샘플링 주기, 추가 의존성
 - [MLflow 원본 코드 v3.15.1](https://github.com/mlflow/mlflow/tree/v3.15.1/mlflow/system_metrics) — `system_metrics_monitor.py`, `metrics/cpu_monitor.py`, `metrics/gpu_monitor.py`, `tracking/fluent.py`
-- [mlflow/mlflow#12365](https://github.com/mlflow/mlflow/issues/12365) — cgroup 메트릭 기능 요청 (2024-06, open)
 - [W&B System Metrics](https://docs.wandb.ai/models/ref/python/experiments/system-metrics) — 수집 주기와 지표 정의
-- [wandb/wandb#11796](https://github.com/wandb/wandb/pull/11796) — cgroup v2 한도를 분모로 쓰는 변경 (2026-04)
-- [wandb CHANGELOG 0.27.0](https://github.com/wandb/wandb/blob/main/CHANGELOG.md)
-- [giampaolo/psutil#2100](https://github.com/giampaolo/psutil/issues/2100) — 컨테이너 안에서 호스트 메모리 보고 (2022-04, open)
 - [Fabio Kung, Memory inside Linux containers (2014)](https://fabiokung.com/2014/03/13/memory-inside-linux-containers/)
 - [lxc/lxcfs](https://github.com/lxc/lxcfs) — `/proc` 파일을 cgroup 값으로 덮어쓰는 FUSE 파일시스템
 - [Alibaba Cloud, Using LXCFS to Improve Container Resource Visibility](https://www.alibabacloud.com/blog/kubernetes-demystified-using-lxcfs-to-improve-container-resource-visibility_594109)
 - [Linux cgroup v2 admin guide](https://docs.kernel.org/admin-guide/cgroup-v2.html) — `memory.current`, `memory.max`, `memory.stat`, `cpu.max`, `cpu.stat`
 - [Kubernetes, Node-pressure Eviction](https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/) — working set 정의
-- [kubernetes-sigs/metrics-server](https://github.com/kubernetes-sigs/metrics-server) — autoscaling 전용이라는 경고
-- [NVIDIA/dcgm-exporter](https://github.com/NVIDIA/dcgm-exporter) — kubelet pod-resources API로 GPU→pod 매핑
-- [Ray `_common/utils.py`](https://github.com/ray-project/ray/blob/master/python/ray/_common/utils.py) — `get_system_memory()`
-- [Ray Out-Of-Memory Prevention](https://docs.ray.io/en/latest/ray-core/scheduling/ray-oom-prevention.html)
-- [Lightning DeviceStatsMonitor](https://github.com/Lightning-AI/pytorch-lightning/blob/master/src/lightning/pytorch/callbacks/device_stats_monitor.py)
 - [Lightning MLFlowLogger](https://github.com/Lightning-AI/pytorch-lightning/blob/master/src/lightning/pytorch/loggers/mlflow.py), [Hugging Face MLflowCallback](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/integration_utils.py), [Ray `setup_mlflow`](https://github.com/ray-project/ray/blob/master/python/ray/air/integrations/mlflow.py) — 셋 다 rank 0만 run을 만든다
 - [MLflow `tracking/fluent.py` v3.15.1](https://github.com/mlflow/mlflow/blob/v3.15.1/mlflow/tracking/fluent.py) — `MLFLOW_RUN_ID` 부착, `ActiveRun.__exit__`의 FAILED, atexit의 `end_run`
-- [Ray Train Fault Tolerance](https://docs.ray.io/en/latest/train/user-guides/fault-tolerance.html) — 워커 실패 시 워커 그룹 전체 재시작
-- [Go blog, Container-aware GOMAXPROCS](https://go.dev/blog/container-aware-gomaxprocs), [Go 1.25 release notes](https://go.dev/doc/go1.25)
-- [uber-go/automaxprocs](https://github.com/uber-go/automaxprocs)
-- [JDK-8146115](https://bugs.openjdk.org/browse/JDK-8146115) — Improve docker container detection and resource configuration usage
-- [.NET Runtime configuration options for garbage collection](https://learn.microsoft.com/en-us/dotnet/core/runtime-config/garbage-collector)
-- [What's New In Python 3.13](https://docs.python.org/3/whatsnew/3.13.html) — `os.process_cpu_count()`
 - [namespaces(7)](https://man7.org/linux/man-pages/man7/namespaces.7.html)
 - [LKML, meminfo: show /proc/meminfo base on container's memcg (2012)](https://lore.kernel.org/linux-kernel//1338260214-21919-1-git-send-email-gaofeng@cn.fujitsu.com/T/) ([미러](https://lkml.iu.edu/hypermail/linux/kernel/1205.3/02096.html))
 - [Everything is a File 철학]({% post_url 2026-01-31-CS-Everything-is-a-File %})
@@ -714,6 +633,7 @@ pod 안에서 켠 MLflow 시스템 메트릭이 무엇을 재는지를 따라온
 - [컨테이너 네트워킹 기본 원리: 네임스페이스 네트워킹]({% post_url 2026-03-19-CS-Container-Networking-Namespace %})
 - [NVIDIA Device Plugin 동작 원리]({% post_url 2024-07-23-Dev-Kubernetes-NVIDIA-GPU-Mechanism %})
 - [NCCL Communicator 초기화 시점: Lazy vs Eager Init]({% post_url 2026-04-18-Dev-NCCL-Communicator-Lazy-Init-Debugging %})
-- [다음 글: [MLflow] 시스템 메트릭 로깅 - 2. 플랫폼 SDK에 얹기: 이름, cgroup 수집기, 원본 무수정 확장]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %})
+- [2편: [MLflow] 시스템 메트릭 로깅 - 2. 플랫폼 SDK에 얹기: 이름, cgroup 수집기, 원본 무수정 확장]({% post_url 2026-09-23-Dev-MLflow-System-Metrics-Platform-SDK %})
+- [3편: [MLflow] 시스템 메트릭 로깅 - 3. 다른 도구와 런타임의 컨테이너 대응]({% post_url 2026-09-24-Dev-MLflow-System-Metrics-Ecosystem %})
 
 <br>
