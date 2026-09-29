@@ -3,6 +3,7 @@ title: "[Nsight] Nsight 프로파일러: 2. 실행 환경별 적용"
 excerpt: "로컬·컨테이너·쿠버네티스·런타임 exec 환경에서 프로파일러를 붙일 때 마주치는 다섯 가지 문제를 정리해 보자."
 categories:
   - Dev
+hidden: true
 toc: true
 use_math: false
 header:
@@ -16,7 +17,7 @@ tags:
   - Container
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-5
-last_modified_at: 2026-09-05
+last_modified_at: 2026-09-28
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 5주차 학습 중 딥다이브한 내용입니다.*

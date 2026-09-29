@@ -3,6 +3,7 @@ title: "[GPU] GPU 패키징과 노드 경계: die에서 랙까지"
 excerpt: "GPU 인터커넥트의 경계가 무엇으로 정해지는지 die부터 랙까지 따라가 보자."
 categories:
   - CS
+hidden: true
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -16,7 +17,7 @@ tags:
   - Datacenter
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-3
-last_modified_at: 2026-08-22
+last_modified_at: 2026-09-28
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 3주차 학습 중 딥다이브한 내용입니다.*

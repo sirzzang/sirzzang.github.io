@@ -3,6 +3,7 @@ title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.2. 데�
 excerpt: "Grafana를 서브패스로 노출하고 Prometheus 데이터소스를 프로비저닝한 뒤, ConfigMap으로 넣은 vLLM 대시보드가 언제 목록에 뜨는지 확인해 보자."
 categories:
   - Kubernetes
+hidden: true
 toc: true
 use_math: false
 header:
@@ -19,7 +20,7 @@ tags:
   - Observability
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-6
-last_modified_at: 2026-09-13
+last_modified_at: 2026-09-28
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.*

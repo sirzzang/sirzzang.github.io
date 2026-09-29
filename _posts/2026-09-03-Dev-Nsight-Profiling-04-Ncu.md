@@ -3,6 +3,7 @@ title: "[Nsight] Nsight 프로파일러: 4. ncu 수집과 커널 판정"
 excerpt: "ncu 리포트를 어느 순서로 읽고, 어떤 숫자가 병목 판정을 가르는지 정리해 보자."
 categories:
   - Dev
+hidden: true
 toc: true
 use_math: false
 header:
@@ -16,7 +17,7 @@ tags:
   - CUDA
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-5
-last_modified_at: 2026-09-05
+last_modified_at: 2026-09-28
 ---
 
 

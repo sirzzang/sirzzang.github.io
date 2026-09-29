@@ -15,39 +15,32 @@ tags:
   - System-Metrics
   - Design-Pattern
   - Contract-Test
+last_modified_at: 2026-09-28
 ---
 
 <br>
 
 # TL;DR
 
-- [이전 글]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %})에서 pod 안에서 켠 CPU·메모리가 노드 값이고, 같은 노드의 rank끼리 복제된다는 것을 확인했다. 이 글은 그 위에서 플랫폼 SDK가 한 일이다
-- 켜는 자리는 환경변수가 아니라 SDK 함수 하나로 모았다. 모니터는 `start_run`을 부른 프로세스마다 생겨서, 환경변수로 켜면 워커 수 + 1개가 같은 키에 섞여 쓴다
-- 이름이 범위를 말하게 했다. 노드를 재는 계열에 `node_`, 컨테이너 루트 파일시스템에 `rootfs_`를 붙이고 rank는 이름 끝에 달았다. 여기에 cgroup 한도 대비 working set을 재는 `container_` 계열을 더했다. 켤 기준은 "제출인가 로컬인가"가 아니라 "cgroup 한도가 실재하는가"다
-- 중복은 두 층이라 다르게 다뤘다. 한 파드에 rank가 여럿 뜨는 파드 중복은 `LOCAL_RANK`로 조율 없이 지웠고, 같은 노드의 파드끼리 겹치는 노드 중복은 이름에 노드를 한 단 끼워 보이게만 했다. 집합 연산으로 맞추는 안은 워커 하나가 늦으면 학습이 멈춰서 버렸다
+- [1편]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %})에서 pod 안에서 켠 CPU·메모리가 노드 값이고 같은 노드의 rank끼리 복제된다는 것을 확인했다. 이 글은 그 위에서 플랫폼 SDK가 한 일이다
+- 메트릭 측정을 활성화하는 수단은 SDK 함수 하나로 모았다. 모니터는 `start_run`을 부른 프로세스마다 생겨서, 환경변수로 켜면 워커 16개일 때 모니터 17개가 같은 키에 섞여 쓴다
+- 이름이 측정 범위를 말하게 했다. 노드를 재는 계열에 `node_`, 컨테이너 루트 파일시스템에 `rootfs_`를 붙이고 rank는 이름 끝에 달았다
+- 여기에 cgroup 한도 대비 working set을 재는 `container_` 계열을 더했다. 켤 기준은 "제출인가 로컬인가"가 아니라 "cgroup 한도가 실재하는가"다
+- 중복은 두 층이라 다르게 다뤘다. pod 중복은 `LOCAL_RANK`로 조율 없이 지웠고, 노드 중복은 이름에 노드를 한 단 끼워 보이게만 했다
+- 집합 연산으로 맞추는 안은 워커 하나가 늦으면 학습이 멈춰서 버렸다
 - MLflow 원본은 한 줄도 고치지 않는다. 수집기 리스트라는 확장점에 얹고, 이름은 프록시로 바꾸고, 문서 밖 표면 의존은 계약 테스트로 잠근다
 
 <br>
 
 # 들어가며
 
-[이전 글]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %})에서 pod 안에서 켠 MLflow 시스템 메트릭이 무엇을 재는지를 따라갔다. MLflow는 재지 않고 psutil이 `/proc` 파일을 읽으며, `/proc/stat`·`/proc/meminfo`는 어떤 namespace로도 격리되지 않아 pod 안에서도 노드 값이 나온다. 
+[1편]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %})에서 pod 안에서 켠 MLflow 시스템 메트릭이 무엇을 재는지를 따라갔다. MLflow는 재지 않고 psutil이 `/proc` 파일을 읽으며, `/proc/stat`·`/proc/meminfo`는 어떤 namespace로도 격리되지 않아 pod 안에서도 노드 값이 나온다. 그래서 `system/` 하나의 접두 아래 노드(`cpu_`·`system_memory_`), 컨테이너 루트 파일시스템(`disk_`), pod(`network_`), 장치(`gpu_0_`) 네 범위가 섞여 있는데, 메트릭 이름은 그 사실을 말하지 않는다. 계열별 분류는 [1편의 파일 기준 분류]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %}#파일-기준-분류)에 표로 있다.
 
-그 결과를 메트릭 계열별로 분류해 보면 아래와 같았다.
+요구의 배경이 OOM 진단이었으므로, 노드 기준 24.5%를 컨테이너 기준으로 읽으면 반대 방향의 판단을 부른다. OOM 자체는 플랫폼이 대신 막아 줄 영역이 아니지만, 어디까지 썼는지를 올바르게 보여 주는 것은 플랫폼 몫이었다. 이 글은 그 몫을 어떻게 했는지 다룬다.
 
-| 계열 | psutil 호출 | 읽는 것 | 여는 프로세스의 namespace에 따라 내용이 다른가 | 재는 범위 | 같은 노드 rank끼리 |
-| --- | --- | --- | --- | --- | --- |
-| `cpu_utilization_percentage` | `cpu_percent()` | `/proc/stat` | **아니오** | **노드** | 같은 값 |
-| `system_memory_usage_*` | `virtual_memory()` | `/proc/meminfo` | **아니오** | **노드** | 같은 값 |
-| `disk_*` | `disk_usage('/')` | 컨테이너 rootfs `statvfs` | **예** (mount ns) | **컨테이너 루트 FS** (노드 디스크가 backing) | 같은 값 |
-| `network_*` | `net_io_counters()` | `/proc/net/dev` | **예** (network ns) | **pod** | 다른 값 |
-| `gpu_0_*` | pynvml | NVML | **아니오** (namespace 아님 — 런타임이 넣어 준 장치 파일) | **그 컨테이너의 GPU** | 다른 값 |
+배경이 되는 플랫폼은 Kubernetes 위의 KubeRay·Ray Train이고, 실험 기록은 플랫폼 SDK가 MLflow를 감싸 제공한다. ML 엔지니어는 함수 하나를 부르고, 어느 프로세스가 어느 run에 어떤 이름으로 쓸지는 플랫폼이 정한다([1편의 기록 표면의 분업]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %}#기록-표면의-분업)). 시스템 메트릭도 같은 분업으로 얹는다.
 
-한 접두(`system/`) 아래 성질이 넷인 계열이 섞여 있고, 메트릭 이름은 그 사실을 말하지 않는다. 요구의 배경이 OOM 진단이었으므로, 노드 기준 24%를 컨테이너 기준으로 읽으면 반대 방향의 판단을 부른다고 헀다. OOM 자체는 플랫폼이 대신 막아 줄 영역이 아니지만, 어디까지 썼는지를 올바르게 보여 주는 것은 플랫폼 몫이었다.
-
-이 글은 그 몫을 어떻게 했는지에 대해 다룬다. 배경이 되는 플랫폼은 Kubernetes 위의 KubeRay·Ray Train이고, 실험 기록은 플랫폼 SDK가 MLflow를 감싸 제공한다. ML 엔지니어는 함수 하나를 부르고, 어느 프로세스가 어느 run에 어떤 이름으로 쓸지는 플랫폼이 정한다([이전 글의 기록 표면의 분업]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %}#기록-표면의-분업)). 시스템 메트릭도 같은 분업으로 얹는다.
-
-**이 글에 나오는 선택들은 정답이 아니며, 앞 글에서 다룬 문제를 어떻게 해결할 수 있는지 하나의 예시  일 뿐이라는 점을 명확히 해 둔다.** 파드 하나가 GPU 한 장이고, 워커를 어느 노드에 둘지는 Ray Train이 쥐고 있으며, MLflow는 버전을 고정해 이미지 밖에서 주입한다. 그런 제약 위에서 고른 답이라 제약이 달라지면 답도 달라진다. 실제로 채택한 안보다 검토하고 접은 안이 많고, 옳다고 보면서도 지금은 하지 않기로 한 것도 있다. 그래서 무엇을 골랐는지만큼 무엇과 견주어 골랐는지를 같이 적었다. 초도 구현이라 운영하면서 뒤집힐 수 있는 자리도 그대로 남겨 두었다.
+**이 글의 선택들은 정답이 아니라 [1편]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %})에서 다룬 문제를 푸는 한 가지 예시다.** pod 하나가 GPU 한 장이고, 워커를 어느 노드에 둘지는 Ray Train이 쥐고 있으며, MLflow는 버전을 고정해 이미지 밖에서 주입한다. 그런 제약 위에서 고른 답이라 제약이 달라지면 답도 달라진다. 채택한 안보다 검토하고 접은 안이 많아서, 무엇을 골랐는지만큼 무엇과 견주어 골랐는지를 같이 적었다. 초도 구현이라 운영하면서 뒤집힐 수 있는 자리도 그대로 남겨 두었다.
 
 
 <br>
@@ -56,7 +49,7 @@ tags:
 
 컨테이너 안에서 켠다는 것에는 이전 글에서 다룬 측정 범위 말고도 플랫폼이 챙겨야 할 것이 둘 있다. psutil과 pynvml이 컨테이너 안에 있어야 한다는 의존성과, 누가 어디서 켜느냐는 활성화 지점이다.
 
-## 1. 의존성
+## 의존성
 
 psutil과 nvidia-ml-py가 컨테이너 안에 있어야 한다. 이 플랫폼을 쓰는 학습 이미지를 모두 확인했는데, 이미지마다 psutil 존재 여부가 달랐다. psutil은 `CPUMonitor` 모듈이 import 시점에 요구하는 하드 의존이라, 없으면 `SystemMetricsMonitor` 자체가 만들어지지 않는다. pynvml은 소프트 의존이라 없으면 GPU 계열만 빠진다.
 
@@ -100,7 +93,7 @@ sys.path  [0]   <ray>/thirdparty_files/    ← Ray가 벤더링한 psutil. 항�
 
 여기에는 한 가지 사소한 함정도 있다. nvidia-ml-py는 `pynvml.py` 옆에 top-level `example.py`를 같이 까는데, 주입 경로는 컨테이너 안 모든 python 프로세스의 `sys.path`에 붙으므로 누군가의 `import example`이 그 예제 파일을 집을 수 있다. 말미라 위험은 낮지만 걷어내는 비용이 한 줄이라 payload에서 지운다. 이 글에서 의존성은 여기까지만 다룬다.
 
-## 2. 활성화 지점
+## 활성화 지점
 
 두 번째는 누가, 어디서 켜느냐다. [활성화와 기록 지표]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %}#활성화와-기록-지표) 절에서 본 대로 MLflow를 켜는 방법은 셋이고(함수, `start_run` 인자, 환경변수), [측정 위치]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %}#측정-위치) 절에서 본 대로 모니터는 `start_run`을 부른 프로세스마다 생긴다. 그런데 제출 경로에서 `start_run`은 [기록 표면의 분업]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %}#기록-표면의-분업) 절에서 본 대로 플랫폼이 부르고, 그 호출은 ML 엔지니어의 학습 함수가 시작되기 전에 끝나 있다. 켜는 방법 셋 중 둘이 `start_run` 시점에 걸리는데 그 시점이 이미 지나 있다는 뜻이다. 그러니 시스템 메트릭 로깅은 지금 상태로는 ML 엔지니어가 켤 수 없다. 켤 수 있으려면 그 자리를 플랫폼이 따로 마련해야 한다.
 
@@ -136,7 +129,7 @@ tracking.enable_system_metrics(interval=30, samples=2)  # 60초당 1점
 
 부르는 자리에도 규칙이 있다. **run이 열린 직후, 데이터로더와 모델을 만들기 전**이다. 제출 경로면 학습 함수의 첫 줄이고, 로컬이면 `start_run()` 바로 다음이다. 늦게 부르면 그 앞 구간이 기록에서 통째로 빠지는데, 데이터셋을 여는 그 구간이 하필 메모리가 튀는 자리다. 문서에 적어 두고도 우리 예제 세 개가 전부 어기고 있었다. 셋 다 데이터와 모델을 만든 뒤에 부르고 있었고, 어기는 정도도 로컬과 제출에서 달랐다.
 
-주기에는 플랫폼이 건 상한이 하나 있다. 수집하는 워커가 넷을 넘으면 주기를 `10 × ⌈n/4⌉`초로 자동으로 올린다. 이것은 MLflow 원본에 없는 규칙이고, 원본에 있을 이유도 없었다. `mlflow/system_metrics/` 아래 어디에도 rank나 world_size 개념이 없다. 원본의 전제는 run 하나에 모니터 하나여서 서버로 가는 쓰기가 워커 수와 무관한데, `all_workers`를 플랫폼이 만들면서 그 전제가 깨졌다. 8워커면 여덟 배다. 그래서 "워커 넷까지의 부하"를 상한으로 잡는 규칙을 플랫폼 쪽에 넣었다. `n`은 rank 수가 아니라 실제 수집기 수다. 뒤의 [파드 단위 중복 제거](#파드-단위-중복-제거)로 줄어든 수가 여기에 들어간다.
+주기에는 플랫폼이 건 상한이 하나 있다. 수집하는 워커가 넷을 넘으면 주기를 `10 × ⌈n/4⌉`초로 자동으로 올린다. 이것은 MLflow 원본에 없는 규칙이고, 원본에 있을 이유도 없었다. `mlflow/system_metrics/` 아래 어디에도 rank나 world_size 개념이 없다. 원본의 전제는 run 하나에 모니터 하나여서 서버로 가는 쓰기가 워커 수와 무관한데, `all_workers`를 플랫폼이 만들면서 그 전제가 깨졌다. 8워커면 여덟 배다. 그래서 "워커 넷까지의 부하"를 상한으로 잡는 규칙을 플랫폼 쪽에 넣었다. `n`은 rank 수가 아니라 실제 수집기 수다. 뒤의 [pod 단위 중복 제거](#pod-단위-중복-제거)로 줄어든 수가 여기에 들어간다.
 
 <br>
 
@@ -187,7 +180,7 @@ rank 표기는 워커 하나만 수집할 때도 붙인다. 안 붙이면 기본
 
 노드 단은 [중복 처리](#중복-처리)에서 검토한 안 가운데 하나(⑦)다. 노드 범위 여섯 계열(`node_*`·`rootfs_*`)은 같은 노드에 뜬 rank끼리 같은 사실을 각자 재는데, `…/rank0`·`…/rank3`만으로는 그 둘이 같은 노드인지 다른 노드인지 이름에서 읽을 수 없었다. MLflow UI는 이름의 마지막 세그먼트를 떼고 나머지로 섹션을 묶어 개수를 `(N)`으로 보여 준다. 노드를 끼우면 헤더가 `system/node_memory_usage_percentage/gpu-node-1 (3)`이 되고, 그 3이 곧 그 노드에 뜬 워커 수이자 같은 사실이 몇 벌 올라와 있는지다. 중복을 없애지는 않지만 보이게 한다.
 
-`container_*`·`network_*`·`gpu_*`에는 끼우지 않는다. 같은 노드라도 값이 실제로 다르므로(실측: 같은 노드·다른 파드의 `container_memory_usage_megabytes`가 288 step 중 0회 일치) 노드로 묶으면 중복이 아닌 것을 중복처럼 보이게 한다. 노드 이름을 못 얻으면(`NODE_NAME` 없음) 끼우지 않는다. `unknown`을 이름에 박으면 그 run의 계열 이름이 통째로 달라져 과거 run과 대조가 끊긴다.
+`container_*`·`network_*`·`gpu_*`에는 끼우지 않는다. 같은 노드라도 값이 실제로 다르므로(실측: 같은 노드·다른 pod의 `container_memory_usage_megabytes`가 288 step 중 0회 일치) 노드로 묶으면 중복이 아닌 것을 중복처럼 보이게 한다. 노드 이름을 못 얻으면(`NODE_NAME` 없음) 끼우지 않는다. `unknown`을 이름에 박으면 그 run의 계열 이름이 통째로 달라져 과거 run과 대조가 끊긴다.
 
 같은 학습 코드를 노드 단 적용 전후로 한 번씩 돌려 나란히 놓은 화면이다. 왼쪽이 전, 오른쪽이 후다.
 
@@ -207,7 +200,7 @@ container_cpu_utilization_percentage    cpu.stat usage_usec 델타 / cpu.max 쿼
 
 퍼센트의 분모가 노드 총량이 아니라 **컨테이너 한도**다. 100%면 OOM 직전이다. 이 이름과 분모라면 24.5%를 보고 "여유가 많다"고 읽어도 틀리지 않는다.
 
-이름이 `pod_`가 아니라 `container_`인 이유도 적어 둔다. `/sys/fs/cgroup/memory.max`는 컨테이너의 값이다. 같은 pod의 로그 수집 사이드카는 별도의 한도(예: 256Mi)를 따로 받는다. 이름이 재는 대상을 그대로 말하게 하고 싶었다.
+이름이 `pod_`가 아니라 `container_`인 이유가 있다. `/sys/fs/cgroup/memory.max`는 컨테이너의 값이다. 같은 pod의 로그 수집 사이드카는 별도의 한도(예: 256Mi)를 따로 받는다. 이름이 재는 대상을 그대로 말하게 하고 싶었다.
 
 ## working set
 
@@ -247,10 +240,10 @@ working set = memory.current − memory.stat 의 inactive_file
 
 | 층 | 언제 | 무엇이 겹치나 |
 | --- | --- | --- |
-| **노드 중복** | rank 둘이 같은 **노드**의 다른 파드에 뜸. GPU 워커는 파드당 GPU 1장이라 rank마다 파드가 갈리고, 노드에는 파드가 여럿 뜬다 | `node_*`·`rootfs_*` 6계열 |
-| **파드 중복** | rank 둘이 같은 **파드**에 뜸. CPU 워커는 Ray Train이 rank를 한 파드에 몰아넣는다 | 11계열 전부. cgroup도 network namespace도 같다 |
+| **노드 중복** | rank 둘이 같은 **노드**의 다른 pod에 뜸. GPU 워커는 pod당 GPU 1장이라 rank마다 pod가 갈리고, 노드에는 pod가 여럿 뜬다 | `node_*`·`rootfs_*` 6계열 |
+| **pod 중복** | rank 둘이 같은 **pod**에 뜸. CPU 워커는 Ray Train이 rank를 한 pod에 몰아넣는다 | 11계열 전부. cgroup도 network namespace도 같다 |
 
-실측에서 8워커 GPU 제출이 노드 넷에 둘씩 뜬 적도, 노드 셋에 3·2·3으로 뜬 적도 있다. 몇 대에 갈리는지를 정하는 것은 GPU 수가 아니라 워커당 CPU·메모리 선언과 노드 용량이다 — 같은 4워커라도 선언이 달라지면 배치가 달라진다. 노드 중복의 "같다"는 값이 똑같다는 뜻이 아니다. 같은 노드의 두 rank가 올린 `node_memory_usage_megabytes`는 288 step 중 한 번도 같지 않았고 최대 7.3 GB 벌어졌다. 두 rank가 같은 호스트의 `/proc/meminfo`를 읽되 읽는 시각이 다르기 때문이다. 퍼센트 계열이 대체로 맞는 것은 반올림이 그 차이를 가려서다. 정확히는 **같은 사실을 다른 시각에 두 번 잰다**. 반면 파드 중복은 같은 컨테이너의 같은 파일을 두 번 읽는 순수 복제다.
+실측에서 8워커 GPU 제출이 노드 넷에 둘씩 뜬 적도, 노드 셋에 3·2·3으로 뜬 적도 있다. 몇 대에 갈리는지를 정하는 것은 GPU 수가 아니라 워커당 CPU·메모리 선언과 노드 용량이다 — 같은 4워커라도 선언이 달라지면 배치가 달라진다. 노드 중복의 "같다"는 값이 똑같다는 뜻이 아니다. 같은 노드의 두 rank가 올린 `node_memory_usage_megabytes`는 288 step 중 한 번도 같지 않았고 최대 7.3 GB 벌어졌다. 두 rank가 같은 호스트의 `/proc/meminfo`를 읽되 읽는 시각이 다르기 때문이다. 퍼센트 계열이 대체로 맞는 것은 반올림이 그 차이를 가려서다. 정확히는 **같은 사실을 다른 시각에 두 번 잰다**. 반면 pod 중복은 같은 컨테이너의 같은 파일을 두 번 읽는 순수 복제다.
 
 없애려면 각 워커가 "나 말고 누가 같은 것을 재나, 그중 내가 첫 번째인가"를 알아야 한다. 검토한 안이 일곱이다.
 
@@ -261,14 +254,14 @@ working set = memory.current − memory.stat 의 inactive_file
 | ③ | rank 0 하나만 노드 계열을 수집한다 | 기각 | rank 0이 뜬 노드 말고 나머지 노드의 CPU·메모리가 통째로 사라진다. 이웃 pod 때문에 특정 노드만 느린 것을 볼 수 없다 |
 | ④ | 켤 때 API로 "이 노드 계열이 이미 있나"를 조회하고 있으면 건너뛴다 | 기각 | MLflow에 조건부 쓰기가 없어, 두 rank가 거의 동시에 조회하면 둘 다 없다고 보고 둘 다 쓴다. 비결정적인 데다 표본마다 API 읽기가 붙어 서버 부하가 두 배가 된다 |
 | ⑤ | 접미를 rank 대신 노드로 한다. 같은 노드의 rank가 같은 키에 쓴다 | 기각 | 조율은 필요 없지만 한 키에 두 rank가 각자의 표본을 쓴다. 표본 시각이 어긋나 값이 십수 %p씩 튀므로 차트가 실재하지 않는 톱니를 그린다. MLflow는 계열 하나에 선 하나라 색으로 가를 수도 없다 |
-| ⑥ | `LOCAL_RANK`로 파드 중복만 없앤다 | **채택** | 한 파드의 두 번째 rank는 `LOCAL_RANK`가 1이다(실측. `LOCAL_WORLD_SIZE`도 온다). 자기 환경변수 하나로 판단이 끝나 조율이 없고, 같은 파일을 다시 읽는 것이라 잃는 정보도 없다. 11계열 전부가 사라지므로 이득도 가장 크다 |
+| ⑥ | `LOCAL_RANK`로 pod 중복만 없앤다 | **채택** | 한 pod의 두 번째 rank는 `LOCAL_RANK`가 1이다(실측. `LOCAL_WORLD_SIZE`도 온다). 자기 환경변수 하나로 판단이 끝나 조율이 없고, 같은 파일을 다시 읽는 것이라 잃는 정보도 없다. 11계열 전부가 사라지므로 이득도 가장 크다 |
 | ⑦ | 노드 범위 계열 이름에 노드를 한 단 끼운다 | **채택** | 중복을 없애지는 않지만 보이게 한다. rank마다 키가 갈려 톱니가 없고, 헤더의 `(N)`이 곧 중복 벌수다. 조율이 없다 |
 
-⑥과 ⑦은 배타적이지 않다. ⑥이 파드 중복을 지우고, ⑦이 남은 노드 중복을 보이게 한다. 둘 다 워커들끼리 말을 맞출 필요가 없다는 것이 ①~⑤와 갈리는 지점이다.
+⑥과 ⑦은 배타적이지 않다. ⑥이 pod 중복을 지우고, ⑦이 남은 노드 중복을 보이게 한다. 둘 다 워커들끼리 말을 맞출 필요가 없다는 것이 ①~⑤와 갈리는 지점이다.
 
 노드 중복을 그대로 두는 이유는 용량이 제약이 아니어서다. 시스템 메트릭은 코드가 부르지 않아도 벽시계로 쌓이는 계열이라 행 수가 커 보이지만, 기본 주기로 16 rank가 하루에 쌓는 양이 약 914 MB(행당 약 433바이트)이고 백엔드 볼륨의 여유는 8.1 TB다. 16 rank가 쉬지 않고 돌아도 채우는 데 약 24년이다. 노드 중복을 없애면 28%가 줄어 24년이 33년이 될 뿐이다. 남은 감축 근거는 차트 수다. MLflow UI는 계열마다 차트를 따로 그리므로 16워커 전수는 차트 256개가 된다. 기록량이 아니라 이 차트 수가 실제 제약이 되면 ②를 꺼낸다.
 
-사용자 표면은 어느 경우에도 그대로다. 인자는 [활성화 지점](#활성화-지점) 절에서 본 대로 `all_workers` 하나이고 rank 집합을 노출하지 않으므로, 나중에 판단이 바뀌어도 사용자 코드는 그대로다. 노드 이름을 어디서 읽는지는 구현 절의 [노드 식별](#노드-식별)에서, `LOCAL_RANK`로 파드 중복을 지우는 코드는 [파드 단위 중복 제거](#파드-단위-중복-제거)에서 다룬다.
+사용자 표면은 어느 경우에도 그대로다. 인자는 [활성화 지점](#활성화-지점) 절에서 본 대로 `all_workers` 하나이고 rank 집합을 노출하지 않으므로, 나중에 판단이 바뀌어도 사용자 코드는 그대로다. 노드 이름을 어디서 읽는지는 구현 절의 [노드 식별](#노드-식별)에서, `LOCAL_RANK`로 pod 중복을 지우는 코드는 [pod 단위 중복 제거](#pod-단위-중복-제거)에서 다룬다.
 
 ## 결과 표면
 
@@ -282,7 +275,7 @@ rank당 16계열이 된다.
 | 그 컨테이너의 GPU | `gpu_0_*` | 5 | `…/rank<N>` |
 | 컨테이너 한도 대비 | `container_memory_usage_{megabytes,percentage}`, `container_cpu_utilization_percentage` | 3 | `…/rank<N>` |
 
-같은 노드에 뜬 파드끼리 `node_`·`rootfs_` 계열은 노드 단이 같은 채 rank만 다르게 올라간다. 16워커·4노드면 256계열이고, MLflow UI가 계열마다 차트를 따로 그리므로 차트도 256개다.
+같은 노드에 뜬 pod끼리 `node_`·`rootfs_` 계열은 노드 단이 같은 채 rank만 다르게 올라간다. 16워커·4노드면 256계열이고, MLflow UI가 계열마다 차트를 따로 그리므로 차트도 256개다.
 
 CPU 2워커 학습 run의 System metrics 탭이다. 이름의 마지막 단인 rank를 떼고 묶여 `container_*` 계열마다 `(2)` 섹션이 서고, 그 안에 `/rank0`·`/rank1` 차트가 나란히 선다.
 
@@ -398,13 +391,11 @@ flowchart TD
   D -- 아니오 --> N["None<br/>container_ 계열 없이 한 줄 안내"]
 ```
 
-한도가 없다는 것을 두 버전이 다른 방식으로 말한다. v2는 문자열 `max`를, v1은 `2^62` 근처의 큰 수를 돌려준다. 둘 다 "무제한"이라는 뜻인데 타입이 달라서, 읽는 쪽에서 각각 걸러야 한다.
+한도가 없다는 것을 두 버전이 다른 방식으로 말한다. v2는 문자열 `max`를, v1은 `2^62` 근처의 큰 수를 돌려준다. 둘 다 "무제한"이라는 뜻인데 타입이 달라서, 읽는 쪽에서 각각 걸러야 한다. v2의 `cpu.max`는 `"800000 100000"`처럼 쿼터와 주기를 한 줄에 주므로 나눠서 8.0 코어를 얻고, 첫 필드가 `max`면 쿼터가 없는 것이다.
 
 ```python
 # 컨테이너 한도 수집기의 생성 — 설정이 아니라 파일을 읽어 판정한다 (간략화)
 class CgroupMonitor:
-    _V1_UNLIMITED = 1 << 62                 # v1은 무제한을 9223372036854771712 류로 돌려준다
-
     @classmethod
     def detect(cls):
         root = os.environ.get('MLPLATFORM_CGROUP_ROOT') or '/sys/fs/cgroup'
@@ -413,35 +404,13 @@ class CgroupMonitor:
             return cls(root, 2, mem, cpu) if (mem or cpu) else None
         mem, cpu = cls._v1_mem_limit(root), cls._v1_cpu_quota(root)
         return cls(root, 1, mem, cpu) if (mem or cpu) else None
-
-    @staticmethod
-    def _v2_cpu_quota(root):
-        raw = _read_text(os.path.join(root, 'cpu.max'))      # 예: "800000 100000"
-        parts = (raw or '').split()
-        if len(parts) != 2 or parts[0] == 'max':             # "max 100000" = 쿼터 없음
-            return None
-        return int(parts[0]) / int(parts[1])                 # -> 8.0 코어
-
-    @classmethod
-    def _v1_mem_limit(cls, root):
-        raw = _read_text(os.path.join(root, 'memory', 'memory.limit_in_bytes'))
-        val = int(raw) if raw else None
-        return val if val and val < cls._V1_UNLIMITED else None
 ```
 
 [working set](#working-set) 절에서 정한 분자도 버전마다 파일과 키가 갈린다. 빼는 값의 이름이 v2에서는 `inactive_file`, v1에서는 `total_inactive_file`이다.
 
-```python
-    # 분자는 memory.current가 아니라 working set이다
-    def _working_set(self):
-        if self._version == 2:
-            used = _read_text(os.path.join(self._root, 'memory.current'))
-            inactive = _read_kv(os.path.join(self._root, 'memory.stat'), 'inactive_file')
-        else:
-            used = _read_text(os.path.join(self._root, 'memory', 'memory.usage_in_bytes'))
-            inactive = _read_kv(os.path.join(self._root, 'memory', 'memory.stat'),
-                                'total_inactive_file')
-        return max(0, int(used) - (inactive or 0))
+```text
+v2   memory.current          − memory.stat 의 inactive_file
+v1   memory.usage_in_bytes   − memory.stat 의 total_inactive_file
 ```
 
 `<root>`는 기본이 `/sys/fs/cgroup`이지만 환경변수 하나로 바꿀 수 있다. 이유는 테스트다. cgroup이 없는 개발 기계(macOS)에서 이 세 계열을 검증할 방법이 없기 때문에, 테스트가 임시 디렉토리에 가짜 cgroup 트리를 만들고 루트를 그쪽으로 돌린다. mock 라이브러리 없이 v1과 v2 경로를 모두 돈다. 경로를 밖에서 넣어 주는 **의존성 주입(dependency injection)**의 가장 작은 형태다.
@@ -502,11 +471,11 @@ def test_upstream_series_key_names_are_stable():
 | run 태그 기록 실패 | 삼킴 |
 | 정지 중 오류 | 경고 한 줄, 계속 |
 
-조용히 실패하지 않는다는 원칙과 짝이다. 환경변수를 걷어내면 걷어냈다고, GPU 계열이 빠지면 빠졌다고, cgroup 계열이 안 붙으면 안 붙었다고 한 줄씩 남긴다. 사용자가 "왜 이 계열이 없지"를 물었을 때 답이 로그에 있어야 한다. 로그는 파드가 사라지면 같이 사라지므로, 아예 못 켠 경우는 run 태그에도 이유를 남긴다.
+조용히 실패하지 않는다는 원칙과 짝이다. 환경변수를 걷어내면 걷어냈다고, GPU 계열이 빠지면 빠졌다고, cgroup 계열이 안 붙으면 안 붙었다고 한 줄씩 남긴다. 사용자가 "왜 이 계열이 없지"를 물었을 때 답이 로그에 있어야 한다. 로그는 pod가 사라지면 같이 사라지므로, 아예 못 켠 경우는 run 태그에도 이유를 남긴다.
 
 GPU 세 줄은 처음에 한 줄이었다. MLflow 원본의 문구를 따라 "nvidia-ml-py가 없거나 NVML 초기화에 실패했습니다"로 뭉갰더니, CPU 워커에서 이 경고가 찍혀 "패키지가 안 깔렸나"로 읽혔다. NVML 오류 코드로 가르려 했는데 CPU 워커에서 실제로 오는 오류는 라이브러리 자체가 없다는 것이라 모든 CPU 워커에 드라이버 경고가 찍혔다. 판별 축을 오류 코드가 아니라 **이 컨테이너에 GPU가 배정됐는가**로 바꿨다. 배정 여부는 장치 파일(`/dev/nvidia[0-9]*`)의 존재로 본다. `NVIDIA_VISIBLE_DEVICES`는 쓸 수 없다. CPU 워커에서도 베이스 이미지가 세워 둔 `all`이 그대로 들어 있어서다. [이전 글의 GPU 절]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %}#gpu)에서 장치 파일만이 배정을 말한다고 한 것이 여기서 판정식이 됐다.
 
-표에 한 줄 있는 "run이 수집 주기보다 짧음"은 실패가 아닌데 실패로 보이는 경우라 따로 적어 둔다. 원본의 수집 루프는 `samples_before_logging`회 수집을 **다 마쳐야** 기록하고, 매 표본 뒤 정지 신호를 검사해 신호가 있으면 기록 없이 반환한다. 그래서 run이 주기 한 번보다 짧으면 한 점도 안 남는 것이 구조적으로 정해진다. 기본 주기 10초에 3초짜리 예제를 돌리면 계열이 0개이고, 주기만 1초로 낮추면 같은 코드가 28계열을 남긴다. 고장이 아니라 산수다. 처음 넣은 모니터 사망 감지는 "예상 표본이 셋 이상인데 한 점도 없음"을 보는 조건이라 이 구간을 그냥 통과시켰다. 예상 표본이 둘 이하이면서 0점인 분기를 따로 만들어 콘솔 한 줄과 run 태그로 이유를 남긴다. 우리 예제에서 먼저 밟았기에 망정이지, 사용자가 먼저 밟았으면 "켰는데 아무것도 없다"로 왔을 자리다.
+표에 한 줄 있는 "run이 수집 주기보다 짧음"은 실패가 아닌데 실패로 보이는 경우라 따로 본다. 원본의 수집 루프는 `samples_before_logging`회 수집을 **다 마쳐야** 기록하고, 매 표본 뒤 정지 신호를 검사해 신호가 있으면 기록 없이 반환한다. 그래서 run이 주기 한 번보다 짧으면 한 점도 안 남는 것이 구조적으로 정해진다. 기본 주기 10초에 3초짜리 예제를 돌리면 계열이 0개이고, 주기만 1초로 낮추면 같은 코드가 28계열을 남긴다. 고장이 아니라 산수다. 처음 넣은 모니터 사망 감지는 "예상 표본이 셋 이상인데 한 점도 없음"을 보는 조건이라 이 구간을 그냥 통과시켰다. 예상 표본이 둘 이하이면서 0점인 분기를 따로 만들어 콘솔 한 줄과 run 태그로 이유를 남긴다. 우리 예제에서 먼저 밟았기에 망정이지, 사용자가 먼저 밟았으면 "켰는데 아무것도 없다"로 왔을 자리다.
 
 ## 노드 식별
 
@@ -531,22 +500,22 @@ env:
 
 노드 이름은 태그뿐 아니라 [노드 범위 계열의 이름](#rank-접미와-노드-단)에도 들어간다. `NODE_NAME`이 없는 워커에서는 태그 값이 `unknown`이고 이름에는 끼우지 않는다. 기록은 그대로 되고, 같은 노드 여부만 판별할 수 없다. `unknown`이 오류가 아니라는 것은 문서에 적어 두었다. [실패 정책](#실패-정책) 절의 원칙과 같다. 모르는 것은 모른다고 적고, 모른다고 해서 학습이나 기록을 막지 않는다.
 
-## 파드 단위 중복 제거
+## pod 단위 중복 제거
 
-[중복 처리](#중복-처리)에서 채택한 ⑥이다. CPU 워커는 Ray Train이 rank 여럿을 한 파드에 넣는데, 시스템 메트릭이 재는 것은 전부 프로세스 밖이다. `container_*`는 그 파드의 cgroup, `network_*`는 그 파드의 network namespace, `node_*`·`rootfs_*`는 호스트, `gpu_*`는 NVML이 보는 장치. 같은 파드의 두 번째 rank는 같은 파일을 다시 읽는 것이라 잃는 정보가 없다. 그리고 판단은 자기 환경변수 하나로 끝난다.
+[중복 처리](#중복-처리)에서 채택한 ⑥이다. CPU 워커는 Ray Train이 rank 여럿을 한 pod에 넣는데, 시스템 메트릭이 재는 것은 전부 프로세스 밖이다. `container_*`는 그 pod의 cgroup, `network_*`는 그 pod의 network namespace, `node_*`·`rootfs_*`는 호스트, `gpu_*`는 NVML이 보는 장치. 같은 pod의 두 번째 rank는 같은 파일을 다시 읽는 것이라 잃는 정보가 없다. 그리고 판단은 자기 환경변수 하나로 끝난다.
 
 ```python
-# 한 파드에 rank가 여럿이면 첫 번째만 수집한다. 자기 환경변수만 본다
+# 한 pod에 rank가 여럿이면 첫 번째만 수집한다. 자기 환경변수만 본다
 if all_workers and int(os.environ.get('LOCAL_RANK', '0') or 0) != 0:
-    return                                            # 같은 파드의 rank 0이 같은 파일을 이미 읽는다
-n_collectors = world_size // int(os.environ.get('LOCAL_WORLD_SIZE', '1') or 1)   # 예상 기록량은 파드 수 기준
+    return                                            # 같은 pod의 rank 0이 같은 파일을 이미 읽는다
+n_collectors = world_size // int(os.environ.get('LOCAL_WORLD_SIZE', '1') or 1)   # 예상 기록량은 pod 수 기준
 ```
 
-`LOCAL_RANK`는 파드 기준이지 물리 노드 기준이 아니다. 실측에서 한 파드의 두 rank는 0·1로 갈렸고, 같은 노드에 뜬 두 파드의 rank는 둘 다 0이었다. 그래서 이것으로 지워지는 것은 파드 중복뿐이고, 노드 중복은 남는다. 못 읽으면 0으로 두어 전원이 수집하게 한다. 그러면 최악이 중복이지, 아무도 수집하지 않는 run은 생기지 않는다. CPU 2워커 학습에서 이 한 줄로 계열이 22개에서 11개로 줄었고, 안내 문구의 예상 기록량도 실제 수집기 수인 파드 수 기준으로 계산된다.
+`LOCAL_RANK`는 pod 기준이지 물리 노드 기준이 아니다. 실측에서 한 pod의 두 rank는 0·1로 갈렸고, 같은 노드에 뜬 두 pod의 rank는 둘 다 0이었다. 그래서 이것으로 지워지는 것은 pod 중복뿐이고, 노드 중복은 남는다. 못 읽으면 0으로 두어 전원이 수집하게 한다. 그러면 최악이 중복이지, 아무도 수집하지 않는 run은 생기지 않는다. CPU 2워커 학습에서 이 한 줄로 계열이 22개에서 11개로 줄었고, 안내 문구의 예상 기록량도 실제 수집기 수인 pod 수 기준으로 계산된다.
 
 ## 재진입과 종료 순서
 
-두 가지를 짧게 적어 둔다.
+두 가지가 더 있다.
 
 같은 프로세스가 run을 여럿 여는 sweep이 있으므로 재진입 가드는 프로세스 플래그가 아니라 **run_id 키**다. 같은 run에서 두 번 부르면 한 줄 알리고 무시한다. 두 번째 호출을 통과시키면 첫 스레드가 아무도 세우지 않는 고아가 되어 같은 계열을 두 스레드가 같은 run에 쓰기 때문이다. 다른 run에서 부르면 이전 모니터를 정지한 뒤 새로 만든다.
 
@@ -579,11 +548,6 @@ def _stop_system_metrics(timeout=SYSMETRICS_STOP_TIMEOUT):
 
 ## 배치와 계열
 
-<!-- TODO(실측): 아래 표·숫자는 제출 전 예측값이다. run 종료 후 MLflow API 로 확정할 것.
-     - 배치: run 태그 mlplatform.sysmetrics.rank<N> (rank -> 노드)
-     - 태그: .ranks / .interval / .samples / .deps / .oom_kill / .mem_peak_sampled_mb
-     확정되면 이 주석을 지운다. -->
-
 워커 8개가 노드 넷에 둘씩 갈렸다. 한 노드에 여덟이 다 오를 수도 있었다. 이 기종은 노드당 GPU가 여덟 장이고 64코어라, 워커당 16코어 선언으로도 네 개까지는 들어간다. 그런데 스케줄러는 묶지 않고 펼쳤고, 같은 기종의 노드 두 대는 아예 쓰이지 않았다. **제출한 쪽은 워커 수만 적었을 뿐 노드가 몇 대가 될지는 정하지 않았다.** 이 값을 미리 알 수 없다는 것이, 노드 이름을 지표 이름에 넣어 사후에 눈으로 확인하게 만든 이유이기도 하다.
 
 | 노드 | rank |
@@ -593,7 +557,11 @@ def _stop_system_metrics(timeout=SYSMETRICS_STOP_TIMEOUT):
 | gpu-node-3 | 0, 2 |
 | gpu-node-4 | 4, 7 |
 
-계열은 128개, 8 rank × 16이다. run 태그에는 rank마다 뜬 노드 이름, 수집 rank 수 8, 주기 20초 × 1표본, `deps = image`(psutil과 pynvml 둘 다 이미지에서 왔다), `oom_kill = TODO`, `mem_peak_sampled_mb = TODO`가 남았다. 주기 20초는 [활성화 지점](#활성화-지점)에서 적은 자동 상향이다. 수집기가 넷을 넘어 `10 × ⌈8/4⌉`로 올라갔다. 기본값 10초로 뒀다면 같은 시간에 두 배가 쌓였을 것이다.
+> 참고: 노드 이름은 이 run 안에서만 유효하다
+>
+> `gpu-node-1`~`gpu-node-4`는 실제 호스트명을 사전순 그대로 치환한 라벨이다. 이 run 안에서는 순서와 대응이 보존되지만, 다른 run이나 [1편]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %})에 나오는 같은 이름과는 무관하다. 치환이 글마다 독립이라 `gpu-node-1`이 같은 장비를 가리키지 않는다. 실제로 1편의 노드는 논리 코어가 144개이고 이 글의 노드는 64개로 기종이 다르다.
+
+계열은 128개, 8 rank × 16이다. run 태그에는 rank마다 뜬 노드 이름, 수집 rank 수 8, 주기 20초 × 1표본, `deps = image`(psutil과 pynvml 둘 다 이미지에서 왔다), `oom_kill = 0`, `mem_peak_sampled_mb = 30552`가 남았다. 주기 20초는 [활성화 지점](#활성화-지점)에서 적은 자동 상향이다. 수집기가 넷을 넘어 `10 × ⌈8/4⌉`로 올라갔다. 기본값 10초로 뒀다면 같은 시간에 두 배가 쌓였을 것이다.
 
 MLflow는 이름의 마지막 세그먼트를 뗀 나머지로 섹션을 묶고 개수를 `(N)`으로 보여 준다. 노드 범위 계열의 헤더가 배치를 그대로 따라간다.
 
@@ -608,39 +576,43 @@ MLflow는 이름의 마지막 세그먼트를 뗀 나머지로 섹션을 묶고 
 
 섹션이 노드 이름으로 넷으로 갈렸다는 것이 노드 단이 먹었다는 뜻이다. 끼우지 않았다면 여덟 계열이 `(8)` 하나로 뭉쳤을 것이다. 각 `(2)`는 그 노드에 뜬 워커 수이자 노드 계열이 몇 벌 중복되는지인데, 이번 배치는 넷 다 둘이라 숫자만으로는 그것이 배치를 따라가는 값인지 고정된 값인지 갈리지 않는다. 위의 배치 표와 대조하면 읽힌다. 배치가 고르지 않은 run에서는 헤더 숫자가 그대로 갈린다. `(8)`은 노드로 묶이면 안 되는 계열이 안 묶였다는 뜻이다. 섹션 34개에 차트 128개다. 겹쳐 그려 주지 않고 rank마다 차트를 따로 그린다는 점은 전수를 켜기 전에 알아 두어야 한다.
 
-<!-- TODO(캡처): System metrics 탭 섹션 목록(전부 접힌 기본 상태).
-     위쪽에 container_*·gpu_0_*·network_* 가 (8) 로, 아래쪽에 node_*·rootfs_* 가
-     노드별로 갈려 (2) 로 서는 구간이 한 화면에 들어오게. 두 장으로 나눠도 된다.
-     ⚠️ 화면의 실제 호스트명을 사전순 그대로 gpu-node-1~4 로 치환할 것(순서가 보존된다). run 이름 블러. -->
+![MLflow System metrics 탭의 섹션 목록을 전부 접은 화면. 위쪽에 system/container_*·gpu_0_*·network_ 계열이 (8)로 열 개 서고, 아래쪽에 system/node_cpu_utilization_percentage가 gpu-node-1·gpu-node-2·gpu-node-3으로 갈려 각각 (2)로 선다]({{site.url}}/assets/images/mlflow-system-metrics-sections.png){: .align-center}
+
+`(8)`과 `(2)`의 경계가 곧 노드 단이 들어간 자리다. 위쪽 열 개는 rank마다 값이 달라 노드로 묶으면 안 되는 계열이고, 아래쪽은 같은 노드끼리 같은 사실을 재는 계열이라 노드가 한 단 끼워져 있다.
 
 ## 노드 값과 컨테이너 값
 
-<!-- TODO(실측): 아래 네 행은 rank 0 의 평균·최대다. metrics/get-history 로 rank 0 계열만
-     뽑아 채운다(run 전체 범위가 아니라 rank 0 값이어야 한다). 분모도 실제 선언으로 확인:
-     노드 메모리 총량 / 워커 memory 한도 / 노드 논리 코어 수 / cpusPerWorker. -->
-
-같은 rank 0에서 두 범위의 계열을 나란히 놓으면 이 글이 말한 차이가 숫자로 보인다.
+같은 rank 0에서 두 범위의 계열을 나란히 놓으면 이 글이 말한 차이가 숫자로 보인다. rank 0은 gpu-node-3에 떴고, 아래는 그 run 전 구간 1,259점의 값이다.
 
 | 계열 (rank 0) | 평균 | 최대 | 분모 |
 | --- | --- | --- | --- |
-| `node_memory_usage_percentage/gpu-node-3` | TODO | TODO | 노드 503 GiB |
-| `container_memory_usage_percentage` | TODO | TODO | 워커 한도 56 GiB |
-| `node_cpu_utilization_percentage/gpu-node-3` | TODO | TODO | 논리 코어 64개 |
-| `container_cpu_utilization_percentage` | TODO | TODO | 쿼터 16코어 |
+| `node_memory_usage_percentage/gpu-node-3` | 5.3% | 6.3% | 노드 503 GiB |
+| `container_memory_usage_percentage` | 39.6% | 50.8% | 워커 한도 56 GiB |
+| `node_cpu_utilization_percentage/gpu-node-3` | 10.4% | 24.3% | 논리 코어 64개 |
+| `container_cpu_utilization_percentage` | 17.9% | 56.8% | 쿼터 16코어 |
 
-노드 기준으로 보면 여유가 많아 보이지만, 컨테이너 기준으로는 그렇지 않다. 태그의 `mem_peak_sampled_mb`가 컨테이너 계열의 최대와 같은 값이고, 실제로 죽었는지는 `oom_kill`이 답한다. [이전 글]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %}#오판-가능성)에서 노드 값만 있을 때 반대 판단을 부른다고 한 그 두 숫자가 같은 화면에 있다.
+분모는 선언값을 그대로 적은 것이 아니라 두 계열에서 역산한 것이다. [1편의 실측]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %}#실측)에서 쓴 것과 같은 방법으로 `_megabytes ÷ _percentage × 100`을 구하면 노드 쪽은 540,664 MB(503.5 GiB), 컨테이너 쪽은 60,118 MB(56.0 GiB)가 나온다. 앞은 노드 용량이고 뒤는 워커 한도다.
+
+같은 순간을 두 범위로 재면 메모리가 5.3%와 39.6%로 갈린다. 노드 기준으로는 손도 안 댄 것처럼 보이지만 컨테이너 기준으로는 한도의 절반 가까이를 쓰고 있고, 최대는 50.8%다. CPU도 방향이 같아서 노드 10.4%가 컨테이너 17.9%다. 태그의 `mem_peak_sampled_mb = 30552`는 rank 0의 `container_memory_usage_megabytes` 최대 30,551.6 MB와 같은 값이고, 실제로 죽었는지는 `oom_kill = 0`이 답한다. [1편]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %}#오판-가능성)에서 노드 값만 있을 때 반대 판단을 부른다고 한 그 두 숫자가 같은 화면에 있다.
 
 ## 같은 노드의 두 rank
 
-<!-- TODO(실측): gpu-node-1 의 두 rank(1·5) 를 step 별로 맞춰 일치 횟수와 최대 격차를 센다.
-     node_memory_usage_percentage / node_memory_usage_megabytes / container_memory_usage_megabytes. -->
+gpu-node-1에 뜬 rank 1과 rank 5를 step별로 맞춰 봤다. 공통 step은 1,255개다.
 
-gpu-node-1에 뜬 rank 1과 rank 5의 노드 계열을 step별로 맞춰 봤다. `node_memory_usage_percentage`는 대부분의 step에서 둘이 같은 값이고, 절대값인 `node_memory_usage_megabytes`는 거의 한 번도 같지 않다. 같은 `/proc/meminfo`를 읽되 20초 주기 안에서 읽는 시각이 어긋나기 때문이다. 퍼센트가 맞는 것은 반올림이 그 차이를 가려서다. 같은 두 rank의 `container_memory_usage_megabytes`는 한 번도 같지 않다. 파드마다 cgroup이 다르니 당연한 결과인데, 노드 범위 계열에만 노드 단을 끼우고 컨테이너 계열에는 끼우지 않은 이유의 실증이기도 하다.
+| 계열 | 두 rank가 같은 값인 step | 최대 격차 |
+| --- | --- | --- |
+| `node_memory_usage_percentage` | 991회 (79.0%) | 0.4%p |
+| `node_memory_usage_megabytes` | 2회 (0.2%) | 2,021.8 MB |
+| `container_memory_usage_megabytes` | 0회 | 5,203.2 MB |
+| `network_receive_megabytes` | 0회 | 2,211.2 MB |
 
-<!-- TODO(캡처): node_memory_usage_megabytes 를 펼쳐 gpu-node-1 (2) 와 gpu-node-2 (2) 를 세로로 잇는다.
-     같은 노드 쌍(rank1·rank5)은 계단이 포개지고, 아래 노드 쌍(rank3·rank6)은 높이가 다르다 —
-     「같은 노드끼리만 겹친다」가 한 장에 나온다. 이어서 container_memory_usage_megabytes (8) 에서
-     같은 rank 들을 잡아 rank 마다 모양이 다른 것을 대비시킨다. 치환은 위와 같다. -->
+노드 범위 계열에서도 절대값은 거의 한 번도 같지 않다. 같은 `/proc/meminfo`를 읽되 20초 주기 안에서 읽는 시각이 어긋나기 때문이다. 퍼센트가 79%에서 맞는 것은 반올림이 그 차이를 가려서이고, 가려지지 않는 21%가 최대 0.4%p로 남는다. **"같은 사실을 다른 시각에 두 번 잰다"가 이 두 행의 간극이다.**
+
+아래 두 행은 성질이 다르다. `container_*`는 pod마다 cgroup이 다르니 값이 갈리는 것이 당연하고, `network_*`도 pod마다 network namespace가 다르다. 두 계열이 한 번도 일치하지 않는다는 것이, 노드 범위 계열에만 노드 단을 끼우고 이 둘에는 끼우지 않은 이유의 실증이다. `network_*`는 두 rank가 같은 데이터셋을 읽어 누적 총량이 1 TB 근처로 비슷하게 가지만, 그 안에서 2.2 GB가 벌어진다. 차트를 멀리서 보면 겹쳐 보여도 같은 값은 아니다.
+
+![node_memory_usage_megabytes를 펼친 화면. 위쪽 gpu-node-2 (2) 섹션의 rank3과 rank6 두 차트가 같은 파형이고, 아래쪽 gpu-node-3 (2) 섹션의 rank0과 rank2도 서로 같되 위 노드보다 높은 대역에 있다]({{site.url}}/assets/images/mlflow-system-metrics-node-pairs.png){: .align-center}
+
+같은 노드에 뜬 두 rank는 파형이 포개지고, 노드가 다르면 대역 자체가 갈린다. 위 표의 "일치 횟수"가 0.2%인데도 그림이 겹쳐 보이는 것은 두 rank가 같은 노드의 같은 메모리를 20초 주기로 번갈아 읽기 때문이다. 차트는 겹치지만 값은 매 step 어긋난다.
 
 <br>
 
@@ -648,13 +620,13 @@ gpu-node-1에 뜬 rank 1과 rank 5의 노드 계열을 step별로 맞춰 봤다.
 
 플랫폼이 한 일을 정리하면 셋이다.
 
-1. **플랫폼이 대신 해 줘야 하는 해석을 문서가 아니라 이름에 넣기로 했다.** 노드를 재는 계열에 `node_`, 컨테이너 루트 파일시스템에 `rootfs_`, 그리고 한도 대비 working set을 재는 `container_` 계열을 더했다. 켤지 여부는 환경을 추정하지 않고 cgroup 한도의 실재로 판정한다
-2. **같은 노드 워커끼리 노드 계열이 중복될 수 있는 한계는 초도 구현에서 그대로 두고, 태그로 알아볼 수 있게만 했다.** 없애려면 워커들이 말을 맞춰야 하는데, 집합 연산은 학습을 멈출 수 있고 run 태그 방식은 결과가 뜨는 순서에 따라 흔들린다. 용량이 제약이 아니라 지금은 그 값어치가 없다
-3. **원본을 고치지 않고 확장하는 대신, 확장점을 쓰되 그 확장점을 테스트로 잠갔다.** 수집기 리스트에 얹고, 이름은 프록시로 바꾸고, 문서 밖 표면 의존은 계약 테스트 한 파일에 모은다
+1. **해석을 문서가 아니라 이름에 넣었다.** 런북에 "CPU·메모리 계열은 노드 값입니다"라고 적는 쪽이 싸지만, 사용자가 보는 것은 런북이 아니라 차트에 붙은 이름이다. 켤지 여부도 환경을 추정하지 않고 cgroup 한도의 실재로 판정한다
+2. **같은 노드 워커끼리 노드 계열이 중복될 수 있는 한계는 초도 구현에서 그대로 두고, 이름에 노드를 끼워 알아볼 수 있게만 했다.** 없애려면 워커들이 말을 맞춰야 하는데, 집합 연산은 학습을 멈출 수 있고 run 태그 방식은 결과가 뜨는 순서에 따라 흔들린다. 용량이 제약이 아니라 지금은 그 값어치가 없다
+3. **원본을 고치지 않고 확장점을 쓰되, 그 확장점을 테스트로 잠갔다.** 문서 밖 표면에 기대는 대가는 "조용히 안 된다"이고, 계약 테스트가 그것을 "먼저 시끄럽게 실패한다"로 바꾼다
 
 한 가지는 아직 닫히지 않았다. 표면을 냈고 그 표면이 실제로 기록한다는 것은 플랫폼 쪽 실험으로 확정했지만, 이 기능을 요청한 ML 엔지니어가 자기 학습 코드에서 이 함수를 불러 남긴 run은 아직 못 봤다. 기능을 냈다는 것과 쓰이고 있다는 것은 다르다.
 
-이 문제가 도구 하나의 버그가 아니라 psutil 위에 얹힌 도구들의 공통 문제라는 것, 그리고 다른 도구와 런타임이 어떻게 대응했는지는 [이전 글의 더 알아보기]({% post_url 2026-09-08-Dev-MLflow-System-Metrics-Container-Isolation %}#더-알아보기-다른-도구의-대응)에 정리했다. 클러스터 스모크 결과는 [결과](#결과) 절에 따로 붙인다.
+이 문제가 도구 하나의 버그가 아니라 psutil 위에 얹힌 도구들의 공통 문제라는 것, 그리고 다른 도구와 런타임이 어떻게 대응했는지는 [3편]({% post_url 2026-09-24-Dev-MLflow-System-Metrics-Ecosystem %})에서 다룬다. 클러스터 스모크 결과는 [결과](#결과) 절에 따로 붙인다.
 
 <br>
 

@@ -3,6 +3,7 @@ title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Train
 excerpt: "칩 하나에 리소스가 둘 광고되는 이유를 커널 디바이스 노드와 device plugin 소켓까지 내려가 확인하고, NVIDIA와 갈리는 지점을 정리해 보자."
 categories:
   - Kubernetes
+hidden: true
 toc: true
 use_math: false
 header:
@@ -18,7 +19,7 @@ tags:
   - Helm
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-6
-last_modified_at: 2026-09-13
+last_modified_at: 2026-09-28
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.*
