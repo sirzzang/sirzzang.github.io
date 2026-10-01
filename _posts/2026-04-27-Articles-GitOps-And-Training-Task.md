@@ -10,7 +10,10 @@ tags:
   - GitOps
   - MLOps
   - ArgoCD
+  - KubeRay
   - Kubernetes
+  - External-Secrets-Operator
+last_modified_at: 2026-10-01
 ---
 
 <br>
@@ -586,13 +589,22 @@ App-of-apps + sync wave + ESO 정도의 조합으로, 수동 helm 운영의 한�
 
 # 3. 정리: 어디는 되고 어디는 안 되는가
 
+| 리소스 | ArgoCD 적합? | 이유 |
+| --- | --- | --- |
+| KubeRay Operator | O | 항상 떠 있어야 하는 컨트롤러 |
+| RayCluster (상시 클러스터) | O | 지속적으로 유지되는 컴퓨팅 풀 |
+| RayService (서빙) | O | 장기 실행 서비스 |
+| KServe InferenceService | O | 장기 실행 서비스 |
+| MLflow, Airflow 등 | O | 장기 실행 서비스 |
+| **RayJob (학습 Job)** | **X** | 일회성 실행, 완료 후 의미 없음 |
+| **Inference Job (배치)** | **X** | 일회성 실행 |
+
 같은 ML 도메인 안에서도 declarative와 imperative가 공존한다. 도구를 영역에 맞게 쓰는 것이 결국 GitOps의 본래 가치를 살리는 길이라 생각한다.
 
 - **Job 단위 실행**(training, batch inference)은 워크플로우 엔진의 영역
 - **Job을 실행하기 위한 기반 인프라**(클러스터 리소스 레벨)는 ArgoCD/GitOps의 정확한 유스케이스
 - **노드 레벨 인프라**(OS, 런타임, 드라이버)는 IaC 도구의 영역
 - **설정의 Git 버전 관리**(넓은 의미의 GitOps)는 모든 영역에 적용 가능
-
 
 "MLOps에 GitOps를 적용한다"는 표현은 이 구분 위에서만 의미를 가진다. 무엇을 적용하는가, 어디에 적용하는가를 구분하지 않으면, OutOfSync가 영구히 켜져 있는 RayJob Application이나 Synced인데 새 학습이 시작되지 않는 함정 같은 문제가 생긴다.
 
