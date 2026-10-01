@@ -487,10 +487,49 @@ Filter와 Score **양쪽에** 등록되는 플러그인에 주목할 필요가 �
 | --- | --- |
 | Filter 통과 → Score → Bind 성공 | 스케줄링 완료 (큐에서 제거) |
 | Filter 통과 → Bind 실패 (일시적 문제) | Backoff Queue |
-| Filter 전체 실패 → PostFilter 선점 성공 | Unschedulable Queue 또는 Backoff Queue (victim이 사라지는 이벤트로 복귀) |
+| Filter 전체 실패 → PostFilter 선점 성공 | **Unschedulable Queue** (일반적) |
 | Filter 전체 실패 → PostFilter 실패 | Unschedulable Queue |
 
 선점에 성공한 경우를 오해하기 쉽다. PostFilter가 선점에 성공해도 **그 스케줄링 시도 자체는 실패로 끝난다.** victim이 아직 종료되지 않았으므로 지금 당장 배치할 수는 없기 때문이다. 파드는 다른 실패와 마찬가지로 큐로 돌아가고, `nominatedNodeName`만 별도로 기록된다. 이후 victim이 실제로 삭제되는 이벤트가 오면 QueueingHint 판정을 거쳐 Active Queue로 복귀하고, PreFilter부터 프로세스를 다시 밟는다.
+
+**선점 성공은 큐 선택에서 특별 대우를 받지 않는다.** 다른 실패와 똑같이 `AddUnschedulableIfNotPresent`를 타고, 목적지는 "이 파드의 스케줄링 사이클이 도는 **도중에** 도착한 클러스터 이벤트가 있었는가"로 갈린다.
+
+<details markdown="1">
+<summary><b>큐 목적지 결정 규칙 (v1.32 기준)</b></summary>
+
+`SchedulerQueueingHints`가 기본 활성화된 v1.32 기준이다. 목적지는 두 함수가 순서대로 정한다.
+
+**1단계 — `determineSchedulingHintForInFlightPod`**: 이 파드의 스케줄링 사이클이 도는 **도중에 도착한** 클러스터 이벤트들을, 이 파드를 떨어뜨린 플러그인들의 [QueueingHint](#enqueueextension과-queueinghint)에 물어본다.
+
+| 판정 | 조건 |
+| --- | --- |
+| `queueSkip` | 사이클 중 도착한 이벤트가 없거나, 있어도 전부 무관하다고 판정 |
+| `queueAfterBackoff` | 관련 있는 이벤트가 있었음 (또는 떨어뜨린 플러그인이 아예 없는 내부 오류) |
+| `queueImmediately` | `PendingPlugins`가 즉시 재시도를 요구 |
+
+**2단계 — `requeuePodViaQueueingHint`**: 판정과 백오프 잔여 시간으로 큐를 고른다.
+
+| 판정 | 백오프 잔여 | 목적지 |
+| --- | --- | --- |
+| `queueSkip` | — | **Unschedulable Queue** |
+| `queueAfterBackoff` | 남아 있음 | **Backoff Queue** |
+| `queueAfterBackoff` | 끝남 | **Active Queue** |
+| `queueImmediately` | — | **Active Queue** |
+
+즉 갈 수 있는 곳은 세 갈래다.
+
+**선점 성공은 왜 거의 항상 Unschedulable Queue인가**
+
+- 선점 파드는 Filter 플러그인에 의해 떨어진 상태라 `UnschedulablePlugins`가 비어 있지 않다. 내부 오류 분기(`queueAfterBackoff`)에 해당하지 않는다
+- victim은 [graceful termination period](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination)를 받는다. PostFilter가 Delete를 호출해도 파드가 실제로 사라지는 이벤트는 그 짧은 사이클 안에 도착하지 않는다 → 사이클 중 관련 이벤트 없음 → `queueSkip`
+
+Backoff나 Active로 가려면 그 짧은 사이클 동안 관련 이벤트가 도착해야 하는데, 선점 시나리오에서는 드물다.
+
+**게이트가 꺼져 있으면 규칙이 다르다**
+
+`SchedulerQueueingHints`는 v1.28에 도입되었지만 **v1.32에서야 기본 활성화**되었다(v1.28~v1.31은 기본 비활성). 꺼져 있으면 구버전 경로를 타며 기준이 더 단순하다 — 사이클 중 move request를 받았거나(`moveRequestCycle >= podSchedulingCycle`) 떨어뜨린 플러그인이 없으면 Backoff Queue, 그 외에는 Unschedulable Queue다. 결론은 같다.
+
+</details>
 
 Active Queue로 복귀하는 조건을 정리하면 다음과 같다.
 
