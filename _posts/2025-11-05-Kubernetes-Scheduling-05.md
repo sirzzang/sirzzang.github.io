@@ -16,7 +16,7 @@ tags:
   - PodGroup
   - Volcano
   - Kueue
-last_modified_at: 2026-09-28
+last_modified_at: 2026-10-01
 ---
 
 <br>
@@ -237,6 +237,7 @@ Events:
 | `node(s) didn't match Pod's node affinity/selector` | NodeAffinity | [nodeSelector / Node Affinity]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#node-affinity) |
 | `node(s) had untolerated taint {k: v}` | TaintToleration | [Taints / Tolerations]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#taints-and-tolerations) |
 | `node(s) were unschedulable` | NodeUnschedulable | [cordon]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#cordon의-기술적-의미) |
+| `node(s) had untolerated taint {node.kubernetes.io/disk-pressure}` | TaintToleration | [노드 압박]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#노드-압박과-스케줄링). 설정이 아니라 노드 상태 문제다 |
 | `node(s) didn't match pod anti-affinity rules` | InterPodAffinity | [Pod Anti-Affinity]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#pod-affinity--anti-affinity) |
 | `node(s) didn't match pod topology spread constraints` | PodTopologySpread | [Topology Spread]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#topology-spread-constraints) |
 | `node(s) didn't have free ports for the requested pod ports` | NodePorts | 파드의 `hostPort` |
@@ -252,6 +253,50 @@ Events:
 ```shell
 ~$ kubectl get events -A --field-selector reason=FailedScheduling --sort-by=.lastTimestamp
 ```
+
+<br>
+
+## 축출된 파드와 스케줄링 실패 구분
+
+진단 1단계(`spec.nodeName`이 비었는지)에서 걸러지지만, 헷갈리기 쉬운 경우가 하나 있다. **축출된 파드**다.
+
+축출은 파드가 배치된 **뒤에** 일어나므로, 축출된 파드에는 `spec.nodeName`이 남아 있고 `PodScheduled` 조건도 `True`로 남아 있다. 1단계 판별에서 "스케줄링 문제가 아니다"로 나오는 것이 맞다. 그 파드는 이미 끝난 파드이고, 실제로 봐야 할 것은 **컨트롤러가 그 자리에 다시 만든 새 파드**다.
+
+아래는 노드의 디스크가 차서 축출된 파드의 실제 출력이다.
+
+```shell
+~$ kubectl describe pod -n label-studio label-studio-ls-app-<hash>-mh74p
+```
+
+```
+# 실행 결과 (발췌, 식별자는 익명화)
+Node:             node-01/10.0.1.10
+Priority:         0
+Status:           Failed
+Reason:           Evicted
+Message:          The node was low on resource: ephemeral-storage.
+                  Threshold quantity: 12439225938, available: 34765552Ki.
+                  Container app was using 670040, request is 0, has larger consumption of ephemeral-storage.
+Conditions:
+  Type               Status
+  DisruptionTarget   True
+  PodScheduled       True
+QoS Class:           BestEffort
+Tolerations:         node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                     node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+```
+
+이 출력 하나에 스케줄링 판단에 쓰이는 정보가 여러 개 들어 있다.
+
+| 필드 | 읽는 방법 |
+| --- | --- |
+| `Reason: Evicted` + `Node`가 채워져 있음 | 스케줄링은 성공했고, 그 뒤에 축출된 것이다. 스케줄링 실패와 혼동하면 안 된다 |
+| `QoS Class: BestEffort` (`request is 0`) | 리소스 요청을 선언하지 않았다. kubelet의 노드 압박 축출은 BestEffort를 먼저 고른다 |
+| `Priority: 0` | PriorityClass가 없다. 다른 파드도 모두 0이면 [선점]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#선점)으로 공간을 만들 수 없다 |
+| `PodScheduled: True` | [1편]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#statusconditions-podscheduled)에서 본 대로 결과 기록이다. 현재 실행 가능 여부를 뜻하지 않는다 |
+| `Tolerations`의 `300s` | 직접 설정한 값이 아니라 API Server가 자동 주입한 기본값이다([3편]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#noexecute와-tolerationseconds)) |
+
+이 사례에서 실제 문제는 재생성된 파드들이었다. 노드에 `disk-pressure` taint가 붙어 Filter에서 탈락하고, 우선순위가 전부 같아 선점도 불가능해 Pending이 누적됐다. 전체 경위는 [MinIO existingClaim 트러블슈팅]({% post_url 2026-02-24-Dev-Minio-Custom-PVC-Troubleshooting %}#왜-재스케줄링이-안-됐나-추론)에 있다.
 
 <br>
 

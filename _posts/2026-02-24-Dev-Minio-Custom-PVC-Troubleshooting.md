@@ -13,6 +13,7 @@ tags:
   - Helm
   - PV
   - PVC
+last_modified_at: 2026-10-01
 ---
 
 <br>
@@ -25,6 +26,7 @@ tags:
 
 - **현상**: 루트 파티션 90% 사용, 워크플로우 중단
 - **원인**: `distributed` 모드에서 `existingClaim` 무시 → K3s default StorageClass가 루트 파티션에 PV 생성
+- **파급**: 디스크 압박으로 kubelet이 `BestEffort` Pod부터 축출. 임계값은 업스트림 기본값(10%)이 아니라 **K3s가 덮어쓴 `nodefs.available: 5%`** 였다
 - **해결**: SSD 증설 → `standalone` 모드 전환 → `existingClaim`으로 SSD 경로의 PVC 연결
 - **핵심**: StatefulSet의 `volumeClaimTemplates`는 `existingClaim`과 본질적으로 충돌한다
 
@@ -42,7 +44,7 @@ System information as of Fri Feb  7 02:07:58 PM KST 2025
   System load:  0.35                Temperature:             35.0 C
   Usage of /:   85.4% of 231.70GB   Processes:               349
   Memory usage: 13%                 Users logged in:         1
-  Swap usage:   1%                  IPv4 address for enp8s0: 172.5.1.97
+  Swap usage:   1%                  IPv4 address for enp8s0: 10.0.1.10
 ```
 
 **루트 파티션이 231.70GB 중 85.4%를 사용** 중이었다. `df -h`로 확인하니 실제로는 90%까지 차 있었다.
@@ -132,18 +134,74 @@ minio   minio      1         deployed  minio-5.2.0  RELEASE.2024-04-18T19-09-19Z
 
 <br>
 
-`minio-1`의 age가 다른 Pod들(87일)에 비해 훨씬 짧다는 것은, 원래 Running이었다가 중간에 죽고 재생성되었다는 의미다. 루트 파티션 사용량이 90%에 도달한 상태에서, kubelet이 **disk pressure**를 감지하고 노드에 `node.kubernetes.io/disk-pressure` taint를 건 것으로 보인다. 이 taint가 걸리면 해당 노드에 새 Pod를 스케줄링할 수 없으므로, `minio-1`은 evict된 뒤 **재스케줄링이 차단**되어 Pending에 머물러 있었다.
+`minio-1`의 age가 다른 Pod들(87일)에 비해 훨씬 짧다는 것은, 원래 Running이었다가 중간에 죽고 재생성되었다는 의미다. 디스크가 가득 찬 상태였으니 노드 압박(node-pressure)이 원인으로 의심됐다.
 
-> **아쉬운 점**: 당시 `kubectl describe node`로 taint 상태를 직접 확인했으면 이 추정을 바로 검증할 수 있었다. 하지만 운영 초기인 데다 시간 압박에 쫓기느라 노드 상태까지 확인하지 못했다. 다만, 같은 노드에서 실행 중이던 Label Studio Pod가 동일한 사유로 evict된 기록이 남아 있어, disk pressure가 실제로 발생했음을 뒷받침한다.
->
-> ```
-> Status:   Failed
-> Reason:   Evicted
-> Message:  The node was low on resource: ephemeral-storage.
->           Threshold quantity: 12439225938, available: 34765552Ki.
-> ```
->
-> QoS Class가 `BestEffort`인 이 Pod가 먼저 축출된 것은 kubelet의 eviction 우선순위와도 일치한다.
+<br>
+
+### 같은 노드의 Label Studio Pod가 남긴 증거
+
+MinIO 쪽에는 축출 기록이 남아 있지 않았지만, 같은 노드에서 실행 중이던 Label Studio Pod에는 축출 기록이 그대로 남아 있었다.
+
+```bash
+$ kubectl describe pod -n label-studio label-studio-ls-app-<hash>-mh74p
+```
+
+```
+# 실행 결과 (발췌, 식별자는 익명화)
+Name:             label-studio-ls-app-<hash>-mh74p
+Node:             node-01/10.0.1.10
+Priority:         0
+Status:           Failed
+Reason:           Evicted
+Message:          The node was low on resource: ephemeral-storage.
+                  Threshold quantity: 12439225938, available: 34765552Ki.
+                  Container app was using 670040, request is 0, has larger consumption of ephemeral-storage.
+                  Container nginx was using 4Ki, request is 0, has larger consumption of ephemeral-storage.
+Conditions:
+  Type               Status
+  DisruptionTarget   True
+  PodScheduled       True     # 스케줄링은 이미 끝난 상태였다
+QoS Class:           BestEffort
+Tolerations:         node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                     node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+```
+
+이 출력에서 읽을 수 있는 것이 네 가지다.
+
+- **`ephemeral-storage` 부족으로 kubelet이 축출했다.** 노드 압박 축출은 스케줄러가 아니라 kubelet이 직접 수행한다
+- **QoS Class가 `BestEffort`다.** 두 컨테이너 모두 `request is 0`, 즉 리소스 요청을 선언하지 않았다. kubelet은 축출 대상을 고를 때 BestEffort → Burstable → Guaranteed 순으로 보므로, 이 Pod이 먼저 선택된 것은 설계된 순서와 일치한다
+- **`Priority: 0`이고 PriorityClass가 없다.** 클러스터의 모든 워크로드가 우선순위를 설정하지 않은 상태였다
+- **`PodScheduled: True`가 남아 있다.** 축출된 Pod인데도 이 조건이 True인 것은, `PodScheduled`가 현재 상태가 아니라 "한 번 스케줄링됐다"는 결과 기록이기 때문이다
+
+`Tolerations`에 `300s`가 붙어 있는 것도 직접 설정한 값이 아니다. `node.kubernetes.io/not-ready`와 `node.kubernetes.io/unreachable`에 대한 toleration은 API Server가 Pod 생성 시 기본값 300초로 자동 주입한다.
+
+<br>
+
+### 왜 재스케줄링이 안 됐나 (추론)
+
+축출 자체는 위 기록으로 확인되지만, 축출된 Pod들이 **왜 13일 동안 Pending에 머물렀는지**는 기록이 남아 있지 않다. 메커니즘상 가장 그럴듯한 경로는 디스크 압박 taint다.
+
+노드 압박이 스케줄링을 막는 경로는 두 단계로 나뉜다.
+
+1. kubelet이 디스크 여유가 임계값 아래로 떨어진 것을 감지하고 노드의 `DiskPressure` condition을 `True`로 설정한다
+2. kube-controller-manager의 node lifecycle controller가 그 condition을 보고 노드에 `node.kubernetes.io/disk-pressure:NoSchedule` taint를 붙인다
+
+이 taint가 붙으면 `TaintToleration` 플러그인이 Filter 단계에서 해당 노드를 탈락시키므로, 그 노드에는 새 Pod이 배치되지 않는다. 축출된 Pod은 ReplicaSet이 다시 만들어 주지만, 새 Pod도 같은 이유로 배치되지 못해 Pending에 쌓인다. 실제로 Label Studio Deployment는 `0/3` 상태로 Pending Pod이 3개 누적되어 있었다.
+
+```bash
+$ kubectl get pod -n label-studio
+NAME                                  READY   STATUS      RESTARTS   AGE
+label-studio-ls-app-<hash>-mh74p      0/2     Completed   1          87d   # 축출된 Pod
+label-studio-ls-app-<hash>-5nzln      0/2     Pending     0          13d   # 재생성 → 배치 실패
+label-studio-ls-app-<hash>-m7ncd      0/2     Pending     0          13d
+label-studio-ls-app-<hash>-ttqw8      0/2     Pending     0          13d
+```
+
+모든 Pod이 `Priority: 0`이었다는 점도 여기서 의미가 있다. 우선순위가 같으면 선점이 일어나지 않으므로, 스케줄러가 공간을 만들어 낼 방법도 없었다. 결국 디스크를 비워 taint가 걷히는 것 외에는 빠져나올 경로가 없는 상태였다.
+
+> **검증하지 못한 부분**: 당시 `kubectl describe node`로 taint를 직접 확인했으면 이 추론을 바로 확정할 수 있었다. 운영 초기인 데다 시간 압박에 쫓기느라 노드 상태까지 보지 못했고, 지금은 그 클러스터의 당시 상태를 다시 확인할 수 없다. 위 두 단계 메커니즘은 Kubernetes 구현상 사실이지만, **이 사건이 그 경로를 탔다는 것은 정황에 기반한 추론**이다.
+
+노드 압박 taint가 스케줄링 단계에서 어떻게 평가되는지, Pending Pod이 어느 큐에서 무엇을 기다리는지는 [쿠버네티스 스케줄링 - 3. 스케줄링 제어]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#노드-압박과-스케줄링)에서 다룬다.
 
 <br>
 
@@ -473,7 +531,7 @@ spec:
             - key: kubernetes.io/hostname
               operator: In
               values:
-                - server01-mlops01
+                - node-01
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -489,7 +547,7 @@ spec:
       storage: 1Ti
 ```
 
-hostPath PV에 `nodeAffinity`를 수동으로 지정했다. SSD가 장착된 노드(`server01-mlops01`)에서만 PV가 사용되도록 하기 위함이다. PV의 capacity를 3Ti(SSD 전체 용량)로, PVC의 requests를 1Ti로 설정한 것은 의도적이다. PVC의 `requests.storage`는 "최소 이만큼의 용량이 필요하다"는 하한이므로, 3Ti PV가 이 요청을 만족하여 바인딩된다. 실제로 MinIO는 PV의 전체 용량을 사용할 수 있다.
+hostPath PV에 `nodeAffinity`를 수동으로 지정했다. SSD가 장착된 노드(`node-01`)에서만 PV가 사용되도록 하기 위함이다. PV의 capacity를 3Ti(SSD 전체 용량)로, PVC의 requests를 1Ti로 설정한 것은 의도적이다. PVC의 `requests.storage`는 "최소 이만큼의 용량이 필요하다"는 하한이므로, 3Ti PV가 이 요청을 만족하여 바인딩된다. 실제로 MinIO는 PV의 전체 용량을 사용할 수 있다.
 
 ```bash
 $ kubectl apply -f minio-pv-pvc.yaml
@@ -511,7 +569,7 @@ mode: standalone
 # 다중 노드 클러스터에서 hostPath PV를 쓸 경우, 해당 노드로 스케줄을 고정하려면 추가:
 # 참고: https://github.com/minio/minio/blob/master/helm/minio/values.yaml#L266
 # nodeSelector:
-#   kubernetes.io/hostname: server01-mlops01
+#   kubernetes.io/hostname: node-01
 ```
 
 ```bash
@@ -605,7 +663,7 @@ spec:
             - key: kubernetes.io/hostname
               operator: In
               values:
-                - server01-mlops01
+                - node-01
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -703,14 +761,62 @@ $ sudo rsync -av /var/lib/rancher/k3s/storage/pvc-84164975-..._minio_export-mini
 
 ## Disk Pressure로 인한 Pod 축출
 
-데이터 이관 자체는 루트 파티션에서 SSD로 복사하는 작업이므로, 루트 파티션의 사용량을 늘리지는 않는다. 문제는 이관을 준비하는 과정에서, **MinIO가 아직 루트 파티션의 기존 PV에 데이터를 쓰고 있었다**는 점이다. 잔여 용량 23GB 상태에서 MinIO가 계속 데이터를 쌓으면서 kubelet의 hard eviction threshold를 넘어섰고, Pod 축출이 시작되었다. 에러 메시지가 `ephemeral-storage`를 명시하고 있는데, 이는 kubelet의 `nodefs.available` 기본 hard eviction threshold(15%) 기준으로 축출이 발생했음을 의미한다. MinIO뿐 아니라 같은 노드의 다른 워크로드에도 영향이 미쳤다.
+데이터 이관 자체는 루트 파티션에서 SSD로 복사하는 작업이므로, 루트 파티션의 사용량을 늘리지는 않는다. 문제는 이관을 준비하는 과정에서, **MinIO가 아직 루트 파티션의 기존 PV에 데이터를 쓰고 있었다**는 점이다. 잔여 용량 23GB 상태에서 MinIO가 계속 데이터를 쌓으면서 kubelet의 hard eviction threshold를 넘어섰고, Pod 축출이 시작되었다. MinIO뿐 아니라 같은 노드의 다른 워크로드에도 영향이 미쳤다.
 
 ```
-Status:   Failed
-Reason:   Evicted
 Message:  The node was low on resource: ephemeral-storage.
           Threshold quantity: 12439225938, available: 34765552Ki.
 ```
+
+### 임계값은 어디서 온 숫자인가
+
+에러 메시지가 `ephemeral-storage`를 명시하는 것은 노드의 `nodefs` 여유 공간이 기준에 걸렸다는 뜻이다. 그런데 메시지의 `Threshold quantity: 12439225938`이 어디서 나온 값인지는 kubelet 설정을 봐야 알 수 있다.
+
+업스트림 kubelet의 기본 hard eviction threshold는 다음과 같다.
+
+| 신호 | 업스트림 기본값 |
+| --- | --- |
+| `memory.available` | 100Mi |
+| `nodefs.available` | 10% |
+| `imagefs.available` | 15% |
+| `nodefs.inodesFree` | 5% |
+
+그런데 이 클러스터는 **K3s**이고, K3s는 이 기본값을 자체적으로 덮어쓴다.
+
+```go
+// K3s: pkg/daemons/agent/agent.go
+EvictionHard: map[string]string{
+    "imagefs.available": "5%",
+    "nodefs.available":  "5%",
+},
+EvictionMinimumReclaim: map[string]string{
+    "imagefs.available": "10%",
+    "nodefs.available":  "10%",
+},
+```
+
+`nodefs.available`이 **5%** 다. 숫자를 맞춰 보면 정확히 들어맞는다.
+
+```
+루트 파티션 용량            231.70 GiB = 248,785,980,621 B
+그중 5%                                = 12,439,299,031 B
+메시지의 Threshold quantity            = 12,439,225,938 B   → 용량의 5.0000%
+```
+
+즉 축출을 일으킨 기준은 업스트림 기본값(10%)이 아니라 **K3s가 설정한 5%** 였다. K3s는 소규모·단일 노드 환경을 염두에 둔 배포본이라 임계값을 낮게 잡는다.
+
+한 가지 더 이상한 점이 있다. 메시지의 `available: 34765552Ki`는 약 33.2GiB로, 임계값(11.6GiB)보다 **크다**. 임계값을 넘지 않았는데 왜 축출됐을까.
+
+`EvictionMinimumReclaim` 때문이다. kubelet은 임계값을 넘겨 축출을 시작하면, 임계값에 턱걸이하는 선에서 멈추지 않고 **`임계값 + minimumReclaim` 만큼 확보될 때까지** 축출을 계속한다. 여기서는 5% + 10% = 15%가 목표가 된다.
+
+```
+축출 목표 수위  = 5% + 10% = 15%  → 37,317,897,093 B (34.75 GiB)
+메시지의 available = 35,599,925,248 B (33.16 GiB) → 용량의 14.31%
+```
+
+메시지에 기록된 `available`은 **회수 루프가 아직 목표(15%)에 도달하지 못한 시점의 관측값**이다. 임계값(5%)은 이미 넘긴 뒤 회수를 진행하는 중이었으므로, 축출은 정상 동작이다.
+
+### 이관 작업에 준 영향
 
 `BestEffort` QoS 클래스의 Pod부터 축출되며, 축출된 Pod는 데이터 복사 중간에 죽어버린다. 이관 작업을 안전하게 진행하려면 **MinIO Pod를 먼저 중지(`scale down`)한 상태에서 복사**해야 했다.
 
