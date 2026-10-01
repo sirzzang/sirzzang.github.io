@@ -16,7 +16,7 @@ tags:
   - Toleration
   - Scheduling Gate
   - Topology Spread Constraints
-last_modified_at: 2026-09-28
+last_modified_at: 2026-10-01
 ---
 
 <br>
@@ -387,13 +387,19 @@ spec:
     tolerationSeconds: 300   # taint 부착 후 300초 버티다가 축출
 ```
 
-노드 장애 시 자동으로 부여되는 taint가 이 메커니즘을 쓴다.
+노드 장애 시 자동으로 부여되는 taint가 이 메커니즘을 쓴다. 자동 부여되는 taint는 다음과 같다.
 
-| Taint | 부여 시점 |
-| --- | --- |
-| `node.kubernetes.io/not-ready` | 노드의 `Ready` condition이 `False`가 됐을 때 |
-| `node.kubernetes.io/unreachable` | 노드의 `Ready` condition이 `Unknown`이 됐을 때 (kubelet이 응답하지 않음) |
-| `node.kubernetes.io/unschedulable` | 노드에 `spec.unschedulable`이 설정됐을 때 (`kubectl cordon`) |
+| Taint | 부여 시점 | Effect |
+| --- | --- | --- |
+| `node.kubernetes.io/not-ready` | 노드의 `Ready` condition이 `False`가 됐을 때 | `NoSchedule` / `NoExecute` |
+| `node.kubernetes.io/unreachable` | 노드의 `Ready` condition이 `Unknown`이 됐을 때 (kubelet이 응답하지 않음) | `NoSchedule` / `NoExecute` |
+| `node.kubernetes.io/unschedulable` | 노드에 `spec.unschedulable`이 설정됐을 때 (`kubectl cordon`) | `NoSchedule` |
+| `node.kubernetes.io/disk-pressure` | 노드의 `DiskPressure` condition이 `True`가 됐을 때 | `NoSchedule` |
+| `node.kubernetes.io/memory-pressure` | 노드의 `MemoryPressure` condition이 `True`가 됐을 때 | `NoSchedule` |
+| `node.kubernetes.io/pid-pressure` | 노드의 `PIDPressure` condition이 `True`가 됐을 때 | `NoSchedule` |
+| `node.kubernetes.io/network-unavailable` | 노드의 `NetworkUnavailable` condition이 `True`가 됐을 때 | `NoSchedule` |
+
+위 표에서 뒤쪽 네 개는 **condition에서 파생되는 taint**다. 조건이 해소되면 taint도 자동으로 제거된다.
 
 노드가 응답하지 않을 때 파드가 사라지기까지의 흐름은 다음과 같다.
 
@@ -421,6 +427,43 @@ node.kubernetes.io/unreachable:NoExecute taint 부착
 즉 cordon은 "스케줄러의 판단에서 노드를 아예 제외"하는 것이 아니라, **Filter 단계에서 두 플러그인이 각각 탈락시키는 것**이다. `NodeUnschedulable`이 반환하는 상태는 `UnschedulableAndUnresolvable`이며, 이는 "클러스터 상태가 바뀌지 않으면 재시도해도 소용없다"는 뜻이어서 파드가 [Unschedulable Queue]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#스케줄러-큐)로 분류된다. cordon이 해제되는 노드 변경 이벤트가 와야 Active Queue로 돌아온다.
 
 두 경로가 모두 Filter라는 점이 중요한 결과를 낳는다. **`spec.nodeName`을 직접 지정해 스케줄러를 우회하면 cordon은 무력화된다.** 이 동작과 활용·주의점은 [1편 - cordon된 노드에 nodeName을 지정하면]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#cordon된-노드에-nodename을-지정하면)에서 다룬다.
+
+<br>
+
+### 노드 압박과 스케줄링
+
+디스크·메모리가 부족해지는 노드 압박(node-pressure) 상황도 cordon과 같은 2단 구조로 스케줄링에 영향을 준다. 다만 여기서는 **축출과 스케줄링 차단이 서로 다른 주체가 수행하는 별개 동작**이라는 점을 구분해야 한다.
+
+```
+kubelet이 디스크 여유가 임계값 아래로 떨어진 것을 감지
+    │
+    ├─ [축출] kubelet이 직접 Pod을 축출한다
+    │         BestEffort → Burstable → Guaranteed 순
+    │         스케줄러는 관여하지 않는다
+    │
+    └─ [스케줄링 차단] kubelet이 노드의 DiskPressure condition을 True로 설정
+              ↓
+          node lifecycle controller가 condition을 보고
+          node.kubernetes.io/disk-pressure:NoSchedule taint 부착
+              ↓
+          TaintToleration 플러그인이 Filter에서 그 노드를 탈락
+```
+
+왼쪽 가지가 **축출**이고 오른쪽 가지가 **스케줄링 차단**이다. 축출은 kubelet이 자기 노드의 Pod을 직접 종료하는 것이므로 `kube-scheduler`와 무관하다. 스케줄러가 관여하는 것은 오른쪽 가지뿐이고, 그 경로는 [cordon](#cordon의-기술적-의미)과 동일하다 — condition 또는 노드 스펙에서 파생된 `NoSchedule` taint를 Filter에서 평가하는 것이다.
+
+이 구분이 실무에서 중요한 이유는, 두 동작이 겹치면 **빠져나오기 어려운 상태**가 만들어지기 때문이다.
+
+1. 디스크가 임계값을 넘는다 → kubelet이 Pod을 축출한다
+2. 동시에 `disk-pressure` taint가 붙어 그 노드가 Filter에서 탈락한다
+3. 축출된 Pod을 ReplicaSet 등이 다시 만든다
+4. 새 Pod도 같은 노드에 배치되지 못한다. 다른 노드에 여유가 없으면 Pending에 머문다
+5. 모든 Pod의 우선순위가 같으면 선점으로 공간을 만들 수도 없다([2편 - 선점이 동작하는 조건]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#선점이-동작하는-조건))
+
+이때 Pending Pod은 [Unschedulable Queue]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#스케줄러-큐)에 들어간다. 복귀 조건은 "클러스터 이벤트"인데, 여기서 그 이벤트는 **디스크를 비워 `DiskPressure`가 해소되고 taint가 걷히는 노드 변경**이다. 즉 스케줄링 설정을 아무리 손봐도 풀리지 않고, 디스크를 확보해야 풀린다.
+
+> **임계값은 배포본마다 다르다.** 업스트림 kubelet의 hard eviction 기본값은 `nodefs.available<10%`, `imagefs.available<15%`지만, 배포본이 이를 덮어쓰는 경우가 있다. 예를 들어 K3s는 `nodefs.available`과 `imagefs.available`을 모두 5%로 낮춰 둔다. 축출이 예상보다 이르거나 늦게 일어난다면 해당 배포본의 kubelet 설정을 확인해야 한다.
+
+실제로 이 경로를 탄 사례는 [MinIO existingClaim 트러블슈팅]({% post_url 2026-02-24-Dev-Minio-Custom-PVC-Troubleshooting %}#같은-노드의-label-studio-pod가-남긴-증거)에 정리해 두었다. K3s 클러스터의 루트 파티션이 차면서 `BestEffort` Pod이 축출되고, 재생성된 Pod들이 13일간 Pending에 머물렀던 기록이다.
 
 <br>
 
@@ -494,6 +537,7 @@ spec:
 | Taint (NoSchedule/NoExecute) | TaintToleration | O | - |
 | Taint (PreferNoSchedule) | TaintToleration | - | O |
 | cordon (`spec.unschedulable`) | NodeUnschedulable + TaintToleration | O | - |
+| 노드 압박 (`DiskPressure` 등 condition) | TaintToleration | O | - |
 
 <br>
 
@@ -508,6 +552,7 @@ spec:
 5. **Topology Spread의 `maxSkew`는 전역 최솟값과의 차이다.** 도메인 쌍 간 차이가 아니다. 롤링 업데이트에서는 `matchLabelKeys`가 없으면 롤아웃이 멈출 수 있다.
 6. **cordon은 Filter 단계의 두 플러그인으로 구현된다.** `NodeUnschedulable`이 `spec.unschedulable`을 보고, node lifecycle controller가 붙인 taint를 `TaintToleration`이 본다. 둘 다 Filter이므로 `spec.nodeName` 직접 지정으로 우회된다.
 7. **`NoExecute`는 이미 실행 중인 파드에도 영향을 준다.** 노드 장애 시 자동 부여되는 taint와 `tolerationSeconds` 기본값 300초가 조합되어, 노드가 죽은 뒤 약 5분 후 파드가 축출된다.
+8. **노드 압박은 축출과 스케줄링 차단이 별개 동작이다.** 축출은 kubelet이 직접 하고, 스케줄링 차단은 condition에서 파생된 `NoSchedule` taint를 Filter가 평가해 이뤄진다. 둘이 겹치면 축출 → 재생성 → 배치 실패가 반복되며, 디스크를 비워 taint가 걷혀야 풀린다.
 
 [1편]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %})과 [2편]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %})에서 다룬 스케줄러의 개념, 프로세스와 함께 이 글의 스케줄링 제어 설정을 이해하면, 파드가 왜 특정 노드에 배치되었는지(또는 배치되지 않았는지)를 체계적으로 파악할 수 있다. [4편]({% post_url 2025-11-05-Kubernetes-Scheduling-04 %})에서는 스케줄러 설정과 최적화(NodeResourcesFit 전략, GPU 단편화, 멀티 프로필 등)를 다룬다.
 

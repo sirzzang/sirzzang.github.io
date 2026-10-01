@@ -11,7 +11,7 @@ tags:
   - Scheduler
   - Scheduling
   - Pod
-last_modified_at: 2026-09-28
+last_modified_at: 2026-10-01
 ---
 
 <br>
@@ -525,6 +525,8 @@ NodeAffinity와 `matchFields`의 구체적인 YAML과 동작은 [3편 - 사례: 
 Active Queue에서 파드를 꺼내는 순서는 **우선순위 기반**이며, 동일한 우선순위의 경우 큐에 들어온 순서(FIFO)를 따른다. Backoff Queue는 백오프 만료 시각이 가장 빠른 파드가 맨 위에 온다.
 
 > Unschedulable Queue는 업스트림 코드에서 `unschedulablePods`라는 맵으로 구현되어 있어 풀(pool)이라고도 불린다. 이 시리즈에서는 큐로 통일해 부른다.
+
+Unschedulable Queue의 복귀 조건이 "클러스터 이벤트"라는 것은, **파드 쪽 설정을 고쳐서는 풀리지 않는 상태가 있다**는 뜻이다. 노드 디스크가 차서 `disk-pressure` taint가 붙은 경우가 그렇다. 디스크를 비워 taint가 걷히는 노드 변경이 일어나야 복귀하므로, 그때까지는 재시도가 전부 실패한다([3편 - 노드 압박과 스케줄링]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#노드-압박과-스케줄링), 실제 사례는 [MinIO 트러블슈팅]({% post_url 2026-02-24-Dev-Minio-Custom-PVC-Troubleshooting %}#왜-재스케줄링이-안-됐나-추론)).
 
 <br>
 
