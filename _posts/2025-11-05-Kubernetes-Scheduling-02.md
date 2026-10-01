@@ -546,7 +546,7 @@ Active Queue로 복귀하는 조건을 정리하면 다음과 같다.
 
 [공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/)에서는 이렇게 설명한다.
 
-> Pods can have priority. Priority indicates the importance of a 파드 relative to other Pods. If a 파드 cannot be scheduled, the scheduler tries to preempt (evict) lower priority Pods to make scheduling of the pending 파드 possible.
+> Pods can have priority. Priority indicates the importance of a Pod relative to other Pods. If a Pod cannot be scheduled, the scheduler tries to preempt (evict) lower priority Pods to make scheduling of the pending Pod possible.
 
 즉, 우선순위가 더 높은 파드를 위해 더 낮은 우선순위 파드를 종료하는 것이다. "선점"이라는 표현이 해당 파드가 직접 리소스를 빼앗는 것처럼 들리지만, 실제 동작은 **낮은 우선순위 파드를 종료시켜 공간을 확보한 후, 높은 우선순위 파드가 그 공간에 스케줄링되는 방식**이다. 선점한 파드에는 `nominatedNodeName`이 설정된다.
 
@@ -628,7 +628,7 @@ Active Queue로 복귀하는 조건을 정리하면 다음과 같다.
 
 각 노드에 대해 "이 노드에서 preemptor보다 낮은 우선순위 파드를 **전부** 제거하면 preemptor가 들어갈 수 있는가"를 확인한다. 공식 문서의 표현은 다음과 같다.
 
-> A Node is considered for preemption only when the answer to this question is yes: "If all the Pods with lower priority than the pending 파드 are removed from the Node, can the pending 파드 be scheduled on the Node?"
+> A Node is considered for preemption only when the answer to this question is yes: "If all the Pods with lower priority than the pending Pod are removed from the Node, can the pending Pod be scheduled on the Node?"
 
 답이 아니오면 그 노드는 후보에서 제외된다.
 
@@ -636,7 +636,7 @@ Active Queue로 복귀하는 조건을 정리하면 다음과 같다.
 
 후보 노드에서 낮은 우선순위 파드를 전부 제거한 상태에서 시작해, 우선순위가 높은 것부터 하나씩 되돌려 넣으면서 여전히 Filter를 통과하는지 재검사한다. 그래서 **낮은 우선순위 파드가 전부 죽는 것이 아니다.**
 
-> Preemption does not necessarily remove all lower-priority Pods. If the pending 파드 can be scheduled by removing fewer than all lower-priority Pods, then only a portion of the lower-priority Pods are removed.
+> Preemption does not necessarily remove all lower-priority Pods. If the pending Pod can be scheduled by removing fewer than all lower-priority Pods, then only a portion of the lower-priority Pods are removed.
 
 **3. 후보 노드 중 하나 선택**
 
@@ -695,7 +695,7 @@ victim 파드가 종료되는 동안 다른 낮은 우선순위 파드가 그 �
 
 다만, nominatedNodeName이 설정된 파드더라도 nominated node에 항상 스케줄링된다는 보장은 없다.
 
-> Please note that 파드 P is **not necessarily scheduled** to the 'nominated Node'.
+> Please note that Pod P is **not necessarily scheduled** to the 'nominated Node'.
 
 보장이 깨지는 경로는 두 가지다.
 
@@ -718,7 +718,7 @@ preemptor가 그 노드의 낮은 우선순위 파드에 `podAffinity`를 걸고
 
 zone 단위 anti-affinity처럼, 다른 노드의 파드를 제거해야 이 노드에 배치할 수 있는 상황이 있다. 스케줄러는 이런 cross-node 선점을 **수행하지 않는다.**
 
-> In order to schedule 파드 P on Node N, 파드 Q can be preempted, but scheduler does not perform cross-node preemption. So, 파드 P will be deemed unschedulable on Node N.
+> In order to schedule Pod P on Node N, Pod Q can be preempted, but scheduler does not perform cross-node preemption. So, Pod P will be deemed unschedulable on Node N.
 
 여러 노드에 걸친 선점이 필요하면 [앞에서 본](#postfilter) out-of-tree `CrossNodePreemption` 플러그인 같은 것을 고려해야 한다.
 
