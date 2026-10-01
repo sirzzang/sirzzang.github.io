@@ -15,7 +15,7 @@ tags:
   - Bin Packing
   - GPU
   - Fragmentation
-last_modified_at: 2026-09-28
+last_modified_at: 2026-10-01
 ---
 
 <br>
@@ -72,7 +72,7 @@ Scheduler 프로세스 (kube-scheduler 바이너리)
 | **Configuration** | 스케줄러 프로세스 전체 | 글로벌 설정 + Profile 목록 |
 | **Profile** | 하나의 `schedulerName` 단위 | 어떤 extension point에 어떤 plugin을 켜고/끄고/weight를 줄지 |
 
-하나의 스케줄러 프로세스는 하나의 Configuration을 가지며, 그 안에 여러 Profile을 포함할 수 있다. Pod의 `spec.schedulerName`이 Profile의 `schedulerName`과 매칭되어, 같은 프로세스 안에서 서로 다른 플러그인 구성으로 스케줄링할 수 있다([1편 - 다중 스케줄러 구현 방식]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#다중-스케줄러-구현-방식) 참고).
+하나의 스케줄러 프로세스는 하나의 Configuration을 가지며, 그 안에 여러 Profile을 포함할 수 있다. 파드의 `spec.schedulerName`이 Profile의 `schedulerName`과 매칭되어, 같은 프로세스 안에서 서로 다른 플러그인 구성으로 스케줄링할 수 있다([1편 - 다중 스케줄러 구현 방식]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#다중-스케줄러-구현-방식) 참고).
 
 <br>
 
@@ -119,21 +119,44 @@ spec:
 
 설정 파일을 고치는 것과 그 설정이 적용되는 것은 별개다. **`kube-scheduler`는 설정 파일을 런타임에 다시 읽지 않는다.** 프로세스를 재시작해야 반영된다.
 
-Static Pod 환경에서 반영시키는 방법은 두 가지다.
+Static Pod 환경에서는 재시작시키는 방법을 고를 때 주의할 점이 있다. **kubelet이 Static Pod을 식별하는 UID는 매니페스트 파일의 mtime이 아니라 파드 오브젝트 내용의 해시**다. 소스에서 UID를 만드는 부분이 그대로 보여 준다.
 
-```shell
-# 방법 1: 매니페스트를 건드려 kubelet이 파드를 재생성하게 한다
-~# touch /etc/kubernetes/manifests/kube-scheduler.yaml
-
-# 방법 2: 파드를 지운다 (kubelet이 매니페스트를 보고 다시 만든다)
-~$ kubectl delete pod -n kube-system kube-scheduler-<control-plane-node>
+```go
+// pkg/kubelet/config/common.go — applyDefaults()
+hasher := md5.New()
+hash.DeepHashObject(hasher, pod)   // 파드 오브젝트 내용으로 해시
+fmt.Fprintf(hasher, "host:%s", nodeName)
+fmt.Fprintf(hasher, "file:%s", source)
+pod.UID = types.UID(hex.EncodeToString(hasher.Sum(nil)[0:]))
 ```
 
-재시작 후에는 기동 여부를 반드시 확인한다.
+따라서 `touch`로 매니페스트의 타임스탬프만 바꾸면 kubelet이 파일 이벤트는 감지하지만 재파싱 결과가 이전과 같아 **파드가 재생성되지 않는다.** 더구나 여기서 바꾸는 것은 매니페스트가 아니라 hostPath로 마운트된 별도 설정 파일(`scheduler-config.yaml`)이므로, 매니페스트 내용은 애초에 변하지 않는다.
+
+내용 해시를 실제로 바꾸거나 파일 자체를 없앴다 되돌리는 방법을 써야 한다.
 
 ```shell
-# 파드가 Running인지 확인
+# 방법 1: 매니페스트를 디렉토리 밖으로 옮겼다 되돌린다 (삭제 → 생성 이벤트)
+~# mv /etc/kubernetes/manifests/kube-scheduler.yaml /root/
+~$ kubectl get pods -n kube-system -l component=kube-scheduler   # 사라졌는지 확인
+~# mv /root/kube-scheduler.yaml /etc/kubernetes/manifests/
+
+# 방법 2: 매니페스트 내용을 바꿔 해시를 바꾼다 (annotation 추가 등)
+~# sed -i 's|^  name: kube-scheduler$|  name: kube-scheduler\n  annotations:\n    reload: "'"$(date +%s)"'"|' \
+     /etc/kubernetes/manifests/kube-scheduler.yaml
+
+# 방법 3: 컨테이너를 직접 죽인다 (kubelet이 다시 띄우며 새 설정 파일을 읽는다)
+~# crictl ps --name kube-scheduler -q | xargs crictl stop
+```
+
+재시작 후에는 기동 여부를 반드시 확인한다. **파드가 `Running`이라는 것만으로는 새 설정이 적용됐다는 보장이 되지 않으므로**, 컨테이너가 실제로 재시작됐는지(`RESTARTS` 또는 `started at`)를 함께 본다.
+
+```shell
+# 파드 상태와 재시작 여부를 함께 확인
 ~$ kubectl get pods -n kube-system -l component=kube-scheduler
+
+# 컨테이너가 실제로 언제 시작됐는지 확인
+~$ kubectl get pod -n kube-system kube-scheduler-<control-plane-node> \
+    -o jsonpath='{.status.containerStatuses[0].state.running.startedAt}'
 
 # 기동 로그 확인 (설정 파싱 오류가 있으면 여기에 나온다)
 ~$ kubectl logs -n kube-system kube-scheduler-<control-plane-node> --tail=50
@@ -165,7 +188,7 @@ Static Pod 환경에서 반영시키는 방법은 두 가지다.
 | 컨트롤 플레인 1대 | 스케줄러가 기동에 실패하면 클러스터 전체의 스케줄링이 멈춘다 |
 | 컨트롤 플레인 HA (3대) | leader election으로 한 대만 활성 상태다. 한 대씩 순차 적용하면 나머지 중 하나가 리더가 되어 스케줄링이 계속된다 |
 
-HA 환경에서도 모든 노드에 같은 설정을 적용해야 한다. 노드별로 설정이 다르면 리더가 바뀔 때마다 스케줄링 동작이 달라진다.
+HA 환경에서는 모든 노드에 같은 설정을 적용하는 편이 적절하다. 노드별로 설정이 다르면 리더가 바뀔 때마다 스케줄링 동작이 달라진다.
 
 > 위 절차는 kubeadm 기준 Static Pod 환경을 전제로 정리한 것이다. 관리형 컨트롤 플레인(EKS, GKE 등)은 사용자가 `kube-scheduler` 설정에 접근할 수 없는 경우가 많고, 이때는 별도 스케줄러를 배포하는 방향([5편 - 멀티 스케줄러 심화]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#멀티-스케줄러-심화))으로 가야 한다.
 
@@ -316,7 +339,19 @@ score:
 
 [2편]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#기본-score-플러그인)에서 `NodeResourcesFit`은 Filter와 Score 양쪽에 등록되는 플러그인이라고 했다. 이 Score 단계의 동작을 결정하는 것이 **스코어링 전략(scoringStrategy)**이다. 플러그인이 각 extension point에서 무엇을 하는지는 [5편 - NodeResourcesFit]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#noderesourcesfit)에서 분해한다.
 
-세 가지 전략이 있다.
+세 가지 전략이 있고, 선택 기준은 다음과 같다.
+
+- 노드마다 여유를 남겨 부하 급증을 흡수해야 한다 → **`LeastAllocated`**(기본)
+- 노드 수를 줄여 비용을 낮추거나 GPU 단편화를 막아야 한다 → **`MostAllocated`**
+- 리소스별로 가중치를 다르게 주거나 사용률 구간별 선호를 따로 둬야 한다 → **`RequestedToCapacityRatio`**
+
+| 전략 | 방향 | 점수 기준 | 주요 시나리오 |
+| --- | --- | --- | --- |
+| LeastAllocated | 분산 | 여유 많은 노드 선호 | 웹 서비스, 고가용성 |
+| MostAllocated | 집중 (bin packing) | 사용률 높은 노드 선호 | 비용 최적화, 배치 작업 |
+| RequestedToCapacityRatio | 커스텀 | 사용률-점수 곡선 정의 | GPU 워크로드, 세밀 제어 |
+
+각 전략의 점수 공식과 계산 예시는 아래에서 다룬다.
 
 ### LeastAllocated (기본)
 
@@ -374,7 +409,7 @@ Node A(74.2) > Node B(18.0)이므로, **여유가 많은 Node A가 선택**된�
 
 여기서 `Allocatable`은 노드가 파드에 할당할 수 있는 총량이고, `Requested`는 그 노드에 이미 배치된 파드들의 `requests` 합이다. 공식의 분모는 항상 `allocatable`이다.
 
-> `requests`를 지정하지 않은 컨테이너에는 스케줄러가 내부적으로 기본값(CPU 100m, memory 200Mi)을 적용해 계산한다. `requests`를 비워 두면 스케줄링 계산에서 0으로 취급되는 것이 아니다.
+> `requests`를 지정하지 않은 컨테이너에는 **Score 단계에 한해** 기본값(CPU 100m, memory 200Mi)이 적용된다. Filter 단계는 실제 `requests`를 그대로 쓰므로 비워 두면 0으로 계산된다. 점수 계산에서만 0이 아닌 값으로 보정된다는 뜻이다.
 
 </details>
 
@@ -495,16 +530,6 @@ resources:
   - name: memory
     weight: 1
 ```
-
-<br>
-
-### 전략 비교 요약
-
-| 전략 | 방향 | 점수 기준 | 주요 시나리오 |
-| --- | --- | --- | --- |
-| LeastAllocated | 분산 | 여유 많은 노드 선호 | 웹 서비스, 고가용성 |
-| MostAllocated | 집중 (bin packing) | 사용률 높은 노드 선호 | 비용 최적화, 배치 작업 |
-| RequestedToCapacityRatio | 커스텀 | 사용률-점수 곡선 정의 | GPU 워크로드, 세밀 제어 |
 
 <br>
 
@@ -635,7 +660,7 @@ GPU 가중치를 CPU/Memory보다 크게(예: 10) 주고, `shape`를 사용률�
 
 이 표의 방법들은 모두 **개별 파드 하나가** 필요한 GPU를 한 노드에서 확보하게 만드는 쪽이다. 여러 파드가 **동시에** 확보되어야 작업이 시작되는 그룹 워크로드(분산 학습 등)는 문제 구조가 다르고, bin packing만으로는 해결되지 않는다. 그 경우의 스케줄링은 [5편 - PodGroup-level Extension Points]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#podgroup-level-extension-points)에서 다룬다.
 
-한 가지 더 짚어 둘 점이 있다. 프로필은 **배치 전략만** 바꾼다. 어떤 파드가 어떤 파드를 밀어낼 수 있는지는 프로필과 무관하게 `PriorityClass`가 결정한다([2편 - 선점]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#선점)). GPU 전용 프로필을 만들어도 선점 동작은 달라지지 않는다.
+주의할 점이 하나 있다. 프로필은 **배치 전략만** 바꾼다. 어떤 파드가 어떤 파드를 밀어낼 수 있는지는 프로필과 무관하게 `PriorityClass`가 결정한다([2편 - 선점]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#선점)). GPU 전용 프로필을 만들어도 선점 동작은 달라지지 않는다.
 
 <br>
 
@@ -698,7 +723,7 @@ profiles:
     percentageOfNodesToScore: 10      # 이 프로필만 10%로 낮춰 처리량 우선
 ```
 
-배치 워크로드처럼 "빠르게 많이 밀어넣는 것"이 배치 품질보다 중요한 프로필에 낮은 값을 주는 식으로 활용할 수 있다.
+배치 워크로드처럼 처리량이 배치 품질보다 중요한 프로필에 낮은 값을 주는 식으로 활용할 수 있다.
 
 <br>
 
@@ -789,14 +814,14 @@ spec:
 
 ## 프로필과 Event 추적
 
-멀티 프로필 환경에서 "어떤 프로필이 이 Pod을 처리했는가"를 확인하려면 Kubernetes Event의 `reportingController` 필드를 보면 된다. 스케줄러는 이벤트 종류에 따라 다른 값을 `reportingController`에 넣는다.
+멀티 프로필 환경에서 "어떤 프로필이 이 파드를 처리했는가"를 확인하려면 Kubernetes Event의 `reportingController` 필드를 보면 된다. 스케줄러는 이벤트 종류에 따라 다른 값을 `reportingController`에 넣는다.
 
 | 이벤트 종류 | `reportingController` 값 | 이유 |
 | --- | --- | --- |
-| **Pod 스케줄링** | 해당 Pod의 `spec.schedulerName` | 어떤 profile이 처리했는지 추적 |
+| **파드 스케줄링** | 해당 파드의 `spec.schedulerName` | 어떤 profile이 처리했는지 추적 |
 | **Leader election** | `profiles[0].schedulerName` | 프로세스 전체 대표값 필요 → 첫 번째 profile 사용 |
 
-Pod 스케줄링 이벤트의 경우, 해당 Pod의 `schedulerName`이 그대로 `reportingController`에 들어간다.
+파드 스케줄링 이벤트의 경우, 해당 파드의 `schedulerName`이 그대로 `reportingController`에 들어간다.
 
 ```yaml
 # schedulerName: gpu-scheduler인 Pod의 스케줄링 Event
@@ -809,7 +834,7 @@ note: "Successfully assigned default/my-pod to node-3"
 
 Leader election 이벤트는 프로세스 전체 단위의 동작이므로 특정 profile에 귀속되지 않는다. 프로세스를 대표하는 별도 이름이 없기 때문에, 관례적으로 `profiles` 배열의 **첫 번째** profile 이름을 사용한다.
 
-디버깅 시 필드 선택자로 이벤트를 필터링하면, 어떤 프로필이 어떤 Pod을 처리했는지 빠르게 확인할 수 있다. 여기서 주의할 점이 있다. **필드 선택자의 이름은 `reportingController`가 아니라 `reportingComponent`다.**
+디버깅 시 필드 선택자로 이벤트를 필터링하면, 어떤 프로필이 어떤 파드를 처리했는지 빠르게 확인할 수 있다. 여기서 주의할 점이 있다. **필드 선택자의 이름은 `reportingController`가 아니라 `reportingComponent`다.**
 
 ```shell
 # 필드 선택자 이름은 reportingComponent (core/v1 필드명을 따른다)

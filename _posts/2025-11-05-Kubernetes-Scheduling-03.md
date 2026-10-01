@@ -76,7 +76,7 @@ kubectl get pod gated-pod
 - 게이트는 **파드 생성 시에만** 추가할 수 있다. 생성 후 새 게이트를 추가하는 것은 불가능하다.
 - 각 게이트는 순서와 관계없이 **개별적으로 제거**할 수 있다. 외부 컨트롤러나 운영자가 조건이 충족되면 해당 게이트를 제거한다.
 - **모든** 게이트가 제거되어야 파드가 Active Queue에 진입하여 스케줄링이 시작된다.
-- 게이트가 남아 있는 동안에는 [Binding 오브젝트]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#binding이-거부되는-조건)로 수동 배치하는 것도 거부된다.
+- 게이트가 남아 있는 동안에는 [Binding 오브젝트]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#binding이-거부되는-조건)로 수동 배치하는 것도 거부된다.
 
 ## 게이트가 설정된 동안의 변경
 
@@ -293,7 +293,7 @@ spec:
 
 Pod Affinity/Anti-Affinity는 다른 제어 설정보다 계산 비용이 크다. 노드의 라벨만 보면 되는 Node Affinity와 달리, **각 노드마다 그 노드(또는 토폴로지 도메인)에 이미 떠 있는 파드들을 순회하며 labelSelector와 대조**해야 하기 때문이다. 공식 문서도 이 점을 명시한다.
 
-> Inter-pod affinity and anti-affinity require substantial amount of processing which can slow down scheduling in large clusters significantly. We do not recommend using them in clusters larger than several hundred nodes.
+> Inter-pod affinity and anti-affinity require substantial amounts of processing which can slow down scheduling in large clusters significantly. We do not recommend using them in clusters larger than several hundred nodes.
 
 비용을 줄이는 방향은 `topologyKey`를 넓게 잡는 것이다. `kubernetes.io/hostname`은 노드 수만큼 도메인이 생기지만, `topology.kubernetes.io/zone`은 zone 수만큼만 생긴다. 도메인 수가 줄면 대조 횟수도 준다. 다만 이것은 **제약의 의미 자체를 바꾸는 것**(노드 단위 분산 → zone 단위 분산)이므로 성능만 보고 바꿀 수는 없다.
 
@@ -413,7 +413,7 @@ node.kubernetes.io/unreachable:NoExecute taint 부착
 해당 노드의 파드 축출
 ```
 
-`tolerationSeconds`를 명시하지 않으면 API Server가 위 두 taint에 대해 기본값 300초를 자동으로 주입한다. 즉 노드가 죽었다고 판정된 뒤 약 5분이 더 지나야 파드가 축출된다. 이 값을 줄이면 장애 감지 후 복구가 빨라지지만, 일시적인 네트워크 단절에도 파드가 축출되므로 트레이드오프가 있다.
+`tolerationSeconds`를 명시하지 않으면 API Server의 `DefaultTolerationSeconds` admission controller(기본 활성화)가 위 두 taint에 대해 기본값 300초를 자동으로 주입한다. 이 값은 `--default-not-ready-toleration-seconds` / `--default-unreachable-toleration-seconds`로 조정한다. 즉 노드가 죽었다고 판정된 뒤 약 5분이 더 지나야 파드가 축출된다. 이 값을 줄이면 장애 감지 후 복구가 빨라지지만, 일시적인 네트워크 단절에도 파드가 축출되므로 트레이드오프가 있다.
 
 ### cordon의 기술적 의미
 
@@ -426,7 +426,7 @@ node.kubernetes.io/unreachable:NoExecute taint 부착
 
 즉 cordon은 "스케줄러의 판단에서 노드를 아예 제외"하는 것이 아니라, **Filter 단계에서 두 플러그인이 각각 탈락시키는 것**이다. `NodeUnschedulable`이 반환하는 상태는 `UnschedulableAndUnresolvable`이며, 이는 "클러스터 상태가 바뀌지 않으면 재시도해도 소용없다"는 뜻이어서 파드가 [Unschedulable Queue]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#스케줄러-큐)로 분류된다. cordon이 해제되는 노드 변경 이벤트가 와야 Active Queue로 돌아온다.
 
-두 경로가 모두 Filter라는 점이 중요한 결과를 낳는다. **`spec.nodeName`을 직접 지정해 스케줄러를 우회하면 cordon은 무력화된다.** 이 동작과 활용·주의점은 [1편 - cordon된 노드에 nodeName을 지정하면]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#cordon된-노드에-nodename을-지정하면)에서 다룬다.
+두 경로가 모두 Filter라는 점이 중요한 결과를 낳는다. **`spec.nodeName`을 직접 지정해 스케줄러를 우회하면 cordon은 무력화된다.** 이 동작과 활용·주의점은 [5편 - cordon된 노드에 nodeName을 지정하면]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#cordon된-노드에-nodename을-지정하면)에서 다룬다.
 
 <br>
 
@@ -438,7 +438,7 @@ node.kubernetes.io/unreachable:NoExecute taint 부착
 kubelet이 디스크 여유가 임계값 아래로 떨어진 것을 감지
     │
     ├─ [축출] kubelet이 직접 Pod을 축출한다
-    │         BestEffort → Burstable → Guaranteed 순
+    │         requests 초과 여부 → Pod Priority → requests 대비 사용량 순
     │         스케줄러는 관여하지 않는다
     │
     └─ [스케줄링 차단] kubelet이 노드의 DiskPressure condition을 True로 설정
@@ -449,21 +449,23 @@ kubelet이 디스크 여유가 임계값 아래로 떨어진 것을 감지
           TaintToleration 플러그인이 Filter에서 그 노드를 탈락
 ```
 
-왼쪽 가지가 **축출**이고 오른쪽 가지가 **스케줄링 차단**이다. 축출은 kubelet이 자기 노드의 Pod을 직접 종료하는 것이므로 `kube-scheduler`와 무관하다. 스케줄러가 관여하는 것은 오른쪽 가지뿐이고, 그 경로는 [cordon](#cordon의-기술적-의미)과 동일하다 — condition 또는 노드 스펙에서 파생된 `NoSchedule` taint를 Filter에서 평가하는 것이다.
+> **QoS 클래스는 축출 순서의 기준이 아니다.** "BestEffort부터 죽는다"로 알려져 있지만, kubelet의 정렬 기준에 QoS 클래스는 들어가지 않는다. 공식 문서도 "The kubelet does not use the pod's QoS class to determine the eviction order"라고 명시한다. requests를 선언하지 않은 파드가 먼저 축출되는 것은 사실이지만, 그 이유는 QoS 등급이 아니라 **사용량이 항상 requests(=0)를 초과하기 때문**이다. 특히 디스크 압박에서는 "QoS classification does not apply to EphemeralStorage requests"라고 못 박혀 있어 QoS로 설명하면 어긋난다.
+
+왼쪽 가지가 **축출**이고 오른쪽 가지가 **스케줄링 차단**이다. 축출은 kubelet이 자기 노드의 파드를 직접 종료하는 것이므로 `kube-scheduler`와 무관하다. 스케줄러가 관여하는 것은 오른쪽 가지뿐이고, 그 경로는 [cordon](#cordon의-기술적-의미)과 동일하다 — condition 또는 노드 스펙에서 파생된 `NoSchedule` taint를 Filter에서 평가하는 것이다.
 
 이 구분이 실무에서 중요한 이유는, 두 동작이 겹치면 **빠져나오기 어려운 상태**가 만들어지기 때문이다.
 
-1. 디스크가 임계값을 넘는다 → kubelet이 Pod을 축출한다
+1. 디스크가 임계값을 넘는다 → kubelet이 파드를 축출한다
 2. 동시에 `disk-pressure` taint가 붙어 그 노드가 Filter에서 탈락한다
-3. 축출된 Pod을 ReplicaSet 등이 다시 만든다
-4. 새 Pod도 같은 노드에 배치되지 못한다. 다른 노드에 여유가 없으면 Pending에 머문다
-5. 모든 Pod의 우선순위가 같으면 선점으로 공간을 만들 수도 없다([2편 - 선점이 동작하는 조건]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#선점이-동작하는-조건))
+3. 축출된 파드를 ReplicaSet 등이 다시 만든다
+4. 새 파드도 같은 노드에 배치되지 못한다. 다른 노드에 여유가 없으면 Pending에 머문다
+5. 모든 파드의 우선순위가 같으면 선점으로 공간을 만들 수도 없다([2편 - 선점이 동작하는 조건]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#선점이-동작하는-조건))
 
-이때 Pending Pod은 [Unschedulable Queue]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#스케줄러-큐)에 들어간다. 복귀 조건은 "클러스터 이벤트"인데, 여기서 그 이벤트는 **디스크를 비워 `DiskPressure`가 해소되고 taint가 걷히는 노드 변경**이다. 즉 스케줄링 설정을 아무리 손봐도 풀리지 않고, 디스크를 확보해야 풀린다.
+이때 Pending 파드는 [Unschedulable Queue]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#스케줄러-큐)에 들어간다. 복귀 조건은 "클러스터 이벤트"인데, 여기서 그 이벤트는 **디스크를 비워 `DiskPressure`가 해소되고 taint가 걷히는 노드 변경**이다. 즉 스케줄링 설정을 아무리 손봐도 풀리지 않고, 디스크를 확보해야 풀린다.
 
 > **임계값은 배포본마다 다르다.** 업스트림 kubelet의 hard eviction 기본값은 `nodefs.available<10%`, `imagefs.available<15%`지만, 배포본이 이를 덮어쓰는 경우가 있다. 예를 들어 K3s는 `nodefs.available`과 `imagefs.available`을 모두 5%로 낮춰 둔다. 축출이 예상보다 이르거나 늦게 일어난다면 해당 배포본의 kubelet 설정을 확인해야 한다.
 
-실제로 이 경로를 탄 사례는 [MinIO existingClaim 트러블슈팅]({% post_url 2026-02-24-Dev-Minio-Custom-PVC-Troubleshooting %}#같은-노드의-label-studio-pod가-남긴-증거)에 정리해 두었다. K3s 클러스터의 루트 파티션이 차면서 `BestEffort` Pod이 축출되고, 재생성된 Pod들이 13일간 Pending에 머물렀던 기록이다.
+실제로 이 경로를 탄 사례가 [MinIO existingClaim 트러블슈팅]({% post_url 2026-02-24-Dev-Minio-Custom-PVC-Troubleshooting %}#같은-노드의-label-studio-pod가-남긴-증거)에 있다. K3s 클러스터의 루트 파티션이 차면서 `BestEffort` 파드가 축출되고, 재생성된 파드들이 13일간 Pending에 머물렀던 기록이다.
 
 <br>
 
@@ -497,7 +499,7 @@ spec:
 
 | 필드 | 역할 |
 | --- | --- |
-| `minDomains` | 적격 도메인 수의 최솟값. 실제 도메인 수가 이보다 적으면 전역 최솟값을 0으로 취급해, 도메인이 채워지기 전에 한쪽으로 몰리는 것을 막는다 (v1.27 beta) |
+| `minDomains` | 적격 도메인 수의 최솟값. 실제 도메인 수가 이보다 적으면 전역 최솟값을 0으로 취급해, 도메인이 채워지기 전에 한쪽으로 몰리는 것을 막는다 (v1.30 GA) |
 | `matchLabelKeys` | `labelSelector`에 더해, 지정한 라벨 키의 **값이 같은 파드끼리만** 세도록 한다. 롤링 업데이트 시 구버전 파드와 신버전 파드를 같이 세는 문제를 막는 데 쓴다(`pod-template-hash` 등) (v1.27 beta) |
 | `nodeAffinityPolicy` | 스큐 계산에서 파드의 nodeSelector/nodeAffinity를 반영할지 여부(`Honor` / `Ignore`) (v1.26 beta) |
 | `nodeTaintsPolicy` | 스큐 계산에서 노드의 taint를 반영할지 여부(`Honor` / `Ignore`) (v1.26 beta) |
@@ -561,8 +563,8 @@ spec:
 # 참고 링크
 
 - [Assigning Pods to Nodes - Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/)
-- [Pod Scheduling Readiness - Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/)
-- [Pod Topology Spread Constraints - Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/)
+- [파드 Scheduling Readiness - Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/)
+- [파드 Topology Spread Constraints - Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/)
 - [Taints and Tolerations - Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
 - [Well-Known Labels, Annotations and Taints - Kubernetes 공식 문서](https://kubernetes.io/docs/reference/labels-annotations-taints/)
 - [Safely Drain a Node - Kubernetes 공식 문서](https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/)

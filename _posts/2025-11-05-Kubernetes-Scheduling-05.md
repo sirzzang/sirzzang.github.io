@@ -23,7 +23,7 @@ last_modified_at: 2026-10-01
 
 # TL;DR
 
-- Extension Point는 결정권에 따라 세 가지로 분류된다: **gate**(PreFilter — Pod reject 및 후보 노드 축소, Filter — 노드 탈락), **informational**(PreScore — 데이터 준비만), **ranking**(Score — 점수만 매김, 탈락시키지 않음).
+- Extension Point는 결정권에 따라 세 가지로 분류된다: **gate**(PreFilter — 파드 reject 및 후보 노드 축소, Filter — 노드 탈락), **informational**(PreScore — 데이터 준비만), **ranking**(Score — 점수만 매김, 탈락시키지 않음).
 - PreScore는 스케줄링 사이클당 1번 호출되어 비싼 계산을 `CycleState`에 캐시하고, Score는 (노드 수 x 플러그인 수)번 호출되어 캐시된 데이터로 점수를 산출한다. PreScore는 결정권이 없는 informational 단계다.
 - 하나의 플러그인이 여러 extension point에 걸쳐 동작하며, 각 단계에서의 역할이 다르다. v1.32 기준 `NodeResourcesFit`은 PreFilter → Filter → PreScore → Score 네 곳, `VolumeBinding`은 여섯 곳에 관여한다.
 - 파드가 Pending에 빠졌을 때는 Events의 `FailedScheduling` 메시지로 어느 플러그인에서 탈락했는지 좁히고, `scheduler_pending_pods` 메트릭의 `queue` 라벨로 어느 큐에 있는지 확인한다.
@@ -39,7 +39,7 @@ last_modified_at: 2026-10-01
 1. **Extension Point 결정권 분류**: [2편의 동작 규칙 요약]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#extension-point별-동작-규칙-요약)을 "결정권"이라는 관점으로 재분류한다
 2. **PreScore 역할**: [2편의 PreScore]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#prescore) 한 줄 설명을 호출 횟수와 캐시 관점으로 푼다
 3. **기본 플러그인 해부**: [2편의 플러그인 매핑 표]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#기본-플러그인과-extension-point-매핑)와 [4편의 스코어링 전략]({% post_url 2025-11-05-Kubernetes-Scheduling-04 %}#noderesourcesfit-스코어링-전략)을 extension point별로 분해한다
-4. **스케줄링 실패 진단**: [1편]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %})이 "파드가 어느 큐에 있는지 확인한다"고 한 것을 실제 명령과 출력으로 채운다
+4. **스케줄링 실패 진단과 수동 배치의 제약**: [1편]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %})이 큐 판별을 과제로 남긴 것을 실제 명령과 출력으로 채우고, 스케줄러를 우회한 파드가 무엇에 막히는지 정리한다
 5. **PodGroup-level Extension Points**: [4편의 GPU 단편화]({% post_url 2025-11-05-Kubernetes-Scheduling-04 %}#리소스-단편화-문제)가 개별 파드 문제라면, 여기서는 파드 그룹 단위의 문제를 다룬다
 6. **멀티 스케줄러 심화**: [1편의 다중 스케줄러]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#커스텀-스케줄러와-다중-스케줄러)와 [3편의 Scheduling Gate]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#scheduling-gate)가 Volcano·Kueue에서 어떻게 조합되는지 본다
 
@@ -53,9 +53,9 @@ last_modified_at: 2026-10-01
 
 [2편]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#extension-point별-동작-규칙-요약)에서 각 extension point의 역할과 복수 플러그인 동작 규칙을 정리했다. 여기서는 "결정권(decision power)"이라는 관점으로 재분류한다. 이 분류를 이해하면 스케줄링 실패 원인을 좁힐 때 "어느 단계에서 탈락/거부가 가능한가"를 즉시 판단할 수 있다.
 
-| Extension Point | 노드를 줄일 수 있나? | Pod reject 가능? | 성격 |
+| Extension Point | 노드를 줄일 수 있나? | 파드 reject 가능? | 성격 |
 | --- | --- | --- | --- |
-| **PreFilter** | O (후보 집합 축소) | O | **gate** — Pod 자체가 스케줄링 불가 판정, 또는 후보 노드 제한 |
+| **PreFilter** | O (후보 집합 축소) | O | **gate** — 파드 자체가 스케줄링 불가 판정, 또는 후보 노드 제한 |
 | **Filter** | O (노드 탈락) | (간접적으로) | **gate** — 노드 탈락 |
 | **PostFilter** | X | X (선점 시도) | **recovery** — 실패 경로에서 공간 확보 |
 | **PreScore** | X | X (에러 시에만 중단) | **informational** — 데이터 준비만 |
@@ -65,11 +65,11 @@ last_modified_at: 2026-10-01
 
 핵심 구분은 다음과 같다.
 
-- **Gate 성격** (PreFilter, Filter, Reserve, Permit): 스케줄링 결과에 직접 영향을 준다. Pod을 reject하거나 노드를 탈락시킬 수 있다.
+- **Gate 성격** (PreFilter, Filter, Reserve, Permit): 스케줄링 결과에 직접 영향을 준다. 파드를 reject하거나 노드를 탈락시킬 수 있다.
 - **Informational 성격** (PreScore): 결정권이 없다. 정상 동작에서 항상 성공해야 하며, Score에게 정보를 제공할 뿐이다. 에러를 반환하면 사이클이 중단되지만, 이는 "의미론적 결정"이 아니라 **내부 오류** 취급이다.
-- **Ranking 성격** (Score): 노드를 탈락시키지도, Pod을 reject하지도 않는다. 순위만 매긴다.
+- **Ranking 성격** (Score): 노드를 탈락시키지도, 파드를 reject하지도 않는다. 순위만 매긴다.
 
-PreFilter가 노드를 줄일 수 있다는 점을 짚어 둘 필요가 있다. PreFilter는 `PreFilterResult`를 반환해 **Filter가 평가할 후보 노드 집합 자체를 제한**할 수 있다. `NodeAffinity`는 `matchFields`로 노드 이름이 확정된 경우 그 노드만 반환하고, `NodeName`도 같은 방식이다. Filter처럼 노드를 하나씩 탈락시키는 것이 아니라 애초에 평가 대상을 좁히는 것이므로, 대규모 클러스터에서 비용 차이가 크다. [1편의 DaemonSet 스케줄러 위임]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#사례-daemonset의-수동--스케줄러-위임-전환)이 이 경로를 탄다.
+PreFilter는 노드를 줄일 수도 있다. `PreFilterResult`를 반환해 **Filter가 평가할 후보 노드 집합 자체를 제한**하는 방식이며, v1.32 기준 `NodeAffinity`가 여기 해당한다 — `matchFields`로 노드 이름이 확정되면 그 노드만 반환한다. Filter처럼 노드를 하나씩 탈락시키는 것이 아니라 애초에 평가 대상을 좁히는 것이므로, 대규모 클러스터에서 비용 차이가 크다. [1편의 DaemonSet 스케줄러 위임]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#사례-daemonset의-수동--스케줄러-위임-전환)이 이 경로를 탄다.
 
 <br>
 
@@ -85,13 +85,13 @@ PreFilter가 노드를 줄일 수 있다는 점을 짚어 둘 필요가 있다. 
 | **역할** | 비싼 계산을 1번 하고 `CycleState`에 캐시 | 캐시된 데이터로 노드별 점수 산출 |
 | **결정권** | 없음 | 없음 (ranking만) |
 
-Score는 적합 노드가 1,000개이고 Score 플러그인이 5개라면 5,000번 호출된다. Pod 분포 계산이나 리소스 타입 파악 같은 비싼 연산을 Score 안에서 하면 매번 반복된다. PreScore에서 1번만 계산하고 `CycleState`에 저장하면 O(N) → O(1)로 줄어든다.
+Score는 적합 노드가 1,000개이고 Score 플러그인이 5개라면 5,000번 호출된다. 파드 분포 계산이나 리소스 타입 파악 같은 비싼 연산을 Score 안에서 하면 매번 반복된다. PreScore에서 1번만 계산하고 `CycleState`에 저장하면 O(N) → O(1)로 줄어든다.
 
 ### PreFilter와의 비교
 
 PreFilter도 "사전 처리" 성격이 있어 혼동될 수 있다. 핵심 차이는 **결정권**이다.
 
-- **PreFilter**: "이 Pod은 아예 스케줄링할 수 없다"를 판단할 수 있고, 후보 노드 집합도 좁힐 수 있다 (예: PVC가 존재하지 않으면 reject)
+- **PreFilter**: "이 파드는 아예 스케줄링할 수 없다"를 판단할 수 있고, 후보 노드 집합도 좁힐 수 있다 (예: PVC가 존재하지 않으면 reject)
 - **PreScore**: 그런 판단이 없다. Filter를 통과한 feasible 노드들에 대해 **점수 매기는 준비만** 한다
 
 ### 대표 플러그인의 PreScore 동작
@@ -112,19 +112,19 @@ podAffinity:
           app: web
 ```
 
-- **PreScore에서 하는 일**: 클러스터의 모든 기존 Pod을 순회하면서 `app: web` 라벨을 가진 Pod이 어떤 노드/zone에 분포해 있는지 미리 계산. 이 결과를 `CycleState`에 저장
-- **Score에서 하는 일**: PreScore가 저장해 둔 분포 데이터를 꺼내서, 각 노드에 "web Pod이 많은 zone일수록 높은 점수" 부여
+- **PreScore에서 하는 일**: 클러스터의 모든 기존 파드를 순회하면서 `app: web` 라벨을 가진 Pod이 어떤 노드/zone에 분포해 있는지 미리 계산. 이 결과를 `CycleState`에 저장
+- **Score에서 하는 일**: PreScore가 저장해 둔 분포 데이터를 꺼내서, 각 노드에 "web 파드가 많은 zone일수록 높은 점수" 부여
 
-분리한 이유는 명확하다. Score가 노드 1,000개에 대해 호출되는데, 매번 "전체 Pod 순회 → 분포 계산"을 반복하면 비효율적이다. PreScore에서 1번만 계산하면 된다. [3편에서 다룬 Pod Affinity의 계산 비용]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#스케줄링-비용)이 큰 이유도 이 순회 때문이다.
+분리한 이유는 명확하다. Score가 노드 1,000개에 대해 호출되는데, 매번 "전체 파드 순회 → 분포 계산"을 반복하면 비효율적이다. PreScore에서 1번만 계산하면 된다. [3편에서 다룬 Pod Affinity의 계산 비용]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#스케줄링-비용)이 큰 이유도 이 순회 때문이다.
 
 #### NodeResourcesFit의 PreScore
 
-- **PreScore에서 하는 일**: Pod이 요청하는 리소스 타입(CPU, Memory, GPU 등)을 파악하고, scoring 전략(LeastAllocated / MostAllocated / RequestedToCapacityRatio)에 맞는 가중치를 미리 계산해서 `CycleState`에 저장
+- **PreScore에서 하는 일**: 파드가 요청하는 리소스 타입(CPU, Memory, GPU 등)을 파악하고, scoring 전략(LeastAllocated / MostAllocated / RequestedToCapacityRatio)에 맞는 가중치를 미리 계산해서 `CycleState`에 저장
 - **Score에서 하는 일**: 노드별로 저장된 가중치를 꺼내서 점수 계산
 
 #### TaintToleration의 PreScore
 
-- **PreScore에서 하는 일**: Pod의 tolerations 목록을 미리 파싱/정리
+- **PreScore에서 하는 일**: 파드의 tolerations 목록을 미리 파싱/정리
 - **Score에서 하는 일**: 각 노드의 taint와 비교해서 "toleration이 필요한 taint가 적을수록 높은 점수" 부여 (PreferNoSchedule taint 기반 soft preference)
 
 <br>
@@ -139,8 +139,8 @@ podAffinity:
 
 | Extension Point | 역할 |
 | --- | --- |
-| **PreFilter** | Pod이 요청하는 리소스 타입 목록을 파악하여 `CycleState`에 저장. 이후 Filter에서 불필요한 리소스 체크를 건너뛰는 최적화에 사용 |
-| **Filter** | 노드의 allocatable 리소스에서 이미 할당된 양을 빼고, Pod의 requests를 수용할 수 있는지 체크. 불가능하면 노드 탈락 |
+| **PreFilter** | 파드가 요청하는 리소스 타입 목록을 파악하여 `CycleState`에 저장. 이후 Filter에서 불필요한 리소스 체크를 건너뛰는 최적화에 사용 |
+| **Filter** | 노드의 allocatable 리소스에서 이미 할당된 양을 빼고, 파드의 requests를 수용할 수 있는지 체크. 불가능하면 노드 탈락 |
 | **PreScore** | scoring 전략(LeastAllocated/MostAllocated/RequestedToCapacityRatio)에 맞는 리소스별 가중치를 미리 계산 |
 | **Score** | 전략에 따라 노드별 점수 산출. LeastAllocated는 여유 많은 노드, MostAllocated는 사용률 높은 노드에 높은 점수 |
 
@@ -154,11 +154,11 @@ v1.32 기준 여섯 개 extension point를 관통하는 플러그인이다. PVC/
 
 | Extension Point | 역할 |
 | --- | --- |
-| **PreFilter** | Pod이 참조하는 PVC 목록을 수집하고, 각 PVC의 바인딩 상태(bound/unbound)를 확인. PVC가 존재하지 않으면 Pod reject |
+| **PreFilter** | 파드가 참조하는 PVC 목록을 수집하고, 각 PVC의 바인딩 상태(bound/unbound)를 확인. PVC가 존재하지 않으면 파드 reject |
 | **Filter** | 해당 노드에서 PV를 마운트할 수 있는지 확인. zone 제약, access mode, 노드 affinity 등을 체크 |
 | **PreScore** | Score에서 쓸 상태를 준비. scorer가 비활성이면 여기서 `Skip`을 반환해 Score를 건너뛴다 |
 | **Score** | 볼륨 용량 기반 스코어링. **feature gate가 꺼져 있으면 동작하지 않는다**(아래 참고) |
-| **Reserve** | 선택된 노드에 대해 PV-PVC 바인딩을 예약. 다른 Pod이 같은 PV를 가져가지 못하도록 함 |
+| **Reserve** | 선택된 노드에 대해 PV-PVC 바인딩을 예약. 다른 파드가 같은 PV를 가져가지 못하도록 함 |
 | **PreBind** | 실제로 PV를 프로비저닝하고 PVC에 바인딩. 네트워크 볼륨 생성 등 시간이 걸리는 작업 |
 
 > **볼륨 용량 스코어링의 feature gate**: v1.32에서는 `VolumeCapacityPriority`(alpha, 기본 비활성화, v1.21 도입)가 이 scorer를 켠다. v1.33에서 `StorageCapacityScoring`(KEP-4049, alpha)으로 대체되었고 `VolumeCapacityPriority`는 deprecated되었다. 두 게이트는 **선호 방향이 다르다.** 구 `VolumeCapacityPriority`는 정적 PV 바인딩에서 요청 크기에 가장 잘 맞는(가장 작은) PV가 있는 노드를 선호했고, `StorageCapacityScoring`은 동적 프로비저닝에서 **여유 용량이 가장 많은** 노드를 선호하는 것이 기본이다(`shape` 설정으로 반대 방향도 가능하다).
@@ -193,10 +193,13 @@ v1.31 이하에서 이 이름들을 `KubeSchedulerConfiguration`에 명시적으
 진단 순서는 다음과 같다.
 
 ```
-1. 스케줄링 문제인가?        → spec.nodeName이 비어 있는지 확인
-2. 어느 단계에서 탈락했나?    → Events의 FailedScheduling 메시지
-3. 어느 큐에 있나?            → 파드 상태 신호 + 스케줄러 메트릭
-4. 무엇을 바꿔야 하나?        → 탈락 플러그인에 대응하는 설정
+1. 스케줄링 문제인가?            → spec.nodeName이 비어 있는지 확인
+2. 어느 단계에서 탈락했고          → Events의 FailedScheduling 메시지에서
+   무엇을 바꿔야 하나?              탈락 플러그인을 찾고 대응 설정으로 연결
+3. 축출된 파드와 혼동하고 있지 않나? → describe pod의 Reason / Node 확인
+4. 어느 큐에 있나?                → 파드 상태 신호 + 스케줄러 메트릭
+5. 더 파고들어야 하나?             → 스케줄러 로그와 메트릭
+6. 스케줄러를 우회한 파드인가?      → 수동 배치의 제약 확인
 ```
 
 첫 단계는 한 줄로 끝난다.
@@ -260,7 +263,7 @@ Events:
 
 진단 1단계(`spec.nodeName`이 비었는지)에서 걸러지지만, 헷갈리기 쉬운 경우가 하나 있다. **축출된 파드**다.
 
-축출은 파드가 배치된 **뒤에** 일어나므로, 축출된 파드에는 `spec.nodeName`이 남아 있고 `PodScheduled` 조건도 `True`로 남아 있다. 1단계 판별에서 "스케줄링 문제가 아니다"로 나오는 것이 맞다. 그 파드는 이미 끝난 파드이고, 실제로 봐야 할 것은 **컨트롤러가 그 자리에 다시 만든 새 파드**다.
+축출은 파드가 배치된 **뒤에** 일어나므로, 축출된 파드에는 `spec.nodeName`이 남아 있고 `PodScheduled` 조건도 `True`로 남아 있다. 1단계 판별에서 "스케줄링 문제가 아니다"로 나오는 것이 맞다. 그 파드는 이미 끝난 파드가고, 실제로 봐야 할 것은 **컨트롤러가 그 자리에 다시 만든 새 파드**다.
 
 아래는 노드의 디스크가 차서 축출된 파드의 실제 출력이다.
 
@@ -291,7 +294,7 @@ Tolerations:         node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
 | 필드 | 읽는 방법 |
 | --- | --- |
 | `Reason: Evicted` + `Node`가 채워져 있음 | 스케줄링은 성공했고, 그 뒤에 축출된 것이다. 스케줄링 실패와 혼동하면 안 된다 |
-| `QoS Class: BestEffort` (`request is 0`) | 리소스 요청을 선언하지 않았다. kubelet의 노드 압박 축출은 BestEffort를 먼저 고른다 |
+| `QoS Class: BestEffort` (`request is 0`) | 리소스 요청을 선언하지 않았다. kubelet은 축출 대상을 고를 때 ① requests 초과 여부 ② Pod Priority ③ requests 대비 사용량을 보는데, requests가 0이면 항상 ①에 걸린다 |
 | `Priority: 0` | PriorityClass가 없다. 다른 파드도 모두 0이면 [선점]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#선점)으로 공간을 만들 수 없다 |
 | `PodScheduled: True` | [1편]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#statusconditions-podscheduled)에서 본 대로 결과 기록이다. 현재 실행 가능 여부를 뜻하지 않는다 |
 | `Tolerations`의 `300s` | 직접 설정한 값이 아니라 API Server가 자동 주입한 기본값이다([3편]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#noexecute와-tolerationseconds)) |
@@ -306,7 +309,7 @@ Tolerations:         node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
 
 | 관찰되는 신호 | 추정 큐 | 근거 |
 | --- | --- | --- |
-| `status.phase: Pending`, `PodScheduled` 조건이 `reason: SchedulingGated` | 큐 진입 전 (PreEnqueue에서 차단) | [Scheduling Gate]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#scheduling-gate)가 남아 있다 |
+| `status.phase: Pending`, `PodScheduled` 조건이 `reason: SchedulingGated` | Unschedulable Queue (PreEnqueue에서 차단되어 Active Queue에 진입한 적 없음) | [Scheduling Gate]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#scheduling-gate)가 남아 있다 |
 | `status.nominatedNodeName`에 값이 있음 | 선점 성공 후 대기 | [선점]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#선점)이 이뤄졌고 victim 종료를 기다리는 중 |
 | `FailedScheduling` 이벤트가 수초 간격으로 반복 | Backoff Queue 경유 | 백오프 타이머(1~10초)에 맞춰 재시도되고 있다 |
 | `FailedScheduling` 이벤트가 한 번 찍히고 오래 조용함 | Unschedulable Queue | 클러스터 이벤트를 기다리는 중 |
@@ -362,15 +365,93 @@ scheduler_pending_pods{queue="unschedulable"} 1
 
 <br>
 
+## 수동 배치의 제약
+
+[1편 - 수동 스케줄링]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#수동-스케줄링)에서 `spec.nodeName` 직접 지정과 Binding 오브젝트 두 방법을 다뤘다. 여기서는 그 두 방법이 **무엇을 건너뛰고 무엇에 막히는지**를 정리한다. 진단 과정에서 "스케줄러를 우회했는데 왜 이렇게 동작하나"를 확인할 때 쓰는 내용이다.
+
+### kubelet이 다시 검사하는 것과 하지 않는 것
+
+스케줄러의 Filter를 건너뛴다고 해서 아무 검증도 없는 것은 아니다. kubelet은 자신의 노드에 배정된 파드를 실행하기 전에 admission 검사를 수행하며, 여기서 Filter 플러그인 일부와 같은 판정을 다시 한다. 다만 **다시 하는 항목과 하지 않는 항목이 명확히 갈린다**.
+
+| 검사 항목 | 스케줄러 Filter | kubelet admission | 수동 배치 시 결과 |
+| --- | --- | --- | --- |
+| 리소스 충분 여부 (`NodeResourcesFit`) | O | **O** | 부족하면 파드가 `OutOfcpu` / `OutOfmemory` 등으로 실행 거부 |
+| `nodeSelector` / Node Affinity `required` | O | **O** | 불일치하면 실행 거부 |
+| 노드명 일치 (`NodeName`) | O | **O** | — |
+| `hostPort` 충돌 (`NodePorts`) | O | **O** | 충돌하면 실행 거부 |
+| `NoExecute` taint | O | **O** (Static Pod은 제외) | tolerate하지 않으면 실행 거부 |
+| **cordon (`NodeUnschedulable`)** | O | **X** | **그대로 실행된다** |
+| **`NoSchedule` / `PreferNoSchedule` taint** | O | **X** | **그대로 실행된다** |
+| Pod Affinity / Anti-Affinity (`InterPodAffinity`) | O | **X** | 배치 규칙을 위반한 채로 실행된다 |
+| 토폴로지 분산 (`PodTopologySpread`) | O | **X** | 분산 제약을 위반한 채로 실행된다 |
+| 볼륨 제약 (`VolumeBinding`, `VolumeZone` 등) | O | **X** | 마운트 단계에서 실패한다 |
+
+정리하면, **리소스와 노드 선택 조건은 kubelet이 막아 주지만, 배치 정책에 해당하는 것(cordon, `NoSchedule` taint, 파드 간 관계, 토폴로지 분산)은 아무도 막지 않는다.** taint/toleration의 effect별 의미는 [3편 - Taints and Tolerations]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#taints-and-tolerations)에서 다룬다.
+
+<br>
+
+### cordon된 노드에 nodeName을 지정하면
+
+위 표에서 cordon이 kubelet 검사 대상이 아닌 것이 실무에서 자주 마주치는 결과로 이어진다. `kubectl cordon`은 노드에 `spec.unschedulable: true`를 설정하고, 이것이 **두 경로로** 스케줄링을 막는다 — `NodeUnschedulable` 플러그인이 그 필드를 직접 확인하는 경로와, node lifecycle controller가 붙인 `node.kubernetes.io/unschedulable:NoSchedule` taint를 `TaintToleration`이 평가하는 경로다(자세한 구조는 [3편 - cordon의 기술적 의미]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#cordon의-기술적-의미)).
+
+중요한 것은 **둘 다 Filter 단계**라는 점이다. 따라서 `spec.nodeName`을 직접 지정해 스케줄러를 우회하면 두 검사 모두 실행되지 않는다. 그리고 cordon이 부착하는 taint의 effect는 `NoSchedule`인데 kubelet은 `NoExecute`만 확인하므로, kubelet admission도 이 파드를 통과시킨다. 결과적으로 **cordon된 노드에도 파드가 정상적으로 뜬다.**
+
+이 동작은 버그가 아니라 설계된 경로이고, 실제로 활용할 여지도 있다. GPU 이상으로 cordon해 둔 노드에 인프라 조치가 끝난 뒤, 해당 노드에서만 짧은 검증 작업(예: CUDA `vectorAdd` 같은 probe Job)을 돌려 정상 여부를 확인하고 싶을 때가 그렇다. cordon을 풀면 그 즉시 일반 워크로드가 들어올 수 있으므로, cordon을 유지한 채 `spec.nodeName`으로 probe만 밀어 넣는 방식을 쓸 수 있다.
+
+다만 이것은 **cordon의 의도를 의도적으로 우회하는 것**이므로, 검증 목적의 단발성 파드에 한정하는 편이 적절하다. 일반 워크로드를 이렇게 배치하면 cordon으로 노드를 비우려는 작업(드레인, 교체, 커널 업그레이드)과 충돌한다.
+
+반대로 스케줄러를 정상적으로 거친 파드는 cordon된 노드에 배치되지 않고 [Unschedulable Queue]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#스케줄러-큐)에서 대기한다. cordon을 해제하는 노드 변경 이벤트가 있어야 다시 Active Queue로 돌아온다.
+
+<br>
+
+### Binding이 거부되는 조건
+
+API Server의 Binding 핸들러는 다음 세 가지 경우에 요청을 거부한다.
+
+| 조건 | 에러 |
+| --- | --- |
+| `spec.nodeName`이 이미 설정되어 있음 | `pod <name> is already assigned to node "<node>"` (409 Conflict) |
+| 파드가 삭제 중임(`deletionTimestamp`가 있음) | `pod <name> is being deleted, cannot be assigned to a host` |
+| `spec.schedulingGates`가 비어 있지 않음 | `pod <name> has non-empty .spec.schedulingGates` |
+
+세 번째 조건이 의외일 수 있다. [Scheduling Gate]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#scheduling-gate)로 스케줄링을 보류시킨 뒤 그 사이에 Binding을 만드는 방식은 **동작하지 않는다.** 게이트가 남아 있으면 Binding 자체가 거부된다.
+
+그렇다면 정상적으로 생성된 파드를 Binding으로 수동 배치하려면, 스케줄러가 먼저 바인딩해 버리기 전에 요청을 넣어야 하는 것인가. 스케줄러는 파드가 등록된 직후에 바인딩하므로 그 경쟁에서 이기는 것은 현실적이지 않다. 대신 **경쟁 자체를 없애는 경로가 있다.** [`spec.schedulerName`]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#schedulername-지정)에 `default-scheduler`가 아닌 이름을 넣으면 기본 스케줄러가 그 파드를 Watch하지 않으므로, 파드는 Pending으로 남아 있고 그동안 Binding을 생성할 수 있다. 커스텀 스케줄러를 구현할 때 도는 루프가 정확히 이 구조다 — 자기 이름이 붙고 `spec.nodeName`이 비어 있는 파드를 Watch하다가, 노드를 골라 Binding을 POST한다.
+
+<br>
+
+### 이미 스케줄링된 파드는 옮길 수 없다
+
+[Binding이 1회성]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#이미-생성된-파드에-대한-수동-스케줄링-binding-오브젝트)이라는 것은, **스케줄링이 완료된 파드의 배치를 바꿀 수 없다**는 뜻이기도 하다. `spec.nodeName`은 API Server가 업데이트를 거부하는 필드이고, 파드 생성 후 변경할 수 있는 `spec` 필드는 아래로 한정된다.
+
+```
+spec.containers[*].image
+spec.initContainers[*].image
+spec.activeDeadlineSeconds
+spec.tolerations                       # 추가만 가능
+spec.terminationGracePeriodSeconds     # 음수였던 경우 1로만
+spec.schedulingGates                   # 삭제만 가능
+spec.nodeSelector                      # 게이트가 있는 동안 추가만 가능
+spec.affinity.nodeAffinity             # 게이트가 있는 동안만
+```
+
+쿠버네티스에는 실행 중인 파드를 다른 노드로 옮기는 마이그레이션 기능이 없다. 따라서 이미 배치된 파드를 다른 노드에 두려면 **삭제하고 다시 만드는 것이 유일한 경로**다. 리소스 컨트롤러(Deployment, DaemonSet 등)가 관리하는 파드라면 파드를 삭제하면 컨트롤러가 새 파드를 만들고, 그 새 파드가 스케줄링을 처음부터 다시 받는다.
+
+선점도 이 원칙의 예외가 아니다. 선점은 victim의 `nodeName`을 고쳐 다른 곳으로 옮기는 것이 아니라 **victim을 삭제**하고, victim의 컨트롤러가 새 파드를 만들고, 그 파드가 다시 스케줄링을 받는 구조다. 축출(Eviction)이나 Descheduler도 같다 — 전부 "삭제 후 재생성"이며, 재배치는 컨트롤러와 스케줄러가 처음부터 다시 수행한다. 선점의 내부 동작은 [2편 - 선점]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#선점)에서 다룬다.
+
+<br>
+
+<br>
+
 # PodGroup-level Extension Points
 
 이 절은 **v1.35와 v1.36 기준**이다. 앞 절들의 기준 버전(v1.32)보다 뒤이고, 두 기능 모두 alpha 단계라 feature gate를 켜야 동작한다.
 
-## 배경: Pod 단위에서 Workload 단위로
+## 배경: 파드 단위에서 Workload 단위로
 
-기존 스케줄링 프레임워크의 extension point는 모두 **Pod 단위**로 동작한다. 한 번에 하나의 Pod을 평가하고, 하나의 노드를 선택하고, 하나의 바인딩을 수행한다.
+기존 스케줄링 프레임워크의 extension point는 모두 **파드 단위**로 동작한다. 한 번에 하나의 파드를 평가하고, 하나의 노드를 선택하고, 하나의 바인딩을 수행한다.
 
-그러나 ML 학습 워크로드처럼 여러 Pod이 **동시에** 자원을 확보해야 하는 경우(gang scheduling), Pod 단위 스케줄링으로는 한계가 있다. 예를 들어 8-GPU Pod 4개가 동시에 확보되어야 학습을 시작할 수 있는데, Pod을 하나씩 스케줄링하면 일부만 배치되고 나머지는 자원 부족으로 Pending에 빠지는 교착 상태가 발생한다.
+그러나 ML 학습 워크로드처럼 여러 파드가 **동시에** 자원을 확보해야 하는 경우(gang scheduling), 파드 단위 스케줄링으로는 한계가 있다. 예를 들어 8-GPU 파드 4개가 동시에 확보되어야 학습을 시작할 수 있는데, 파드를 하나씩 스케줄링하면 일부만 배치되고 나머지는 자원 부족으로 Pending에 빠지는 교착 상태가 발생한다.
 
 이는 [4편 - 리소스 단편화 문제]({% post_url 2025-11-05-Kubernetes-Scheduling-04 %}#리소스-단편화-문제)의 단편화가 파드 그룹 단위로 확대된 형태다. 4편의 bin packing 전략은 파드 하나가 필요한 GPU를 한 노드에서 확보하게 만들지만, "4개 파드가 동시에 확보되어야 한다"는 요구는 표현할 수 없다.
 
@@ -385,7 +466,7 @@ PodGroup-level이 Pod-level을 **대체하는 게 아니라 감싸는(wrapping) 
 
 | Extension Point | 등장 시점 | 상태 | 역할 |
 | --- | --- | --- | --- |
-| `queueSort`, `filter`, `score`, `bind` 등 | K8s 초기~1.19+ | stable | Pod 단위 스케줄링 |
+| `queueSort`, `filter`, `score`, `bind` 등 | K8s 초기~1.19+ | stable | 파드 단위 스케줄링 |
 | `placementGenerate` | **v1.36** | **alpha** | PodGroup이 배치될 수 있는 노드 집합(placement) 후보를 생성 |
 | `placementScore` | **v1.36** | **alpha** | placement 후보들에 점수를 매겨 최적 배치를 선택 |
 
@@ -393,7 +474,7 @@ PodGroup-level이 Pod-level을 **대체하는 게 아니라 감싸는(wrapping) 
 
 ## 동작 흐름
 
-Pod 단위 스케줄링이 사라지는 것은 아니다. Pod이 PodGroup에 속할 때만 PodGroup 스케줄링 사이클로 분기한다.
+파드 단위 스케줄링이 사라지는 것은 아니다. 파드가 PodGroup에 속할 때만 PodGroup 스케줄링 사이클로 분기한다.
 
 ```
 스케줄러가 큐에서 Pod을 꺼냄 (pop)
@@ -412,26 +493,26 @@ Pod 단위 스케줄링이 사라지는 것은 아니다. Pod이 PodGroup에 속
             └─ 실패 → 전부 큐로 반환 (아무것도 bind 안 함)
 ```
 
-여기서 `minCount`는 **그룹이 시작되기 위해 최소한 배치되어야 하는 Pod 수**다. Workload 오브젝트에 지정하며, 이 수를 채우지 못하면 아무것도 바인딩하지 않고 전부 큐로 돌려보낸다. 일부만 떠서 자원을 점유한 채 나머지를 기다리는 교착을 원천적으로 막는 것이 atomic 결정의 목적이다.
+여기서 `minCount`는 **그룹이 시작되기 위해 최소한 배치되어야 하는 파드 수**다. Workload 오브젝트에 지정하며, 이 수를 채우지 못하면 아무것도 바인딩하지 않고 전부 큐로 돌려보낸다. 일부만 떠서 자원을 점유한 채 나머지를 기다리는 교착을 원천적으로 막는 것이 atomic 결정의 목적이다.
 
-Pod이 어느 그룹에 속하는지를 가리키는 필드는 버전에 따라 다르다. v1.35에서는 `spec.workloadRef`였고, **v1.36에서 `spec.schedulingGroup`으로 교체**되었다.
+파드가 어느 그룹에 속하는지를 가리키는 필드는 버전에 따라 다르다. v1.35에서는 `spec.workloadRef`였고, **v1.36에서 `spec.schedulingGroup`으로 교체**되었다.
 
-트리거는 여전히 개별 Pod을 큐에서 꺼내는 것이다. 다만 그 Pod이 그룹 소속이면 이후에 타게 되는 사이클 자체가 달라진다.
+트리거는 여전히 개별 파드를 큐에서 꺼내는 것이다. 다만 그 파드가 그룹 소속이면 이후에 타게 되는 사이클 자체가 달라진다.
 
 ## v1.35 vs v1.36 구현 차이
 
 | 버전 | 방식 |
 | --- | --- |
-| **v1.35** (gang scheduling alpha, KEP-4671) | Pod을 **하나씩** 스케줄링하되, `PreEnqueue`와 `Permit`에 배리어를 두어 그룹 전체가 모일 때까지 진행을 막는다. 기존 Pod 단위 파이프라인을 그대로 재활용하는 방식 |
+| **v1.35** (gang scheduling alpha, KEP-4671) | 파드를 **하나씩** 스케줄링하되, `PreEnqueue`와 `Permit`에 배리어를 두어 그룹 전체가 모일 때까지 진행을 막는다. 기존 파드 단위 파이프라인을 그대로 재활용하는 방식 |
 | **v1.36** (PodGroup scheduling cycle, KEP-5732) | **별도의 사이클**로 그룹 전체를 한 번에 평가한다. 스냅샷 1회, atomic 결정, `placementGenerate`/`placementScore` 도입 |
 
-v1.35는 기존 파이프라인 위에 배리어를 얹어 그룹 동작을 구현한 것이고, v1.36에서 그룹 자체를 스케줄링 단위로 다루는 사이클이 생겼다. KEP-4671은 gang scheduling을 v1.37에 beta로 올리는 것을 목표로 하고 있으며, workload 단위 스케줄링 사이클의 beta 목표도 v1.37로 이동했다.
+v1.35는 기존 파이프라인 위에 배리어를 얹어 그룹 동작을 구현한 것이고, v1.36에서 그룹 자체를 스케줄링 단위로 다루는 사이클이 생겼다. KEP-4671은 gang scheduling의 beta를 v1.37로, KEP-5732는 workload 단위 스케줄링 사이클의 beta를 v1.38로 계획하고 있다.
 
 ## NodeResourcesFit의 PodGroup 모드
 
 `NodeResourcesFit`은 PodGroup 스케줄링 시 `placementScore` extension point에서도 동작하며, resource utilization을 **placement 전체 단위**로 계산한다. 이때 `MostAllocated` 방향으로 고정된다.
 
-PodGroup은 여러 Pod을 하나의 placement(노드 집합)에 모아서 배치하는데, placement 내 노드의 사용률을 최대한 높여야 placement가 차지하는 노드 수가 줄고, 남는 노드를 다른 워크로드가 쓸 수 있기 때문이다. `LeastAllocated`(분산 배치)는 개별 Pod에는 적합하지만, 그룹 단위 배치에서는 [자원 단편화]({% post_url 2025-11-05-Kubernetes-Scheduling-04 %}#단편화란)를 일으킨다.
+PodGroup은 여러 파드를 하나의 placement(노드 집합)에 모아서 배치하는데, placement 내 노드의 사용률을 최대한 높여야 placement가 차지하는 노드 수가 줄고, 남는 노드를 다른 워크로드가 쓸 수 있기 때문이다. `LeastAllocated`(분산 배치)는 개별 파드에는 적합하지만, 그룹 단위 배치에서는 [자원 단편화]({% post_url 2025-11-05-Kubernetes-Scheduling-04 %}#단편화란)를 일으킨다.
 
 ## Feature Gate 상태와 활성화
 
@@ -443,7 +524,7 @@ PodGroup 관련 기능은 모두 alpha 상태로, 사용하려면 feature gate�
 | `GenericWorkload` | v1.35 | alpha | Workload API 활성화 |
 | `TopologyAwareWorkloadScheduling` | v1.36 | alpha | `placementGenerate` / `placementScore` extension point 활성화 |
 
-GA가 되더라도 "모든 Pod이 PodGroup으로 스케줄링된다"는 것이 아니다. 그룹에 속하지 않은 Pod은 기존 Pod 단위 사이클을 그대로 탄다.
+GA가 되더라도 "모든 파드가 PodGroup으로 스케줄링된다"는 것이 아니다. 그룹에 속하지 않은 파드는 기존 파드 단위 사이클을 그대로 탄다.
 
 <br>
 
@@ -482,9 +563,9 @@ profiles:
 
 | 기능 | kube-scheduler 기본 플러그인으로 가능? |
 | --- | --- |
-| Gang scheduling (Pod 그룹이 동시에 자원 확보되어야 스케줄링) | v1.35 alpha부터 네이티브 지원 시작 ([위 절](#podgroup-level-extension-points)) |
+| Gang scheduling (파드 그룹이 동시에 자원 확보되어야 스케줄링) | v1.35 alpha부터 네이티브 지원 시작 ([위 절](#podgroup-level-extension-points)) |
 | Fair-share queue (팀별 자원 할당량 관리) | X |
-| [Job-level preemption]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#선점의-한계) (개별 Pod이 아닌 Job 단위 preemption) | X |
+| [Job-level preemption]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#선점의-한계) (개별 파드가 아닌 Job 단위 preemption) | X |
 | Borrowing/Lending (큐 간 자원 대여) | X |
 
 이런 로직은 새로운 플러그인 코드를 Go로 작성해야 하고, 플러그인은 바이너리에 컴파일되어야 하므로 별도 빌드/배포가 필요하다. [2편의 PostFilter 절]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#postfilter)에서 본 out-of-tree 플러그인들도 같은 이유로 별도 바이너리가 필요하다.
@@ -529,7 +610,7 @@ Kueue가 파드를 붙잡아 두는 수단은 워크로드 종류에 따라 다�
 | 워크로드 | 제어 수단 |
 | --- | --- |
 | batch/v1 Job 등 suspend를 지원하는 리소스 | webhook으로 `.spec.suspend`를 `true`로 두고, 자원이 확보되면 `false`로 바꾼다 |
-| plain Pod (Pod 계열 integration) | [3편에서 다룬 Scheduling Gate]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#scheduling-gate)(`kueue.x-k8s.io/admission`)를 주입하고, 자원이 확보되면 제거한다 |
+| plain 파드 (파드 계열 integration) | [3편에서 다룬 Scheduling Gate]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#scheduling-gate)(`kueue.x-k8s.io/admission`)를 주입하고, 자원이 확보되면 제거한다 |
 
 어느 쪽이든 공통점은 **스케줄러 앞단에서 진입 시점만 제어한다**는 것이다. 큐 정책(fair-share, borrowing/lending 등)에 따라 언제 풀어 줄지를 Kueue가 판단하고, 실제 노드 선택은 기본 kube-scheduler가 한다. 스케줄러가 하나뿐이므로 자원 뷰 충돌이 설계 단계에서 발생하지 않는다.
 
@@ -558,13 +639,13 @@ Volcano는 이를 의도적으로 피한다. 기본 `schedulerName`으로 `volca
 
 `default-scheduler`라는 이름의 profile이 클러스터에 없으면 어떻게 되나?
 
-`spec.schedulerName`을 지정하지 않은 Pod은 kube-apiserver가 자동으로 `default-scheduler`로 설정한다([1편 - schedulerName 지정]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#schedulername-지정)). 이 이름을 처리할 스케줄러가 없으면, 해당 Pod은 아무도 pick up하지 않으므로 **영구 Pending** 상태가 된다.
+`spec.schedulerName`을 지정하지 않은 Pod은 kube-apiserver가 자동으로 `default-scheduler`로 설정한다([1편 - schedulerName 지정]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#schedulername-지정)). 이 이름을 처리할 스케줄러가 없으면, 해당 파드는 아무도 pick up하지 않으므로 **영구 Pending** 상태가 된다.
 
 | 시나리오 | 결과 |
 | --- | --- |
-| kube-scheduler를 끄고 volcano만 운영 + **모든** Pod에 `schedulerName: volcano` 명시 | 문제 없음 |
-| kube-scheduler를 끄고 volcano만 운영 + **일부** Pod이 schedulerName 미지정 | 해당 Pod 영구 Pending |
-| kube-scheduler를 끄고 volcano만 운영 + **시스템 Pod** (coredns 등) | 시스템 Pod도 Pending → 클러스터 기능 장애 |
+| kube-scheduler를 끄고 volcano만 운영 + **모든** 파드에 `schedulerName: volcano` 명시 | 문제 없음 |
+| kube-scheduler를 끄고 volcano만 운영 + **일부** 파드가 schedulerName 미지정 | 해당 파드 영구 Pending |
+| kube-scheduler를 끄고 volcano만 운영 + **시스템 파드** (coredns 등) | 시스템 파드도 Pending → 클러스터 기능 장애 |
 
 마지막 케이스는 영향 범위가 클러스터 전체로 넓어진다. `coredns`, `kube-proxy` 같은 시스템 컴포넌트도 기본적으로 `schedulerName`을 생략하기 때문에 `default-scheduler`를 기대한다. 이것이 실무에서 기본 kube-scheduler를 완전히 끄는 구성이 드문 이유이며, 대부분 병행 운영하는 이유다.
 
@@ -580,7 +661,7 @@ Volcano는 이를 의도적으로 피한다. 기본 `schedulerName`으로 `volca
 | **플러그인** | 같은 바이너리에 컴파일된 것만 사용 | 각 바이너리가 다른 플러그인 세트 가능 |
 | **자원 뷰** | 하나의 프로세스라 일관된 상태 | 각자 독립적으로 API server를 watch → **race condition 가능** |
 
-스케줄러가 2개면 같은 노드에 동시에 Pod을 배치하려다 충돌이 날 수 있다. 예: 둘 다 "이 노드에 GPU 4개 남아있네" → 동시에 bind → 실제로는 4개밖에 없는데 8개 배치 시도. K8s는 이를 optimistic concurrency(API server에서 bind 시 충돌 감지 → 실패한 쪽이 retry)로 처리하지만, 완벽하지는 않다.
+스케줄러가 2개면 같은 노드에 동시에 파드를 배치하려다 충돌이 날 수 있다. 예: 둘 다 "이 노드에 GPU 4개 남아있네" → 동시에 bind → 실제로는 4개밖에 없는데 8개 배치 시도. K8s는 이를 optimistic concurrency(API server에서 bind 시 충돌 감지 → 실패한 쪽이 retry)로 처리하지만, 완벽하지는 않다.
 
 ## 실무 권장
 
@@ -598,7 +679,7 @@ Volcano는 이를 의도적으로 피한다. 기본 `schedulerName`으로 `volca
 2. **PreScore는 비용이 큰 계산을 1번만 수행하여 Score에 공유하는 캐시 레이어다.** Score가 (노드 수 x 플러그인 수)번 호출되므로, PreScore에서 미리 계산하면 O(N) → O(1)로 줄어든다. PreFilter와 달리 결정권은 없다.
 3. **주요 플러그인은 여러 extension point에 걸쳐 동작하며, 각 단계에서의 역할이 다르다.** v1.32 기준 `NodeResourcesFit`은 4개, `VolumeBinding`은 6개 extension point에 관여한다. 클라우드 벤더 전용 볼륨 제한 플러그인 4개는 v1.32에서 제거되었다.
 4. **진단은 Events → 메트릭 순서로 좁힌다.** `FailedScheduling` 메시지의 사유 조각이 어느 Filter 플러그인에서 나온 것인지 대응시키면 처방이 나오고, `scheduler_pending_pods`의 `queue` 라벨(`active`/`backoff`/`unschedulable`/`gated`)로 큐 적체를 확인한다.
-5. **v1.35에서 gang scheduling이, v1.36에서 PodGroup 단위 스케줄링 사이클이 도입되었다.** 그룹에 속한 Pod은 별도 사이클로 분기하여 `minCount` 충족 여부에 따라 전부 bind 또는 전부 반환하는 atomic 결정을 받는다. 모두 alpha이고 feature gate가 필요하다.
+5. **v1.35에서 gang scheduling이, v1.36에서 PodGroup 단위 스케줄링 사이클이 도입되었다.** 그룹에 속한 파드는 별도 사이클로 분기하여 `minCount` 충족 여부에 따라 전부 bind 또는 전부 반환하는 atomic 결정을 받는다. 모두 alpha이고 feature gate가 필요하다.
 6. **Profile만으로 되는 경우와 별도 바이너리가 필요한 경우를 구분해야 한다.** 기본 플러그인 조합 변경은 Profile로 충분하고, fair-share queue 같은 기본 플러그인에 없는 로직은 별도 바이너리(Volcano)나 컨트롤러(Kueue)가 필요하다. 실무에서는 가능하면 단일 스케줄러 + 여러 Profile을 권장하며, Kueue는 suspend와 Scheduling Gate로 race condition을 원천 회피하는 설계다.
 
 스케줄링 시리즈 전체를 종합하면:
@@ -609,7 +690,7 @@ Volcano는 이를 의도적으로 피한다. 기본 `schedulerName`으로 `volca
 | [2편]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}) | 스케줄링 프레임워크, Extension Point, 플러그인, 선점 |
 | [3편]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}) | Scheduling Gate, nodeSelector, Affinity, Topology Spread, Taint/Toleration, cordon |
 | [4편]({% post_url 2025-11-05-Kubernetes-Scheduling-04 %}) | 설정 계층 구조, 설정 적용과 롤백, NodeResourcesFit 전략, GPU 단편화, 멀티 프로필 |
-| 5편 (이 글) | Extension Point 심화, PreScore 역할, 실패 진단, PodGroup 스케줄링, 멀티 스케줄러 아키텍처 |
+| 5편 (이 글) | Extension Point 심화, PreScore 역할, 실패 진단, 수동 배치의 제약, PodGroup 스케줄링, 멀티 스케줄러 아키텍처 |
 
 <br>
 

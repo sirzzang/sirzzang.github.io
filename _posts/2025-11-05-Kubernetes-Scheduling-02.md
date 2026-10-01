@@ -15,7 +15,7 @@ tags:
   - Filter
   - Score
   - Plugin
-last_modified_at: 2026-09-28
+last_modified_at: 2026-10-01
 ---
 
 <br>
@@ -62,7 +62,7 @@ last_modified_at: 2026-09-28
 <center><sup>Extension Point 종류와 API 분류 (초록 실선: Extensible API, 주황 점선: Internal API). 출처: <a href="https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/#interfaces">Kubernetes Docs - Scheduling Framework</a></sup></center>
 
 ![kubernetes-scheduling]({{site.url}}/assets/images/kubernetes-scheduling.png){: .align-center}
-<center><sup>큐에서 꺼낸 파드가 각 extension point를 거쳐 running 상태가 되기까지의 전체 흐름</sup></center>
+<center><sup>직접 그린 도식. 큐에서 꺼낸 파드가 각 extension point를 거쳐 running 상태가 되기까지의 전체 흐름</sup></center>
 
 정상 경로의 extension point 순서는 다음과 같다.
 
@@ -121,7 +121,7 @@ Kubernetes 초기에는 **Scheduler Extender**라는 웹훅 기반 외부 프로
 
 | 문제 | 설명 |
 | --- | --- |
-| HTTP 호출 오버헤드 | 노드 수천 개 × Pod 수천 개 filtering마다 네트워크 왕복이 발생해 스케줄링 지연이 커진다 |
+| HTTP 호출 오버헤드 | 노드 수천 개 × 파드 수천 개 filtering마다 네트워크 왕복이 발생해 스케줄링 지연이 커진다 |
 | 에러 핸들링 복잡 | 외부 프로세스가 죽으면 스케줄러 전체가 멈춤 |
 | 상태 공유 불가 | PreFilter에서 계산한 결과를 Filter에서 재사용할 수 없음 |
 
@@ -158,7 +158,7 @@ Interface (Go 인터페이스, 플러그인이 구현할 수 있는 것)
 
 현재의 Scheduling Framework 이전에는 **Scheduling Policies**라는 방식으로 스케줄러의 filtering과 scoring을 설정했다. Predicates(Filtering 단계의 boolean 평가식)와 Priorities(Scoring 단계의 점수 함수)를 정의하는 구조였다.
 
-- **Predicates**: "이 노드에 이 Pod를 놓을 수 있는가"에 대한 `true/false` 판정. 예: `PodFitsResources`, `MatchNodeSelector`, `NoTaintsTolerated`
+- **Predicates**: "이 노드에 이 파드를 놓을 수 있는가"에 대한 `true/false` 판정. 예: `PodFitsResources`, `MatchNodeSelector`, `NoTaintsTolerated`
 - **Priorities**: feasible 노드(Filter를 통과해 배치가 가능한 노드)들에 0~10 점수를 매기고, 가중치를 곱하여 최고 점수 노드를 선택. 예: `LeastRequestedPriority`, `BalancedResourceAllocation`, `ImageLocalityPriority`
 
 이 방식은 v1.23부터 deprecated되었으며, 현재는 **Scheduling Profiles + Scheduling Framework**가 표준이다. 개념적으로 filtering/scoring 2단계는 동일하나, 단순한 predicate/priority 함수 목록이 아니라 plugin point 기반으로 세분화된 것이 핵심 차이다. 현재 Score 단계의 점수 범위는 0~10이 아니라 0~100이다.
@@ -171,17 +171,17 @@ Interface (Go 인터페이스, 플러그인이 구현할 수 있는 것)
 
 ### PreEnqueue
 
-파드가 내부 Active Queue에 추가되기 **전에** 호출된다. 모든 PreEnqueue 플러그인이 `Success`를 반환해야 파드가 Active Queue에 진입할 수 있다. 하나라도 실패하면 파드는 Unschedulable Queue에 배치되며, 스케줄링을 시도하지 않는다.
+파드가 내부 Active Queue에 추가되기 **전에** 호출된다. 모든 PreEnqueue 플러그인이 `Success`를 반환해야 파드가 Active Queue에 진입할 수 있다. 하나라도 실패하면 파드는 Unschedulable Queue에 보관되며, 스케줄링을 시도하지 않는다. 다만 이 파드들은 "시도했다가 실패한" 파드와 구분되어 메트릭상 `gated`로 따로 집계된다([5편 - 파드가 어느 큐에 있는지 판별]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#파드가-어느-큐에-있는지-판별)).
 
-PreEnqueue는 **Pod이 Active Queue에 진입하려 할 때마다** 호출된다. 새 Pod의 최초 진입뿐 아니라, Backoff Queue에서의 복귀, Unschedulable Queue에서의 복귀 시에도 거친다. "애초에 스케줄링 대상이 될 자격이 있는가"를 판단하는 진입 조건이다.
+PreEnqueue는 **파드가 Active Queue에 진입하려 할 때마다** 호출된다. 새 파드의 최초 진입뿐 아니라, Backoff Queue에서의 복귀, Unschedulable Queue에서의 복귀 시에도 거친다. "애초에 스케줄링 대상이 될 자격이 있는가"를 판단하는 진입 조건이다.
 
 | 시나리오 | PreEnqueue 거치나? |
 | --- | --- |
-| 새 Pod 생성 → 최초 진입 | O |
+| 새 파드 생성 → 최초 진입 | O |
 | Backoff Queue → Active Queue 복귀 | O |
 | Unschedulable Queue → Active Queue 복귀 | O |
 
-대표 사용 사례는 [Scheduling Gate](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/)다. Pod에 `spec.schedulingGates`가 설정되어 있으면 `SchedulingGates` 플러그인이 Success를 반환하지 않아 Active Queue에 진입할 수 없다. 외부 컨트롤러가 gate를 제거해야 비로소 스케줄링이 시작된다. Scheduling Gate의 구체적인 사용법은 [3편 - Scheduling Gate]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#scheduling-gate)에서 다룬다.
+대표 사용 사례는 [Scheduling Gate](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/)다. 파드에 `spec.schedulingGates`가 설정되어 있으면 `SchedulingGates` 플러그인이 Success를 반환하지 않아 Active Queue에 진입할 수 없다. 외부 컨트롤러가 gate를 제거해야 비로소 스케줄링이 시작된다. Scheduling Gate의 구체적인 사용법은 [3편 - Scheduling Gate]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#scheduling-gate)에서 다룬다.
 
 <br>
 
@@ -191,10 +191,10 @@ PreEnqueue와 마찬가지로 `KubeSchedulerConfiguration`에 노출되지 않�
 
 앞서 본 것처럼 파드는 여러 단계에서 reject될 수 있고, reject된 파드는 Unschedulable Queue에 머문다. 문제는 이 파드를 **언제** 다시 꺼낼지 판단하는 기준이다.
 
-- **문제**: Filter나 Reserve 등의 단계에서 플러그인이 파드를 reject하면, 해당 파드는 Unschedulable Queue로 들어간다. 그런데 이 파드를 언제 다시 꺼내서 스케줄링을 시도해야 할까? 기준이 없다면, 클러스터에서 *아무* 변화(노드 라벨 변경, 새 Pod 삭제 등)가 생길 때마다 모든 unschedulable 파드를 다시 시도해야 한다. 불필요한 재시도 폭증을 초래한다.
+- **문제**: Filter나 Reserve 등의 단계에서 플러그인이 파드를 reject하면, 해당 파드는 Unschedulable Queue로 들어간다. 그런데 이 파드를 언제 다시 꺼내서 스케줄링을 시도해야 할까? 기준이 없다면, 클러스터에서 *아무* 변화(노드 라벨 변경, 새 파드 삭제 등)가 생길 때마다 모든 unschedulable 파드를 다시 시도해야 한다. 불필요한 재시도 폭증을 초래한다.
 - **해결**: `EnqueueExtension` 인터페이스를 구현하면, 플러그인이 "나한테 의미 있는 이벤트가 뭔지"를 선언할 수 있다.
 
-Pod을 reject할 수 있는 인터페이스(PreEnqueue, PreFilter, Filter, Reserve, Permit)를 구현하는 플러그인은 이 인터페이스도 함께 구현해야 한다. reject할 수 있는 플러그인이기 때문에, "어떤 이벤트에서 재시도하는 게 의미 있는지"를 선언해 줘야 하는 것이다.
+파드를 reject할 수 있는 인터페이스(PreEnqueue, PreFilter, Filter, Reserve, Permit)를 구현하는 플러그인은 이 인터페이스도 함께 구현해야 한다. reject할 수 있는 플러그인이기 때문에, "어떤 이벤트에서 재시도하는 게 의미 있는지"를 선언해 줘야 하는 것이다.
 
 `EnqueueExtension`만으로는 이벤트 **타입**까지만 필터링된다. 더 세밀한 판단을 위해 **QueueingHint** 콜백 함수가 존재한다. 둘이 합쳐서 2단계 필터링 메커니즘을 구성한다.
 
@@ -206,7 +206,7 @@ Pod을 reject할 수 있는 인터페이스(PreEnqueue, PreFilter, Filter, Reser
        예: "그 노드가 unschedulable에서 schedulable로 바뀌었나?"
 ```
 
-구체적인 예로 `NodeUnschedulable` 플러그인을 보자. 이 플러그인은 [cordon된 노드]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#cordon된-노드에-nodename을-지정하면)를 Filter에서 탈락시키므로, "노드의 cordon이 풀렸을 때"와 "파드에 toleration이 추가되었을 때"만 재시도하면 된다.
+구체적인 예로 `NodeUnschedulable` 플러그인을 보자. 이 플러그인은 [cordon된 노드]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#cordon의-기술적-의미)를 Filter에서 탈락시키므로, "노드의 cordon이 풀렸을 때"와 "파드에 toleration이 추가되었을 때"만 재시도하면 된다.
 
 ```go
 // NodeUnschedulable 플러그인이 등록하는 이벤트 (개념적으로 정리)
@@ -215,7 +215,7 @@ func (pl *NodeUnschedulable) EventsToRegister(_ context.Context) ([]fwk.ClusterE
         // 노드가 변경되면 → cordon이 풀렸는지 확인
         {Event: ..., QueueingHintFn: pl.isSchedulableAfterNodeChange},
         // 파드의 toleration이 변경되면 → unschedulable taint를 tolerate하게 됐는지 확인
-        {Event: ..., QueueingHintFn: pl.isSchedulableAfterTargetPodTolerationChange},
+        {Event: ..., QueueingHintFn: pl.isSchedulableAfterPodTolerationChange},
     }, nil
 }
 
@@ -256,8 +256,8 @@ Active Queue 내에서 파드의 정렬 순서를 결정한다. `Less(Pod1, Pod2
 
 PreFilter는 사전 처리만 하는 단계가 아니다. 두 가지 결정권이 있다.
 
-- **Pod 자체를 reject**: 예를 들어 `VolumeBinding`은 파드가 참조하는 PVC가 존재하지 않으면 여기서 reject한다.
-- **후보 노드 집합을 좁히기**: `PreFilterResult`를 반환해 Filter가 평가할 노드를 제한할 수 있다. `NodeAffinity`는 `matchFields`로 노드 이름이 고정된 경우 해당 노드만 후보로 반환하고, `NodeName`도 같은 방식으로 동작한다. [1편에서 다룬 DaemonSet의 스케줄러 위임]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#사례-daemonset의-수동--스케줄러-위임-전환)이 정확히 이 최적화를 탄다 — 노드 하나만 평가하므로 전체 노드를 순회하지 않는다.
+- **파드 자체를 reject**: 예를 들어 `VolumeBinding`은 파드가 참조하는 PVC가 존재하지 않으면 여기서 reject한다.
+- **후보 노드 집합을 좁히기**: `PreFilterResult`를 반환해 Filter가 평가할 노드를 제한할 수 있다. v1.32 기준 `NodeAffinity`가 이 방식을 쓴다 — `matchFields`로 노드 이름이 고정되면 해당 노드만 후보로 반환한다. [1편에서 다룬 DaemonSet의 스케줄러 위임]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#사례-daemonset의-수동--스케줄러-위임-전환)이 정확히 이 최적화를 탄다 — 노드 하나만 평가하므로 전체 노드를 순회하지 않는다. (`NodeName` 플러그인은 v1.32 기준 Filter만 구현한다.)
 
 v1.27부터는 플러그인이 `Skip` 상태를 반환하여, 해당 플러그인의 Filter 실행을 건너뛸 수 있다(예: 파드에 nodeAffinity가 없으면 `NodeAffinity` 플러그인의 Filter를 Skip). 같은 버전에서 PreScore → Score 방향의 Skip도 도입되었다.
 
@@ -301,7 +301,7 @@ v1.27부터는 플러그인이 `Skip` 상태를 반환하여, 해당 플러그�
 > PostFilter is called by the scheduling framework when the scheduling cycle failed at Prefilter or Filter
 
 ![kubernetes-scheduling-2]({{site.url}}/assets/images/kubernetes-scheduling-2.png){: .align-center}
-<center><sup>Filter 실패 후 PostFilter(선점) 흐름 상세. 큐 복귀 경로와 각 플러그인의 분기를 함께 나타냈다.</sup></center>
+<center><sup>직접 그린 도식. Filter 실패 후 PostFilter(선점) 흐름 상세. 큐 복귀 경로와 각 플러그인의 분기를 함께 나타냈다. 도식의 `3.2 CrossNodePreemption`·`3.3 그 외 커스텀 플러그인`은 out-of-tree 플러그인이라 기본 `kube-scheduler` 바이너리에서는 실행되지 않는다(아래 표 참고)</sup></center>
 
 플러그인은 설정된 순서대로 실행되며(순차 실행), 첫 번째로 성공한 플러그인에서 종료된다(Early Exit). 성공한 플러그인이 `nominatedNodeName`을 설정하며, 파드당 하나의 후보 노드만 설정 가능하다.
 
@@ -321,7 +321,7 @@ out-of-tree 플러그인은 기본 `kube-scheduler` 바이너리에 컴파일되
 
 ### PreScore
 
-Score 플러그인이 사용할 **공유 상태를 생성**하는 사전 처리 단계다. 노드를 탈락시키거나 Pod을 reject하는 결정권은 없는 **informational** 성격의 단계이며, 오류를 반환하면 Scheduling Cycle이 중단된다.
+Score 플러그인이 사용할 **공유 상태를 생성**하는 사전 처리 단계다. 노드를 탈락시키거나 파드를 reject하는 결정권은 없는 **informational** 성격의 단계이며, 오류를 반환하면 Scheduling Cycle이 중단된다.
 
 > `CycleState` 캐시 패턴, 대표 플러그인(InterPodAffinity, NodeResourcesFit, TaintToleration)의 구체적인 PreScore 동작은 [5편 - PreScore 역할]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#prescore-역할)에서 자세히 다룬다.
 
@@ -432,9 +432,9 @@ API Server가 이 요청을 처리하면서 `spec.nodeName`을 설정하고 `Pod
 대부분의 extension point는 등록된 플러그인을 모두 실행(AND 조건 또는 합산)하지만, QueueSort와 Bind는 "하나만 동작해야 한다"는 공통점이 있다. 다만 그 제약의 메커니즘이 다르다.
 
 - **QueueSort — 등록 자체가 1개로 제한**: `Less(Pod1, Pod2)`로 전체 순서(total ordering)를 결정하는 비교 함수다. 비교 함수가 2개 존재하면 순서가 모순될 수 있으므로, 단일 비교 기준만 허용된다.
-- **Bind — 복수 등록 가능, 실행은 1개만 (Chain of Responsibility)**: 여러 Bind 플러그인을 등록할 수 있지만, "Pod을 Node에 묶는 API 호출"은 한 번만 이뤄져야 하므로 첫 번째로 처리하겠다고 한 플러그인만 실행되고 나머지는 스킵된다.
+- **Bind — 복수 등록 가능, 실행은 1개만 (Chain of Responsibility)**: 여러 Bind 플러그인을 등록할 수 있지만, "파드를 Node에 묶는 API 호출"은 한 번만 이뤄져야 하므로 첫 번째로 처리하겠다고 한 플러그인만 실행되고 나머지는 스킵된다.
 
-> 각 extension point가 "노드를 탈락시킬 수 있는가 / Pod을 reject할 수 있는가"로 재분류한 결정권 관점은 [5편 - Extension Point 결정권 분류]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#extension-point-결정권-분류)에서 다룬다.
+> 각 extension point가 "노드를 탈락시킬 수 있는가 / 파드를 reject할 수 있는가"로 재분류한 결정권 관점은 [5편 - Extension Point 결정권 분류]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#extension-point-결정권-분류)에서 다룬다.
 
 <br>
 
@@ -466,7 +466,7 @@ v1.32 기준 기본 활성화된 플러그인이 어떤 extension point에 등�
 | DefaultPreemption | postFilter | 기본 선점 로직 |
 | DefaultBinder | bind | 기본 바인딩 (Binding 오브젝트 생성) |
 
-> 클라우드 벤더 전용 볼륨 제한 플러그인(`EBSLimits`, `GCEPDLimits`, `AzureDiskLimits`, `CinderLimits`)은 과거에 존재했으나 **v1.32에서 모두 제거**되었다. 현재는 CSI 기반의 `NodeVolumeLimits`가 이 역할을 대신한다. 설정 파일에 제거된 이름이 남아 있으면 스케줄러가 기동에 실패하므로, v1.32 이상으로 업그레이드할 때 확인이 필요하다.
+> 클라우드 벤더 전용 볼륨 제한 플러그인(`EBSLimits`, `GCEPDLimits`, `AzureDiskLimits`, `CinderLimits`)은 과거에 존재했으나 **v1.32에서 모두 제거**되었다. 현재는 CSI 기반의 `NodeVolumeLimits`가 이 역할을 대신한다. 제거된 이름을 `plugins`의 `enabled`나 `pluginConfig`에 명시해 둔 설정은 스케줄러 기동을 실패시키므로(`disabled`에만 남은 경우는 조용히 무시된다), v1.32 이상으로 업그레이드할 때 확인이 필요하다.
 
 Filter와 Score **양쪽에** 등록되는 플러그인에 주목할 필요가 있다. 예를 들어:
 
@@ -499,7 +499,7 @@ Active Queue로 복귀하는 조건을 정리하면 다음과 같다.
 
 이 모든 과정에서 파드는 Pending 상태를 유지하며, 스케줄링에 성공해 바인딩되고 컨테이너가 시작되어야 비로소 Running 상태가 된다. 큐 구조와 큐 간 이동 조건에 대한 자세한 내용은 [1편의 스케줄러 큐 섹션]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#스케줄러-큐)을 참고한다.
 
-> *실전 사례*: GPU 1개뿐인 노드에 `nodeSelector`로 고정 배치한 Deployment를 업데이트할 때, 기본값(`maxSurge: 1`, `maxUnavailable: 0`)이 적용되면 새 파드를 먼저 생성하려 하지만, GPU가 이미 점유 중이라 Filter에서 탈락하고, 같은 우선순위라 선점도 불가하여 Unschedulable Queue에 갇히는 교착 상태가 발생한다. 기존 파드가 종료되어 GPU 리소스가 해제되는 클러스터 이벤트가 발생해야 복귀할 수 있다. 자세한 분석은 [Deployment 재배포 실패 시리즈]({% post_url 2025-11-05-Dev-Kubernetes-Deployment-Failure-1 %})를 참고한다.
+> *실전 사례*: GPU 1개뿐인 노드에 `nodeSelector`로 고정 배치한 Deployment를 업데이트할 때, 기본값(`maxSurge: 1`, `maxUnavailable: 0`)이 적용되면 새 파드를 먼저 생성하려 하지만, GPU가 이미 점유 중이라 Filter에서 탈락하고, 같은 우선순위라 선점도 불가하여 Unschedulable Queue에 갇히는 교착 상태가 발생한다. 기존 파드가 종료되어 GPU 리소스가 해제되는 클러스터 이벤트가 발생해야 복귀할 수 있다. 경위는 [Deployment 재배포 실패 시리즈 1편]({% post_url 2025-11-05-Dev-Kubernetes-Deployment-Failure-1 %})부터, 교착의 분석은 [3편 - Deadlock]({% post_url 2025-11-05-Dev-Kubernetes-Deployment-Failure-3 %})에서 다룬다.
 
 <br>
 
@@ -507,7 +507,7 @@ Active Queue로 복귀하는 조건을 정리하면 다음과 같다.
 
 [공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/)에서는 이렇게 설명한다.
 
-> Pods can have priority. Priority indicates the importance of a Pod relative to other Pods. If a Pod cannot be scheduled, the scheduler tries to preempt (evict) lower priority Pods to make scheduling of the pending Pod possible.
+> Pods can have priority. Priority indicates the importance of a 파드 relative to other Pods. If a 파드 cannot be scheduled, the scheduler tries to preempt (evict) lower priority Pods to make scheduling of the pending 파드 possible.
 
 즉, 우선순위가 더 높은 파드를 위해 더 낮은 우선순위 파드를 종료하는 것이다. "선점"이라는 표현이 해당 파드가 직접 리소스를 빼앗는 것처럼 들리지만, 실제 동작은 **낮은 우선순위 파드를 종료시켜 공간을 확보한 후, 높은 우선순위 파드가 그 공간에 스케줄링되는 방식**이다. 선점한 파드에는 `nominatedNodeName`이 설정된다.
 
@@ -589,7 +589,7 @@ Active Queue로 복귀하는 조건을 정리하면 다음과 같다.
 
 각 노드에 대해 "이 노드에서 preemptor보다 낮은 우선순위 파드를 **전부** 제거하면 preemptor가 들어갈 수 있는가"를 확인한다. 공식 문서의 표현은 다음과 같다.
 
-> A Node is considered for preemption only when the answer to this question is yes: "If all the Pods with lower priority than the pending Pod are removed from the Node, can the pending Pod be scheduled on the Node?"
+> A Node is considered for preemption only when the answer to this question is yes: "If all the Pods with lower priority than the pending 파드 are removed from the Node, can the pending 파드 be scheduled on the Node?"
 
 답이 아니오면 그 노드는 후보에서 제외된다.
 
@@ -597,7 +597,7 @@ Active Queue로 복귀하는 조건을 정리하면 다음과 같다.
 
 후보 노드에서 낮은 우선순위 파드를 전부 제거한 상태에서 시작해, 우선순위가 높은 것부터 하나씩 되돌려 넣으면서 여전히 Filter를 통과하는지 재검사한다. 그래서 **낮은 우선순위 파드가 전부 죽는 것이 아니다.**
 
-> Preemption does not necessarily remove all lower-priority Pods. If the pending Pod can be scheduled by removing fewer than all lower-priority Pods, then only a portion of the lower-priority Pods are removed.
+> Preemption does not necessarily remove all lower-priority Pods. If the pending 파드 can be scheduled by removing fewer than all lower-priority Pods, then only a portion of the lower-priority Pods are removed.
 
 **3. 후보 노드 중 하나 선택**
 
@@ -624,7 +624,7 @@ victim이 종료되기를 기다리는 동안 스케줄러는 다른 파드를 �
 
 선점과 종료 사이의 시간 간격을 줄이려면 낮은 우선순위 파드의 graceful termination period를 짧게 두는 방법이 있다. 다만 이것은 해당 워크로드가 종료 처리에 필요한 시간을 줄이는 것이므로, 워크로드 특성을 보고 판단해야 한다.
 
-여기서 중요한 점은, **선점이 victim을 다른 노드로 "옮기는" 것이 아니라는 것**이다. victim은 삭제되고, victim의 컨트롤러가 새 파드를 만들고, 그 새 파드가 스케줄링을 처음부터 다시 받는다. [1편에서 본 것처럼]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#이미-스케줄링된-파드는-옮길-수-없다) 이미 바인딩된 파드의 배치를 바꾸는 방법은 삭제 후 재생성뿐이고, 선점도 이 원칙을 따른다.
+여기서 중요한 점은, **선점이 victim을 다른 노드로 "옮기는" 것이 아니라는 것**이다. victim은 삭제되고, victim의 컨트롤러가 새 파드를 만들고, 그 새 파드가 스케줄링을 처음부터 다시 받는다. [5편에서 보듯]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#이미-스케줄링된-파드는-옮길-수-없다) 이미 바인딩된 파드의 배치를 바꾸는 방법은 삭제 후 재생성뿐이고, 선점도 이 원칙을 따른다.
 
 <br>
 
@@ -656,7 +656,7 @@ victim 파드가 종료되는 동안 다른 낮은 우선순위 파드가 그 �
 
 다만, nominatedNodeName이 설정된 파드더라도 nominated node에 항상 스케줄링된다는 보장은 없다.
 
-> Please note that Pod P is **not necessarily scheduled** to the 'nominated Node'.
+> Please note that 파드 P is **not necessarily scheduled** to the 'nominated Node'.
 
 보장이 깨지는 경로는 두 가지다.
 
@@ -679,7 +679,7 @@ preemptor가 그 노드의 낮은 우선순위 파드에 `podAffinity`를 걸고
 
 zone 단위 anti-affinity처럼, 다른 노드의 파드를 제거해야 이 노드에 배치할 수 있는 상황이 있다. 스케줄러는 이런 cross-node 선점을 **수행하지 않는다.**
 
-> In order to schedule Pod P on Node N, Pod Q can be preempted, but scheduler does not perform cross-node preemption. So, Pod P will be deemed unschedulable on Node N.
+> In order to schedule 파드 P on Node N, 파드 Q can be preempted, but scheduler does not perform cross-node preemption. So, 파드 P will be deemed unschedulable on Node N.
 
 여러 노드에 걸친 선점이 필요하면 [앞에서 본](#postfilter) out-of-tree `CrossNodePreemption` 플러그인 같은 것을 고려해야 한다.
 
@@ -701,7 +701,7 @@ zone 단위 anti-affinity처럼, 다른 노드의 파드를 제거해야 이 노
 2. **정상 경로는 PreEnqueue → QueueSort → PreFilter → Filter → PreScore → Score → NormalizeScore → Reserve → Permit → PreBind → Bind → PostBind다.** PostFilter는 이 순서에 포함되지 않고, Filter에서 모든 노드가 탈락했을 때만 분기하는 실패 경로다.
 3. **Filter는 부적합 노드를 탈락시키고, Score는 최적 노드를 선택한다.** Filter에서는 `requests` 기준으로 리소스를 판단하며, `required` 조건만 체크한다. Score에서는 `preferred` 조건과 리소스 분산 전략 등을 반영하여 점수를 산출하고, NormalizeScore로 0~100에 맞춘 뒤 가중 합산한다. 동점이면 균등 무작위로 고른다.
 4. **하나의 플러그인이 여러 extension point에 등록될 수 있다.** v1.32 기준 `NodeResourcesFit`과 `NodeAffinity`가 PreFilter·Filter·PreScore·Score 네 곳, `VolumeBinding`이 여섯 곳에 등록된다. Score 가중치는 `TaintToleration`(3), `NodeAffinity`/`PodTopologySpread`/`InterPodAffinity`(2), 나머지(1)다.
-5. **큐 재시도는 EnqueueExtension + QueueingHint로 효율화된다.** 플러그인이 "의미 있는 이벤트 타입"을 선언하고(1단계), 콜백이 "이 구체적 이벤트가 이 Pod에 관련 있는가"를 판단한다(2단계). 반환값은 `Queue`와 `QueueSkip` 두 가지이며, 백오프 경유 여부는 큐가 결정한다.
+5. **큐 재시도는 EnqueueExtension + QueueingHint로 효율화된다.** 플러그인이 "의미 있는 이벤트 타입"을 선언하고(1단계), 콜백이 "이 구체적 이벤트가 이 파드에 관련 있는가"를 판단한다(2단계). 반환값은 `Queue`와 `QueueSkip` 두 가지이며, 백오프 경유 여부는 큐가 결정한다.
 6. **선점은 PriorityClass 기반으로 동작한다.** 우선순위가 정의되지 않으면 선점은 발생하지 않는다. victim 노드 선택은 PDB 위반 최소부터 시작하는 6단계 기준을 따르고, victim은 Delete API로 삭제되므로 PDB는 best-effort로만 존중된다.
 7. **`nominatedNodeName`은 예약 마커일 뿐, 보장이 아니다.** 끼어들기를 방지하고 다음 사이클에서 우선 탐색되지만, 다른 노드가 먼저 비거나 더 높은 우선순위 파드가 도착하면 결과가 달라진다.
 8. **선점에도 한계가 있다.** 낮은 우선순위 파드에 affinity를 걸면 선점하지 않고, cross-node 선점은 수행하지 않으며, 그룹 단위 선점은 기본 플러그인에 없다.
@@ -716,7 +716,7 @@ zone 단위 anti-affinity처럼, 다른 노드의 파드를 제거해야 이 노
 
 - [Scheduling Framework - Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/)
 - [Pod Priority and Preemption - Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/)
-- [Pod Scheduling Readiness - Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/)
+- [파드 Scheduling Readiness - Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/)
 - [Specifying a Disruption Budget for your Application - Kubernetes 공식 문서](https://kubernetes.io/docs/tasks/run-application/configure-pdb/)
 - [Scheduler Performance Tuning - Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduler-perf-tuning/)
 - [kubernetes-sigs/scheduler-plugins](https://github.com/kubernetes-sigs/scheduler-plugins)

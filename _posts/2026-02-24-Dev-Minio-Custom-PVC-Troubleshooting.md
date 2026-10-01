@@ -1,5 +1,5 @@
 ---
-title:  "[Kubernetes] MinIO distributed 모드에서 existingClaim이 조용히 무시되는 이유"
+title:  "[MinIO] distributed 모드의 existingClaim: 무시되는 이유와 standalone 전환"
 excerpt: "K3s 클러스터에서 루트 파티션이 가득 찬 원인을 추적하고, README대로 existingClaim을 설정했는데도 적용되지 않는 이유를 확인해보자."
 categories:
   - Dev
@@ -169,7 +169,7 @@ Tolerations:         node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
 이 출력에서 읽을 수 있는 것이 네 가지다.
 
 - **`ephemeral-storage` 부족으로 kubelet이 축출했다.** 노드 압박 축출은 스케줄러가 아니라 kubelet이 직접 수행한다
-- **QoS Class가 `BestEffort`다.** 두 컨테이너 모두 `request is 0`, 즉 리소스 요청을 선언하지 않았다. kubelet은 축출 대상을 고를 때 BestEffort → Burstable → Guaranteed 순으로 보므로, 이 Pod이 먼저 선택된 것은 설계된 순서와 일치한다
+- **두 컨테이너 모두 `request is 0`이다.** 리소스 요청을 선언하지 않았고, 그 결과 QoS Class가 `BestEffort`로 매겨졌다. kubelet의 축출 대상 선정 기준은 ① 사용량이 requests를 초과했는가 ② Pod Priority ③ requests 대비 사용량 순인데, requests가 0이면 사용량이 항상 ①에 걸린다. 이 Pod이 먼저 선택된 이유가 이것이다
 - **`Priority: 0`이고 PriorityClass가 없다.** 클러스터의 모든 워크로드가 우선순위를 설정하지 않은 상태였다
 - **`PodScheduled: True`가 남아 있다.** 축출된 Pod인데도 이 조건이 True인 것은, `PodScheduled`가 현재 상태가 아니라 "한 번 스케줄링됐다"는 결과 기록이기 때문이다
 
@@ -333,7 +333,7 @@ volumes:
 
 ## 핵심: 구조적 충돌
 
-결과적으로 정리해 보면, values.yaml에서 설정할 수 있는 `existingClaim` 값은 distributed 모드, 즉 MinIO가 Statefulset으로 실행될 때는 무시된다.
+결과적으로 정리해 보면, values.yaml에서 설정할 수 있는 `existingClaim` 값은 distributed 모드, 즉 MinIO가 StatefulSet으로 실행될 때는 무시된다.
 
 | 구분 | `distributed` (기본값) | `standalone` |
 | --- | --- | --- |
@@ -347,7 +347,7 @@ volumes:
 
 이것은 버그라기보다 **distributed 모드가 필요로 하는 StatefulSet의 설계와 `existingClaim`의 본질적인 충돌**이다. 아래에서 두 층위로 나눠 살펴본다.
 
-### distributed 모드와 Statefulset
+### distributed 모드와 StatefulSet
 
 MinIO의 distributed 모드는 erasure coding으로 데이터를 보호한다. 오브젝트를 데이터 블록과 패리티 블록으로 나눠 erasure set을 이루는 드라이브들에 분산 저장하며, 드라이브 여러 개가 죽어도 나머지 블록으로 복구할 수 있다. 
 
@@ -364,7 +364,7 @@ StatefulSet은 Pod마다 독립된 PVC를 갖는 것을 전제로 설계된다. 
 <br>
 
 <details markdown="1">
-<summary><b>참고: distributed(Statefulset) + RWX 스토리지였다면?</b></summary>
+<summary><b>참고: distributed(StatefulSet) + RWX 스토리지였다면?</b></summary>
 
 NFS처럼 ReadWriteMany를 지원하는 스토리지였다면 하나의 PVC를 여러 Pod이 동시에 마운트하는 것은 기술적으로 가능하다. 그러나 두 가지 이유로 distributed 모드에서는 의미가 없다.
 
@@ -385,7 +385,7 @@ standalone 모드는 Pod이 1개이므로 RWX든 RWO든 마운트하는 Pod이 *
 
 <br>
 
-### 문제
+### 문서화되지 않은 제약
 
 진짜 문제는 이 제약이 **어디에도 문서화되어 있지 않다**는 것이다. values.yaml의 `existingClaim` 주석에도, README의 Existing PersistentVolumeClaim 섹션에도, mode에 따른 제한사항은 언급되지 않았다. 설정은 받아들이되 조용히 무시하는, 전형적인 **silent failure**다.
 
@@ -807,7 +807,7 @@ EvictionMinimumReclaim: map[string]string{
 
 한 가지 더 이상한 점이 있다. 메시지의 `available: 34765552Ki`는 약 33.2GiB로, 임계값(11.6GiB)보다 **크다**. 임계값을 넘지 않았는데 왜 축출됐을까.
 
-`EvictionMinimumReclaim` 때문이다. kubelet은 임계값을 넘겨 축출을 시작하면, 임계값에 턱걸이하는 선에서 멈추지 않고 **`임계값 + minimumReclaim` 만큼 확보될 때까지** 축출을 계속한다. 여기서는 5% + 10% = 15%가 목표가 된다.
+`EvictionMinimumReclaim` 때문이다. kubelet은 임계값을 넘겨 축출을 시작하면, 임계값에 복귀하는 시점에 멈추지 않고 **`임계값 + minimumReclaim` 만큼 확보될 때까지** 축출을 계속한다. 여기서는 5% + 10% = 15%가 목표가 된다.
 
 ```
 축출 목표 수위  = 5% + 10% = 15%  → 37,317,897,093 B (34.75 GiB)
@@ -818,7 +818,7 @@ EvictionMinimumReclaim: map[string]string{
 
 ### 이관 작업에 준 영향
 
-`BestEffort` QoS 클래스의 Pod부터 축출되며, 축출된 Pod는 데이터 복사 중간에 죽어버린다. 이관 작업을 안전하게 진행하려면 **MinIO Pod를 먼저 중지(`scale down`)한 상태에서 복사**해야 했다.
+requests를 선언하지 않은 Pod이 먼저 축출되며, 축출된 Pod는 데이터 복사 중간에 죽어버린다. 이관 작업을 안전하게 진행하려면 **MinIO Pod를 먼저 중지(`scale down`)한 상태에서 복사**해야 했다.
 
 <br>
 
@@ -837,6 +837,7 @@ $ kubectl delete pvc export-minio-0 export-minio-1 export-minio-2 -n minio
 재배포 후 MinIO 콘솔에서 버킷이 정상 표시되었고, 이후 라벨링 파이프라인을 수차례 실행하면서 데이터가 SSD에 정상적으로 축적되는 것을 확인했다.
 
 ![minio-new-bucket]({{site.url}}/assets/images/minio-new-bucket.png){: .align-center}
+<center><sup>직접 캡처. 재배포 후 MinIO Object Browser에 버킷이 표시되고, 새 PV 경로(<code>/mnt/data/minio-pv</code>)에 해당 디렉토리가 생성되어 있다</sup></center>
 
 파이프라인을 여러 차례 실행한 뒤 디스크 사용량을 확인했을 때, 데이터가 SSD 경로에 쌓이고 루트 파티션은 안정적으로 유지되고 있었다.
 
@@ -870,7 +871,7 @@ using StatefulSet's volumeClaimTemplates for erasure coding.
 Your specified PVC 'my-custom-pvc' will not be used.
 ```
 
-## 결과
+## PR 처리 경과
 
 PR을 올린 것은 2025년 11월이었다. 리뷰나 코멘트 없이 open 상태로 남아 있었고, 2026년 2월 13일 **레포 자체가 archive** 되면서 PR은 영구히 열린 상태로 남게 되었다.
 
@@ -928,7 +929,7 @@ sudo fdisk /dev/sda
 
 <br>
 
-```
+```bash
 sudo mkfs.ext4 /dev/sda
 ```
 ```bash
@@ -961,7 +962,7 @@ sudo mkdir -p /mnt/sdc
 
 /etc/fstab 파일을 수정하여 부팅 시 자동으로 마운트되도록 설정함
 
-```
+```bash
 sudo blkid
 ```
 ```
@@ -987,7 +988,7 @@ sudo blkid
 
 <br>
 
-```
+```bash
 sudo vi /etc/fstab
 ```
 ```
@@ -1033,7 +1034,7 @@ sudo systemctl daemon-reload
 
 <br>
 
-```
+```bash
 df -h
 ```
 ```
