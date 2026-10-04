@@ -37,7 +37,7 @@
 
 
 
-  <meta property="article:modified_time" content="2026-09-28T00:00:00+09:00">
+  <meta property="article:modified_time" content="2026-10-01T00:00:00+09:00">
 
 
 
@@ -442,7 +442,7 @@ window.MathJax = {
     <meta itemprop="headline" content="[Kubernetes] 쿠버네티스 스케줄링 - 1. 개념">
     <meta itemprop="description" content="Kubernetes에서의 파드 스케줄링 개념에 대해 알아보자.">
     <meta itemprop="datePublished" content="2025-11-05T00:00:00+09:00">
-    <meta itemprop="dateModified" content="2026-09-28T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-10-01T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
@@ -462,7 +462,7 @@ window.MathJax = {
 
 
 
-  20 분 소요
+  17 분 소요
 
 
             
@@ -516,17 +516,7 @@ window.MathJax = {
       <li><a href="#수동-스케줄링">수동 스케줄링</a>
         <ul>
           <li><a href="#파드-생성-시-specnodename-지정">파드 생성 시 spec.nodeName 지정</a></li>
-          <li><a href="#우회되는-검증과-kubelet이-다시-하는-검증">우회되는 검증과 kubelet이 다시 하는 검증</a>
-            <ul>
-              <li><a href="#cordon된-노드에-nodename을-지정하면">cordon된 노드에 nodeName을 지정하면</a></li>
-            </ul>
-          </li>
-          <li><a href="#이미-생성된-파드에-대한-수동-스케줄링-binding-오브젝트">이미 생성된 파드에 대한 수동 스케줄링: Binding 오브젝트</a>
-            <ul>
-              <li><a href="#binding이-거부되는-조건">Binding이 거부되는 조건</a></li>
-              <li><a href="#이미-스케줄링된-파드는-옮길-수-없다">이미 스케줄링된 파드는 옮길 수 없다</a></li>
-            </ul>
-          </li>
+          <li><a href="#이미-생성된-파드에-대한-수동-스케줄링-binding-오브젝트">이미 생성된 파드에 대한 수동 스케줄링: Binding 오브젝트</a></li>
           <li><a href="#수동-스케줄링-방식-비교">수동 스케줄링 방식 비교</a></li>
           <li><a href="#사례-daemonset의-수동--스케줄러-위임-전환">사례: DaemonSet의 수동 → 스케줄러 위임 전환</a></li>
         </ul>
@@ -635,7 +625,7 @@ window.MathJax = {
   <li>(필요 시) 선점: 낮은 우선순위 파드(victim) 선택 및 종료 요청</li>
 </ul>
 
-<p>또한, 당연히 스케줄링은 <strong>파드</strong>에 적용되는 개념이다. Deployment, Statefulset 등과 같은 리소스 컨트롤러에 적용되는 개념이 아니라는 의미다.</p>
+<p>또한, 당연히 스케줄링은 <strong>파드</strong>에 적용되는 개념이다. Deployment, StatefulSet 등과 같은 리소스 컨트롤러에 적용되는 개념이 아니라는 의미다.</p>
 
 <p><br /></p>
 
@@ -974,120 +964,11 @@ kube-scheduler-control-plane   1/1     Running   0          3d
 
 <p><br /></p>
 
-<h3 id="우회되는-검증과-kubelet이-다시-하는-검증">우회되는 검증과 kubelet이 다시 하는 검증</h3>
+<p>스케줄러의 Filter를 건너뛴다고 해서 아무 검증도 없는 것은 아니다. kubelet은 자신의 노드에 배정된 파드를 실행하기 전에 admission 검사를 수행하며, 여기서 리소스 충분 여부와 <code class="highlighter-rouge">nodeSelector</code>, <code class="highlighter-rouge">NoExecute</code> taint 등은 다시 판정한다. 그러나 <strong>배치 정책에 해당하는 것 — cordon, <code class="highlighter-rouge">NoSchedule</code> taint, 파드 간 affinity, 토폴로지 분산 — 은 스케줄러도 kubelet도 검사하지 않는다.</strong></p>
 
-<p>스케줄러의 Filter를 건너뛴다고 해서 아무 검증도 없는 것은 아니다. kubelet은 자신의 노드에 배정된 파드를 실행하기 전에 admission 검사를 수행하며, 여기서 Filter 플러그인 일부와 같은 판정을 다시 한다. 다만 <strong>다시 하는 항목과 하지 않는 항목이 명확히 갈린다</strong>.</p>
+<p>그래서 cordon된 노드에 <code class="highlighter-rouge">spec.nodeName</code>을 직접 지정하면 파드가 그대로 뜬다. cordon이 Filter 단계에서만 평가되고 kubelet은 <code class="highlighter-rouge">NoSchedule</code> taint를 보지 않기 때문이다(구조는 <a href="/kubernetes/Kubernetes-Scheduling-03/#cordon의-기술적-의미">3편 - cordon의 기술적 의미</a>). 버그가 아니라 설계된 경로이고, GPU 장애 노드를 cordon해 둔 채 검증용 probe만 밀어 넣는 식으로 활용할 여지도 있다.</p>
 
-<table>
-  <thead>
-    <tr>
-      <th>검사 항목</th>
-      <th>스케줄러 Filter</th>
-      <th>kubelet admission</th>
-      <th>수동 배치 시 결과</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>리소스 충분 여부 (<code class="highlighter-rouge">NodeResourcesFit</code>)</td>
-      <td>O</td>
-      <td><strong>O</strong></td>
-      <td>부족하면 파드가 <code class="highlighter-rouge">OutOfcpu</code> / <code class="highlighter-rouge">OutOfmemory</code> 등으로 실행 거부</td>
-    </tr>
-    <tr>
-      <td><code class="highlighter-rouge">nodeSelector</code> / Node Affinity <code class="highlighter-rouge">required</code></td>
-      <td>O</td>
-      <td><strong>O</strong></td>
-      <td>불일치하면 실행 거부</td>
-    </tr>
-    <tr>
-      <td>노드명 일치 (<code class="highlighter-rouge">NodeName</code>)</td>
-      <td>O</td>
-      <td><strong>O</strong></td>
-      <td>—</td>
-    </tr>
-    <tr>
-      <td><code class="highlighter-rouge">hostPort</code> 충돌 (<code class="highlighter-rouge">NodePorts</code>)</td>
-      <td>O</td>
-      <td><strong>O</strong></td>
-      <td>충돌하면 실행 거부</td>
-    </tr>
-    <tr>
-      <td><code class="highlighter-rouge">NoExecute</code> taint</td>
-      <td>O</td>
-      <td><strong>O</strong> (Static Pod은 제외)</td>
-      <td>tolerate하지 않으면 실행 거부</td>
-    </tr>
-    <tr>
-      <td><strong>cordon (<code class="highlighter-rouge">NodeUnschedulable</code>)</strong></td>
-      <td>O</td>
-      <td><strong>X</strong></td>
-      <td><strong>그대로 실행된다</strong></td>
-    </tr>
-    <tr>
-      <td><strong><code class="highlighter-rouge">NoSchedule</code> / <code class="highlighter-rouge">PreferNoSchedule</code> taint</strong></td>
-      <td>O</td>
-      <td><strong>X</strong></td>
-      <td><strong>그대로 실행된다</strong></td>
-    </tr>
-    <tr>
-      <td>Pod Affinity / Anti-Affinity (<code class="highlighter-rouge">InterPodAffinity</code>)</td>
-      <td>O</td>
-      <td><strong>X</strong></td>
-      <td>배치 규칙을 위반한 채로 실행된다</td>
-    </tr>
-    <tr>
-      <td>토폴로지 분산 (<code class="highlighter-rouge">PodTopologySpread</code>)</td>
-      <td>O</td>
-      <td><strong>X</strong></td>
-      <td>분산 제약을 위반한 채로 실행된다</td>
-    </tr>
-    <tr>
-      <td>볼륨 제약 (<code class="highlighter-rouge">VolumeBinding</code>, <code class="highlighter-rouge">VolumeZone</code> 등)</td>
-      <td>O</td>
-      <td><strong>X</strong></td>
-      <td>마운트 단계에서 실패한다</td>
-    </tr>
-  </tbody>
-</table>
-
-<p>정리하면, <strong>리소스와 노드 선택 조건은 kubelet이 막아 주지만, 배치 정책에 해당하는 것(cordon, <code class="highlighter-rouge">NoSchedule</code> taint, 파드 간 관계, 토폴로지 분산)은 아무도 막지 않는다.</strong> taint/toleration의 effect별 의미는 <a href="/kubernetes/Kubernetes-Scheduling-03/#taints-and-tolerations">3편 - Taints and Tolerations</a>에서 다룬다.</p>
-
-<p><br /></p>
-
-<h4 id="cordon된-노드에-nodename을-지정하면">cordon된 노드에 nodeName을 지정하면</h4>
-
-<p>위 표에서 cordon이 kubelet 검사 대상이 아닌 것이 실무에서 자주 마주치는 결과로 이어진다. <code class="highlighter-rouge">kubectl cordon</code>은 노드에 <code class="highlighter-rouge">spec.unschedulable: true</code>를 설정하고, 이것이 두 경로로 스케줄링을 막는다.</p>
-
-<table>
-  <thead>
-    <tr>
-      <th>경로</th>
-      <th>적용 주체</th>
-      <th>단계</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code class="highlighter-rouge">node.spec.unschedulable</code>을 직접 확인</td>
-      <td><code class="highlighter-rouge">NodeUnschedulable</code> 플러그인</td>
-      <td>Filter</td>
-    </tr>
-    <tr>
-      <td><code class="highlighter-rouge">node.kubernetes.io/unschedulable:NoSchedule</code> taint 자동 부착</td>
-      <td>node lifecycle controller가 부착 → <code class="highlighter-rouge">TaintToleration</code> 플러그인이 평가</td>
-      <td>Filter</td>
-    </tr>
-  </tbody>
-</table>
-
-<p>둘 다 <strong>Filter 단계</strong>다. 따라서 <code class="highlighter-rouge">spec.nodeName</code>을 직접 지정해 스케줄러를 우회하면 두 검사 모두 실행되지 않는다. 그리고 cordon이 부착하는 taint의 effect는 <code class="highlighter-rouge">NoSchedule</code>인데 kubelet은 <code class="highlighter-rouge">NoExecute</code>만 확인하므로, kubelet admission도 이 파드를 통과시킨다. 결과적으로 <strong>cordon된 노드에도 파드가 정상적으로 뜬다.</strong></p>
-
-<p>이 동작은 버그가 아니라 설계된 경로이고, 실제로 활용할 여지도 있다. GPU 이상으로 cordon해 둔 노드에 인프라 조치가 끝난 뒤, 해당 노드에서만 짧은 검증 작업(예: CUDA <code class="highlighter-rouge">vectorAdd</code> 같은 probe Job)을 돌려 정상 여부를 확인하고 싶을 때가 그렇다. cordon을 풀면 그 즉시 일반 워크로드가 들어올 수 있으므로, cordon을 유지한 채 <code class="highlighter-rouge">spec.nodeName</code>으로 probe만 밀어 넣는 방식을 쓸 수 있다.</p>
-
-<p>다만 이것은 <strong>cordon의 의도를 의도적으로 우회하는 것</strong>이므로, 검증 목적의 단발성 파드에 한정하는 편이 적절하다. 일반 워크로드를 이렇게 배치하면 cordon으로 노드를 비우려는 작업(드레인, 교체, 커널 업그레이드)과 충돌한다.</p>
-
-<p>한편 <code class="highlighter-rouge">NodeUnschedulable</code> 플러그인이 Filter에서 반환하는 상태는 <code class="highlighter-rouge">UnschedulableAndUnresolvable</code>이다. 이것은 “클러스터 상태가 바뀌지 않는 한 재시도해도 소용없다”는 뜻이어서, 스케줄러를 정상적으로 거친 파드는 <a href="#스케줄러-큐">Unschedulable Queue</a>로 분류된다. cordon을 해제하는 노드 변경 이벤트가 발생해야 다시 Active Queue로 돌아온다.</p>
+<p>kubelet이 다시 검사하는 항목과 하지 않는 항목의 전체 대조, cordon 우회의 주의점은 <a href="/kubernetes/Kubernetes-Scheduling-05/#수동-배치의-제약">5편 - 수동 배치의 제약</a>에서 다룬다.</p>
 
 <p><br /></p>
 
@@ -1119,7 +1000,7 @@ curl <span class="nt">-X</span> POST http://&lt;API_SERVER&gt;/api/v1/namespaces
   }'</span>
 </code></pre></div></div>
 
-<p>Binding 오브젝트가 생성되면 API Server가 해당 파드의 <code class="highlighter-rouge">spec.nodeName</code>을 <code class="highlighter-rouge">worker-1</code>으로 설정하고 <code class="highlighter-rouge">PodScheduled: True</code> 조건을 기록하며, 해당 노드의 kubelet이 파드를 실행한다. <code class="highlighter-rouge">spec.nodeName</code> 직접 지정과 마찬가지로 스케줄러의 Filter는 실행되지 않고, <a href="#우회되는-검증과-kubelet이-다시-하는-검증">kubelet의 admission 검사만</a> 적용된다.</p>
+<p>Binding 오브젝트가 생성되면 API Server가 해당 파드의 <code class="highlighter-rouge">spec.nodeName</code>을 <code class="highlighter-rouge">worker-1</code>으로 설정하고 <code class="highlighter-rouge">PodScheduled: True</code> 조건을 기록하며, 해당 노드의 kubelet이 파드를 실행한다. <code class="highlighter-rouge">spec.nodeName</code> 직접 지정과 마찬가지로 스케줄러의 Filter는 실행되지 않고, <a href="/kubernetes/Kubernetes-Scheduling-05/#kubelet이-다시-검사하는-것과-하지-않는-것">kubelet의 admission 검사만</a> 적용된다.</p>
 
 <p>Binding 오브젝트의 핵심 특성은 다음과 같다.</p>
 
@@ -1131,56 +1012,9 @@ curl <span class="nt">-X</span> POST http://&lt;API_SERVER&gt;/api/v1/namespaces
 
 <p><br /></p>
 
-<h4 id="binding이-거부되는-조건">Binding이 거부되는 조건</h4>
+<p>이 1회성이라는 성질에는 중요한 따름정리가 있다. <strong>스케줄링이 완료된 파드의 배치는 바꿀 수 없다.</strong> 쿠버네티스에는 실행 중인 파드를 다른 노드로 옮기는 마이그레이션 기능이 없으므로, 배치를 바꾸려면 삭제 후 재생성이 유일한 경로다. 선점과 축출도 이 원칙의 예외가 아니다 — victim의 <code class="highlighter-rouge">nodeName</code>을 고치는 것이 아니라 삭제하고, 컨트롤러가 만든 새 파드가 스케줄링을 처음부터 다시 받는다.</p>
 
-<p>API Server의 Binding 핸들러는 다음 세 가지 경우에 요청을 거부한다.</p>
-
-<table>
-  <thead>
-    <tr>
-      <th>조건</th>
-      <th>에러</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code class="highlighter-rouge">spec.nodeName</code>이 이미 설정되어 있음</td>
-      <td><code class="highlighter-rouge">pod &lt;name&gt; is already assigned to node "&lt;node&gt;"</code> (409 Conflict)</td>
-    </tr>
-    <tr>
-      <td>파드가 삭제 중임(<code class="highlighter-rouge">deletionTimestamp</code>가 있음)</td>
-      <td><code class="highlighter-rouge">pod &lt;name&gt; is being deleted, cannot be assigned to a host</code></td>
-    </tr>
-    <tr>
-      <td><code class="highlighter-rouge">spec.schedulingGates</code>가 비어 있지 않음</td>
-      <td><code class="highlighter-rouge">pod &lt;name&gt; has non-empty .spec.schedulingGates</code></td>
-    </tr>
-  </tbody>
-</table>
-
-<p>세 번째 조건이 의외일 수 있다. <a href="/kubernetes/Kubernetes-Scheduling-03/#scheduling-gate">Scheduling Gate</a>로 스케줄링을 보류시킨 뒤 그 사이에 Binding을 만드는 방식은 <strong>동작하지 않는다.</strong> 게이트가 남아 있으면 Binding 자체가 거부된다.</p>
-
-<p>그렇다면 정상적으로 생성된 파드를 Binding으로 수동 배치하려면, 스케줄러가 먼저 바인딩해 버리기 전에 요청을 넣어야 하는 것인가. 스케줄러는 파드가 등록된 직후에 바인딩하므로 그 경쟁에서 이기는 것은 현실적이지 않다. 대신 <strong>경쟁 자체를 없애는 것이 정석이다.</strong> 앞에서 본 <a href="#schedulername-지정"><code class="highlighter-rouge">spec.schedulerName</code></a>에 <code class="highlighter-rouge">default-scheduler</code>가 아닌 이름을 넣으면 기본 스케줄러가 그 파드를 Watch하지 않으므로, 파드는 Pending으로 남아 있고 그동안 Binding을 생성할 수 있다. 커스텀 스케줄러를 구현할 때 도는 루프가 정확히 이 구조다 — 자기 이름이 붙고 <code class="highlighter-rouge">spec.nodeName</code>이 비어 있는 파드를 Watch하다가, 노드를 골라 Binding을 POST한다.</p>
-
-<p><br /></p>
-
-<h4 id="이미-스케줄링된-파드는-옮길-수-없다">이미 스케줄링된 파드는 옮길 수 없다</h4>
-
-<p>Binding이 1회성이라는 것은, <strong>스케줄링이 완료된 파드의 배치를 바꿀 수 없다</strong>는 뜻이기도 하다. <code class="highlighter-rouge">spec.nodeName</code>은 API Server가 업데이트를 거부하는 필드이고, 파드 생성 후 변경할 수 있는 <code class="highlighter-rouge">spec</code> 필드는 아래로 한정된다.</p>
-
-<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>spec.containers[*].image
-spec.initContainers[*].image
-spec.activeDeadlineSeconds
-spec.tolerations                       # 추가만 가능
-spec.terminationGracePeriodSeconds     # 음수였던 경우 1로만
-spec.schedulingGates                   # 삭제만 가능
-spec.nodeSelector                      # 게이트가 있는 동안 추가만 가능
-spec.affinity.nodeAffinity             # 게이트가 있는 동안만
-</code></pre></div></div>
-
-<p>쿠버네티스에는 실행 중인 파드를 다른 노드로 옮기는 마이그레이션 기능이 없다. 따라서 이미 배치된 파드를 다른 노드에 두려면 <strong>삭제하고 다시 만드는 것이 유일한 경로</strong>다. 리소스 컨트롤러(Deployment, DaemonSet 등)가 관리하는 파드라면 파드를 삭제하면 컨트롤러가 새 파드를 만들고, 그 새 파드가 스케줄링을 처음부터 다시 받는다.</p>
-
-<p>선점도 이 원칙의 예외가 아니다. 선점은 victim의 <code class="highlighter-rouge">nodeName</code>을 고쳐 다른 곳으로 옮기는 것이 아니라 <strong>victim을 삭제</strong>하고, victim의 컨트롤러가 새 파드를 만들고, 그 파드가 다시 스케줄링을 받는 구조다. 축출(Eviction)이나 Descheduler도 같다 — 전부 “삭제 후 재생성”이며, 재배치는 컨트롤러와 스케줄러가 처음부터 다시 수행한다. 선점의 내부 동작은 <a href="/kubernetes/Kubernetes-Scheduling-02/#선점">2편 - 선점</a>에서 다룬다.</p>
+<p>Binding이 거부되는 세 가지 조건, 스케줄러와 경쟁하지 않고 Binding을 쓰는 방법, 변경 가능한 <code class="highlighter-rouge">spec</code> 필드 목록은 <a href="/kubernetes/Kubernetes-Scheduling-05/#수동-배치의-제약">5편 - 수동 배치의 제약</a>에서 다룬다.</p>
 
 <p><br /></p>
 
@@ -1323,6 +1157,8 @@ spec.affinity.nodeAffinity             # 게이트가 있는 동안만
   <p>Unschedulable Queue는 업스트림 코드에서 <code class="highlighter-rouge">unschedulablePods</code>라는 맵으로 구현되어 있어 풀(pool)이라고도 불린다. 이 시리즈에서는 큐로 통일해 부른다.</p>
 </blockquote>
 
+<p>Unschedulable Queue의 복귀 조건이 “클러스터 이벤트”라는 것은, <strong>파드 쪽 설정을 고쳐서는 풀리지 않는 상태가 있다</strong>는 뜻이다. 노드 디스크가 차서 <code class="highlighter-rouge">disk-pressure</code> taint가 붙은 경우가 그렇다. 디스크를 비워 taint가 걷히는 노드 변경이 일어나야 복귀하므로, 그때까지는 재시도가 전부 실패한다(<a href="/kubernetes/Kubernetes-Scheduling-03/#노드-압박과-스케줄링">3편 - 노드 압박과 스케줄링</a>, 실제 사례는 <a href="/dev/Dev-Minio-Custom-PVC-Troubleshooting/#왜-재스케줄링이-안-됐나-추론">MinIO 트러블슈팅</a>).</p>
+
 <p><br /></p>
 
 <h3 id="active-queue-진입-경로">Active Queue 진입 경로</h3>
@@ -1360,7 +1196,7 @@ spec.affinity.nodeAffinity             # 게이트가 있는 동안만
       <td>백오프 타이머가 만료된 파드를 Backoff Queue → Active Queue로 이동</td>
     </tr>
     <tr>
-      <td><code class="highlighter-rouge">flushUnschedulableQLeftover</code></td>
+      <td><code class="highlighter-rouge">flushUnschedulablePodsLeftover</code></td>
       <td>30초</td>
       <td>Unschedulable Queue에 <code class="highlighter-rouge">podMaxInUnschedulablePodsDuration</code>(기본 <strong>5분</strong>)보다 오래 머문 파드를 Active Queue 또는 Backoff Queue로 이동 (이벤트에 의해 이동되지 못한 잔류 파드 처리)</td>
     </tr>
@@ -1369,7 +1205,7 @@ spec.affinity.nodeAffinity             # 게이트가 있는 동안만
 
 <p>여기서 <strong>30초는 검사 주기이고, 이동 대상을 판정하는 체류 기준은 5분</strong>이다. 두 값을 혼동하지 않아야 한다.</p>
 
-<p><code class="highlighter-rouge">flushUnschedulableQLeftover</code>는 안전망 역할이다. 정상적으로는 클러스터 이벤트에 의한 Move Request가 Unschedulable Queue의 파드를 이동시키지만, 이벤트를 놓치거나 매칭되지 않은 파드가 영원히 갇히는 것을 방지한다. 최악의 경우 파드가 약 5분 30초(5분 초과 체류 + 다음 검사 주기 30초)까지 Unschedulable Queue에 머물 수 있다.</p>
+<p><code class="highlighter-rouge">flushUnschedulablePodsLeftover</code>는 안전망 역할이다. 정상적으로는 클러스터 이벤트에 의한 Move Request가 Unschedulable Queue의 파드를 이동시키지만, 이벤트를 놓치거나 매칭되지 않은 파드가 영원히 갇히는 것을 방지한다. 최악의 경우 파드가 약 5분 30초(5분 초과 체류 + 다음 검사 주기 30초)까지 Unschedulable Queue에 머물 수 있다.</p>
 
 <p><br /></p>
 
@@ -1510,7 +1346,7 @@ spec.affinity.nodeAffinity             # 게이트가 있는 동안만
 
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-09-28">September 28, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-01">October 1, 2026</time></p>
         
       </footer>
 

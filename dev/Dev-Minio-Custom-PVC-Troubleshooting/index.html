@@ -9,7 +9,7 @@
   <head>
     <meta charset="utf-8">
 
-<!-- begin _includes/seo.html --><title>[Kubernetes] MinIO distributed 모드에서 existingClaim이 조용히 무시되는 이유 - Eraser’s StudyLog</title>
+<!-- begin _includes/seo.html --><title>[MinIO] distributed 모드의 existingClaim: 무시되는 이유와 standalone 전환 - Eraser’s StudyLog</title>
 <meta name="description" content="K3s 클러스터에서 루트 파티션이 가득 찬 원인을 추적하고, README대로 existingClaim을 설정했는데도 적용되지 않는 이유를 확인해보자. ">
 
 
@@ -19,7 +19,7 @@
 <meta property="og:type" content="article">
 <meta property="og:locale" content="ko">
 <meta property="og:site_name" content="Eraser's StudyLog">
-<meta property="og:title" content="[Kubernetes] MinIO distributed 모드에서 existingClaim이 조용히 무시되는 이유">
+<meta property="og:title" content="[MinIO] distributed 모드의 existingClaim: 무시되는 이유와 standalone 전환">
 <meta property="og:url" content="https://sirzzang.github.io//dev/Dev-Minio-Custom-PVC-Troubleshooting/">
 
 
@@ -36,6 +36,8 @@
   <meta property="article:published_time" content="2026-02-24T00:00:00+09:00">
 
 
+
+  <meta property="article:modified_time" content="2026-10-01T00:00:00+09:00">
 
 
 
@@ -437,16 +439,16 @@ window.MathJax = {
 
 
   <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
-    <meta itemprop="headline" content="[Kubernetes] MinIO distributed 모드에서 existingClaim이 조용히 무시되는 이유">
+    <meta itemprop="headline" content="[MinIO] distributed 모드의 existingClaim: 무시되는 이유와 standalone 전환">
     <meta itemprop="description" content="K3s 클러스터에서 루트 파티션이 가득 찬 원인을 추적하고, README대로 existingClaim을 설정했는데도 적용되지 않는 이유를 확인해보자.">
     <meta itemprop="datePublished" content="2026-02-24T00:00:00+09:00">
-    
+    <meta itemprop="dateModified" content="2026-10-01T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
         <header>
 		  
-          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] MinIO distributed 모드에서 existingClaim이 조용히 무시되는 이유
+          <h1 id="page-title" class="page__title" itemprop="headline">[MinIO] distributed 모드의 existingClaim: 무시되는 이유와 standalone 전환
 </h1>
           
           <p class="page__meta">
@@ -460,7 +462,7 @@ window.MathJax = {
 
 
 
-  22 분 소요
+  25 분 소요
 
 
             
@@ -483,7 +485,12 @@ window.MathJax = {
     <ul>
       <li><a href="#현상-루트-파티션-용량-부족">현상: 루트 파티션 용량 부족</a></li>
       <li><a href="#용량-분석-루트-파티션은-누가-먹고-있는가">용량 분석: 루트 파티션은 누가 먹고 있는가</a></li>
-      <li><a href="#클러스터-상태-확인">클러스터 상태 확인</a></li>
+      <li><a href="#클러스터-상태-확인">클러스터 상태 확인</a>
+        <ul>
+          <li><a href="#같은-노드의-label-studio-pod가-남긴-증거">같은 노드의 Label Studio Pod가 남긴 증거</a></li>
+          <li><a href="#왜-재스케줄링이-안-됐나-추론">왜 재스케줄링이 안 됐나 (추론)</a></li>
+        </ul>
+      </li>
       <li><a href="#작업-제약">작업 제약</a></li>
     </ul>
   </li>
@@ -499,9 +506,9 @@ window.MathJax = {
       </li>
       <li><a href="#핵심-구조적-충돌">핵심: 구조적 충돌</a>
         <ul>
-          <li><a href="#distributed-모드와-statefulset">distributed 모드와 Statefulset</a></li>
+          <li><a href="#distributed-모드와-statefulset">distributed 모드와 StatefulSet</a></li>
           <li><a href="#그래서-existingclaim이-무시되는-이유">그래서 existingClaim이 무시되는 이유</a></li>
-          <li><a href="#문제-1">문제</a></li>
+          <li><a href="#문서화되지-않은-제약">문서화되지 않은 제약</a></li>
         </ul>
       </li>
       <li><a href="#k3s-local-path-provisioner">K3s local-path provisioner</a></li>
@@ -545,7 +552,12 @@ window.MathJax = {
           <li><a href="#2차-시도-rsync로-숨김-파일-포함-복사--성공">2차 시도: rsync로 숨김 파일 포함 복사 → 성공</a></li>
         </ul>
       </li>
-      <li><a href="#disk-pressure로-인한-pod-축출">Disk Pressure로 인한 Pod 축출</a></li>
+      <li><a href="#disk-pressure로-인한-pod-축출">Disk Pressure로 인한 Pod 축출</a>
+        <ul>
+          <li><a href="#임계값은-어디서-온-숫자인가">임계값은 어디서 온 숫자인가</a></li>
+          <li><a href="#이관-작업에-준-영향">이관 작업에 준 영향</a></li>
+        </ul>
+      </li>
       <li><a href="#pv-재배포-시-경로-변경-불가">PV 재배포 시 경로 변경 불가</a></li>
     </ul>
   </li>
@@ -553,7 +565,7 @@ window.MathJax = {
   <li><a href="#에필로그-pr-21689과-레포-archive">에필로그: PR #21689과 레포 archive</a>
     <ul>
       <li><a href="#pr-내용">PR 내용</a></li>
-      <li><a href="#결과-1">결과</a></li>
+      <li><a href="#pr-처리-경과">PR 처리 경과</a></li>
     </ul>
   </li>
   <li><a href="#참고">참고</a>
@@ -589,6 +601,7 @@ window.MathJax = {
 <ul>
   <li><strong>현상</strong>: 루트 파티션 90% 사용, 워크플로우 중단</li>
   <li><strong>원인</strong>: <code class="highlighter-rouge">distributed</code> 모드에서 <code class="highlighter-rouge">existingClaim</code> 무시 → K3s default StorageClass가 루트 파티션에 PV 생성</li>
+  <li><strong>파급</strong>: 디스크 압박으로 kubelet이 <code class="highlighter-rouge">BestEffort</code> Pod부터 축출. 임계값은 업스트림 기본값(10%)이 아니라 <strong>K3s가 덮어쓴 <code class="highlighter-rouge">nodefs.available: 5%</code></strong> 였다</li>
   <li><strong>해결</strong>: SSD 증설 → <code class="highlighter-rouge">standalone</code> 모드 전환 → <code class="highlighter-rouge">existingClaim</code>으로 SSD 경로의 PVC 연결</li>
   <li><strong>핵심</strong>: StatefulSet의 <code class="highlighter-rouge">volumeClaimTemplates</code>는 <code class="highlighter-rouge">existingClaim</code>과 본질적으로 충돌한다</li>
 </ul>
@@ -606,7 +619,7 @@ window.MathJax = {
   System load:  0.35                Temperature:             35.0 C
   Usage of /:   85.4% of 231.70GB   Processes:               349
   Memory usage: 13%                 Users logged <span class="k">in</span>:         1
-  Swap usage:   1%                  IPv4 address <span class="k">for </span>enp8s0: 172.5.1.97
+  Swap usage:   1%                  IPv4 address <span class="k">for </span>enp8s0: 10.0.1.10
 </code></pre></div></div>
 
 <p><strong>루트 파티션이 231.70GB 중 85.4%를 사용</strong> 중이었다. <code class="highlighter-rouge">df -h</code>로 확인하니 실제로는 90%까지 차 있었다.</p>
@@ -691,19 +704,77 @@ minio   minio      1         deployed  minio-5.2.0  RELEASE.2024-04-18T19-09-19Z
 
 <p><br /></p>
 
-<p><code class="highlighter-rouge">minio-1</code>의 age가 다른 Pod들(87일)에 비해 훨씬 짧다는 것은, 원래 Running이었다가 중간에 죽고 재생성되었다는 의미다. 루트 파티션 사용량이 90%에 도달한 상태에서, kubelet이 <strong>disk pressure</strong>를 감지하고 노드에 <code class="highlighter-rouge">node.kubernetes.io/disk-pressure</code> taint를 건 것으로 보인다. 이 taint가 걸리면 해당 노드에 새 Pod를 스케줄링할 수 없으므로, <code class="highlighter-rouge">minio-1</code>은 evict된 뒤 <strong>재스케줄링이 차단</strong>되어 Pending에 머물러 있었다.</p>
+<p><code class="highlighter-rouge">minio-1</code>의 age가 다른 Pod들(87일)에 비해 훨씬 짧다는 것은, 원래 Running이었다가 중간에 죽고 재생성되었다는 의미다. 디스크가 가득 찬 상태였으니 노드 압박(node-pressure)이 원인으로 의심됐다.</p>
+
+<p><br /></p>
+
+<h3 id="같은-노드의-label-studio-pod가-남긴-증거">같은 노드의 Label Studio Pod가 남긴 증거</h3>
+
+<p>MinIO 쪽에는 축출 기록이 남아 있지 않았지만, 같은 노드에서 실행 중이던 Label Studio Pod에는 축출 기록이 그대로 남아 있었다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl describe pod <span class="nt">-n</span> label-studio label-studio-ls-app-&lt;<span class="nb">hash</span><span class="o">&gt;</span><span class="nt">-mh74p</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 실행 결과 (발췌, 식별자는 익명화)
+Name:             label-studio-ls-app-&lt;hash&gt;-mh74p
+Node:             node-01/10.0.1.10
+Priority:         0
+Status:           Failed
+Reason:           Evicted
+Message:          The node was low on resource: ephemeral-storage.
+                  Threshold quantity: 12439225938, available: 34765552Ki.
+                  Container app was using 670040, request is 0, has larger consumption of ephemeral-storage.
+                  Container nginx was using 4Ki, request is 0, has larger consumption of ephemeral-storage.
+Conditions:
+  Type               Status
+  DisruptionTarget   True
+  PodScheduled       True     # 스케줄링은 이미 끝난 상태였다
+QoS Class:           BestEffort
+Tolerations:         node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                     node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+</code></pre></div></div>
+
+<p>이 출력에서 읽을 수 있는 것이 네 가지다.</p>
+
+<ul>
+  <li><strong><code class="highlighter-rouge">ephemeral-storage</code> 부족으로 kubelet이 축출했다.</strong> 노드 압박 축출은 스케줄러가 아니라 kubelet이 직접 수행한다</li>
+  <li><strong>두 컨테이너 모두 <code class="highlighter-rouge">request is 0</code>이다.</strong> 리소스 요청을 선언하지 않았고, 그 결과 QoS Class가 <code class="highlighter-rouge">BestEffort</code>로 매겨졌다. kubelet의 축출 대상 선정 기준은 ① 사용량이 requests를 초과했는가 ② Pod Priority ③ requests 대비 사용량 순인데, requests가 0이면 사용량이 항상 ①에 걸린다. 이 Pod이 먼저 선택된 이유가 이것이다</li>
+  <li><strong><code class="highlighter-rouge">Priority: 0</code>이고 PriorityClass가 없다.</strong> 클러스터의 모든 워크로드가 우선순위를 설정하지 않은 상태였다</li>
+  <li><strong><code class="highlighter-rouge">PodScheduled: True</code>가 남아 있다.</strong> 축출된 Pod인데도 이 조건이 True인 것은, <code class="highlighter-rouge">PodScheduled</code>가 현재 상태가 아니라 “한 번 스케줄링됐다”는 결과 기록이기 때문이다</li>
+</ul>
+
+<p><code class="highlighter-rouge">Tolerations</code>에 <code class="highlighter-rouge">300s</code>가 붙어 있는 것도 직접 설정한 값이 아니다. <code class="highlighter-rouge">node.kubernetes.io/not-ready</code>와 <code class="highlighter-rouge">node.kubernetes.io/unreachable</code>에 대한 toleration은 API Server가 Pod 생성 시 기본값 300초로 자동 주입한다.</p>
+
+<p><br /></p>
+
+<h3 id="왜-재스케줄링이-안-됐나-추론">왜 재스케줄링이 안 됐나 (추론)</h3>
+
+<p>축출 자체는 위 기록으로 확인되지만, 축출된 Pod들이 <strong>왜 13일 동안 Pending에 머물렀는지</strong>는 기록이 남아 있지 않다. 메커니즘상 가장 그럴듯한 경로는 디스크 압박 taint다.</p>
+
+<p>노드 압박이 스케줄링을 막는 경로는 두 단계로 나뉜다.</p>
+
+<ol>
+  <li>kubelet이 디스크 여유가 임계값 아래로 떨어진 것을 감지하고 노드의 <code class="highlighter-rouge">DiskPressure</code> condition을 <code class="highlighter-rouge">True</code>로 설정한다</li>
+  <li>kube-controller-manager의 node lifecycle controller가 그 condition을 보고 노드에 <code class="highlighter-rouge">node.kubernetes.io/disk-pressure:NoSchedule</code> taint를 붙인다</li>
+</ol>
+
+<p>이 taint가 붙으면 <code class="highlighter-rouge">TaintToleration</code> 플러그인이 Filter 단계에서 해당 노드를 탈락시키므로, 그 노드에는 새 Pod이 배치되지 않는다. 축출된 Pod은 ReplicaSet이 다시 만들어 주지만, 새 Pod도 같은 이유로 배치되지 못해 Pending에 쌓인다. 실제로 Label Studio Deployment는 <code class="highlighter-rouge">0/3</code> 상태로 Pending Pod이 3개 누적되어 있었다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl get pod <span class="nt">-n</span> label-studio
+NAME                                  READY   STATUS      RESTARTS   AGE
+label-studio-ls-app-&lt;<span class="nb">hash</span><span class="o">&gt;</span><span class="nt">-mh74p</span>      0/2     Completed   1          87d   <span class="c"># 축출된 Pod</span>
+label-studio-ls-app-&lt;<span class="nb">hash</span><span class="o">&gt;</span><span class="nt">-5nzln</span>      0/2     Pending     0          13d   <span class="c"># 재생성 → 배치 실패</span>
+label-studio-ls-app-&lt;<span class="nb">hash</span><span class="o">&gt;</span><span class="nt">-m7ncd</span>      0/2     Pending     0          13d
+label-studio-ls-app-&lt;<span class="nb">hash</span><span class="o">&gt;</span><span class="nt">-ttqw8</span>      0/2     Pending     0          13d
+</code></pre></div></div>
+
+<p>모든 Pod이 <code class="highlighter-rouge">Priority: 0</code>이었다는 점도 여기서 의미가 있다. 우선순위가 같으면 선점이 일어나지 않으므로, 스케줄러가 공간을 만들어 낼 방법도 없었다. 결국 디스크를 비워 taint가 걷히는 것 외에는 빠져나올 경로가 없는 상태였다.</p>
 
 <blockquote>
-  <p><strong>아쉬운 점</strong>: 당시 <code class="highlighter-rouge">kubectl describe node</code>로 taint 상태를 직접 확인했으면 이 추정을 바로 검증할 수 있었다. 하지만 운영 초기인 데다 시간 압박에 쫓기느라 노드 상태까지 확인하지 못했다. 다만, 같은 노드에서 실행 중이던 Label Studio Pod가 동일한 사유로 evict된 기록이 남아 있어, disk pressure가 실제로 발생했음을 뒷받침한다.</p>
-
-  <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Status:   Failed
-Reason:   Evicted
-Message:  The node was low on resource: ephemeral-storage.
-          Threshold quantity: 12439225938, available: 34765552Ki.
-</code></pre></div>  </div>
-
-  <p>QoS Class가 <code class="highlighter-rouge">BestEffort</code>인 이 Pod가 먼저 축출된 것은 kubelet의 eviction 우선순위와도 일치한다.</p>
+  <p><strong>검증하지 못한 부분</strong>: 당시 <code class="highlighter-rouge">kubectl describe node</code>로 taint를 직접 확인했으면 이 추론을 바로 확정할 수 있었다. 운영 초기인 데다 시간 압박에 쫓기느라 노드 상태까지 보지 못했고, 지금은 그 클러스터의 당시 상태를 다시 확인할 수 없다. 위 두 단계 메커니즘은 Kubernetes 구현상 사실이지만, <strong>이 사건이 그 경로를 탔다는 것은 정황에 기반한 추론</strong>이다.</p>
 </blockquote>
+
+<p>노드 압박 taint가 스케줄링 단계에서 어떻게 평가되는지, Pending Pod이 어느 큐에서 무엇을 기다리는지는 <a href="/kubernetes/Kubernetes-Scheduling-03/#노드-압박과-스케줄링">쿠버네티스 스케줄링 - 3. 스케줄링 제어</a>에서 다룬다.</p>
 
 <p><br /></p>
 
@@ -827,7 +898,7 @@ Message:  The node was low on resource: ephemeral-storage.
 
 <h2 id="핵심-구조적-충돌">핵심: 구조적 충돌</h2>
 
-<p>결과적으로 정리해 보면, values.yaml에서 설정할 수 있는 <code class="highlighter-rouge">existingClaim</code> 값은 distributed 모드, 즉 MinIO가 Statefulset으로 실행될 때는 무시된다.</p>
+<p>결과적으로 정리해 보면, values.yaml에서 설정할 수 있는 <code class="highlighter-rouge">existingClaim</code> 값은 distributed 모드, 즉 MinIO가 StatefulSet으로 실행될 때는 무시된다.</p>
 
 <table>
   <thead>
@@ -870,7 +941,7 @@ Message:  The node was low on resource: ephemeral-storage.
 
 <p>이것은 버그라기보다 <strong>distributed 모드가 필요로 하는 StatefulSet의 설계와 <code class="highlighter-rouge">existingClaim</code>의 본질적인 충돌</strong>이다. 아래에서 두 층위로 나눠 살펴본다.</p>
 
-<h3 id="distributed-모드와-statefulset">distributed 모드와 Statefulset</h3>
+<h3 id="distributed-모드와-statefulset">distributed 모드와 StatefulSet</h3>
 
 <p>MinIO의 distributed 모드는 erasure coding으로 데이터를 보호한다. 오브젝트를 데이터 블록과 패리티 블록으로 나눠 erasure set을 이루는 드라이브들에 분산 저장하며, 드라이브 여러 개가 죽어도 나머지 블록으로 복구할 수 있다.</p>
 
@@ -887,7 +958,7 @@ Message:  The node was low on resource: ephemeral-storage.
 <p><br /></p>
 
 <details>
-  <summary><b>참고: distributed(Statefulset) + RWX 스토리지였다면?</b></summary>
+  <summary><b>참고: distributed(StatefulSet) + RWX 스토리지였다면?</b></summary>
 
   <p>NFS처럼 ReadWriteMany를 지원하는 스토리지였다면 하나의 PVC를 여러 Pod이 동시에 마운트하는 것은 기술적으로 가능하다. 그러나 두 가지 이유로 distributed 모드에서는 의미가 없다.</p>
 
@@ -908,7 +979,7 @@ Message:  The node was low on resource: ephemeral-storage.
 
 <p><br /></p>
 
-<h3 id="문제-1">문제</h3>
+<h3 id="문서화되지-않은-제약">문서화되지 않은 제약</h3>
 
 <p>진짜 문제는 이 제약이 <strong>어디에도 문서화되어 있지 않다</strong>는 것이다. values.yaml의 <code class="highlighter-rouge">existingClaim</code> 주석에도, README의 Existing PersistentVolumeClaim 섹션에도, mode에 따른 제한사항은 언급되지 않았다. 설정은 받아들이되 조용히 무시하는, 전형적인 <strong>silent failure</strong>다.</p>
 
@@ -1087,7 +1158,7 @@ MinIO 데이터가 루트 파티션에 축적 → 용량 부족
             <span class="pi">-</span> <span class="na">key</span><span class="pi">:</span> <span class="s">kubernetes.io/hostname</span>
               <span class="na">operator</span><span class="pi">:</span> <span class="s">In</span>
               <span class="na">values</span><span class="pi">:</span>
-                <span class="pi">-</span> <span class="s">server01-mlops01</span>
+                <span class="pi">-</span> <span class="s">node-01</span>
 <span class="nn">---</span>
 <span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
 <span class="na">kind</span><span class="pi">:</span> <span class="s">PersistentVolumeClaim</span>
@@ -1103,7 +1174,7 @@ MinIO 데이터가 루트 파티션에 축적 → 용량 부족
       <span class="na">storage</span><span class="pi">:</span> <span class="s">1Ti</span>
 </code></pre></div></div>
 
-<p>hostPath PV에 <code class="highlighter-rouge">nodeAffinity</code>를 수동으로 지정했다. SSD가 장착된 노드(<code class="highlighter-rouge">server01-mlops01</code>)에서만 PV가 사용되도록 하기 위함이다. PV의 capacity를 3Ti(SSD 전체 용량)로, PVC의 requests를 1Ti로 설정한 것은 의도적이다. PVC의 <code class="highlighter-rouge">requests.storage</code>는 “최소 이만큼의 용량이 필요하다”는 하한이므로, 3Ti PV가 이 요청을 만족하여 바인딩된다. 실제로 MinIO는 PV의 전체 용량을 사용할 수 있다.</p>
+<p>hostPath PV에 <code class="highlighter-rouge">nodeAffinity</code>를 수동으로 지정했다. SSD가 장착된 노드(<code class="highlighter-rouge">node-01</code>)에서만 PV가 사용되도록 하기 위함이다. PV의 capacity를 3Ti(SSD 전체 용량)로, PVC의 requests를 1Ti로 설정한 것은 의도적이다. PVC의 <code class="highlighter-rouge">requests.storage</code>는 “최소 이만큼의 용량이 필요하다”는 하한이므로, 3Ti PV가 이 요청을 만족하여 바인딩된다. 실제로 MinIO는 PV의 전체 용량을 사용할 수 있다.</p>
 
 <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>kubectl apply <span class="nt">-f</span> minio-pv-pvc.yaml
 </code></pre></div></div>
@@ -1123,7 +1194,7 @@ MinIO 데이터가 루트 파티션에 축적 → 용량 부족
 <span class="c1"># 다중 노드 클러스터에서 hostPath PV를 쓸 경우, 해당 노드로 스케줄을 고정하려면 추가:</span>
 <span class="c1"># 참고: https://github.com/minio/minio/blob/master/helm/minio/values.yaml#L266</span>
 <span class="c1"># nodeSelector:</span>
-<span class="c1">#   kubernetes.io/hostname: server01-mlops01</span>
+<span class="c1">#   kubernetes.io/hostname: node-01</span>
 </code></pre></div></div>
 
 <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>helm uninstall minio <span class="nt">-n</span> minio
@@ -1255,7 +1326,7 @@ MinIO 데이터가 루트 파티션에 축적 → 용량 부족
             <span class="pi">-</span> <span class="na">key</span><span class="pi">:</span> <span class="s">kubernetes.io/hostname</span>
               <span class="na">operator</span><span class="pi">:</span> <span class="s">In</span>
               <span class="na">values</span><span class="pi">:</span>
-                <span class="pi">-</span> <span class="s">server01-mlops01</span>
+                <span class="pi">-</span> <span class="s">node-01</span>
 <span class="nn">---</span>
 <span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
 <span class="na">kind</span><span class="pi">:</span> <span class="s">PersistentVolumeClaim</span>
@@ -1355,15 +1426,80 @@ MinIO 데이터가 루트 파티션에 축적 → 용량 부족
 
 <h2 id="disk-pressure로-인한-pod-축출">Disk Pressure로 인한 Pod 축출</h2>
 
-<p>데이터 이관 자체는 루트 파티션에서 SSD로 복사하는 작업이므로, 루트 파티션의 사용량을 늘리지는 않는다. 문제는 이관을 준비하는 과정에서, <strong>MinIO가 아직 루트 파티션의 기존 PV에 데이터를 쓰고 있었다</strong>는 점이다. 잔여 용량 23GB 상태에서 MinIO가 계속 데이터를 쌓으면서 kubelet의 hard eviction threshold를 넘어섰고, Pod 축출이 시작되었다. 에러 메시지가 <code class="highlighter-rouge">ephemeral-storage</code>를 명시하고 있는데, 이는 kubelet의 <code class="highlighter-rouge">nodefs.available</code> 기본 hard eviction threshold(15%) 기준으로 축출이 발생했음을 의미한다. MinIO뿐 아니라 같은 노드의 다른 워크로드에도 영향이 미쳤다.</p>
+<p>데이터 이관 자체는 루트 파티션에서 SSD로 복사하는 작업이므로, 루트 파티션의 사용량을 늘리지는 않는다. 문제는 이관을 준비하는 과정에서, <strong>MinIO가 아직 루트 파티션의 기존 PV에 데이터를 쓰고 있었다</strong>는 점이다. 잔여 용량 23GB 상태에서 MinIO가 계속 데이터를 쌓으면서 kubelet의 hard eviction threshold를 넘어섰고, Pod 축출이 시작되었다. MinIO뿐 아니라 같은 노드의 다른 워크로드에도 영향이 미쳤다.</p>
 
-<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Status:   Failed
-Reason:   Evicted
-Message:  The node was low on resource: ephemeral-storage.
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Message:  The node was low on resource: ephemeral-storage.
           Threshold quantity: 12439225938, available: 34765552Ki.
 </code></pre></div></div>
 
-<p><code class="highlighter-rouge">BestEffort</code> QoS 클래스의 Pod부터 축출되며, 축출된 Pod는 데이터 복사 중간에 죽어버린다. 이관 작업을 안전하게 진행하려면 <strong>MinIO Pod를 먼저 중지(<code class="highlighter-rouge">scale down</code>)한 상태에서 복사</strong>해야 했다.</p>
+<h3 id="임계값은-어디서-온-숫자인가">임계값은 어디서 온 숫자인가</h3>
+
+<p>에러 메시지가 <code class="highlighter-rouge">ephemeral-storage</code>를 명시하는 것은 노드의 <code class="highlighter-rouge">nodefs</code> 여유 공간이 기준에 걸렸다는 뜻이다. 그런데 메시지의 <code class="highlighter-rouge">Threshold quantity: 12439225938</code>이 어디서 나온 값인지는 kubelet 설정을 봐야 알 수 있다.</p>
+
+<p>업스트림 kubelet의 기본 hard eviction threshold는 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>신호</th>
+      <th>업스트림 기본값</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">memory.available</code></td>
+      <td>100Mi</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nodefs.available</code></td>
+      <td>10%</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">imagefs.available</code></td>
+      <td>15%</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nodefs.inodesFree</code></td>
+      <td>5%</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>그런데 이 클러스터는 <strong>K3s</strong>이고, K3s는 이 기본값을 자체적으로 덮어쓴다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// K3s: pkg/daemons/agent/agent.go</span><span class="x">
+</span><span class="n">EvictionHard</span><span class="o">:</span><span class="x"> </span><span class="k">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">string</span><span class="p">{</span><span class="x">
+    </span><span class="s">"imagefs.available"</span><span class="o">:</span><span class="x"> </span><span class="s">"5%"</span><span class="p">,</span><span class="x">
+    </span><span class="s">"nodefs.available"</span><span class="o">:</span><span class="x">  </span><span class="s">"5%"</span><span class="p">,</span><span class="x">
+</span><span class="p">},</span><span class="x">
+</span><span class="n">EvictionMinimumReclaim</span><span class="o">:</span><span class="x"> </span><span class="k">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">string</span><span class="p">{</span><span class="x">
+    </span><span class="s">"imagefs.available"</span><span class="o">:</span><span class="x"> </span><span class="s">"10%"</span><span class="p">,</span><span class="x">
+    </span><span class="s">"nodefs.available"</span><span class="o">:</span><span class="x">  </span><span class="s">"10%"</span><span class="p">,</span><span class="x">
+</span><span class="p">},</span><span class="x">
+</span></code></pre></div></div>
+
+<p><code class="highlighter-rouge">nodefs.available</code>이 <strong>5%</strong> 다. 숫자를 맞춰 보면 정확히 들어맞는다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>루트 파티션 용량            231.70 GiB = 248,785,980,621 B
+그중 5%                                = 12,439,299,031 B
+메시지의 Threshold quantity            = 12,439,225,938 B   → 용량의 5.0000%
+</code></pre></div></div>
+
+<p>즉 축출을 일으킨 기준은 업스트림 기본값(10%)이 아니라 <strong>K3s가 설정한 5%</strong> 였다. K3s는 소규모·단일 노드 환경을 염두에 둔 배포본이라 임계값을 낮게 잡는다.</p>
+
+<p>한 가지 더 이상한 점이 있다. 메시지의 <code class="highlighter-rouge">available: 34765552Ki</code>는 약 33.2GiB로, 임계값(11.6GiB)보다 <strong>크다</strong>. 임계값을 넘지 않았는데 왜 축출됐을까.</p>
+
+<p><code class="highlighter-rouge">EvictionMinimumReclaim</code> 때문이다. kubelet은 임계값을 넘겨 축출을 시작하면, 임계값에 복귀하는 시점에 멈추지 않고 <strong><code class="highlighter-rouge">임계값 + minimumReclaim</code> 만큼 확보될 때까지</strong> 축출을 계속한다. 여기서는 5% + 10% = 15%가 목표가 된다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>축출 목표 수위  = 5% + 10% = 15%  → 37,317,897,093 B (34.75 GiB)
+메시지의 available = 35,599,925,248 B (33.16 GiB) → 용량의 14.31%
+</code></pre></div></div>
+
+<p>메시지에 기록된 <code class="highlighter-rouge">available</code>은 <strong>회수 루프가 아직 목표(15%)에 도달하지 못한 시점의 관측값</strong>이다. 임계값(5%)은 이미 넘긴 뒤 회수를 진행하는 중이었으므로, 축출은 정상 동작이다.</p>
+
+<h3 id="이관-작업에-준-영향">이관 작업에 준 영향</h3>
+
+<p>requests를 선언하지 않은 Pod이 먼저 축출되며, 축출된 Pod는 데이터 복사 중간에 죽어버린다. 이관 작업을 안전하게 진행하려면 <strong>MinIO Pod를 먼저 중지(<code class="highlighter-rouge">scale down</code>)한 상태에서 복사</strong>해야 했다.</p>
 
 <p><br /></p>
 
@@ -1381,6 +1517,7 @@ Message:  The node was low on resource: ephemeral-storage.
 <p>재배포 후 MinIO 콘솔에서 버킷이 정상 표시되었고, 이후 라벨링 파이프라인을 수차례 실행하면서 데이터가 SSD에 정상적으로 축적되는 것을 확인했다.</p>
 
 <p><img src="https://sirzzang.github.io//assets/images/minio-new-bucket.png" alt="minio-new-bucket" class="align-center" /></p>
+<center><sup>직접 캡처. 재배포 후 MinIO Object Browser에 버킷이 표시되고, 새 PV 경로(<code>/mnt/data/minio-pv</code>)에 해당 디렉토리가 생성되어 있다</sup></center>
 
 <p>파이프라인을 여러 차례 실행한 뒤 디스크 사용량을 확인했을 때, 데이터가 SSD 경로에 쌓이고 루트 파티션은 안정적으로 유지되고 있었다.</p>
 
@@ -1416,7 +1553,7 @@ using StatefulSet's volumeClaimTemplates for erasure coding.
 Your specified PVC 'my-custom-pvc' will not be used.
 </code></pre></div></div>
 
-<h2 id="결과-1">결과</h2>
+<h2 id="pr-처리-경과">PR 처리 경과</h2>
 
 <p>PR을 올린 것은 2025년 11월이었다. 리뷰나 코멘트 없이 open 상태로 남아 있었고, 2026년 2월 13일 <strong>레포 자체가 archive</strong> 되면서 PR은 영구히 열린 상태로 남게 되었다.</p>
 
@@ -1501,7 +1638,7 @@ Units: sectors of 1 <span class="k">*</span> 512 <span class="o">=</span> 512 by
 
 <p><br /></p>
 
-<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo mkfs.ext4 /dev/sda
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">sudo </span>mkfs.ext4 /dev/sda
 </code></pre></div></div>
 <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mke2fs 1.47.0 <span class="o">(</span>5-Feb-2023<span class="o">)</span>
 Discarding device blocks: <span class="k">done
@@ -1535,7 +1672,7 @@ Superblock backups stored on blocks:
 
 <p>/etc/fstab 파일을 수정하여 부팅 시 자동으로 마운트되도록 설정함</p>
 
-<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo blkid
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">sudo </span>blkid
 </code></pre></div></div>
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>/dev/sda: UUID="abcd-1234" TYPE="ext4"
 /dev/sdb: UUID="efgh-5678" TYPE="ext4"
@@ -1564,7 +1701,7 @@ Superblock backups stored on blocks:
 
 <p><br /></p>
 
-<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo vi /etc/fstab
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">sudo </span>vi /etc/fstab
 </code></pre></div></div>
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>UUID=abcd-1234  /mnt/data  ext4  defaults  0  0
 UUID=efgh-5678  /mnt/sdb   ext4  defaults  0  0
@@ -1613,7 +1750,7 @@ mount: <span class="o">(</span>hint<span class="o">)</span> your fstab has been 
 
 <p><br /></p>
 
-<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>df -h
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>df <span class="nt">-h</span>
 </code></pre></div></div>
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Filesystem      Size  Used Avail Use% Mounted on
 /dev/sda        1.8T   28K  1.7T   1% /mnt/data
@@ -1731,7 +1868,7 @@ mount: <span class="o">(</span>hint<span class="o">)</span> your fstab has been 
 
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-02-24T00:00:00+09:00">February 24, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-01">October 1, 2026</time></p>
         
       </footer>
 
@@ -1740,7 +1877,7 @@ mount: <span class="o">(</span>hint<span class="o">)</span> your fstab has been 
     <h4 class="page__share-title">공유하기</h4>
   
 
-  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+MinIO+distributed+%EB%AA%A8%EB%93%9C%EC%97%90%EC%84%9C+existingClaim%EC%9D%B4+%EC%A1%B0%EC%9A%A9%ED%9E%88+%EB%AC%B4%EC%8B%9C%EB%90%98%EB%8A%94+%EC%9D%B4%EC%9C%A0%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Minio-Custom-PVC-Troubleshooting%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+  <a href="https://twitter.com/intent/tweet?text=%5BMinIO%5D+distributed+%EB%AA%A8%EB%93%9C%EC%9D%98+existingClaim%3A+%EB%AC%B4%EC%8B%9C%EB%90%98%EB%8A%94+%EC%9D%B4%EC%9C%A0%EC%99%80+standalone+%EC%A0%84%ED%99%98%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Minio-Custom-PVC-Troubleshooting%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
 
   <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Minio-Custom-PVC-Troubleshooting%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
 

@@ -37,7 +37,7 @@
 
 
 
-  <meta property="article:modified_time" content="2026-09-28T00:00:00+09:00">
+  <meta property="article:modified_time" content="2026-10-01T00:00:00+09:00">
 
 
 
@@ -442,7 +442,7 @@ window.MathJax = {
     <meta itemprop="headline" content="[Kubernetes] 쿠버네티스 스케줄링 - 5. Extension Point 심화와 PodGroup 스케줄링">
     <meta itemprop="description" content="Extension Point의 결정권 분류, PreScore 역할, 기본 플러그인 심화, 스케줄링 실패 진단, PodGroup 스케줄링, 멀티 스케줄러 아키텍처를 알아보자.">
     <meta itemprop="datePublished" content="2025-11-05T00:00:00+09:00">
-    <meta itemprop="dateModified" content="2026-09-28T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-10-01T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
@@ -462,7 +462,7 @@ window.MathJax = {
 
 
 
-  18 분 소요
+  23 분 소요
 
 
             
@@ -510,13 +510,22 @@ window.MathJax = {
   <li><a href="#스케줄링-실패-진단">스케줄링 실패 진단</a>
     <ul>
       <li><a href="#events-메시지-읽기">Events 메시지 읽기</a></li>
+      <li><a href="#축출된-파드와-스케줄링-실패-구분">축출된 파드와 스케줄링 실패 구분</a></li>
       <li><a href="#파드가-어느-큐에-있는지-판별">파드가 어느 큐에 있는지 판별</a></li>
       <li><a href="#스케줄러-로그와-메트릭">스케줄러 로그와 메트릭</a></li>
+      <li><a href="#수동-배치의-제약">수동 배치의 제약</a>
+        <ul>
+          <li><a href="#kubelet이-다시-검사하는-것과-하지-않는-것">kubelet이 다시 검사하는 것과 하지 않는 것</a></li>
+          <li><a href="#cordon된-노드에-nodename을-지정하면">cordon된 노드에 nodeName을 지정하면</a></li>
+          <li><a href="#binding이-거부되는-조건">Binding이 거부되는 조건</a></li>
+          <li><a href="#이미-스케줄링된-파드는-옮길-수-없다">이미 스케줄링된 파드는 옮길 수 없다</a></li>
+        </ul>
+      </li>
     </ul>
   </li>
   <li><a href="#podgroup-level-extension-points">PodGroup-level Extension Points</a>
     <ul>
-      <li><a href="#배경-pod-단위에서-workload-단위로">배경: Pod 단위에서 Workload 단위로</a></li>
+      <li><a href="#배경-파드-단위에서-workload-단위로">배경: 파드 단위에서 Workload 단위로</a></li>
       <li><a href="#2계층-extension-point-체계">2계층 Extension Point 체계</a></li>
       <li><a href="#동작-흐름">동작 흐름</a></li>
       <li><a href="#v135-vs-v136-구현-차이">v1.35 vs v1.36 구현 차이</a></li>
@@ -549,7 +558,7 @@ window.MathJax = {
 <h1 id="tldr">TL;DR</h1>
 
 <ul>
-  <li>Extension Point는 결정권에 따라 세 가지로 분류된다: <strong>gate</strong>(PreFilter — Pod reject 및 후보 노드 축소, Filter — 노드 탈락), <strong>informational</strong>(PreScore — 데이터 준비만), <strong>ranking</strong>(Score — 점수만 매김, 탈락시키지 않음).</li>
+  <li>Extension Point는 결정권에 따라 세 가지로 분류된다: <strong>gate</strong>(PreFilter — 파드 reject 및 후보 노드 축소, Filter — 노드 탈락), <strong>informational</strong>(PreScore — 데이터 준비만), <strong>ranking</strong>(Score — 점수만 매김, 탈락시키지 않음).</li>
   <li>PreScore는 스케줄링 사이클당 1번 호출되어 비싼 계산을 <code class="highlighter-rouge">CycleState</code>에 캐시하고, Score는 (노드 수 x 플러그인 수)번 호출되어 캐시된 데이터로 점수를 산출한다. PreScore는 결정권이 없는 informational 단계다.</li>
   <li>하나의 플러그인이 여러 extension point에 걸쳐 동작하며, 각 단계에서의 역할이 다르다. v1.32 기준 <code class="highlighter-rouge">NodeResourcesFit</code>은 PreFilter → Filter → PreScore → Score 네 곳, <code class="highlighter-rouge">VolumeBinding</code>은 여섯 곳에 관여한다.</li>
   <li>파드가 Pending에 빠졌을 때는 Events의 <code class="highlighter-rouge">FailedScheduling</code> 메시지로 어느 플러그인에서 탈락했는지 좁히고, <code class="highlighter-rouge">scheduler_pending_pods</code> 메트릭의 <code class="highlighter-rouge">queue</code> 라벨로 어느 큐에 있는지 확인한다.</li>
@@ -567,7 +576,7 @@ window.MathJax = {
   <li><strong>Extension Point 결정권 분류</strong>: <a href="/kubernetes/Kubernetes-Scheduling-02/#extension-point별-동작-규칙-요약">2편의 동작 규칙 요약</a>을 “결정권”이라는 관점으로 재분류한다</li>
   <li><strong>PreScore 역할</strong>: <a href="/kubernetes/Kubernetes-Scheduling-02/#prescore">2편의 PreScore</a> 한 줄 설명을 호출 횟수와 캐시 관점으로 푼다</li>
   <li><strong>기본 플러그인 해부</strong>: <a href="/kubernetes/Kubernetes-Scheduling-02/#기본-플러그인과-extension-point-매핑">2편의 플러그인 매핑 표</a>와 <a href="/kubernetes/Kubernetes-Scheduling-04/#noderesourcesfit-스코어링-전략">4편의 스코어링 전략</a>을 extension point별로 분해한다</li>
-  <li><strong>스케줄링 실패 진단</strong>: <a href="/kubernetes/Kubernetes-Scheduling-01/">1편</a>이 “파드가 어느 큐에 있는지 확인한다”고 한 것을 실제 명령과 출력으로 채운다</li>
+  <li><strong>스케줄링 실패 진단과 수동 배치의 제약</strong>: <a href="/kubernetes/Kubernetes-Scheduling-01/">1편</a>이 큐 판별을 과제로 남긴 것을 실제 명령과 출력으로 채우고, 스케줄러를 우회한 파드가 무엇에 막히는지 정리한다</li>
   <li><strong>PodGroup-level Extension Points</strong>: <a href="/kubernetes/Kubernetes-Scheduling-04/#리소스-단편화-문제">4편의 GPU 단편화</a>가 개별 파드 문제라면, 여기서는 파드 그룹 단위의 문제를 다룬다</li>
   <li><strong>멀티 스케줄러 심화</strong>: <a href="/kubernetes/Kubernetes-Scheduling-01/#커스텀-스케줄러와-다중-스케줄러">1편의 다중 스케줄러</a>와 <a href="/kubernetes/Kubernetes-Scheduling-03/#scheduling-gate">3편의 Scheduling Gate</a>가 Volcano·Kueue에서 어떻게 조합되는지 본다</li>
 </ol>
@@ -587,7 +596,7 @@ window.MathJax = {
     <tr>
       <th>Extension Point</th>
       <th>노드를 줄일 수 있나?</th>
-      <th>Pod reject 가능?</th>
+      <th>파드 reject 가능?</th>
       <th>성격</th>
     </tr>
   </thead>
@@ -596,7 +605,7 @@ window.MathJax = {
       <td><strong>PreFilter</strong></td>
       <td>O (후보 집합 축소)</td>
       <td>O</td>
-      <td><strong>gate</strong> — Pod 자체가 스케줄링 불가 판정, 또는 후보 노드 제한</td>
+      <td><strong>gate</strong> — 파드 자체가 스케줄링 불가 판정, 또는 후보 노드 제한</td>
     </tr>
     <tr>
       <td><strong>Filter</strong></td>
@@ -640,12 +649,12 @@ window.MathJax = {
 <p>핵심 구분은 다음과 같다.</p>
 
 <ul>
-  <li><strong>Gate 성격</strong> (PreFilter, Filter, Reserve, Permit): 스케줄링 결과에 직접 영향을 준다. Pod을 reject하거나 노드를 탈락시킬 수 있다.</li>
+  <li><strong>Gate 성격</strong> (PreFilter, Filter, Reserve, Permit): 스케줄링 결과에 직접 영향을 준다. 파드를 reject하거나 노드를 탈락시킬 수 있다.</li>
   <li><strong>Informational 성격</strong> (PreScore): 결정권이 없다. 정상 동작에서 항상 성공해야 하며, Score에게 정보를 제공할 뿐이다. 에러를 반환하면 사이클이 중단되지만, 이는 “의미론적 결정”이 아니라 <strong>내부 오류</strong> 취급이다.</li>
-  <li><strong>Ranking 성격</strong> (Score): 노드를 탈락시키지도, Pod을 reject하지도 않는다. 순위만 매긴다.</li>
+  <li><strong>Ranking 성격</strong> (Score): 노드를 탈락시키지도, 파드를 reject하지도 않는다. 순위만 매긴다.</li>
 </ul>
 
-<p>PreFilter가 노드를 줄일 수 있다는 점을 짚어 둘 필요가 있다. PreFilter는 <code class="highlighter-rouge">PreFilterResult</code>를 반환해 <strong>Filter가 평가할 후보 노드 집합 자체를 제한</strong>할 수 있다. <code class="highlighter-rouge">NodeAffinity</code>는 <code class="highlighter-rouge">matchFields</code>로 노드 이름이 확정된 경우 그 노드만 반환하고, <code class="highlighter-rouge">NodeName</code>도 같은 방식이다. Filter처럼 노드를 하나씩 탈락시키는 것이 아니라 애초에 평가 대상을 좁히는 것이므로, 대규모 클러스터에서 비용 차이가 크다. <a href="/kubernetes/Kubernetes-Scheduling-01/#사례-daemonset의-수동--스케줄러-위임-전환">1편의 DaemonSet 스케줄러 위임</a>이 이 경로를 탄다.</p>
+<p>PreFilter는 노드를 줄일 수도 있다. <code class="highlighter-rouge">PreFilterResult</code>를 반환해 <strong>Filter가 평가할 후보 노드 집합 자체를 제한</strong>하는 방식이며, v1.32 기준 <code class="highlighter-rouge">NodeAffinity</code>가 여기 해당한다 — <code class="highlighter-rouge">matchFields</code>로 노드 이름이 확정되면 그 노드만 반환한다. Filter처럼 노드를 하나씩 탈락시키는 것이 아니라 애초에 평가 대상을 좁히는 것이므로, 대규모 클러스터에서 비용 차이가 크다. <a href="/kubernetes/Kubernetes-Scheduling-01/#사례-daemonset의-수동--스케줄러-위임-전환">1편의 DaemonSet 스케줄러 위임</a>이 이 경로를 탄다.</p>
 
 <p><br /></p>
 
@@ -682,14 +691,14 @@ window.MathJax = {
   </tbody>
 </table>
 
-<p>Score는 적합 노드가 1,000개이고 Score 플러그인이 5개라면 5,000번 호출된다. Pod 분포 계산이나 리소스 타입 파악 같은 비싼 연산을 Score 안에서 하면 매번 반복된다. PreScore에서 1번만 계산하고 <code class="highlighter-rouge">CycleState</code>에 저장하면 O(N) → O(1)로 줄어든다.</p>
+<p>Score는 적합 노드가 1,000개이고 Score 플러그인이 5개라면 5,000번 호출된다. 파드 분포 계산이나 리소스 타입 파악 같은 비싼 연산을 Score 안에서 하면 매번 반복된다. PreScore에서 1번만 계산하고 <code class="highlighter-rouge">CycleState</code>에 저장하면 O(N) → O(1)로 줄어든다.</p>
 
 <h3 id="prefilter와의-비교">PreFilter와의 비교</h3>
 
 <p>PreFilter도 “사전 처리” 성격이 있어 혼동될 수 있다. 핵심 차이는 <strong>결정권</strong>이다.</p>
 
 <ul>
-  <li><strong>PreFilter</strong>: “이 Pod은 아예 스케줄링할 수 없다”를 판단할 수 있고, 후보 노드 집합도 좁힐 수 있다 (예: PVC가 존재하지 않으면 reject)</li>
+  <li><strong>PreFilter</strong>: “이 파드는 아예 스케줄링할 수 없다”를 판단할 수 있고, 후보 노드 집합도 좁힐 수 있다 (예: PVC가 존재하지 않으면 reject)</li>
   <li><strong>PreScore</strong>: 그런 판단이 없다. Filter를 통과한 feasible 노드들에 대해 <strong>점수 매기는 준비만</strong> 한다</li>
 </ul>
 
@@ -711,23 +720,23 @@ window.MathJax = {
 </code></pre></div></div>
 
 <ul>
-  <li><strong>PreScore에서 하는 일</strong>: 클러스터의 모든 기존 Pod을 순회하면서 <code class="highlighter-rouge">app: web</code> 라벨을 가진 Pod이 어떤 노드/zone에 분포해 있는지 미리 계산. 이 결과를 <code class="highlighter-rouge">CycleState</code>에 저장</li>
-  <li><strong>Score에서 하는 일</strong>: PreScore가 저장해 둔 분포 데이터를 꺼내서, 각 노드에 “web Pod이 많은 zone일수록 높은 점수” 부여</li>
+  <li><strong>PreScore에서 하는 일</strong>: 클러스터의 모든 기존 파드를 순회하면서 <code class="highlighter-rouge">app: web</code> 라벨을 가진 Pod이 어떤 노드/zone에 분포해 있는지 미리 계산. 이 결과를 <code class="highlighter-rouge">CycleState</code>에 저장</li>
+  <li><strong>Score에서 하는 일</strong>: PreScore가 저장해 둔 분포 데이터를 꺼내서, 각 노드에 “web 파드가 많은 zone일수록 높은 점수” 부여</li>
 </ul>
 
-<p>분리한 이유는 명확하다. Score가 노드 1,000개에 대해 호출되는데, 매번 “전체 Pod 순회 → 분포 계산”을 반복하면 비효율적이다. PreScore에서 1번만 계산하면 된다. <a href="/kubernetes/Kubernetes-Scheduling-03/#스케줄링-비용">3편에서 다룬 Pod Affinity의 계산 비용</a>이 큰 이유도 이 순회 때문이다.</p>
+<p>분리한 이유는 명확하다. Score가 노드 1,000개에 대해 호출되는데, 매번 “전체 파드 순회 → 분포 계산”을 반복하면 비효율적이다. PreScore에서 1번만 계산하면 된다. <a href="/kubernetes/Kubernetes-Scheduling-03/#스케줄링-비용">3편에서 다룬 Pod Affinity의 계산 비용</a>이 큰 이유도 이 순회 때문이다.</p>
 
 <h4 id="noderesourcesfit의-prescore">NodeResourcesFit의 PreScore</h4>
 
 <ul>
-  <li><strong>PreScore에서 하는 일</strong>: Pod이 요청하는 리소스 타입(CPU, Memory, GPU 등)을 파악하고, scoring 전략(LeastAllocated / MostAllocated / RequestedToCapacityRatio)에 맞는 가중치를 미리 계산해서 <code class="highlighter-rouge">CycleState</code>에 저장</li>
+  <li><strong>PreScore에서 하는 일</strong>: 파드가 요청하는 리소스 타입(CPU, Memory, GPU 등)을 파악하고, scoring 전략(LeastAllocated / MostAllocated / RequestedToCapacityRatio)에 맞는 가중치를 미리 계산해서 <code class="highlighter-rouge">CycleState</code>에 저장</li>
   <li><strong>Score에서 하는 일</strong>: 노드별로 저장된 가중치를 꺼내서 점수 계산</li>
 </ul>
 
 <h4 id="tainttoleration의-prescore">TaintToleration의 PreScore</h4>
 
 <ul>
-  <li><strong>PreScore에서 하는 일</strong>: Pod의 tolerations 목록을 미리 파싱/정리</li>
+  <li><strong>PreScore에서 하는 일</strong>: 파드의 tolerations 목록을 미리 파싱/정리</li>
   <li><strong>Score에서 하는 일</strong>: 각 노드의 taint와 비교해서 “toleration이 필요한 taint가 적을수록 높은 점수” 부여 (PreferNoSchedule taint 기반 soft preference)</li>
 </ul>
 
@@ -751,11 +760,11 @@ window.MathJax = {
   <tbody>
     <tr>
       <td><strong>PreFilter</strong></td>
-      <td>Pod이 요청하는 리소스 타입 목록을 파악하여 <code class="highlighter-rouge">CycleState</code>에 저장. 이후 Filter에서 불필요한 리소스 체크를 건너뛰는 최적화에 사용</td>
+      <td>파드가 요청하는 리소스 타입 목록을 파악하여 <code class="highlighter-rouge">CycleState</code>에 저장. 이후 Filter에서 불필요한 리소스 체크를 건너뛰는 최적화에 사용</td>
     </tr>
     <tr>
       <td><strong>Filter</strong></td>
-      <td>노드의 allocatable 리소스에서 이미 할당된 양을 빼고, Pod의 requests를 수용할 수 있는지 체크. 불가능하면 노드 탈락</td>
+      <td>노드의 allocatable 리소스에서 이미 할당된 양을 빼고, 파드의 requests를 수용할 수 있는지 체크. 불가능하면 노드 탈락</td>
     </tr>
     <tr>
       <td><strong>PreScore</strong></td>
@@ -786,7 +795,7 @@ window.MathJax = {
   <tbody>
     <tr>
       <td><strong>PreFilter</strong></td>
-      <td>Pod이 참조하는 PVC 목록을 수집하고, 각 PVC의 바인딩 상태(bound/unbound)를 확인. PVC가 존재하지 않으면 Pod reject</td>
+      <td>파드가 참조하는 PVC 목록을 수집하고, 각 PVC의 바인딩 상태(bound/unbound)를 확인. PVC가 존재하지 않으면 파드 reject</td>
     </tr>
     <tr>
       <td><strong>Filter</strong></td>
@@ -802,7 +811,7 @@ window.MathJax = {
     </tr>
     <tr>
       <td><strong>Reserve</strong></td>
-      <td>선택된 노드에 대해 PV-PVC 바인딩을 예약. 다른 Pod이 같은 PV를 가져가지 못하도록 함</td>
+      <td>선택된 노드에 대해 PV-PVC 바인딩을 예약. 다른 파드가 같은 PV를 가져가지 못하도록 함</td>
     </tr>
     <tr>
       <td><strong>PreBind</strong></td>
@@ -890,10 +899,13 @@ window.MathJax = {
 
 <p>진단 순서는 다음과 같다.</p>
 
-<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>1. 스케줄링 문제인가?        → spec.nodeName이 비어 있는지 확인
-2. 어느 단계에서 탈락했나?    → Events의 FailedScheduling 메시지
-3. 어느 큐에 있나?            → 파드 상태 신호 + 스케줄러 메트릭
-4. 무엇을 바꿔야 하나?        → 탈락 플러그인에 대응하는 설정
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>1. 스케줄링 문제인가?            → spec.nodeName이 비어 있는지 확인
+2. 어느 단계에서 탈락했고          → Events의 FailedScheduling 메시지에서
+   무엇을 바꿔야 하나?              탈락 플러그인을 찾고 대응 설정으로 연결
+3. 축출된 파드와 혼동하고 있지 않나? → describe pod의 Reason / Node 확인
+4. 어느 큐에 있나?                → 파드 상태 신호 + 스케줄러 메트릭
+5. 더 파고들어야 하나?             → 스케줄러 로그와 메트릭
+6. 스케줄러를 우회한 파드인가?      → 수동 배치의 제약 확인
 </code></pre></div></div>
 
 <p>첫 단계는 한 줄로 끝난다.</p>
@@ -955,6 +967,11 @@ Events:
       <td><a href="/kubernetes/Kubernetes-Scheduling-03/#cordon의-기술적-의미">cordon</a></td>
     </tr>
     <tr>
+      <td><code class="highlighter-rouge">node(s) had untolerated taint {node.kubernetes.io/disk-pressure}</code></td>
+      <td>TaintToleration</td>
+      <td><a href="/kubernetes/Kubernetes-Scheduling-03/#노드-압박과-스케줄링">노드 압박</a>. 설정이 아니라 노드 상태 문제다</td>
+    </tr>
+    <tr>
       <td><code class="highlighter-rouge">node(s) didn't match pod anti-affinity rules</code></td>
       <td>InterPodAffinity</td>
       <td><a href="/kubernetes/Kubernetes-Scheduling-03/#pod-affinity--anti-affinity">Pod Anti-Affinity</a></td>
@@ -993,6 +1010,71 @@ Events:
 
 <p><br /></p>
 
+<h2 id="축출된-파드와-스케줄링-실패-구분">축출된 파드와 스케줄링 실패 구분</h2>
+
+<p>진단 1단계(<code class="highlighter-rouge">spec.nodeName</code>이 비었는지)에서 걸러지지만, 헷갈리기 쉬운 경우가 하나 있다. <strong>축출된 파드</strong>다.</p>
+
+<p>축출은 파드가 배치된 <strong>뒤에</strong> 일어나므로, 축출된 파드에는 <code class="highlighter-rouge">spec.nodeName</code>이 남아 있고 <code class="highlighter-rouge">PodScheduled</code> 조건도 <code class="highlighter-rouge">True</code>로 남아 있다. 1단계 판별에서 “스케줄링 문제가 아니다”로 나오는 것이 맞다. 그 파드는 이미 끝난 파드가고, 실제로 봐야 할 것은 <strong>컨트롤러가 그 자리에 다시 만든 새 파드</strong>다.</p>
+
+<p>아래는 노드의 디스크가 차서 축출된 파드의 실제 출력이다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>~<span class="nv">$ </span>kubectl describe pod <span class="nt">-n</span> label-studio label-studio-ls-app-&lt;<span class="nb">hash</span><span class="o">&gt;</span><span class="nt">-mh74p</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 실행 결과 (발췌, 식별자는 익명화)
+Node:             node-01/10.0.1.10
+Priority:         0
+Status:           Failed
+Reason:           Evicted
+Message:          The node was low on resource: ephemeral-storage.
+                  Threshold quantity: 12439225938, available: 34765552Ki.
+                  Container app was using 670040, request is 0, has larger consumption of ephemeral-storage.
+Conditions:
+  Type               Status
+  DisruptionTarget   True
+  PodScheduled       True
+QoS Class:           BestEffort
+Tolerations:         node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                     node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+</code></pre></div></div>
+
+<p>이 출력 하나에 스케줄링 판단에 쓰이는 정보가 여러 개 들어 있다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>필드</th>
+      <th>읽는 방법</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">Reason: Evicted</code> + <code class="highlighter-rouge">Node</code>가 채워져 있음</td>
+      <td>스케줄링은 성공했고, 그 뒤에 축출된 것이다. 스케줄링 실패와 혼동하면 안 된다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">QoS Class: BestEffort</code> (<code class="highlighter-rouge">request is 0</code>)</td>
+      <td>리소스 요청을 선언하지 않았다. kubelet은 축출 대상을 고를 때 ① requests 초과 여부 ② Pod Priority ③ requests 대비 사용량을 보는데, requests가 0이면 항상 ①에 걸린다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">Priority: 0</code></td>
+      <td>PriorityClass가 없다. 다른 파드도 모두 0이면 <a href="/kubernetes/Kubernetes-Scheduling-02/#선점">선점</a>으로 공간을 만들 수 없다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">PodScheduled: True</code></td>
+      <td><a href="/kubernetes/Kubernetes-Scheduling-01/#statusconditions-podscheduled">1편</a>에서 본 대로 결과 기록이다. 현재 실행 가능 여부를 뜻하지 않는다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">Tolerations</code>의 <code class="highlighter-rouge">300s</code></td>
+      <td>직접 설정한 값이 아니라 API Server가 자동 주입한 기본값이다(<a href="/kubernetes/Kubernetes-Scheduling-03/#noexecute와-tolerationseconds">3편</a>)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 사례에서 실제 문제는 재생성된 파드들이었다. 노드에 <code class="highlighter-rouge">disk-pressure</code> taint가 붙어 Filter에서 탈락하고, 우선순위가 전부 같아 선점도 불가능해 Pending이 누적됐다. 전체 경위는 <a href="/dev/Dev-Minio-Custom-PVC-Troubleshooting/#왜-재스케줄링이-안-됐나-추론">MinIO existingClaim 트러블슈팅</a>에 있다.</p>
+
+<p><br /></p>
+
 <h2 id="파드가-어느-큐에-있는지-판별">파드가 어느 큐에 있는지 판별</h2>
 
 <p>큐 이름은 파드 오브젝트에 직접 노출되지 않는다. 파드 쪽 신호로는 아래와 같이 <strong>추정</strong>할 수 있다.</p>
@@ -1008,7 +1090,7 @@ Events:
   <tbody>
     <tr>
       <td><code class="highlighter-rouge">status.phase: Pending</code>, <code class="highlighter-rouge">PodScheduled</code> 조건이 <code class="highlighter-rouge">reason: SchedulingGated</code></td>
-      <td>큐 진입 전 (PreEnqueue에서 차단)</td>
+      <td>Unschedulable Queue (PreEnqueue에서 차단되어 Active Queue에 진입한 적 없음)</td>
       <td><a href="/kubernetes/Kubernetes-Scheduling-03/#scheduling-gate">Scheduling Gate</a>가 남아 있다</td>
     </tr>
     <tr>
@@ -1117,15 +1199,169 @@ scheduler_pending_pods{queue="unschedulable"} 1
 
 <p><br /></p>
 
+<h2 id="수동-배치의-제약">수동 배치의 제약</h2>
+
+<p><a href="/kubernetes/Kubernetes-Scheduling-01/#수동-스케줄링">1편 - 수동 스케줄링</a>에서 <code class="highlighter-rouge">spec.nodeName</code> 직접 지정과 Binding 오브젝트 두 방법을 다뤘다. 여기서는 그 두 방법이 <strong>무엇을 건너뛰고 무엇에 막히는지</strong>를 정리한다. 진단 과정에서 “스케줄러를 우회했는데 왜 이렇게 동작하나”를 확인할 때 쓰는 내용이다.</p>
+
+<h3 id="kubelet이-다시-검사하는-것과-하지-않는-것">kubelet이 다시 검사하는 것과 하지 않는 것</h3>
+
+<p>스케줄러의 Filter를 건너뛴다고 해서 아무 검증도 없는 것은 아니다. kubelet은 자신의 노드에 배정된 파드를 실행하기 전에 admission 검사를 수행하며, 여기서 Filter 플러그인 일부와 같은 판정을 다시 한다. 다만 <strong>다시 하는 항목과 하지 않는 항목이 명확히 갈린다</strong>.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>검사 항목</th>
+      <th>스케줄러 Filter</th>
+      <th>kubelet admission</th>
+      <th>수동 배치 시 결과</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>리소스 충분 여부 (<code class="highlighter-rouge">NodeResourcesFit</code>)</td>
+      <td>O</td>
+      <td><strong>O</strong></td>
+      <td>부족하면 파드가 <code class="highlighter-rouge">OutOfcpu</code> / <code class="highlighter-rouge">OutOfmemory</code> 등으로 실행 거부</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nodeSelector</code> / Node Affinity <code class="highlighter-rouge">required</code></td>
+      <td>O</td>
+      <td><strong>O</strong></td>
+      <td>불일치하면 실행 거부</td>
+    </tr>
+    <tr>
+      <td>노드명 일치 (<code class="highlighter-rouge">NodeName</code>)</td>
+      <td>O</td>
+      <td><strong>O</strong></td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">hostPort</code> 충돌 (<code class="highlighter-rouge">NodePorts</code>)</td>
+      <td>O</td>
+      <td><strong>O</strong></td>
+      <td>충돌하면 실행 거부</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">NoExecute</code> taint</td>
+      <td>O</td>
+      <td><strong>O</strong> (Static Pod은 제외)</td>
+      <td>tolerate하지 않으면 실행 거부</td>
+    </tr>
+    <tr>
+      <td><strong>cordon (<code class="highlighter-rouge">NodeUnschedulable</code>)</strong></td>
+      <td>O</td>
+      <td><strong>X</strong></td>
+      <td><strong>그대로 실행된다</strong></td>
+    </tr>
+    <tr>
+      <td><strong><code class="highlighter-rouge">NoSchedule</code> / <code class="highlighter-rouge">PreferNoSchedule</code> taint</strong></td>
+      <td>O</td>
+      <td><strong>X</strong></td>
+      <td><strong>그대로 실행된다</strong></td>
+    </tr>
+    <tr>
+      <td>Pod Affinity / Anti-Affinity (<code class="highlighter-rouge">InterPodAffinity</code>)</td>
+      <td>O</td>
+      <td><strong>X</strong></td>
+      <td>배치 규칙을 위반한 채로 실행된다</td>
+    </tr>
+    <tr>
+      <td>토폴로지 분산 (<code class="highlighter-rouge">PodTopologySpread</code>)</td>
+      <td>O</td>
+      <td><strong>X</strong></td>
+      <td>분산 제약을 위반한 채로 실행된다</td>
+    </tr>
+    <tr>
+      <td>볼륨 제약 (<code class="highlighter-rouge">VolumeBinding</code>, <code class="highlighter-rouge">VolumeZone</code> 등)</td>
+      <td>O</td>
+      <td><strong>X</strong></td>
+      <td>마운트 단계에서 실패한다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>정리하면, <strong>리소스와 노드 선택 조건은 kubelet이 막아 주지만, 배치 정책에 해당하는 것(cordon, <code class="highlighter-rouge">NoSchedule</code> taint, 파드 간 관계, 토폴로지 분산)은 아무도 막지 않는다.</strong> taint/toleration의 effect별 의미는 <a href="/kubernetes/Kubernetes-Scheduling-03/#taints-and-tolerations">3편 - Taints and Tolerations</a>에서 다룬다.</p>
+
+<p><br /></p>
+
+<h3 id="cordon된-노드에-nodename을-지정하면">cordon된 노드에 nodeName을 지정하면</h3>
+
+<p>위 표에서 cordon이 kubelet 검사 대상이 아닌 것이 실무에서 자주 마주치는 결과로 이어진다. <code class="highlighter-rouge">kubectl cordon</code>은 노드에 <code class="highlighter-rouge">spec.unschedulable: true</code>를 설정하고, 이것이 <strong>두 경로로</strong> 스케줄링을 막는다 — <code class="highlighter-rouge">NodeUnschedulable</code> 플러그인이 그 필드를 직접 확인하는 경로와, node lifecycle controller가 붙인 <code class="highlighter-rouge">node.kubernetes.io/unschedulable:NoSchedule</code> taint를 <code class="highlighter-rouge">TaintToleration</code>이 평가하는 경로다(자세한 구조는 <a href="/kubernetes/Kubernetes-Scheduling-03/#cordon의-기술적-의미">3편 - cordon의 기술적 의미</a>).</p>
+
+<p>중요한 것은 <strong>둘 다 Filter 단계</strong>라는 점이다. 따라서 <code class="highlighter-rouge">spec.nodeName</code>을 직접 지정해 스케줄러를 우회하면 두 검사 모두 실행되지 않는다. 그리고 cordon이 부착하는 taint의 effect는 <code class="highlighter-rouge">NoSchedule</code>인데 kubelet은 <code class="highlighter-rouge">NoExecute</code>만 확인하므로, kubelet admission도 이 파드를 통과시킨다. 결과적으로 <strong>cordon된 노드에도 파드가 정상적으로 뜬다.</strong></p>
+
+<p>이 동작은 버그가 아니라 설계된 경로이고, 실제로 활용할 여지도 있다. GPU 이상으로 cordon해 둔 노드에 인프라 조치가 끝난 뒤, 해당 노드에서만 짧은 검증 작업(예: CUDA <code class="highlighter-rouge">vectorAdd</code> 같은 probe Job)을 돌려 정상 여부를 확인하고 싶을 때가 그렇다. cordon을 풀면 그 즉시 일반 워크로드가 들어올 수 있으므로, cordon을 유지한 채 <code class="highlighter-rouge">spec.nodeName</code>으로 probe만 밀어 넣는 방식을 쓸 수 있다.</p>
+
+<p>다만 이것은 <strong>cordon의 의도를 의도적으로 우회하는 것</strong>이므로, 검증 목적의 단발성 파드에 한정하는 편이 적절하다. 일반 워크로드를 이렇게 배치하면 cordon으로 노드를 비우려는 작업(드레인, 교체, 커널 업그레이드)과 충돌한다.</p>
+
+<p>반대로 스케줄러를 정상적으로 거친 파드는 cordon된 노드에 배치되지 않고 <a href="/kubernetes/Kubernetes-Scheduling-01/#스케줄러-큐">Unschedulable Queue</a>에서 대기한다. cordon을 해제하는 노드 변경 이벤트가 있어야 다시 Active Queue로 돌아온다.</p>
+
+<p><br /></p>
+
+<h3 id="binding이-거부되는-조건">Binding이 거부되는 조건</h3>
+
+<p>API Server의 Binding 핸들러는 다음 세 가지 경우에 요청을 거부한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>조건</th>
+      <th>에러</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">spec.nodeName</code>이 이미 설정되어 있음</td>
+      <td><code class="highlighter-rouge">pod &lt;name&gt; is already assigned to node "&lt;node&gt;"</code> (409 Conflict)</td>
+    </tr>
+    <tr>
+      <td>파드가 삭제 중임(<code class="highlighter-rouge">deletionTimestamp</code>가 있음)</td>
+      <td><code class="highlighter-rouge">pod &lt;name&gt; is being deleted, cannot be assigned to a host</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">spec.schedulingGates</code>가 비어 있지 않음</td>
+      <td><code class="highlighter-rouge">pod &lt;name&gt; has non-empty .spec.schedulingGates</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>세 번째 조건이 의외일 수 있다. <a href="/kubernetes/Kubernetes-Scheduling-03/#scheduling-gate">Scheduling Gate</a>로 스케줄링을 보류시킨 뒤 그 사이에 Binding을 만드는 방식은 <strong>동작하지 않는다.</strong> 게이트가 남아 있으면 Binding 자체가 거부된다.</p>
+
+<p>그렇다면 정상적으로 생성된 파드를 Binding으로 수동 배치하려면, 스케줄러가 먼저 바인딩해 버리기 전에 요청을 넣어야 하는 것인가. 스케줄러는 파드가 등록된 직후에 바인딩하므로 그 경쟁에서 이기는 것은 현실적이지 않다. 대신 <strong>경쟁 자체를 없애는 경로가 있다.</strong> <a href="/kubernetes/Kubernetes-Scheduling-01/#schedulername-지정"><code class="highlighter-rouge">spec.schedulerName</code></a>에 <code class="highlighter-rouge">default-scheduler</code>가 아닌 이름을 넣으면 기본 스케줄러가 그 파드를 Watch하지 않으므로, 파드는 Pending으로 남아 있고 그동안 Binding을 생성할 수 있다. 커스텀 스케줄러를 구현할 때 도는 루프가 정확히 이 구조다 — 자기 이름이 붙고 <code class="highlighter-rouge">spec.nodeName</code>이 비어 있는 파드를 Watch하다가, 노드를 골라 Binding을 POST한다.</p>
+
+<p><br /></p>
+
+<h3 id="이미-스케줄링된-파드는-옮길-수-없다">이미 스케줄링된 파드는 옮길 수 없다</h3>
+
+<p><a href="/kubernetes/Kubernetes-Scheduling-01/#이미-생성된-파드에-대한-수동-스케줄링-binding-오브젝트">Binding이 1회성</a>이라는 것은, <strong>스케줄링이 완료된 파드의 배치를 바꿀 수 없다</strong>는 뜻이기도 하다. <code class="highlighter-rouge">spec.nodeName</code>은 API Server가 업데이트를 거부하는 필드이고, 파드 생성 후 변경할 수 있는 <code class="highlighter-rouge">spec</code> 필드는 아래로 한정된다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>spec.containers[*].image
+spec.initContainers[*].image
+spec.activeDeadlineSeconds
+spec.tolerations                       # 추가만 가능
+spec.terminationGracePeriodSeconds     # 음수였던 경우 1로만
+spec.schedulingGates                   # 삭제만 가능
+spec.nodeSelector                      # 게이트가 있는 동안 추가만 가능
+spec.affinity.nodeAffinity             # 게이트가 있는 동안만
+</code></pre></div></div>
+
+<p>쿠버네티스에는 실행 중인 파드를 다른 노드로 옮기는 마이그레이션 기능이 없다. 따라서 이미 배치된 파드를 다른 노드에 두려면 <strong>삭제하고 다시 만드는 것이 유일한 경로</strong>다. 리소스 컨트롤러(Deployment, DaemonSet 등)가 관리하는 파드라면 파드를 삭제하면 컨트롤러가 새 파드를 만들고, 그 새 파드가 스케줄링을 처음부터 다시 받는다.</p>
+
+<p>선점도 이 원칙의 예외가 아니다. 선점은 victim의 <code class="highlighter-rouge">nodeName</code>을 고쳐 다른 곳으로 옮기는 것이 아니라 <strong>victim을 삭제</strong>하고, victim의 컨트롤러가 새 파드를 만들고, 그 파드가 다시 스케줄링을 받는 구조다. 축출(Eviction)이나 Descheduler도 같다 — 전부 “삭제 후 재생성”이며, 재배치는 컨트롤러와 스케줄러가 처음부터 다시 수행한다. 선점의 내부 동작은 <a href="/kubernetes/Kubernetes-Scheduling-02/#선점">2편 - 선점</a>에서 다룬다.</p>
+
+<p><br /></p>
+
+<p><br /></p>
+
 <h1 id="podgroup-level-extension-points">PodGroup-level Extension Points</h1>
 
 <p>이 절은 <strong>v1.35와 v1.36 기준</strong>이다. 앞 절들의 기준 버전(v1.32)보다 뒤이고, 두 기능 모두 alpha 단계라 feature gate를 켜야 동작한다.</p>
 
-<h2 id="배경-pod-단위에서-workload-단위로">배경: Pod 단위에서 Workload 단위로</h2>
+<h2 id="배경-파드-단위에서-workload-단위로">배경: 파드 단위에서 Workload 단위로</h2>
 
-<p>기존 스케줄링 프레임워크의 extension point는 모두 <strong>Pod 단위</strong>로 동작한다. 한 번에 하나의 Pod을 평가하고, 하나의 노드를 선택하고, 하나의 바인딩을 수행한다.</p>
+<p>기존 스케줄링 프레임워크의 extension point는 모두 <strong>파드 단위</strong>로 동작한다. 한 번에 하나의 파드를 평가하고, 하나의 노드를 선택하고, 하나의 바인딩을 수행한다.</p>
 
-<p>그러나 ML 학습 워크로드처럼 여러 Pod이 <strong>동시에</strong> 자원을 확보해야 하는 경우(gang scheduling), Pod 단위 스케줄링으로는 한계가 있다. 예를 들어 8-GPU Pod 4개가 동시에 확보되어야 학습을 시작할 수 있는데, Pod을 하나씩 스케줄링하면 일부만 배치되고 나머지는 자원 부족으로 Pending에 빠지는 교착 상태가 발생한다.</p>
+<p>그러나 ML 학습 워크로드처럼 여러 파드가 <strong>동시에</strong> 자원을 확보해야 하는 경우(gang scheduling), 파드 단위 스케줄링으로는 한계가 있다. 예를 들어 8-GPU 파드 4개가 동시에 확보되어야 학습을 시작할 수 있는데, 파드를 하나씩 스케줄링하면 일부만 배치되고 나머지는 자원 부족으로 Pending에 빠지는 교착 상태가 발생한다.</p>
 
 <p>이는 <a href="/kubernetes/Kubernetes-Scheduling-04/#리소스-단편화-문제">4편 - 리소스 단편화 문제</a>의 단편화가 파드 그룹 단위로 확대된 형태다. 4편의 bin packing 전략은 파드 하나가 필요한 GPU를 한 노드에서 확보하게 만들지만, “4개 파드가 동시에 확보되어야 한다”는 요구는 표현할 수 없다.</p>
 
@@ -1154,7 +1390,7 @@ scheduler_pending_pods{queue="unschedulable"} 1
       <td><code class="highlighter-rouge">queueSort</code>, <code class="highlighter-rouge">filter</code>, <code class="highlighter-rouge">score</code>, <code class="highlighter-rouge">bind</code> 등</td>
       <td>K8s 초기~1.19+</td>
       <td>stable</td>
-      <td>Pod 단위 스케줄링</td>
+      <td>파드 단위 스케줄링</td>
     </tr>
     <tr>
       <td><code class="highlighter-rouge">placementGenerate</code></td>
@@ -1175,7 +1411,7 @@ scheduler_pending_pods{queue="unschedulable"} 1
 
 <h2 id="동작-흐름">동작 흐름</h2>
 
-<p>Pod 단위 스케줄링이 사라지는 것은 아니다. Pod이 PodGroup에 속할 때만 PodGroup 스케줄링 사이클로 분기한다.</p>
+<p>파드 단위 스케줄링이 사라지는 것은 아니다. 파드가 PodGroup에 속할 때만 PodGroup 스케줄링 사이클로 분기한다.</p>
 
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>스케줄러가 큐에서 Pod을 꺼냄 (pop)
     │
@@ -1193,11 +1429,11 @@ scheduler_pending_pods{queue="unschedulable"} 1
             └─ 실패 → 전부 큐로 반환 (아무것도 bind 안 함)
 </code></pre></div></div>
 
-<p>여기서 <code class="highlighter-rouge">minCount</code>는 <strong>그룹이 시작되기 위해 최소한 배치되어야 하는 Pod 수</strong>다. Workload 오브젝트에 지정하며, 이 수를 채우지 못하면 아무것도 바인딩하지 않고 전부 큐로 돌려보낸다. 일부만 떠서 자원을 점유한 채 나머지를 기다리는 교착을 원천적으로 막는 것이 atomic 결정의 목적이다.</p>
+<p>여기서 <code class="highlighter-rouge">minCount</code>는 <strong>그룹이 시작되기 위해 최소한 배치되어야 하는 파드 수</strong>다. Workload 오브젝트에 지정하며, 이 수를 채우지 못하면 아무것도 바인딩하지 않고 전부 큐로 돌려보낸다. 일부만 떠서 자원을 점유한 채 나머지를 기다리는 교착을 원천적으로 막는 것이 atomic 결정의 목적이다.</p>
 
-<p>Pod이 어느 그룹에 속하는지를 가리키는 필드는 버전에 따라 다르다. v1.35에서는 <code class="highlighter-rouge">spec.workloadRef</code>였고, <strong>v1.36에서 <code class="highlighter-rouge">spec.schedulingGroup</code>으로 교체</strong>되었다.</p>
+<p>파드가 어느 그룹에 속하는지를 가리키는 필드는 버전에 따라 다르다. v1.35에서는 <code class="highlighter-rouge">spec.workloadRef</code>였고, <strong>v1.36에서 <code class="highlighter-rouge">spec.schedulingGroup</code>으로 교체</strong>되었다.</p>
 
-<p>트리거는 여전히 개별 Pod을 큐에서 꺼내는 것이다. 다만 그 Pod이 그룹 소속이면 이후에 타게 되는 사이클 자체가 달라진다.</p>
+<p>트리거는 여전히 개별 파드를 큐에서 꺼내는 것이다. 다만 그 파드가 그룹 소속이면 이후에 타게 되는 사이클 자체가 달라진다.</p>
 
 <h2 id="v135-vs-v136-구현-차이">v1.35 vs v1.36 구현 차이</h2>
 
@@ -1211,7 +1447,7 @@ scheduler_pending_pods{queue="unschedulable"} 1
   <tbody>
     <tr>
       <td><strong>v1.35</strong> (gang scheduling alpha, KEP-4671)</td>
-      <td>Pod을 <strong>하나씩</strong> 스케줄링하되, <code class="highlighter-rouge">PreEnqueue</code>와 <code class="highlighter-rouge">Permit</code>에 배리어를 두어 그룹 전체가 모일 때까지 진행을 막는다. 기존 Pod 단위 파이프라인을 그대로 재활용하는 방식</td>
+      <td>파드를 <strong>하나씩</strong> 스케줄링하되, <code class="highlighter-rouge">PreEnqueue</code>와 <code class="highlighter-rouge">Permit</code>에 배리어를 두어 그룹 전체가 모일 때까지 진행을 막는다. 기존 파드 단위 파이프라인을 그대로 재활용하는 방식</td>
     </tr>
     <tr>
       <td><strong>v1.36</strong> (PodGroup scheduling cycle, KEP-5732)</td>
@@ -1220,13 +1456,13 @@ scheduler_pending_pods{queue="unschedulable"} 1
   </tbody>
 </table>
 
-<p>v1.35는 기존 파이프라인 위에 배리어를 얹어 그룹 동작을 구현한 것이고, v1.36에서 그룹 자체를 스케줄링 단위로 다루는 사이클이 생겼다. KEP-4671은 gang scheduling을 v1.37에 beta로 올리는 것을 목표로 하고 있으며, workload 단위 스케줄링 사이클의 beta 목표도 v1.37로 이동했다.</p>
+<p>v1.35는 기존 파이프라인 위에 배리어를 얹어 그룹 동작을 구현한 것이고, v1.36에서 그룹 자체를 스케줄링 단위로 다루는 사이클이 생겼다. KEP-4671은 gang scheduling의 beta를 v1.37로, KEP-5732는 workload 단위 스케줄링 사이클의 beta를 v1.38로 계획하고 있다.</p>
 
 <h2 id="noderesourcesfit의-podgroup-모드">NodeResourcesFit의 PodGroup 모드</h2>
 
 <p><code class="highlighter-rouge">NodeResourcesFit</code>은 PodGroup 스케줄링 시 <code class="highlighter-rouge">placementScore</code> extension point에서도 동작하며, resource utilization을 <strong>placement 전체 단위</strong>로 계산한다. 이때 <code class="highlighter-rouge">MostAllocated</code> 방향으로 고정된다.</p>
 
-<p>PodGroup은 여러 Pod을 하나의 placement(노드 집합)에 모아서 배치하는데, placement 내 노드의 사용률을 최대한 높여야 placement가 차지하는 노드 수가 줄고, 남는 노드를 다른 워크로드가 쓸 수 있기 때문이다. <code class="highlighter-rouge">LeastAllocated</code>(분산 배치)는 개별 Pod에는 적합하지만, 그룹 단위 배치에서는 <a href="/kubernetes/Kubernetes-Scheduling-04/#단편화란">자원 단편화</a>를 일으킨다.</p>
+<p>PodGroup은 여러 파드를 하나의 placement(노드 집합)에 모아서 배치하는데, placement 내 노드의 사용률을 최대한 높여야 placement가 차지하는 노드 수가 줄고, 남는 노드를 다른 워크로드가 쓸 수 있기 때문이다. <code class="highlighter-rouge">LeastAllocated</code>(분산 배치)는 개별 파드에는 적합하지만, 그룹 단위 배치에서는 <a href="/kubernetes/Kubernetes-Scheduling-04/#단편화란">자원 단편화</a>를 일으킨다.</p>
 
 <h2 id="feature-gate-상태와-활성화">Feature Gate 상태와 활성화</h2>
 
@@ -1263,7 +1499,7 @@ scheduler_pending_pods{queue="unschedulable"} 1
   </tbody>
 </table>
 
-<p>GA가 되더라도 “모든 Pod이 PodGroup으로 스케줄링된다”는 것이 아니다. 그룹에 속하지 않은 Pod은 기존 Pod 단위 사이클을 그대로 탄다.</p>
+<p>GA가 되더라도 “모든 파드가 PodGroup으로 스케줄링된다”는 것이 아니다. 그룹에 속하지 않은 파드는 기존 파드 단위 사이클을 그대로 탄다.</p>
 
 <p><br /></p>
 
@@ -1307,7 +1543,7 @@ scheduler_pending_pods{queue="unschedulable"} 1
   </thead>
   <tbody>
     <tr>
-      <td>Gang scheduling (Pod 그룹이 동시에 자원 확보되어야 스케줄링)</td>
+      <td>Gang scheduling (파드 그룹이 동시에 자원 확보되어야 스케줄링)</td>
       <td>v1.35 alpha부터 네이티브 지원 시작 (<a href="#podgroup-level-extension-points">위 절</a>)</td>
     </tr>
     <tr>
@@ -1315,7 +1551,7 @@ scheduler_pending_pods{queue="unschedulable"} 1
       <td>X</td>
     </tr>
     <tr>
-      <td><a href="/kubernetes/Kubernetes-Scheduling-02/#선점의-한계">Job-level preemption</a> (개별 Pod이 아닌 Job 단위 preemption)</td>
+      <td><a href="/kubernetes/Kubernetes-Scheduling-02/#선점의-한계">Job-level preemption</a> (개별 파드가 아닌 Job 단위 preemption)</td>
       <td>X</td>
     </tr>
     <tr>
@@ -1405,7 +1641,7 @@ scheduler_pending_pods{queue="unschedulable"} 1
       <td>webhook으로 <code class="highlighter-rouge">.spec.suspend</code>를 <code class="highlighter-rouge">true</code>로 두고, 자원이 확보되면 <code class="highlighter-rouge">false</code>로 바꾼다</td>
     </tr>
     <tr>
-      <td>plain Pod (Pod 계열 integration)</td>
+      <td>plain 파드 (파드 계열 integration)</td>
       <td><a href="/kubernetes/Kubernetes-Scheduling-03/#scheduling-gate">3편에서 다룬 Scheduling Gate</a>(<code class="highlighter-rouge">kueue.x-k8s.io/admission</code>)를 주입하고, 자원이 확보되면 제거한다</td>
     </tr>
   </tbody>
@@ -1437,7 +1673,7 @@ scheduler_pending_pods{queue="unschedulable"} 1
 
 <p><code class="highlighter-rouge">default-scheduler</code>라는 이름의 profile이 클러스터에 없으면 어떻게 되나?</p>
 
-<p><code class="highlighter-rouge">spec.schedulerName</code>을 지정하지 않은 Pod은 kube-apiserver가 자동으로 <code class="highlighter-rouge">default-scheduler</code>로 설정한다(<a href="/kubernetes/Kubernetes-Scheduling-01/#schedulername-지정">1편 - schedulerName 지정</a>). 이 이름을 처리할 스케줄러가 없으면, 해당 Pod은 아무도 pick up하지 않으므로 <strong>영구 Pending</strong> 상태가 된다.</p>
+<p><code class="highlighter-rouge">spec.schedulerName</code>을 지정하지 않은 Pod은 kube-apiserver가 자동으로 <code class="highlighter-rouge">default-scheduler</code>로 설정한다(<a href="/kubernetes/Kubernetes-Scheduling-01/#schedulername-지정">1편 - schedulerName 지정</a>). 이 이름을 처리할 스케줄러가 없으면, 해당 파드는 아무도 pick up하지 않으므로 <strong>영구 Pending</strong> 상태가 된다.</p>
 
 <table>
   <thead>
@@ -1448,16 +1684,16 @@ scheduler_pending_pods{queue="unschedulable"} 1
   </thead>
   <tbody>
     <tr>
-      <td>kube-scheduler를 끄고 volcano만 운영 + <strong>모든</strong> Pod에 <code class="highlighter-rouge">schedulerName: volcano</code> 명시</td>
+      <td>kube-scheduler를 끄고 volcano만 운영 + <strong>모든</strong> 파드에 <code class="highlighter-rouge">schedulerName: volcano</code> 명시</td>
       <td>문제 없음</td>
     </tr>
     <tr>
-      <td>kube-scheduler를 끄고 volcano만 운영 + <strong>일부</strong> Pod이 schedulerName 미지정</td>
-      <td>해당 Pod 영구 Pending</td>
+      <td>kube-scheduler를 끄고 volcano만 운영 + <strong>일부</strong> 파드가 schedulerName 미지정</td>
+      <td>해당 파드 영구 Pending</td>
     </tr>
     <tr>
-      <td>kube-scheduler를 끄고 volcano만 운영 + <strong>시스템 Pod</strong> (coredns 등)</td>
-      <td>시스템 Pod도 Pending → 클러스터 기능 장애</td>
+      <td>kube-scheduler를 끄고 volcano만 운영 + <strong>시스템 파드</strong> (coredns 등)</td>
+      <td>시스템 파드도 Pending → 클러스터 기능 장애</td>
     </tr>
   </tbody>
 </table>
@@ -1505,7 +1741,7 @@ scheduler_pending_pods{queue="unschedulable"} 1
   </tbody>
 </table>
 
-<p>스케줄러가 2개면 같은 노드에 동시에 Pod을 배치하려다 충돌이 날 수 있다. 예: 둘 다 “이 노드에 GPU 4개 남아있네” → 동시에 bind → 실제로는 4개밖에 없는데 8개 배치 시도. K8s는 이를 optimistic concurrency(API server에서 bind 시 충돌 감지 → 실패한 쪽이 retry)로 처리하지만, 완벽하지는 않다.</p>
+<p>스케줄러가 2개면 같은 노드에 동시에 파드를 배치하려다 충돌이 날 수 있다. 예: 둘 다 “이 노드에 GPU 4개 남아있네” → 동시에 bind → 실제로는 4개밖에 없는데 8개 배치 시도. K8s는 이를 optimistic concurrency(API server에서 bind 시 충돌 감지 → 실패한 쪽이 retry)로 처리하지만, 완벽하지는 않다.</p>
 
 <h2 id="실무-권장">실무 권장</h2>
 
@@ -1526,7 +1762,7 @@ scheduler_pending_pods{queue="unschedulable"} 1
   <li><strong>PreScore는 비용이 큰 계산을 1번만 수행하여 Score에 공유하는 캐시 레이어다.</strong> Score가 (노드 수 x 플러그인 수)번 호출되므로, PreScore에서 미리 계산하면 O(N) → O(1)로 줄어든다. PreFilter와 달리 결정권은 없다.</li>
   <li><strong>주요 플러그인은 여러 extension point에 걸쳐 동작하며, 각 단계에서의 역할이 다르다.</strong> v1.32 기준 <code class="highlighter-rouge">NodeResourcesFit</code>은 4개, <code class="highlighter-rouge">VolumeBinding</code>은 6개 extension point에 관여한다. 클라우드 벤더 전용 볼륨 제한 플러그인 4개는 v1.32에서 제거되었다.</li>
   <li><strong>진단은 Events → 메트릭 순서로 좁힌다.</strong> <code class="highlighter-rouge">FailedScheduling</code> 메시지의 사유 조각이 어느 Filter 플러그인에서 나온 것인지 대응시키면 처방이 나오고, <code class="highlighter-rouge">scheduler_pending_pods</code>의 <code class="highlighter-rouge">queue</code> 라벨(<code class="highlighter-rouge">active</code>/<code class="highlighter-rouge">backoff</code>/<code class="highlighter-rouge">unschedulable</code>/<code class="highlighter-rouge">gated</code>)로 큐 적체를 확인한다.</li>
-  <li><strong>v1.35에서 gang scheduling이, v1.36에서 PodGroup 단위 스케줄링 사이클이 도입되었다.</strong> 그룹에 속한 Pod은 별도 사이클로 분기하여 <code class="highlighter-rouge">minCount</code> 충족 여부에 따라 전부 bind 또는 전부 반환하는 atomic 결정을 받는다. 모두 alpha이고 feature gate가 필요하다.</li>
+  <li><strong>v1.35에서 gang scheduling이, v1.36에서 PodGroup 단위 스케줄링 사이클이 도입되었다.</strong> 그룹에 속한 파드는 별도 사이클로 분기하여 <code class="highlighter-rouge">minCount</code> 충족 여부에 따라 전부 bind 또는 전부 반환하는 atomic 결정을 받는다. 모두 alpha이고 feature gate가 필요하다.</li>
   <li><strong>Profile만으로 되는 경우와 별도 바이너리가 필요한 경우를 구분해야 한다.</strong> 기본 플러그인 조합 변경은 Profile로 충분하고, fair-share queue 같은 기본 플러그인에 없는 로직은 별도 바이너리(Volcano)나 컨트롤러(Kueue)가 필요하다. 실무에서는 가능하면 단일 스케줄러 + 여러 Profile을 권장하며, Kueue는 suspend와 Scheduling Gate로 race condition을 원천 회피하는 설계다.</li>
 </ol>
 
@@ -1558,7 +1794,7 @@ scheduler_pending_pods{queue="unschedulable"} 1
     </tr>
     <tr>
       <td>5편 (이 글)</td>
-      <td>Extension Point 심화, PreScore 역할, 실패 진단, PodGroup 스케줄링, 멀티 스케줄러 아키텍처</td>
+      <td>Extension Point 심화, PreScore 역할, 실패 진단, 수동 배치의 제약, PodGroup 스케줄링, 멀티 스케줄러 아키텍처</td>
     </tr>
   </tbody>
 </table>
@@ -1664,7 +1900,7 @@ scheduler_pending_pods{queue="unschedulable"} 1
 
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-09-28">September 28, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-01">October 1, 2026</time></p>
         
       </footer>
 
