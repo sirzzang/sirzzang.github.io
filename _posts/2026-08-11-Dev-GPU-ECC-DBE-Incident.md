@@ -17,7 +17,7 @@ tags:
   - NCCL
   - GPU-Operator
   - MLOps
-last_modified_at: 2026-09-12
+last_modified_at: 2026-10-06
 ---
 
 <br>
@@ -28,7 +28,7 @@ last_modified_at: 2026-09-12
 - DBE는 SECDED의 정정 한계(단일 정정·이중 검출)를 넘은 오류라 하드웨어가 정정을 포기하고 신고만 한 것이다. GPU는 불량 row를 remap 대상으로 마킹했고, 드라이버가 Drain and Reset을 지시했다
 - GPU Operator operand를 노드 라벨 스위치로 걷어내고 `nvidia-smi -i 1 -r`로 리셋해 remap을 활성화했다. 리셋 후 volatile 카운터는 0으로 돌아왔지만 remap 이력은 InfoROM에 남는다 — 카드는 이 사건을 기억한다
 - 단발 이벤트 1건이고 remap 실패도 없어 일단 RMA가 아니라 관찰 단계로 판정했다. [이론 글]({% post_url 2026-06-01-CS-GPU-ECC-Memory-Integrity %})에서 공부했던 내용이 처음으로 실제 장애로 발현된 사례이자, 그때 구축한 모니터링이 일한 사례다
-- (후기) 관찰은 반나절 만에 끝났다. 나흘 새 같은 FBPA·같은 뱅크에서 DBE가 두 차례 더 재발하며 예비 row를 연속 소모했고, soft error 가설을 기각했다. 공식 RMA 임계(remapping failure flag)에는 아직 미달이라, 격리 운용으로 전환하고 보증 범위 확인과 이력 공식 접수를 선제 요청했다
+- (후기) 관찰은 반나절 만에 끝났다. 나흘 새 같은 FBPA·같은 뱅크에서 DBE가 두 차례 더 재발하며 예비 row를 연속 소모했고, 무작위 soft error로는 설명하기 어려운 패턴이 드러났다. 다만 패턴은 문제가 "어디에" 있는지까지만 말해 줄 뿐 원인은 가려 주지 않는다. 공식 RMA 임계(remapping failure flag)에는 아직 미달이라, 격리 운용으로 전환하고 보증 범위 확인과 이력 접수를 먼저 요청했다
 
 <br>
 
@@ -568,7 +568,9 @@ GPU-cd616af2-..., 0, 0, No, No
 
 physAddr는 매번 다르다. 그러나 **파티션은 세 번 모두 FBPA 3 / subpartition 0**이고, 히스토그램은 Max 511 / Partial 1을 유지하고 있다 — 512개 뱅크 중 511개는 손도 안 댄 채, 같은 1개 뱅크만 예비 row를 연속으로 소모하고 있다는 뜻이다.
 
-이 국소성이 판정을 가른다. 입자 충돌 같은 무작위 soft error라면 오류 위치가 메모리 전역에 흩어져야 정상이다. 오류가 하나의 물리 영역에 몰리고, 예비 row 소모가 진행되고, 재발 간격이 시간 단위라면 — "운 나쁘게 세 번"이 아니라 **메모리 다이의 특정 영역이 진행성으로 열화되고 있다**는 신호다. 재발 시 판단 기준 세 가지 중 두 가지(같은 FBPA 재발, remapped rows 증가)가 성립했고, soft error 가설은 기각한다.
+이 국소성이 판정을 가른다. 입자 충돌 같은 무작위 soft error라면 오류 위치가 메모리 전역에 흩어지는 것이 자연스럽다. 오류가 하나의 물리 영역에 몰리고, 예비 row 소모가 이어지고, 재발 간격이 시간 단위라면 "운 나쁘게 세 번"으로 보기는 어렵고, **특정 영역에 지속되는 문제가 있다**는 신호로 읽는 편이 합리적이다. 재발 시 판단 기준 세 가지 중 두 가지(같은 FBPA 재발, remapped rows 증가)가 성립했으므로, soft error 가설은 더 이상 유력하지 않다.
+
+다만 이 패턴이 말해 주는 것은 문제가 "어디에" 있는지까지다. 그 영역이 "왜" 나빠졌는지는 오류 패턴만으로 가릴 수 없다. 메모리 자체의 결함 말고도 온도·전력 같은 운용 조건이 오류율에 영향을 줄 수 있기 때문이다. 예를 들어 DRAM 셀은 온도가 오르면 전하를 붙잡아 두는 시간이 짧아진다(DDR 규격이 고온 구간에서 refresh를 두 배로 하도록 정한 이유다). 원인을 가리려면 운용 조건을 점검·보정한 뒤에도 같은 영역에서 재발하는지를 따로 확인해야 한다.
 
 여담으로 3차 발생은 1차와 똑같이 검출 이벤트 2건(volatile 카운터 2)에 새 remap row 1개였다. 남은 궁금증에 적어 둔 "카운터 2" 미스터리의 재현으로, 같은 불량 row가 두 번 검출된다는 가설 쪽에 무게가 실린다.
 
@@ -608,11 +610,120 @@ my-user@gpu-node-a:~$ sudo systemctl start nvidia-dcgm
 
 이번 카드는 remapped row 3개에 `Failure: No`라 어느 조건에도 미달이다. 판정 표에서 이 상태를 "RMA 대상"이 아니라 "RMA 검토"로 적은 이유가 정확히 이 임계다. 부수 소득도 있다 — 리셋 전 점검에서 뱅크당 예비 row 개수는 미공개라고 적었는데, failure 트리거 기준으로 uncorrectable은 뱅크당 8개가 한계임을 이 문서에서 확인했다. 문제의 뱅크는 3/8을 소모한 셈이다 (단, A100 세대 문서 기준이라 아키텍처별로 다를 수 있다).
 
-그래서 요청도 "RMA를 진행해 달라"가 아니라 그 전 단계로 보냈다. 보증 범위 확인, RMA 절차 안내, 필요한 추가 진단(`nvidia-bug-report.sh`, `dcgmi diag` 등) 문의, 그리고 발생 이력·열화 진행 근거·환경 요인 배제 확인(온도·스로틀 정상, PCIe AER/MCE 없음, 동일 모델·동일 드라이버의 다른 노드 전량 정상)의 공식 접수다. 공급사가 "진단 결과를 보자"거나 "failure flag까지 관찰하라"고 회신할 수도 있다. 그래도 보증 기간 안에 이력을 접수해 두면, 이후 진단이 결함을 잡거나 임계에 도달했을 때 처음부터 다시 설명할 필요 없이 진행될 여지가 커진다. 예비 row 소진까지 기다리면 증거는 확실해지겠지만, 그 사이 학습이 죽는 비용과 보증 기간이라는 변수가 쌓인다는 계산도 그대로다.
+그래서 곧바로 "RMA를 진행해 달라"고 하기보다 그 전 단계를 먼저 밟는 편이 낫다. 이 단계에서 정리해 둘 것은 대체로 다음과 같다.
 
-> 처음에는 들인 지 얼마 되지 않은 새 카드가 왜 벌써 이런 문제가 나타날까 생각했는데, 찾아 보니 오히려 그래서 — 얼마 되지 않은 카드라서 — 라고 한다. 하드웨어 고장률은 시간 축에서 **욕조 곡선(bathtub curve)**을 그리는데, 제조 결함이 있는 개체는 대개 초기 몇 달의 **초기 불량(infant mortality)** 구간에서 드러나고, 보증이 정확히 이 구간을 위해 존재한다. 신품 카드의 진행성 메모리 결함은 운영 실수의 결과가 아니라 교과서적인 RMA 케이스다. 더 파고 싶다면 bathtub curve, infant mortality, MTBF 같은 신뢰성 공학 키워드로 시작하면 된다.
+- 보증 범위와 RMA 절차, 벤더가 요구하는 진단 자료(`nvidia-smi -q` 전문, `nvidia-bug-report.sh`, `dcgmi diag` 결과 등)
+- 발생 이력과 진행 근거(발생 시각·physAddr·파티션, remapped rows와 Bank Remap Availability 추이)
+- 운용 조건 점검 결과(온도·스로틀, PCIe AER/MCE, 같은 모델·드라이버를 쓰는 다른 노드의 상태)
 
-현재 이 카드의 InfoROM에는 remap된 row 3개와 aggregate 카운터 5가 남아 있다. 판정이 어느 쪽으로 나든, 추후에는 발생 기록이 근거 자료가 될 수 있다.
+벤더는 "진단 결과를 보자"거나 "failure flag까지 관찰하라"고 답할 수 있다. 그래도 보증 기간 안에 이력을 접수해 두면, 이후 진단이 결함을 잡거나 임계에 도달했을 때 처음부터 다시 설명하지 않아도 된다. 예비 row 소진까지 기다리면 증거는 확실해지겠지만, 그 사이 학습이 죽는 비용과 보증 기간이라는 변수가 쌓인다는 계산도 그대로다.
+
+> 처음에는 들인 지 얼마 되지 않은 카드에서 왜 벌써 이런 문제가 나타날까 생각했는데, 신뢰성 공학 관점에서는 이상한 일이 아니라고 한다. 하드웨어 고장률은 시간 축에서 **욕조 곡선(bathtub curve)**을 그리고, 사용 초기 몇 달은 고장률이 높은 **초기 불량(infant mortality)** 구간이다. 보증이 이 구간을 덮도록 설계되는 이유다. 다만 이 구간의 고장에는 제조 과정의 잠재 결함 외에도 설치·운용 조건의 영향이 섞여 있어서, 고장 시점만으로 원인을 단정할 수는 없다. 더 파고 싶다면 bathtub curve, infant mortality, MTBF 같은 신뢰성 공학 키워드로 시작하면 된다.
+
+3차 발생 직후 이 카드의 InfoROM에는 remap된 row 3개와 aggregate 카운터 5가 남아 있었다. 판정이 어느 쪽으로 나든, 추후에는 발생 기록이 근거 자료가 될 수 있다.
+
+> **참고**: 후속 관찰 (2026-10-06 업데이트)
+>
+> 2026-10-06에 GPU 1의 상태를 다시 측정했다. 그 사이 9월 10일에 같은 위치(FBPA 3 / subpartition 0, physAddr `0xebe10bbe0`)에서 DBE가 한 번 더 발생해 있었다(4차 발생).
+>
+> - DBE 발생: 4회 (08-10, 08-11, 08-14, 09-10)
+> - `remapped_rows.uncorrectable`: 4 (3차 직후 3). 여전히 같은 1개 뱅크(Max 511 / Partial 1)에서 소모 중이다
+> - aggregate `DRAM Uncorrectable`: 7 (3차 직후 5). 4차도 1·3차처럼 카운터가 2 올랐다
+> - `Remapping Failure Occurred: No`. 4차 발생 후 아직 리셋하지 않아 remap은 `Pending: Yes` 상태다
+>
+> 문제의 뱅크는 A100 문서 기준 한계 8개 중 4개를 소모한 셈이고, 공식 RMA 임계(remapping failure flag)에는 여전히 미달이다.
+>
+> 이번 측정에서 짚어 둘 것은 두 카운터가 서로 다른 것을 센다는 점이다. aggregate `DRAM Uncorrectable`은 정정 불가 오류가 **검출된 횟수**이고, `remapped_rows.uncorrectable`(`nvidia-smi -q`의 `Remapped Rows` › `Uncorrectable Error`)은 그 오류 때문에 교체 대상으로 잡힌 **행의 개수**다. 검출 7번에 행 4개인 것도 그래서다. 행 개수에는 리셋 전이라 교체가 아직 적용되지 않은(`Pending`) 행도 들어간다. 4차 이후 리셋하지 않았는데 3에서 4로 오른 것이 그 예다. 벤더 지원 창구와 "에러 카운트 N회" 같은 기준을 주고받을 때는 어느 카운터를 말하는지부터 맞춰야 하고, 이 건에서 확인한 기준은 행 개수 쪽이었다. 기준 자료로 `nvidia-smi -q` 전문을 요구받을 수 있으니, 리셋 전 상태의 출력을 보존해 두는 것도 좋다.
+>
+> 하나 더 걸리는 점이 있다. ECC 오류는 메모리를 **읽을 때** 검출된다. 4차 발생 이후로는 이 노드를 cordon해 두어 GPU 1을 쓰는 작업이 없는데, 아무도 문제의 영역을 읽지 않으면 셀 상태가 나빠지더라도 오류는 검출되지 않고 카운트도 쌓이지 않는다. 이력을 쌓으려면 써야 하고, 쓰면 학습이 죽는 구조다. 다만 여기서 "쓴다"가 학습을 다시 배정한다는 뜻일 필요는 없다. cordon이 막는 것은 죽으면 그대로 비용이 되는 **운영 부하**(ML 엔지니어의 학습)이고, 해당 GPU에만 거는 통제된 **진단 부하**는 죽어도 잃을 것이 없다. 오히려 cordon 상태이기 때문에 다른 작업을 건드리지 않고 진단 부하를 걸 수 있다.
+
+<details markdown="1">
+<summary><b>2026-10-06 실측에 사용한 커맨드와 전체 출력</b></summary>
+
+GPU 1의 ECC 카운터와 row remapper 상태 전체다.
+
+```shell
+my-user@gpu-node-a:~$ nvidia-smi -i 1 -q -d ECC,ROW_REMAPPER
+# 실행 결과
+==============NVSMI LOG==============
+
+Timestamp                                              : Tue Oct  6 02:35:18 2026
+Driver Version                                         : 595.58.03
+CUDA Version                                           : 13.2
+
+Attached GPUs                                          : 4
+GPU 00000000:55:00.0
+    ECC Mode
+        Current                                        : Enabled
+        Pending                                        : Enabled
+    ECC Errors
+        Volatile
+            SRAM Correctable                           : 0
+            SRAM Uncorrectable Parity                  : 0
+            SRAM Uncorrectable SEC-DED                 : 0
+            DRAM Correctable                           : 0
+            DRAM Uncorrectable                         : 2
+        Aggregate
+            SRAM Correctable                           : 0
+            SRAM Uncorrectable Parity                  : 0
+            SRAM Uncorrectable SEC-DED                 : 0
+            DRAM Correctable                           : 0
+            DRAM Uncorrectable                         : 7
+            SRAM Threshold Exceeded                    : No
+        Aggregate Uncorrectable SRAM Sources
+            SRAM L2                                    : 0
+            SRAM SM                                    : 0
+            SRAM Microcontroller                       : 0
+            SRAM PCIE                                  : 0
+            SRAM Other                                 : 0
+        Channel Repair Pending                         : No
+        TPC Repair Pending                             : No
+        Unrepairable Memory                            : No
+    Remapped Rows
+        Correctable Error                              : 0
+        Uncorrectable Error                            : 4
+        Pending                                        : Yes
+        Remapping Failure Occurred                     : No
+        Bank Remap Availability Histogram
+            Max                                        : 511 bank(s)
+            High                                       : 0 bank(s)
+            Partial                                    : 1 bank(s)
+            Low                                        : 0 bank(s)
+            None                                       : 0 bank(s)
+```
+
+4장 비교다. GPU 1 외에는 카운터가 모두 0이다.
+
+```shell
+my-user@gpu-node-a:~$ nvidia-smi --query-gpu=index,ecc.errors.uncorrected.volatile.total,ecc.errors.uncorrected.aggregate.total,remapped_rows.uncorrectable,remapped_rows.pending,remapped_rows.failure --format=csv
+# 실행 결과
+index, ecc.errors.uncorrected.volatile.total, ecc.errors.uncorrected.aggregate.total, remapped_rows.uncorrectable, remapped_rows.pending, remapped_rows.failure
+0, 0, 0, 0, No, No
+1, 2, 7, 4, Yes, No
+2, 0, 0, 0, No, No
+3, 0, 0, 0, No, No
+```
+
+GPU 1의 Xid 기록이다. 저널 보존 범위가 08-16 이후라 1~3차는 잡히지 않고 4차 발생만 나온다.
+
+```shell
+my-user@gpu-node-a:~$ sudo journalctl -k --no-pager | grep -E 'Xid \(PCI:0000:55:00\)'
+# 실행 결과
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid (PCI:0000:55:00): 48, An uncorrectable double bit error (DBE) has been detected on GPU in the framebuffer at physAddr 0xebe10bbe0 partition 3, subpartition 0.
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid (PCI:0000:55:00): 171, GDDR, Uncorrectable DRAM error in FBPA 3 subpartition 0 physAddr 0xebe10bbe0
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid (PCI:0000:55:00): 48, pid=3007894, name=ray::_RayTrainW, channel 0x00000002
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid (PCI:0000:55:00): 48, pid=3007894, name=ray::_RayTrainW, channel 0x00000003
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid (PCI:0000:55:00): 48, pid=3007894, name=ray::_RayTrainW, channel 0x00000004
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid (PCI:0000:55:00): 48, pid=3007894, name=ray::_RayTrainW, channel 0x00000005
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid (PCI:0000:55:00): 48, pid=3007894, name=ray::_RayTrainW, channel 0x00000006
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid (PCI:0000:55:00): 48, pid=3007894, name=ray::_RayTrainW, channel 0x00000007
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid (PCI:0000:55:00): 48, pid=3007894, name=ray::_RayTrainW, channel 0x00000008
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid (PCI:0000:55:00): 48, pid=3007894, name=ray::_RayTrainW, channel 0x00000009
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid (PCI:0000:55:00): 63, pid=3007894, name=pt_autograd_0, Row Remapper: New row (0x0000000ebe10bbe0) marked for remapping, reset gpu to activate.
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid (PCI:0000:55:00): 154, GPU recovery action changed from 0x0 (None) to 0x4 (Drain and Reset)
+```
+
+</details>
 
 <br>
 
