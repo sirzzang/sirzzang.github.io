@@ -37,7 +37,7 @@
 
 
 
-  <meta property="article:modified_time" content="2026-09-12T00:00:00+09:00">
+  <meta property="article:modified_time" content="2026-10-06T00:00:00+09:00">
 
 
 
@@ -442,7 +442,7 @@ window.MathJax = {
     <meta itemprop="headline" content="[GPU] 사례로 보는 GPU ECC 장애: VRAM DBE부터 row remapping까지">
     <meta itemprop="description" content="GPU ECC 발생 사례를 통해 VRAM DBE 발생부터 분산 학습 실패, row remapping과 리셋 복구까지 알아 보자.">
     <meta itemprop="datePublished" content="2026-08-11T00:00:00+09:00">
-    <meta itemprop="dateModified" content="2026-09-12T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-10-06T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
@@ -462,7 +462,7 @@ window.MathJax = {
 
 
 
-  29 분 소요
+  33 분 소요
 
 
             
@@ -1342,7 +1342,111 @@ my-user@gpu-node-a:~<span class="nv">$ </span><span class="nb">sudo </span>syste
   <p>처음에는 들인 지 얼마 되지 않은 새 카드가 왜 벌써 이런 문제가 나타날까 생각했는데, 찾아 보니 오히려 그래서 — 얼마 되지 않은 카드라서 — 라고 한다. 하드웨어 고장률은 시간 축에서 <strong>욕조 곡선(bathtub curve)</strong>을 그리는데, 제조 결함이 있는 개체는 대개 초기 몇 달의 <strong>초기 불량(infant mortality)</strong> 구간에서 드러나고, 보증이 정확히 이 구간을 위해 존재한다. 신품 카드의 진행성 메모리 결함은 운영 실수의 결과가 아니라 교과서적인 RMA 케이스다. 더 파고 싶다면 bathtub curve, infant mortality, MTBF 같은 신뢰성 공학 키워드로 시작하면 된다.</p>
 </blockquote>
 
-<p>현재 이 카드의 InfoROM에는 remap된 row 3개와 aggregate 카운터 5가 남아 있다. 판정이 어느 쪽으로 나든, 추후에는 발생 기록이 근거 자료가 될 수 있다.</p>
+<p>3차 발생 직후 이 카드의 InfoROM에는 remap된 row 3개와 aggregate 카운터 5가 남아 있었다. 판정이 어느 쪽으로 나든, 추후에는 발생 기록이 근거 자료가 될 수 있다.</p>
+
+<blockquote>
+  <p><strong>참고</strong>: 후속 조치 (2026-10-06 업데이트)</p>
+
+  <p>2026-10-06에 GPU 1의 상태를 다시 측정했다. 그 사이 9월 10일에 같은 위치(FBPA 3 / subpartition 0, physAddr <code class="highlighter-rouge">0xebe10bbe0</code>)에서 DBE가 한 번 더 발생해 있었다(4차 발생).</p>
+
+  <ul>
+    <li>DBE 발생: 4회 (08-10, 08-11, 08-14, 09-10)</li>
+    <li><code class="highlighter-rouge">remapped_rows.uncorrectable</code>: 4 (3차 직후 3). 여전히 같은 1개 뱅크(Max 511 / Partial 1)에서 소모 중이다</li>
+    <li>aggregate <code class="highlighter-rouge">DRAM Uncorrectable</code>: 7 (3차 직후 5). 4차도 1·3차처럼 카운터가 2 올랐다</li>
+    <li><code class="highlighter-rouge">Remapping Failure Occurred: No</code>. 4차 발생 후 아직 리셋하지 않아 remap은 <code class="highlighter-rouge">Pending: Yes</code> 상태다</li>
+  </ul>
+
+  <p>문제의 뱅크는 A100 문서 기준 한계 8개 중 4개를 소모한 셈이고, 공식 RMA 임계(remapping failure flag)에는 여전히 미달이다.</p>
+
+  <p>대응 상황은 공급사 대응을 맡은 인프라 팀으로부터 회신을 받아 정리했다. 대응은 두 갈래로 진행 중이다. 첫째, 서버 업체 의견에 따라 설치 환경 측면의 요인도 한 번 더 배제해 보기로 했다. 환경 보강을 마친 뒤 재발 여부를 다시 확인할 예정이다. 둘째, NVIDIA 본사로부터는 GPU 이슈 접수에 에러 카운트가 최소 5회 이상 필요하다는 회신을 받았다. 그래서 이슈 로그를 계속 축적하면서, 서버(GPU) 공급사의 다른 채널로도 대응 방안을 찾고 있다. 다만 이 <strong>에러 카운트가 위에서 측정한 값 중 무엇을 가리키는지</strong>(DBE 발생 4회인지, aggregate 카운터 7인지)는 아직 확인하지 못해, 인프라 팀을 통해 기준을 문의해 두었다.</p>
+
+  <p>여기서 한 가지 걸리는 점이 있다. ECC 오류는 메모리를 <strong>읽을 때</strong> 검출된다. 4차 발생 이후로는 이 노드를 cordon해 두어 GPU 1을 쓰는 작업이 없는데, 아무도 문제의 영역을 읽지 않으면 셀 상태가 나빠지더라도 오류는 검출되지 않고 카운트도 쌓이지 않는다. 이력을 쌓으려면 써야 하고, 쓰면 학습이 죽는 구조다. 다만 여기서 “쓴다”가 학습을 다시 배정한다는 뜻일 필요는 없다. cordon이 막는 것은 죽으면 그대로 비용이 되는 <strong>운영 부하</strong>(ML 엔지니어의 학습)이고, 해당 GPU에만 거는 통제된 <strong>진단 부하</strong>는 죽어도 잃을 것이 없다. 오히려 cordon 상태이기 때문에 다른 작업을 건드리지 않고 진단 부하를 걸 수 있다.</p>
+</blockquote>
+
+<details>
+  <summary><b>2026-10-06 실측에 사용한 커맨드와 전체 출력</b></summary>
+
+  <p>GPU 1의 ECC 카운터와 row remapper 상태 전체다.</p>
+
+  <div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>my-user@gpu-node-a:~<span class="nv">$ </span>nvidia-smi <span class="nt">-i</span> 1 <span class="nt">-q</span> <span class="nt">-d</span> ECC,ROW_REMAPPER
+<span class="c"># 실행 결과</span>
+<span class="o">==============</span>NVSMI <span class="nv">LOG</span><span class="o">==============</span>
+
+Timestamp                                              : Tue Oct  6 02:35:18 2026
+Driver Version                                         : 595.58.03
+CUDA Version                                           : 13.2
+
+Attached GPUs                                          : 4
+GPU 00000000:55:00.0
+    ECC Mode
+        Current                                        : Enabled
+        Pending                                        : Enabled
+    ECC Errors
+        Volatile
+            SRAM Correctable                           : 0
+            SRAM Uncorrectable Parity                  : 0
+            SRAM Uncorrectable SEC-DED                 : 0
+            DRAM Correctable                           : 0
+            DRAM Uncorrectable                         : 2
+        Aggregate
+            SRAM Correctable                           : 0
+            SRAM Uncorrectable Parity                  : 0
+            SRAM Uncorrectable SEC-DED                 : 0
+            DRAM Correctable                           : 0
+            DRAM Uncorrectable                         : 7
+            SRAM Threshold Exceeded                    : No
+        Aggregate Uncorrectable SRAM Sources
+            SRAM L2                                    : 0
+            SRAM SM                                    : 0
+            SRAM Microcontroller                       : 0
+            SRAM PCIE                                  : 0
+            SRAM Other                                 : 0
+        Channel Repair Pending                         : No
+        TPC Repair Pending                             : No
+        Unrepairable Memory                            : No
+    Remapped Rows
+        Correctable Error                              : 0
+        Uncorrectable Error                            : 4
+        Pending                                        : Yes
+        Remapping Failure Occurred                     : No
+        Bank Remap Availability Histogram
+            Max                                        : 511 bank<span class="o">(</span>s<span class="o">)</span>
+            High                                       : 0 bank<span class="o">(</span>s<span class="o">)</span>
+            Partial                                    : 1 bank<span class="o">(</span>s<span class="o">)</span>
+            Low                                        : 0 bank<span class="o">(</span>s<span class="o">)</span>
+            None                                       : 0 bank<span class="o">(</span>s<span class="o">)</span>
+</code></pre></div>  </div>
+
+  <p>4장 비교다. GPU 1 외에는 카운터가 모두 0이다.</p>
+
+  <div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>my-user@gpu-node-a:~<span class="nv">$ </span>nvidia-smi <span class="nt">--query-gpu</span><span class="o">=</span>index,ecc.errors.uncorrected.volatile.total,ecc.errors.uncorrected.aggregate.total,remapped_rows.uncorrectable,remapped_rows.pending,remapped_rows.failure <span class="nt">--format</span><span class="o">=</span>csv
+<span class="c"># 실행 결과</span>
+index, ecc.errors.uncorrected.volatile.total, ecc.errors.uncorrected.aggregate.total, remapped_rows.uncorrectable, remapped_rows.pending, remapped_rows.failure
+0, 0, 0, 0, No, No
+1, 2, 7, 4, Yes, No
+2, 0, 0, 0, No, No
+3, 0, 0, 0, No, No
+</code></pre></div>  </div>
+
+  <p>GPU 1의 Xid 기록이다. 저널 보존 범위가 08-16 이후라 1~3차는 잡히지 않고 4차 발생만 나온다.</p>
+
+  <div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code>my-user@gpu-node-a:~<span class="nv">$ </span><span class="nb">sudo </span>journalctl <span class="nt">-k</span> <span class="nt">--no-pager</span> | <span class="nb">grep</span> <span class="nt">-E</span> <span class="s1">'Xid \(PCI:0000:55:00\)'</span>
+<span class="c"># 실행 결과</span>
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid <span class="o">(</span>PCI:0000:55:00<span class="o">)</span>: 48, An uncorrectable double bit error <span class="o">(</span>DBE<span class="o">)</span> has been detected on GPU <span class="k">in </span>the framebuffer at physAddr 0xebe10bbe0 partition 3, subpartition 0.
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid <span class="o">(</span>PCI:0000:55:00<span class="o">)</span>: 171, GDDR, Uncorrectable DRAM error <span class="k">in </span>FBPA 3 subpartition 0 physAddr 0xebe10bbe0
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid <span class="o">(</span>PCI:0000:55:00<span class="o">)</span>: 48, <span class="nv">pid</span><span class="o">=</span>3007894, <span class="nv">name</span><span class="o">=</span>ray::_RayTrainW, channel 0x00000002
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid <span class="o">(</span>PCI:0000:55:00<span class="o">)</span>: 48, <span class="nv">pid</span><span class="o">=</span>3007894, <span class="nv">name</span><span class="o">=</span>ray::_RayTrainW, channel 0x00000003
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid <span class="o">(</span>PCI:0000:55:00<span class="o">)</span>: 48, <span class="nv">pid</span><span class="o">=</span>3007894, <span class="nv">name</span><span class="o">=</span>ray::_RayTrainW, channel 0x00000004
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid <span class="o">(</span>PCI:0000:55:00<span class="o">)</span>: 48, <span class="nv">pid</span><span class="o">=</span>3007894, <span class="nv">name</span><span class="o">=</span>ray::_RayTrainW, channel 0x00000005
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid <span class="o">(</span>PCI:0000:55:00<span class="o">)</span>: 48, <span class="nv">pid</span><span class="o">=</span>3007894, <span class="nv">name</span><span class="o">=</span>ray::_RayTrainW, channel 0x00000006
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid <span class="o">(</span>PCI:0000:55:00<span class="o">)</span>: 48, <span class="nv">pid</span><span class="o">=</span>3007894, <span class="nv">name</span><span class="o">=</span>ray::_RayTrainW, channel 0x00000007
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid <span class="o">(</span>PCI:0000:55:00<span class="o">)</span>: 48, <span class="nv">pid</span><span class="o">=</span>3007894, <span class="nv">name</span><span class="o">=</span>ray::_RayTrainW, channel 0x00000008
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid <span class="o">(</span>PCI:0000:55:00<span class="o">)</span>: 48, <span class="nv">pid</span><span class="o">=</span>3007894, <span class="nv">name</span><span class="o">=</span>ray::_RayTrainW, channel 0x00000009
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid <span class="o">(</span>PCI:0000:55:00<span class="o">)</span>: 63, <span class="nv">pid</span><span class="o">=</span>3007894, <span class="nv">name</span><span class="o">=</span>pt_autograd_0, Row Remapper: New row <span class="o">(</span>0x0000000ebe10bbe0<span class="o">)</span> marked <span class="k">for </span>remapping, reset gpu to activate.
+Sep 10 05:22:05 gpu-node-a kernel: NVRM: Xid <span class="o">(</span>PCI:0000:55:00<span class="o">)</span>: 154, GPU recovery action changed from 0x0 <span class="o">(</span>None<span class="o">)</span> to 0x4 <span class="o">(</span>Drain and Reset<span class="o">)</span>
+</code></pre></div>  </div>
+
+</details>
 
 <p><br /></p>
 
@@ -1448,7 +1552,7 @@ my-user@gpu-node-a:~<span class="nv">$ </span><span class="nb">sudo </span>syste
 
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-09-12">September 12, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-06">October 6, 2026</time></p>
         
       </footer>
 
