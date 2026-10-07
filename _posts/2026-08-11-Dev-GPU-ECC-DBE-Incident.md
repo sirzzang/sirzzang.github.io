@@ -26,7 +26,7 @@ last_modified_at: 2026-10-06
 
 - 학습이 돌던 노드의 GPU 1 VRAM에서 DBE(Double-Bit Error)가 발생했다. 커널 로그에 Xid 48/171/63/154 연쇄가 찍혔고, 해당 GPU를 쓰던 rank는 `uncorrectable ECC error`로 즉사, 반대편 rank는 NCCL collective를 600초 기다리다 timeout으로 죽으면서 분산 학습 전체가 실패했다
 - DBE는 SECDED의 정정 한계(단일 정정·이중 검출)를 넘은 오류라 하드웨어가 정정을 포기하고 신고만 한 것이다. GPU는 불량 row를 remap 대상으로 마킹했고, 드라이버가 Drain and Reset을 지시했다
-- GPU Operator operand를 노드 라벨 스위치로 걷어내고 `nvidia-smi -i 1 -r`로 리셋해 remap을 활성화했다. 리셋 후 volatile 카운터는 0으로 돌아왔지만 remap 이력은 InfoROM에 남는다 — 카드는 이 사건을 기억한다
+- 노드에 `nvidia.com/gpu.deploy.operands=false` 라벨을 붙여 GPU 핸들을 쥔 GPU Operator operand 파드(device-plugin, dcgm-exporter 등)를 노드에서 삭제하고, `nvidia-smi -i 1 -pm 0`(persistence 해제) → `nvidia-smi -i 1 -r`로 리셋해 remap을 활성화했다. 리셋 후 volatile 카운터는 0으로 돌아왔지만 remap 이력은 InfoROM에 남는다 — 카드는 이 사건을 기억한다
 - 단발 이벤트 1건이고 remap 실패도 없어 일단 RMA가 아니라 관찰 단계로 판정했다. [이론 글]({% post_url 2026-06-01-CS-GPU-ECC-Memory-Integrity %})에서 공부했던 내용이 처음으로 실제 장애로 발현된 사례이자, 그때 구축한 모니터링이 일한 사례다
 - (후기) 관찰은 반나절 만에 끝났다. 나흘 새 같은 FBPA·같은 뱅크에서 DBE가 두 차례 더 재발하며 예비 row를 연속 소모했고, 무작위 soft error로는 설명하기 어려운 패턴이 드러났다. 다만 패턴은 문제가 "어디에" 있는지까지만 말해 줄 뿐 원인은 가려 주지 않는다. 공식 RMA 임계(remapping failure flag)에는 아직 미달이라, 격리 운용으로 전환하고 보증 범위 확인과 이력 접수를 먼저 요청했다
 
@@ -281,7 +281,7 @@ Xid 154의 처방에도 일반화 주의가 하나 더 붙는다. **Drain and Re
 | None | 별도 복구 조치 불필요 | GPU 상태에 영향이 없는 오류 |
 | GPU Reset | 해당 GPU만 초기화 | GPU 단독 리셋으로 복구되는 결함 |
 | Drain and Reset | 신규 작업은 차단하고, 기존 작업이 빠져나간 뒤 초기화 | framebuffer 일부 offline, row remap 대기 같은 축소 운전 상태 — 이번 사건의 처방 |
-| Drain P2P | P2P 트래픽만 먼저 걷어내고, 이후 후속 조치 재결정 | NVLink/P2P 경로 결함 |
+| Drain P2P | P2P 트래픽만 먼저 중단(drain)하고, 이후 후속 조치 재결정 | NVLink/P2P 경로 결함 |
 | Node Reboot | GPU 단위 조치로는 부족, 노드 전체 재부팅 | GSP(GPU System Processor) 펌웨어 무응답, PCIe/NVML에서 GPU 미조회, reset 반복 실패, 같은 reset domain에 묶인 다중 GPU |
 
 표의 Drain P2P 행이 보여주듯 이 체계는 ECC 전용이 아니다. Xid 154는 **함께 뜬 다른 Xid에 필요한 복구 수준을 요약해 주는 범용 메커니즘**이라 NVLink/P2P 결함 같은 비-ECC 오류에서도 갱신되고, 반대로 GPU 상태를 바꾸지 않는 앱 수준 오류(Xid 13, 31 등)에서는 None에 머물러 Xid 154 자체가 따라붙지 않는다. 다만 어떤 권고든 "하드웨어 정상" 판정은 아니다 — 복구 후 재발 확인이 필요하다는 점은 같다.
@@ -338,12 +338,12 @@ sequenceDiagram
 3. GPU 리셋 시, 메모리 컨트롤러의 행 주소 디코딩 단계에서 불량 row 주소가 예비 row로 치환되도록 매핑을 전환한다
 4. 이후 그 주소로의 접근은 전부 예비 row로 간다 — 소프트웨어가 보는 주소 공간은 그대로고, 도달하는 물리 row만 바뀐다
 
-현재 계산을 고치는 게 아니라 **불량 도로를 폐쇄하고 우회도로를 개통**하는 것이다. 그래서 현재 학습 데이터와 CUDA 컨텍스트의 복구는 불가능하고, 불량 영역 격리와 리셋 후 재사용만 가능하다.
+즉 이미 오염된 계산을 고치는 기능이 아니라, **이후의 접근이 불량 row에 닿지 않도록 주소 매핑을 바꾸는** 기능이다. 그래서 현재 학습 데이터와 CUDA 컨텍스트의 복구는 불가능하고, 불량 row 격리와 리셋 후 재사용만 가능하다.
 
 이 메커니즘을 이해하면 몇 가지 자연스러운 의문이 풀린다.
 
 - **remap된 row는 영영 격리되나?** 그렇다. InfoROM에 기록되어 리셋·재부팅 후에도 계속 대체된다. 예비 row는 뱅크당 유한하고, 소진되면 `Remapping Failure Occurred: Yes`가 된다. 즉 "불량 row 발생 → 예비로 대체 → 예비 소진 → 카드 수명 끝"이 GPU 메모리 노화의 수명 모델 그 자체다. 디스크 불량 섹터 재할당과 같은 발상이다
-- **리셋은 "깨끗한 상태에서 재시작"인가?** 절반만 맞다. 리셋은 VRAM 내용과 CUDA 컨텍스트를 전부 버리고 새로 시작하는 것 + 예약된 remap을 실제로 활성화하는 것이다. 깨진 데이터를 복구하는 게 아니라, 판을 새로 깔면서 불량 도로 폐쇄를 반영하는 것이다
+- **리셋은 "깨끗한 상태에서 재시작"인가?** 절반만 맞다. 리셋은 VRAM 내용과 CUDA 컨텍스트를 전부 버리고 새로 시작하는 것 + 예약된 remap을 실제로 활성화하는 것이다. 깨진 데이터를 복구하지는 않고, 초기화하면서 예약된 row 치환을 메모리 컨트롤러의 매핑에 반영한다
 - **리셋 전에는 이 GPU를 못 쓰나?** 쓸 수는 있다. GPU는 여전히 동작하고 나머지 메모리는 정상이다. 다만 불량 row가 활성 매핑에 남아 있어 그 주소를 다시 쓰면 재발 위험이 있고, 실제로는 device plugin이 unhealthy로 마킹해 Kubernetes 스케줄링에서 이미 빠져 있다. 드라이버 권고가 "Drain(새 작업 차단) and Reset"인 이유다
 
 ## 리셋 전 점검
@@ -401,7 +401,7 @@ GPU 00000000:55:00.0
 
 다른 하나는 **리셋의 영향 범위**다. 학습 실패 후 ML 엔지니어가 같은 노드의 GPU 2·3으로 학습을 다시 돌려 둔 상태였기 때문에, GPU 1 리셋이 이 학습을 건드리면 안 된다. PCI 토폴로지를 보면 GPU 0·1(54:00/55:00)과 GPU 2·3(D3:00/D4:00)은 서로 다른 root complex에 있고 이 카드는 NVLink 미지원이라 함께 리셋돼야 할 도메인이 없다. 최악의 경우에도 영향 범위는 같은 쪽의 GPU 0(idle)까지고 2·3에는 닿지 않는다. 노드 재부팅이 아니라 **GPU 1 단독 리셋**을 택한 이유이기도 하다 — 드라이버 권고 자체가 reboot이 아닌 Drain and Reset이었고, 재부팅은 2·3의 학습을 죽이므로 최후 수단으로 미뤄 뒀다.
 
-## GPU Operator operand 정리와 리셋
+## GPU 핸들 해제와 리셋
 
 리셋 절차는 단순하다 — 가 아니었다. GPU 리셋은 해당 GPU를 잡고 있는 프로세스가 하나도 없어야 하는데, compute 프로세스는 없어도 **파일 핸들을 쥔 데몬들**이 있다.
 
@@ -423,26 +423,26 @@ The following GPUs could not be reset:
 
 > 참고: nvidia-persistenced **GPU 디바이스 파일을 항상 열어 둬서, 클라이언트가 없어도 드라이버 초기화 상태를 유지하는 데몬**이다. 이게 없으면 마지막 클라이언트가 떠날 때 GPU가 deinit되어 다음 CUDA 시작이 느려진다. "항상 핸들을 잡고 있는 것"이 존재 이유라서, 리셋할 때는 정확히 그 이유로 걸림돌이 된다.
 
-persistenced를 풀어도 리셋이 거부된 것은 GPU Operator의 operand 파드들(dcgm-exporter, device-plugin, gpu-feature-discovery 등)이 NVML 핸들을 쥐고 있기 때문이다. 처음엔 파드를 지웠는데, DaemonSet이라 즉시 되살아나 소용이 없었다. GPU Operator는 이 상황을 위해 노드 라벨 마스터 스위치를 제공한다.
+persistenced를 풀어도 리셋이 거부된 것은 GPU Operator의 operand 파드들(dcgm-exporter, device-plugin, gpu-feature-discovery 등)이 NVML 핸들을 쥐고 있기 때문이다. 처음엔 파드를 지웠는데, DaemonSet이라 즉시 되살아나 소용이 없었다. GPU Operator에서는 노드에 `nvidia.com/gpu.deploy.operands=false` 라벨을 붙이면 그 노드의 operand 파드 전체가 삭제된다.
 
 ```shell
-# 로컬(kubectl) — operand 전체를 이 노드에서 걷어내는 마스터 스위치
+# 로컬(kubectl) — 이 노드의 operand 파드 전체를 삭제시키는 라벨
 ~$ kubectl label node gpu-node-a nvidia.com/gpu.deploy.operands=false --overwrite
 node/gpu-node-a labeled
 
-# operand 파드가 실제로 빠질 때까지 확인 (NFD worker만 남으면 정상)
+# operand 파드가 실제로 삭제될 때까지 확인 (NFD worker만 남으면 정상)
 ~$ kubectl get pods -n gpu-operator -o wide --no-headers | awk '$7=="gpu-node-a"'
 gpu-operator-node-feature-discovery-worker-z4wb6   1/1   Running     0   81d   10.42.x.x   gpu-node-a
 nvidia-cuda-validator-7482p                        0/1   Completed   0   81d   <none>      gpu-node-a
 ```
 
-operand 각각의 DaemonSet은 `nvidia.com/gpu.deploy.device-plugin=true` 같은 개별 라벨을 nodeSelector로 쓰는데, 개별 라벨을 손으로 뒤집으면 오퍼레이터가 reconcile로 되돌릴 수 있다. `gpu.deploy.operands=false`는 오퍼레이터 자신이 하위 라벨들을 내려서 operand를 걷어내는, NVIDIA가 드라이버 업그레이드용으로 문서화한 경로다. 되돌릴 때도 오퍼레이터가 알아서 복구한다.
+동작은 이렇다. operand 각각의 DaemonSet은 `nvidia.com/gpu.deploy.device-plugin=true` 같은 component별 라벨을 nodeSelector로 쓴다. `gpu.deploy.operands=false`가 붙으면 오퍼레이터가 그 노드의 `nvidia.com/gpu.deploy.<component>` 라벨(driver, device-plugin, dcgm, dcgm-exporter, gpu-feature-discovery, operator-validator 등)을 모두 지우고, nodeSelector가 더 이상 맞지 않게 된 파드를 DaemonSet 컨트롤러가 그 노드에서 삭제한다. `operands` 라벨을 지우면 오퍼레이터가 component 라벨을 `true`로 다시 붙여 파드가 돌아온다. component 라벨을 직접 하나씩 바꾸는 방법도 있지만, operand 수만큼 바꾸고 되돌려야 한다. 라벨 하나를 붙였다 지우는 이 방법은 GPU Operator 문서의 "Preventing Installation of Operands on Some Nodes" 절에 나온다(라벨 처리 동작은 GPU Operator v25.10.1 소스 기준, 2026년 10월 확인).
 
 이 방법이 안전하다고 판단한 근거는 두 가지다. 
-- 첫째, 이 노드의 드라이버는 **호스트 설치**다(driver daemonset 파드가 없고 `/proc/driver/nvidia/version`이 호스트 커널 모듈을 가리킨다). operand를 걷어내도 드라이버가 언로드될 위험이 없다 — 컨테이너 드라이버였다면 이 방법이 GPU 2·3 학습까지 죽였을 것이다. 
+- 첫째, 이 노드의 드라이버는 **호스트 설치**다(driver daemonset 파드가 없고 `/proc/driver/nvidia/version`이 호스트 커널 모듈을 가리킨다). operand 파드를 삭제해도 드라이버가 언로드될 위험이 없다 — 컨테이너 드라이버였다면 이 방법이 GPU 2·3 학습까지 죽였을 것이다. 
 - 둘째, 장애 후 **k8s로 GPU를 할당받은 파드가 0개**라, 노드의 `nvidia.com/gpu` capacity가 잠시 사라져도 영향받는 워크로드가 없다. GPU 2·3 학습은 호스트 직접 프로세스라 무관하다.
 
-돌아보면 이 과정 전체가 Xid 154가 말한 **Drain의 실체**였다. 새 작업 유입 차단은 device plugin의 unhealthy 마킹으로 이미 되어 있었고, compute 프로세스는 이미 없었으니, 남은 것은 관리 데몬들의 핸들 제거 — persistenced 해제와 operand 정리 — 였던 셈이다.
+돌아보면 이 과정 전체가 Xid 154가 말한 **Drain의 실체**였다. 새 작업 유입 차단은 device plugin의 unhealthy 마킹으로 이미 되어 있었고, compute 프로세스는 이미 없었으니, 남은 것은 관리 데몬들이 열어 둔 `/dev/nvidia1` 파일 핸들을 닫게 하는 일 — `nvidia-smi -i 1 -pm 0`으로 persistenced가 GPU 1을 놓게 하고, `operands=false`로 operand 파드를 삭제하는 것 — 이었던 셈이다.
 
 operand가 빠진 뒤 리셋은 바로 성공했다.
 
@@ -458,7 +458,7 @@ GPU 00000000:55:00.0 was successfully reset.
 All done.
 ```
 
-만약 operand를 걷어내고도 `In use by another client`가 계속됐다면, `sudo lsof /dev/nvidia1`로 홀더를 특정하고, 다음 수단으로 `nvidia-smi drain -p 0000:55:00.0 -m 1` → 리셋 → `-m 0`, 최후 수단으로 노드 재부팅(2·3 학습이 죽으므로 마지막) 순서로 계획해 뒀었다.
+만약 operand 파드를 삭제하고도 `In use by another client`가 계속됐다면, `sudo lsof /dev/nvidia1`로 홀더를 특정하고, 다음 수단으로 `nvidia-smi drain -p 0000:55:00.0 -m 1` → 리셋 → `-m 0`, 최후 수단으로 노드 재부팅(2·3 학습이 죽으므로 마지막) 순서로 계획해 뒀었다.
 
 리셋 후 원복은 역순이다.
 
@@ -518,15 +518,15 @@ GPU-cd616af2-..., 0, 0, No, No
 | 사건 | GPU 1 VRAM DBE (Xid 48/171) → 2-GPU 분산 학습 실패 |
 | 실패 양상 | DBE 맞은 rank는 즉사(SIGABRT), 반대 rank는 NCCL timeout으로 10분 뒤 사망 |
 | 격리 | row remap 마킹(Xid 63) + device plugin unhealthy 마킹 |
-| 조치 | operand 정리 → GPU 1 단독 리셋 → remap 활성화 확인 → 원복 |
+| 조치 | `operands=false` 라벨로 operand 파드 삭제 + `nvidia-smi -i 1 -pm 0` → `nvidia-smi -i 1 -r` → `Pending: No` 확인 → 라벨 제거·`-pm 1` |
 | 판정 (08-11 당시) | 단발 이벤트, remap 성공, 예비 여유 충분 → RMA 아닌 관찰 단계 — 이후 뒤집힌다 (후기) |
 
 교훈 몇 가지를 남긴다.
 
 - **모니터링 파이프라인은 만들 때가 아니라 터질 때 가치가 증명된다.** DCGM 메트릭에 걸어 둔 alert rule 하나가 자정의 DBE를 즉시 알렸고, 커널 로그 → 학습 로그 → remapper 상태로 이어지는 진단이 아침에 바로 가능했다. 이론 글에서 "실속 있는 액션"이라고 적었던 것이 실제로 실속이 있었다
 - **학습이 죽은 것 자체가 ECC의 성과다.** ECC 없는 카드였다면 이 학습은 죽지 않고 오염된 채 수렴했을 것이고, 그게 훨씬 나쁜 결과다. "오류를 안 내는 것"이 아니라 "오류를 알 수 있는 것"이 ECC의 가치라는 이론 글의 결론이 그대로 검증됐다
-- **리셋의 영향 범위를 먼저 계산해야 한다.** 같은 노드에서 다른 학습이 돌고 있었고, PCI 토폴로지·NVLink 유무·드라이버 설치 방식(호스트 vs 컨테이너)을 확인한 뒤에야 GPU 단독 리셋이 안전하다고 결론 낼 수 있었다. 특히 드라이버가 컨테이너 설치였다면 operand 정리가 오히려 사고를 냈을 것이다
-- **GPU Operator 환경의 GPU 리셋은 라벨 스위치가 정석이다.** 파드 삭제는 DaemonSet이 되살리고, 개별 라벨 조작은 오퍼레이터가 되돌린다. `nvidia.com/gpu.deploy.operands=false`가 문서화된 경로다
+- **리셋의 영향 범위를 먼저 계산해야 한다.** 같은 노드에서 다른 학습이 돌고 있었고, PCI 토폴로지·NVLink 유무·드라이버 설치 방식(호스트 vs 컨테이너)을 확인한 뒤에야 GPU 단독 리셋이 안전하다고 결론 낼 수 있었다. 특히 드라이버가 컨테이너 설치였다면 `operands=false`가 driver 파드까지 삭제해 오히려 사고를 냈을 것이다
+- **GPU Operator 환경에서 GPU를 리셋할 때는 `nvidia.com/gpu.deploy.operands=false` 노드 라벨로 operand 파드를 삭제하는 것이 정석이다.** 파드를 직접 지우면 DaemonSet이 다시 만들고, component 라벨을 하나씩 바꾸면 operand 수만큼 바꾸고 되돌려야 한다. 이 라벨은 붙였다 지우는 것으로 끝난다
 
 ## 터진 다음의 자동 복구
 
@@ -576,7 +576,7 @@ physAddr는 매번 다르다. 그러나 **파티션은 세 번 모두 FBPA 3 / s
 
 ## 세 번째 리셋 트러블슈팅
 
-리셋 절차는 세 번 모두 같은 플레이북(operand 라벨 스위치 → persistence 해제 → 단독 리셋 → 원복)이었는데, 3차에서는 다 걷어냈는데도 리셋이 거부됐다. `fuser`로 보유자를 다시 확인하니 이번엔 k8s 파드가 아니었다.
+리셋 절차는 세 번 모두 같았다(`operands=false` 라벨 → `nvidia-smi -i 1 -pm 0` → `nvidia-smi -i 1 -r` → 라벨 제거·`-pm 1`). 그런데 3차에서는 operand 파드를 모두 삭제하고 persistence도 해제했는데도 리셋이 거부됐다. `fuser`로 보유자를 다시 확인하니 이번엔 k8s 파드가 아니었다.
 
 ```shell
 my-user@gpu-node-a:~$ sudo fuser -v /dev/nvidia1
@@ -587,7 +587,7 @@ my-user@gpu-node-a:~$ cat /proc/1873116/cgroup
 0::/system.slice/nvidia-dcgm.service    # k8s 파드가 아니라 호스트 systemd 서비스
 ```
 
-그 사이 호스트에 systemd 서비스로 새로 올라온 DCGM(nv-hostengine)이었다. 확인해 보니 전날 RMA 진단 준비 과정에서 설치·enable된 것이었다. `gpu.deploy.operands=false`는 **k8s operand 파드만** 걷어낸다 — 같은 역할의 데몬이라도 호스트 systemd로 떠 있으면 라벨 스위치의 영향권 밖이다. 조치는 한 줄 추가로 끝났다.
+그 사이 호스트에 systemd 서비스로 새로 올라온 DCGM(nv-hostengine)이었다. 확인해 보니 전날 RMA 진단 준비 과정에서 설치·enable된 것이었다. `gpu.deploy.operands=false`가 삭제하는 것은 **k8s operand 파드뿐**이다. 같은 역할의 데몬이라도 호스트에 systemd 서비스로 떠 있으면 이 라벨과 무관하게 `/dev/nvidia1`을 계속 열어 두고 있다. 조치는 한 줄 추가로 끝났다.
 
 ```shell
 my-user@gpu-node-a:~$ sudo systemctl stop nvidia-dcgm
@@ -596,7 +596,7 @@ GPU 00000000:55:00.0 was successfully reset.
 my-user@gpu-node-a:~$ sudo systemctl start nvidia-dcgm
 ```
 
-본문에서 Drain의 실체가 "관리 데몬들의 핸들 제거"였다고 정리했는데, 여기에 한 줄이 더 붙는다. **핸들 보유자 목록은 고정이 아니다.** 1·2차의 블로커는 operand 파드였고 3차는 호스트 DCGM이었다. 절차를 외울 게 아니라, 리셋 전마다 `fuser -v /dev/nvidia*`로 그 시점의 실제 보유자를 확인하는 것이 정석이다.
+본문에서 Drain의 실체가 "관리 데몬들이 열어 둔 디바이스 파일 핸들을 닫게 하는 일"이었다고 정리했는데, 여기에 한 줄이 더 붙는다. **핸들 보유자 목록은 고정이 아니다.** 1·2차의 블로커는 operand 파드였고 3차는 호스트 DCGM이었다. 절차를 외울 게 아니라, 리셋 전마다 `fuser -v /dev/nvidia*`로 그 시점의 실제 보유자를 확인하는 것이 정석이다.
 
 ## 조치 전환: 격리 운용과 선제 RMA 문의
 
