@@ -1,0 +1,1735 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] 쿠버네티스 스케줄링 - 0. 스케줄링 일반 개념과 쿠버네티스 - Eraser’s StudyLog</title>
+<meta name="description" content="Slurm, LSF, Volcano, kube-scheduler를 함께 놓고 스케줄러가 답하는 공통 질문과 설계 축을 정리하고, 쿠버네티스 스케줄링 모델이 그 안에서 어디에 있는지 알아보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] 쿠버네티스 스케줄링 - 0. 스케줄링 일반 개념과 쿠버네티스">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-Scheduling-00/">
+
+
+  <meta property="og:description" content="Slurm, LSF, Volcano, kube-scheduler를 함께 놓고 스케줄러가 답하는 공통 질문과 설계 축을 정리하고, 쿠버네티스 스케줄링 모델이 그 안에서 어디에 있는지 알아보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2025-11-05T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-10-15T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-Scheduling-00/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Dev/" >Dev</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Language/" >Language</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/etc/" >Etc</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] 쿠버네티스 스케줄링 - 0. 스케줄링 일반 개념과 쿠버네티스">
+    <meta itemprop="description" content="Slurm, LSF, Volcano, kube-scheduler를 함께 놓고 스케줄러가 답하는 공통 질문과 설계 축을 정리하고, 쿠버네티스 스케줄링 모델이 그 안에서 어디에 있는지 알아보자.">
+    <meta itemprop="datePublished" content="2025-11-05T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-10-15T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] 쿠버네티스 스케줄링 - 0. 스케줄링 일반 개념과 쿠버네티스
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2025-11-05T00:00:00+09:00">2025년 11월 05일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+            
+          </p>
+          
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#들어가며">들어가며</a></li>
+  <li><a href="#용어-정리">용어 정리</a>
+    <ul>
+      <li><a href="#일반-용어">일반 용어</a></li>
+      <li><a href="#쿠버네티스-스케줄러-용어">쿠버네티스 스케줄러 용어</a></li>
+    </ul>
+  </li>
+  <li><a href="#스케줄러-일반">스케줄러 일반</a>
+    <ul>
+      <li><a href="#스케줄러의-공통-질문">스케줄러의 공통 질문</a></li>
+      <li><a href="#사이클-모델">사이클 모델</a>
+        <ul>
+          <li><a href="#이벤트-단위-처리">이벤트 단위 처리</a></li>
+          <li><a href="#주기-단위-일괄-처리">주기 단위 일괄 처리</a></li>
+          <li><a href="#slurm-혼합-방식">Slurm: 혼합 방식</a></li>
+        </ul>
+      </li>
+      <li><a href="#동시성-모델">동시성 모델</a></li>
+      <li><a href="#확장-구조">확장 구조</a></li>
+      <li><a href="#시스템별-용어-차이">시스템별 용어 차이</a></li>
+    </ul>
+  </li>
+  <li><a href="#쿠버네티스의-스케줄링-모델">쿠버네티스의 스케줄링 모델</a>
+    <ul>
+      <li><a href="#배치-단위-파드">배치 단위: 파드</a></li>
+      <li><a href="#파드-실행-경로">파드 실행 경로</a></li>
+      <li><a href="#스케줄러-공통-규칙">스케줄러 공통 규칙</a></li>
+      <li><a href="#kube-scheduler의-사이클-모델과-동시성-모델">kube-scheduler의 사이클 모델과 동시성 모델</a></li>
+      <li><a href="#스케줄링-동작-변경-층위">스케줄링 동작 변경 층위</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a>
+    <ul>
+      <li><a href="#시리즈-구성">시리즈 구성</a></li>
+    </ul>
+  </li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>클러스터 스케줄러는 구현이 달라도 같은 질문에 답한다. 무엇을 한 번에 배치하나(단위), 누구부터 하나(큐·순서), 어디에 들어갈 수 있나(적합성), 어디가 가장 좋은가(순위), 언제 확정하나(확정), 자리가 없으면 누구를 내보내나(회수), 들여보내도 되나(입장 제어·쿼터)다.</li>
+  <li>설계는 두 축으로 갈린다. <strong>사이클 모델</strong>(이벤트마다 하나씩 처리하는가, 주기마다 일괄 처리하는가)과 <strong>동시성 모델</strong>(Omega 논문의 monolithic / statically partitioned / two-level / shared-state)이다. 두 축은 서로 독립이다.</li>
+  <li>확장 구조는 코어(처리 순서와 확장 지점을 정하는 부분), 플러그인(판단 코드), 설정(조합)으로 이루어지고, 거의 모든 스케줄러에 있다. <code class="highlighter-rouge">kube-scheduler</code>는 플러그인을 컴파일 시점에 넣고, Slurm은 런타임에 로드한다. <strong>Scheduling Framework</strong>는 그중 <code class="highlighter-rouge">kube-scheduler</code> 계열의 확장 구조를 가리키는 고유명사다. 스케줄러 일반에 “스케줄링 프레임워크”라는 개념이 따로 있는 것이 아니다.</li>
+  <li>쿠버네티스는 파드(Pod)를 배치 단위로 두고, 파드 생성은 컨트롤러가, 배치는 스케줄러가 맡도록 역할을 나눴다. 기본 스케줄러 <code class="highlighter-rouge">kube-scheduler</code>는 이벤트마다 파드 하나씩 처리한다. 스케줄러를 여러 개 띄우면 공유 상태(shared-state) 모델에 가까워지지만, 결정을 반영하는 Binding 단계에서 자원 충돌을 검사하지 않는다.</li>
+  <li>쿠버네티스 위의 모든 스케줄러는 <code class="highlighter-rouge">spec.schedulerName</code>이 자기 이름이고 <code class="highlighter-rouge">spec.nodeName</code>이 빈 파드를 골라 Binding API로 노드를 지정한다. 스케줄링 동작을 바꾸는 방법은 네 층위(프로필 변경 / 커스텀 빌드 kube-scheduler / 별도 구현 스케줄러 / 스케줄러 앞단의 워크로드 admission)로 나뉜다.</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="들어가며">들어가며</h1>
+
+<p>쿠버네티스 스케줄링을 정리하다 보면 두 가지 질문이 반복해서 생긴다.</p>
+
+<p>첫 번째 질문은 이름이 가리키는 대상이 정확히 무엇이냐는 것이다. 이름만 보고는 정체를 짐작하기 어려운 것이 많다.</p>
+
+<ul>
+  <li>Coscheduling은 플러그인이라고 소개되지만, 쓰려면 스케줄러를 따로 띄워야 한다</li>
+  <li>Kueue는 이름에 큐가 들어 있지만 파드를 노드에 바인딩하지 않는다</li>
+  <li>Scheduling Framework는 <code class="highlighter-rouge">kube-scheduler</code> 내부 구조의 이름인데, Volcano도 자기 내부 구조를 프레임워크라고 부른다</li>
+</ul>
+
+<p>이 혼동은 <code class="highlighter-rouge">kube-scheduler</code>의 구조와 스케줄러 일반의 구조를 구분하지 않은 데서 나온다.</p>
+
+<p>두 번째 질문은 지금 정리하는 개념이 쿠버네티스에만 있느냐는 것이다. 선점이나 우선순위 큐가 쿠버네티스만의 것인지, Slurm이나 LSF 같은 HPC 스케줄러에도 있는 스케줄링 일반의 개념인지 궁금해진다. 답은 개념마다 다르다.</p>
+
+<ul>
+  <li>선점은 양쪽에 다 있지만 방식이 다르다. 쿠버네티스는 victim을 삭제하고, LSF는 기본적으로 일시 중지한다</li>
+  <li>backfill은 HPC 스케줄러에는 있지만 <code class="highlighter-rouge">kube-scheduler</code>에는 없다</li>
+  <li>여러 노드에 걸친 잡에 자원을 한꺼번에 주는 것은 HPC 스케줄러에서는 기본 동작인데, 쿠버네티스에서는 gang scheduling이라는 별도 기능으로 붙여야 한다</li>
+</ul>
+
+<p>두 질문 모두 <code class="highlighter-rouge">kube-scheduler</code> 하나만 보고는 답하기 어렵다. 그래서 다른 스케줄러를 함께 놓고 비교한다. 다만 이름으로는 맞댈 수 없다. 같은 일을 하는 단계가 시스템마다 이름이 다르고(<code class="highlighter-rouge">kube-scheduler</code>의 Filter, Volcano의 predicates, Slurm의 select 플러그인), 반대로 Slurm의 Gang Scheduling처럼 이름은 같은데 뜻이 다른 경우도 있기 때문이다.</p>
+
+<p>대신 기능으로 맞춘다. 어떤 스케줄러든 작업을 배치하려면 내려야 하는 결정이 있다. 무엇을 한 번에 배치할지, 누구부터 할지, 어디에 들어갈 수 있는지, 언제 확정할지 같은 것이다. 이 결정을 공통 질문으로 세우고 각 스케줄러의 답을 나란히 놓으면 두 질문에 함께 답할 수 있다. 이름이 달라도 같은 질문에 답하는 단계는 같은 것으로 묶인다. 모든 스케줄러가 같은 질문에 답하면 스케줄링 일반의 개념이고, <code class="highlighter-rouge">kube-scheduler</code>만 다르게 답하거나 답하지 않으면 쿠버네티스가 내린 설계 선택이다.</p>
+
+<p>이 글은 HPC 배치 스케줄러(Slurm, LSF), 쿠버네티스 위의 다른 스케줄러(Volcano), <code class="highlighter-rouge">kube-scheduler</code>를 이 공통 질문 위에 놓고 비교한 뒤, 그 안에서 쿠버네티스의 스케줄링 모델이 어디에 있는지 본다.</p>
+
+<ol>
+  <li><strong>스케줄러 일반</strong>: 스케줄러의 공통 질문, 사이클 모델, 동시성 모델, 확장 구조, 시스템별 용어 차이</li>
+  <li><strong>쿠버네티스의 스케줄링 모델</strong>: 배치 단위인 파드, 파드 실행 경로, 스케줄러 공통 규칙, kube-scheduler의 사이클 모델과 동시성 모델, 스케줄링 동작 변경 층위</li>
+</ol>
+
+<p>Slurm, LSF, Volcano는 비교에 필요한 범위에서만 다루고, 각 시스템의 설정과 운영은 다루지 않는다. 쿠버네티스 쪽 서술은 시리즈 기준 버전인 v1.32를 따르고, 그 이후 기능은 등장 지점에 버전을 표기한다. 바로 아래의 <a href="#용어-정리">용어 정리</a>가 시리즈 전체의 표기 기준이다. 1편부터는 <code class="highlighter-rouge">kube-scheduler</code>를 중심으로 다루고, 다른 도구(Coscheduling, Volcano, Kueue)는 5편에서 gang scheduling과 함께 다룬다.</p>
+
+<p><br /></p>
+
+<h1 id="용어-정리">용어 정리</h1>
+
+<p>시리즈 전체에서 아래 표기를 쓴다. 같은 대상을 다른 표기로 부르지 않는다. 각 용어는 본문에서 다시 설명하므로, 처음에는 표기 기준으로만 확인하고 넘어가도 된다.</p>
+
+<h2 id="일반-용어">일반 용어</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>용어</th>
+      <th>뜻</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>클러스터 스케줄러</td>
+      <td>여러 작업이 한정된 자원을 나눠 쓰도록 각 작업을 언제 어디서 실행할지 정하는 시스템. CPU 스케줄러(운영체제)나 cron 같은 작업 스케줄러와 구분하려고 “클러스터”를 붙인다. 노드 수와 상관없이 노드 집합을 대상으로 한다</td>
+    </tr>
+    <tr>
+      <td>사이클 모델</td>
+      <td>스케줄러가 언제, 몇 개의 작업을 놓고 결정하는지에 대한 구조</td>
+    </tr>
+    <tr>
+      <td>동시성 모델</td>
+      <td>스케줄러가 여럿일 때 누가 상태를 보고 누가 결정을 확정하는지에 대한 구조</td>
+    </tr>
+    <tr>
+      <td>확장 구조</td>
+      <td>스케줄러가 판단 로직을 바꿔 끼울 수 있게 만든 내부 구조의 일반명사. 코어, 플러그인, 설정으로 이루어진다</td>
+    </tr>
+    <tr>
+      <td>코어</td>
+      <td>확장 구조에서 처리 순서와 확장 지점을 정하고, 각 확장 지점에서 플러그인을 호출하는 부분</td>
+    </tr>
+    <tr>
+      <td>확장 지점</td>
+      <td>코어가 플러그인을 호출하는 자리의 일반명사</td>
+    </tr>
+    <tr>
+      <td>플러그인</td>
+      <td>확장 지점에 끼우는 판단 코드</td>
+    </tr>
+    <tr>
+      <td>admission</td>
+      <td>작업이나 파드를 들여보낼지 정하는 단계. API admission, 워크로드 admission(Kueue), kubelet admission이 각각 다른 시점에 있다</td>
+    </tr>
+    <tr>
+      <td>gang scheduling</td>
+      <td>쿠버네티스 맥락에서 파드 그룹을 전부 배치하거나 하나도 배치하지 않는 것</td>
+    </tr>
+    <tr>
+      <td>backfill</td>
+      <td>큰 잡의 예상 시작 시각을 늦추지 않는 범위에서 작은 잡을 빈 자원에 먼저 실행하는 기법</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="쿠버네티스-스케줄러-용어">쿠버네티스 스케줄러 용어</h2>
+
+<p>아래는 쿠버네티스 위에서 파드를 배치하는 스케줄러, 즉 <a href="#스케줄러-공통-규칙">공통 규칙</a>을 따르는 스케줄러의 표기다. Slurm과 LSF는 쿠버네티스 밖의 클러스터 스케줄러라 이 분류에 들어가지 않는다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>표기</th>
+      <th>가리키는 것</th>
+      <th>쓰지 않는 표기</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">kube-scheduler</code></td>
+      <td>쿠버네티스 업스트림이 배포하는 기본 스케줄러 바이너리. in-tree 플러그인만 들어 있다</td>
+      <td><code class="highlighter-rouge">kube-scheduler</code>를 가리키는 “쿠버네티스 스케줄러”</td>
+    </tr>
+    <tr>
+      <td>커스텀 빌드 kube-scheduler</td>
+      <td><code class="highlighter-rouge">kube-scheduler</code> 코드에 out-of-tree 플러그인을 추가 등록해 다시 빌드한 바이너리. Scheduling Framework와 프로필 문법은 <code class="highlighter-rouge">kube-scheduler</code>와 같다. 예: Coscheduling을 넣은 scheduler-plugins 스케줄러, Koordinator의 <code class="highlighter-rouge">koord-scheduler</code></td>
+      <td>“Coscheduling 스케줄러”, “플러그인을 설치한 kube-scheduler”</td>
+    </tr>
+    <tr>
+      <td>kube-scheduler 계열</td>
+      <td><code class="highlighter-rouge">kube-scheduler</code>와 커스텀 빌드 kube-scheduler를 함께 가리킬 때. Scheduling Framework를 쓰는 스케줄러 전체다</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>별도 구현 스케줄러</td>
+      <td>쿠버네티스 위에서 동작하는 스케줄러 중 Scheduling Framework를 쓰지 않고 독자 구조로 만든 것. 예: Volcano, YuniKorn</td>
+      <td>“커스텀 스케줄러”</td>
+    </tr>
+    <tr>
+      <td>기본 스케줄러</td>
+      <td>클러스터에서 <code class="highlighter-rouge">default-scheduler</code>라는 이름을 처리하는 스케줄러(역할). 대개 컨트롤 플레인의 <code class="highlighter-rouge">kube-scheduler</code>다</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>두 번째 스케줄러</td>
+      <td>기본 스케줄러와 함께 띄운 다른 스케줄러 프로세스(역할). 위의 세 종류 중 무엇이든 될 수 있고, 같은 <code class="highlighter-rouge">kube-scheduler</code> 바이너리를 다른 설정으로 띄운 것일 수도 있다</td>
+      <td>“확장 스케줄러”, “커스텀 스케줄러”</td>
+    </tr>
+    <tr>
+      <td>gang 스케줄러</td>
+      <td>gang scheduling을 처리하는 스케줄러(역할). Coscheduling을 넣은 커스텀 빌드 kube-scheduler, 네이티브 gang scheduling을 켠 <code class="highlighter-rouge">kube-scheduler</code>, Volcano 등이다</td>
+      <td>“Coscheduling 스케줄러”</td>
+    </tr>
+    <tr>
+      <td>다중 스케줄러</td>
+      <td>스케줄러 프로세스가 여럿인 구성</td>
+      <td>“멀티 스케줄러”</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">default-scheduler</code></td>
+      <td>파드 <code class="highlighter-rouge">spec.schedulerName</code>의 기본값이자 기본 프로필의 이름. 바이너리 이름이 아니다</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>Scheduling Framework</td>
+      <td>kube-scheduler 계열의 확장 구조(고유명사). 코어와 플러그인이 구현하는 인터페이스를 합친 플러그인 아키텍처다. 영문으로만 쓰고, 같은 글 안에서 앞에 이미 나왔으면 “프레임워크”로 줄여 쓸 수 있다</td>
+      <td>“스케줄링 프레임워크”, “스케줄러 프레임워크”</td>
+    </tr>
+    <tr>
+      <td>extension point</td>
+      <td>Scheduling Framework의 확장 지점(QueueSort, Filter, Score 등). 헤딩과 표 머리에서는 Extension Point로 쓴다</td>
+      <td><code class="highlighter-rouge">kube-scheduler</code> 맥락의 “확장 지점”</td>
+    </tr>
+    <tr>
+      <td>플러그인</td>
+      <td>Scheduling Framework의 extension point를 구현한 Go 코드. 기본 바이너리에 들어 있으면 in-tree, 아니면 out-of-tree다. 런타임에 설치하는 것이 아니라 빌드할 때 넣는다</td>
+      <td>“플러그인을 설치한다”</td>
+    </tr>
+    <tr>
+      <td>프로필</td>
+      <td><code class="highlighter-rouge">KubeSchedulerConfiguration</code>의 <code class="highlighter-rouge">profiles[]</code> 항목. <code class="highlighter-rouge">schedulerName</code> 하나에 프로필 하나다. YAML 필드명과 공식 기능명(Scheduling Profiles)은 원문대로 쓴다</td>
+      <td>산문의 “Profile”, “profile”, “프로파일”</td>
+    </tr>
+    <tr>
+      <td>다중 프로필</td>
+      <td>한 스케줄러 프로세스 안에 프로필을 여럿 두는 구성</td>
+      <td>“멀티 프로필”</td>
+    </tr>
+    <tr>
+      <td>Scheduler Extender</td>
+      <td>스케줄러가 HTTP로 외부 프로세스에 판단을 묻는 확장 방식. 플러그인과 달리 바이너리를 다시 빌드하지 않는다</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>워크로드 admission 컨트롤러</td>
+      <td>Kueue처럼 잡을 대기시켰다가 들여보낼 시점을 정하는 컨트롤러. 바인딩은 하지 않는다(Kueue의 TAS는 배치할 토폴로지 도메인까지 정한다). API Server의 admission controller(웹훅·플러그인)와 다르다</td>
+      <td>Kueue를 가리키는 “스케줄러”, “gang scheduler”</td>
+    </tr>
+    <tr>
+      <td>PodGroup</td>
+      <td>같은 이름의 API가 셋이다. Coscheduling(<code class="highlighter-rouge">scheduling.x-k8s.io</code>), 네이티브(<code class="highlighter-rouge">scheduling.k8s.io</code>), Volcano(<code class="highlighter-rouge">scheduling.volcano.sh</code>). 문맥상 모호하면 소속을 붙인다</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>Workload, 워크로드</td>
+      <td><code class="highlighter-rouge">Workload</code>는 같은 이름의 API가 둘이다. 네이티브 Workload API(<code class="highlighter-rouge">scheduling.k8s.io</code>)와 Kueue의 admission 단위(<code class="highlighter-rouge">kueue.x-k8s.io</code>)다. 문맥상 모호하면 소속을 붙인다. 워크로드는 일반명사</td>
+      <td>—</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="스케줄러-일반">스케줄러 일반</h1>
+
+<h2 id="스케줄러의-공통-질문">스케줄러의 공통 질문</h2>
+
+<p>클러스터 스케줄러는 여러 작업이 한정된 자원(노드, CPU, 메모리, GPU)을 나눠 쓰도록, 각 작업을 언제 어디서 실행할지 정하는 시스템이다. “클러스터”를 붙이는 것은 운영체제가 프로세스와 스레드를 CPU 코어에 배정하는 CPU 스케줄러나, 정해진 시각에 작업을 실행하는 cron 같은 작업 스케줄러와 구분하기 위해서다. 클러스터 스케줄러가 다루는 대상은 노드의 집합이고, 노드가 한 대뿐인 구성(노드 1대짜리 클러스터)에서도 같은 방식으로 동작한다. 이 시리즈에서 수식어 없이 “스케줄러”라고 쓰면 클러스터 스케줄러를 가리킨다.</p>
+
+<p>비교 대상은 넷이다. <code class="highlighter-rouge">kube-scheduler</code>와 Volcano는 쿠버네티스 위에서 파드를 노드에 배치하는 스케줄러이고, Slurm과 LSF는 쿠버네티스 없이 자기 데몬으로 노드를 관리하며 잡을 배치하는 HPC 스케줄러다. 구현은 제각각이어도 답하는 질문은 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>질문</th>
+      <th>공통 개념</th>
+      <th>kube-scheduler</th>
+      <th>Volcano</th>
+      <th>Slurm</th>
+      <th>LSF</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>무엇을 한 번에 배치하나</td>
+      <td>스케줄링 단위</td>
+      <td>파드</td>
+      <td>PodGroup으로 묶은 파드 그룹</td>
+      <td>잡</td>
+      <td>잡</td>
+    </tr>
+    <tr>
+      <td>누구부터 하나</td>
+      <td>큐·정렬</td>
+      <td>내부 큐(Active Queue 등) + QueueSort 플러그인</td>
+      <td>Queue CRD, JobOrder·TaskOrder</td>
+      <td>파티션 + 우선순위 플러그인(multifactor)</td>
+      <td>큐(<code class="highlighter-rouge">lsb.queues</code>)의 우선순위 + fairshare</td>
+    </tr>
+    <tr>
+      <td>어디에 들어갈 수 있나</td>
+      <td>적합성 판단</td>
+      <td>Filter 플러그인</td>
+      <td>predicates 플러그인</td>
+      <td>select 플러그인(<code class="highlighter-rouge">cons_tres</code>)</td>
+      <td>자원 요구 문자열의 <code class="highlighter-rouge">select[]</code></td>
+    </tr>
+    <tr>
+      <td>어디가 가장 좋은가</td>
+      <td>순위 매기기</td>
+      <td>Score 플러그인</td>
+      <td>nodeorder, binpack 플러그인</td>
+      <td>노드 <code class="highlighter-rouge">Weight</code>(낮은 쪽 우선), select 플러그인, topology 플러그인</td>
+      <td>자원 요구 문자열의 <code class="highlighter-rouge">order[]</code></td>
+    </tr>
+    <tr>
+      <td>언제 확정하나</td>
+      <td>할당 확정</td>
+      <td>Reserve → Permit → Bind</td>
+      <td>세션 안에서 commit 또는 discard → Bind</td>
+      <td>요청 자원의 할당이 확보되면 잡 시작</td>
+      <td>병렬 잡은 필요한 슬롯이 모두 확보되면 디스패치</td>
+    </tr>
+    <tr>
+      <td>자리가 없으면 누구를 내보내나</td>
+      <td>회수</td>
+      <td>PostFilter의 선점(victim 파드 삭제)</td>
+      <td>preempt, reclaim action</td>
+      <td>preempt 플러그인(취소·재큐잉·일시 중지 등)</td>
+      <td>선점(기본은 일시 중지)</td>
+    </tr>
+    <tr>
+      <td>들여보내도 되나</td>
+      <td>입장 제어·쿼터</td>
+      <td>쿼터·용량 기반 정책 없음. PreEnqueue에서 Scheduling Gate 같은 진입 조건만 확인한다(ResourceQuota는 API Server가 파드 생성 시점에 검사)</td>
+      <td>enqueue action + Queue의 capability</td>
+      <td>QOS, 계정(association) 한도</td>
+      <td>자원 한도(<code class="highlighter-rouge">lsb.resources</code>의 Limit 섹션)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Volcano 열의 단위는 설명이 필요하다. Volcano 스케줄러는 PodGroup(<code class="highlighter-rouge">scheduling.volcano.sh</code>) 하나와 거기에 속한 파드들을 묶어 내부적으로 job이라고 부르고, 이 묶음을 한 번에 배치한다. 쿠버네티스의 Job(<code class="highlighter-rouge">batch/v1</code>)과는 다른 것이다. 사용자가 쓰는 Volcano Job(<code class="highlighter-rouge">batch.volcano.sh</code>) CRD는 이 PodGroup과 파드를 만들어 주는 워크로드 API다. Slurm과 LSF의 잡은 사용자가 <code class="highlighter-rouge">sbatch</code>나 <code class="highlighter-rouge">bsub</code>로 제출하는 작업 단위 그대로다.</p>
+
+<p>이 표에서 <code class="highlighter-rouge">kube-scheduler</code> 열만 두 가지가 다르다. 스케줄링 단위가 파드 그룹이나 잡이 아니라 <strong>파드 하나</strong>이고, 스케줄러 안에 <strong>쿼터·용량을 보고 들여보낼지 정하는 입장 제어가 없다</strong>(진입을 막는 훅인 PreEnqueue만 있다). 이 두 차이가 <a href="/kubernetes/Kubernetes-Scheduling-05/">5편</a>에서 다루는 gang scheduling(파드 그룹을 전부 배치하거나 하나도 배치하지 않는 것) 문제의 출발점이다. 나머지 질문은 이름만 다를 뿐 모든 구현체에 대응하는 단계가 있다.</p>
+
+<p><br /></p>
+
+<h2 id="사이클-모델">사이클 모델</h2>
+
+<p>사이클 모델은 스케줄러가 언제, 몇 개의 작업을 놓고 결정을 내리는지에 대한 구조다. 결론부터 말하면 <code class="highlighter-rouge">kube-scheduler</code>는 이벤트마다 하나씩, Volcano와 LSF는 주기마다 세션을 열어 일괄로 처리하고, Slurm은 두 방식을 섞는다.</p>
+
+<h3 id="이벤트-단위-처리">이벤트 단위 처리</h3>
+
+<p>새 파드가 생기거나 클러스터 상태가 바뀌면, 큐에서 작업 하나를 꺼내 노드를 고르고 다음 작업으로 넘어간다. <code class="highlighter-rouge">kube-scheduler</code>가 이 방식이다(<a href="/kubernetes/Kubernetes-Scheduling-02/#스케줄러-큐">2편 - 스케줄러 큐</a>).</p>
+
+<ul>
+  <li>구조가 단순하고, 작업이 생기면 바로 반응하므로 지연이 짧다</li>
+  <li>작업 하나의 판단만 하므로 대규모 클러스터에서도 처리량을 내기 쉽다</li>
+  <li>여러 작업을 함께 놓고 판단하는 전역 최적화가 어렵다. 그룹 전체가 들어갈 수 있는지 미리 볼 수 없어 gang scheduling에 약하고, 처리 순서에 따라 결과가 달라진다</li>
+</ul>
+
+<h3 id="주기-단위-일괄-처리">주기 단위 일괄 처리</h3>
+
+<p>정해진 주기마다 클러스터 상태의 스냅샷을 찍고, 대기 중인 작업 전체를 놓고 한꺼번에 계산한다. Volcano가 이 방식이다. 기본 1초마다 세션을 열고, 세션 안에서 정해진 action(enqueue, allocate 등)을 순서대로 실행한 뒤 세션을 닫는다.</p>
+
+<ul>
+  <li>잡에 속한 작업 전체를 가상으로 배치해 본 뒤 확정하거나 되돌릴 수 있어, gang scheduling과 큐 간 공정 분배에 유리하다</li>
+  <li>주기만큼 반응이 늦고, 세션 하나의 계산량이 대기 작업 수와 클러스터 규모에 비례한다</li>
+</ul>
+
+<p>LSF도 이 방식에 가깝다. 배치 데몬(<code class="highlighter-rouge">mbatchd</code>)이 대기 중인 잡을 <code class="highlighter-rouge">JOB_SCHEDULING_INTERVAL</code>(<code class="highlighter-rouge">lsb.params</code>) 간격으로 스케줄러 데몬(<code class="highlighter-rouge">mbschd</code>)에 넘기고, <code class="highlighter-rouge">mbschd</code>가 정책과 자원 상황을 보고 결정을 내린다. 이 값은 스케줄링 세션의 최소 주기로, 한 바퀴가 일찍 끝나면 다음 주기까지 쉬고, 0으로 두면 곧바로 다음 세션을 연다.</p>
+
+<h3 id="slurm-혼합-방식">Slurm: 혼합 방식</h3>
+
+<p>Slurm의 메인 스케줄러는 이벤트(잡 제출, 잡 종료, 설정 변경)가 생기면 큐 앞쪽 일부(<code class="highlighter-rouge">default_queue_depth</code>, 기본 100개)를 빠르게 훑고, <code class="highlighter-rouge">sched_interval</code>(기본 60초)마다 큐 전체를 본다. 여기에 별도의 backfill 스케줄러가 <code class="highlighter-rouge">bf_interval</code>(기본 30초)마다 돈다.</p>
+
+<p>backfill은 우선순위가 높은 큰 잡이 자원을 기다리는 동안, 그 잡의 예상 시작 시각을 늦추지 않는 범위에서 뒤의 작은 잡을 빈 자원에 먼저 실행하는 기법이다. 각 잡의 실행 시간 상한(time limit)을 알아야 예상 시작 시각을 계산할 수 있다. <code class="highlighter-rouge">kube-scheduler</code>는 파드의 실행 시간 상한을 배치 판단에 쓰지 않으므로 backfill을 할 수 없다. <code class="highlighter-rouge">activeDeadlineSeconds</code>처럼 상한을 적는 필드는 있지만 스케줄러의 입력은 아니다.</p>
+
+<p>LSF도 같은 기법을 쓴다. 병렬 잡은 필요한 슬롯이 모두 확보되어야 디스패치되므로, 큰 병렬 잡이 굶지 않도록 슬롯을 모아 두는 예약(<code class="highlighter-rouge">SLOT_RESERVE</code>, 기본 비활성)과, 그 예약된 슬롯을 실행 시간 상한이 있는 짧은 잡에 빌려 주는 backfill(<code class="highlighter-rouge">BACKFILL=Y</code>)을 함께 쓴다.</p>
+
+<p><br /></p>
+
+<h2 id="동시성-모델">동시성 모델</h2>
+
+<p>동시성 모델은 스케줄러가 여럿일 때 누가 클러스터 상태를 보고 누가 결정을 확정하는지에 대한 구조다. 대표적인 분류는 Google의 Omega 논문(EuroSys 2013)이 제시한 네 가지다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구조</th>
+      <th>설명</th>
+      <th>논문이 든 예</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>monolithic</td>
+      <td>스케줄러 하나가 모든 작업을 같은 클러스터 상태 위에서 결정한다</td>
+      <td>당시 Google의 클러스터 스케줄러, Maui/Moab, Platform LSF</td>
+    </tr>
+    <tr>
+      <td>statically partitioned</td>
+      <td>클러스터를 고정 분할하고 분할마다 스케줄러를 둔다</td>
+      <td>Hadoop, Quincy</td>
+    </tr>
+    <tr>
+      <td>two-level</td>
+      <td>중앙 자원 관리자가 자원을 제안(offer)하고, 애플리케이션별 스케줄러(Mesos의 용어로 framework)가 제안을 받아 결정한다</td>
+      <td>Mesos, Hadoop-on-Demand</td>
+    </tr>
+    <tr>
+      <td>shared-state</td>
+      <td>여러 스케줄러가 클러스터 상태를 각자 사본으로 들고 결정한 뒤, 그 결정을 공유 상태에 반영할 때 다른 스케줄러의 결정과 충돌하는지 검사한다(낙관적 동시성)</td>
+      <td>Omega</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>shared-state에서 각 스케줄러는 클러스터 상태의 사본 위에서 결정을 내리고, 그 결정을 원본(공유 상태)에 반영한다. Omega 논문은 이 반영을 트랜잭션 커밋으로 처리한다. 커밋할 때 그사이 다른 스케줄러가 같은 자원을 가져갔으면 커밋이 실패하고, 실패한 스케줄러는 갱신된 상태로 다시 결정한다. 스케줄러끼리 서로를 잠그지 않고 일단 결정부터 하므로 낙관적 동시성이라고 부른다. 워크로드 특성에 맞는 스케줄러를 각자 독립적으로 붙이고 발전시킬 수 있지만, 같은 자원을 동시에 고르는 충돌과 재시도가 생기고, 스케줄러마다 정책이 달라 전역적인 공정성과 쿼터를 맞추기 어렵다.</p>
+
+<p>쿠버네티스는 Google 내부의 Borg와 그 후속 연구인 Omega의 경험 위에서 설계되었다. 쿠버네티스가 이 분류에서 어디에 있는지는 <a href="#kube-scheduler의-사이클-모델과-동시성-모델">아래</a>에서 본다.</p>
+
+<p><br /></p>
+
+<h2 id="확장-구조">확장 구조</h2>
+
+<p>확장 구조는 스케줄러가 판단 로직을 바꿔 끼울 수 있게 만든 내부 구조다. 결론부터 말하면, 확장 지점을 정해 두고 거기에 판단 코드를 끼우는 구조는 <code class="highlighter-rouge">kube-scheduler</code>만의 것이 아니라 거의 모든 스케줄러에 있고, 구현체마다 이름과 모양, 플러그인을 넣는 시점이 다르다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>요소</th>
+      <th>역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>코어</td>
+      <td>처리 순서와 확장 지점을 정하고, 각 확장 지점에서 플러그인을 호출하는 부분</td>
+    </tr>
+    <tr>
+      <td>플러그인</td>
+      <td>확장 지점에 끼우는 판단 코드</td>
+    </tr>
+    <tr>
+      <td>설정</td>
+      <td>어떤 플러그인을 어떤 조합으로 쓸지 고르는 것</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>구현체별로 보면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>kube-scheduler</th>
+      <th>Volcano</th>
+      <th>Slurm</th>
+      <th>LSF</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>코어</td>
+      <td><strong>Scheduling Framework</strong>의 런타임. 파드 하나의 처리를 extension point 순서로 고정</td>
+      <td>세션 + action + plugin. action이 세션 안의 큰 흐름(enqueue, allocate 등)을 정하고, plugin은 세션에 콜백 함수(JobOrderFn, PredicateFn, NodeOrderFn 등)를 등록</td>
+      <td>기능 영역별 플러그인 타입(priority, select, sched, preempt 등)</td>
+      <td>스케줄러 데몬(<code class="highlighter-rouge">mbschd</code>)이 스케줄러 모듈을 조합</td>
+    </tr>
+    <tr>
+      <td>플러그인</td>
+      <td>Go 패키지(<code class="highlighter-rouge">NodeResourcesFit</code> 등)</td>
+      <td>Go 패키지(gang, drf, proportion, binpack 등)</td>
+      <td>공유 객체</td>
+      <td>공유 모듈(<code class="highlighter-rouge">schmod_default</code>, <code class="highlighter-rouge">schmod_fairshare</code>, <code class="highlighter-rouge">schmod_preemption</code> 등). 플러그인 SDK로 사용자 모듈 작성 가능</td>
+    </tr>
+    <tr>
+      <td>설정 단위</td>
+      <td><code class="highlighter-rouge">KubeSchedulerConfiguration</code>의 프로필(<code class="highlighter-rouge">schedulerName</code>마다 1개)</td>
+      <td><code class="highlighter-rouge">volcano-scheduler</code> ConfigMap의 <code class="highlighter-rouge">actions</code>·<code class="highlighter-rouge">tiers</code></td>
+      <td><code class="highlighter-rouge">slurm.conf</code>의 <code class="highlighter-rouge">PriorityType</code>, <code class="highlighter-rouge">SelectType</code>, <code class="highlighter-rouge">SchedulerType</code>, <code class="highlighter-rouge">PreemptType</code></td>
+      <td><code class="highlighter-rouge">lsb.modules</code>의 <code class="highlighter-rouge">PluginModule</code> 섹션</td>
+    </tr>
+    <tr>
+      <td>플러그인을 넣는 시점</td>
+      <td>컴파일 시점. 없는 플러그인은 재빌드</td>
+      <td>기본은 컴파일 시점. <code class="highlighter-rouge">--plugins-dir</code>로 Go plugin(<code class="highlighter-rouge">.so</code>) 런타임 로드 가능</td>
+      <td>런타임 로드</td>
+      <td><code class="highlighter-rouge">LSF_LIBDIR</code>의 모듈을 설정에 적고 <code class="highlighter-rouge">badmin reconfig</code>로 반영</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 표에서 두 가지를 알 수 있다.</p>
+
+<ul>
+  <li><strong>플러그인은 자기 스케줄러의 코어에 묶여 있다.</strong> 플러그인은 특정 코어의 확장 지점에 맞춰 작성되므로 다른 스케줄러로 옮겨 끼울 수 없다. <code class="highlighter-rouge">kube-scheduler</code>용 Coscheduling 플러그인을 Volcano에 넣을 수 없는 이유다. 참고로 Volcano의 predicates·nodeorder 플러그인은 <code class="highlighter-rouge">kube-scheduler</code> 플러그인의 판단 로직을 일부 가져다 쓴다. 노드를 판단하는 기준은 비슷하되, 그 판단을 파드 하나씩 돌리느냐 잡 단위 세션 안에서 돌리느냐가 다르다</li>
+  <li><strong>설정 단위의 이름과 구조도 구현체마다 다르다.</strong> “프로필”이라는 이름과 구조(<code class="highlighter-rouge">schedulerName</code>마다 플러그인 조합 1개)는 <code class="highlighter-rouge">kube-scheduler</code> 고유의 것이다. Volcano는 하나의 설정 아래에서 Queue로 정책을 나눈다</li>
+</ul>
+
+<p>용어는 다음과 같이 구분한다. <strong>Scheduling Framework</strong>(고유명사)는 <code class="highlighter-rouge">kube-scheduler</code> 계열의 확장 구조, 즉 코어와 플러그인이 구현하는 인터페이스를 합친 플러그인 아키텍처만 가리킨다. 쿠버네티스 공식 문서가 붙인 이름이다. 다른 구현체의 내부 구조까지 통칭할 때는 일반명사로 “확장 구조”라고 쓴다. 이를 “스케줄링 프레임워크”로 옮겨 쓰면 스케줄러 일반에 그런 이름의 개념이 따로 있는 것처럼 읽히므로, 이 시리즈는 그 표기를 쓰지 않는다.</p>
+
+<p><br /></p>
+
+<h2 id="시스템별-용어-차이">시스템별 용어 차이</h2>
+
+<p>여러 스케줄러를 함께 보면 같은 단어가 시스템마다 다른 뜻으로 쓰인다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>용어</th>
+      <th>쿠버네티스 맥락 (예: kube-scheduler, Volcano)</th>
+      <th>다른 스케줄러 (예: Slurm, LSF, Mesos)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>gang scheduling</td>
+      <td>파드 그룹이 전부 배치되거나 하나도 배치되지 않는 것(all-or-nothing)</td>
+      <td>Slurm의 Gang Scheduling은 같은 자원에 할당된 여러 잡을 번갈아 일시 중지시키며 시간을 나눠 쓰는 time-slicing을 가리킨다</td>
+    </tr>
+    <tr>
+      <td>큐</td>
+      <td><code class="highlighter-rouge">kube-scheduler</code> 내부의 파드 큐(사용자가 만들지 않음), Volcano의 Queue CRD(정책 단위), Kueue의 ClusterQueue·LocalQueue(쿼터 단위)</td>
+      <td>Slurm의 파티션, LSF의 큐는 사용자가 잡을 제출하는 대상이자 정책 단위다</td>
+    </tr>
+    <tr>
+      <td>프레임워크</td>
+      <td><code class="highlighter-rouge">kube-scheduler</code>의 Scheduling Framework(고유명사, 플러그인 아키텍처). Volcano 문서는 자기 확장 구조(세션·action·plugin)를 framework라고 부른다</td>
+      <td>Mesos의 framework는 자원 제안을 받아 결정하는 애플리케이션별 스케줄러다</td>
+    </tr>
+    <tr>
+      <td>backfill</td>
+      <td>Volcano의 backfill action은 자원 요청이 없는(BestEffort) 파드를 배치하는 단계다</td>
+      <td>Slurm·LSF의 backfill은 큰 잡의 예상 시작 시각을 늦추지 않는 범위에서 작은 잡을 먼저 실행하는 기법이다</td>
+    </tr>
+    <tr>
+      <td>선점</td>
+      <td><code class="highlighter-rouge">kube-scheduler</code>는 victim 파드를 삭제하고, 컨트롤러가 새 파드를 만들어 처음부터 다시 스케줄링</td>
+      <td>Slurm은 <code class="highlighter-rouge">PreemptMode</code>에 따라 취소(CANCEL), 재큐잉(REQUEUE), 일시 중지(SUSPEND) 등을 고른다. LSF의 기본 선점은 낮은 우선순위 잡의 일시 중지이고, 설정으로 종료나 재큐잉으로 바꿀 수 있다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>쿠버네티스 쪽에서는 하나가 더 있다. <strong>Kueue는 이름에 큐가 있지만 파드를 노드에 바인딩하지 않으므로 스케줄러가 아니다.</strong> 스케줄러 앞단에서 워크로드를 들여보낼 시점을 정하는 워크로드 admission 컨트롤러다. Topology Aware Scheduling(TAS)을 쓰면 배치할 토폴로지 도메인(최하위가 노드면 노드)까지 정해 nodeSelector로 넘기지만, 바인딩은 여전히 뒤의 스케줄러가 한다. API Server의 admission controller(웹훅·플러그인)와는 다른 것이다(<a href="/kubernetes/Kubernetes-Scheduling-05/">5편</a>).</p>
+
+<p><br /></p>
+
+<h1 id="쿠버네티스의-스케줄링-모델">쿠버네티스의 스케줄링 모델</h1>
+
+<h2 id="배치-단위-파드">배치 단위: 파드</h2>
+
+<p>쿠버네티스는 파드를 가장 작은 배치 단위로 두고, 역할을 둘로 나눴다. 워크로드를 어떻게 만들지는 컨트롤러(Deployment, Job, 각종 CRD)가, 만들어진 파드를 어디에 놓을지는 스케줄러가 맡는다.</p>
+
+<ul>
+  <li>스케줄러가 워크로드 종류를 몰라도 되므로, 새 워크로드 타입(CRD)이 생겨도 스케줄러를 바꿀 필요가 없다</li>
+  <li>쿠버네티스가 초기에 주로 겨냥한 워크로드는 서로 독립적인 장기 실행 서비스였다. 파드를 하나씩 빠르게 배치하는 방식이 단순하고 확장성도 좋았다. 스케줄러가 실행 시간 상한을 입력으로 받지 않으므로, <a href="#slurm-혼합-방식">앞의 backfill</a>처럼 종료 시각을 전제로 한 기법은 기본 구조에 없다</li>
+</ul>
+
+<p>대신 여러 파드가 함께 떠야 의미가 있는 배치·분산 학습 워크로드와는 맞지 않는다. 그래서 gang scheduling은 생태계(Coscheduling, Volcano, Kueue) 쪽 확장으로 먼저 발전했고, v1.35부터는 기본 스케줄러에도 들어오고 있다(<a href="/kubernetes/Kubernetes-Scheduling-05/">5편</a>).</p>
+
+<p><br /></p>
+
+<h2 id="파드-실행-경로">파드 실행 경로</h2>
+
+<p>파드가 만들어져 노드에서 실행되기까지는 여러 단계의 검사를 거친다. 스케줄러는 그중 한 단계다.</p>
+
+<pre><code class="language-mermaid">flowchart LR
+    A["API admission&lt;br/&gt;ResourceQuota, webhook"] --&gt; B["워크로드 admission&lt;br/&gt;(Kueue 사용 시)"]
+    B --&gt; C["스케줄링&lt;br/&gt;노드 선택"]
+    C --&gt; D["바인딩&lt;br/&gt;spec.nodeName 설정"]
+    D --&gt; E["kubelet admission&lt;br/&gt;노드에서 재확인"]
+    E --&gt; F["실행"]
+</code></pre>
+
+<table>
+  <thead>
+    <tr>
+      <th>단계</th>
+      <th>하는 일</th>
+      <th>통과하지 못하면</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>API admission</td>
+      <td>파드 생성 요청 시점에 ResourceQuota, admission webhook 등이 검사한다</td>
+      <td>파드 생성 자체가 거부된다. 대기하는 큐는 없다</td>
+    </tr>
+    <tr>
+      <td>워크로드 admission (Kueue 사용 시)</td>
+      <td>잡을 대기(suspend) 상태로 두었다가, 쿼터와 용량이 허락할 때 풀어 준다</td>
+      <td>잡이 대기 상태로 남는다</td>
+    </tr>
+    <tr>
+      <td>스케줄링</td>
+      <td>스케줄러가 파드를 놓을 노드를 고른다</td>
+      <td>파드가 <code class="highlighter-rouge">spec.nodeName</code>이 빈 채로 Pending에 남고, 스케줄러 큐에서 재시도한다</td>
+    </tr>
+    <tr>
+      <td>바인딩</td>
+      <td>스케줄러가 Binding API로 <code class="highlighter-rouge">spec.nodeName</code>을 설정한다</td>
+      <td>큐로 돌아가 재시도한다</td>
+    </tr>
+    <tr>
+      <td>kubelet admission</td>
+      <td>노드의 kubelet이 실제 자원 등을 다시 확인한다</td>
+      <td>파드가 <code class="highlighter-rouge">Failed</code>로 끝난다. 컨트롤러가 관리하는 파드라면 새 파드가 만들어진다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>스케줄러 단계와 kubelet admission이 따로 있다는 점이 <a href="#kube-scheduler의-사이클-모델과-동시성-모델">뒤에서 다룰 스케줄러 간 충돌</a>과 연결된다. 스케줄러가 노드를 잘못 골라도 자원(CPU·메모리·확장 자원)은 노드에서 한 번 더 걸러지므로 과할당된 채 실행되지는 않지만, 걸러진 파드는 실패로 끝난다. 파드 간 anti-affinity나 토폴로지 분산처럼 kubelet이 다시 보지 않는 규칙은 걸러지지 않고, 깨진 채로 실행된다.</p>
+
+<p><br /></p>
+
+<h2 id="스케줄러-공통-규칙">스케줄러 공통 규칙</h2>
+
+<p>쿠버네티스 위의 스케줄러는 <code class="highlighter-rouge">kube-scheduler</code>든 Volcano든 같은 규칙을 따른다. 노드를 고르는 내부 방식은 달라도, 쿠버네티스와 주고받는 방식은 같다.</p>
+
+<ul>
+  <li><strong>대상 선택</strong>: 파드를 watch하되, <code class="highlighter-rouge">spec.nodeName</code>이 비어 있고 <code class="highlighter-rouge">spec.schedulerName</code>이 자기 이름인 파드만 스케줄링 큐에 넣는다. <code class="highlighter-rouge">kube-scheduler</code>는 이미 노드가 정해진 파드를 <code class="highlighter-rouge">schedulerName</code>과 무관하게 캐시에 넣어 노드 자원 계산에 쓴다. <code class="highlighter-rouge">schedulerName</code>을 지정하지 않은 파드는 API Server가 <code class="highlighter-rouge">default-scheduler</code>로 채운다(mutating webhook이 바꾸지 않는 한)</li>
+  <li><strong>결정 기록</strong>: 노드를 고르면 Binding API(파드의 <code class="highlighter-rouge">binding</code> 서브리소스)로 <code class="highlighter-rouge">spec.nodeName</code>을 지정한다. <code class="highlighter-rouge">kube-scheduler</code>의 기본 Bind 플러그인도, Volcano(<code class="highlighter-rouge">schedulerName: volcano</code>)도 같은 API를 쓴다</li>
+  <li><strong>실행 형태</strong>: Static Pod, Deployment, systemd 서비스 등으로 실행되고(<a href="/kubernetes/Kubernetes-Scheduling-01/#kube-scheduler">1편 - kube-scheduler</a>), 복제본을 여러 개 두면 리더 선출(leader election)로 같은 lease를 잡은 하나만 동작한다. lease는 스케줄러마다 달라야 한다. kube-scheduler 계열의 기본 lease는 <code class="highlighter-rouge">kube-system/kube-scheduler</code>라서, 두 번째 스케줄러가 <code class="highlighter-rouge">leaderElection.resourceName</code>을 바꾸지 않으면 기본 스케줄러와 리더 자리를 다툰다</li>
+  <li><strong>설정 방식</strong>: 구현체마다 다르다(<a href="#확장-구조">앞의 확장 구조 표</a>)</li>
+</ul>
+
+<p>쿠버네티스 밖의 HPC 스케줄러를 이 규칙에 연결하는 브리지도 있다. Slinky의 slurm-bridge는 쿠버네티스 워크로드를 대리용 Slurm 잡으로 바꿔 Slurm 컨트롤러가 자원을 할당하게 하고, 할당이 끝나면 파드를 노드에 바인딩한다. slurm-bridge의 스케줄러 자체는 Slurm 연동 플러그인을 넣은 커스텀 빌드 kube-scheduler이고, 기본 스케줄러와 병행하는 두 번째 스케줄러로 쓰도록 설계되어 있다. LSF Connector for Kubernetes도 <code class="highlighter-rouge">schedulerName: lsf</code>인 파드를 LSF 잡으로 바꿔 LSF 스케줄러의 결정을 받은 뒤 바인딩한다. 이때 쿠버네티스 위의 스케줄러 역할을 하는 것은 브리지와 HPC 스케줄러의 조합이고, Slurm이나 LSF 자체가 쿠버네티스 스케줄러가 되는 것은 아니다.</p>
+
+<p>이 규칙의 상세(스케줄링 대상의 판단 기준, <code class="highlighter-rouge">schedulerName</code> 매칭, Binding 오브젝트)는 <a href="/kubernetes/Kubernetes-Scheduling-01/">1편</a>에서 다룬다.</p>
+
+<p><br /></p>
+
+<h2 id="kube-scheduler의-사이클-모델과-동시성-모델">kube-scheduler의 사이클 모델과 동시성 모델</h2>
+
+<p>앞의 두 축으로 보면 <code class="highlighter-rouge">kube-scheduler</code>의 위치는 다음과 같다.</p>
+
+<ul>
+  <li><strong>사이클 모델</strong>: 이벤트마다 파드 하나씩 처리한다. 파드 하나에 대해 노드를 고르는 Scheduling Cycle은 한 번에 하나씩 직렬로 돌고, 바인딩을 수행하는 Binding Cycle만 병렬로 돈다(<a href="/kubernetes/Kubernetes-Scheduling-01/#scheduling-framework">1편 - Scheduling Framework</a>)</li>
+  <li><strong>동시성 모델</strong>: 스케줄러가 하나면 monolithic이다. 한 프로세스 안에 프로필이 여러 개여도 프로필끼리 캐시를 공유하므로 여전히 monolithic이다. 다른 스케줄러 프로세스를 함께 띄우면 shared-state에 가까워진다. 각자 API Server를 watch해 같은 클러스터 상태를 보고, 각자 결정한 뒤 Binding 요청으로 그 결정을 API Server(공유 상태)에 반영한다. 쿠버네티스에서 Omega의 커밋에 해당하는 단계가 Binding이다</li>
+</ul>
+
+<p>다만 shared-state라고 해도 Omega와는 다르다. Omega는 결정을 반영할 때(커밋) 자원 충돌을 검사하지만, 쿠버네티스의 Binding은 파드에 이미 노드가 지정되었는지 등만 보고 노드의 남은 자원은 보지 않는다. 그래서 두 스케줄러가 같은 노드의 같은 자원을 고르면 두 Binding이 모두 성공하고, 늦게 도착한 파드를 노드의 kubelet이 거부한다(<a href="/kubernetes/Kubernetes-Scheduling-01/#자원-뷰-충돌">1편 - 자원 뷰 충돌</a>).</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구성</th>
+      <th>사이클 모델</th>
+      <th>동시성 모델</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">kube-scheduler</code> 하나 (프로필 여러 개 포함)</td>
+      <td>이벤트마다 하나씩</td>
+      <td>monolithic</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">kube-scheduler</code> + 두 번째 스케줄러, 같은 노드 공유</td>
+      <td>스케줄러마다 다름</td>
+      <td>shared-state에 가까움. Binding 때 자원 충돌 검사 없음</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">kube-scheduler</code> + 두 번째 스케줄러, 노드 풀 분리</td>
+      <td>스케줄러마다 다름</td>
+      <td>statically partitioned에 가까움. 충돌은 줄지만 풀 사이에 자원을 나눠 쓰지 못한다(DaemonSet 파드는 예외)</td>
+    </tr>
+    <tr>
+      <td>Volcano 단독</td>
+      <td>주기마다 일괄</td>
+      <td>monolithic</td>
+    </tr>
+    <tr>
+      <td>Slurm</td>
+      <td>이벤트 + 주기</td>
+      <td>monolithic</td>
+    </tr>
+    <tr>
+      <td>LSF</td>
+      <td>주기(세션)</td>
+      <td>monolithic</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 표에서 <strong>“프로필이 여러 개인 것”과 “스케줄러가 여러 개인 것”은 다르다</strong>는 점이 드러난다. 프로필은 하나의 상태 위에서 정책만 나누고, 스케줄러를 늘리면 상태 자체가 나뉜다.</p>
+
+<p><br /></p>
+
+<h2 id="스케줄링-동작-변경-층위">스케줄링 동작 변경 층위</h2>
+
+<p>쿠버네티스에서 스케줄링 동작을 바꾸는 방법은 네 층위로 나뉜다. 1~3은 아래로 갈수록 기본 스케줄러에서 멀어지고, 4는 스케줄러를 그대로 두고 그 앞단에 붙는다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>층위</th>
+      <th>바꾸는 것</th>
+      <th>바이너리</th>
+      <th>예</th>
+      <th>상세</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1. 프로필 변경</td>
+      <td>기본 바이너리에 있는 플러그인의 조합, 가중치, 인자. 기본 바이너리의 기능을 켜는 feature gate 활성화도 여기에 가깝다</td>
+      <td><code class="highlighter-rouge">kube-scheduler</code> 그대로</td>
+      <td><code class="highlighter-rouge">NodeResourcesFit</code>을 MostAllocated로</td>
+      <td><a href="/kubernetes/Kubernetes-Scheduling-01/#설정-계층-구조">1편 - 설정 계층 구조</a>, <a href="/kubernetes/Kubernetes-Scheduling-04/">4편</a></td>
+    </tr>
+    <tr>
+      <td>2. 커스텀 빌드 kube-scheduler</td>
+      <td>out-of-tree 플러그인 추가. Scheduling Framework는 그대로</td>
+      <td>커스텀 빌드 kube-scheduler</td>
+      <td>Coscheduling, CapacityScheduling, Koordinator</td>
+      <td><a href="/kubernetes/Kubernetes-Scheduling-01/#플러그인">1편 - 플러그인</a></td>
+    </tr>
+    <tr>
+      <td>3. 별도 구현 스케줄러</td>
+      <td>스케줄러 구조 자체</td>
+      <td>Scheduling Framework를 쓰지 않는 별개의 스케줄러</td>
+      <td>Volcano, YuniKorn</td>
+      <td><a href="/kubernetes/Kubernetes-Scheduling-01/#다중-프로필과-다중-스케줄러">1편 - 다중 프로필과 다중 스케줄러</a></td>
+    </tr>
+    <tr>
+      <td>4. 스케줄러 앞단의 워크로드 admission</td>
+      <td>파드가 스케줄링 대상이 되는 시점</td>
+      <td>스케줄러는 그대로, 별도 컨트롤러 추가</td>
+      <td>Kueue</td>
+      <td><a href="/kubernetes/Kubernetes-Scheduling-05/">5편</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>층위 2와 3은 둘 다 별도 바이너리를 띄우지만 성격이 다르다. 2는 <code class="highlighter-rouge">kube-scheduler</code>를 확장한 것이고, 3은 <code class="highlighter-rouge">kube-scheduler</code>를 대신하는 것이다. 2로 만든 스케줄러는 프로필 문법과 extension point 순서가 <code class="highlighter-rouge">kube-scheduler</code>와 같고, 3은 둘 다 다르다. 층위 4는 스케줄러가 아니므로, 노드 배치는 그 뒤에 있는 스케줄러(1~3 중 하나)가 한다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>이 글에서 다룬 핵심 내용을 정리한다.</p>
+
+<ol>
+  <li><strong>스케줄러는 구현이 달라도 같은 질문에 답한다.</strong> 단위, 큐·순서, 적합성, 순위, 확정, 회수, 입장 제어다. <code class="highlighter-rouge">kube-scheduler</code>는 단위가 파드이고 스케줄러 안에 쿼터·용량 기반 입장 제어가 없다는 점에서 HPC 배치 스케줄러와 다르다.</li>
+  <li><strong>설계는 사이클 모델과 동시성 모델 두 축으로 갈린다.</strong> <code class="highlighter-rouge">kube-scheduler</code>는 이벤트마다 하나씩 처리하고, Volcano와 LSF는 주기마다 일괄 처리하며, Slurm은 둘을 섞는다. 동시성 모델은 Omega 논문의 네 분류(monolithic, statically partitioned, two-level, shared-state)로 볼 수 있다.</li>
+  <li><strong>코어·플러그인·설정은 확장 구조의 일반 요소이고, Scheduling Framework는 그중 <code class="highlighter-rouge">kube-scheduler</code> 계열의 구현이다.</strong> 플러그인은 자기 스케줄러의 코어에 묶여 있어 다른 스케줄러로 옮길 수 없다. 플러그인을 넣는 시점은 <code class="highlighter-rouge">kube-scheduler</code>가 컴파일 시점, Slurm이 런타임이다.</li>
+  <li><strong>쿠버네티스는 파드를 배치 단위로 두고 생성과 배치의 역할을 나눴다.</strong> 쿠버네티스 위의 모든 스케줄러는 <code class="highlighter-rouge">schedulerName</code>으로 대상을 고르고 Binding API로 결정을 기록한다. 스케줄러를 여러 개 띄우면 공유 상태 모델에 가까워지지만 결정을 반영하는 Binding 단계에서 자원 충돌을 검사하지 않아, 충돌은 kubelet admission에서 드러난다.</li>
+  <li><strong>스케줄링 동작을 바꾸는 방법은 네 층위다.</strong> 프로필 변경, 커스텀 빌드 kube-scheduler, 별도 구현 스케줄러, 스케줄러 앞단의 워크로드 admission이다. 커스텀 빌드 kube-scheduler와 별도 구현 스케줄러는 둘 다 별도 바이너리지만, 앞은 <code class="highlighter-rouge">kube-scheduler</code>의 확장이고 뒤는 대안이다.</li>
+</ol>
+
+<p><br /></p>
+
+<p><br /></p>
+
+<h2 id="시리즈-구성">시리즈 구성</h2>
+
+<p>앞으로의 시리즈는 범위가 큰 개념에서 작은 개념 순으로 이어진다. 앞 편의 내용을 전제로 하는 편은 그 뒤에 둔다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>편</th>
+      <th>범위</th>
+      <th>핵심</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0편 (이 글)</td>
+      <td>스케줄러 일반 → 쿠버네티스 모델</td>
+      <td>공통 질문, 사이클·동시성 모델, 확장 구조, 쿠버네티스 위 스케줄러의 공통 규칙, 네 층위</td>
+    </tr>
+    <tr>
+      <td><a href="/kubernetes/Kubernetes-Scheduling-01/">1편</a></td>
+      <td>쿠버네티스 규칙 → kube-scheduler 구조</td>
+      <td>스케줄링 개념, 스케줄러 지정, 판단 기준, 수동 스케줄링, DaemonSet, Scheduling Framework·플러그인·프로필, 다중 스케줄러 구성</td>
+    </tr>
+    <tr>
+      <td><a href="/kubernetes/Kubernetes-Scheduling-02/">2편</a></td>
+      <td>kube-scheduler 동작</td>
+      <td>스케줄러 큐, Extension Point, 기본 플러그인, 선점</td>
+    </tr>
+    <tr>
+      <td><a href="/kubernetes/Kubernetes-Scheduling-03/">3편</a></td>
+      <td>파드·노드 측 제어</td>
+      <td>Scheduling Gate, nodeSelector, Affinity, Topology Spread, Taint/Toleration, cordon</td>
+    </tr>
+    <tr>
+      <td><a href="/kubernetes/Kubernetes-Scheduling-04/">4편</a></td>
+      <td>운영자 설정</td>
+      <td>설정 적용과 롤백, 플러그인 설정 패턴, NodeResourcesFit 전략, GPU 단편화, 성능 튜닝, 다중 프로필</td>
+    </tr>
+    <tr>
+      <td><a href="/kubernetes/Kubernetes-Scheduling-05/">5편</a></td>
+      <td>파드 단위 모델의 한계</td>
+      <td>부분 배정 문제, 해결 레이어, Coscheduling, 네이티브 Workload API, Volcano, Kueue</td>
+    </tr>
+    <tr>
+      <td><a href="/kubernetes/Kubernetes-Scheduling-06/">6편</a></td>
+      <td>내부 심화와 진단</td>
+      <td>Extension Point 결정권, PreScore, 기본 플러그인 해부, 실패 진단, 수동 배치의 제약</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://research.google/pubs/omega-flexible-scalable-schedulers-for-large-compute-clusters/">Omega: flexible, scalable schedulers for large compute clusters - EuroSys 2013</a></li>
+  <li><a href="https://queue.acm.org/detail.cfm?id=2898444">Borg, Omega, and Kubernetes - ACM Queue</a></li>
+  <li><a href="https://slurm.schedmd.com/sched_config.html">Slurm - Scheduling Configuration Guide</a></li>
+  <li><a href="https://slurm.schedmd.com/plugins.html">Slurm - Plugin Programmer Guide</a></li>
+  <li><a href="https://slurm.schedmd.com/gang_scheduling.html">Slurm - Gang Scheduling</a></li>
+  <li><a href="https://slurm.schedmd.com/preempt.html">Slurm - Preemption</a></li>
+  <li><a href="https://github.com/SlinkyProject/slurm-bridge">SlinkyProject/slurm-bridge - GitHub</a></li>
+  <li><a href="https://www.ibm.com/support/knowledgecenter/en/SSWRJV_10.1.0/kubernetes_connector/deploy_jobs.html">IBM Spectrum LSF - Deploying Kubernetes jobs in LSF Connector for Kubernetes</a></li>
+  <li><a href="https://www.ibm.com/docs/en/SSWRJV_10.1.0/lsf_config_ref/lsb.modules.5.html">IBM Spectrum LSF - lsb.modules</a></li>
+  <li><a href="https://www.ibm.com/docs/en/SSWRJV_10.1.0/lsf_admin/chap_preemptive_lsf_admin.html">IBM Spectrum LSF - Preemptive scheduling</a></li>
+  <li><a href="https://volcano.sh/en/docs/schduler_introduction/">Volcano - Scheduler</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/scheduling-eviction/kube-scheduler/">kube-scheduler - Kubernetes 공식 문서</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/">Scheduling Framework - Kubernetes 공식 문서</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#cluster-scheduling" class="page__taxonomy-item" rel="tag">Cluster Scheduling</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#lsf" class="page__taxonomy-item" rel="tag">LSF</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#scheduler" class="page__taxonomy-item" rel="tag">Scheduler</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#scheduling" class="page__taxonomy-item" rel="tag">Scheduling</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#slurm" class="page__taxonomy-item" rel="tag">Slurm</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#volcano" class="page__taxonomy-item" rel="tag">Volcano</a>
+    
+    </span>
+  </p>
+
+
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 카테고리: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-15">October 15, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+%EC%BF%A0%EB%B2%84%EB%84%A4%ED%8B%B0%EC%8A%A4+%EC%8A%A4%EC%BC%80%EC%A4%84%EB%A7%81+-+0.+%EC%8A%A4%EC%BC%80%EC%A4%84%EB%A7%81+%EC%9D%BC%EB%B0%98+%EA%B0%9C%EB%85%90%EA%B3%BC+%EC%BF%A0%EB%B2%84%EB%84%A4%ED%8B%B0%EC%8A%A4%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Scheduling-00%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Scheduling-00%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Scheduling-00%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-Scheduling-00?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/dev/Dev-Kubernetes-Deployment-Failure-3/" class="pagination--pager" title="[Kubernetes] Kubernetes Deployment 재배포 실패 원인과 해결 - 3. Deadlock
+">이전</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-Scheduling-01/" class="pagination--pager" title="[Kubernetes] 쿠버네티스 스케줄링 - 1. 개념과 kube-scheduler 구조
+">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">참고</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-MLflow-System-Metrics-Ecosystem/" rel="permalink">[MLflow] 시스템 메트릭 로깅 - 3. 다른 도구와 런타임의 컨테이너 대응
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 24일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  9 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">컨테이너 안에서 켠 관측 도구가 노드 값을 보여 주는 문제를, 다른 도구와 언어 런타임은 어떻게 다뤘는지 찾아보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-MLflow-System-Metrics-Platform-SDK/" rel="permalink">[MLflow] 시스템 메트릭 로깅 - 2. 플랫폼 SDK에 얹기: 이름, cgroup 수집기, 원본 무수정 확장
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 23일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  30 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">MLflow 원본을 고치지 않고 pod 내 시스템 메트릭 로깅 문제를 해결한 과정에 대해 정리해 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/dev/Dev-Envoy-Proxy-LLM-Serving/" rel="permalink">[Envoy] Envoy 프록시 구조와 확장: llm-d가 Envoy를 쓰는 방식
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 19일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  18 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">Envoy의 구조와 xDS 동적 설정, ext_proc 확장을 정리하고, llm-d Router가 ext_proc으로 Envoy에 붙는 방식을 살펴 보자.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/images/blog-Dev.jpg"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/" rel="permalink">[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> 2026년 09월 11일
+        
+          <span class="page__meta-sep"> · </span>
+        
+      
+      
+        <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  16 분 소요
+
+
+      
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">노드도 파드도 늘릴 수 없는 환경에서 HPA Lab이 어디까지 가는지, 그리고 CPU 사용률이 추론 워크로드의 스케일 신호가 될 수 있는지 확인해 보자.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-Scheduling-00/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-Scheduling-00"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>
