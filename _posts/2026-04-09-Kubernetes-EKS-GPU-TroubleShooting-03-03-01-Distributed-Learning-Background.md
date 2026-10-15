@@ -20,6 +20,7 @@ tags:
   - Troubleshooting
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-5
+last_modified_at: 2026-10-15
 ---
 
 *정영준님의 AWS EKS Workshop Study(AEWS) [5주차 학습 내용](https://devfloor9.github.io/engineering-playbook/slides/eks-debugging/)을 기반으로 합니다.*
@@ -188,7 +189,7 @@ Operator가 하는 일:
 2. Worker Pod에 `MASTER_ADDR`/`MASTER_PORT`/`RANK`/`WORLD_SIZE` env 자동 주입
 3. Pod 실패 시 정책에 따라 전체 재시작 (`restartPolicy: OnFailure` / `ExitCode`)
 4. `succeeded` / `failed` 상태를 CRD status로 집계
-5. Gang scheduling (Volcano/Kueue 연동) 지원
+5. Gang scheduling 연동(Volcano, scheduler-plugins의 Coscheduling) 지원. Kueue와는 잡 단위 admission으로 연동된다
 
 **포괄 범위**: 학습 전용. **적합한 경우**: 실제 학습 잡. 시간이 오래 걸리고(hours~days), 실패 복구가 중요하고, 여러 팀/잡이 공유하는 클러스터.
 
@@ -221,9 +222,11 @@ Horovod 기반 학습을 위한 operator. `mpirun` + SSH로 Pod 간 프로세스
 | RANK/WORLD_SIZE 주입 | 수동 (env) | 자동 | 자동 | 자동 |
 | 실패 재시작 | 없음 | 정책 기반 | 정책 기반 | 정책 기반 |
 | 설치 오버헤드 | 0 | CRD + operator + webhook | CRD + head/worker + GCS | CRD + launcher Pod + SSH |
-| Gang scheduling | 없음 | Volcano/Kueue 연동 | 내장 | Volcano 연동 |
+| Gang scheduling | 없음 | Volcano·Coscheduling 연동 | batch scheduler 연동(Volcano, YuniKorn, scheduler-plugins 등) | Volcano·Coscheduling 연동 |
 | GPU collective | NCCL | NCCL | NCCL | NCCL 또는 MPI |
 | 적합 케이스 | 단발 테스트, smoke test | 실무 학습 잡 | 동적/혼합 워크로드 | TF 레거시, HPC 팀 |
+
+세 오퍼레이터(Training Operator, KubeRay, MPI Operator) 모두 Kueue로 잡 단위 admission을 받을 수 있다.
 
 <br>
 
@@ -313,7 +316,7 @@ spec:
 - 여러 팀이 같은 클러스터를 공유하는가 (gang scheduling 필요)
 - 관측/알림이 필요한가 (CRD status → Alertmanager)
 
-EKS에서 PyTorchJob을 쓰려면 [Kubeflow training-operator helm chart](https://github.com/kubeflow/training-operator)를 설치하고, Kueue 또는 Volcano를 gang scheduler로 얹으면 시작점으로 충분하다.
+EKS에서 PyTorchJob을 쓰려면 [Kubeflow Training Operator v1](https://github.com/kubeflow/trainer/tree/release-1.9)을 kustomize 매니페스트로 설치한다(저장소는 `kubeflow/trainer`로 이름이 바뀌었고, Helm 차트는 후속 버전인 Kubeflow Trainer v2(TrainJob)용이다). gang scheduling이나 잡 단위 admission이 필요하면 Volcano 연동이나 Kueue를 검토할 수 있다. EKS에서는 Volcano가 두 번째 스케줄러가 되므로 노드 풀 분리를 함께 본다. 둘의 역할 차이는 [쿠버네티스 스케줄링 5편]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %})에 정리했다.
 
 <br>
 

@@ -16,6 +16,7 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-2
 hidden: true
+last_modified_at: 2026-10-15
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 2장의 학습 내용을 바탕으로 합니다*
@@ -315,7 +316,7 @@ K8s 클러스터는 두 종류의 노드로 구성된다.
 
 | 강점 | 설명 |
 |---|---|
-| Efficient Resource Management | kube-scheduler가 Pod를 노드에 배치. 커스텀 스케줄러로 AWS Trainium·Inferentia 같은 가속기에 워크로드 배치 가능 |
+| Efficient Resource Management | kube-scheduler가 Pod를 노드에 배치. AWS Trainium·Inferentia는 device plugin이 자원으로 노출하고, 연속 코어 할당이 필요하면 Scheduler Extender를 붙인 두 번째 스케줄러(Neuron scheduler extension)를 쓴다 |
 | Seamless Scalability | HPA(Pod 개수) + VPA(CPU/메모리 limit) + Cluster Autoscaler(노드 수) 조합 |
 | Extensibility | 업스트림 수정 없이 확장. Kubeflow, PyTorch/TensorFlow용 커스텀 오퍼레이터, GPU 장치 플러그인 |
 | Security | RBAC, K8s Secrets, 네트워크 정책, 감사 로그, Pod Security Standards(PSS) |

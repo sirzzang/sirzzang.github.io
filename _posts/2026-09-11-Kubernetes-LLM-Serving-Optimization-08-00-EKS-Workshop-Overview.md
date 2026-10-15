@@ -16,7 +16,7 @@ tags:
   - LLM-Serving
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-6
-last_modified_at: 2026-09-13
+last_modified_at: 2026-10-15
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.*
@@ -235,7 +235,7 @@ public.ecr.aws/neuron/pytorch-inference-vllm-neuronx:0.9.1-neuronx-...    7.9 Gi
 
 ### Neuron scheduler extension
 
-배치를 맡는 쪽은 `k8s-neuron-scheduler`와 `my-scheduler` 두 Deployment다. 파드가 이 스케줄러를 타려면 스펙에 `schedulerName: my-scheduler`를 명시해야 한다. 기본 kube-scheduler를 그대로 두고 확장 스케줄러를 나란히 띄운 뒤, 필요한 워크로드만 이름으로 지정해 보내는 형태다.
+배치를 맡는 쪽은 `k8s-neuron-scheduler`와 `my-scheduler` 두 Deployment다. 파드가 이 스케줄러를 타려면 스펙에 `schedulerName: my-scheduler`를 명시해야 한다. 기본 kube-scheduler를 그대로 두고 Scheduler Extender 설정을 넣은 두 번째 스케줄러를 나란히 띄운 뒤, 필요한 워크로드만 이름으로 지정해 보내는 형태다.
 
 이 확장이 필요한 이유는 두 가지다. 앞에서 본 칩과 코어의 이중 회계를 정확히 처리해야 하고, 텐서 병렬로 여러 코어를 묶어 쓸 때 연속된 코어를 할당해야 한다. 스케줄러 파드의 실제 로그와 배치 결과는 [8.2.2편]({% post_url 2026-09-11-Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure %})에서 확인한다.
 

@@ -19,7 +19,7 @@ tags:
   - Helm
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-6
-last_modified_at: 2026-09-28
+last_modified_at: 2026-10-15
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 6주차 학습 내용을 기반으로 합니다.*
@@ -1383,6 +1383,8 @@ kind: Deployment
 ## 스케줄러 확장이 개입하는 지점
 
 [칩과 코어를 따로 세면 생기는 일](#칩과-코어를-따로-세면-생기는-일)에서 제기한 문제로 돌아온다. 스케줄러 확장은 기본 kube-scheduler를 고치지 않고 **그 바깥에** 붙는다.
+
+알아 둘 점이 하나 있다. "스케줄러 확장"은 AWS가 붙인 이름(Neuron scheduler extension)이고, 쿠버네티스 쪽 메커니즘은 Scheduler Extender다. 스케줄러가 HTTP로 외부 프로세스(`k8s-neuron-scheduler`)에 판단을 묻는 방식이라, 플러그인처럼 스케줄러 바이너리를 다시 빌드하지 않는다. `my-scheduler`는 EKS Distro가 빌드한 kube-scheduler 이미지(out-of-tree 플러그인 없음)에 `extenders` 설정만 넣어 두 번째 스케줄러로 띄운 것이고, out-of-tree 플러그인을 넣어 다시 빌드한 커스텀 빌드 kube-scheduler가 아니다. 두 방식의 차이는 [쿠버네티스 스케줄링 1편 - Scheduling Framework 아키텍처]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#scheduling-framework-아키텍처)와 [플러그인]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#플러그인)에 정리했다.
 
 ```mermaid
 flowchart TD

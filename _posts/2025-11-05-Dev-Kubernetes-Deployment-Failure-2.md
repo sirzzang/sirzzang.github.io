@@ -12,6 +12,7 @@ tags:
   - kubernetes
   - deployment
   - scheduler
+last_modified_at: 2026-10-15
 ---
 
 <br>
@@ -178,7 +179,7 @@ RollingUpdateStrategy:  25% max unavailable, 25% max surge # rolling update 항�
 
 ## Unschedulable Queue로의 이동
 
-결국 이 상황은, 파드가 [Unschedulable Queue]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#스케줄러-큐)로 이동하게 되는 전형적인 케이스다. [스케줄링 프로세스]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#큐-복귀)에서 살펴 보았듯, 스케줄러는 실패 유형에 따라 파드를 다른 큐로 이동시킨다. **애초에 배치 가능한 노드를 찾지 못해 노드 선택 자체가 실패한 경우, 파드는 Unschedulable Queue로 이동**하게 된다.
+결국 이 상황은, 파드가 [Unschedulable Queue]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#스케줄러-큐)로 이동하게 되는 전형적인 케이스다. [스케줄링 프로세스]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#프로세스-결과와-큐-이동-요약)에서 살펴 보았듯, 스케줄러는 실패 유형에 따라 파드를 다른 큐로 이동시킨다. **애초에 배치 가능한 노드를 찾지 못해 노드 선택 자체가 실패한 경우, 파드는 Unschedulable Queue로 이동**하게 된다.
 
 <br>
 

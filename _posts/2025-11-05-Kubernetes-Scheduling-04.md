@@ -1,6 +1,6 @@
 ---
 title:  "[Kubernetes] 쿠버네티스 스케줄링 - 4. 스케줄러 설정과 최적화"
-excerpt: "NodeResourcesFit 전략, 리소스 단편화 문제, 스케줄러 성능 튜닝, 멀티 프로필 구성을 알아보자."
+excerpt: "NodeResourcesFit 전략, 리소스 단편화 문제, 스케줄러 성능 튜닝, 다중 프로필 구성을 알아보자."
 categories:
   - Kubernetes
 toc: true
@@ -15,64 +15,39 @@ tags:
   - Bin Packing
   - GPU
   - Fragmentation
-last_modified_at: 2026-10-01
+last_modified_at: 2026-10-15
 ---
 
 <br>
 
 # TL;DR
 
-- 스케줄러 설정은 **프로세스 1개 : Configuration 1개 : Profile N개** 계층 구조를 가진다. Configuration은 글로벌 설정과 Profile 목록을 포함하며, 각 Profile이 extension point별 플러그인 구성을 담당한다.
+- 스케줄러 설정은 **프로세스 1개 : Configuration 1개 : 프로필 N개** 계층 구조를 가진다([1편 - 설정 계층 구조]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#설정-계층-구조)). Configuration은 글로벌 설정과 프로필 목록을 포함하며, 각 프로필이 extension point별 플러그인 구성을 담당한다. 이 글은 그 Configuration을 전달·적용하는 방법과 설정 문법을 다룬다.
 - `KubeSchedulerConfiguration`을 통해 스케줄러의 플러그인 구성, 스코어링 전략, 성능 파라미터를 세밀하게 설정할 수 있다. `multiPoint` 필드로 플러그인을 모든 extension point에 일괄 등록하고, `*` 패턴으로 기본 플러그인을 전부 비활성화한 뒤 순서를 재배치할 수 있다.
 - 설정 파일만 고쳐도 스케줄러는 다시 읽지 않는다. Static Pod 환경에서는 프로세스를 재시작시켜야 하고, 설정에 오류가 있으면 스케줄러가 기동하지 못해 신규 파드가 모두 Pending에 빠진다.
 - `NodeResourcesFit` 플러그인은 세 가지 스코어링 전략을 제공한다: `LeastAllocated`(기본, 리소스 분산), `MostAllocated`(bin packing, 노드 채우기), `RequestedToCapacityRatio`(커스텀 곡선).
-- GPU 등 희소 리소스는 `LeastAllocated` 전략에서 **단편화(fragmentation)** 문제가 발생하기 쉽다. 여러 노드에 GPU가 분산 배치되어, 단일 노드에서 충분한 GPU를 확보하지 못하는 상황이다. `MostAllocated` 전략으로 완화할 수 있다.
+- GPU 등 희소 리소스는 `LeastAllocated` 전략에서 **단편화(fragmentation)** 문제가 발생하기 쉽다. 여러 노드에 GPU가 분산 배치되어, 단일 노드에서 충분한 GPU를 확보하지 못하는 상황이다. `MostAllocated` 전략의 `resources`에 `nvidia.com/gpu`를 넣어 완화할 수 있다. 기본 설정의 `NodeResourcesFit`은 cpu·memory만 점수에 넣기 때문이다.
 - `percentageOfNodesToScore`로 대규모 클러스터에서의 스케줄링 지연을 줄일 수 있으며, 단일 kube-scheduler에서 여러 프로필을 운영하여 워크로드 성격에 맞는 스케줄링 정책을 적용할 수 있다.
 
 <br>
 
 # 들어가며
 
-[1편]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}), [2편]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}), [3편]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %})에서 스케줄링의 개념, 프레임워크, 스케줄링 제어 설정까지 다뤘다. 이번 글에서는 **스케줄러 자체의 설정과 최적화**를 다룬다. 기준 버전은 앞 편들과 같은 v1.32다.
+[1편]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}), [2편]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}), [3편]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %})에서 스케줄링의 개념과 Scheduling Framework, 스케줄링 제어 설정까지 다뤘다. 이번 글에서는 **스케줄러 자체의 설정과 최적화**를 다룬다. 기준 버전은 앞 편들과 같은 v1.32다.
 
-1. **KubeSchedulerConfiguration**: 설정 계층 구조(Configuration → Profile), 설정 전달과 적용 방법, 설정 파일 구조, 플러그인 활성화/비활성화 패턴(`multiPoint`, `*` 패턴)
+1. **KubeSchedulerConfiguration**: 설정 전달과 적용 방법, 설정 파일 구조, 플러그인 활성화/비활성화 패턴(`multiPoint`, `*` 패턴)
 2. **NodeResourcesFit 스코어링 전략**: LeastAllocated, MostAllocated, RequestedToCapacityRatio 세 전략의 동작 원리와 사용 시나리오
 3. **리소스 단편화 문제**: 특히 GPU 환경에서 발생하는 단편화와 해결 방안
 4. **스케줄러 성능 튜닝**: `percentageOfNodesToScore`와 대규모 클러스터 최적화
-5. **멀티 프로필**: 워크로드 성격에 따라 서로 다른 스케줄링 정책을 적용하는 구성
+5. **다중 프로필**: 워크로드 성격에 따라 서로 다른 스케줄링 정책을 적용하는 구성
 
-> Extension Point의 결정권 분류, PreScore 역할, PodGroup 스케줄링 등 프레임워크 내부 동작은 [5편]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %})에서 자세히 다룬다.
+> 설정 계층 구조(Configuration → 프로필)와 프로필이 고를 수 있는 플러그인의 범위는 [1편 - kube-scheduler 구조]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#kube-scheduler-구조)에서 다뤘다. PodGroup 스케줄링은 [5편]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %})에서, Extension Point의 결정권 분류와 PreScore 역할 등 Scheduling Framework 내부 동작은 [6편]({% post_url 2025-11-05-Kubernetes-Scheduling-06 %})에서 자세히 다룬다.
 
 <br>
 
 # KubeSchedulerConfiguration
 
-## 설정 계층 구조
-
-스케줄러 설정을 이해하려면 먼저 **스케줄러 프로세스, Configuration, Profile** 세 개념의 계층 관계를 잡아야 한다.
-
-```
-Scheduler 프로세스 (kube-scheduler 바이너리)
-  └── Configuration (1개)
-        ├── 글로벌 설정 (leaderElection, clientConnection, parallelism 등)
-        └── Profiles[] (1개 이상)
-              ├── Profile "default-scheduler"
-              │     └── Extension Points
-              │           ├── filter: [Plugin A, Plugin B, ...]
-              │           ├── score: [Plugin C (weight:2), ...]
-              │           └── ...
-              └── Profile "gpu-scheduler"
-                    └── Extension Points
-                          ├── filter: [Plugin A, Plugin E, ...]
-                          └── ...
-```
-
-| 개념 | 범위 | 뭘 설정하나 |
-| --- | --- | --- |
-| **Configuration** | 스케줄러 프로세스 전체 | 글로벌 설정 + Profile 목록 |
-| **Profile** | 하나의 `schedulerName` 단위 | 어떤 extension point에 어떤 plugin을 켜고/끄고/weight를 줄지 |
-
-하나의 스케줄러 프로세스는 하나의 Configuration을 가지며, 그 안에 여러 Profile을 포함할 수 있다. 파드의 `spec.schedulerName`이 Profile의 `schedulerName`과 매칭되어, 같은 프로세스 안에서 서로 다른 플러그인 구성으로 스케줄링할 수 있다([1편 - 다중 스케줄러 구현 방식]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#다중-스케줄러-구현-방식) 참고).
+스케줄러 프로세스, Configuration, 프로필의 계층 관계는 [1편 - 설정 계층 구조]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#설정-계층-구조)에서 정리했다. 여기서는 그 Configuration을 스케줄러에 전달하고 적용하는 방법부터 본다.
 
 <br>
 
@@ -82,11 +57,11 @@ Scheduler 프로세스 (kube-scheduler 바이너리)
 
 | 클러스터 유형 | kube-scheduler 실행 방식 | 설정 전달 |
 | --- | --- | --- |
-| **kubeadm** (가장 일반적) | Static Pod (`/etc/kubernetes/manifests/kube-scheduler.yaml`) | Pod spec의 command에 `--config` 지정, hostPath로 마운트 |
-| **RKE2** | Static Pod 또는 자체 관리 | `/var/lib/rancher/rke2/` 하위 경로에서 관리 |
+| **kubeadm** (가장 일반적) | Static Pod (`/etc/kubernetes/manifests/kube-scheduler.yaml`) | ClusterConfiguration의 `scheduler.extraArgs`(`config`)와 `scheduler.extraVolumes`로 지정한다. 매니페스트를 직접 고치면 `kubeadm upgrade` 때 덮어써진다 |
+| **RKE2** | Static Pod (`/var/lib/rancher/rke2/agent/pod-manifests/`, rke2-server가 생성) | `/etc/rancher/rke2/config.yaml`의 `kube-scheduler-arg`(`config=...`)와 `kube-scheduler-extra-mount`로 지정한 뒤 rke2-server를 재시작한다. 매니페스트를 직접 고친 내용은 rke2-server가 다시 쓸 때 사라진다 |
 | **systemd** | systemd unit file | `ExecStart=kube-scheduler --config ...` |
 
-kubeadm 기준으로 Static Pod manifest는 다음과 같은 구조다.
+kubeadm 기준으로 기존 Static Pod 매니페스트에 아래 항목을 더하는 구조다. 기존 `--kubeconfig` 등의 플래그와 `scheduler.conf` 마운트는 그대로 둔다(아래 발췌는 추가하는 부분만 보여 준다).
 
 ```yaml
 # /etc/kubernetes/manifests/kube-scheduler.yaml (Static Pod)
@@ -160,6 +135,9 @@ pod.UID = types.UID(hex.EncodeToString(hasher.Sum(nil)[0:]))
 
 # 기동 로그 확인 (설정 파싱 오류가 있으면 여기에 나온다)
 ~$ kubectl logs -n kube-system kube-scheduler-<control-plane-node> --tail=50
+
+# HA 구성이면 어느 인스턴스가 리더인지 확인한다 (새 설정은 그 인스턴스가 리더일 때만 동작한다)
+~$ kubectl -n kube-system get lease kube-scheduler -o jsonpath='{.spec.holderIdentity}'
 ```
 
 설정 YAML에 오타가 있거나 존재하지 않는 플러그인 이름이 들어 있으면 **스케줄러가 기동하지 못한다.** 이때 클러스터에서 벌어지는 일은 다음과 같다.
@@ -167,6 +145,7 @@ pod.UID = types.UID(hex.EncodeToString(hasher.Sum(nil)[0:]))
 - 이미 실행 중인 파드는 영향을 받지 않는다. 스케줄링은 배치 시점의 작업이므로, 배치가 끝난 파드는 kubelet이 계속 관리한다
 - **신규 파드는 전부 Pending에 머문다.** 아무도 `spec.nodeName`을 채워 주지 않는다
 - 파드가 죽고 재생성되는 워크로드도 새 파드가 뜨지 않는다
+- DaemonSet 파드도 스케줄러가 배치하므로([1편 - DaemonSet]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#사례-daemonset의-수동--스케줄러-위임-전환)), 장애 중에 새로 붙은 노드에는 CNI·kube-proxy 같은 DaemonSet이 뜨지 않아 노드가 Ready가 되지 못할 수 있다
 
 그래서 롤백 경로를 먼저 확보해 두는 편이 적절하다.
 
@@ -175,9 +154,12 @@ pod.UID = types.UID(hex.EncodeToString(hasher.Sum(nil)[0:]))
 ~# cp /etc/kubernetes/manifests/kube-scheduler.yaml /root/kube-scheduler.yaml.bak
 ~# cp /etc/kubernetes/scheduler-config.yaml /root/scheduler-config.yaml.bak
 
-# 문제가 생기면 되돌린다
+# 문제가 생기면 되돌린다 (설정 파일 오류라면 설정 파일도 되돌려야 한다)
 ~# cp /root/kube-scheduler.yaml.bak /etc/kubernetes/manifests/kube-scheduler.yaml
+~# cp /root/scheduler-config.yaml.bak /etc/kubernetes/scheduler-config.yaml
 ```
+
+설정 파일만 되돌리면 매니페스트 해시가 그대로라 파드가 재생성되지 않고, CrashLoopBackOff 백오프가 끝나야 새 내용이 읽힌다. 바로 반영하려면 위 방법 1(매니페스트를 디렉토리 밖으로 옮겼다 되돌리기)로 다시 띄운다.
 
 백업 파일을 `/etc/kubernetes/manifests/` **안에** 두면 안 된다. kubelet은 그 디렉토리의 매니페스트를 전부 읽으므로, `kube-scheduler.yaml.bak`도 파드로 띄우려 시도한다. 백업은 반드시 디렉토리 밖에 둔다.
 
@@ -190,7 +172,7 @@ pod.UID = types.UID(hex.EncodeToString(hasher.Sum(nil)[0:]))
 
 HA 환경에서는 모든 노드에 같은 설정을 적용하는 편이 적절하다. 노드별로 설정이 다르면 리더가 바뀔 때마다 스케줄링 동작이 달라진다.
 
-> 위 절차는 kubeadm 기준 Static Pod 환경을 전제로 정리한 것이다. 관리형 컨트롤 플레인(EKS, GKE 등)은 사용자가 `kube-scheduler` 설정에 접근할 수 없는 경우가 많고, 이때는 별도 스케줄러를 배포하는 방향([5편 - 멀티 스케줄러 심화]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#멀티-스케줄러-심화))으로 가야 한다.
+> 위 절차는 kubeadm 기준 Static Pod 환경을 전제로 정리한 것이다. 매니페스트를 직접 고쳤다면 `kubeadm upgrade` 전에 같은 내용을 ClusterConfiguration이나 kubeadm patches(`--patches`)로 옮겨 둬야 한다. RKE2는 위 표의 방식으로 바꾼다. 관리형 컨트롤 플레인은 대부분 `kube-scheduler` 설정을 노출하지 않는다. 예외로 AKS는 v1.33부터 preview로 in-tree 플러그인 프로필을 CRD로 받고, GKE는 autoscaling 프로필 `optimize-utilization`으로 할당률이 높은 노드를 선호하게 할 수 있다(시리즈 기준 버전 밖의 기능으로, 검증 범위 밖이다). 그 밖의 환경이거나 out-of-tree 플러그인이 필요하면 두 번째 스케줄러를 배포하는 방향([1편 - 다중 프로필과 다중 스케줄러]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#다중-프로필과-다중-스케줄러))으로 가야 한다.
 
 <br>
 
@@ -202,7 +184,7 @@ HA 환경에서는 모든 노드에 같은 설정을 적용하는 편이 적절�
 apiVersion: kubescheduler.config.k8s.io/v1
 kind: KubeSchedulerConfiguration        # Configuration (전체 설정)
 clientConnection:
-  kubeconfig: /etc/srv/kubernetes/kube-scheduler/kubeconfig  # 글로벌 설정
+  kubeconfig: /etc/kubernetes/scheduler.conf  # 글로벌 설정. kubeadm 기준. --config를 주면 --kubeconfig 플래그는 무시되므로 여기에 적어야 한다
 profiles:                                # Profile 목록
   - schedulerName: default-scheduler     # Profile 이름 (Pod의 spec.schedulerName과 매칭)
     pluginConfig:                         # 플러그인별 상세 설정
@@ -271,7 +253,7 @@ plugins:
       - name: TaintToleration  # Filter + PreScore + Score 전부에서 제거
 ```
 
-K8s 기본 스케줄러 프로파일도 내부적으로 이 방식을 사용한다. v1.32 기준 18개의 기본 플러그인이 `multiPoint`로 등록되어, extension point별로 일일이 나열하지 않고도 관리된다. 전체 목록은 [2편 - 기본 플러그인과 Extension Point 매핑]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#기본-플러그인과-extension-point-매핑)에 있다.
+`kube-scheduler`의 기본 프로필도 내부적으로 이 방식을 사용한다. v1.32 기준 18개의 기본 플러그인이 `multiPoint`로 등록되어, extension point별로 일일이 나열하지 않고도 관리된다. 전체 목록은 [2편 - 기본 플러그인과 Extension Point 매핑]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#기본-플러그인과-extension-point-매핑)에 있다.
 
 <br>
 
@@ -337,13 +319,13 @@ score:
 
 ## NodeResourcesFit 스코어링 전략
 
-[2편]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#기본-score-플러그인)에서 `NodeResourcesFit`은 Filter와 Score 양쪽에 등록되는 플러그인이라고 했다. 이 Score 단계의 동작을 결정하는 것이 **스코어링 전략(scoringStrategy)**이다. 플러그인이 각 extension point에서 무엇을 하는지는 [5편 - NodeResourcesFit]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#noderesourcesfit)에서 분해한다.
+[2편]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#기본-score-플러그인)에서 `NodeResourcesFit`은 Filter와 Score 양쪽에 등록되는 플러그인이라고 했다. 이 Score 단계의 동작을 결정하는 것이 **스코어링 전략(scoringStrategy)**이다. 플러그인이 각 extension point에서 무엇을 하는지는 [6편 - NodeResourcesFit]({% post_url 2025-11-05-Kubernetes-Scheduling-06 %}#noderesourcesfit)에서 분해한다.
 
 세 가지 전략이 있고, 선택 기준은 다음과 같다.
 
 - 노드마다 여유를 남겨 부하 급증을 흡수해야 한다 → **`LeastAllocated`**(기본)
 - 노드 수를 줄여 비용을 낮추거나 GPU 단편화를 막아야 한다 → **`MostAllocated`**
-- 리소스별로 가중치를 다르게 주거나 사용률 구간별 선호를 따로 둬야 한다 → **`RequestedToCapacityRatio`**
+- 사용률 구간마다 선호를 따로 둬야 한다(예: 일정 사용률까지는 채우고 그 뒤로는 피함) → **`RequestedToCapacityRatio`**. 리소스별 가중치(`resources[].weight`)는 세 전략 모두에서 쓸 수 있다
 
 | 전략 | 방향 | 점수 기준 | 주요 시나리오 |
 | --- | --- | --- | --- |
@@ -517,9 +499,9 @@ shape:
     score: 0
 ```
 
-**핵심 활용: 리소스별 가중치 차등 적용**
+**활용: 사용률-점수 곡선과 리소스별 가중치**
 
-`RequestedToCapacityRatio`의 가장 큰 장점은 **리소스별로 가중치를 차등** 적용할 수 있다는 것이다. 예를 들어 GPU 리소스에 높은 가중치를 주어, GPU를 최우선으로 bin packing하면서 CPU/Memory는 상대적으로 덜 중요하게 취급할 수 있다.
+`RequestedToCapacityRatio`의 고유 기능은 `shape`로 사용률 구간별 점수를 정하는 것이다. 리소스별 가중치(`resources[].weight`)는 세 전략 모두에서 쓸 수 있고, 아래처럼 곡선과 함께 쓰면 효과가 분명해진다. 예를 들어 GPU 리소스에 높은 가중치를 주어, GPU를 최우선으로 bin packing하면서 CPU/Memory는 상대적으로 덜 중요하게 취급할 수 있다.
 
 ```yaml
 resources:
@@ -610,7 +592,7 @@ CPU나 Memory와 달리, GPU는 다음과 같은 특성 때문에 단편화에 �
 | 분할 가능성 | 자유롭게 분할 | 정수 단위만 허용 |
 | overcommit | 가능 (request < limit) | **불가** ([request == limit 강제]({% post_url 2024-07-23-Dev-Kubernetes-NVIDIA-GPU-Mechanism %}#extended-resource로서의-gpu)) |
 
-GPU가 4개인 노드에서 GPU 1개짜리 파드 2개가 다른 노드에 분산 배치되면, GPU 4개짜리 파드는 어디에도 들어갈 수 없게 된다. **기본 전략인 `LeastAllocated`가 정확히 이 상황을 만든다**. 리소스를 고르게 분산시키므로, 모든 노드가 "부분 점유" 상태가 된다.
+GPU가 4개인 노드에서 GPU 1개짜리 파드 2개가 다른 노드에 분산 배치되면, GPU 4개짜리 파드는 어디에도 들어갈 수 없게 된다. **기본 설정이 정확히 이 상황을 만든다**. 기본 설정의 `NodeResourcesFit`은 cpu·memory만 점수에 넣으므로 GPU 사용량 자체는 보지 않는다. CPU·메모리 기준으로 여유 있는 노드를 고르는 `LeastAllocated`가 결과적으로 GPU 파드도 흩어 놓아, 모든 노드가 "부분 점유" 상태가 된다.
 
 ### 해결: MostAllocated 또는 RequestedToCapacityRatio
 
@@ -639,7 +621,7 @@ profiles:
                 weight: 1
 ```
 
-이 설정은 **클러스터 전체의 기본 배치 전략을 바꾼다.** GPU를 쓰지 않는 일반 워크로드도 bin packing 방향으로 배치되므로, 일반 서비스까지 특정 노드에 몰릴 수 있다. GPU 워크로드에만 적용하려면 [멀티 프로필](#멀티-프로필)로 분리하는 편이 적절하다.
+이 설정은 **클러스터 전체의 기본 배치 전략을 바꾼다.** GPU를 쓰지 않는 일반 워크로드도 bin packing 방향으로 배치되므로, 일반 서비스까지 특정 노드에 몰릴 수 있다. GPU 워크로드에만 적용하려면 [다중 프로필](#다중-프로필)로 분리하는 편이 적절하다.
 
 **RequestedToCapacityRatio로 더 세밀하게 제어**
 
@@ -654,13 +636,13 @@ GPU 가중치를 CPU/Memory보다 크게(예: 10) 주고, `shape`를 사용률�
 | 방법 | 설명 |
 | --- | --- |
 | bin packing 전략 | `MostAllocated` 또는 `RequestedToCapacityRatio`로 GPU를 집중 배치 |
-| 노드 풀 분리 | GPU 노드와 일반 노드를 [taint/toleration]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#taints-and-tolerations)으로 분리하여, GPU 노드에는 GPU 워크로드만 배치 |
-| 멀티 프로필 | GPU 워크로드 전용 프로필에만 bin packing 적용, 일반 워크로드는 LeastAllocated 유지 |
-| 전용 스케줄러 | Volcano, Kueue 등 GPU 토폴로지 인식 스케줄러 사용 ([5편 - Volcano vs Kueue]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#volcano-vs-kueue-접근-방식의-차이)) |
+| 노드 풀 분리 | GPU 노드와 일반 노드를 [taint/toleration]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#taints-and-tolerations)으로 분리하여, GPU 노드에는 GPU 워크로드만 배치. GPU를 요청하지 않는 파드는 점수 계산에서 GPU를 보지 않으므로 GPU 노드를 피하지 않는다 |
+| 다중 프로필 | GPU 워크로드 전용 프로필에만 bin packing 적용, 일반 워크로드는 LeastAllocated 유지 |
+| 별도 구현 스케줄러 | Volcano 등 배치 워크로드용 스케줄러를 두 번째 스케줄러로 사용(binpack 플러그인). 참고로 Kueue는 스케줄러가 아니라 스케줄러 앞단의 워크로드 admission 컨트롤러다 ([5편 - Volcano vs Kueue]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#volcano-vs-kueue-접근-방식의-차이)) |
 
-이 표의 방법들은 모두 **개별 파드 하나가** 필요한 GPU를 한 노드에서 확보하게 만드는 쪽이다. 여러 파드가 **동시에** 확보되어야 작업이 시작되는 그룹 워크로드(분산 학습 등)는 문제 구조가 다르고, bin packing만으로는 해결되지 않는다. 그 경우의 스케줄링은 [5편 - PodGroup-level Extension Points]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#podgroup-level-extension-points)에서 다룬다.
+이 표의 방법들은 Volcano를 빼면 모두 **개별 파드 하나가** 필요한 GPU를 한 노드에서 확보하게 만드는 쪽이다. 여러 파드가 **동시에** 확보되어야 작업이 시작되는 그룹 워크로드(분산 학습 등)는 문제 구조가 다르고, bin packing만으로는 해결되지 않는다. 그 경우의 스케줄링은 [5편]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %})에서 다룬다. bin packing을 그룹 워크로드와 함께 쓸 때 어느 프로필에 설정해야 하는지도 그곳에서 다룬다.
 
-주의할 점이 하나 있다. 프로필은 **배치 전략만** 바꾼다. 어떤 파드가 어떤 파드를 밀어낼 수 있는지는 프로필과 무관하게 `PriorityClass`가 결정한다([2편 - 선점]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#선점)). GPU 전용 프로필을 만들어도 선점 동작은 달라지지 않는다.
+주의할 점이 하나 있다. 프로필은 배치 전략을 바꾸지만, 선점할 때 victim을 고르는 기준은 `PriorityClass`의 우선순위다([2편 - 선점]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#선점)). 같은 프로세스 안에서는 다른 프로필로 배치된 파드도 victim이 될 수 있다. 프로필이 바꿀 수 있는 것은 선점을 할지 여부(`postFilter`에서 `DefaultPreemption` 비활성화)와 그 인자 정도다.
 
 <br>
 
@@ -727,9 +709,9 @@ profiles:
 
 <br>
 
-# 멀티 프로필
+# 다중 프로필
 
-[1편 - 다중 스케줄러 구현 방식]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#다중-스케줄러-구현-방식)에서 단일 kube-scheduler에서 여러 프로필을 운영할 수 있다고 했다. 여기서는 이를 활용한 구체적인 구성 예시를 다룬다.
+[1편 - 다중 정책 구성 방식]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#다중-정책-구성-방식)에서 단일 kube-scheduler에서 여러 프로필을 운영할 수 있다고 했다. 여기서는 이를 활용한 구체적인 구성 예시를 다룬다.
 
 ## 워크로드 성격에 따른 프로필 분리
 
@@ -806,7 +788,7 @@ spec:
               nvidia.com/gpu: 2
 ```
 
-## 멀티 프로필의 제약
+## 다중 프로필의 제약
 
 - 모든 프로필이 **동일한 `queueSort` 플러그인**을 사용해야 한다. 스케줄러 내부적으로 Pending 파드 큐는 하나이기 때문이다. 서로 다른 `queueSort`를 지정하면 스케줄러가 기동 시 validation 오류로 거부한다.
 - 프로필별로 `schedulerName`이 **고유**해야 한다. 같은 프로세스 안에서 중복되면 기동 시 거부된다.
@@ -814,12 +796,12 @@ spec:
 
 ## 프로필과 Event 추적
 
-멀티 프로필 환경에서 "어떤 프로필이 이 파드를 처리했는가"를 확인하려면 Kubernetes Event의 `reportingController` 필드를 보면 된다. 스케줄러는 이벤트 종류에 따라 다른 값을 `reportingController`에 넣는다.
+다중 프로필 환경에서 "어떤 프로필이 이 파드를 처리했는가"를 확인하려면 Kubernetes Event의 `reportingController` 필드를 보면 된다. 스케줄러는 이벤트 종류에 따라 다른 값을 `reportingController`에 넣는다.
 
 | 이벤트 종류 | `reportingController` 값 | 이유 |
 | --- | --- | --- |
-| **파드 스케줄링** | 해당 파드의 `spec.schedulerName` | 어떤 profile이 처리했는지 추적 |
-| **Leader election** | `profiles[0].schedulerName` | 프로세스 전체 대표값 필요 → 첫 번째 profile 사용 |
+| **파드 스케줄링** | 해당 파드의 `spec.schedulerName` | 어떤 프로필이 처리했는지 추적 |
+| **Leader election** | `profiles[0].schedulerName` | 프로세스 전체 대표값 필요 → 첫 번째 프로필 사용 |
 
 파드 스케줄링 이벤트의 경우, 해당 파드의 `schedulerName`이 그대로 `reportingController`에 들어간다.
 
@@ -832,7 +814,7 @@ reason: Scheduled
 note: "Successfully assigned default/my-pod to node-3"
 ```
 
-Leader election 이벤트는 프로세스 전체 단위의 동작이므로 특정 profile에 귀속되지 않는다. 프로세스를 대표하는 별도 이름이 없기 때문에, 관례적으로 `profiles` 배열의 **첫 번째** profile 이름을 사용한다.
+Leader election 이벤트는 프로세스 전체 단위의 동작이므로 특정 프로필에 귀속되지 않는다. 프로세스를 대표하는 별도 이름이 없기 때문에, 관례적으로 `profiles` 배열의 **첫 번째** 프로필 이름을 사용한다.
 
 디버깅 시 필드 선택자로 이벤트를 필터링하면, 어떤 프로필이 어떤 파드를 처리했는지 빠르게 확인할 수 있다. 여기서 주의할 점이 있다. **필드 선택자의 이름은 `reportingController`가 아니라 `reportingComponent`다.**
 
@@ -855,15 +837,15 @@ default     30s         Normal   Scheduled   pod/ml-training-7d4b8c-xk2p9  Succe
 
 이 글에서 다룬 핵심 내용을 정리한다.
 
-1. **스케줄러 설정은 프로세스 → Configuration → Profile 계층 구조다.** 하나의 스케줄러 프로세스가 하나의 Configuration을 가지고, 그 안에 여러 Profile을 포함한다. `kube-scheduler`는 `--config` 플래그로 Configuration 파일을 전달받으며, 클러스터 유형에 따라 Static Pod, systemd 등 방식이 다르다.
+1. **스케줄러 설정은 프로세스 → Configuration → 프로필 계층 구조를 따른다([1편]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#설정-계층-구조)).** 하나의 스케줄러 프로세스가 하나의 Configuration을 가지고, 그 안에 여러 Profile을 포함한다. `kube-scheduler`는 `--config` 플래그로 Configuration 파일을 전달받으며, 클러스터 유형에 따라 Static Pod, systemd 등 방식이 다르다.
 2. **설정 파일을 고치는 것과 적용되는 것은 별개다.** 스케줄러는 설정을 런타임에 다시 읽지 않으므로 프로세스를 재시작해야 하고, 설정 오류로 기동에 실패하면 신규 파드가 전부 Pending에 빠진다. 백업은 매니페스트 디렉토리 밖에 두고, HA 환경에서는 한 대씩 순차 적용한다.
 3. **`multiPoint`로 플러그인을 일괄 등록하고, `*` 패턴으로 순서를 재배치할 수 있다.** `multiPoint`는 플러그인이 구현하는 모든 extension point에 자동 등록하며, 개별 extension point 설정이 `multiPoint`보다 우선한다. `*` disable 후 `enabled`로 재등록하면 플러그인 호출 순서를 완전히 제어할 수 있다.
 4. **`NodeResourcesFit`은 세 가지 스코어링 전략을 제공한다.** `LeastAllocated`(기본)는 리소스를 분산, `MostAllocated`는 노드를 채우는 bin packing, `RequestedToCapacityRatio`는 리소스별 가중치와 사용률-점수 곡선을 커스텀으로 정의한다. 점수 공식의 분모는 항상 `allocatable`이다.
-5. **GPU 리소스는 단편화에 취약하다.** 노드당 수량이 적고 단위가 크기 때문에, `LeastAllocated` 전략에서 모든 노드가 부분 점유되어 큰 GPU 요청을 수용하지 못하는 문제가 발생한다. `MostAllocated`로 전환하거나, GPU 가중치를 높인 `RequestedToCapacityRatio`를 사용하여 bin packing을 적용한다. 다만 기본 프로필의 전략을 바꾸면 일반 워크로드까지 영향을 받으므로, 멀티 프로필로 분리하는 편이 적절하다.
+5. **GPU 리소스는 단편화에 취약하다.** 노드당 수량이 적고 단위가 크기 때문에, `LeastAllocated` 전략에서 모든 노드가 부분 점유되어 큰 GPU 요청을 수용하지 못하는 문제가 발생한다. `MostAllocated`로 전환하거나, GPU 가중치를 높인 `RequestedToCapacityRatio`를 사용하여 bin packing을 적용한다. 다만 기본 프로필의 전략을 바꾸면 일반 워크로드까지 영향을 받으므로, 다중 프로필로 분리하는 편이 적절하다.
 6. **`percentageOfNodesToScore`로 대규모 클러스터의 스케줄링 속도를 개선할 수 있다.** 기본값은 클러스터 규모에 따라 자동 계산되며 비율 5%·노드 수 100개의 두 하한이 걸린다. 100노드 이하에서는 따로 설정할 필요가 없고, 공식 문서는 10% 아래로 낮추는 것을 권하지 않는다.
-7. **멀티 프로필로 워크로드 성격에 맞는 스케줄링 정책을 적용할 수 있다.** 일반 워크로드에는 `LeastAllocated`, GPU 워크로드에는 `MostAllocated`를 적용하는 식으로 프로필을 분리한다. 어떤 프로필이 처리했는지는 Event의 `reportingComponent` 필드 선택자로 확인한다.
+7. **다중 프로필로 워크로드 성격에 맞는 스케줄링 정책을 적용할 수 있다.** 일반 워크로드에는 `LeastAllocated`, GPU 워크로드에는 `MostAllocated`를 적용하는 식으로 프로필을 분리한다. 어떤 프로필이 처리했는지는 Event의 `reportingComponent` 필드 선택자로 확인한다.
 
-[5편]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %})에서는 지금까지 한 줄로 지나간 프레임워크 내부 동작(Extension Point 결정권, PreScore 역할, 기본 플러그인 해부)과 PodGroup 스케줄링, 멀티 스케줄러 아키텍처를 다룬다.
+[5편]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %})에서는 파드 단위 스케줄링의 한계와 gang scheduling(PodGroup 스케줄링, Coscheduling, Volcano, Kueue)을, [6편]({% post_url 2025-11-05-Kubernetes-Scheduling-06 %})에서는 지금까지 한 줄로 지나간 Scheduling Framework 내부 동작(Extension Point 결정권, PreScore 역할, 기본 플러그인 해부)과 스케줄링 실패 진단을 다룬다.
 
 <br>
 

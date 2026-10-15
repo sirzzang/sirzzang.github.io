@@ -16,14 +16,14 @@ tags:
   - Toleration
   - Scheduling Gate
   - Topology Spread Constraints
-last_modified_at: 2026-10-01
+last_modified_at: 2026-10-15
 ---
 
 <br>
 
 # TL;DR
 
-- 파드가 실행될 노드를 **제어**하기 위한 설정으로 `nodeSelector`, Node Affinity, Pod Affinity/Anti-Affinity, Topology Spread Constraints, Taints/Tolerations 등이 있다. 이 설정들은 스케줄링 프레임워크의 Filter와 Score 단계에서 플러그인을 통해 평가된다.
+- 파드가 실행될 노드를 **제어**하기 위한 설정으로 `nodeSelector`, Node Affinity, Pod Affinity/Anti-Affinity, Topology Spread Constraints, Taints/Tolerations 등이 있다. 이 설정들은 Scheduling Framework의 Filter와 Score extension point에서 플러그인을 통해 평가된다.
 - 제어 설정은 두 방향으로 나뉜다. `nodeSelector`·Node Affinity·Pod Affinity는 **파드가 배치를 요구**하는 쪽이고, Taints/Tolerations는 **노드가 파드를 거부**하는 쪽이다.
 - **Scheduling Gate**(v1.26 alpha, v1.30 GA)는 파드의 스케줄링 자체를 보류하는 메커니즘이다. 게이트가 설정된 파드는 스케줄러의 큐에 진입하지 않으며(`SchedulingGated` 상태), 모든 게이트가 제거되어야 스케줄링이 시작된다.
 - `nodeSelector`는 단순 라벨 매칭, Node Affinity는 표현식 기반의 유연한 노드 선택, Pod Affinity/Anti-Affinity는 다른 파드와의 관계 기반 배치를 제어한다.
@@ -33,13 +33,13 @@ last_modified_at: 2026-10-01
 
 # 들어가며
 
-[2편]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %})에서 스케줄링 프레임워크의 전체 extension point와 플러그인 동작 원리를 살펴보았다. 스케줄러가 Filter → Score → Bind 과정을 거쳐 노드를 선택한다는 것을 알았으니, 이번 글에서는 **그 과정에 영향을 주는 파드/노드 설정**을 다룬다.
+[2편]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %})에서 `kube-scheduler`의 Scheduling Framework가 정한 전체 extension point와 플러그인 동작 원리를 살펴보았다. 스케줄러가 Filter → Score → Bind 과정을 거쳐 노드를 선택한다는 것을 알았으니, 이번 글에서는 **그 과정에 영향을 주는 파드/노드 설정**을 다룬다.
 
 1. **Scheduling Gate**: 스케줄링 자체를 보류하는 메커니즘
 2. **파드 측 배치 요청**: `nodeSelector`, Node Affinity, Pod Affinity / Anti-Affinity
 3. **노드 측 거부와 토폴로지 분산**: Taints and Tolerations, Topology Spread Constraints
 
-각 설정이 스케줄링 프레임워크의 어떤 단계(Filter/Score)에서 어떤 플러그인에 의해 평가되는지도 함께 정리한다.
+각 설정이 Scheduling Framework의 어떤 extension point(Filter/Score)에서 어떤 플러그인에 의해 평가되는지도 함께 정리한다.
 
 <br>
 
@@ -49,7 +49,7 @@ last_modified_at: 2026-10-01
 
 [Scheduling Gate](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/)(v1.26 alpha, **v1.30 GA**)는 파드의 스케줄링을 의도적으로 **보류**하는 메커니즘이다. 파드의 `spec.schedulingGates` 필드에 하나 이상의 게이트를 설정하면, 해당 파드는 `SchedulingGated` 상태가 되어 스케줄러가 아예 스케줄링을 시도하지 않는다.
 
-[2편]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#preenqueue)에서 다룬 프레임워크 기준으로 보면, Scheduling Gate는 **PreEnqueue** extension point에서 `SchedulingGates` 플러그인이 처리한다. 게이트가 설정된 파드는 Active Queue에 진입하지 못하므로, 스케줄링 사이클 자체가 시작되지 않는다.
+[2편]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#preenqueue)에서 다룬 Scheduling Framework 기준으로 보면, Scheduling Gate는 **PreEnqueue** extension point에서 `SchedulingGates` 플러그인이 처리한다. 게이트가 설정된 파드는 Active Queue에 진입하지 못하므로, 스케줄링 사이클 자체가 시작되지 않는다.
 
 ## 동작 방식
 
@@ -76,7 +76,7 @@ kubectl get pod gated-pod
 - 게이트는 **파드 생성 시에만** 추가할 수 있다. 생성 후 새 게이트를 추가하는 것은 불가능하다.
 - 각 게이트는 순서와 관계없이 **개별적으로 제거**할 수 있다. 외부 컨트롤러나 운영자가 조건이 충족되면 해당 게이트를 제거한다.
 - **모든** 게이트가 제거되어야 파드가 Active Queue에 진입하여 스케줄링이 시작된다.
-- 게이트가 남아 있는 동안에는 [Binding 오브젝트]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#binding이-거부되는-조건)로 수동 배치하는 것도 거부된다.
+- 게이트가 남아 있는 동안에는 [Binding 오브젝트]({% post_url 2025-11-05-Kubernetes-Scheduling-06 %}#binding이-거부되는-조건)로 수동 배치하는 것도 거부된다.
 
 ## 게이트가 설정된 동안의 변경
 
@@ -96,13 +96,13 @@ Scheduling Gate가 설정된 상태에서는 파드의 스케줄링 지시자(sc
 | --- | --- |
 | 장비 추가 전 파드 사전 생성 | GPU 노드가 아직 준비되지 않았지만, 파드를 미리 생성해 두고 노드 준비 후 게이트 제거 |
 | 외부 승인 워크플로우 | 비용 승인, 라이선스 확인 등 외부 시스템의 승인을 받은 후에만 스케줄링 |
-| 리소스 쿼터 관리 | 클러스터 리소스가 확보될 때까지 스케줄링을 보류하여 불필요한 스케줄링 시도 방지. [Kueue](https://kueue.sigs.k8s.io/)가 이 방식으로 큐 정책을 구현한다 |
+| 리소스 쿼터 관리 | 클러스터 리소스가 확보될 때까지 스케줄링을 보류하여 불필요한 스케줄링 시도 방지. [Kueue](https://kueue.sigs.k8s.io/)는 plain 파드를 관리할 때 이 방식으로 진입 시점을 제어한다(Job 계열은 `suspend`를 쓴다) |
 | CI/CD 파이프라인 연동 | 배포 파이프라인에서 특정 단계가 완료된 후에만 파드 스케줄링 |
 | 동적 스케줄링 조건 설정 | 게이트가 설정된 동안 nodeSelector나 affinity를 조건에 맞게 설정한 뒤 게이트 제거 |
 
 Scheduling Gate의 핵심 이점은, 스케줄링 불가능한 파드가 스케줄러의 큐에서 반복적으로 시도되는 것을 방지한다는 것이다. 게이트가 없으면 파드는 Active Queue → 스케줄링 실패 → Backoff/Unschedulable Queue → 다시 Active Queue 순환을 반복하며 스케줄러에 불필요한 부하를 준다. Cluster Autoscaler 등 외부 컴포넌트도 이러한 파드를 "스케줄링 불가능"으로 인식하여 불필요한 스케일링 판단을 할 수 있다.
 
-Kueue가 이 메커니즘으로 fair-share·borrowing 같은 큐 정책을 구현하는 방식은 [5편 - Volcano vs Kueue]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#volcano-vs-kueue-접근-방식의-차이)에서 다룬다.
+Kueue가 이 메커니즘(plain 파드)과 `suspend`(Job 계열)로 fair-share·borrowing 같은 큐 정책을 구현하는 방식은 [5편 - Volcano vs Kueue]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#volcano-vs-kueue-접근-방식의-차이)에서 다룬다.
 
 <br>
 
@@ -135,7 +135,7 @@ spec:
     image: cuda-app:latest
 ```
 
-- **프레임워크 평가**: `NodeAffinity` 플러그인이 Filter 단계에서 평가
+- **평가 플러그인**: `NodeAffinity` 플러그인이 Filter 단계에서 평가
 - **동작**: AND 조건. 모든 라벨이 일치해야 통과
 - **한계**: 단순 equality 매칭만 가능. OR 조건, 부정 조건(not in), 소프트 조건(preferred) 등은 표현할 수 없음
 
@@ -286,7 +286,7 @@ spec:
           topologyKey: topology.kubernetes.io/zone  # zone 단위로 분산
 ```
 
-- **프레임워크 평가**: `InterPodAffinity` 플러그인이 Filter(`required`)와 Score(`preferred`) 단계에서 평가
+- **평가 플러그인**: `InterPodAffinity` 플러그인이 Filter(`required`)와 Score(`preferred`) 단계에서 평가
 - `topologyKey`는 노드 라벨의 키를 지정. 같은 키-값 쌍을 가진 노드들이 하나의 토폴로지 도메인을 형성
 
 ### 스케줄링 비용
@@ -369,7 +369,7 @@ GPU 노드에 taint를 거는 이유는 **일반 워크로드가 값비싼 GPU �
 
 > GPU 파드가 GPU 노드에 뜨지 않을 때는 위 두 설정 외에 **노드가 GPU를 실제로 광고하고 있는지**도 확인해야 한다. `kubectl describe node <node>`의 `Allocatable`에 `nvidia.com/gpu`가 0이거나 아예 없으면 device plugin 쪽 문제이고, 스케줄링 설정을 고쳐도 해결되지 않는다. GPU가 extended resource로 노출되는 구조는 [NVIDIA GPU 동작 메커니즘]({% post_url 2024-07-23-Dev-Kubernetes-NVIDIA-GPU-Mechanism %}#extended-resource로서의-gpu)에서 다룬다.
 
-### 프레임워크 평가
+### 평가 플러그인
 
 - `TaintToleration` 플러그인이 Filter(`NoSchedule`, `NoExecute`)와 Score(`PreferNoSchedule`, taint가 적은 노드 선호) 단계에서 평가
 - Score 가중치는 기본 3으로, 다른 Score 플러그인보다 높다
@@ -424,9 +424,9 @@ node.kubernetes.io/unreachable:NoExecute taint 부착
 | `node.spec.unschedulable`을 직접 확인 | `NodeUnschedulable` 플러그인 | Filter |
 | `node.kubernetes.io/unschedulable:NoSchedule` taint 자동 부착 | node lifecycle controller가 부착 → `TaintToleration` 플러그인이 평가 | Filter |
 
-즉 cordon은 "스케줄러의 판단에서 노드를 아예 제외"하는 것이 아니라, **Filter 단계에서 두 플러그인이 각각 탈락시키는 것**이다. `NodeUnschedulable`이 반환하는 상태는 `UnschedulableAndUnresolvable`이며, 이는 "클러스터 상태가 바뀌지 않으면 재시도해도 소용없다"는 뜻이어서 파드가 [Unschedulable Queue]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#스케줄러-큐)로 분류된다. cordon이 해제되는 노드 변경 이벤트가 와야 Active Queue로 돌아온다.
+즉 cordon은 "스케줄러의 판단에서 노드를 아예 제외"하는 것이 아니라, **Filter 단계에서 두 플러그인이 각각 탈락시키는 것**이다. `NodeUnschedulable`이 반환하는 상태는 `UnschedulableAndUnresolvable`이며, 이는 "클러스터 상태가 바뀌지 않으면 재시도해도 소용없다"는 뜻이어서 파드가 [Unschedulable Queue]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#스케줄러-큐)로 분류된다. cordon이 해제되는 노드 변경 이벤트가 와야 Active Queue로 돌아온다.
 
-두 경로가 모두 Filter라는 점이 중요한 결과를 낳는다. **`spec.nodeName`을 직접 지정해 스케줄러를 우회하면 cordon은 무력화된다.** 이 동작과 활용·주의점은 [5편 - cordon된 노드에 nodeName을 지정하면]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#cordon된-노드에-nodename을-지정하면)에서 다룬다.
+두 경로가 모두 Filter라는 점이 중요한 결과를 낳는다. **`spec.nodeName`을 직접 지정해 스케줄러를 우회하면 cordon은 무력화된다.** 이 동작과 활용·주의점은 [6편 - cordon된 노드에 nodeName을 지정하면]({% post_url 2025-11-05-Kubernetes-Scheduling-06 %}#cordon된-노드에-nodename을-지정하면)에서 다룬다.
 
 <br>
 
@@ -461,7 +461,7 @@ kubelet이 디스크 여유가 임계값 아래로 떨어진 것을 감지
 4. 새 파드도 같은 노드에 배치되지 못한다. 다른 노드에 여유가 없으면 Pending에 머문다
 5. 모든 파드의 우선순위가 같으면 선점으로 공간을 만들 수도 없다([2편 - 선점이 동작하는 조건]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#선점이-동작하는-조건))
 
-이때 Pending 파드는 [Unschedulable Queue]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %}#스케줄러-큐)에 들어간다. 복귀 조건은 "클러스터 이벤트"인데, 여기서 그 이벤트는 **디스크를 비워 `DiskPressure`가 해소되고 taint가 걷히는 노드 변경**이다. 즉 스케줄링 설정을 아무리 손봐도 풀리지 않고, 디스크를 확보해야 풀린다.
+이때 Pending 파드는 [Unschedulable Queue]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}#스케줄러-큐)에 들어간다. 복귀 조건은 "클러스터 이벤트"인데, 여기서 그 이벤트는 **디스크를 비워 `DiskPressure`가 해소되고 taint가 걷히는 노드 변경**이다. 즉 스케줄링 설정을 아무리 손봐도 풀리지 않고, 디스크를 확보해야 풀린다.
 
 > **임계값은 배포본마다 다르다.** 업스트림 kubelet의 hard eviction 기본값은 `nodefs.available<10%`, `imagefs.available<15%`지만, 배포본이 이를 덮어쓰는 경우가 있다. 예를 들어 K3s는 `nodefs.available`과 `imagefs.available`을 모두 5%로 낮춰 둔다. 축출이 예상보다 이르거나 늦게 일어난다면 해당 배포본의 kubelet 설정을 확인해야 한다.
 
@@ -489,7 +489,7 @@ spec:
 - `whenUnsatisfiable`:
   - `DoNotSchedule`: 제약을 만족하지 못하면 스케줄링하지 않음 (Filter 동작)
   - `ScheduleAnyway`: 제약을 가능한 한 만족하도록 노력하되, 불가능하면 스케줄링 허용 (Score 동작)
-- **프레임워크 평가**: `PodTopologySpread` 플러그인이 Filter(`DoNotSchedule`)와 Score(`ScheduleAnyway`) 단계에서 평가
+- **평가 플러그인**: `PodTopologySpread` 플러그인이 Filter(`DoNotSchedule`)와 Score(`ScheduleAnyway`) 단계에서 평가
 
 `maxSkew`를 "도메인 쌍 간 차이"로 읽으면 안 된다. 기준은 항상 **전역 최솟값과의 차이**다. 예를 들어 zone A에 3개, zone B에 1개, zone C에 1개 파드가 있고 `maxSkew: 1`이면, 전역 최솟값은 1이므로 zone A는 이미 차이가 2로 위반 상태다. 새 파드는 B나 C에만 들어갈 수 있다.
 
@@ -524,7 +524,7 @@ spec:
 
 # 스케줄링 제어 설정 요약
 
-각 설정이 스케줄링 프레임워크의 어떤 단계에서 어떤 플러그인에 의해 평가되는지 정리한다.
+각 설정이 Scheduling Framework의 어떤 extension point에서 어떤 플러그인에 의해 평가되는지 정리한다.
 
 | 설정 | 플러그인 | Filter (required) | Score (preferred) |
 | --- | --- | --- | --- |
@@ -556,7 +556,7 @@ spec:
 7. **`NoExecute`는 이미 실행 중인 파드에도 영향을 준다.** 노드 장애 시 자동 부여되는 taint와 `tolerationSeconds` 기본값 300초가 조합되어, 노드가 죽은 뒤 약 5분 후 파드가 축출된다.
 8. **노드 압박은 축출과 스케줄링 차단이 별개 동작이다.** 축출은 kubelet이 직접 하고, 스케줄링 차단은 condition에서 파생된 `NoSchedule` taint를 Filter가 평가해 이뤄진다. 둘이 겹치면 축출 → 재생성 → 배치 실패가 반복되며, 디스크를 비워 taint가 걷혀야 풀린다.
 
-[1편]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %})과 [2편]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %})에서 다룬 스케줄러의 개념, 프로세스와 함께 이 글의 스케줄링 제어 설정을 이해하면, 파드가 왜 특정 노드에 배치되었는지(또는 배치되지 않았는지)를 체계적으로 파악할 수 있다. [4편]({% post_url 2025-11-05-Kubernetes-Scheduling-04 %})에서는 스케줄러 설정과 최적화(NodeResourcesFit 전략, GPU 단편화, 멀티 프로필 등)를 다룬다.
+[1편]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %})과 [2편]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %})에서 다룬 스케줄러의 개념, 프로세스와 함께 이 글의 스케줄링 제어 설정을 이해하면, 파드가 왜 특정 노드에 배치되었는지(또는 배치되지 않았는지)를 체계적으로 파악할 수 있다. [4편]({% post_url 2025-11-05-Kubernetes-Scheduling-04 %})에서는 스케줄러 설정과 최적화(NodeResourcesFit 전략, GPU 단편화, 다중 프로필 등)를 다룬다.
 
 <br>
 

@@ -12,6 +12,7 @@ tags:
   - kubernetes
   - deployment
   - scheduler
+last_modified_at: 2026-10-15
 ---
 
 <br>
@@ -78,7 +79,7 @@ Events:
 
 결과적으로, **문제는 Deployment 배포 시 업데이트 전략을 명확하게 설정하지 않았기 때문**에 발생한 것이었다. 그러나 이 문제의 원인을 더 정확하게 파악하기 위해서는 Deployment 배치 전략과 스케줄링 전략에 대해 자세히 알아야 한다. 
 
-> *참고*: 스케줄링에 대한 자세한 내용은 별도로 정리한 [쿠버네티스 스케줄링 - 1. 개념]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %})과 [쿠버네티스 스케줄링 - 2. 프로세스와 선점]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}) 글을 참고하자.
+> *참고*: 스케줄링에 대한 자세한 내용은 별도로 정리한 [쿠버네티스 스케줄링 - 1. 개념과 kube-scheduler 구조]({% post_url 2025-11-05-Kubernetes-Scheduling-01 %})과 [쿠버네티스 스케줄링 - 2. 프로세스와 선점]({% post_url 2025-11-05-Kubernetes-Scheduling-02 %}) 글을 참고하자.
 
 <br>
 

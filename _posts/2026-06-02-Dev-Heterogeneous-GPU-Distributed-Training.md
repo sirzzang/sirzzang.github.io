@@ -241,7 +241,7 @@ spec:
     nvidia.com/gpu.product: "NVIDIA-GeForce-RTX-5090"
 ```
 
-- **Gang scheduling**(Volcano, Kueue 등): all-or-nothing 배치로, 잡의 워커가 쪼개져 이기종에 흩어지는 것 자체를 방지한다
+- **Gang scheduling**(Volcano, Coscheduling 등. Kueue는 잡 단위 admission으로 보완): all-or-nothing 배치로, 워커 일부만 떠서 GPU를 잡은 채 나머지를 기다리는 부분 배정을 막는다([쿠버네티스 스케줄링 5편]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %})). 어떤 기종에 놓일지는 제약하지 않으므로 위의 `nodeSelector`/affinity와 함께 써야 한다. Kueue를 쓰면 ResourceFlavor의 `nodeLabels`를 잡의 파드 템플릿 `nodeSelector`에 넣어 잡 전체를 한 기종 풀로 보낼 수 있다
 - **Topology-aware scheduling**: 같은 풀 안에서도 interconnect가 좋은 노드끼리 묶어 통신 병목을 줄인다
 
 핵심은 균형이다. 이기종을 클러스터에서 물리적으로 영구 격리하라는 게 아니다. **같은 클러스터에 5090 풀과 6000 Pro 풀이 공존하되, 라벨 + 스케줄링 제약으로 각 잡을 동질 풀에 라우팅**하는 게 정석이다. 그래야 6000 Pro 풀을 더 큰 모델·더 큰 배치 잡에 따로 활용할 수 있다.
@@ -285,7 +285,7 @@ spec:
 - **synchronous SGD straggler problem**: straggler 완화 기법(backup workers, gradient coding 등)
 - **heterogeneity-aware training**: 배치 비례 분배, gradient weighting (예: Whale 등 연구)
 - **gradient staleness in async SGD**: 비동기가 수렴을 어떻게 해치는가
-- **gang scheduling**: Volcano / Kueue의 all-or-nothing 배치 원리
+- **gang scheduling**: Volcano·Coscheduling의 all-or-nothing 배치 원리와 Kueue의 잡 단위 admission
 - **NCCL collective topology**: 이기종/PCIe-NVLink 혼재에서 ring-allreduce 토폴로지가 어떻게 바뀌는가
 
 <br>
