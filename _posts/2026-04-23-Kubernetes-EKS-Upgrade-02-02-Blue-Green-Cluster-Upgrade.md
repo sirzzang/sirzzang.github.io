@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-Upgrade-02-02-Blue-Green-Cluster-Upgrade/
 categories:
   - k8s-eks
   - k8s-operations
-  - cs-cloud
   - study
 toc: true
 header:

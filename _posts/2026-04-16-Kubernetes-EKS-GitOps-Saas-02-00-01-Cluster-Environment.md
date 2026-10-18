@@ -4,7 +4,6 @@ excerpt: "실습 환경에 이미 배포된 네임스페이스와 Flux 리소스
 permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-02-00-01-Cluster-Environment/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

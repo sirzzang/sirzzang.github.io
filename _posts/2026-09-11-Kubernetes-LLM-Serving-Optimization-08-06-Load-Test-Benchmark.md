@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Bench
 categories:
   - mlops-serving
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 use_math: false

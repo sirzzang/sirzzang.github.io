@@ -5,6 +5,7 @@ permalink: /dev/Dev-NCCL-GPU-Compat-CI-Runtime-Gate/
 categories:
   - mlops-gpu
   - mlops-training
+  - prog-tools
   - dev-log
 toc: true
 header:

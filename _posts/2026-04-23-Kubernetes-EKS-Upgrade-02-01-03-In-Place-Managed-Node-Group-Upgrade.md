@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-Upgrade-02-01-03-In-Place-Managed-Node-Gro
 categories:
   - k8s-eks
   - k8s-operations
-  - cs-cloud
   - study
 toc: true
 header:

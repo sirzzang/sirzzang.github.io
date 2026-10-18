@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-Upgrade-01-00-Overview/
 categories:
   - k8s-eks
   - k8s-operations
-  - cs-cloud
   - study
 toc: true
 header:

@@ -4,7 +4,6 @@ excerpt: "Terraform init/plan/apply를 실행하고, Public-Public 구성의 EKS
 permalink: /kubernetes/Kubernetes-EKS-01-01-02-Installation-Result/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-02-00-01-Kubernetes-Pod-to-Pod-Networking/
 categories:
   - k8s-networking
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

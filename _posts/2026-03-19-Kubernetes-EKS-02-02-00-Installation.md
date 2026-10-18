@@ -4,7 +4,6 @@ excerpt: "VPC CNI 실습을 위한 2주차 EKS 환경을 Terraform으로 구성�
 permalink: /kubernetes/Kubernetes-EKS-02-02-00-Installation/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

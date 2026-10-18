@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-02-00-00-Kubernetes-Networking-Model/
 categories:
   - k8s-networking
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

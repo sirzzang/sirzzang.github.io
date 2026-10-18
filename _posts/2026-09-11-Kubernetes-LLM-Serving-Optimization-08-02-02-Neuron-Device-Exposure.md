@@ -6,7 +6,6 @@ categories:
   - mlops-gpu
   - k8s-eks
   - cs-linux
-  - cs-cloud
   - study
 toc: true
 use_math: false

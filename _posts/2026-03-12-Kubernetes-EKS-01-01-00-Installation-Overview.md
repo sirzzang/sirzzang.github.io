@@ -4,7 +4,6 @@ excerpt: "EKS 클러스터를 배포하기 위한 방법을 비교하고, 이번
 permalink: /kubernetes/Kubernetes-EKS-01-01-00-Installation-Overview/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

@@ -4,7 +4,6 @@ excerpt: "CloudFormation 스택 생성부터 Terraform 인프라 배포 완료�
 permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-01-01-03-Installation/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

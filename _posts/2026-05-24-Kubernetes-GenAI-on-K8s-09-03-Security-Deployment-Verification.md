@@ -6,7 +6,6 @@ categories:
   - k8s-eks
   - k8s-auth
   - cs-security
-  - cs-cloud
   - study
 toc: true
 header:

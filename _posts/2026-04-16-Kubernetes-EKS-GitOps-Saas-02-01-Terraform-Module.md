@@ -4,7 +4,6 @@ excerpt: "tenant-apps Terraform 모듈이 어떤 AWS 리소스를 만드는지 �
 permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-02-01-Terraform-Module/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

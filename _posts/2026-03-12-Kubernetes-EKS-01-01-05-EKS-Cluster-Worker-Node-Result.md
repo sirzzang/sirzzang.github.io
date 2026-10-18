@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-01-01-05-EKS-Cluster-Worker-Node-Result/
 categories:
   - k8s-eks
   - cs-linux
-  - cs-cloud
   - study
 toc: true
 header:

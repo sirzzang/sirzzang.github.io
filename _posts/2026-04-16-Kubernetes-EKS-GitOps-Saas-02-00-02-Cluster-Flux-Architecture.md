@@ -4,7 +4,6 @@ excerpt: "Flux의 3-Layer 모델과 진입점 체계를 분석하고, Git 저장
 permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-02-00-02-Cluster-Flux-Architecture/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

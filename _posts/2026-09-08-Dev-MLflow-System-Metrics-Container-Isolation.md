@@ -6,6 +6,7 @@ categories:
   - mlops-experiment
   - cs-container
   - cs-linux
+  - prog-python
   - dev-log
 toc: true
 header:

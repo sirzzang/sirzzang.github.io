@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-Auth-02-02-EKS-Auth-AuthZ/
 categories:
   - k8s-auth
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

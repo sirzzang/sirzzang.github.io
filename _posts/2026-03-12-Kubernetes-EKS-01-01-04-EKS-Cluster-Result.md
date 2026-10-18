@@ -4,7 +4,6 @@ excerpt: "EKS 클러스터의 구성 요소를 확인하고, 온프레미스 Kub
 permalink: /kubernetes/Kubernetes-EKS-01-01-04-EKS-Cluster-Result/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

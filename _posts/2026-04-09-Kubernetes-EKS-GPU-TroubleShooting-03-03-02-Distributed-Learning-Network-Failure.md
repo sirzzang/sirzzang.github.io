@@ -6,7 +6,6 @@ categories:
   - k8s-eks
   - mlops-gpu
   - mlops-training
-  - cs-cloud
   - study
 toc: true
 header:

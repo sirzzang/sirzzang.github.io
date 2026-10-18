@@ -4,7 +4,6 @@ excerpt: "Tofu Controller로 Terraform CRD를 Git에 push하면 인프라가 생
 permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

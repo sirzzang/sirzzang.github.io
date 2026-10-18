@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-03-GPU-Node-Provisi
 categories:
   - k8s-eks
   - mlops-gpu
-  - cs-cloud
   - study
 toc: true
 header:

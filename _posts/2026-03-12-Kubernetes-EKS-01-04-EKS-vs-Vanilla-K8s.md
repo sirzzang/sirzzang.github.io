@@ -4,7 +4,6 @@ excerpt: "EKS에서 달라지는 것과 달라지지 않는 것을 정리해보�
 permalink: /kubernetes/Kubernetes-EKS-01-04-EKS-vs-Vanilla-K8s/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

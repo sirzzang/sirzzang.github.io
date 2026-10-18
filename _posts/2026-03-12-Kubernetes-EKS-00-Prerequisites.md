@@ -4,7 +4,6 @@ excerpt: "EKS 스터디를 위한 실습 환경을 구성해보자."
 permalink: /kubernetes/Kubernetes-EKS-00-Prerequisites/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-02-02-01-Installation-Result/
 categories:
   - k8s-eks
   - k8s-networking
-  - cs-cloud
   - study
 toc: true
 header:

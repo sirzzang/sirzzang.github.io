@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-Auth-02-03-EKS-Auth-AuthZ-Practice/
 categories:
   - k8s-auth
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

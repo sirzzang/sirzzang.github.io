@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-Auth-01-Installation/
 categories:
   - k8s-eks
   - k8s-auth
-  - cs-cloud
   - study
 toc: true
 header:

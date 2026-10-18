@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-GPU-TroubleShooting-05-Conclusion/
 categories:
   - k8s-eks
   - mlops-gpu
-  - cs-cloud
   - study
 toc: true
 header:

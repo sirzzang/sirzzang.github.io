@@ -4,7 +4,6 @@ excerpt: "EKS SaaS GitOps 실습 환경 배포가 완료된 후, SSM 접속과 V
 permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-01-01-04-Installation-Result/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

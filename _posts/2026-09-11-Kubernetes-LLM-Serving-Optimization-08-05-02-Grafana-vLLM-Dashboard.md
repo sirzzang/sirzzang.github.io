@@ -6,7 +6,6 @@ categories:
   - mlops-serving
   - mlops-monitoring
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 use_math: false

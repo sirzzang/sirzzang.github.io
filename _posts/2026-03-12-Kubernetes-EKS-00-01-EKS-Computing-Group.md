@@ -4,7 +4,6 @@ excerpt: "EKS 데이터 플레인을 구성하는 네 가지 방식을 비교하
 permalink: /kubernetes/Kubernetes-EKS-00-01-EKS-Computing-Group/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

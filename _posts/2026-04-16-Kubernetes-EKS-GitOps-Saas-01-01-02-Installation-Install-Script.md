@@ -4,7 +4,6 @@ excerpt: "EKS SaaS GitOps 워크숍의 2단계 인프라 배포 스크립트(ins
 permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-01-01-02-Installation-Install-Script/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

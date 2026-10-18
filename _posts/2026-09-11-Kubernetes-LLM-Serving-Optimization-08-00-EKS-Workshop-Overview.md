@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Ov
 categories:
   - mlops-serving
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 use_math: false

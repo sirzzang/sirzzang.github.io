@@ -4,7 +4,6 @@ excerpt: "EKS 기반 GitOps SaaS 워크숍의 실습 환경 구조(CloudFormatio
 permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-01-00-Installation-Overview/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

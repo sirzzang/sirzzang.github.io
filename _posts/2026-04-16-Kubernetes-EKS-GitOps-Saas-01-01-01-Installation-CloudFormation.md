@@ -4,7 +4,6 @@ excerpt: "EKS SaaS GitOps 워크숍의 1단계 부트스트랩 코드(vs-code-ec
 permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-01-01-01-Installation-CloudFormation/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

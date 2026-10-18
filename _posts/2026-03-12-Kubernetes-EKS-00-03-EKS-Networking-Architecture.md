@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-00-03-EKS-Networking-Architecture/
 categories:
   - k8s-eks
   - k8s-networking
-  - cs-cloud
   - study
 toc: true
 header:

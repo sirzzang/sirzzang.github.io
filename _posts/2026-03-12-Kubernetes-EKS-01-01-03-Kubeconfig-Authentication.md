@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-01-01-03-Kubeconfig-Authentication/
 categories:
   - k8s-eks
   - k8s-auth
-  - cs-cloud
   - study
 toc: true
 header:

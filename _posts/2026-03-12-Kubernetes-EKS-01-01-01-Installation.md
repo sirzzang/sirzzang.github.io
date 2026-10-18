@@ -4,7 +4,6 @@ excerpt: "Public-Public 엔드포인트 구성을 가진 EKS 클러스터를 배
 permalink: /kubernetes/Kubernetes-EKS-01-01-01-Installation/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

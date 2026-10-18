@@ -4,7 +4,7 @@ excerpt: "엣지 컴퓨팅에 대해 알아 보자."
 toc: true
 permalink: /etc/etc-edge-computing/
 categories:
-  - etc
+  - cs-cloud
   - concept
 tags:
   - 엣지

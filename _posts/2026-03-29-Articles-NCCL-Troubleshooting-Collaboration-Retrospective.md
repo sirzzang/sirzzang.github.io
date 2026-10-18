@@ -16,6 +16,7 @@ tags:
   - Troubleshooting
   - Collaboration
   - Retrospective
+last_modified_at: 2026-10-18
 ---
 
 <br>
@@ -25,6 +26,7 @@ tags:
 - **문제**: K8s 위 분산 학습에서 GPU worker 4개 이상 사용 시 NCCL `all_reduce`에서 `CUDA error: illegal memory access` 발생했다. worker 1~2개에서는 정상이다.
 - **원인**: 사용자 코드가 아닌 NCCL 인프라 자체의 문제였다. gloo 백엔드로 전환하니 동일 코드가 정상 동작했다.
 - **교훈**: "코드 먼저 의심"은 무리 없는 판단이었지만, ML 엔지니어의 체계적인 코드 레벨 검증이 선행되었기에 인프라 문제라는 결론의 신뢰도가 확보됐다. ML, MLOps 경계에 걸친 문제일수록 협업의 순서와 역할 분담이 중요하다.
+- (후기) 이 글을 쓸 때 남아 있던 근본 원인은 이후 확인됐다. [원인 분석](#원인-분석)에서 꼽은 세 후보 중 세 번째(CUDA driver와 NCCL 빌드 버전 호환성 불일치)가 구체화된 것으로, base 이미지의 NCCL 2.26.2가 CUDA 12.2로 빌드되어 RTX 5090(sm_120)용으로 미리 컴파일된 커널이 없었다. NCCL을 2.29.7로 올린 base 이미지로 문제를 해결했고, 같은 이미지가 다시 배포되지 않도록 빌드·배포 단계에 호환성 게이트를 붙였다. 원인을 좁혀 간 과정은 [[NCCL] NCCL Communicator 초기화 시점]({% post_url 2026-04-18-Dev-NCCL-Communicator-Lazy-Init-Debugging %}), 재발 방지는 [[NCCL] GPU 호환성 게이트]({% post_url 2026-04-30-Dev-NCCL-GPU-Compat-CI-Runtime-Gate %})에 정리했다
 
 <br>
 
@@ -127,6 +129,10 @@ NCCL은 프로세스 수에 따라 통신 알고리즘과 버퍼 크기를 동�
 gloo 백엔드로 분산 학습이 정상 동작 중이다. 디버깅 과정에서 추가했던 모든 workaround(환경변수, 코드 변경, Dockerfile 수정)는 전부 되돌렸다.
 
 gloo는 GPU 텐서에 대해서도 CPU를 경유해 통신하므로, SyncBN(Synchronized Batch Normalization)을 재활성화했을 때 BN layer마다 GPU-CPU 전송 오버헤드가 발생한다. 학습 속도 모니터링이 필요한 상태이며, NCCL 자체의 근본적인 해결은 아직 남아 있다.
+
+> (후기) 근본 원인은 이후 확인됐다. NCCL 2.26.2(CUDA 12.2 빌드)에 sm_120(RTX 5090)용 커널이 없었고, sm_120 커널이 포함된 NCCL 2.29.7로 base 이미지를 올려 해결했다.
+> - 원인을 좁혀 간 과정: [[NCCL] NCCL Communicator 초기화 시점: Lazy vs Eager Init]({% post_url 2026-04-18-Dev-NCCL-Communicator-Lazy-Init-Debugging %})
+> - 재발 방지(빌드 타임·배포 타임 게이트): [[NCCL] GPU 호환성 게이트]({% post_url 2026-04-30-Dev-NCCL-GPU-Compat-CI-Runtime-Gate %})
 
 <br>
 

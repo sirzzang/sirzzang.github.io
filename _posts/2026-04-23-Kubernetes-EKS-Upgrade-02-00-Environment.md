@@ -4,7 +4,6 @@ excerpt: "AWS EKS 업그레이드 워크숍 실습 환경의 클러스터 구성
 permalink: /kubernetes/Kubernetes-EKS-Upgrade-02-00-Environment/
 categories:
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-Auth-00-00-Overview/
 categories:
   - k8s-auth
   - k8s-eks
-  - cs-cloud
   - study
 toc: true
 header:

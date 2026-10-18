@@ -5,7 +5,6 @@ permalink: /kubernetes/Kubernetes-EKS-Upgrade-02-01-04-Blue-Green-Managed-Node-G
 categories:
   - k8s-eks
   - k8s-operations
-  - cs-cloud
   - study
 toc: true
 header:
