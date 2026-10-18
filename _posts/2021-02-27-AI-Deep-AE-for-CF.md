@@ -1,5 +1,5 @@
 ---
-title:  "[AI] Training Deep AutoEncoders for Collaborative Filtering 리뷰"
+title:  "[RecSys] Training Deep AutoEncoders for Collaborative Filtering 리뷰"
 excerpt: "<<Collabortaive Filtering>> 협업 필터링을 위한 깊은 오토인코더 네트워크를 구성해 보자."
 toc: true
 toc_sticky: true

@@ -1,5 +1,5 @@
 ---
-title:  "[AI] Transformers 라이브러리 사용하기"
+title:  "[NLP] Transformers 라이브러리 사용하기"
 excerpt: "이제 HuggingFace Transformers 라이브러리를 Keras Functional API처럼 사용할 수 있다!"
 toc: true
 toc_sticky: true

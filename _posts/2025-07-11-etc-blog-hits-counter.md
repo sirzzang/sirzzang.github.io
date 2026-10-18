@@ -1,5 +1,5 @@
 ---
-title:  "블로그 hits counter 변경"
+title:  "[Jekyll] 블로그 hits counter 변경"
 toc: false
 permalink: /etc/etc-blog-hits-counter/
 categories:

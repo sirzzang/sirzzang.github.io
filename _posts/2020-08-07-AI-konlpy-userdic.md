@@ -1,5 +1,5 @@
 ---
-title:  "[AI] KoNLPy 사용자 사전 추가"
+title:  "[NLP] KoNLPy 사용자 사전 추가"
 excerpt: "Google Colabaratory에서 사용자 사전을 추가해 보자."
 toc: true
 toc_sticky: true
