@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] GPU Sharing: Time Slicing - 1. 개념"
 excerpt: GPU Time Slicing에 대해 알아보자.
+permalink: /kubernetes/Kubernetes-GPU-Time-Slicing-1/
 categories:
-  - Kubernetes
+  - mlops-gpu
+  - cs-architecture
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -1,8 +1,11 @@
 ---
 title:  "[Go] Query Parameter를 이용해 PostgreSQL json 타입의 데이터 조회하기"
 excerpt: Go를 이용해 PostgreSQL jsonb 타입의 데이터를 조회할 때, query parameter 설정에 주의해야 한다.
+permalink: /dev/Dev-go-postgresql-jsonb-query-parameter/
 categories:
-  - Dev
+  - prog-go
+  - cs-database
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] kubeconfig - 3. API Reference 톺아보기"
 excerpt: "kubeconfig 파일의 전체 필드 스펙을 상세히 살펴보자."
+permalink: /kubernetes/Kubernetes-Kubeconfig-03/
 categories:
-  - Kubernetes
+  - k8s-auth
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

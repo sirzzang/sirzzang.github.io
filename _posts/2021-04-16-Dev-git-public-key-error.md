@@ -1,8 +1,10 @@
 ---
 title:  "[Git] Permission Denied (public key) 에러 해결"
 excerpt: git clone 과정에서 permission denied 에러 해결 방법
+permalink: /dev/Dev-git-public-key-error/
 categories:
-  - Dev
+  - prog-tools
+  - troubleshooting
 toc: false
 header:
   teaser: /assets/images/blog-Dev.jpg

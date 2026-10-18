@@ -3,8 +3,10 @@ title:  "[AI] KoNLPy 사용자 사전 추가"
 excerpt: "Google Colabaratory에서 사용자 사전을 추가해 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-konlpy-userdic/
 categories:
-  - AI
+  - ai-ml-dl
+  - dev-log
 tags:
   - 자연어처리
   - Python

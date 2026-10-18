@@ -1,8 +1,12 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.6. 부하 테스트와 llmperf 벤치마크"
 excerpt: "자작 스크립트와 llmperf로 vLLM에 부하를 걸고, 두 도구가 낸 수치를 나란히 놓을 수 있는지 확인해 보자."
+permalink: /kubernetes/Kubernetes-LLM-Serving-Optimization-08-06-Load-Test-Benchmark/
 categories:
-  - Kubernetes
+  - mlops-serving
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
 use_math: false
 header:

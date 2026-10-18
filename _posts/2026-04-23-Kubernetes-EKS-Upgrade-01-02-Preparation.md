@@ -1,8 +1,12 @@
 ---
 title: "[EKS] EKS 업그레이드: 업그레이드 준비"
 excerpt: "EKS 클러스터 업그레이드 전에 확인해야 할 사전 요구사항, Upgrade Insights, 체크리스트, PDB 설정 등을 정리해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Upgrade-01-02-Preparation/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-operations
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -16,7 +20,6 @@ tags:
   - ArgoCD
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
-hidden: true
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 7주차 학습 내용을 기반으로 합니다.*

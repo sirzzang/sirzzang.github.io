@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] 쿠버네티스 스케줄링 - 0. 스케줄링 일반 개념과 쿠버네티스"
 excerpt: "Slurm, LSF, Volcano, kube-scheduler를 함께 놓고 스케줄러가 답하는 공통 질문과 설계 축을 정리하고, 쿠버네티스 스케줄링 모델이 그 안에서 어디에 있는지 알아보자."
+permalink: /kubernetes/Kubernetes-Scheduling-00/
 categories:
-  - Kubernetes
+  - k8s-scheduling
+  - mlops-resource
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

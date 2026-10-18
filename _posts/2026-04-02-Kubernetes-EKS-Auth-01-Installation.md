@@ -1,10 +1,13 @@
 ---
 title: "[EKS] EKS: 인증/인가 - 2. 실습 환경 배포"
 excerpt: "4주차 인증/인가 실습을 위한 EKS 환경을 배포해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Auth-01-Installation/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-auth
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

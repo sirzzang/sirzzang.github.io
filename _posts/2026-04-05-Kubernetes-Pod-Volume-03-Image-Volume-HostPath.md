@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Pod 볼륨 - 3. image 볼륨과 hostPath"
 excerpt: "image 볼륨으로 컨테이너 이미지의 파일을 다른 컨테이너에 마운트하고, hostPath 볼륨의 동작과 위험성을 알아보자."
+permalink: /kubernetes/Kubernetes-Pod-Volume-03-Image-Volume-HostPath/
 categories:
-  - Kubernetes
+  - k8s-storage
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -15,7 +17,6 @@ tags:
   - OCI
   - ImageVolume
   - security
-hidden: true
 last_modified_at: 2026-09-13
 ---
 

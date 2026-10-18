@@ -1,10 +1,14 @@
 ---
 title: "[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 3. 분산학습과 NCCL 통신 - 2. SG 차단 네트워크 장애 재현"
 excerpt: "EKS node SG에서 ephemeral self-ref를 제거하면 분산학습이 어떻게 실패하는지 재현해 보자."
+permalink: /kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-02-Distributed-Learning-Network-Failure/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - mlops-gpu
+  - mlops-training
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

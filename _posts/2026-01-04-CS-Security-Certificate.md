@@ -1,8 +1,12 @@
 ---
 title:  "[Security] 디지털 인증서"
 excerpt: "디지털 인증서의 필요성, 구조, 체인, 그리고 종류"
+redirect_from:
+  - /cs/CS-Certificate/
+permalink: /cs/CS-Security-Certificate/
 categories:
-  - CS
+  - cs-security
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -271,5 +275,5 @@ End Entity (최종 - 예: google.com)
 
 디지털 인증서는 공개키 암호화의 신뢰 문제를 해결하는 핵심 기술이다. CA가 공개키의 소유자를 보증하고, 인증서 체인을 통해 신뢰를 전파한다. 루트 인증서는 기술적 검증 없이 사회적 합의로 신뢰되며, 이것이 PKI 전체의 출발점이 된다.
 
-인증서의 표준 형식에 대해서는 [X.509 인증서](/cs/CS-X509-Certificate/)를, PKI의 전체 구조와 운영에 대해서는 [PKI](/cs/CS-PKI/)를 참고하자.
+인증서의 표준 형식에 대해서는 [X.509 인증서](/cs/CS-Security-X509-Certificate/)를, PKI의 전체 구조와 운영에 대해서는 [PKI](/cs/CS-PKI/)를 참고하자.
 

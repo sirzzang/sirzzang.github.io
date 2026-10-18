@@ -2,8 +2,11 @@
 title:  "AWS EC2 인프라 철수기: 현황 분석부터 의사결정까지"
 excerpt: "클라우드 비용과 효용 사이에서 고민하고, 온프레미스 이전을 결정하기까지의 과정을 기록한다."
 toc: true
+permalink: /articles/Articles-AWS-EC2-Withdrawal/
 categories:
-  - Articles
+  - articles
+  - cs-cloud
+  - retrospective
 header:
   teaser: /assets/images/blog-Articles.png
 tags:
@@ -14,7 +17,6 @@ tags:
   - infrastructure
   - on-premise
   - decision-making
-hidden: true
 ---
 
 <br>

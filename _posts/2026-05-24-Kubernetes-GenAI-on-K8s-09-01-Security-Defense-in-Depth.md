@@ -1,8 +1,12 @@
 ---
 title: "[GenAI] GenAI on K8s: 9.1 - 보안 개념: Defense in Depth"
 excerpt: "GenAI 워크로드를 K8s에 올릴 때의 보안 원칙을 defense in depth 관점에서 정리하고, 컨테이너 생애주기 전체에 걸친 보안 영역과 GenAI 고유 고려사항까지 살펴보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-09-01-Security-Defense-in-Depth/
 categories:
-  - Kubernetes
+  - k8s-auth
+  - cs-security
+  - k8s-workload
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -17,7 +21,6 @@ tags:
   - IRSA
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-9
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 9장의 학습 내용을 바탕으로 합니다*

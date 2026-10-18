@@ -1,8 +1,10 @@
 ---
 title:  "[nginx] CORS 상황 해결: 같은 도메인의 다른 nginx가 응답하고 있었다"
 excerpt: "프론트엔드 로그인 시 405 에러의 원인을 추적하고, 같은 도메인에 nginx가 여러 개 떠 있을 때의 함정을 정리해 보자."
+permalink: /dev/Dev-Nginx-CORS-Troubleshooting/
 categories:
-  - Dev
+  - cs-network
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

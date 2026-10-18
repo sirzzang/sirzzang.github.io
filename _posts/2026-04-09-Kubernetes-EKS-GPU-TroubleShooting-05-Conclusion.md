@@ -1,10 +1,13 @@
 ---
 title: "[EKS] EKS GPU 트러블슈팅: 5. 결론"
 excerpt: "EKS GPU 트러블슈팅 시리즈를 마무리하며, 실습에서 도출한 운영 체크리스트와 회고를 정리한다."
+permalink: /kubernetes/Kubernetes-EKS-GPU-TroubleShooting-05-Conclusion/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - mlops-gpu
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

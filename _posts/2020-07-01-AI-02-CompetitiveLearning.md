@@ -5,8 +5,10 @@ toc: true
 toc_sticky: true
 header:
   teaser: /assets/images/blog-AI.jpg
+permalink: /ai/AI-02-CompetitiveLearning/
 categories:
-  - AI
+  - ai-ml-dl
+  - study
 tags:
   - DL
   - Competitive Learning

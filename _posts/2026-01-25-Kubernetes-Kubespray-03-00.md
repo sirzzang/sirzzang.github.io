@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 3.0. 프로젝트 구조 Overview"
 excerpt: "Kubespray 프로젝트의 전체 디렉토리 구조를 살펴보고, 핵심 파일들을 파악해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-03-00/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

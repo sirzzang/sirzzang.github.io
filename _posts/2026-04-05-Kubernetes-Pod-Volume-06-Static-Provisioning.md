@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Pod 볼륨 - 6. 정적 프로비저닝과 노드 로컬 PersistentVolume"
 excerpt: "관리자가 PV를 수동으로 생성하는 정적 프로비저닝과, 노드 로컬 PV의 생성/요청/해제/재활용 과정을 알아보자."
+permalink: /kubernetes/Kubernetes-Pod-Volume-06-Static-Provisioning/
 categories:
-  - Kubernetes
+  - k8s-storage
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -15,7 +17,6 @@ tags:
   - local-volume
   - nodeAffinity
   - reclaim-policy
-hidden: true
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 10장의 학습 내용을 기반으로 합니다.*

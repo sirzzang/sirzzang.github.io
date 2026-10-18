@@ -49,9 +49,9 @@ def slug_from_filename(filename: str) -> str:
     return m.group(1) if m else stem
 
 
-def permalink(categories: list[str], slug: str) -> str:
-    cat = "/".join(c.lower() for c in categories) if categories else ""
-    return f"/{cat}/{slug}/" if cat else f"/{slug}/"
+def permalink(fm: dict, slug: str) -> str:
+    # 기존 글은 front matter permalink 로 배포 당시 URL 이 고정돼 있다. 새 글은 _config.yml 의 /:title/
+    return fm.get("permalink") or f"/{slug}/"
 
 
 def normalize(url: str) -> str:
@@ -78,12 +78,8 @@ def build_post_map(posts_dir: str):
             content = f.read()
 
         fm = parse_front_matter(content)
-        cats = fm.get("categories", [])
-        if isinstance(cats, str):
-            cats = [cats]
-
         slug = slug_from_filename(fname)
-        url = permalink(cats, slug)
+        url = permalink(fm, slug)
         title = fm.get("title", slug)
         info = {"url": url, "title": title}
 

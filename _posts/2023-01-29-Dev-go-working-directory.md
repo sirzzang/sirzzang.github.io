@@ -1,8 +1,10 @@
 ---
 title:  "[Go] go run command와 working directory"
 excerpt: 패키지 실행 시 working directory에 주의하지 않으면 발생할 수 있는 문제
+permalink: /language/Dev-go-working-directory/
 categories:
-  - Language
+  - prog-go
+  - troubleshooting
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

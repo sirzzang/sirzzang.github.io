@@ -1,8 +1,11 @@
 ---
 title: "[GenAI] GenAI on K8s: 11.6 - 도구 비교, Bias·Drift 운영, 평가 메트릭"
 excerpt: "Kubeflow·MLflow·Ray 비교표, AIF360 fairness gate, drift 통계 측정, 자동 재학습 흐름, 분류·GenAI 평가 메트릭을 정리해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-11-06-Tool-Comparison-Bias-and-Drift-Ops/
 categories:
-  - Kubernetes
+  - mlops-monitoring
+  - mlops-pipeline
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -20,7 +23,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-11
 use_math: false
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 11장의 학습 내용을 바탕으로 합니다*

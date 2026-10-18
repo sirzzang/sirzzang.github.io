@@ -1,8 +1,10 @@
 ---
 title:  "[Git] Git configuration 변경 방법"
 excerpt: git 사용 환경 설정 파일을 확인하고 변경해 보자
+permalink: /dev/Dev-git-config/
 categories:
-  - Dev
+  - prog-tools
+  - troubleshooting
 toc: false
 header:
   teaser: /assets/images/blog-Dev.jpg

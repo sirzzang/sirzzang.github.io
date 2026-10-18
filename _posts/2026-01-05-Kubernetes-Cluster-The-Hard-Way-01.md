@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 1. Prerequisites"
 excerpt: "VirtualBox와 Vagrant를 사용하여 Kubernetes 실습을 위한 4대의 가상 머신(jumpbox, server, node-0, node-1)을 구성하고 초기 설정을 완료해보자."
+permalink: /kubernetes/Kubernetes-Cluster-The-Hard-Way-01/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

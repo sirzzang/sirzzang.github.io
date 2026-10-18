@@ -1,10 +1,13 @@
 ---
 title:  "[EKS] EKS: Public-Public EKS 클러스터 - 7. 엔드포인트 액세스 분석"
 excerpt: "Public-Public 구성에서 API 서버 엔드포인트 구성에 대해 살펴보자."
+permalink: /kubernetes/Kubernetes-EKS-01-01-07-Public-Public-Endpoint/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-networking
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

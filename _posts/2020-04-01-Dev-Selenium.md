@@ -5,8 +5,11 @@ toc: true
 toc_sticky: true
 header:
   teaser: /assets/images/blog-Dev.jpg
+permalink: /dev/Dev-Selenium/
 categories:
-  - Dev
+  - prog-tools
+  - prog-python
+  - concept
 tags:
   - Python
   - Crawling

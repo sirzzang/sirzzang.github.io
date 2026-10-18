@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8. 오프라인 배포: kubespray-offline - 0. Overview"
 excerpt: "kubespray-offline이 무엇을, 왜 자동화하는지 이해하기 위한  청사진을 그려보자."
+permalink: /kubernetes/Kubernetes-Kubespray-08-02-00/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -14,7 +16,6 @@ tags:
   - kubespray-offline
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-6
-hidden: true
 
 ---
 

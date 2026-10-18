@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.1. kubeadm init"
 excerpt: "kubeadm init 명령어의 동작 원리와 각 단계를 살펴보자."
+permalink: /kubernetes/Kubernetes-Kubeadm-01-1/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-auth
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +13,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-3
-hidden: true
 
 ---
 

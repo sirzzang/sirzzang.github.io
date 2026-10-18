@@ -1,8 +1,10 @@
 ---
 title: "AI와 나: 디버깅하는 AI를 보며 느낀 동질감"
 excerpt: "Claude Code가 삽질하는 걸 보고 있자니, 묘한 동질감이 들어 남겨 보는 기록."
+permalink: /articles/Articles-AI-and-Me/
 categories:
-  - Articles
+  - articles
+  - retrospective
 toc: true
 header:
   teaser: /assets/images/blog-Articles.png
@@ -12,7 +14,6 @@ tags:
   - Debugging
   - Retrospective
   - Coexistence
-hidden: true
 ---
 
 <br>

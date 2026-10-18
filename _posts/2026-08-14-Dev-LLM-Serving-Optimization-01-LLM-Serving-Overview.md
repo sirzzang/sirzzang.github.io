@@ -1,8 +1,10 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 1. 개요: 트랜스포머에서 서빙 시스템으로"
 excerpt: "트랜스포머 학습을 서빙과 잇고, 왜 프레임워크 없이 서빙 시스템을 직접 만드는지 그려 보자."
+permalink: /dev/Dev-LLM-Serving-Optimization-01-LLM-Serving-Overview/
 categories:
-  - Dev
+  - mlops-serving
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

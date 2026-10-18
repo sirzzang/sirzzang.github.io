@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] kubelet의 노드 상태 보고 구조"
 excerpt: "kubelet이 노드 상태를 API server에 보고하는 원리에 대해 알아보자."
+permalink: /kubernetes/Kubernetes-Kubelet-Node-Status/
 categories:
-  - Kubernetes
+  - k8s-operations
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

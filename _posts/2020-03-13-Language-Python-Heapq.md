@@ -3,8 +3,11 @@ title:  "[Python] heapq 모듈"
 excerpt:
 header:
   teaser: /assets/images/blog-Dev.jpg
+permalink: /language/Language-Python-Heapq/
 categories:
-  - Language
+  - prog-python
+  - cs-algorithm
+  - concept
 toc : true
 tags:
   - Python

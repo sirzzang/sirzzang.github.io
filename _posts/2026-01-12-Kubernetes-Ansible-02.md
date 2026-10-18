@@ -1,9 +1,10 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 1.1. 환경 구성"
-hidden: true
 excerpt: "Ansible Control Node 설정과 SSH 키 기반 인증 구성을 통해 Kubespray 실습 환경을 준비해보자."
+permalink: /kubernetes/Kubernetes-Ansible-02/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

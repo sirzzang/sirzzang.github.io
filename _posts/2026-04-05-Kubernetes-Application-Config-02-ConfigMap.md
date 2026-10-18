@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] 어플리케이션 설정 - 2. ConfigMap"
 excerpt: "ConfigMap을 이용해 설정 데이터를 파드에서 분리하고 환경 변수로 주입하는 방법을 알아보자."
+permalink: /kubernetes/Kubernetes-Application-Config-02-ConfigMap/
 categories:
-  - Kubernetes
+  - k8s-workload
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -14,7 +16,6 @@ tags:
   - configMapKeyRef
   - environment-variable
   - immutable
-hidden: true
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 8장의 학습 내용을 기반으로 합니다.*

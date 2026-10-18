@@ -1,8 +1,10 @@
 ---
 title: "[Nsight] Nsight 프로파일러: 1. 개념과 동작 원리"
 excerpt: "맥에 뷰어를 깔고 Colab T4로 리포트를 하나 떠 보면서, Nsight가 무엇을 재고 그 측정 방식이 어떤 제약을 만드는지 정리해 보자."
+permalink: /dev/Dev-Nsight-Profiling-01-Concepts/
 categories:
-  - Dev
+  - mlops-gpu
+  - concept
 toc: true
 use_math: false
 header:

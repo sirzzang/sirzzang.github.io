@@ -1,9 +1,10 @@
 ---
 title: "[LLM] LLM 서빙과 최적화 - 2.2. Transformer: Transformer Explainer"
 excerpt: "Transformer Explainer를 이용해 브라우저에서 GPT-2를 이용해 트랜스포머 내부를 들여다 보자."
+permalink: /ai/AI-LLM-Optimization-02-02-Transformer-Explainer-Overview/
 categories:
-  - AI
-hidden: true
+  - ai-llm
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-AI.jpg

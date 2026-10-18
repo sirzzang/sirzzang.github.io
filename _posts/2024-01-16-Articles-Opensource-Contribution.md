@@ -2,8 +2,10 @@
 title:  "나의 작고 소중한 오픈 소스 기여 후기"
 excerpt: "How to contribute to open source"
 toc: true
+permalink: /articles/Articles-Opensource-Contribution/
 categories:
-  - Articles
+  - articles
+  - retrospective
 tags:
   - 후기
   - 오픈 소스

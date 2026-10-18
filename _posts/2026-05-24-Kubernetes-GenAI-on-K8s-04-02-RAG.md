@@ -1,8 +1,10 @@
 ---
 title: "[GenAI] GenAI on K8s: 4.2 - RAG (Retrieval-Augmented Generation)"
 excerpt: "외부 지식을 LLM에 주입하는 RAG의 5단계 파이프라인, 임베딩 공간 시각화, 그리고 hallucination 비교 실험을 통해 RAG의 본질을 파악해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-04-02-RAG/
 categories:
-  - Kubernetes
+  - ai-llm
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -18,7 +20,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-4
 use_math: false
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 4장의 학습 내용을 바탕으로 합니다*

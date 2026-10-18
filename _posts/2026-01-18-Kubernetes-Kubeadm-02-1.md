@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 2.1. kubeadm join"
 excerpt: "kubeadm join 명령어의 동작 원리와 각 단계를 살펴보자."
+permalink: /kubernetes/Kubernetes-Kubeadm-02-1/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-auth
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +13,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-3
-hidden: true
 
 ---
 

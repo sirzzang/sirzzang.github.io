@@ -1,8 +1,12 @@
 ---
 title: "[GenAI] GenAI on K8s: 10.5 - GPU 스케일링·최적화와 NVIDIA NIM"
 excerpt: "DCGM 메트릭 기반 GPU 오토스케일링, GPU_UTIL을 맹신하면 안 되는 이유, 그리고 NVIDIA NIM까지 정리해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-10-05-GPU-Scaling-Optimization-and-NIM/
 categories:
-  - Kubernetes
+  - mlops-resource
+  - mlops-gpu
+  - mlops-serving
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -20,7 +24,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-10
 use_math: false
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 10장의 학습 내용을 바탕으로 합니다*

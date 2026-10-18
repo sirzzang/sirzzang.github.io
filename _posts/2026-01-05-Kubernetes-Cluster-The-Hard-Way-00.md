@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 0. Overview"
 excerpt: "Kubernetes The Hard Way를 따라 자동화 도구 없이 쿠버네티스 클러스터를 손으로 직접 구성해보자."
+permalink: /kubernetes/Kubernetes-Cluster-The-Hard-Way-00/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -1,8 +1,10 @@
 ---
 title:  "[CS] 프록시(Proxy)와 리버스 프록시(Reverse Proxy)"
 excerpt: "프록시와 리버스 프록시의 개념, 차이, 실무 활용을 알아보자."
+permalink: /cs/CS-Proxy-Reverse-Proxy/
 categories:
-  - CS
+  - cs-network
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

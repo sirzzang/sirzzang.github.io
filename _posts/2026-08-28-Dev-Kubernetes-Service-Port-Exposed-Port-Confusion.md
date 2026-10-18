@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Service 포트와 노출 포트 혼동으로 인한 연결 타임아웃 트러블슈팅"
 excerpt: "클러스터 밖으로 노출된 접속용 포트를 클러스터 내부 Service 포트로 착각하면 어떤 증상이 나타나는지 알아 보자."
+permalink: /dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion/
 categories:
-  - Dev
+  - k8s-networking
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

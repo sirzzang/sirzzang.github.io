@@ -1,8 +1,10 @@
 ---
 title:  "[Python] super() vs. super(Class)"
 excerpt: 문득 궁금해진 파이썬 super 키워드
+permalink: /language/Language-super/
 categories:
-  - Language
+  - prog-python
+  - concept
 toc: false
 header:
   teaser: /assets/images/blog-Dev.jpg

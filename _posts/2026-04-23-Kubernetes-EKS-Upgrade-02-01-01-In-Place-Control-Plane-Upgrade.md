@@ -1,8 +1,12 @@
 ---
 title: "[EKS] EKS 업그레이드: In-Place 실습 - Control Plane 업그레이드"
 excerpt: "Terraform을 이용해 EKS Control Plane을 1.30에서 1.31로 업그레이드하는 실습을 진행해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Upgrade-02-01-01-In-Place-Control-Plane-Upgrade/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-operations
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -14,7 +18,6 @@ tags:
   - Terraform
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
-hidden: true
 last_modified_at: 2026-08-24
 ---
 

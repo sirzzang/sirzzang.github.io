@@ -1,8 +1,11 @@
 ---
 title:  "[Container] Docker와 containerd 이미지 관리 비교 - 3. 같은 이미지이지만 중복 저장이 아닌 경우"
 excerpt: docker와 crictl에서 같은 이미지가 보이는 현상이 실제 중복 저장인지 확인해 보자.
+permalink: /dev/Dev-Container-Duplicate-Container-Images-3/
 categories:
-  - Dev
+  - cs-container
+  - k8s-operations
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

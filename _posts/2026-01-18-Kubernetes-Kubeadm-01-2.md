@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.2. 환경 확인 및 사전 설정"
 excerpt: "kubeadm 클러스터 구성을 위해 실습 환경을 확인하고, 시간 동기화·SELinux·Swap·커널 모듈 등 사전 설정을 수행해보자."
+permalink: /kubernetes/Kubernetes-Kubeadm-01-2/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - cs-linux
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +13,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-3
-hidden: true
 
 ---
 

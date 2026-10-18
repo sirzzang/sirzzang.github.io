@@ -1,8 +1,12 @@
 ---
 title: "[EKS] EKS 업그레이드: Blue-Green 클러스터 업그레이드"
 excerpt: "새 EKS 클러스터(Green)를 생성하고, 워크로드를 마이그레이션한 뒤 기존 클러스터(Blue)를 폐기하는 Blue-Green 클러스터 업그레이드를 정리해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Upgrade-02-02-Blue-Green-Cluster-Upgrade/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-operations
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -19,7 +23,6 @@ tags:
   - Route53
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
-hidden: true
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 7주차 학습 내용을 기반으로 합니다.*

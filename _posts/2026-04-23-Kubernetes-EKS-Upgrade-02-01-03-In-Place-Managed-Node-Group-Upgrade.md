@@ -1,8 +1,12 @@
 ---
 title: "[EKS] EKS 업그레이드: In-Place 실습 - Managed Node Group 업그레이드"
 excerpt: "Terraform으로 EKS Managed Node Group을 업그레이드하는 두 가지 시나리오(기본 AMI, 커스텀 AMI)를 실습해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Upgrade-02-01-03-In-Place-Managed-Node-Group-Upgrade/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-operations
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -15,7 +19,6 @@ tags:
   - Terraform
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
-hidden: true
 last_modified_at: 2026-08-24
 ---
 

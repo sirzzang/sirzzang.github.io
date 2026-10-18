@@ -1,10 +1,13 @@
 ---
 title:  "[EKS] EKS: Public-Public EKS 클러스터 - 7. 보안그룹 아키텍처"
 excerpt: "EKS 클러스터에 생성된 보안그룹을 분석하고, 컨트롤 플레인과 데이터 플레인의 통신 구조를 이해해보자."
+permalink: /kubernetes/Kubernetes-EKS-01-01-07-Security-Group-Architecture/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-networking
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

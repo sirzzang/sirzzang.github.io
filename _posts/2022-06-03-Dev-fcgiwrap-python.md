@@ -1,8 +1,11 @@
 ---
 title:  "[CGI] fcgiwrap으로 Python 스크립트를 실행하며 겪었던 문제 해결하기"
 excerpt: FastCGI 방식으로 Python 스크립트를 실행할 때 마주했던 문제들
+permalink: /dev/Dev-fcgiwrap-python/
 categories:
-  - Dev
+  - cs-network
+  - cs-linux
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

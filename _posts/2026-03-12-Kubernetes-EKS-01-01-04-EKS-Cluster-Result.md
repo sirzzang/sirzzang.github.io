@@ -1,10 +1,12 @@
 ---
 title:  "[EKS] EKS: Public-Public EKS 클러스터 - 4. 클러스터 구성 요소 확인"
 excerpt: "EKS 클러스터의 구성 요소를 확인하고, 온프레미스 Kubernetes와의 구조적 차이를 분석해보자."
+permalink: /kubernetes/Kubernetes-EKS-01-01-04-EKS-Cluster-Result/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

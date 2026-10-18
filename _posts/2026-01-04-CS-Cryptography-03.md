@@ -1,10 +1,11 @@
 ---
 title:  "[Cryptography] 양방향 암호화 - 대칭키"
 excerpt: "대칭키 암호화의 개념과 DES, 3DES, AES 알고리즘"
+permalink: /cs/CS-Cryptography-03/
 categories:
-  - CS
+  - cs-security
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

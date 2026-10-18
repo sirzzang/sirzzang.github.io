@@ -1,8 +1,10 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: 서빙 최적화 기법 - 6.1. 개요: iteration에서 continuous batching까지"
 excerpt: "서빙 최적화 기법의 출발점인 배칭의 큰 흐름을 실행 단위, 동기, 구조, 재구성 시점 순으로 잡아 보자."
+permalink: /dev/Dev-LLM-Serving-Optimization-06-01-LLM-Serving-Optimization-Techniques-Overview/
 categories:
-  - Dev
+  - mlops-serving
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

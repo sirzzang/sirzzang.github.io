@@ -3,8 +3,10 @@ title:  "[Git] Git 활용하기"
 excerpt: "<<VCS>> 기억해야 할 git 활용 방법"
 toc: true
 toc_sticky: true
+permalink: /dev/Dev-git-basic/
 categories:
-  - Dev
+  - prog-tools
+  - study
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

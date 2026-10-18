@@ -1,10 +1,13 @@
 ---
 title: "[EKS] EKS GPU 트러블슈팅: 2. 실습 환경 구성 - 2. 배포 결과"
 excerpt: "Terraform으로 GPU 트러블슈팅 실습 환경을 배포하고, 클러스터 기본 사항을 확인해 보자."
+permalink: /kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-02-Installation-Result/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - mlops-gpu
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

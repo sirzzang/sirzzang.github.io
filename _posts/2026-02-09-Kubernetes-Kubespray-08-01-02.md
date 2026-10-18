@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8. 오프라인 배포: The Hard Way - 2. NTP / DNS"
 excerpt: "폐쇄망 환경에서 노드 간 시간 동기화를 위한 NTP 서버와, 내부 도메인 이름 해석을 위한 DNS 서버를 구축해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-08-01-02/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - cs-network
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -17,7 +20,6 @@ tags:
   - BIND
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-6
-hidden: true
 
 ---
 

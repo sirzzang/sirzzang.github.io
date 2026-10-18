@@ -1,8 +1,11 @@
 ---
 title:  "[MinIO] distributed 모드의 existingClaim: 무시되는 이유와 standalone 전환"
 excerpt: "K3s 클러스터에서 루트 파티션이 가득 찬 원인을 추적하고, README대로 existingClaim을 설정했는데도 적용되지 않는 이유를 확인해보자."
+permalink: /dev/Dev-Minio-Custom-PVC-Troubleshooting/
 categories:
-  - Dev
+  - k8s-storage
+  - k8s-operations
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

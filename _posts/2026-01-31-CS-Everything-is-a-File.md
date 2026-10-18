@@ -1,8 +1,10 @@
 ---
 title:  "[Linux] Everything is a File 철학"
 excerpt: "Unix/Linux의 Everything is a File 철학에 대해 알아보자."
+permalink: /cs/CS-Everything-is-a-File/
 categories:
-  - CS
+  - cs-linux
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

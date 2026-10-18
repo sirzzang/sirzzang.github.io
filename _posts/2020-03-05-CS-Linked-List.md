@@ -4,9 +4,10 @@ excerpt:
 header:
   teaser: /assets/images/blog-Programming.jpg
 
+permalink: /cs/CS-Linked-List/
 categories:
-  - CS
-hidden: true
+  - cs-algorithm
+  - concept
 tags:
   - Python
   - 자료구조

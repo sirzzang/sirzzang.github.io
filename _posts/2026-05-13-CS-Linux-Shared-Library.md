@@ -1,8 +1,11 @@
 ---
 title: "[Linux] 공유 라이브러리(.so): soname 계약부터 동적 링커 탐색까지"
 excerpt: "soname/ABI 계약, RPATH와 RUNPATH의 우선순위 역전, 정적 링크 트레이드오프, NVIDIA pip 이중 구조를 정리해 보자."
+permalink: /cs/CS-Linux-Shared-Library/
 categories:
-  - CS
+  - cs-linux
+  - mlops-gpu
+  - concept
 toc: true
 use_math: false
 header:

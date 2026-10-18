@@ -1,8 +1,11 @@
 ---
 title: "[Envoy] Envoy 프록시 구조와 확장: llm-d가 Envoy를 쓰는 방식"
 excerpt: "Envoy의 구조와 xDS 동적 설정, ext_proc 확장을 정리하고, llm-d Router가 ext_proc으로 Envoy에 붙는 방식을 살펴 보자."
+permalink: /dev/Dev-Envoy-Proxy-LLM-Serving/
 categories:
-  - Dev
+  - mlops-serving
+  - cs-network
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

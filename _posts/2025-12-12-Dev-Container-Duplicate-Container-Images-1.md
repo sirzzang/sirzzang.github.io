@@ -1,8 +1,10 @@
 ---
 title:  "[Container] Docker와 containerd 이미지 관리 비교 - 1. 배경지식"
 excerpt: 컨테이너 런타임(dockerd, containerd)의 구조, 스토리지 드라이버 구현 비교, 런타임 CLI에 대해 알아보자.
+permalink: /dev/Dev-Container-Duplicate-Container-Images-1/
 categories:
-  - Dev
+  - cs-container
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

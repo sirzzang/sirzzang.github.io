@@ -3,8 +3,11 @@ title:  "[NLP] Kaggle IMDB_2.구현"
 excerpt: "<<Sentiment Analysis>> Kaggle IMDB 대회 우승자 아이디어를 코드로 구현해 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-IMDB-kaggle1st-02/
 categories:
-  - AI
+  - ai-ml-dl
+  - ai-paper
+  - study
 header:
   teaser: /assets/images/blog-AI.jpg
 tags:

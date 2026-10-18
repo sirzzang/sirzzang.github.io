@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.4. kubeadm init 실행"
 excerpt: "kubeadm init을 실행하여 컨트롤 플레인을 구성하고 초기 상태를 확인해보자."
+permalink: /kubernetes/Kubernetes-Kubeadm-01-4/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

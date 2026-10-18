@@ -1,10 +1,12 @@
 ---
 title: "[EKS] GitOps 기반 SaaS: 실습 환경 구성 - 1. CloudFormation 코드 분석"
 excerpt: "EKS SaaS GitOps 워크숍의 1단계 부트스트랩 코드(vs-code-ec2.yaml)를 분석해보자."
+permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-01-01-01-Installation-CloudFormation/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

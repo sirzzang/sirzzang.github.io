@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] etcd 비정상 시나리오별 대응"
 excerpt: K3s 삼중화 클러스터에서 etcd 멤버가 비정상일 때의 대표 시나리오와 대응 방법을 정리한다.
+permalink: /dev/Dev-Kubernetes-Etcd-Failure-Scenarios/
 categories:
-  - Dev
+  - k8s-operations
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

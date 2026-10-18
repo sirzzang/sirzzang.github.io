@@ -1,10 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 3.2.2. 변수 분석 - 그룹 변수 확인"
 excerpt: "Kubespray의 group_vars 디렉토리 구조와 주요 설정 변수들을 확인해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-03-02-02/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

@@ -1,8 +1,11 @@
 ---
 title: "[MLflow] 시스템 메트릭 로깅 - 2. 플랫폼 SDK에 얹기: 이름, cgroup 수집기, 원본 무수정 확장"
 excerpt: "MLflow 원본을 고치지 않고 pod 내 시스템 메트릭 로깅 문제를 해결한 과정에 대해 정리해 보자."
+permalink: /dev/Dev-MLflow-System-Metrics-Platform-SDK/
 categories:
-  - Dev
+  - mlops-experiment
+  - cs-container
+  - dev-log
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

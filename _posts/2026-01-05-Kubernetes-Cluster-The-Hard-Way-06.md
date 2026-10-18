@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 6. Generating the Data Encryption Config and Key"
 excerpt: "Kubernetes Secret 데이터를 암호화하기 위한 encryption-config.yaml 설정 파일을 생성하고 Control Plane에 배포해보자."
+permalink: /kubernetes/Kubernetes-Cluster-The-Hard-Way-06/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - cs-security
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +13,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-1
-hidden: true
 
 ---
 

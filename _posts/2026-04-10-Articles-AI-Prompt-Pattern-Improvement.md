@@ -1,8 +1,11 @@
 ---
 title: "AI 프롬프트 작성 패턴 개선기: 수작업 분석에서 자동화 회고까지"
 excerpt: "320달러 회고 이후, 프롬프트 습관을 추적하고 개선하기 위해 시도한 것들과 그 결과를 기록한다."
+permalink: /articles/Articles-AI-Prompt-Pattern-Improvement/
 categories:
-  - Articles
+  - articles
+  - prog-tools
+  - retrospective
 toc: true
 header:
   teaser: /assets/images/blog-Articles.png
@@ -12,7 +15,6 @@ tags:
   - Prompt Engineering
   - Retrospective
   - Productivity
-hidden: true
 ---
 
 <br>

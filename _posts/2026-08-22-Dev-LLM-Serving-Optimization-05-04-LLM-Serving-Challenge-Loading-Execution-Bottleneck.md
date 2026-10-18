@@ -1,9 +1,11 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.4. 모델 로딩·실행 병목: 메모리 용량과 산술 강도"
 excerpt: "모델 로딩의 메모리 용량 제약과 실행 단계의 병목을 산술 강도로 분석해 보자."
+permalink: /dev/Dev-LLM-Serving-Optimization-05-04-LLM-Serving-Challenge-Loading-Execution-Bottleneck/
 categories:
-  - Dev
-hidden: true
+  - mlops-serving
+  - cs-architecture
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

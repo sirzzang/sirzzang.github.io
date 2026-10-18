@@ -1,8 +1,13 @@
 ---
 title: "[GenAI] GenAI on K8s: 9.3 - 보안 배포 실습: 5단계 검증 + GPU 트러블슈팅"
 excerpt: "Ch9 인프라를 실제로 배포하고, ECR 공급망부터 Bottlerocket host, PSS, Secret 주입까지 5단계 보안 검증을 수행한다. GPU 추론 시도 중 만난 Bottlerocket ephemeral-storage 문제도 다룬다."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-09-03-Security-Deployment-Verification/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-auth
+  - cs-security
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -21,7 +26,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-9
 use_math: false
-hidden: true
 last_modified_at: 2026-08-24
 ---
 

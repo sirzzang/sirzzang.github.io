@@ -1,8 +1,11 @@
 ---
 title:  "[Docker] Docker Bridge Network 사용 시 IP 충돌 - 2. 해결"
 excerpt: Docker Bridge Network를 사용해 컨테이너를 배포하며 생기는 IP 대역대 충돌 문제를 해결하는 방법
+permalink: /dev/Dev-docker-network-bridge-ip-collision-2/
 categories:
-  - Dev
+  - cs-container
+  - cs-network
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

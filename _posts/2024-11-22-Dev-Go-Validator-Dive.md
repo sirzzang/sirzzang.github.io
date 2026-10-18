@@ -1,8 +1,10 @@
 ---
 title:  "[Go] gin 중첩 구조체 validation"
 excerpt: gin의 binding tag로 dive를 사용하면 중첩 구조체에 대한 validation을 수행할 수 있다
+permalink: /dev/Dev-Go-Validator-Dive/
 categories:
-  - Dev
+  - prog-go
+  - dev-log
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

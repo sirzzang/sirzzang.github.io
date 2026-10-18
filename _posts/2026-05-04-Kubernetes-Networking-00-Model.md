@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] 네트워킹 모델: 4가지 문제와 'NAT 없이' 원칙"
 excerpt: "쿠버네티스 네트워킹의 4가지 문제 — 컨테이너 간, 파드 간, 파드-서비스, 외부-서비스 — 와 핵심 원칙인 'NAT 없이'가 어디까지 적용되는지를 정리해 보자."
+permalink: /kubernetes/Kubernetes-Networking-00-Model/
 categories:
-  - Kubernetes
+  - k8s-networking
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -11,7 +13,6 @@ tags:
   - Networking
   - CNI
   - NAT
-hidden: true
 
 ---
 

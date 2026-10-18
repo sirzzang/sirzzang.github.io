@@ -1,8 +1,10 @@
 ---
 title: "[GenAI] GenAI on K8s: 10.4 - GPU 공유: MPS와 Time-slicing"
 excerpt: "MPS(동시 공유)와 time-slicing(시분할 공유)의 메커니즘, K8s 적용 방법, 세 기법 비교를 정리해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-10-04-GPU-Sharing-MPS-and-Time-Slicing/
 categories:
-  - Kubernetes
+  - mlops-gpu
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -20,7 +22,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-10
 use_math: false
-hidden: true
 last_modified_at: 2026-08-24
 ---
 

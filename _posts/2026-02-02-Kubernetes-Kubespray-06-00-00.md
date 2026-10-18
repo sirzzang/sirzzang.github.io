@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 6.0. 노드 관리 - Playbook Overview"
 excerpt: "Kubespray의 노드 관리 Playbook(scale.yml, remove-node.yml, reset.yml) 개요"
+permalink: /kubernetes/Kubernetes-Kubespray-06-00-00/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-operations
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -13,7 +16,6 @@ tags:
   - Ansible
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-5
-hidden: true
 
 ---
 

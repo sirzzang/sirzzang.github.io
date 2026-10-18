@@ -1,8 +1,11 @@
 ---
 title: "[GenAI] GenAI on K8s: 10.2 - GPU Utilization 이해와 DCGM"
 excerpt: "DCGM과 dcgm-exporter의 역할을 구분하고, GPU utilization이 왜 문제가 되는지, 그리고 파티셔닝 기법의 필요성까지 살펴보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-10-02-GPU-Utilization-and-DCGM/
 categories:
-  - Kubernetes
+  - mlops-gpu
+  - mlops-monitoring
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -18,7 +21,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-10
 use_math: false
-hidden: true
 last_modified_at: 2026-08-24
 ---
 

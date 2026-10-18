@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: RKE2를 이용해 클러스터 구성하기 - 3. 인증서 관리"
 excerpt: "RKE2 클러스터의 인증서 구조와 갱신 메커니즘을 확인해보자."
+permalink: /kubernetes/Kubernetes-RKE2-03/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-auth
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

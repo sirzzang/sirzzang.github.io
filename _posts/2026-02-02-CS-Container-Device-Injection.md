@@ -1,8 +1,11 @@
 ---
 title:  "[Container] 컨테이너 장치 주입: OCI Runtime Hook과 CDI"
 excerpt: "컨테이너에 장치 파일을 주입하기 위한 두 가지 방식을 알아보자."
+permalink: /cs/CS-Container-Device-Injection/
 categories:
-  - CS
+  - cs-container
+  - mlops-gpu
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

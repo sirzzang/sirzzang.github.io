@@ -1,10 +1,12 @@
 ---
 title: "[EKS] GitOps 기반 SaaS: 클러스터 환경 확인 - 1. Flux 리소스 개요"
 excerpt: "실습 환경에 이미 배포된 네임스페이스와 Flux 리소스를 확인하고, Gitea 저장소 접근을 설정하자."
+permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-02-00-01-Cluster-Environment/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

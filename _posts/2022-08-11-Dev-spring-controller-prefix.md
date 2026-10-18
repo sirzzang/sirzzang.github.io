@@ -1,8 +1,10 @@
 ---
 title:  "[Spring] url prefix 설정"
 excerpt: Spring에서 API 버전 관리를 위한 url prefix를 설정하는 방법
+permalink: /dev/Dev-spring-controller-prefix/
 categories:
-  - Dev
+  - prog-java
+  - dev-log
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

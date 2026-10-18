@@ -1,8 +1,10 @@
 ---
 title:  "[Linux] 커널 파라미터와 sysctl"
 excerpt: "리눅스 커널 파라미터의 개념, sysctl을 이용한 조회·설정, /etc/sysctl.d/ 파일 체계에 대해 알아보자."
+permalink: /cs/CS-Linux-Kernel-Parameter/
 categories:
-  - CS
+  - cs-linux
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

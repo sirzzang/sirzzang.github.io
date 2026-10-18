@@ -1,10 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 2. Kubernetes The Kubespray Way"
 excerpt: "Kubernetes The Hard Way에서 수동으로 진행했던 작업들을 Kubespray로 자동화하여 클러스터를 구성해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-02/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

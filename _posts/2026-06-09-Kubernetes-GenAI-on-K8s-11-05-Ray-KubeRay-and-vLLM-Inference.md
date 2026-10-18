@@ -1,8 +1,12 @@
 ---
 title: "[GenAI] GenAI on K8s: 11.5 - Ray/KubeRay와 vLLM 추론 아키텍처"
 excerpt: "KubeRay operator·CRD 3종·계층적 스케줄링, Ray Train 숨은 +1 CPU 트러블슈팅, vLLM PagedAttention 메커니즘을 정리해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-11-05-Ray-KubeRay-and-vLLM-Inference/
 categories:
-  - Kubernetes
+  - mlops-training
+  - mlops-serving
+  - mlops-resource
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -18,7 +22,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-11
 use_math: false
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 11장의 학습 내용을 바탕으로 합니다*

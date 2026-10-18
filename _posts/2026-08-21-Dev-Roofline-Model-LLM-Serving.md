@@ -1,8 +1,11 @@
 ---
 title: "[Performance] Roofline 모델로 보는 LLM 서빙: 세 점으로 나눠 찍는 병목"
 excerpt: "Roofline 모델을 LLM 서빙 워크로드에 세 점으로 나눠 찍고, 실제 서빙에 적용해 그래프를 그려 보자."
+permalink: /dev/Dev-Roofline-Model-LLM-Serving/
 categories:
-  - Dev
+  - mlops-serving
+  - cs-architecture
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

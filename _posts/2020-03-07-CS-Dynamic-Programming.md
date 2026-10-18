@@ -4,9 +4,10 @@ excerpt:
 header:
   teaser: /assets/images/blog-Programming.jpg
 
+permalink: /cs/CS-Dynamic-Programming/
 categories:
-  - CS
-hidden: true
+  - cs-algorithm
+  - study
 toc : true
 tags:
   - 알고리즘

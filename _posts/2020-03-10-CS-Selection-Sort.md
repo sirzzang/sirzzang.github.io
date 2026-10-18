@@ -4,9 +4,10 @@ excerpt:
 header:
   teaser: /assets/images/blog-Programming.jpg
 
+permalink: /cs/CS-Selection-Sort/
 categories:
-  - CS
-hidden: true
+  - cs-algorithm
+  - concept
 toc : true
 tags:
   - 알고리즘

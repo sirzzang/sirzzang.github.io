@@ -1,10 +1,14 @@
 ---
 title: "[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 3. 분산학습과 NCCL 통신 - 1. 배경 및 재현 실험 설계"
 excerpt: "분산학습의 원리, NCCL 통신 계층, EKS에서의 실험 설계까지 분산학습 장애 실험 설계의 배경에 대해 정리해보자."
+permalink: /kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-03-01-Distributed-Learning-Background/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - mlops-gpu
+  - mlops-training
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

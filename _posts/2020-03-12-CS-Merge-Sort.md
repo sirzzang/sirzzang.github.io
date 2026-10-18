@@ -4,9 +4,10 @@ excerpt:
 header:
   teaser: /assets/images/blog-Programming.jpg
 
+permalink: /cs/CS-Merge-Sort/
 categories:
-  - CS
-hidden: true
+  - cs-algorithm
+  - concept
 toc : true
 tags:
   - Python

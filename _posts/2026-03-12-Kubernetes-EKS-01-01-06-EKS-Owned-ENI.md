@@ -1,10 +1,13 @@
 ---
 title:  "[EKS] EKS: Public-Public EKS 클러스터 - 6. EKS Owned ENI 확인"
 excerpt: "EKS 클러스터에 생성된 네트워크 인터페이스를 콘솔에서 확인하고, EKS Owned ENI의 정체를 파악해보자."
+permalink: /kubernetes/Kubernetes-EKS-01-01-06-EKS-Owned-ENI/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-networking
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

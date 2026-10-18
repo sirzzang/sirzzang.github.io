@@ -1,8 +1,11 @@
 ---
 title: "[SSH] SSH 접속 원리"
 excerpt: "매번 아무렇지 않게 접속하던 SSH의 동작 원리를 알아보자."
+permalink: /cs/CS-SSH-basic/
 categories:
-  - CS
+  - cs-network
+  - cs-security
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

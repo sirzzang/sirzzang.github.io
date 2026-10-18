@@ -1,8 +1,11 @@
 ---
 title:  "[Container] containerd 설정 파일 톺아 보기"
 excerpt: "containerd의 config.toml 설정 파일 구조와 주요 옵션을 살펴보자."
+permalink: /dev/Container-Containerd-Configuration/
 categories:
-  - Dev
+  - cs-container
+  - mlops-gpu
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

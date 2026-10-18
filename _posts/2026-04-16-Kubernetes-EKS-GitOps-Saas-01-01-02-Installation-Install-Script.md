@@ -1,10 +1,12 @@
 ---
 title: "[EKS] GitOps 기반 SaaS: 실습 환경 구성 - 2. install.sh 코드 분석"
 excerpt: "EKS SaaS GitOps 워크숍의 2단계 인프라 배포 스크립트(install.sh)를 분석해 보자."
+permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-01-01-02-Installation-Install-Script/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

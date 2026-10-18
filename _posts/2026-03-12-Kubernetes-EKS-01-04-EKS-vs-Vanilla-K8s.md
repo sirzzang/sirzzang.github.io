@@ -1,10 +1,12 @@
 ---
 title:  "[EKS] EKS: EKS vs. Vanilla Kubernetes"
 excerpt: "EKS에서 달라지는 것과 달라지지 않는 것을 정리해보자."
+permalink: /kubernetes/Kubernetes-EKS-01-04-EKS-vs-Vanilla-K8s/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

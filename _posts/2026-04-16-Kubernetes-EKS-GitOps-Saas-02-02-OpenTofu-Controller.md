@@ -1,10 +1,12 @@
 ---
 title: "[EKS] GitOps 기반 SaaS: 테넌트 인프라 배포 - 2. Tofu Controller"
 excerpt: "Tofu Controller로 Terraform CRD를 Git에 push하면 인프라가 생기고, 삭제하면 인프라가 사라지도록 GitOps 기반 인프라 배포를 진행해 보자."
+permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-02-02-OpenTofu-Controller/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

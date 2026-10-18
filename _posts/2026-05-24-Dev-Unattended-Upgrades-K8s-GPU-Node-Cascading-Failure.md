@@ -1,8 +1,12 @@
 ---
 title: "[Ubuntu] OS 자동 업데이트가 K8s GPU 노드를 두 번 깨뜨린 이야기"
 excerpt: "unattended-upgrades가 NVIDIA 드라이버 버전 불일치와 kube-proxy IPVS 장애를 연쇄적으로 일으킨 과정과 교훈을 정리해 보자."
+permalink: /dev/Dev-Unattended-Upgrades-K8s-GPU-Node-Cascading-Failure/
 categories:
-  - Dev
+  - mlops-gpu
+  - cs-linux
+  - k8s-operations
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

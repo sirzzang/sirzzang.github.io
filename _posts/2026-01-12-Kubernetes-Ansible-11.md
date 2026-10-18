@@ -1,9 +1,10 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 10. 롤(Role)"
 excerpt: "Ansible 롤(Role)을 활용하여 재사용 가능한 Playbook 구조를 만드는 방법을 실습해보자."
-hidden: true
+permalink: /kubernetes/Kubernetes-Ansible-11/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

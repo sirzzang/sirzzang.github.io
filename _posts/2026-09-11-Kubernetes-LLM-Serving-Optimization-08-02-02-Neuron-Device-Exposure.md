@@ -1,9 +1,13 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.2. Trainium 디바이스가 쿠버네티스에 노출되는 경로"
 excerpt: "칩 하나에 리소스가 둘 광고되는 이유를 커널 디바이스 노드와 device plugin 소켓까지 내려가 확인하고, NVIDIA와 갈리는 지점을 정리해 보자."
+permalink: /kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-02-Neuron-Device-Exposure/
 categories:
-  - Kubernetes
-hidden: true
+  - mlops-gpu
+  - k8s-eks
+  - cs-linux
+  - cs-cloud
+  - study
 toc: true
 use_math: false
 header:

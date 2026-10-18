@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.6. 노드 정보, 인증서 및 kubeconfig 확인"
 excerpt: "kubeadm init 이후 노드 정보, 인증서, kubeconfig를 상세히 확인해보자."
+permalink: /kubernetes/Kubernetes-Kubeadm-01-6/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-auth
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +13,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-3
-hidden: true
 
 ---
 

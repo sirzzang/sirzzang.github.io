@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Pod 볼륨 - 1. 볼륨 소개"
 excerpt: "Kubernetes Pod에서 볼륨이 필요한 이유와 마운트 기초, 볼륨 타입 개요를 알아보자."
+permalink: /kubernetes/Kubernetes-Pod-Volume-01-Introduction/
 categories:
-  - Kubernetes
+  - k8s-storage
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -15,7 +17,6 @@ tags:
   - emptyDir
   - hostPath
   - ephemeral-volume
-hidden: true
 last_modified_at: 2026-09-13
 ---
 

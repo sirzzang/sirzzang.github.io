@@ -1,8 +1,10 @@
 ---
 title:  "[JPA] 엔티티 생성자"
 excerpt: JPA 엔티티 생성자에 디폴트 생성자 롬복 어노테이션이 필요한 이유
+permalink: /dev/Dev-entity-constructors-jpa/
 categories:
-  - Dev
+  - prog-java
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

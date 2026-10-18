@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8. 오프라인 배포: The Hard Way - 1. Network Gateway"
 excerpt: "폐쇄망 환경 시뮬레이션을 위해 admin을 NAT Gateway로 구성하고, k8s-node의 인터넷 직접 접근을 차단해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-08-01-01/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - cs-network
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -18,7 +21,6 @@ tags:
   - MASQUERADE
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-6
-hidden: true
 
 ---
 

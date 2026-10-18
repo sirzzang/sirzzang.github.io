@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 8.1. Bootstrapping the Kubernetes Control Plane"
 excerpt: "Kubernetes Control Plane 컴포넌트들의 systemd unit 파일과 설정 파일을 분석해보자."
+permalink: /kubernetes/Kubernetes-Cluster-The-Hard-Way-08-1/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +12,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-1
-hidden: true
 
 ---
 

@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] GPU Sharing: Time Slicing - 3. 적용"
 excerpt: NVIDIA GPU에 GPU Time Slicing을 실제로 적용해보자.
+permalink: /kubernetes/Kubernetes-GPU-Time-Slicing-3/
 categories:
-  - Kubernetes
+  - mlops-gpu
+  - k8s-workload
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

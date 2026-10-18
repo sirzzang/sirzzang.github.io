@@ -1,8 +1,10 @@
 ---
 title:  "[JavaScript] this 이해하기"
 excerpt: 어쩌다 마주친 자바스크립트에서의 this
+permalink: /language/Language-javascript-this/
 categories:
-  - Language
+  - prog-javascript
+  - concept
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

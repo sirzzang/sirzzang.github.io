@@ -3,8 +3,10 @@ title:  "[ML/DL] 정보이론 기초"
 excerpt: "<<Information Theory>> 머신러닝, 딥러닝에 필요한 정보이론 기초를 알아 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-Information-Theory/
 categories:
-  - AI
+  - ai-ml-dl
+  - study
 header:
   teaser: /assets/images/blog-AI.jpg
 tags:

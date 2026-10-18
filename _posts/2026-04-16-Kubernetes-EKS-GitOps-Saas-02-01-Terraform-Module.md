@@ -1,10 +1,12 @@
 ---
 title: "[EKS] GitOps 기반 SaaS: 테넌트 인프라 배포 - 1. Terraform 모듈 테스트"
 excerpt: "tenant-apps Terraform 모듈이 어떤 AWS 리소스를 만드는지 확인해 보자."
+permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-02-01-Terraform-Module/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

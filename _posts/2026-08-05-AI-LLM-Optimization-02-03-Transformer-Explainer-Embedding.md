@@ -1,9 +1,10 @@
 ---
 title: "[LLM] LLM 서빙과 최적화 - 2.3. Transformer: 임베딩"
 excerpt: "트랜스포머의 입구인 임베딩이 텍스트를 벡터로 바꾸는 과정을 줌인해 보자."
+permalink: /ai/AI-LLM-Optimization-02-03-Transformer-Explainer-Embedding/
 categories:
-  - AI
-hidden: true
+  - ai-llm
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-AI.jpg

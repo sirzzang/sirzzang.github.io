@@ -1,8 +1,10 @@
 ---
 title: "[Python] python -m과 모듈 실행: 어느 파이썬의 무엇이 실행되는가"
 excerpt: CI 스크립트에서 만난 python3 -m pytest를 계기로, 파이썬 실행 방식에 따라 sys.path와 import, 인터프리터 선택이 어떻게 달라지는지 정리하고 직접 확인해 보자.
+permalink: /language/Language-Python-Module-Execution/
 categories:
-  - Language
+  - prog-python
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

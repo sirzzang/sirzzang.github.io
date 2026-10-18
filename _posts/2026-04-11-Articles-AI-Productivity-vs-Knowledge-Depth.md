@@ -1,8 +1,10 @@
 ---
 title: "AI 시대의 학습: 생산성과 깊이 사이에서"
 excerpt: "AI 도구로 생산성은 올려야 하는데, 학습에 오랜 시간이 걸리는 사람이 워크플로우를 만들어 보며 느낀 고민의 기록."
+permalink: /articles/Articles-AI-Productivity-vs-Knowledge-Depth/
 categories:
-  - Articles
+  - articles
+  - retrospective
 toc: true
 header:
   teaser: /assets/images/blog-Articles.png
@@ -13,7 +15,6 @@ tags:
   - Claude-Code
   - Workflow
   - Retrospective
-hidden: true
 ---
 
 <br>

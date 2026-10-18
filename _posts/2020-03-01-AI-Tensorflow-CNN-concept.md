@@ -3,8 +3,10 @@ title:  "[DL] CNN_1.모델 구조"
 excerpt: "<<Neural Network>> CNN 모델 구조를 이해해 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-Tensorflow-CNN-concept/
 categories:
-  - AI
+  - ai-ml-dl
+  - study
 header:
   teaser: /assets/images/blog-AI.jpg
 tags:

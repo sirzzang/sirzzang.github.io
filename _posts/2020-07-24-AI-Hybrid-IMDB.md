@@ -3,8 +3,10 @@ title:  "[NLP] Hybrid_IMDB 감성분석"
 excerpt: "<<Embedding>> LSTM과 CNN 네트워크를 결합해 IMDB 감성 분석을 수행해 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-Hybrid-IMDB/
 categories:
-  - AI
+  - ai-ml-dl
+  - study
 header:
   teaser: /assets/images/blog-AI.jpg
 tags:

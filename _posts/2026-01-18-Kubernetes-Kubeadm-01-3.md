@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.3. CRI(containerd) 및 kubeadm 구성 요소 설치"
 excerpt: "kubeadm 클러스터 구성을 위해 CRI(containerd)를 설치하고, kubeadm/kubelet/kubectl을 설치해보자."
+permalink: /kubernetes/Kubernetes-Kubeadm-01-3/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - cs-container
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +13,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-3
-hidden: true
 
 ---
 

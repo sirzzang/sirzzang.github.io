@@ -4,9 +4,10 @@ excerpt: 정렬 알고리즘을 살펴보기 전에
 header:
   teaser: /assets/images/blog-Programming.jpg
 
+permalink: /cs/CS-Sort-Algorithm/
 categories:
-  - CS
-hidden: true
+  - cs-algorithm
+  - concept
 toc : true
 tags:
   - Python

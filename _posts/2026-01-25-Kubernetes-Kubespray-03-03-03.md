@@ -1,10 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 3.3.3. cluster.yml - internal_facts.yml"
 excerpt: "Kubespray cluster.yml의 두 번째 단계인 internal_facts.yml을 분석해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-03-03-03/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

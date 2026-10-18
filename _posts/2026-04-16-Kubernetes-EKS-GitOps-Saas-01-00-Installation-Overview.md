@@ -1,10 +1,12 @@
 ---
 title: "[EKS] GitOps 기반 SaaS: 실습 환경 개요"
 excerpt: "EKS 기반 GitOps SaaS 워크숍의 실습 환경 구조(CloudFormation 부트스트랩과 Terraform 인프라 배포의 2단 구조)를 살펴보자."
+permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-01-00-Installation-Overview/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

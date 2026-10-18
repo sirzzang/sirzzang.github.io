@@ -1,8 +1,10 @@
 ---
 title:  "[Container] 컨테이너 이미지"
 excerpt: "컨테이너 이미지 기초에 대해 알아보자."
+permalink: /cs/CS-Container-Image/
 categories:
-  - CS
+  - cs-container
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

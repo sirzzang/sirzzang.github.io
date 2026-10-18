@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 0. Overview"
 excerpt: "kubeadm의 개념과 설계 철학, 주요 명령어를 살펴보고, Kubernetes The Hard Way와 비교해보자."
+permalink: /kubernetes/Kubernetes-Kubeadm-00/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-auth
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -1,10 +1,12 @@
 ---
 title: "[EKS] GitOps 기반 SaaS: 실습 환경 구성 - 3. 설치"
 excerpt: "CloudFormation 스택 생성부터 Terraform 인프라 배포 완료까지의 과정을 살펴 보자."
+permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-01-01-03-Installation/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

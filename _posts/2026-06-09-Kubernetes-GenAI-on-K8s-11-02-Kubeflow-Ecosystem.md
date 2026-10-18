@@ -1,8 +1,11 @@
 ---
 title: "[GenAI] GenAI on K8s: 11.2 - Kubeflow 생태계: Notebooks, Katib, Pipelines, KServe"
 excerpt: "Kubeflow의 Notebooks·Katib·Pipelines·KServe 컴포넌트와 Profile 기반 multi-tenant RBAC, Katib vs Pipelines 책임 경계를 정리해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-11-02-Kubeflow-Ecosystem/
 categories:
-  - Kubernetes
+  - mlops-pipeline
+  - mlops-training
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -17,7 +20,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-11
 use_math: false
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 11장의 학습 내용을 바탕으로 합니다*

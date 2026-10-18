@@ -1,10 +1,12 @@
 ---
 title:  "[EKS] EKS: EKS 배포 개요"
 excerpt: "EKS 클러스터를 배포하기 위한 방법을 비교하고, 이번 실습에서 사용할 Terraform의 핵심 개념을 살펴보자."
+permalink: /kubernetes/Kubernetes-EKS-01-01-00-Installation-Overview/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

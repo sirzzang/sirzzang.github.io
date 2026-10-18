@@ -1,8 +1,11 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.1. Trainium·Inferentia와 Neuron 스택"
 excerpt: "워크샵이 쓰는 Trainium이 어떤 칩인지, Neuron SDK가 어떤 스택인지, NVIDIA 스택과 어디까지 대응되는지 정리해 보자."
+permalink: /kubernetes/Kubernetes-LLM-Serving-Optimization-08-01-AWS-Accelerators/
 categories:
-  - Kubernetes
+  - mlops-gpu
+  - mlops-serving
+  - study
 toc: true
 use_math: false
 header:

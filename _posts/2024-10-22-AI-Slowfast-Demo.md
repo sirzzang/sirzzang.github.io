@@ -3,8 +3,11 @@ title:  "[AI] SlowFast Demo 실행"
 excerpt: "<<Video Understanding>> 사전 훈련된 SlowFast 모델을 돌려 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-Slowfast-Demo/
 categories:
-  - AI
+  - ai-paper
+  - ai-ml-dl
+  - dev-log
 tags:
   - Video Understanding
   - SlowFast

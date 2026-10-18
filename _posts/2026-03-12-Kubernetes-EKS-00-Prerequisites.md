@@ -1,10 +1,12 @@
 ---
 title:  "[EKS] EKS: 실습 환경 구성하기"
 excerpt: "EKS 스터디를 위한 실습 환경을 구성해보자."
+permalink: /kubernetes/Kubernetes-EKS-00-Prerequisites/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

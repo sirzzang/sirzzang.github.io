@@ -1,8 +1,12 @@
 ---
 title:  "[Kubernetes] 쿠버네티스 스케줄링 - 6. Extension Point 심화와 스케줄링 실패 진단"
 excerpt: "Extension Point의 결정권 분류, PreScore 역할, 기본 플러그인 심화, 스케줄링 실패 진단과 수동 배치의 제약을 알아보자."
+permalink: /kubernetes/Kubernetes-Scheduling-06/
 categories:
-  - Kubernetes
+  - k8s-scheduling
+  - mlops-resource
+  - k8s-operations
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

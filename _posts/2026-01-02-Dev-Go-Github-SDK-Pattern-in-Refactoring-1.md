@@ -1,8 +1,10 @@
 ---
 title:  "[Go] go-github SDK 패턴을 적용한 리팩토링 - 1. 패턴 이해"
 excerpt: go-github SDK의 구조적 패턴을 분석하고 이해해 보자.
+permalink: /dev/Dev-Go-Github-SDK-Pattern-in-Refactoring-1/
 categories:
-  - Dev
+  - prog-go
+  - dev-log
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

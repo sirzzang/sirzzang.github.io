@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] GPU Sharing: Time Slicing - 2. 설정"
 excerpt: NVIDIA GPU Time Slicing의 동작 원리와 ConfigMap 설정 방법을 알아보자.
+permalink: /kubernetes/Kubernetes-GPU-Time-Slicing-2/
 categories:
-  - Kubernetes
+  - mlops-gpu
+  - k8s-workload
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

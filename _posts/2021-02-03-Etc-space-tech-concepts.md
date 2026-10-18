@@ -3,8 +3,10 @@ title:  "3D, VR, AR"
 excerpt: "공간의 개념에서 3D, VR, AR를 정의해 보자."
 toc: false
 toc_sticky: false
+permalink: /etc/etc-space-tech-concepts/
 categories:
-  - Etc
+  - etc
+  - concept
 tags:
   - 3D
   - VR

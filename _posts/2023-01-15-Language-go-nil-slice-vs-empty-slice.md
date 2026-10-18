@@ -1,8 +1,10 @@
 ---
 title:  "[Go] Nil Slice"
 excerpt: nil slice와 empty slice의 차이
+permalink: /language/Language-go-nil-slice-vs-empty-slice/
 categories:
-  - Language
+  - prog-go
+  - concept
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

@@ -3,8 +3,10 @@ title:  "[DL] Deep Reinforcement Learning for Asset Allocation in US Equities �
 excerpt: "<<Asset Allocation>> 자산배분에 딥러닝 강화학습을 적용해 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-DRL-for-Asset-Allocation/
 categories:
-  - AI
+  - ai-paper
+  - study
 header:
   teaser: /assets/images/blog-AI.jpg
 tags:

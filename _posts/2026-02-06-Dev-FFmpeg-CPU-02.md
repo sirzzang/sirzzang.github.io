@@ -1,10 +1,14 @@
 ---
 title:  "[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 2. 배경지식: cgroup, 컨테이너, 쿠버네티스"
 excerpt: "cgroup이 프로세스 그룹의 CPU를 어떻게 제한하는지, 그리고 K8s의 CPU limit이 커널까지 전달되는 경로를 알아 보자."
+permalink: /dev/Dev-FFmpeg-CPU-02/
 categories:
-  - Dev
+  - cs-linux
+  - cs-container
+  - k8s-workload
+  - cs-media
+  - troubleshooting
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

@@ -1,8 +1,10 @@
 ---
 title: "[GenAI] GenAI on K8s: 10.7 - Ch10 실습: time-slicing 배포·검증·트러블슈팅"
 excerpt: "EKS + L4에서 time-slicing을 apply하고 Llama-3.2-1B 5 Pod를 한 GPU에 올리는 전 과정과, HF 403·GPU 주입 실패를 추적·해결한 기록을 정리해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-10-07-Ch10-Lab-Deploy-Time-Slicing-Verification/
 categories:
-  - Kubernetes
+  - mlops-gpu
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -21,7 +23,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-10
 use_math: false
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 10장 hands-on 실습 기록입니다*

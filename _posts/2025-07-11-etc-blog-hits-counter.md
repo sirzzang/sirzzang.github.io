@@ -1,8 +1,10 @@
 ---
 title:  "블로그 hits counter 변경"
 toc: false
+permalink: /etc/etc-blog-hits-counter/
 categories:
-  - Etc
+  - prog-tools
+  - dev-log
 tags:
   - github.io
   - hits

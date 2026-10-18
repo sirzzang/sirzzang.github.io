@@ -1,9 +1,13 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.2. 데이터소스 프로비저닝과 vLLM 대시보드"
 excerpt: "Grafana를 서브패스로 노출하고 Prometheus 데이터소스를 프로비저닝한 뒤, ConfigMap으로 넣은 vLLM 대시보드가 언제 목록에 뜨는지 확인해 보자."
+permalink: /kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-02-Grafana-vLLM-Dashboard/
 categories:
-  - Kubernetes
-hidden: true
+  - mlops-serving
+  - mlops-monitoring
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
 use_math: false
 header:

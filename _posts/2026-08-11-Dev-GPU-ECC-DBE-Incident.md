@@ -1,8 +1,10 @@
 ---
 title: "[GPU] 사례로 보는 GPU ECC 장애: VRAM DBE부터 row remapping까지"
 excerpt: GPU ECC 발생 사례를 통해 VRAM DBE 발생부터 분산 학습 실패, row remapping과 리셋 복구까지 알아 보자.
+permalink: /dev/Dev-GPU-ECC-DBE-Incident/
 categories:
-  - Dev
+  - mlops-gpu
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

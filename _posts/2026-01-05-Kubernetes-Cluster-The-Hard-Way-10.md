@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 10. Configuring kubectl for Remote Access"
 excerpt: "Jumpbox에서 원격으로 클러스터를 관리할 수 있도록 kubectl을 설정해보자."
+permalink: /kubernetes/Kubernetes-Cluster-The-Hard-Way-10/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-auth
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +13,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-1
-hidden: true
 
 ---
 

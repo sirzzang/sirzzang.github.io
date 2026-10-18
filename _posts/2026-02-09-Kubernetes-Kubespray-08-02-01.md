@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8. 오프라인 배포: kubespray-offline - 1. Offline Environment"
 excerpt: "Kubespray 공식 문서 offline-environment.md를 분석하며, 오프라인 배포에 필요한 아티팩트, 서빙 인프라, 변수 설정 전반을 이해해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-08-02-01/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -17,7 +19,6 @@ tags:
   - Container-Registry
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-6
-hidden: true
 
 ---
 

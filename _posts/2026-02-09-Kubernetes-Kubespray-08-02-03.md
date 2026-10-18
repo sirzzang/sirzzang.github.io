@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8. 오프라인 배포: kubespray-offline - 3. contrib/offline vs. kubespray-offline"
 excerpt: "Kubespray 공식 contrib/offline 스크립트와 kubespray-offline 프로젝트를 비교하며, 각각의 구조와 커버리지 차이를 파악해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-08-02-03/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -17,7 +19,6 @@ tags:
   - Container-Registry
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-6
-hidden: true
 
 ---
 

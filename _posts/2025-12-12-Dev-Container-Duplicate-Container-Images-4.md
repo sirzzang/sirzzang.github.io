@@ -1,8 +1,11 @@
 ---
 title:  "[Container] Docker와 containerd 이미지 관리 비교 - 4. DooD 환경에서의 이미지 분리 저장"
 excerpt: DooD 환경에서 containerd와 Docker에 서로 다른 이미지가 저장되는 현상에 대해 알아 보자.
+permalink: /dev/Dev-Container-Duplicate-Container-Images-4/
 categories:
-  - Dev
+  - cs-container
+  - k8s-operations
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -4,8 +4,10 @@ excerpt: "<<Language Model>> Transformer 모델의 전체적인 구조를 알아
 toc: true
 toc_sticky: true
 classes: wide
+permalink: /ai/AI-Transformer-01/
 categories:
-  - AI
+  - ai-llm
+  - study
 header:
   teaser: /assets/images/blog-AI.jpg
 tags:

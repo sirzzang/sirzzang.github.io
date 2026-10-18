@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] 쿠버네티스 네트워킹: CNI (Container Network Interface)"
 excerpt: "CNI 표준의 배경과 개념, 플러그인 분류(Reference/Solution), 설정 구조(IPAM 포함), 그리고 kubelet → containerd → CNI 바이너리 호출의 동작 방식을 정리한다."
+permalink: /kubernetes/Kubernetes-Networking-02-CNI/
 categories:
-  - Kubernetes
+  - k8s-networking
+  - cs-container
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

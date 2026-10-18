@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Service와 kube-proxy"
 excerpt: "쿠버네티스 Service 추상화, kube-proxy의 동작 모드, 그리고 ClusterIP·NodePort·LoadBalancer 패킷 흐름에 대해 알아 보자."
+permalink: /kubernetes/Kubernetes-Networking-04-Service/
 categories:
-  - Kubernetes
+  - k8s-networking
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -19,7 +21,6 @@ tags:
   - NodePort
   - LoadBalancer
   - netfilter
-hidden: true
 
 ---
 

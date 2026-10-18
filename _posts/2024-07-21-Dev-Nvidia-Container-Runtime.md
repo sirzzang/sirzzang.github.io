@@ -1,8 +1,11 @@
 ---
 title:  "[Container] NVIDIA Container Runtime"
 excerpt: 컨테이너 런타임과 NVIDIA Container Runtime에 대하여
+permalink: /dev/Dev-Nvidia-Container-Runtime/
 categories:
-  - Dev
+  - mlops-gpu
+  - cs-container
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -1,10 +1,11 @@
 ---
 title:  "[Cryptography] 암호학 기초 - 개념과 분류"
 excerpt: "암호학의 기본 개념과 암호화 알고리즘 분류 체계에 대해 알아 보자."
+permalink: /cs/CS-Cryptography-01/
 categories:
-  - CS
+  - cs-security
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

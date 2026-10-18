@@ -1,8 +1,10 @@
 ---
 title:  "[Dev] 영상 업로드 실패 사태 분석 - 2. YUV 색공간과 영상 압축"
 excerpt: YUV 색공간, 영상 인코딩/디코딩, 그리고 카메라가 RGB를 쓸 수밖에 없는 이유까지.
+permalink: /dev/Dev-H264-Decoding-Failure-2/
 categories:
-  - Dev
+  - cs-media
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

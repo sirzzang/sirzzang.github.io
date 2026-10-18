@@ -3,9 +3,10 @@ title:  "[Algorithm] 퀵정렬"
 header:
   teaser: /assets/images/blog-Programming.jpg
 
+permalink: /cs/CS-Quick-Sort/
 categories:
-  - CS
-hidden: true
+  - cs-algorithm
+  - concept
 toc : true
 tags:
   - Python

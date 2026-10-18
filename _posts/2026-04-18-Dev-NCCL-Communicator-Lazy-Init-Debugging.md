@@ -1,8 +1,10 @@
 ---
 title: "[NCCL] NCCL Communicator 초기화 시점: Lazy vs Eager Init"
 excerpt: "같은 root cause가 Ray와 torchrun에서 다른 증상으로 나타난 이유에 대해 알아보자."
+permalink: /dev/Dev-NCCL-Communicator-Lazy-Init-Debugging/
 categories:
-  - Dev
+  - mlops-training
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -3,8 +3,10 @@ title:  "Portfolio Selection"
 excerpt: "마르코비츠의 포트포리오 선택 이론은 Modern Portfolio Theory의 초석이 되었다."
 toc: true
 toc_sticky: true
+permalink: /etc/etc-Portfolio-Selection/
 categories:
-  - Etc
+  - etc
+  - concept
 tags:
   - MPT
   - Mean Variance

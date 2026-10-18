@@ -1,8 +1,11 @@
 ---
 title:  "[Linux] 디바이스 드라이버: 3계층 구조"
 excerpt: "리눅스에서 장치를 다루기 위한 3계층 구조를 알아보자."
+permalink: /cs/CS-Linux-Device-Driver/
 categories:
-  - CS
+  - cs-linux
+  - mlops-gpu
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

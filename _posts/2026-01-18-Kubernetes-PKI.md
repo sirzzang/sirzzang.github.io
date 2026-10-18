@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Kubernetes PKI"
 excerpt: "Kubernetes 클러스터의 인증서 인프라에 대해 알아보자."
+permalink: /kubernetes/Kubernetes-PKI/
 categories:
-  - Kubernetes
+  - k8s-auth
+  - cs-security
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

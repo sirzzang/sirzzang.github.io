@@ -1,8 +1,13 @@
 ---
 title: "[GenAI] GenAI on K8s: 9.2 - 보안 인프라 코드 분석: EKS + Secret 주입 흐름"
 excerpt: "Ch9 Terraform 코드를 따라가며 EKS 보안 설계(Bottlerocket, IMDSv2, Pod Identity, ECR 공급망)와 Secrets Store CSI Driver의 secret 주입 흐름을 분석해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-09-02-Security-Infrastructure-Code/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-auth
+  - k8s-workload
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -19,7 +24,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-9
 use_math: false
-hidden: true
 last_modified_at: 2026-08-24
 ---
 

@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 6.0.2. 노드 관리 - remove-node.yml"
 excerpt: "Kubespray의 노드 제거 플레이북 remove-node.yml의 전체 흐름과 구조를 분석해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-06-00-02/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-operations
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -13,7 +16,6 @@ tags:
   - remove-node.yml
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-5
-hidden: true
 
 ---
 

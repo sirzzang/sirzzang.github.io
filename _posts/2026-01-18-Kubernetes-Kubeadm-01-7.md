@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.7. Static Pod 및 애드온 확인"
 excerpt: "kubeadm init으로 배포된 Static Pod(etcd, API Server, Scheduler, Controller Manager)와 필수 애드온(CoreDNS, kube-proxy)을 상세히 확인해보자."
+permalink: /kubernetes/Kubernetes-Kubeadm-01-7/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +12,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-3
-hidden: true
 
 ---
 

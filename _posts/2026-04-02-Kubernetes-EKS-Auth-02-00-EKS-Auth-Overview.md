@@ -1,10 +1,13 @@
 ---
 title: "[EKS] EKS: 인증/인가 - 3. 사용자 → K8s API: 전체 흐름"
 excerpt: "사용자(IAM)가 kubectl로 EKS API 서버에 접근할 때 인증되고 인가되기까지의 전 과정을 단계별로 따라가 보자."
+permalink: /kubernetes/Kubernetes-EKS-Auth-02-00-EKS-Auth-Overview/
 categories:
-  - Kubernetes
+  - k8s-auth
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

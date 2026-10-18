@@ -1,10 +1,13 @@
 ---
 title:  "[EKS] EKS: Public-Public EKS 클러스터 - 5. 워커 노드 내부 확인"
 excerpt: "SSH로 워커 노드에 접속하여 kubelet, containerd, 인증서 등 노드 내부 구성을 확인해보자."
+permalink: /kubernetes/Kubernetes-EKS-01-01-05-EKS-Cluster-Worker-Node-Result/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-linux
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

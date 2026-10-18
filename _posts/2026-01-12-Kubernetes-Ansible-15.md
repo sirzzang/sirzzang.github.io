@@ -1,8 +1,10 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 15. 결론"
 excerpt: "Ansible의 철학이 Kubespray에서 어떻게 구현되어 있는지 살펴보자.."
+permalink: /kubernetes/Kubernetes-Ansible-15/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

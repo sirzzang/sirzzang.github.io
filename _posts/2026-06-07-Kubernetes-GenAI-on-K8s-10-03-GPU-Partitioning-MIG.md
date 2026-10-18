@@ -1,8 +1,10 @@
 ---
 title: "[GenAI] GenAI on K8s: 10.3 - GPU 파티셔닝: MIG"
 excerpt: "GPU 다이 구조(GPC/SM/메모리 계층)에서 시작해 MIG의 compute/memory slice 설계, 프로파일 해석, placement 규칙, K8s 연동까지 깊이 있게 파고들어 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-10-03-GPU-Partitioning-MIG/
 categories:
-  - Kubernetes
+  - mlops-gpu
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -20,7 +22,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-10
 use_math: false
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 10장의 학습 내용을 바탕으로 합니다*

@@ -1,9 +1,10 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.2. 배치 요청: 정적 배칭의 효과와 한계"
 excerpt: "배치의 의미를 정리하고, 실습으로 정적 배칭의 처리량 향상과 한계를 측정해 보자."
+permalink: /dev/Dev-LLM-Serving-Optimization-03-02-LLM-Serving-From-Scratch-Batch-Request/
 categories:
-  - Dev
-hidden: true
+  - mlops-serving
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

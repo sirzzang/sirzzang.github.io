@@ -1,10 +1,13 @@
 ---
 title:  "[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델 - 1. 파드 간 통신"
 excerpt: "EKS 시리즈에서 AWS VPC CNI를 다루기 전에, 파드 간 통신을 푸는 세 가지 방식과 VPC CNI가 그중 어디에 해당하는지를 짧게 짚어 보자."
+permalink: /kubernetes/Kubernetes-EKS-02-00-01-Kubernetes-Pod-to-Pod-Networking/
 categories:
-  - Kubernetes
+  - k8s-networking
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

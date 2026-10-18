@@ -1,8 +1,11 @@
 ---
 title: "[NCCL] GPU 호환성 게이트: 빌드 타임과 배포 타임에서 NCCL 커널 미스매치 차단하기"
 excerpt: "cuobjdump로 NCCL 바이너리의 SASS/PTX 아키텍처를 분석하고, CI와 init container에서 GPU 호환성을 자동 검증하는 패턴을 정리해 보자."
+permalink: /dev/Dev-NCCL-GPU-Compat-CI-Runtime-Gate/
 categories:
-  - Dev
+  - mlops-gpu
+  - mlops-training
+  - dev-log
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

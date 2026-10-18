@@ -1,8 +1,10 @@
 ---
 title: "[GenAI] GenAI on K8s: 11.3 - MLflow: Tracking, Model Registry, Models"
 excerpt: "MLflow Tracking의 Experiment→Run 계층, backend/artifact store 분리, Stage에서 Alias로의 전환, champion/challenger 패턴을 정리해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-11-03-MLflow-Tracking-and-Registry/
 categories:
-  - Kubernetes
+  - mlops-experiment
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -16,7 +18,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-11
 use_math: false
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 11장의 학습 내용을 바탕으로 합니다*

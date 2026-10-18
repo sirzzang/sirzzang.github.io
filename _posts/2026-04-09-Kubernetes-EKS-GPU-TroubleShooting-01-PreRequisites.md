@@ -1,10 +1,13 @@
 ---
 title: "[EKS] EKS GPU 트러블슈팅: 1. 실습 사전 준비 - EC2 Service Quota 증설"
 excerpt: "GPU 인스턴스를 띄우기 위한 EC2 Service Quota 확인과 증설 과정에 대해 알아 보자."
+permalink: /kubernetes/Kubernetes-EKS-GPU-TroubleShooting-01-PreRequisites/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - mlops-gpu
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

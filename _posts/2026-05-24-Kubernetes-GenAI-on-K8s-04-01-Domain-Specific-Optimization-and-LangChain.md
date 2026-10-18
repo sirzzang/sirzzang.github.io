@@ -1,8 +1,10 @@
 ---
 title: "[GenAI] GenAI on K8s: 4.1 - 도메인 특화 최적화 개요와 LangChain"
 excerpt: "범용 LLM의 한계, 3가지 도메인 최적화 기법, LangChain 프레임워크 구조, 그리고 Agent가 실제로 LLM에 보내는 prompt를 들여다보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-04-01-Domain-Specific-Optimization-and-LangChain/
 categories:
-  - Kubernetes
+  - ai-llm
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -17,7 +19,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-4
 use_math: false
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 4장의 학습 내용을 바탕으로 합니다*

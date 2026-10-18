@@ -1,8 +1,10 @@
 ---
 title:  "[Linux] 커널 메시지 - 1. printk와 커널 링버퍼"
 excerpt: "커널 메시지는 누가 어디에 쓰고, dmesg는 무엇을 읽는지에 대해 알아 보자."
+permalink: /cs/CS-Kernel-Message-01/
 categories:
-  - CS
+  - cs-linux
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

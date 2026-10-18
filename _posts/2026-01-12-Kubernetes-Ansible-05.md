@@ -1,9 +1,10 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 4. Playbook"
-hidden: true
 excerpt: "Ansible Playbook의 구조와 문법을 이해하고, 조건문을 활용한 멀티 OS 환경 관리를 실습해보자."
+permalink: /kubernetes/Kubernetes-Ansible-05/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

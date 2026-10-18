@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 3.2.1. 변수 분석 - Kubespray 변수 배치 전략"
 excerpt: "Kubespray의 변수 배치 전략을 이해하고, 변수 분석 시 어디를 봐야 하는지 파악해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-03-02-01/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

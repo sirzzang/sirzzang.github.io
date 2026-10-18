@@ -1,8 +1,10 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.3. prefill과 decode: 생성 추론의 두 단계"
 excerpt: "prefill과 decode 개념에 대해 알아 보자."
+permalink: /dev/Dev-LLM-Serving-Optimization-03-03-LLM-Serving-Prefill-Decode/
 categories:
-  - Dev
+  - mlops-serving
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] 쿠버네티스 스케줄링 - 1. 개념과 kube-scheduler 구조"
 excerpt: "Kubernetes에서의 파드 스케줄링 개념과, kube-scheduler를 이루는 Scheduling Framework·플러그인·프로필의 관계에 대해 알아보자."
+permalink: /kubernetes/Kubernetes-Scheduling-01/
 categories:
-  - Kubernetes
+  - k8s-scheduling
+  - mlops-resource
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

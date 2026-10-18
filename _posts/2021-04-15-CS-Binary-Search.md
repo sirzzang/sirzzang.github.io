@@ -3,9 +3,10 @@ title:  "[Algorithm] 이분탐색"
 excerpt: 이분탐색 혹은 이진탐색
 header:
   teaser: /assets/images/blog-Programming.jpg
+permalink: /cs/CS-Binary-Search/
 categories:
-  - CS
-hidden: true
+  - cs-algorithm
+  - concept
 toc : true
 tags:
   - Python

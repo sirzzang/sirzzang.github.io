@@ -1,14 +1,16 @@
 ---
 title:  "[Kubernetes] 네트워킹: Linux 네트워크 스택 이해하기 - iptables와 conntrack"
 excerpt: "Kubernetes 네트워킹이 Linux 네트워크 스택(iptables, conntrack) 위에서 어떻게 동작하는지 살펴보자."
+permalink: /kubernetes/Kubernetes-Networking-Linux-Stack/
 categories:
-  - Kubernetes
+  - k8s-networking
+  - cs-linux
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:
   - Kubernetes
-hidden: true
 
 ---
 

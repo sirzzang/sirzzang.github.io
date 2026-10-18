@@ -1,8 +1,11 @@
 ---
 title: "[GenAI] GenAI on K8s: 10.1 - GPU 자원 개요와 K8s 할당 메커니즘"
 excerpt: "K8s에서 GenAI 워크로드에 GPU를 할당하는 메커니즘을 device plugin, NFD/GFD, 그리고 extended resource 규칙까지 정리해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-10-01-GPU-Resources-and-K8s-Allocation/
 categories:
-  - Kubernetes
+  - mlops-gpu
+  - mlops-resource
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -19,7 +22,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-10
 use_math: false
-hidden: true
 last_modified_at: 2026-08-24
 ---
 

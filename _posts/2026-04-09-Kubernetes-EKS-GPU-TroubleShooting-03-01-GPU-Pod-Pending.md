@@ -1,10 +1,13 @@
 ---
 title: "[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 1. Device Plugin 비활성화"
 excerpt: "Device Plugin 비활성화로 GPU Pod Pending 장애를 재현하고, Pod에서 ClusterPolicy까지 단계별로 원인을 추적해 보자."
+permalink: /kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-01-GPU-Pod-Pending/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - mlops-gpu
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

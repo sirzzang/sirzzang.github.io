@@ -1,8 +1,10 @@
 ---
 title:  "[Go] Functional Options 패턴으로 생성자 리팩토링하기"
 excerpt: Rob Pike의 생각을 좇아, Functional Options 패턴을 적용해 유연하고 확장 가능한 생성자를 만들어 보자.
+permalink: /dev/Dev-Go-Functional-Options-Pattern-in-Refactoring/
 categories:
-  - Dev
+  - prog-go
+  - dev-log
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

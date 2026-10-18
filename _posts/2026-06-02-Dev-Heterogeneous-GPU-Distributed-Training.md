@@ -1,8 +1,11 @@
 ---
 title: "[Distributed Training] 이기종 GPU 분산학습: 다른 기종을 한 DDP 잡에 섞으면 벌어지는 일"
 excerpt: 서로 다른 기종의 GPU를 한 DDP 잡에 섞으면 어떻게 되는지 직접 확인하고, 동기 데이터 병렬에서 이기종 GPU가 손해인 이유를 정리해 보자.
+permalink: /dev/Dev-Heterogeneous-GPU-Distributed-Training/
 categories:
-  - Dev
+  - mlops-training
+  - mlops-resource
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

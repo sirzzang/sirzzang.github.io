@@ -1,8 +1,12 @@
 ---
 title: "[Continual Learning] 하나의 모델, 여러 개의 태스크: 산업 AI는 어떻게 새로운 지식을 계속 배우는가"
 excerpt: "Superb AI 세미나에서 들은 연속 학습 방법론을 정리하고, MLOps 플랫폼 엔지니어가 배워야 할 점에 대해 생각해 보자."
+permalink: /ai/AI-Continual-Learning-Industrial-AI/
 categories:
-  - AI
+  - ai-ml-dl
+  - mlops-training
+  - mlops-data
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-AI.jpg

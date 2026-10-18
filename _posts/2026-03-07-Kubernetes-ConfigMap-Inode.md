@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] ConfigMap 볼륨 마운트와 inode: kubelet atomic_writer 딥다이브"
 excerpt: "ConfigMap 볼륨 마운트가 subPath 유무에 따라 업데이트 반영에서 정반대로 동작하는 이유를 kubelet atomic_writer 코드와 bind mount의 inode 관점에서 파헤쳐 보자."
+permalink: /kubernetes/Kubernetes-ConfigMap-Inode/
 categories:
-  - Kubernetes
+  - k8s-workload
+  - cs-linux
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

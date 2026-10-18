@@ -1,10 +1,13 @@
 ---
 title:  "[EKS] EKS: 네트워킹 아키텍처 개요"
 excerpt: "EKS에서 컨트롤 플레인과 데이터 플레인이 어떻게 통신하는지, AWS 네트워킹 기초와 EKS Owned ENI의 역할을 살펴보자."
+permalink: /kubernetes/Kubernetes-EKS-00-03-EKS-Networking-Architecture/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-networking
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

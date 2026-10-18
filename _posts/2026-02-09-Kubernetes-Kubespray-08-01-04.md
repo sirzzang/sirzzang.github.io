@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8. 오프라인 배포: The Hard Way - 4. Private Container Registry"
 excerpt: "폐쇄망 환경에서 컨테이너 이미지 배포를 위한 사설 컨테이너 레지스트리를 구축해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-08-01-04/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - cs-container
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -17,7 +20,6 @@ tags:
   - registries.conf
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-6
-hidden: true
 
 ---
 

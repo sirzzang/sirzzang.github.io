@@ -1,8 +1,10 @@
 ---
 title:  "[tbAdmin] .fileTableLock Permission Denied 에러 해결"
 excerpt: 권한을 가지지 않은 사용자가 프로그램을 실행할 때 마주치는 오류
+permalink: /dev/Dev-osgi-permission-denied-error/
 categories:
-  - Dev
+  - cs-linux
+  - troubleshooting
 toc: false
 header:
   teaser: /assets/images/blog-Dev.jpg

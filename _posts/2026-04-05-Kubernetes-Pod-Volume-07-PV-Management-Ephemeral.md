@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Pod 볼륨 - 7. PV 관리와 Ephemeral PersistentVolume"
 excerpt: "PVC 리사이징, 볼륨 스냅샷/복원, 그리고 Pod 수명 주기에 종속되는 Ephemeral PersistentVolume을 알아보자."
+permalink: /kubernetes/Kubernetes-Pod-Volume-07-PV-Management-Ephemeral/
 categories:
-  - Kubernetes
+  - k8s-storage
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -15,7 +17,6 @@ tags:
   - VolumeSnapshot
   - ephemeral-volume
   - volumeClaimTemplate
-hidden: true
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 10장의 학습 내용을 기반으로 합니다.*

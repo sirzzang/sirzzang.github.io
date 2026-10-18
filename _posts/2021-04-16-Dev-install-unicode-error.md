@@ -1,8 +1,10 @@
 ---
 title:  "[Python] pip 이용 의존 라이브러리 설치 시 unicode 에러 해결"
 excerpt: unicode 에러가 날 때의 해결 방법을 알아 보자.
+permalink: /dev/Dev-install-unicode-error/
 categories:
-  - Dev
+  - prog-python
+  - troubleshooting
 toc: false
 header:
   teaser: /assets/images/blog-Dev.jpg

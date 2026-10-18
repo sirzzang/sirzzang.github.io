@@ -2,8 +2,10 @@
 title:  "[ELK] ELK stack"
 excerpt: 로그 모니터링, 빅데이터 분석 등에 자주 활용되는 스택
 toc: true
+permalink: /dev/Dev-elk-stack-01/
 categories:
-  - Dev
+  - prog-tools
+  - concept
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

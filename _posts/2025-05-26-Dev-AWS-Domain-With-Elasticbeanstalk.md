@@ -1,8 +1,11 @@
 ---
 title:  "[AWS] AWS Elastic Beanstalk 환경 도메인 연결"
 excerpt: AWS Elastic Beanstalk 환경에 도메인을 연동해 보자.
+permalink: /dev/Dev-AWS-Domain-With-Elasticbeanstalk/
 categories:
-  - Dev
+  - cs-cloud
+  - cs-network
+  - dev-log
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

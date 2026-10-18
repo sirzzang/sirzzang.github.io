@@ -1,10 +1,12 @@
 ---
 title: "[EKS] GitOps 기반 SaaS: 실습 환경 구성 - 4. 설치 결과 확인"
 excerpt: "EKS SaaS GitOps 실습 환경 배포가 완료된 후, SSM 접속과 VS Code 웹 환경으로 설치 결과를 확인해 보자."
+permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-01-01-04-Installation-Result/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

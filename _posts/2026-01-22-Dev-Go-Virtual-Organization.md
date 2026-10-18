@@ -1,8 +1,10 @@
 ---
 title:  "[Go] Virtual Organization 도입기 - 접근 제어 로직 일원화"
 excerpt: "이원화된 로직을 하나의 추상화로 통합하기"
+permalink: /dev/Dev-Go-Virtual-Organization/
 categories:
-  - Dev
+  - prog-go
+  - dev-log
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

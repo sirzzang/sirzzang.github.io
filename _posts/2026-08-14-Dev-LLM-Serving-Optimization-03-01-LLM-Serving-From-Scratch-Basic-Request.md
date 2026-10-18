@@ -1,9 +1,10 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 3.1. 기본 생성 요청: 첫 기동과 낮은 처리량"
 excerpt: "서비스를 직접 기동해 프로세스 구조를 관찰하고, 부하 테스트로 단일 워커의 순차 처리 병목을 재현해 보자."
+permalink: /dev/Dev-LLM-Serving-Optimization-03-01-LLM-Serving-From-Scratch-Basic-Request/
 categories:
-  - Dev
-hidden: true
+  - mlops-serving
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

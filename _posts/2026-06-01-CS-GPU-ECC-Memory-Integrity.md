@@ -1,8 +1,11 @@
 ---
 title: "[GPU] GPU ECC: 메모리 오류를 검출하고 정정하는 원리"
 excerpt: ECC가 무엇이고 GPU에서 어떻게 동작하는지, 왜 중요한지 짚어 보자.
+permalink: /cs/CS-GPU-ECC-Memory-Integrity/
 categories:
-  - CS
+  - mlops-gpu
+  - cs-architecture
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

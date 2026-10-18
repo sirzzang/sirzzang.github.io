@@ -1,8 +1,10 @@
 ---
 title:  "[JPA] 양방향 연관관계 엔티티 순환 참조 문제"
 excerpt: JPA를 이용해 양방향 연관관계를 설정한 엔티티를 JSON 응답에 반환하는 경우 발생할 수 있는 문제
+permalink: /dev/Dev-jpa-bidirectional-infinite-recursion/
 categories:
-  - Dev
+  - prog-java
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

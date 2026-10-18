@@ -1,9 +1,12 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.3. GPU 인터커넥트: 대역폭 계층과 GPU 선택"
 excerpt: "GPU 인터커넥트의 대역폭 계층을 이해하고 모델 크기별 GPU 선택 기준을 세워 보자."
+permalink: /dev/Dev-LLM-Serving-Optimization-05-03-LLM-Serving-Challenge-GPU-Interconnect-Selection/
 categories:
-  - Dev
-hidden: true
+  - mlops-serving
+  - mlops-gpu
+  - cs-architecture
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

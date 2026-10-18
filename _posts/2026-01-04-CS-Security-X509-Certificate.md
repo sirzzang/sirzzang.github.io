@@ -1,8 +1,10 @@
 ---
 title:  "[Security] X.509 인증서"
 excerpt: "X.509 인증서의 구조와 필드에 대해 알아 보자."
+permalink: /cs/CS-Security-X509-Certificate/
 categories:
-  - CS
+  - cs-security
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -20,7 +22,7 @@ tags:
 
 X.509는 공개키 인증서의 **국제 표준 형식**이다. HTTPS, 쿠버네티스, VPN 등 다양한 시스템에서 사용된다. 이 글에서는 X.509 인증서의 구조와 필드에 대해 알아본다.
 
-> 인증서의 기본 개념(필요성, 체인, 종류)은 [디지털 인증서](/cs/Security-CS-Certificate/)를, PKI 전반에 대해서는 [PKI](/cs/CS-PKI/)를 참고하자.
+> 인증서의 기본 개념(필요성, 체인, 종류)은 [디지털 인증서](/cs/CS-Security-Certificate/)를, PKI 전반에 대해서는 [PKI](/cs/CS-PKI/)를 참고하자.
 
 <br>
 

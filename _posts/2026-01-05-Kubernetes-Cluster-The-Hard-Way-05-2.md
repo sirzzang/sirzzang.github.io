@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 5.2. Generating Kubernetes Configuration Files"
 excerpt: "OpenSSL을 사용하여 각 컴포넌트를 위한 kubeconfig 파일을 생성하고 배포해보자."
+permalink: /kubernetes/Kubernetes-Cluster-The-Hard-Way-05-2/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-auth
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +13,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-1
-hidden: true
 
 ---
 

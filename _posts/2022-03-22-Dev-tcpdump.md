@@ -1,8 +1,10 @@
 ---
 title:  "[tcpdump] tcpdump를 사용하며 겪었던 문제 해결하기"
 excerpt: tcpdump로 패킷을 분석할 때 마주하는 문제들
+permalink: /dev/Dev-tcpdump/
 categories:
-  - Dev
+  - cs-network
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

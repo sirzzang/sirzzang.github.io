@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] 쿠버네티스와 스왑"
 excerpt: "쿠버네티스에서 스왑 비활성화가 권장되는 이유와 최신 NodeSwap 기능을 살펴본다."
+permalink: /kubernetes/Kubernetes-Swap/
 categories:
-  - Kubernetes
+  - k8s-operations
+  - cs-linux
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

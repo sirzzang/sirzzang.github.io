@@ -1,9 +1,10 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 8. 조건문"
 excerpt: "Ansible 조건문(when)을 활용하여 특정 조건에서만 작업을 실행하는 방법을 실습해보자."
-hidden: true
+permalink: /kubernetes/Kubernetes-Ansible-09/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

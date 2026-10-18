@@ -1,8 +1,11 @@
 ---
 title: "[LLM] LLM 서빙과 최적화 - 2.1. LLM과 트랜스포머 개요"
 excerpt: "LLM 서빙을 이해하기 위한 언어 모델의 발전, 트랜스포머 아키텍처 개요에 대해 알아 보자."
+permalink: /ai/AI-LLM-Optimization-02-01-LLM-Transformer-Overview/
 categories:
-  - AI
+  - ai-llm
+  - mlops-serving
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-AI.jpg

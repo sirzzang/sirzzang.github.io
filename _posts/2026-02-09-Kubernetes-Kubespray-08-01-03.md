@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8. 오프라인 배포: The Hard Way - 3. Local Package Repository"
 excerpt: "폐쇄망 환경에서 OS 패키지 설치를 위한 로컬 YUM/DNF 저장소를 구축해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-08-01-03/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -19,7 +21,6 @@ tags:
   - nginx
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-6
-hidden: true
 
 ---
 

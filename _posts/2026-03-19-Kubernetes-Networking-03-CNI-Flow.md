@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] CNI 동작 흐름: Pod 생성부터 노드 간 통신까지"
 excerpt: "CNI 솔루션 설치, Pod 생성, 같은/다른 노드 통신, 외부 통신까지 — Flannel(VXLAN) 시나리오로 따라가는 패킷 흐름과 VTEP/onlink/FDB의 역할."
+permalink: /kubernetes/Kubernetes-Networking-03-CNI-Flow/
 categories:
-  - Kubernetes
+  - k8s-networking
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -1,10 +1,13 @@
 ---
 title: "[EKS] EKS: 인증/인가 - 5. 사용자 → K8s API: 매핑과 인가(AuthZ)"
 excerpt: "인증 완료 후 인가를 위해 IAM identity를 K8s username/group으로 변환하는 브릿지 단계에 대해 정리해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Auth-02-02-EKS-Auth-AuthZ/
 categories:
-  - Kubernetes
+  - k8s-auth
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

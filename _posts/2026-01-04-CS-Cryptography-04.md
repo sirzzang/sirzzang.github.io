@@ -1,10 +1,11 @@
 ---
 title:  "[Cryptography] 양방향 암호화 - 비대칭키"
 excerpt: "비대칭키 암호화의 개념, RSA 알고리즘, 그리고 암호화와 서명의 차이"
+permalink: /cs/CS-Cryptography-04/
 categories:
-  - CS
+  - cs-security
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

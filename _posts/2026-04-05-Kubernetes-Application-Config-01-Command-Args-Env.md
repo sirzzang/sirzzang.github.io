@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] 어플리케이션 설정 - 1. 컨테이너 커맨드, 인자, 환경 변수"
 excerpt: "Kubernetes 파드에서 컨테이너의 커맨드, 인자, 환경 변수를 설정하는 방법을 알아보자."
+permalink: /kubernetes/Kubernetes-Application-Config-01-Command-Args-Env/
 categories:
-  - Kubernetes
+  - k8s-workload
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -15,7 +17,6 @@ tags:
   - command
   - args
   - environment-variable
-hidden: true
 last_modified_at: 2026-09-13
 ---
 

@@ -1,8 +1,12 @@
 ---
 title: "[EKS] EKS 업그레이드: 개요"
 excerpt: "Kubernetes 업그레이드의 기본 원리를 짚고, 온프레미스 환경과 비교하며 EKS 클러스터 업그레이드 시리즈를 시작해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Upgrade-01-00-Overview/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-operations
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -13,7 +17,6 @@ tags:
   - EKS-Upgrade
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
-hidden: true
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 7주차 학습 내용을 기반으로 합니다.*

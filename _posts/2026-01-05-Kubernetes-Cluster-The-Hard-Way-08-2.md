@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 8.2. Bootstrapping the Kubernetes Control Plane"
 excerpt: "Kubernetes Control Plane 컴포넌트들을 server 노드에 배포하고 시작해보자."
+permalink: /kubernetes/Kubernetes-Cluster-The-Hard-Way-08-2/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-auth
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

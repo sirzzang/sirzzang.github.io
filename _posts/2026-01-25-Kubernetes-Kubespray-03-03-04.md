@@ -1,10 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 3.3.4. cluster.yml - Prepare for etcd install"
 excerpt: "Kubespray cluster.yml의 세 번째 단계인 Prepare for etcd install 플레이를 분석해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-03-03-04/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

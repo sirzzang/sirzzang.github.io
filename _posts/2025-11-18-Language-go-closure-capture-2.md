@@ -1,8 +1,10 @@
 ---
 title:  "[Go] Closure Capture - 2. Closure Capture"
 excerpt: go의 클로저 캡처에 대해 알아 보자
+permalink: /language/Language-go-closure-capture-2/
 categories:
-  - Language
+  - prog-go
+  - concept
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

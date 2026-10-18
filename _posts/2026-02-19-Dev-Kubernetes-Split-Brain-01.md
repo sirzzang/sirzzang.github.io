@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] K3s Split Brain 트러블슈팅 - 1. 상황 복기"
 excerpt: K3s 컨트롤 플레인 노드를 재조인하는 과정에서 발생한 Split Brain 문제의 발견과 당시 해결 과정을 복기한다.
+permalink: /dev/Dev-Kubernetes-Split-Brain-01/
 categories:
-  - Dev
+  - k8s-operations
+  - k8s-cluster
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -1,8 +1,12 @@
 ---
 title: "[GPU] 사례로 본 GPU 클러스터의 LLM 서빙 전략: 스펙 시트 읽기부터 토폴로지 실측까지"
 excerpt: LLMSO 스터디에서 정리한 GPU 스펙·인터커넥트 프레임 및 서빙 전략을 실제 클러스터에 적용해 보자.
+permalink: /dev/Dev-LLM-Serving-GPU-Cluster-Analysis/
 categories:
-  - Dev
+  - mlops-gpu
+  - mlops-resource
+  - mlops-serving
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

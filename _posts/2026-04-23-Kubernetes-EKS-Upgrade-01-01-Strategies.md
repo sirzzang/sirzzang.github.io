@@ -1,8 +1,12 @@
 ---
 title: "[EKS] EKS 업그레이드: 업그레이드 전략"
 excerpt: "In-Place와 Blue-Green 두 가지 EKS 업그레이드 전략의 개념, 장단점, 선택 기준을 비교해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Upgrade-01-01-Strategies/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-operations
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -13,7 +17,6 @@ tags:
   - EKS-Upgrade
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
-hidden: true
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 7주차 학습 내용을 기반으로 합니다.*

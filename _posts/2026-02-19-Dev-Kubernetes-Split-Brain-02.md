@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] K3s Split Brain 트러블슈팅 - 2. 원인 분석"
 excerpt: K3s 소스 코드 분석과 재현 실험을 통해 Split Brain의 정확한 발생 메커니즘을 파악해보자.
+permalink: /dev/Dev-Kubernetes-Split-Brain-02/
 categories:
-  - Dev
+  - k8s-operations
+  - k8s-cluster
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

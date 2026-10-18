@@ -1,9 +1,13 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.4. ingress-nginx L7 노출과 자체 서명 인증서"
 excerpt: "ingress-nginx를 올려 URL에서 포트를 떼어내고, CLB가 두 개가 된 구조와 브라우저 인증서 경고가 바뀐 이유를 확인해 보자."
+permalink: /kubernetes/Kubernetes-LLM-Serving-Optimization-08-04-Ingress-Nginx-Routing/
 categories:
-  - Kubernetes
-hidden: true
+  - mlops-serving
+  - k8s-eks
+  - k8s-networking
+  - cs-cloud
+  - study
 toc: true
 use_math: false
 header:

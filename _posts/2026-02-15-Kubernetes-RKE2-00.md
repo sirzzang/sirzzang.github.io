@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: RKE2를 이용해 클러스터 구성하기 - 0. Overview"
 excerpt: "RKE2가 무엇이고, K3s 및 기존 프로비저닝 도구와 어떻게 다른지 살펴보자."
+permalink: /kubernetes/Kubernetes-RKE2-00/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

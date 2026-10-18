@@ -5,8 +5,10 @@ toc: true
 toc_sticky: true
 header:
   teaser: /assets/images/blog-Dev.jpg
+permalink: /ai/AI-Classification-Types/
 categories:
-  - AI
+  - ai-ml-dl
+  - study
 tags:
   - ML
   - DL

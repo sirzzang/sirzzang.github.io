@@ -1,8 +1,11 @@
 ---
 title: "NCCL 트러블슈팅 회고: MLOps 엔지니어가 바톤을 넘겨받기까지"
 excerpt: "분산 학습에서 터진 NCCL 문제를 해결하며 느낀 점을 정리한 기록"
+permalink: /articles/Articles-NCCL-Troubleshooting-Collaboration-Retrospective/
 categories:
-  - Articles
+  - articles
+  - mlops-training
+  - retrospective
 toc: true
 header:
   teaser: /assets/images/blog-Articles.png
@@ -13,7 +16,6 @@ tags:
   - Troubleshooting
   - Collaboration
   - Retrospective
-hidden: true
 ---
 
 <br>

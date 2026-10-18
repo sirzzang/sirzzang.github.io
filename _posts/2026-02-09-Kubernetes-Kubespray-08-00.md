@@ -1,10 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8. 오프라인 배포: Overview"
 excerpt: "폐쇄망(Air-Gapped) 환경에서 Kubernetes 클러스터를 배포하기 위해 무엇이 필요한지 전체 그림을 그려보자."
+permalink: /kubernetes/Kubernetes-Kubespray-08-00/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

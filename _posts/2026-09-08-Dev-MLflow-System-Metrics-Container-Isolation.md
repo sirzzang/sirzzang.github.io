@@ -1,8 +1,12 @@
 ---
 title: "[MLflow] 시스템 메트릭 로깅 - 1. 컨테이너 안에서 잰 값은 누구의 것인가: psutil, 네임스페이스, cgroup"
 excerpt: "학습 플랫폼 SDK에 MLflow 시스템 메트릭 로깅 기능을 추가하며, pod 안에서 어떤 문제가 발생할 수 있는지 알아 보자."
+permalink: /dev/Dev-MLflow-System-Metrics-Container-Isolation/
 categories:
-  - Dev
+  - mlops-experiment
+  - cs-container
+  - cs-linux
+  - dev-log
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

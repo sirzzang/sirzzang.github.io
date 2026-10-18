@@ -1,10 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 4.2. 클러스터 배포 - 플레이북 실행"
 excerpt: "Kubespray의 cluster.yml 플레이북을 실행해 클러스터를 배포해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-04-02/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

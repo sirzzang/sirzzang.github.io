@@ -1,10 +1,13 @@
 ---
 title: "[EKS] EKS: 인증/인가 - 6. 사용자 → K8s API: 매핑과 인가(AuthZ) 실습"
 excerpt: "Access Entry 확인, SubjectAccessReview, 새 IAM Role 생성과 권한 테스트를 통해 매핑과 인가 과정을 직접 확인해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Auth-02-03-EKS-Auth-AuthZ-Practice/
 categories:
-  - Kubernetes
+  - k8s-auth
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

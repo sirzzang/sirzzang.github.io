@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 4.0. 클러스터 배포 - 실습 환경 구성"
 excerpt: "cluster.yml을 이용해 클러스터 배포 실습을 위한 환경을 구성해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-04-00/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

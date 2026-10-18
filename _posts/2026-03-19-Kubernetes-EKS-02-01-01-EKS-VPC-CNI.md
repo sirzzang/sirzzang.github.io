@@ -1,10 +1,13 @@
 ---
 title:  "[EKS] EKS: Networking - 1. AWS VPC CNI"
 excerpt: "AWS VPC CNI의 구조와 동작 원리에 대해 살펴보자."
+permalink: /kubernetes/Kubernetes-EKS-02-01-01-EKS-VPC-CNI/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-networking
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

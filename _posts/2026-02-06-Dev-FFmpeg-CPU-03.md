@@ -1,10 +1,12 @@
 ---
 title:  "[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 3. 배경지식: 영상 처리와 FFmpeg"
 excerpt: "ffmpeg의 영상 처리 파이프라인과 멀티스레드 동작 방식에 대해 알아 보자."
+permalink: /dev/Dev-FFmpeg-CPU-03/
 categories:
-  - Dev
+  - k8s-workload
+  - cs-media
+  - troubleshooting
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

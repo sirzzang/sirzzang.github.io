@@ -2,15 +2,17 @@
 title:  "12월 Cursor 사용 회고: 320달러의 교훈"
 excerpt: "AI 툴을 마구잡이로 사용하다 요금 폭탄을 맞고, 반성하며 달라질 것을 다짐한 기록"
 toc: true
+permalink: /articles/Articles-Cursor-Retrospective-202512/
 categories:
-  - Articles
+  - articles
+  - prog-tools
+  - retrospective
 header:
   teaser: /assets/images/blog-Articles.png
 tags:
   - AI
   - Cursor
   - Retrospective
-hidden: true
 ---
 
 <br>

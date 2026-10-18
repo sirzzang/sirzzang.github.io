@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 7. Bootstrapping the etcd Cluster"
 excerpt: "Kubernetes 클러스터의 핵심 데이터 저장소인 etcd를 Control Plane 노드에 구성하고 시작해보자."
+permalink: /kubernetes/Kubernetes-Cluster-The-Hard-Way-07/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

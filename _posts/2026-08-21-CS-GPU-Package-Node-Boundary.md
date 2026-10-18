@@ -1,9 +1,11 @@
 ---
 title: "[GPU] GPU 패키징과 노드 경계: die에서 랙까지"
 excerpt: "GPU 인터커넥트의 경계가 무엇으로 정해지는지 die부터 랙까지 따라가 보자."
+permalink: /cs/CS-GPU-Package-Node-Boundary/
 categories:
-  - CS
-hidden: true
+  - cs-architecture
+  - mlops-gpu
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

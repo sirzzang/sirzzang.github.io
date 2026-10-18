@@ -1,10 +1,15 @@
 ---
 title:  "[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델 - 2. Service와 kube-proxy"
 excerpt: "EKS 시리즈에서 LoadBalancer Controller를 다루기 전에, Service / kube-proxy / LoadBalancer Instance vs IP Target Mode를 짧게 정리해 보자."
+permalink: /kubernetes/Kubernetes-EKS-02-00-02-Kubernetes-Networking-Service/
+redirect_from:
+  - /Kubernetes-EKS-02-01-02-EKS-Service/
 categories:
-  - Kubernetes
+  - k8s-networking
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

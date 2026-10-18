@@ -1,8 +1,11 @@
 ---
 title:  "[EKS] EKS: Overview"
 excerpt: "AWS의 관리형 Kubernetes 서비스인 EKS가 무엇인지 간단히 살펴보자."
+permalink: /kubernetes/Kubernetes-EKS-00-00-EKS-Overview/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

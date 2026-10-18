@@ -1,8 +1,12 @@
 ---
 title:  "[AWS] EC2 배포 오류"
 excerpt: Elastic Beanstalk을 이용해 EC2에 이미지를 배포하던 도중 발생한 OOM 에러
+permalink: /dev/Dev-aws-elasticbeanstalk-deploy-oom-error/
 categories:
-  - Dev
+  - cs-cloud
+  - prog-tools
+  - cs-container
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -1,8 +1,11 @@
 ---
 title: "[EKS] EKS 업그레이드: 실습 환경"
 excerpt: "AWS EKS 업그레이드 워크숍 실습 환경의 클러스터 구성, 노드, 애드온, 샘플 애플리케이션을 확인해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Upgrade-02-00-Environment/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -16,7 +19,6 @@ tags:
   - Karpenter
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
-hidden: true
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 7주차 학습 내용을 기반으로 합니다.*

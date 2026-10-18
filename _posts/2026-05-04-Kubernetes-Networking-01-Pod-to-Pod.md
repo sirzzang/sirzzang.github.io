@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] 파드 간 통신: 같은 노드 / 다른 노드"
 excerpt: "쿠버네티스 네트워킹 모델의 핵심인 파드 간 통신을 같은 노드(veth + bridge)와 다른 노드(오버레이 / BGP / 클라우드 네이티브)로 나누어, 각 방식이 NAT 없이 어떻게 도달하는지 패킷 단위로 살펴 보자."
+permalink: /kubernetes/Kubernetes-Networking-01-Pod-to-Pod/
 categories:
-  - Kubernetes
+  - k8s-networking
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -15,7 +17,6 @@ tags:
   - bridge
   - overlay
   - BGP
-hidden: true
 
 ---
 

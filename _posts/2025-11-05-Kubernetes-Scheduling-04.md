@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] 쿠버네티스 스케줄링 - 4. 스케줄러 설정과 최적화"
 excerpt: "NodeResourcesFit 전략, 리소스 단편화 문제, 스케줄러 성능 튜닝, 다중 프로필 구성을 알아보자."
+permalink: /kubernetes/Kubernetes-Scheduling-04/
 categories:
-  - Kubernetes
+  - k8s-scheduling
+  - mlops-resource
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

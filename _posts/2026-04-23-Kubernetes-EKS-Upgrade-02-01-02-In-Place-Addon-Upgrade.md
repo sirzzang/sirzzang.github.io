@@ -1,8 +1,12 @@
 ---
 title: "[EKS] EKS 업그레이드: In-Place 실습 - EKS 애드온 업그레이드"
 excerpt: "Control Plane 업그레이드 후, Terraform을 이용해 CoreDNS, kube-proxy, VPC CNI 등 EKS 애드온을 업그레이드해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Upgrade-02-01-02-In-Place-Addon-Upgrade/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-operations
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -17,7 +21,6 @@ tags:
   - VPC-CNI
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
-hidden: true
 last_modified_at: 2026-08-24
 ---
 

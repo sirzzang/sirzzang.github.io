@@ -3,8 +3,11 @@ title:  "[NLP] Kaggle IMDB_1.논문 분석"
 excerpt: "<<Sentiment Analysis>> Kaggle IMDB 대회 우승자 아이디어를 분석해 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-IMDB-kaggle1st-01/
 categories:
-  - AI
+  - ai-ml-dl
+  - ai-paper
+  - study
 header:
   teaser: /assets/images/blog-AI.jpg
 tags:

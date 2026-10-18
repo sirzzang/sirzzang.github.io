@@ -1,8 +1,12 @@
 ---
 title: "[EKS] EKS GPU 트러블슈팅: 0. 개요"
 excerpt: "EKS GPU 트러블슈팅 실습을 진행해보자."
+permalink: /kubernetes/Kubernetes-EKS-GPU-TroubleShooting-00-Overview/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - mlops-gpu
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

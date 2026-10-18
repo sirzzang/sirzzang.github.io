@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: RKE2를 이용해 클러스터 구성하기 - 2. 에이전트 노드 조인"
 excerpt: "RKE2 에이전트 노드를 설치하고 서버 노드에 조인한 뒤, 샘플 파드 배포로 클러스터를 확인한다."
+permalink: /kubernetes/Kubernetes-RKE2-02/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

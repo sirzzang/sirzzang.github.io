@@ -1,8 +1,11 @@
 ---
 title: "[GenAI] GenAI on K8s: 1. 생성형 AI 기초"
 excerpt: "AI, ML, DL, GenAI의 관계부터 Transformer 아키텍처, GenAI 프로젝트 라이프사이클, 배포 스택까지 정리해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-01-GenAI-Fundamentals/
 categories:
-  - Kubernetes
+  - ai-llm
+  - ai-ml-dl
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -15,7 +18,6 @@ tags:
   - Machine-Learning
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-1
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 1장의 학습 내용을 바탕으로 합니다*

@@ -1,9 +1,13 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.2. LoadBalancer 서비스 노출과 추론 테스트"
 excerpt: "vLLM Service를 LoadBalancer로 노출했을 때 만들어지는 CLB의 리스너 구조를 확인하고, 추론 요청이 실제로 왕복하는지 검증해 보자."
+permalink: /kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-02-Service-LoadBalancer/
 categories:
-  - Kubernetes
-hidden: true
+  - mlops-serving
+  - k8s-eks
+  - k8s-networking
+  - cs-cloud
+  - study
 toc: true
 use_math: false
 header:

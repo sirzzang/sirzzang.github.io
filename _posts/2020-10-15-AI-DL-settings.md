@@ -3,8 +3,11 @@ title:  "[AI] DL GPU 개발환경 구축: Windows"
 excerpt: "GPU를 사용하는 Tensorflow, PyTorch 개발환경을 구축해 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-DL-settings/
 categories:
-  - AI
+  - mlops-gpu
+  - ai-ml-dl
+  - dev-log
 tags:
   - DL
   - Python

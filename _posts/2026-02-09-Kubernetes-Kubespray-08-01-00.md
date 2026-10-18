@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8. 오프라인 배포: The Hard Way - 0. 실습 환경 배포"
 excerpt: "폐쇄망 Kubernetes 클러스터 배포를 위한 Vagrant 실습 환경을 구성하고, 네트워크 구조를 확인해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-08-01-00/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -15,7 +17,6 @@ tags:
   - VirtualBox
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-6
-hidden: true
   
 ---
 

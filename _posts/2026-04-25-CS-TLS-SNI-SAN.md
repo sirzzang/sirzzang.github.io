@@ -1,8 +1,11 @@
 ---
 title:  "[TLS] SNI와 SAN: 개념, 차이, 그리고 인증서 디버깅 팁"
 excerpt: "TLS handshake에서 SNI와 SAN이 각각 어떤 역할을 하는지, 그리고 openssl s_client로 인증서를 디버깅할 때 servername을 신경써야 하는 이유에 대해 알아 보자."
+permalink: /cs/CS-TLS-SNI-SAN/
 categories:
-  - CS
+  - cs-network
+  - cs-security
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

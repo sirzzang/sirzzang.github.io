@@ -1,8 +1,11 @@
 ---
 title: "[MCP] VPN SSL Inspection으로 인한 Notion MCP 연결 실패"
 excerpt: "같은 VPN SSL Inspection인데 kubectl과는 해결이 정반대다. Node.js의 trust 모델과 NODE_EXTRA_CA_CERTS 해법을 정리해 보자."
+permalink: /dev/Dev-Notion-MCP-VPN-SSL-Inspection/
 categories:
-  - Dev
+  - cs-security
+  - prog-tools
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

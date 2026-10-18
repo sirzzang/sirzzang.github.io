@@ -1,8 +1,10 @@
 ---
 title: "[GenAI] GenAI on K8s: 11.4 - Argo Workflows와 ML 파이프라인 오케스트레이션"
 excerpt: "Argo Workflows의 Workflow CRD 실행 모델(step = Pod, init/main/wait 3컨테이너), Kubeflow Pipelines와의 레이어 관계, Argo CD와의 책임 분리, parallelism 세 층위를 정리해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-11-04-Argo-Workflows/
 categories:
-  - Kubernetes
+  - mlops-pipeline
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -17,7 +19,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-11
 use_math: false
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 11장의 학습 내용을 바탕으로 합니다*

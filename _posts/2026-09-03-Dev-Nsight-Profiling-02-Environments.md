@@ -1,9 +1,11 @@
 ---
 title: "[Nsight] Nsight 프로파일러: 2. 실행 환경별 적용"
 excerpt: "로컬·컨테이너·쿠버네티스·런타임 exec 환경에서 프로파일러를 붙일 때 마주치는 다섯 가지 문제를 정리해 보자."
+permalink: /dev/Dev-Nsight-Profiling-02-Environments/
 categories:
-  - Dev
-hidden: true
+  - mlops-gpu
+  - cs-container
+  - concept
 toc: true
 use_math: false
 header:

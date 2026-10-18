@@ -1,8 +1,11 @@
 ---
 title: "[LLM] LLM 서빙과 최적화 - 1. AI 개요: 가중치, 행렬, 그리고 학습과 GPU"
 excerpt: "가중치는 어떻게 학습되며, 그 숫자들이 모델의 판단 능력을 어떻게 결정하는지 알아보자."
+permalink: /ai/AI-LLM-Optimization-01-AI-Overview/
 categories:
-  - AI
+  - ai-llm
+  - ai-ml-dl
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-AI.jpg

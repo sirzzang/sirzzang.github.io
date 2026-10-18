@@ -1,10 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 3.3.1. cluster.yml - 태스크 구조"
 excerpt: "cluster.yml의 15개 플레이와 태스크 구조를 --list-tasks로 분석해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-03-03-01/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

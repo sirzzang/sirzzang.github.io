@@ -1,9 +1,13 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.3.1. init container 모델 컴파일과 S3 캐시"
 excerpt: "vLLM Deployment를 init container 패턴으로 올리고, Neuron 컴파일 산출물이 S3 캐시를 거쳐 메인 컨테이너로 전달되는 경로를 확인해 보자."
+permalink: /kubernetes/Kubernetes-LLM-Serving-Optimization-08-03-01-vLLM-Deployment/
 categories:
-  - Kubernetes
-hidden: true
+  - mlops-serving
+  - k8s-eks
+  - k8s-workload
+  - cs-cloud
+  - study
 toc: true
 use_math: false
 header:

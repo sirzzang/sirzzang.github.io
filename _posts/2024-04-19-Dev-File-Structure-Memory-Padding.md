@@ -1,8 +1,11 @@
 ---
 title:  "[Go] Go 언어 메모리 패딩"
 excerpt: Memory Padding을 생각하지 않고 구조체를 설계할 때 마주칠 수 있는 문제
+permalink: /dev/Dev-File-Structure-Memory-Padding/
 categories:
-  - Dev
+  - prog-go
+  - cs-architecture
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

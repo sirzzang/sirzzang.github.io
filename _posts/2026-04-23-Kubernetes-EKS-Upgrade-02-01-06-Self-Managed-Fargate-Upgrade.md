@@ -1,8 +1,12 @@
 ---
 title: "[EKS] EKS 업그레이드: Self-managed 노드 및 Fargate 업그레이드"
 excerpt: "Self-managed 노드는 Launch Template AMI 교체로, Fargate는 Deployment 재시작만으로 업그레이드할 수 있다."
+permalink: /kubernetes/Kubernetes-EKS-Upgrade-02-01-06-Self-Managed-Fargate-Upgrade/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-operations
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -16,7 +20,6 @@ tags:
   - Terraform
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
-hidden: true
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 7주차 학습 내용을 기반으로 합니다.*

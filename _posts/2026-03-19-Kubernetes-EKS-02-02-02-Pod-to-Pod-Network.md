@@ -1,10 +1,13 @@
 ---
 title: "[EKS] EKS: Networking - 3. 파드 간 통신"
 excerpt: "VPC CNI가 파드 네트워크를 구성하는 와이어링 과정과 파드 간 패킷 흐름을 tcpdump로 추적해 보자."
+permalink: /kubernetes/Kubernetes-EKS-02-02-02-Pod-to-Pod-Network/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-networking
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

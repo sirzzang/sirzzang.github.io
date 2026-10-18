@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Pod 볼륨 - 4. configMap, secret, downwardAPI, projected 볼륨"
 excerpt: "ConfigMap, Secret, Downward API 데이터를 볼륨으로 컨테이너에 파일로 주입하는 방법과 projected 볼륨을 알아보자."
+permalink: /kubernetes/Kubernetes-Pod-Volume-04-ConfigMap-Secret-DownwardAPI-Projected/
 categories:
-  - Kubernetes
+  - k8s-storage
+  - k8s-workload
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -16,7 +19,6 @@ tags:
   - projected
   - fsGroup
   - file-permissions
-hidden: true
 last_modified_at: 2026-09-13
 ---
 

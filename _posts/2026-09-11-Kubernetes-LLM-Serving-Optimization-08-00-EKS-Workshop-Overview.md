@@ -1,8 +1,12 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.0. 개요와 워크샵 아키텍처"
 excerpt: "EKS와 AWS Trainium 위에 vLLM을 올리는 워크샵의 목적과 클러스터 아키텍처를 살펴보자."
+permalink: /kubernetes/Kubernetes-LLM-Serving-Optimization-08-00-EKS-Workshop-Overview/
 categories:
-  - Kubernetes
+  - mlops-serving
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
 use_math: false
 header:

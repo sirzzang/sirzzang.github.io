@@ -1,8 +1,10 @@
 ---
 title:  "[CS] Origin에 대한 고찰 - 정의, SOP, CORS"
 excerpt: Origin에 대해 알아보자.
+permalink: /cs/CS-Origin-SOP-CORS/
 categories:
-  - CS
+  - cs-network
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

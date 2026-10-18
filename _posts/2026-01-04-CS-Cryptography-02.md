@@ -1,10 +1,11 @@
 ---
 title:  "[Cryptography] 단방향 암호화 - 해시 함수"
 excerpt: "해시 함수의 특징, 용도, 그리고 레인보우 테이블 공격과 솔트에 대해 알아 보자."
+permalink: /cs/CS-Cryptography-02/
 categories:
-  - CS
+  - cs-security
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

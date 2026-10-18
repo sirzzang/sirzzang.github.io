@@ -1,9 +1,10 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: 단일 모델 서빙 시스템 - 2. 코드 구조: 다섯 컴포넌트 해부"
 excerpt: "단일 모델 서빙 서비스의 코드를 컴포넌트 단위로 해부하며, 프로세스 분리와 큐 기반 IPC가 어떻게 구현되는지 살펴보자."
+permalink: /dev/Dev-LLM-Serving-Optimization-02-LLM-Serving-From-Scratch-Structure/
 categories:
-  - Dev
-hidden: true
+  - mlops-serving
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

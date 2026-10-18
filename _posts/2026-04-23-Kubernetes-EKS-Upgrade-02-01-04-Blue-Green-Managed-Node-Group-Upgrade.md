@@ -1,8 +1,12 @@
 ---
 title: "[EKS] EKS 업그레이드: Blue-Green Managed Node Group 마이그레이션"
 excerpt: "새 노드 그룹(Green)을 생성하고 기존 노드 그룹(Blue)을 삭제하여, Stateful 워크로드를 포함한 파드를 마이그레이션하는 Blue-Green 방식의 Managed Node Group 업그레이드를 실습해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Upgrade-02-01-04-Blue-Green-Managed-Node-Group-Upgrade/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-operations
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -18,7 +22,6 @@ tags:
   - ArgoCD
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
-hidden: true
 last_modified_at: 2026-08-24
 ---
 

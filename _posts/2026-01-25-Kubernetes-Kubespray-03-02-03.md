@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 3.2.3. 변수 분석 - kubespray_defaults 역할"
 excerpt: "Kubespray의 kubespray_defaults 역할과 변수 시스템을 분석해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-03-02-03/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -12,7 +14,6 @@ tags:
   - Ansible
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-4
-hidden: true
 
 last_modified_at: 2026-09-09
 ---

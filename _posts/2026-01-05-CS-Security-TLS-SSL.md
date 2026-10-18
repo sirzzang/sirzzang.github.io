@@ -1,8 +1,11 @@
 ---
 title:  "[Security] TLS/SSL 프로토콜"
 excerpt: "TLS와 mTLS에 대해 알아 보자."
+permalink: /cs/CS-Security-TLS-SSL/
 categories:
-  - CS
+  - cs-security
+  - cs-network
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -56,7 +59,7 @@ TLS는 세 가지 핵심 보안 목표를 달성한다:
 
 1. **기밀성(Confidentiality)**: 대칭키 암호화로 보장하며, AES-GCM, ChaCha20-Poly1305 등의 알고리즘을 사용함
 2. **무결성(Integrity)**: MAC(Message Authentication Code) 또는 HMAC을 통해 데이터 변조 방지
-3. **인증(Authentication)**: [X.509 인증서](/cs/CS-X509-Certificate/)와 디지털 서명을 통해 통신 상대방의 신원 확인
+3. **인증(Authentication)**: [X.509 인증서](/cs/CS-Security-X509-Certificate/)와 디지털 서명을 통해 통신 상대방의 신원 확인
 
 ## Cipher Suite
 

@@ -1,8 +1,10 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: 고급 최적화 기법 - 7.2.1. speculative decoding 원리: 추측, 병렬 검증, 분포 보존"
 excerpt: "추측과 병렬 검증으로 decode를 가속하는 speculative decoding의 원리에 대해 알아 보자."
+permalink: /dev/Dev-LLM-Serving-Optimization-07-02-01-Speculative-Decoding-Concept/
 categories:
-  - Dev
+  - mlops-serving
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

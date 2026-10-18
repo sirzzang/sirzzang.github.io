@@ -1,10 +1,11 @@
 ---
 title: "[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 2. Service Account"
 excerpt: "K8s가 직접 관리하는 non-human identity인 Service Account의 개념과 토큰 생명주기를 정리해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Auth-00-03-Service-Accounts/
 categories:
-  - Kubernetes
+  - k8s-auth
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

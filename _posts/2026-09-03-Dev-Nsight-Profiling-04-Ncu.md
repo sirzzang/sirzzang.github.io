@@ -1,9 +1,11 @@
 ---
 title: "[Nsight] Nsight 프로파일러: 4. ncu 수집과 커널 판정"
 excerpt: "ncu 리포트를 어느 순서로 읽고, 어떤 숫자가 병목 판정을 가르는지 정리해 보자."
+permalink: /dev/Dev-Nsight-Profiling-04-Ncu/
 categories:
-  - Dev
-hidden: true
+  - mlops-gpu
+  - cs-architecture
+  - concept
 toc: true
 use_math: false
 header:

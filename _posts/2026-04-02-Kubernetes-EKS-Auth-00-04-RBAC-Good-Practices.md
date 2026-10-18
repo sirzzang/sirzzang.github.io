@@ -1,10 +1,11 @@
 ---
 title: "[EKS] EKS: 인증/인가 - 1. K8S 인증/인가 기초 - 3. RBAC 모범 사례"
 excerpt: "K8S RBAC에서 의도치 않은 권한 상승이 발생할 수 있는 경로를 정리하고, 안전한 설계 원칙을 살펴보자."
+permalink: /kubernetes/Kubernetes-EKS-Auth-00-04-RBAC-Good-Practices/
 categories:
-  - Kubernetes
+  - k8s-auth
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

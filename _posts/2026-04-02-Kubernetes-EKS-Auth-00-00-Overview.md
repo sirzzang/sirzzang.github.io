@@ -1,8 +1,12 @@
 ---
 title: "[EKS] EKS: 인증/인가 - 0. 개요"
 excerpt: "EKS에서 두 인증 체계(K8s와 AWS IAM)가 만나면서 생기는 근본 문제와 세 가지 인증 흐름을 정리해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Auth-00-00-Overview/
 categories:
-  - Kubernetes
+  - k8s-auth
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

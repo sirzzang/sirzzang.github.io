@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Pod 볼륨 - 2. emptyDir"
 excerpt: "emptyDir 볼륨으로 컨테이너 재시작 간 데이터를 유지하고, init 컨테이너로 초기화하며, 컨테이너 간 파일을 공유하는 방법을 알아보자."
+permalink: /kubernetes/Kubernetes-Pod-Volume-02-emptyDir/
 categories:
-  - Kubernetes
+  - k8s-storage
+  - k8s-workload
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -14,7 +17,6 @@ tags:
   - init-container
   - sidecar
   - tmpfs
-hidden: true
 last_modified_at: 2026-09-13
 ---
 

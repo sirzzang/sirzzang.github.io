@@ -1,8 +1,10 @@
 ---
 title:  "[Database] Database 고가용성"
 excerpt: Database 고가용성 확보를 위해 알아 두면 좋은 개념들
+permalink: /cs/CS-db-high-availability/
 categories:
-  - CS
+  - cs-database
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

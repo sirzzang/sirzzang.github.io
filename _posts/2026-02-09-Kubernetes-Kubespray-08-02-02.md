@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 8. 오프라인 배포: kubespray-offline - 2. Downloads / Mirror"
 excerpt: "Kubespray의 다운로드 메커니즘과 변수 체계, 그리고 공개 미러 설정 방법을 이해해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-08-02-02/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -15,7 +17,6 @@ tags:
   - Ansible
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-6
-hidden: true
 
 ---
 

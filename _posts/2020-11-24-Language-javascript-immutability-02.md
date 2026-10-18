@@ -3,8 +3,10 @@ title:  "[JavaScript] 불변성-2"
 excerpt: "자바스크립트에서의 데이터 불변성(immutability)에 대해 알아보자."
 toc: true
 toc_sticky: true
+permalink: /language/Language-javascript-immutability-02/
 categories:
-  - Language
+  - prog-javascript
+  - study
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

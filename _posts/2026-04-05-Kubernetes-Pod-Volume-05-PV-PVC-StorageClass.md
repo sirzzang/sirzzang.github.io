@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Pod 볼륨 - 5. PersistentVolume, PersistentVolumeClaim, StorageClass"
 excerpt: "영속 스토리지의 핵심 추상화인 PV, PVC, StorageClass 개념과 동적 프로비저닝, 접근 모드, CSI 드라이버를 알아보자."
+permalink: /kubernetes/Kubernetes-Pod-Volume-05-PV-PVC-StorageClass/
 categories:
-  - Kubernetes
+  - k8s-storage
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -16,7 +18,6 @@ tags:
   - dynamic-provisioning
   - CSI
   - access-mode
-hidden: true
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 10장의 학습 내용을 기반으로 합니다.*

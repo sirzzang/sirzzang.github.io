@@ -1,8 +1,10 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: 고급 최적화 기법 - 7.1. 개요: 단일 GPU 너머의 네 기법"
 excerpt: "LLM 서빙 고급 최적화 기법(speculative decoding, 멀티 GPU 분산, PD 분리, 고급 KV 캐싱)에 대해 알아 보자."
+permalink: /dev/Dev-LLM-Serving-Optimization-07-01-LLM-Serving-Advanced-Techniques-Overview/
 categories:
-  - Dev
+  - mlops-serving
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

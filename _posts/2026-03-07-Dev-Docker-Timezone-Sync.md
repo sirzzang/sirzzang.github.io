@@ -1,8 +1,11 @@
 ---
 title:  "[Docker] 호스트-컨테이너 타임존 런타임 동기화 문제"
 excerpt: "bind mount한 파일이 호스트에서 바뀌었는데 컨테이너에서는 바뀌지 않는 이유에 대해 알아보자."
+permalink: /dev/Dev-Docker-Timezone-Sync/
 categories:
-  - Dev
+  - cs-container
+  - cs-linux
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

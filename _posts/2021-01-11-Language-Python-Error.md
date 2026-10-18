@@ -1,8 +1,10 @@
 ---
 title:  "[Python] raise vs. raise from e"
 excerpt: 파이썬에서 예외가 어디서부터 발생했는지 알고 싶다면, raise from을 사용하자.
+permalink: /language/Language-Python-Error/
 categories:
-  - Language
+  - prog-python
+  - concept
 toc: false
 header:
   teaser: /assets/images/blog-Dev.jpg

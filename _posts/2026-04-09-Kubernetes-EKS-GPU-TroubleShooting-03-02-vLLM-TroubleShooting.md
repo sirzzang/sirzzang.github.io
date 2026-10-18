@@ -1,10 +1,14 @@
 ---
 title: "[EKS] EKS GPU 트러블슈팅: 3. 장애 재현 - 2. vLLM 기동 실패"
 excerpt: "A10G 24GB에 vLLM 14B-AWQ를 올려 vLLM 기동 실패 시나리오 4가지를 재현하고, kubectl logs --previous 중심의 디버깅 경로를 짚어 보자."
+permalink: /kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-02-vLLM-TroubleShooting/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - mlops-gpu
+  - mlops-serving
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

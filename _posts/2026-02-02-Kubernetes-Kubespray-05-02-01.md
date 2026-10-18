@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 5.2.1. Full Client-Side LB(Case 1) HA 구성 - 클러스터 배포"
 excerpt: "Kubespray로 HA Control Plane 클러스터를 배포하고 Client-Side LB 구성을 확인해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-05-02-01/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -13,7 +15,6 @@ tags:
   - Client-Side LB
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-5
-hidden: true
 
 ---
 

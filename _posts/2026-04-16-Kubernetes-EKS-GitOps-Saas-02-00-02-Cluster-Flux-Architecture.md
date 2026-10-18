@@ -1,10 +1,12 @@
 ---
 title: "[EKS] GitOps 기반 SaaS: 클러스터 환경 확인 - 2. Flux 아키텍처 분석"
 excerpt: "Flux의 3-Layer 모델과 진입점 체계를 분석하고, Git 저장소의 어떤 파일이 클러스터의 어디에 영향을 미치는지 지도를 그려 보자."
+permalink: /kubernetes/Kubernetes-EKS-GitOps-Saas-02-00-02-Cluster-Flux-Architecture/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

@@ -1,9 +1,10 @@
 ---
 title: "[LLM] LLM 서빙과 최적화 - 2.6. Transformer: MLP와 트랜스포머 블록 마무리"
 excerpt: "어텐션이 모아 온 정보를 토큰별로 비선형 가공하는 MLP 서브레이어에 대해 알아 보자."
+permalink: /ai/AI-LLM-Optimization-02-06-Transformer-Explainer-MLP/
 categories:
-  - AI
-hidden: true
+  - ai-llm
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-AI.jpg

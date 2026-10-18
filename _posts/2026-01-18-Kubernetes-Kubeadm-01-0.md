@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.0. 실습 구성도"
 excerpt: "kubeadm 클러스터 구성 실습에서 각 단계별 조감도를 그려보자."
+permalink: /kubernetes/Kubernetes-Kubeadm-01-0/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +12,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-3
-hidden: true
 
 ---
 

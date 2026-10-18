@@ -1,10 +1,13 @@
 ---
 title: "[EKS] EKS GPU 트러블슈팅: 2. 실습 환경 구성 - 3. GPU 노드 프로비저닝 결과"
 excerpt: "GPU 노드를 프로비저닝하고 GPU Operator를 설치한 뒤, Allocatable GPU와 nvidia-smi로 end-to-end 검증해 보자."
+permalink: /kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-03-GPU-Node-Provisioning/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - mlops-gpu
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

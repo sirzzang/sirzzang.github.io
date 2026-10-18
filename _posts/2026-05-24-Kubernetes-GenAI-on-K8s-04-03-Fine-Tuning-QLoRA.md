@@ -1,8 +1,11 @@
 ---
 title: "[GenAI] GenAI on K8s: 4.3 - Fine-tuning (QLoRA)"
 excerpt: "PEFT, LoRA, QLoRA의 개념부터 Colab T4에서 Llama-3-8B를 fine-tune한 실습 결과, 그리고 RAG와의 선택 가이드까지 정리해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-04-03-Fine-Tuning-QLoRA/
 categories:
-  - Kubernetes
+  - ai-llm
+  - mlops-training
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -19,7 +22,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-4
 use_math: false
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 4장의 학습 내용을 바탕으로 합니다*

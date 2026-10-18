@@ -1,8 +1,12 @@
 ---
 title:  "[Kubernetes] Pod CPU Limit과 FFmpeg Thread 최적 조정 - 0. 목격한 상황"
 excerpt: "Kubernetes 환경에서 ffmpeg 프레임 추출이 비정상적으로 느렸던 상황에 대해 정리해 보자."
+permalink: /dev/Dev-FFmpeg-CPU-00/
 categories:
-  - Dev
+  - k8s-workload
+  - cs-linux
+  - cs-media
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -1,10 +1,13 @@
 ---
 title:  "[EKS] EKS: Public-Public EKS 클러스터 - 3. kubeconfig와 EKS API 서버 인증"
 excerpt: "kubeconfig를 설정하고, EKS API 서버가 IAM 자격증명을 인증하는 구조를 확인해보자."
+permalink: /kubernetes/Kubernetes-EKS-01-01-03-Kubeconfig-Authentication/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-auth
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

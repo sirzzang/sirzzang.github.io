@@ -1,9 +1,10 @@
 ---
 title:  "[Ansible] Kubespray: Kubespray를 위한 Ansible 기초 - 2. 인벤토리"
-hidden: true
 excerpt: "Ansible 인벤토리의 개념과 형식, 구성 요소를 이해하고 실습 환경에서 인벤토리 파일을 작성해보자."
+permalink: /kubernetes/Kubernetes-Ansible-03/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

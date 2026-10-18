@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 5.1. Generating Kubernetes Configuration Files"
 excerpt: "kubeconfig의 개념과 구성 요소, Node Authorizer의 동작 원리를 이해해보자."
+permalink: /kubernetes/Kubernetes-Cluster-The-Hard-Way-05-1/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-auth
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +13,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-1
-hidden: true
 
 ---
 

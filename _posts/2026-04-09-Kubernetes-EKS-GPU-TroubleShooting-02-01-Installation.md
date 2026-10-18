@@ -1,10 +1,13 @@
 ---
 title: "[EKS] EKS GPU 트러블슈팅: 2. 실습 환경 구성 - 1. Terraform 코드"
 excerpt: "GPU 트러블슈팅 실습을 위한 EKS 환경을 Terraform으로 구성해 보자."
+permalink: /kubernetes/Kubernetes-EKS-GPU-TroubleShooting-02-01-Installation/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - mlops-gpu
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

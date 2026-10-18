@@ -1,10 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 3.1. ansible.cfg 분석"
 excerpt: "Kubespray에서 사용하는 ansible.cfg 설정을 상세히 분석하고, 환경에 맞게 커스터마이징하는 방법을 알아보자."
+permalink: /kubernetes/Kubernetes-Kubespray-03-01/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

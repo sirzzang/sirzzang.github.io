@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] NVIDIA Device Plugin 동작 원리"
 excerpt: 쿠버네티스 환경에서 실행되는 컨테이너가 GPU를 사용할 수 있게 되기까지
+permalink: /dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/
 categories:
-  - Dev
+  - mlops-gpu
+  - mlops-resource
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

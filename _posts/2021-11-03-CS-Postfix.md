@@ -1,10 +1,11 @@
 ---
 title:  "[Algorithm] 후위표기법 연산"
 excerpt: 
+permalink: /cs/CS-Postfix/
 categories:
-  - CS
+  - cs-algorithm
+  - concept
 toc: false
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

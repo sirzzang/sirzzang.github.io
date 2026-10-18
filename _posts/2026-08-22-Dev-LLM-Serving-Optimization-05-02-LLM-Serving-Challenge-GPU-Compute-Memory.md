@@ -1,9 +1,12 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.2. GPU 스펙 읽기: 연산과 메모리"
 excerpt: "GPU 스펙의 연산·메모리 속성을 읽고 H100 SXM과 NVL을 비교해 보자."
+permalink: /dev/Dev-LLM-Serving-Optimization-05-02-LLM-Serving-Challenge-GPU-Compute-Memory/
 categories:
-  - Dev
-hidden: true
+  - mlops-serving
+  - mlops-gpu
+  - cs-architecture
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -1,10 +1,14 @@
 ---
 title: "[EKS] EKS GPU 트러블슈팅: 4. 사례 탐구 - CUDA XID, Auto Mode, EFA"
 excerpt: "EKS 관리형 환경에서 재현할 수 없는 GPU 주제 3가지를, 문서 탐구와 실무 경험 매핑으로 정리해 보자."
+permalink: /kubernetes/Kubernetes-EKS-GPU-TroubleShooting-04-Error-Cases/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - mlops-gpu
+  - mlops-training
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

@@ -3,8 +3,10 @@ title:  "[AI] Matrix Factorization Techniques for Recommender Systems 리뷰"
 excerpt: "<<Matrix Factorization>> Netflix Prize 우승 팀에게 MF 기법을 배워 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-MF-techniques/
 categories:
-  - AI
+  - ai-paper
+  - study
 tags:
   - 추천시스템
   - 행렬분해

@@ -1,8 +1,11 @@
 ---
 title:  "[AWS] AWS Elastic Beanstalk 환경 413 Entity Too Large 에러 해결"
 excerpt: AWS Elastic Beanstalk 환경에서 발생하는 413 Entity Too Large 에러를 해결해 보자
+permalink: /dev/Dev-AWS-Elastic-Beanstalk-Nginx-413-Error/
 categories:
-  - Dev
+  - cs-cloud
+  - cs-network
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

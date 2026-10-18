@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 9.1. Bootstrapping the Kubernetes Worker Nodes"
 excerpt: "Worker Node 컴포넌트 설정 파일들을 분석해보자."
+permalink: /kubernetes/Kubernetes-Cluster-The-Hard-Way-09-1/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-networking
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +13,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-1
-hidden: true
 
 ---
 

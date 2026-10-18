@@ -1,8 +1,11 @@
 ---
 title: "[Kubernetes] Container Runtime CLI 없는 노드에서 이미지 조회하기"
 excerpt: "워커 노드에 docker/crictl/ctr이 없어도 kubectl API로 이미지를 조회할 수 있다. kubelet의 노드 상태 보고를 활용하는 방법을 정리해 보자."
+permalink: /dev/Dev-Container-Runtime-CLI-Missing-Node-Image-Query/
 categories:
-  - Dev
+  - k8s-operations
+  - cs-container
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

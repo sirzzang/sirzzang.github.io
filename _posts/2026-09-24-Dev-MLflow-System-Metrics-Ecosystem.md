@@ -1,8 +1,11 @@
 ---
 title: "[MLflow] 시스템 메트릭 로깅 - 3. 다른 도구와 런타임의 컨테이너 대응"
 excerpt: "컨테이너 안에서 켠 관측 도구가 노드 값을 보여 주는 문제를, 다른 도구와 언어 런타임은 어떻게 다뤘는지 찾아보자."
+permalink: /dev/Dev-MLflow-System-Metrics-Ecosystem/
 categories:
-  - Dev
+  - mlops-experiment
+  - cs-container
+  - dev-log
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

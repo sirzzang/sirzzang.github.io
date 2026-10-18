@@ -3,9 +3,10 @@ title:  "[Algorithm] 그리디(탐욕) 알고리즘"
 excerpt:
 header:
   teaser: /assets/images/blog-Programming.jpg
+permalink: /cs/CS-Greedy-Algorithm/
 categories:
-  - CS
-hidden: true
+  - cs-algorithm
+  - concept
 toc : true
 tags:
   - Python

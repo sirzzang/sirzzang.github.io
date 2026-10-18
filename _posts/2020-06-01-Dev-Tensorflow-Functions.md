@@ -1,8 +1,11 @@
 ---
 title:  "[Tensorflow] 기억해야 할 Tensorflow 사용법"
 excerpt: 파이썬 Tensorflow 2.x 버전 사용법 이해하기
+permalink: /dev/Dev-Tensorflow-Functions/
 categories:
-  - Dev
+  - prog-python
+  - ai-ml-dl
+  - concept
 toc : true
 tags:
   - Python

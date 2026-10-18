@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 4.1. 클러스터 배포 - 인벤토리 구성 및 변수 수정"
 excerpt: "Kubespray 인벤토리를 구성하고 클러스터 배포를 위한 변수를 수정한다."
+permalink: /kubernetes/Kubernetes-Kubespray-04-01/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

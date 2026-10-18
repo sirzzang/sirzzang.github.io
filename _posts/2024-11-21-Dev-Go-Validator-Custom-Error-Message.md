@@ -1,8 +1,10 @@
 ---
 title:  "[Go] gin validator 에러 메시지 변경"
 excerpt: gin의 json struct validator를 사용할 때, 사용자 친화적인 에러 메시지를 반환해 보자
+permalink: /dev/Dev-Go-Validator-Custom-Error-Message/
 categories:
-  - Dev
+  - prog-go
+  - dev-log
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

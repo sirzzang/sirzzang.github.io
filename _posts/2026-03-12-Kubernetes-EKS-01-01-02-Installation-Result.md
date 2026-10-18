@@ -1,10 +1,12 @@
 ---
 title:  "[EKS] EKS: Public-Public EKS 클러스터 - 2. 배포"
 excerpt: "Terraform init/plan/apply를 실행하고, Public-Public 구성의 EKS 클러스터 배포 결과를 확인하자."
+permalink: /kubernetes/Kubernetes-EKS-01-01-02-Installation-Result/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

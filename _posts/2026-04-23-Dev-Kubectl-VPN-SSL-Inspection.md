@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] VPN SSL Inspection으로 인한 클러스터 API 접근 실패"
 excerpt: "VPN 환경에서 회사 방화벽이 kube-apiserver TLS를 가로채 재서명하며 발생한 인증서 검증 실패에 대해 알아 보자."
+permalink: /dev/Dev-Kubectl-VPN-SSL-Inspection/
 categories:
-  - Dev
+  - k8s-auth
+  - cs-security
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -1,10 +1,12 @@
 ---
 title:  "[EKS] EKS: 데이터 플레인 컴퓨팅"
 excerpt: "EKS 데이터 플레인을 구성하는 네 가지 방식을 비교하고, 관리형 노드 그룹의 동작 원리를 살펴보자."
+permalink: /kubernetes/Kubernetes-EKS-00-01-EKS-Computing-Group/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

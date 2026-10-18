@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] 쿠버네티스 스케줄링 - 5. 파드 단위 스케줄링의 한계와 Gang Scheduling"
 excerpt: "파드를 하나씩 배치하는 kube-scheduler가 분산 학습 같은 그룹 워크로드에서 겪는 한계와, 이를 푸는 Coscheduling, 네이티브 Workload API, Volcano, Kueue의 접근 방식을 알아보자."
+permalink: /kubernetes/Kubernetes-Scheduling-05/
 categories:
-  - Kubernetes
+  - mlops-resource
+  - k8s-scheduling
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

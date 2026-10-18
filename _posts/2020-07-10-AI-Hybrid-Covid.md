@@ -3,8 +3,10 @@ title:  "[DL] Hybrid_COVID 예측"
 excerpt: "<<Neural Network>> LSTM과 CNN 네트워크를 결합하여 시계열 예측 모형을 만들어 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-Hybrid-Covid/
 categories:
-  - AI
+  - ai-ml-dl
+  - study
 header:
   teaser: /assets/images/blog-AI.jpg
 tags:

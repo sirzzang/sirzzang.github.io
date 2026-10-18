@@ -1,8 +1,12 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 4.2. Provisioning a CA and Generating TLS Certificates"
 excerpt: "Kubernetes 클러스터의 인증서 생성을 위한 OpenSSL 설정 파일(ca.conf)의 구조를 분석해보자."
+permalink: /kubernetes/Kubernetes-Cluster-The-Hard-Way-04-2/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-auth
+  - cs-security
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +14,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-1
-hidden: true
 
 ---
 

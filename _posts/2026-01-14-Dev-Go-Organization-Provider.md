@@ -1,8 +1,10 @@
 ---
 title:  "[Go] Provider Pattern으로 멀티 인증 시스템 설계하기"
 excerpt: "단순 컬럼 추가 vs 확장 가능한 설계, 그 사이에서 고민했던 기록"
+permalink: /dev/Dev-Go-Organization-Provider/
 categories:
-  - Dev
+  - prog-go
+  - dev-log
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

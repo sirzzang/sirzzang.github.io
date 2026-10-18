@@ -3,8 +3,10 @@ title:  "[NLP] Transformer_2.Positional Encoding"
 excerpt: "<<Language Model>> Transformer 모델에 사용된 Positional Encoding을 알아 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-Transformer-02/
 categories:
-  - AI
+  - ai-llm
+  - study
 header:
   teaser: /assets/images/blog-AI.jpg
 tags:

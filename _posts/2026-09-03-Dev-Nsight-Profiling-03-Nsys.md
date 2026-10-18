@@ -1,9 +1,10 @@
 ---
 title: "[Nsight] Nsight 프로파일러: 3. nsys 수집과 리포트 읽기"
 excerpt: "nsys로 무엇을 어떻게 수집하고, 뷰어에 뜬 리포트를 어느 순서로 읽어 병목을 판정하는지 정리해 보자."
+permalink: /dev/Dev-Nsight-Profiling-03-Nsys/
 categories:
-  - Dev
-hidden: true
+  - mlops-gpu
+  - concept
 toc: true
 use_math: false
 header:

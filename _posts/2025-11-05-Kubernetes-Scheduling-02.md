@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] 쿠버네티스 스케줄링 - 2. 프로세스와 선점"
 excerpt: "kube-scheduler가 파드를 큐에서 꺼내 extension point를 거쳐 배치하는 프로세스와 선점 메커니즘에 대해 알아보자."
+permalink: /kubernetes/Kubernetes-Scheduling-02/
 categories:
-  - Kubernetes
+  - k8s-scheduling
+  - mlops-resource
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

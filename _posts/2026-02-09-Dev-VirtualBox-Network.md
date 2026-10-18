@@ -1,8 +1,11 @@
 ---
 title:  "[CS] VirtualBox + Vagrant 네트워크 어댑터 이해하기"
 excerpt: "Vagrant + VirtualBox 환경에서 반복적으로 등장하는 NAT, Host-Only 네트워크 구조를 정리한다."
+permalink: /cs/Dev-VirtualBox-Network/
 categories:
-  - CS
+  - cs-network
+  - k8s-cluster
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

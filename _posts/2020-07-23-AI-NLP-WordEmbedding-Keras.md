@@ -3,8 +3,10 @@ title:  "[NLP] Word Embedding"
 excerpt: "<<Embedding>> 지도학습 기반의 단어 임베딩 기법을 알아 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-NLP-WordEmbedding-Keras/
 categories:
-  - AI
+  - ai-ml-dl
+  - study
 header:
   teaser: /assets/images/blog-AI.jpg
 tags:

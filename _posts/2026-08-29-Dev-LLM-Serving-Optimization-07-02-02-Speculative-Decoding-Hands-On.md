@@ -1,8 +1,10 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: 고급 최적화 기법 - 7.2.2. speculative decoding 실습: 네 가지 변형 벤치마크와 측정 검증"
 excerpt: "vLLM에서 vanilla, n-gram, EAGLE-3 변형을 동시성 1과 16으로 실측해 보자."
+permalink: /dev/Dev-LLM-Serving-Optimization-07-02-02-Speculative-Decoding-Hands-On/
 categories:
-  - Dev
+  - mlops-serving
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

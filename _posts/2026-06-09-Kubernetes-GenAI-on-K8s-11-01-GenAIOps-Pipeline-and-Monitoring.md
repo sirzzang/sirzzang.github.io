@@ -1,8 +1,11 @@
 ---
 title: "[GenAI] GenAI on K8s: 11.1 - GenAIOps 개요와 GenAI 파이프라인 5단계"
 excerpt: "GenAIOps가 MLOps를 어떻게 확장하는지, data→experiment→adapt→serve→monitor 5단계 파이프라인과 drift 감지 기초를 정리해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-11-01-GenAIOps-Pipeline-and-Monitoring/
 categories:
-  - Kubernetes
+  - mlops-pipeline
+  - mlops-monitoring
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -18,7 +21,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-11
 use_math: false
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 11장의 학습 내용을 바탕으로 합니다*

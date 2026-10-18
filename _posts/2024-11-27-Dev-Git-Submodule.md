@@ -1,8 +1,10 @@
 ---
 title:  "[Git] Git Submodule 사용 방법"
 excerpt: Git의 submodule 기능을 이용해 Git 저장소 하위에 또 다른 Git 저장소를 관리하기
+permalink: /dev/Dev-Git-Submodule/
 categories:
-  - Dev
+  - prog-tools
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

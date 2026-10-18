@@ -3,8 +3,10 @@ title:  "[ML/DL] Sigmoid 함수"
 excerpt: "<<Activation Function>> 로지스틱 회귀 문제의 활성화 함수를 도출해 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-sigmoid/
 categories:
-  - AI
+  - ai-ml-dl
+  - study
 header:
   teaser: /assets/images/blog-AI.jpg
 tags:

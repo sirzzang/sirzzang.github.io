@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 6.0.3. 노드 관리 - reset.yml"
 excerpt: "Kubespray의 클러스터 초기화 플레이북 reset.yml의 전체 흐름과 구조를 분석해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-06-00-03/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-operations
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -13,7 +16,6 @@ tags:
   - reset.yml
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-5
-hidden: true
 
 ---
 

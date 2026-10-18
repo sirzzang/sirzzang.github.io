@@ -1,10 +1,13 @@
 ---
 title: "[EKS] EKS: Networking - 2. 실습 환경 구성 - 2. 확인"
 excerpt: "배포된 EKS 클러스터의 네트워크 구성을 노드 수준에서 직접 확인하고, VPC CNI가 ENI와 보조 IP를 어떻게 관리하는지 살펴보자."
+permalink: /kubernetes/Kubernetes-EKS-02-02-01-Installation-Result/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-networking
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

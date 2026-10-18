@@ -1,9 +1,13 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.5.1. vLLM 메트릭 수집과 서브패스 노출"
 excerpt: "Helm으로 Prometheus를 올려 vLLM의 /metrics를 수집하고, Ingress 서브패스로 웹 UI를 열었을 때 무엇이 함께 바뀌는지 확인해 보자."
+permalink: /kubernetes/Kubernetes-LLM-Serving-Optimization-08-05-01-Prometheus-Metrics-Scrape/
 categories:
-  - Kubernetes
-hidden: true
+  - mlops-serving
+  - mlops-monitoring
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
 use_math: false
 header:

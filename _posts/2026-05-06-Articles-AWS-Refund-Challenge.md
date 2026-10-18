@@ -1,8 +1,11 @@
 ---
 title: "AWS: CloudFormation 삭제 실패와 비용 환불기"
 excerpt: "CloudFormation 삭제 실패를 모른 채 5일간 요금이 새어나가고, AWS Support에 부분 환불을 요청하기까지의 기록."
+permalink: /articles/Articles-AWS-Refund-Challenge/
 categories:
-  - Articles
+  - articles
+  - cs-cloud
+  - retrospective
 toc: true
 header:
   teaser: /assets/images/blog-Articles.png

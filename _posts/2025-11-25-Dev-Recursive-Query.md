@@ -2,8 +2,10 @@
 title:  "[PostgreSQL] 재귀 쿼리"
 excerpt: 재귀 쿼리를 이용해 상향식, 하향식, 트리 탐색을 할 수 있다.
 toc: true
+permalink: /dev/Dev-Recursive-Query/
 categories:
-  - Dev
+  - cs-database
+  - concept
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

@@ -1,8 +1,12 @@
 ---
 title:  "[Kubernetes] Kubernetes Deployment 재배포 실패 원인과 해결 - 2. 분석 및 해결"
 excerpt: Kubernetes에서의 Deployment 재배포는 왜 실패했는지 알아보자.
+permalink: /dev/Dev-Kubernetes-Deployment-Failure-2/
 categories:
-  - Dev
+  - k8s-operations
+  - k8s-workload
+  - k8s-scheduling
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

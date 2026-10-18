@@ -1,8 +1,13 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.7. HPA와 스케일링 제약"
 excerpt: "노드도 파드도 늘릴 수 없는 환경에서 HPA Lab이 어디까지 가는지, 그리고 CPU 사용률이 추론 워크로드의 스케일 신호가 될 수 있는지 확인해 보자."
+permalink: /kubernetes/Kubernetes-LLM-Serving-Optimization-08-07-Scaling/
 categories:
-  - Kubernetes
+  - mlops-serving
+  - mlops-resource
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
 use_math: false
 header:

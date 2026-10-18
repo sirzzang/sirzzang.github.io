@@ -1,9 +1,13 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: vLLM on Trainium 워크샵 - 8.2.1. Trainium 노드그룹 구성"
 excerpt: "EKS 컨트롤 플레인만 있는 상태에서 trn1.2xlarge 관리형 노드그룹을 붙이고, 미리 박혀 있던 AMI ID 때문에 막힌 지점을 풀어 보자."
+permalink: /kubernetes/Kubernetes-LLM-Serving-Optimization-08-02-01-EKS-Cluster-Nodegroup/
 categories:
-  - Kubernetes
-hidden: true
+  - mlops-serving
+  - k8s-eks
+  - mlops-gpu
+  - cs-cloud
+  - study
 toc: true
 use_math: false
 header:

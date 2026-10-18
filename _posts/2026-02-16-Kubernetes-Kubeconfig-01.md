@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] kubeconfig - 1. 개요"
 excerpt: "Kubernetes 클러스터 접근 설정 파일인 kubeconfig의 개념, 구조, 사용법에 대해 알아보자."
+permalink: /kubernetes/Kubernetes-Kubeconfig-01/
 categories:
-  - Kubernetes
+  - k8s-auth
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -1,10 +1,6 @@
 ---
 title: "Dev"
 permalink: /categories/Dev/
-layout: category
-author_profile: true
-taxonomy: Dev
+redirect_to: /
+sitemap: false
 ---
-
- 
-

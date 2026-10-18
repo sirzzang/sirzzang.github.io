@@ -1,10 +1,12 @@
 ---
 title:  "[EKS] EKS: Public-Public EKS 클러스터 - 1. Terraform 코드 분석"
 excerpt: "Public-Public 엔드포인트 구성을 가진 EKS 클러스터를 배포하기 위한 Terraform 코드를 분석해보자."
+permalink: /kubernetes/Kubernetes-EKS-01-01-01-Installation/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

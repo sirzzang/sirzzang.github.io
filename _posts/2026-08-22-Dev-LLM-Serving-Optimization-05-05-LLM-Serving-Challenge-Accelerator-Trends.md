@@ -1,9 +1,12 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.5. AI 가속기 지형과 메모리 벽"
 excerpt: "NVIDIA 밖 AI 가속기 지형과 메모리 벽 완화 트렌드를 살펴보고 5장을 정리해 보자."
+permalink: /dev/Dev-LLM-Serving-Optimization-05-05-LLM-Serving-Challenge-Accelerator-Trends/
 categories:
-  - Dev
-hidden: true
+  - mlops-serving
+  - mlops-gpu
+  - cs-architecture
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

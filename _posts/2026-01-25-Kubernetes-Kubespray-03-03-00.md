@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 3.3.0. cluster.yml - Overview"
 excerpt: "Kubespray의 메인 플레이북 cluster.yml의 전체 흐름과 구조를 분석해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-03-03-00/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

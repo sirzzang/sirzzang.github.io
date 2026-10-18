@@ -1,8 +1,11 @@
 ---
 title: "AI 스킬 작성 관찰기: 자연어 문서가 프로그래밍 단위가 되는 순간"
 excerpt: "Claude Code가 SKILL.md 구현 계획에 RED-GREEN-REFACTOR를 꺼낸 순간을 분해하며 적어 본 기록."
+permalink: /articles/Articles-AI-Skill-Writing-Observation/
 categories:
-  - Articles
+  - articles
+  - prog-tools
+  - retrospective
 toc: true
 header:
   teaser: /assets/images/blog-Articles.png
@@ -14,7 +17,6 @@ tags:
   - Superpowers
   - Prompt-Engineering
   - Retrospective
-hidden: true
 ---
 
 <br>

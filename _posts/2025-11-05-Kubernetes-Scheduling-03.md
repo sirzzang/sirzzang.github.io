@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] 쿠버네티스 스케줄링 - 3. 스케줄링 제어"
 excerpt: "파드가 실행될 노드를 제어하기 위한 다양한 설정과 스케줄링 게이트에 대해 알아보자."
+permalink: /kubernetes/Kubernetes-Scheduling-03/
 categories:
-  - Kubernetes
+  - k8s-scheduling
+  - mlops-resource
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

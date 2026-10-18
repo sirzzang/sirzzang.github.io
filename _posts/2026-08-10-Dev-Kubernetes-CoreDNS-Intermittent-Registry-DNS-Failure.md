@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] CoreDNS 업스트림 DNS 오염: 노드 편입이 부른 간헐적 이름 해석 실패"
 excerpt: "CoreDNS 레플리카 하나가 반환한 공용 IP, 그 간헐 실패의 진단과 해결 기록"
+permalink: /dev/Dev-Kubernetes-CoreDNS-Intermittent-Registry-DNS-Failure/
 categories:
-  - Dev
+  - k8s-networking
+  - k8s-operations
+  - troubleshooting
 toc: true
 use_math: false
 header:

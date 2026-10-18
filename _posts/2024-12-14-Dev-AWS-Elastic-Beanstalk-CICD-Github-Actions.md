@@ -1,8 +1,11 @@
 ---
 title:  "[AWS] GitHub Actions를 이용해 Elastic Beanstalk에 배포하기"
 excerpt: GitHub Actions에서 Elastic Beanstalk에 배포하는 Workflow를 만들어 보자.
+permalink: /dev/Dev-AWS-Elastic-Beanstalk-CICD-Github-Actions/
 categories:
-  - Dev
+  - cs-cloud
+  - prog-tools
+  - dev-log
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

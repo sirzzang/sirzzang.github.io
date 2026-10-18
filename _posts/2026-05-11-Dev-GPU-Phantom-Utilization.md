@@ -1,8 +1,11 @@
 ---
 title: "[GPU] Phantom GPU Utilization 사례 분석: CUDA Context 잔류 가설과 그 한계"
 excerpt: "NCCL 분산학습 종료 후 14/32 GPU가 Util 100%·메모리 0·프로세스 없음 상태에 빠졌다. CUDA context 잔류를 유력 가설로 두되, 직접 증거를 확보하지 못한 한계까지 함께 살펴보자."
+permalink: /dev/Dev-GPU-Phantom-Utilization/
 categories:
-  - Dev
+  - mlops-gpu
+  - mlops-monitoring
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

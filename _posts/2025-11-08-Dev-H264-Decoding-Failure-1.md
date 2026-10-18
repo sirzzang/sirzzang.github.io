@@ -1,8 +1,11 @@
 ---
 title:  "[Dev] 영상 업로드 실패 사태 분석 - 1. 홀수 해상도 문제와 트러블슈팅"
 excerpt: H.264 코덱은 짝수 해상도의 영상만 지원한다(..!).
+permalink: /dev/Dev-H264-Decoding-Failure-1/
 categories:
-  - Dev
+  - cs-media
+  - prog-go
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

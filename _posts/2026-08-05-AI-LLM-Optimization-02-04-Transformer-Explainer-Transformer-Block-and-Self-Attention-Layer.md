@@ -1,9 +1,10 @@
 ---
 title: "[LLM] LLM 서빙과 최적화 - 2.4. Transformer: 트랜스포머 블록과 셀프 어텐션 레이어"
 excerpt: "트랜스포머 블록의 첫 서브레이어인 멀티헤드 셀프 어텐션에 대해 알아 보자."
+permalink: /ai/AI-LLM-Optimization-02-04-Transformer-Explainer-Transformer-Block-and-Self-Attention-Layer/
 categories:
-  - AI
-hidden: true
+  - ai-llm
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-AI.jpg

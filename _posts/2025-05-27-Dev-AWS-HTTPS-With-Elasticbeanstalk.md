@@ -1,8 +1,12 @@
 ---
 title:  "[AWS] AWS Elastic Beanstalk 환경 HTTPS 설정"
 excerpt: AWS Elastic Beanstalk 환경에 HTTPS를 설정해 보자.
+permalink: /dev/Dev-AWS-HTTPS-With-Elasticbeanstalk/
 categories:
-  - Dev
+  - cs-cloud
+  - cs-network
+  - cs-security
+  - dev-log
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

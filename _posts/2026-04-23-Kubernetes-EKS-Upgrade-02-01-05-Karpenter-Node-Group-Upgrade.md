@@ -1,8 +1,12 @@
 ---
 title: "[EKS] EKS 업그레이드: Karpenter 노드 업그레이드"
 excerpt: "Karpenter가 관리하는 노드를 Drift와 Disruption Budget을 활용해 제어된 방식으로 업그레이드하는 워크샵 내용을 정리해 보자."
+permalink: /kubernetes/Kubernetes-EKS-Upgrade-02-01-05-Karpenter-Node-Group-Upgrade/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - k8s-operations
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -17,7 +21,6 @@ tags:
   - ArgoCD
   - AWS-EKS-Workshop-Study
   - AWS-EKS-Workshop-Study-Week-7
-hidden: true
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 AWS EKS Workshop Study(AEWS) 7주차 학습 내용을 기반으로 합니다.*

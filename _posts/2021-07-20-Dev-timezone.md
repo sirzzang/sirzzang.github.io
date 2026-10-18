@@ -2,8 +2,10 @@
 title:  "[FrontEnd] 자바스크립트로 날짜 다루기"
 excerpt: 브라우저 환경에서 날짜를 렌더링하다 겪었던 문제
 toc: true
+permalink: /dev/Dev-timezone/
 categories:
-  - Dev
+  - prog-javascript
+  - troubleshooting
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

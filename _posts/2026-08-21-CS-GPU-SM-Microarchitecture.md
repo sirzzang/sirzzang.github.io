@@ -1,9 +1,11 @@
 ---
 title: "[GPU] SM 마이크로아키텍처: CUDA 코어·텐서 코어와 TFLOPS의 출처"
 excerpt: "스펙표의 TFLOPS가 어디서 나오는지 SM 구조로 분해해 보자."
+permalink: /cs/CS-GPU-SM-Microarchitecture/
 categories:
-  - CS
-hidden: true
+  - cs-architecture
+  - mlops-gpu
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

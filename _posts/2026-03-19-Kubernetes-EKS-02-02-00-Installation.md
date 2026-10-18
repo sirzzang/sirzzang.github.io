@@ -1,10 +1,12 @@
 ---
 title: "[EKS] EKS: Networking - 2. 실습 환경 구성 - 1. 배포"
 excerpt: "VPC CNI 실습을 위한 2주차 EKS 환경을 Terraform으로 구성해 보자."
+permalink: /kubernetes/Kubernetes-EKS-02-02-00-Installation/
 categories:
-  - Kubernetes
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

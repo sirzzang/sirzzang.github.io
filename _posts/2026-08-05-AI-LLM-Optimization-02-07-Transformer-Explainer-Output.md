@@ -1,8 +1,11 @@
 ---
 title: "[LLM] LLM 서빙과 최적화 - 2.7. Transformer: 출력층과 샘플링, 아키텍처 마무리"
 excerpt: "트랜스포머 블록의 출력이 토큰이 되는 과정에 대해 알아 보자."
+permalink: /ai/AI-LLM-Optimization-02-07-Transformer-Explainer-Output/
 categories:
-  - AI
+  - ai-llm
+  - mlops-serving
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-AI.jpg

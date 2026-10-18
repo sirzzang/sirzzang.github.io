@@ -1,8 +1,11 @@
 ---
 title:  "[Go] 10일간의 리팩토링 여정: 스불재에서 Clean Architecture까지"
 excerpt: "시간에 쫓겨 쌓아 올린 기술 부채를 청산하기 위한 10일간의 기록(feat. Cursor)"
+permalink: /dev/Dev-Go-Backend-Refactoring-Journey/
 categories:
-  - Dev
+  - prog-go
+  - prog-tools
+  - dev-log
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

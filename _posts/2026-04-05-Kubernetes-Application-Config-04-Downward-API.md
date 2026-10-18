@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] 어플리케이션 설정 - 4. Downward API"
 excerpt: "Downward API를 이용해 파드 메타데이터와 컨테이너 리소스 정보를 어플리케이션에 전달하는 방법을 알아보자."
+permalink: /kubernetes/Kubernetes-Application-Config-04-Downward-API/
 categories:
-  - Kubernetes
+  - k8s-workload
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -13,7 +15,6 @@ tags:
   - fieldRef
   - resourceFieldRef
   - metadata
-hidden: true
 last_modified_at: 2026-09-13
 ---
 

@@ -1,8 +1,10 @@
 ---
 title: "[LLM] LLM 서빙과 최적화: LLM 서빙의 도전 과제 - 5.1. 서빙 최적화의 중요성: 고객 경험·비용·확장성"
 excerpt: "LLM 서빙 최적화가 고객 경험·비용·확장성을 어떻게 좌우하는지 알아 보자."
+permalink: /dev/Dev-LLM-Serving-Optimization-05-01-LLM-Serving-Challenge-Importance/
 categories:
-  - Dev
+  - mlops-serving
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

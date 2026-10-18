@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: 내 손으로 클러스터 구성하기 - 9.2. Bootstrapping the Kubernetes Worker Nodes"
 excerpt: "Worker Node에 containerd, kubelet, kube-proxy를 설치하고 클러스터에 등록해보자."
+permalink: /kubernetes/Kubernetes-Cluster-The-Hard-Way-09-2/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-networking
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

@@ -3,8 +3,10 @@ title:  "[NLP] Transformer_3.Multi-head Attention_2"
 excerpt: "<<Language Model>> Transformer 모델에 사용된 Multi-head Attention을 알아 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-Transformer-04/
 categories:
-  - AI
+  - ai-llm
+  - study
 header:
   teaser: /assets/images/blog-AI.jpg
 tags:

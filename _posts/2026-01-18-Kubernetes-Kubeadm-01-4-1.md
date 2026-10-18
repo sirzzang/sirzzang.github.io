@@ -1,8 +1,11 @@
 ---
 title:  "[Kubernetes] Cluster: Kubeadm을 이용해 클러스터 구성하기 - 1.4.1. 편의 도구 설치"
 excerpt: "kubectl 관련 편의 도구를 설치하여 클러스터 관리 환경을 구성해보자."
+permalink: /kubernetes/Kubernetes-Kubeadm-01-4-1/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - prog-tools
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -10,7 +13,6 @@ tags:
   - Kubernetes
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-3
-hidden: true
 
 ---
 

@@ -1,8 +1,11 @@
 ---
 title: "MLOps와 GitOps: 어느 영역까지 적용할 수 있는가"
 excerpt: "선언형 도구가 어디까지 ML 워크로드를 다룰 수 있는지 고민한 기록."
+permalink: /articles/Articles-GitOps-And-Training-Task/
 categories:
-  - Articles
+  - articles
+  - mlops-pipeline
+  - retrospective
 toc: true
 header:
   teaser: /assets/images/blog-Articles.png

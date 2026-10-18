@@ -1,8 +1,11 @@
 ---
 title:  "[Linux] 커널 메시지 - 2. 시스템 로그 저장소와 저널"
 excerpt: "커널 메시지를 보관하는 링버퍼의 사본은 누가 어떻게 보존하는지 알아 보자."
+permalink: /cs/CS-Kernel-Message-02/
 categories:
-  - CS
+  - cs-linux
+  - mlops-gpu
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

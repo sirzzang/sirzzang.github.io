@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Kubernetes Deployment 재배포 실패 원인과 해결 - 3. Deadlock"
 excerpt: 보다 보니, 이거 그냥 Deadlock이 아니던가!
+permalink: /dev/Dev-Kubernetes-Deployment-Failure-3/
 categories:
-  - Dev
+  - k8s-operations
+  - troubleshooting
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

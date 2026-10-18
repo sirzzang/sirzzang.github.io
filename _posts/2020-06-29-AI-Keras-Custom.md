@@ -3,8 +3,10 @@ title:  "[Pyhton] 손실함수, 규제함수 만들기"
 excerpt: "Keras 기능을 이용해 Loss Function, Regularizer Function 커스텀하기"
 toc: true
 toc_sticky: true
+permalink: /ai/AI-Keras-Custom/
 categories:
-  - AI
+  - ai-ml-dl
+  - study
 tags:
   - ML
   - DL

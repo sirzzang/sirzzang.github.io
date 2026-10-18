@@ -1,8 +1,12 @@
 ---
 title:  "[EKS] EKS: Networking - 0. 쿠버네티스 네트워킹 모델"
 excerpt: "EKS 네트워킹 시리즈를 시작하기 전에, AWS VPC CNI가 구현해야 하는 쿠버네티스 네트워킹 모델의 4가지 문제와 'NAT 없이' 원칙을 짧게 확인해 보자."
+permalink: /kubernetes/Kubernetes-EKS-02-00-00-Kubernetes-Networking-Model/
 categories:
-  - Kubernetes
+  - k8s-networking
+  - k8s-eks
+  - cs-cloud
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

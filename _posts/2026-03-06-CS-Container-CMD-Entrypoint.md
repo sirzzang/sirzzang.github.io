@@ -1,8 +1,11 @@
 ---
 title:  "[Container] 컨테이너 실행 명령: CMD, ENTRYPOINT"
 excerpt: "Docker CMD와 ENTRYPOINT에 대해 알아보자."
+permalink: /cs/CS-Container-CMD-Entrypoint/
 categories:
-  - CS
+  - cs-container
+  - k8s-workload
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

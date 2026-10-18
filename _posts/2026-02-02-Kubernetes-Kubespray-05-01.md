@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 5.1. HA 구성 - 실습 환경"
 excerpt: "External LB(HAProxy) + HA Control Plane + Client-Side LB 실습 환경을 구성해보자."
+permalink: /kubernetes/Kubernetes-Kubespray-05-01/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -14,7 +16,6 @@ tags:
   - Vagrant
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-5
-hidden: true
 
 ---
 

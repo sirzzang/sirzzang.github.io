@@ -1,10 +1,12 @@
 ---
 title:  "[Kubernetes] Cluster: Kubespray를 이용해 클러스터 구성하기 - 5.0. HA 구성 - 개요"
 excerpt: "Kubernetes Control Plane HA 구성의 3가지 패턴을 이해하고 Kubespray 설정 방법을 알아보자."
+permalink: /kubernetes/Kubernetes-Kubespray-05-00/
 categories:
-  - Kubernetes
+  - k8s-cluster
+  - k8s-operations
+  - study
 toc: true
-hidden: true
 header:
   teaser: /assets/images/blog-Dev.jpg
 tags:

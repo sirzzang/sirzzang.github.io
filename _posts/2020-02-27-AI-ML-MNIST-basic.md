@@ -3,8 +3,10 @@ title:  "[ML] MNIST_1.Tensorflow 구현"
 excerpt: "<<Classification>> Multinomial Classification을 Tensorflow로 구현해 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-ML-MNIST-basic/
 categories:
-  - AI
+  - ai-ml-dl
+  - study
 header:
   teaser: /assets/images/blog-AI.jpg
 tags:

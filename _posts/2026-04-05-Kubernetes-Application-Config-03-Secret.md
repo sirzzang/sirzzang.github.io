@@ -1,8 +1,10 @@
 ---
 title:  "[Kubernetes] 어플리케이션 설정 - 3. Secret"
 excerpt: "Secret을 이용해 민감 데이터를 관리하고 파드에 전달하는 방법과 보안 고려사항을 알아보자."
+permalink: /kubernetes/Kubernetes-Application-Config-03-Secret/
 categories:
-  - Kubernetes
+  - k8s-workload
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -14,7 +16,6 @@ tags:
   - docker-registry
   - security
   - etcd
-hidden: true
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 8장의 학습 내용을 기반으로 합니다.*

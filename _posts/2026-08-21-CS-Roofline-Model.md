@@ -1,8 +1,11 @@
 ---
 title: "[Performance] Roofline 모델: 연산 강도로 판별하는 성능 병목"
 excerpt: "Roofline 모델에 대해 알아 보자."
+permalink: /cs/CS-Roofline-Model/
 categories:
-  - CS
+  - cs-architecture
+  - mlops-serving
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

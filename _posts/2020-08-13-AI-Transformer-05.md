@@ -3,8 +3,10 @@ title:  "[NLP] Transformer_4. 네트워크 구조"
 excerpt: "<<Language Model>> Transformer 모델의 인코더 및 디코더 모듈의 구성을 알아 보자."
 toc: true
 toc_sticky: true
+permalink: /ai/AI-Transformer-05/
 categories:
-  - AI
+  - ai-llm
+  - study
 header:
   teaser: /assets/images/blog-AI.jpg
 tags:

@@ -1,8 +1,11 @@
 ---
 title:  "[GPU] GPU 공유 메커니즘: 개요"
 excerpt: GPU를 여러 워크로드가 나눠 쓰는 방법을 알아보자.
+permalink: /dev/Dev-GPU-Sharing-Mechanisms/
 categories:
-  - Dev
+  - mlops-gpu
+  - mlops-resource
+  - concept
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg

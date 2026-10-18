@@ -1,8 +1,11 @@
 ---
 title: "[GenAI] GenAI on K8s: 10.6 - Ch10 실습 코드 분석: time-slicing과 Llama 워크로드"
 excerpt: "Ch10 hands-on의 nvidia-ts.yaml, aiml-addons.tf, llama32-deploy.yaml을 읽고 upstream 결함과 수정 포인트를 정리해 보자."
+permalink: /kubernetes/Kubernetes-GenAI-on-K8s-10-06-Ch10-Lab-Code-Analysis-Time-Slicing-and-Llama/
 categories:
-  - Kubernetes
+  - mlops-gpu
+  - cs-container
+  - study
 toc: true
 header:
   teaser: /assets/images/blog-Dev.jpg
@@ -20,7 +23,6 @@ tags:
   - Kubernetes-for-Generative-AI-Solutions
   - Kubernetes-for-Generative-AI-Solutions-Chapter-10
 use_math: false
-hidden: true
 ---
 
 *[Kubernetes for Generative AI Solutions(Packt 2025, ISBN 978-1-83620-993-5, 저자 Ashok Srirama / Sukirti Gupta)](https://github.com/PacktPublishing/Kubernetes-for-Generative-AI-Solutions) 10장 hands-on 코드를 바탕으로 합니다*
