@@ -1,5 +1,5 @@
 ---
-title:  "[CS] 컨테이너 네트워킹 기본 원리: 네임스페이스 네트워킹"
+title:  "[Container] 컨테이너 네트워킹 기본 원리: 네임스페이스 네트워킹"
 excerpt: "리눅스 네트워크 네임스페이스를 이용해 컨테이너 네트워킹의 기본 원리를 직접 구성해 보자."
 permalink: /cs/CS-Container-Networking-Namespace/
 categories:

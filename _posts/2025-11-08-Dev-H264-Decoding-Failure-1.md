@@ -1,5 +1,5 @@
 ---
-title:  "[Dev] 영상 업로드 실패 사태 분석 - 1. 홀수 해상도 문제와 트러블슈팅"
+title:  "[H.264] 영상 업로드 실패 사태 분석 - 1. 홀수 해상도 문제와 트러블슈팅"
 excerpt: H.264 코덱은 짝수 해상도의 영상만 지원한다(..!).
 permalink: /dev/Dev-H264-Decoding-Failure-1/
 categories:
@@ -175,4 +175,4 @@ ffmpeg -i /data/3480/original_video.mp4 \
 
 다시 한 번, 반성하자. ~~엉엉.. 반성 그만하게 해주세요 나 자신아..~~
 
-*다음 포스트: [[Dev] 영상 업로드 실패 사태 분석 - 2. YUV 색공간과 영상 압축]({% post_url 2025-11-08-Dev-H264-Decoding-Failure-2 %})*
+*다음 포스트: [[H.264] 영상 업로드 실패 사태 분석 - 2. YUV 색공간과 영상 압축]({% post_url 2025-11-08-Dev-H264-Decoding-Failure-2 %})*

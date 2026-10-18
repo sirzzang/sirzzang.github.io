@@ -1,5 +1,5 @@
 ---
-title:  "[CS] 메모리, 페이지, 스왑"
+title:  "[Linux] 메모리, 페이지, 스왑"
 excerpt: "리눅스 메모리 관리의 기초 개념을 알아보자."
 permalink: /cs/CS-Memory-Page-Swap/
 categories:

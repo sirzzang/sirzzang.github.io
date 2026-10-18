@@ -1,5 +1,5 @@
 ---
-title:  "[CS] 리눅스 스토리지 기초 - 1. 블록 디바이스, 파티션, 파일 시스템"
+title:  "[Linux] 리눅스 스토리지 기초 - 1. 블록 디바이스, 파티션, 파일 시스템"
 excerpt: "디스크가 '쓸 수 있는 공간'이 되기까지의 과정을 살펴보자."
 permalink: /cs/CS-Linux-Storage-01/
 categories:

@@ -1,5 +1,5 @@
 ---
-title:  "[Dev] Kubernetes 공유 메모리: PyTorch DataLoader shm 부족 트러블슈팅"
+title:  "[Kubernetes] 공유 메모리: PyTorch DataLoader shm 부족 트러블슈팅"
 excerpt: "Kubernetes에서 PyTorch DataLoader의 shared memory 부족 문제를 emptyDir 볼륨으로 해결한다."
 permalink: /dev/Dev-Kubernetes-Shared-Memory/
 categories:
