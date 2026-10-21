@@ -19,7 +19,7 @@ tags:
   - VPN
   - SSL-Inspection
   - NODE_EXTRA_CA_CERTS
-last_modified_at: 2026-09-13
+last_modified_at: 2026-10-21
 ---
 
 <br>
@@ -43,12 +43,13 @@ last_modified_at: 2026-09-13
 
 2. 원인
    - 회사 VPN의 SSL Inspection이 `mcp.notion.com` TLS를 가로채 회사 CA로 재서명
-   - Node.js는 OS 키체인을 참조하지 않고 자체 내장 CA bundle(Mozilla 기반)만 사용하므로 회사 CA를 알 수 없음
+   - Claude Code가 쓰는 Node.js 계열 런타임은 기본적으로 OS 키체인을 참조하지 않고 자체 내장 CA bundle(Mozilla 기반)만 사용하므로 회사 CA를 알 수 없음
    - `kubectl`과 달리 이번 대상은 **공인 인터넷 서비스**이므로, VPN 없이 직접 연결하면 정상 동작한다
 
 3. 해결
    - macOS 시스템 인증서를 PEM으로 내보내 `NODE_EXTRA_CA_CERTS` 환경변수로 Node.js에 주입
-   - `~/.zshrc`(Claude Code 프로세스 자체)와 `settings.json` env(MCP 도구 프로세스) **양쪽 모두** 설정 필요
+   - 당시에는 `~/.zshrc`와 `settings.json` env 두 곳에 설정해 해결
+   - Claude Code 2.1.101부터는 OS 인증서 저장소를 기본으로 신뢰하므로, 키체인에 회사 CA가 등록된 환경이라면 이 설정 없이도 동작한다
 
 <br>
 
@@ -80,11 +81,13 @@ VPN을 끄면 정상 동작한다. `mcp.notion.com`은 공인 인터넷 서비�
 
 # 원인 분석
 
-## Notion MCP는 Node.js 위에서 동작한다
+## Notion MCP는 Claude Code 프로세스 안에서 동작한다
 
-본격적인 분석 전에 짚고 갈 것이 있다. 이번 사례에서 TLS 검증을 수행하는 주체는 Claude Code 본체이고, Claude Code는 **Node.js 기반 애플리케이션**이다. Notion MCP는 `--transport http`로 등록한 원격 MCP 서버라서 별도 로컬 프로세스를 띄우지 않는다. 즉 `mcp.notion.com`으로 향하는 HTTPS 요청은 Claude Code가 직접 보내고, 그 TLS 핸드셰이크 검증도 **Node.js의 TLS 스택(OpenSSL 바인딩 + 내장 CA bundle)**이 담당한다.
+본격적인 분석 전에 짚고 갈 것이 있다. 이번 사례에서 TLS 검증을 수행하는 주체는 Claude Code 본체이고, Claude Code는 **JavaScript 애플리케이션**이다. Notion MCP는 `--transport http`로 등록한 원격 MCP 서버라서 별도 로컬 프로세스를 띄우지 않는다. 즉 `mcp.notion.com`으로 향하는 HTTPS 요청은 Claude Code가 직접 보내고, 그 TLS 핸드셰이크 검증도 **Claude Code가 돌아가는 런타임의 TLS 스택과 내장 CA bundle**이 담당한다.
 
-그래서 같은 SSL Inspection 환경이라도, `kubectl`(Go의 `crypto/tls`)과 Notion MCP(Node.js의 TLS 스택)는 서로 **다른 trust 소스**를 들고 인증서를 검증하게 된다. 뒤이어 보겠지만, 에러 메시지가 다르고 해법이 정반대로 갈리는 근본 원인이 여기에 있다.
+> 이 런타임은 설치 방식에 따라 다르다. 2.1.113 이전 버전을 npm 패키지로 설치했다면 Node.js 위에서 돌고, 네이티브 설치판은 Bun 런타임을 내장한 단일 바이너리다(2026년 10월 기준 확인). 두 런타임 모두 기본으로 Mozilla 기반 내장 CA bundle을 쓰고 `NODE_EXTRA_CA_CERTS`를 지원하므로, 이 글에서 다루는 trust 모델은 같다. 이하 편의상 Node.js trust 모델이라 부른다.
+
+그래서 같은 SSL Inspection 환경이라도, `kubectl`(Go의 `crypto/tls`)과 Notion MCP(Claude Code 런타임의 TLS 스택)는 서로 **다른 trust 소스**를 들고 인증서를 검증하게 된다. 뒤이어 보겠지만, 에러 메시지가 다르고 해법이 정반대로 갈리는 근본 원인이 여기에 있다.
 
 > 참고로 다음 절에서 비교할 Jira MCP는 `uvx`(Python)로 실행되는 **로컬** MCP 서버이고, 이 경우엔 Claude Code가 아니라 `uvx`로 띄운 Python 프로세스가 TLS 검증의 주체가 된다. 그래서 같은 "MCP 도구"라도 Node.js trust 모델이 적용되는지가 갈린다.
 
@@ -113,7 +116,7 @@ SSL Inspection의 동작 메커니즘(방화벽 MITM, 인증서 즉석 생성, T
 | VPN 없으면? | 사설 IP라 라우팅 자체가 안 됨 | **정상 동작** (공인 CA 인증서 직접 받음) |
 | 에러 메시지 | `x509: certificate signed by unknown authority` | `self signed certificate in certificate chain` |
 
-에러 메시지는 표현이 다르지만 본질은 같다. Go(kubectl)는 "서명한 CA를 모르겠다"(`unknown authority`), Node.js는 "체인 안에 내가 모르는 자기서명 인증서가 있다"(`self signed certificate in certificate chain`)로 표현할 뿐, 둘 다 **"이 인증서를 서명한 CA가 내 trust store에 없다"**는 동일한 상태를 가리킨다. TLS 라이브러리(Go `crypto/tls` vs Node.js OpenSSL 바인딩)에 따라 표현만 다른 것이다.
+에러 메시지는 표현이 다르지만 본질은 같다. Go(kubectl)는 "서명한 CA를 모르겠다"(`unknown authority`), Node.js는 "체인 안에 내가 모르는 자기서명 인증서가 있다"(`self signed certificate in certificate chain`)로 표현할 뿐, 둘 다 **"이 인증서를 서명한 CA가 내 trust store에 없다"**는 동일한 상태를 가리킨다. TLS 라이브러리(Go `crypto/tls` vs OpenSSL 계열 라이브러리. Node.js는 OpenSSL, Bun은 BoringSSL을 쓴다)에 따라 표현만 다른 것이다.
 
 `openssl s_client`로 실제 확인해 보면 이 분류를 직접 볼 수 있다.
 
@@ -133,7 +136,7 @@ subject=CN=notion.com
 
 ## Node.js의 trust 모델
 
-여기가 핵심이다. Node.js는 자체적으로 내장한 **CA bundle(Mozilla NSS 기반)만** 사용한다. 이 bundle에는 DigiCert, Let's Encrypt 같은 공인 CA만 들어 있고, 회사 CA는 당연히 없다.
+여기가 핵심이다. Node.js는 기본적으로 자체 내장한 **CA bundle(Mozilla NSS 기반)만** 사용한다. 이 bundle에는 DigiCert, Let's Encrypt 같은 공인 CA만 들어 있고, 회사 CA는 당연히 없다.
 
 - **VPN 없이 직접 연결할 때**: `mcp.notion.com`의 진짜 인증서(공인 CA 서명)가 온다 → 내장 bundle에 해당 공인 CA가 있으므로 검증 성공
 - **VPN 경유할 때**: 방화벽이 재서명한 인증서(회사 CA 서명)가 온다 → 내장 bundle에 회사 CA가 없으므로 검증 실패
@@ -170,7 +173,7 @@ subject=CN=*.google.com
 
 브라우저는 인증서 체인을 따라 올라가다 회사 루트 CA에 도달하면 키체인을 확인하고, 거기에 "항상 신뢰"로 등록되어 있으니 검증을 통과시킨다. 그래서 회사 CA로 재서명된 인증서라도 정상으로 보이는 것이다.
 
-> Windows도 원리는 같다. 시스템 trust store가 키체인 대신 **Windows 인증서 저장소**(certmgr.msc → "신뢰할 수 있는 루트 인증 기관")이고, 회사 IT가 **그룹 정책(GPO)**으로 회사 CA를 배포한다. Chrome·Edge 등은 양쪽 OS 모두 시스템 trust store를 참조하므로 동작 방식이 동일하다. 예외는 **Firefox**로, 기본적으로 자체 NSS 인증서 저장소를 사용해 OS trust store를 참조하지 않는다. `security.enterprise_roots.enabled` 설정을 켜야 OS store도 함께 참조한다. 회사 환경에서 Firefox만 HTTPS 경고가 뜨는데 대부분 이것이 원인이다.
+> Windows도 원리는 같다. 시스템 trust store가 키체인 대신 **Windows 인증서 저장소**(certmgr.msc → "신뢰할 수 있는 루트 인증 기관")이고, 회사 IT가 **그룹 정책(GPO)**으로 회사 CA를 배포한다. Chrome·Edge 등은 양쪽 OS 모두 시스템 trust store를 참조하므로 동작 방식이 동일하다. 예외는 **Firefox**로, 기본적으로 자체 NSS 인증서 저장소를 사용해 OS trust store를 참조하지 않는다. `security.enterprise_roots.enabled` 설정을 켜야 OS store도 함께 참조한다. 회사 환경에서 Firefox만 HTTPS 경고가 뜨는데 대부분 이것이 원인이다. 다만 Firefox는 MITM으로 보이는 TLS 오류를 만나면 이 설정을 스스로 켜고 다시 접속을 시도하기도 해서, 경고 없이 넘어가는 경우도 있다.
 
 **Node.js는 이 키체인을 참조하지 않는다.** 키체인에 회사 CA가 등록되어 있든 말든 Node.js에게는 아무 의미가 없다. 같은 머신, 같은 네트워크, 같은 SSL Inspection인데 브라우저는 되고 Node.js는 안 되는 이유가 바로 이것이다.
 
@@ -209,11 +212,13 @@ claude mcp add-json jira '{
 
 ### 런타임 차이가 결과를 가른다
 
-`uvx`는 Python 패키지 러너다. Node.js 진영의 `npx`와 같은 역할로, 패키지를 격리된 가상 환경에 설치하고 실행한다. Jira MCP는 `uvx`(Python)로, Notion MCP는 Node.js로 동작한다.
+`uvx`는 Python 패키지 러너다. Node.js 진영의 `npx`와 같은 역할로, 패키지를 격리된 가상 환경에 설치하고 실행한다. Jira MCP는 `uvx`로 띄운 Python 프로세스로, Notion MCP는 Claude Code(Node.js 계열 런타임)로 동작한다.
 
-여기서 핵심은 Jira MCP의 args에 들어간 `--system-certs` 플래그다. 이 플래그는 `uvx`가 Python의 인증서 라이브러리(certifi)에게 **자체 bundle 대신 OS 시스템 인증서를 사용하라**고 지정한다. 사실 Python도 기본적으로는 Node.js와 마찬가지로 자체 CA bundle(certifi 패키지)을 쓰고 OS 키체인을 참조하지 않는다. 그런데 `--system-certs`가 이 동작을 오버라이드해서, macOS 키체인을 참조하게 만든다. 키체인에 회사 CA가 "항상 신뢰"로 등록되어 있으므로, 방화벽이 재서명한 인증서도 검증이 통과하는 것이다.
+사실 Python도 기본적으로는 Node.js와 마찬가지로 OS 키체인을 참조하지 않는다. 대표적인 HTTP 라이브러리인 `requests`는 자체 CA bundle(`certifi` 패키지)을 쓴다. 그런데 `mcp-atlassian`은 v0.19.0(2026년 2월)부터 시작할 때 `truststore` 라이브러리로 Python의 `ssl` 모듈이 **OS 신뢰 저장소**로 인증서를 검증하도록 바꿔 둔다. 이 동작은 기본으로 켜져 있고, `MCP_ATLASSIAN_USE_SYSTEM_TRUSTSTORE` 환경변수로 끌 수 있다. macOS에서는 키체인을 참조하게 되고, 키체인에 회사 CA가 "항상 신뢰"로 등록되어 있으므로 방화벽이 재서명한 인증서도 검증이 통과하는 것이다.
 
-Node.js에는 이런 플래그가 없다. 대신 `NODE_EXTRA_CA_CERTS`라는 환경변수로 추가 CA 인증서 파일을 직접 주입하는 방식을 쓴다.
+Jira MCP의 args에 들어간 `--system-certs`는 이것과 다른 층위의 플래그다. uv 0.11.0에서 `--native-tls`를 대신해 생긴 옵션으로, **uv 자신이** 패키지 인덱스(PyPI)에서 `mcp-atlassian`을 내려받을 때 OS 인증서 저장소로 검증하게 한다. VPN 환경에서는 이 다운로드도 SSL Inspection을 거치므로 캐시가 비어 있을 때는 필요하지만, uvx가 띄운 Python 프로세스의 인증서 검증에는 관여하지 않는다.
+
+Node.js에도 OS 인증서 저장소를 쓰게 하는 옵션이 있다. `--use-system-ca` 플래그(v23.8.0, v22.15.0부터)와 `NODE_USE_SYSTEM_CA=1` 환경변수(v24.6.0, v22.19.0부터)다. 다만 이 글의 해결 시점에는 Claude Code 문서가 안내하던 방법인 `NODE_EXTRA_CA_CERTS` 환경변수로 추가 CA 인증서 파일을 직접 주입했다.
 
 <br>
 
@@ -221,7 +226,7 @@ Node.js에는 이런 플래그가 없다. 대신 `NODE_EXTRA_CA_CERTS`라는 환
 
 macOS 키체인에서 시스템 인증서(회사 CA 포함)를 PEM 형식으로 내보내고, `NODE_EXTRA_CA_CERTS` 환경변수로 Node.js에 전달한다.
 
-Jira MCP의 `--system-certs`가 certifi bundle을 OS 시스템 인증서로 **통째로 교체**하는 오버라이드 방식이었다면, `NODE_EXTRA_CA_CERTS`는 Node.js 내장 Mozilla bundle을 **그대로 유지**하면서 지정한 PEM 파일의 CA를 **추가로** 신뢰 목록에 넣는 확장 방식이다. 기존에 신뢰하던 공인 CA(DigiCert 등)는 그대로 살아 있고, 거기에 회사 CA가 더해지는 구조다.
+Jira MCP의 `truststore`가 검증 기준을 certifi bundle에서 OS 신뢰 저장소로 **통째로 바꾸는** 방식이었다면, `NODE_EXTRA_CA_CERTS`는 Node.js 내장 Mozilla bundle을 **그대로 유지**하면서 지정한 PEM 파일의 CA를 **추가로** 신뢰 목록에 넣는 확장 방식이다. 기존에 신뢰하던 공인 CA(DigiCert 등)는 그대로 살아 있고, 거기에 회사 CA가 더해지는 구조다.
 
 ## 1단계: 시스템 인증서를 PEM 파일로 내보내기
 
@@ -235,7 +240,7 @@ security find-certificate -a -p /System/Library/Keychains/SystemRootCertificates
 
 ## 2단계: NODE_EXTRA_CA_CERTS 환경변수 설정
 
-**두 곳 모두** 설정해야 한다.
+이번에는 **두 곳에** 설정했다.
 
 ```bash
 # ~/.zshrc에 추가
@@ -249,14 +254,16 @@ export NODE_EXTRA_CA_CERTS="$HOME/.claude/system-certs.pem"
 }
 ```
 
-### 왜 양쪽 다 필요한가
+### 두 곳에 설정한 이유
 
-| 설정 위치 | 적용 범위 |
+| 설정 위치 | 적용 시점 |
 |---|---|
-| `~/.zshrc` 환경변수 | Claude Code 프로세스 자체 (OAuth 인증 플로우 포함) |
-| `settings.json` env | Claude Code가 실행하는 도구(MCP) 프로세스 |
+| `~/.zshrc` 환경변수 | 셸에서 `claude`를 실행할 때 프로세스 환경으로 전달됨 |
+| `settings.json` env | Claude Code가 시작한 뒤 설정을 읽어 자기 프로세스와 하위 프로세스(Bash 도구, stdio MCP 서버)에 적용 |
 
-`~/.zshrc`에만 설정하면 MCP 도구 프로세스에 전달되지 않아 도구 호출에서 여전히 에러가 발생한다. 반대로 `settings.json`에만 설정하면 Claude Code 본체의 OAuth 인증 플로우에서 SSL 에러가 난다. Notion MCP는 OAuth로 인증한 뒤 도구를 호출하는 구조이므로, **양쪽 모두 설정해야** 전체 플로우가 동작한다.
+`NODE_EXTRA_CA_CERTS`는 원래 런타임이 프로세스를 시작할 때 한 번만 읽는 변수다. Node.js 문서도 실행 중에 `process.env`로 값을 바꾸면 현재 프로세스에는 효과가 없다고 명시한다. 그래서 Claude Code 본체 프로세스(OAuth 인증 플로우 포함)에 확실히 적용되도록 셸 환경에 넣었고, Claude Code가 띄우는 하위 프로세스에도 같은 값이 가도록 `settings.json`에도 넣었다.
+
+> 2026년 10월 기준 Claude Code 문서는 `settings.json`의 `env`가 Claude Code 본체에도 적용된다고 안내한다. 따라서 현재 버전에서는 `settings.json` 한 곳만 설정해도 된다. 또 Notion MCP는 HTTP transport라 하위 프로세스를 띄우지 않으므로, 하위 프로세스 쪽 설정은 stdio로 띄우는 Node.js 기반 MCP 서버가 있을 때 의미가 있다.
 
 ## 3단계: Notion MCP 재설정
 
@@ -268,6 +275,12 @@ claude mcp add --transport http notion https://mcp.notion.com/mcp -s user
 
 재설정하면 OAuth 인증부터 다시 진행되며, 이때 `NODE_EXTRA_CA_CERTS`로 주입된 회사 CA가 적용되어 TLS 검증이 통과한다.
 
+## Claude Code 2.1.101 이후
+
+이 트러블슈팅 직후에 나온 Claude Code 2.1.101(2026년 4월 10일)부터는 내장 CA bundle과 함께 **OS 인증서 저장소도 기본으로 신뢰**한다. 신뢰 소스는 `CLAUDE_CODE_CERT_STORE` 환경변수로 고르고, 기본값은 `bundled,system`이다. macOS에서는 키체인이 OS 인증서 저장소이므로, 키체인에 회사 CA가 "항상 신뢰"로 등록된 환경이라면 문서 기준으로는 `NODE_EXTRA_CA_CERTS` 없이도 Notion MCP가 동작한다. 이 경우 Claude Code의 trust 소스는 아래 정리 표의 브라우저 행과 같아진다.
+
+`NODE_EXTRA_CA_CERTS`는 여전히 지원된다. OS 저장소에 넣기 어려운 CA를 따로 줘야 할 때나, OS 저장소를 끄고(`CLAUDE_CODE_CERT_STORE=bundled`) 쓸 때 의미가 있다. 2026년 10월 기준 Claude Code 문서와 changelog로 확인했다.
+
 <br>
 
 # 정리
@@ -277,19 +290,19 @@ claude mcp add --transport http notion https://mcp.notion.com/mcp -s user
 | 도구 | trust 소스 | OS 키체인 참조 | 회사 CA를 trust에 넣으면? |
 |---|---|---|---|
 | kubectl | kubeconfig `certificate-authority-data` | X | 하면 안 됨 (cluster 검증 포기) |
-| Node.js (Notion MCP) | 내장 CA bundle (Mozilla) | X | **해야 풀림** (`NODE_EXTRA_CA_CERTS`) |
+| Node.js (Notion MCP) | 내장 CA bundle (Mozilla) | X (기본값 기준) | **해야 풀림** (`NODE_EXTRA_CA_CERTS`) |
 | 브라우저 (Safari/Chrome) | OS 시스템 trust store | O | 이미 되어 있어서 자물쇠 정상 |
-| Python (`--system-certs`) | OS 시스템 trust store | O | Jira MCP가 되는 이유 |
+| Python (`mcp-atlassian`의 `truststore`) | OS 시스템 trust store | O | 이미 되어 있어서 Jira MCP 정상 |
 
-`kubectl`과 Node.js는 **둘 다 OS 키체인을 무시**하지만, trust 소스의 성격이 달라서 해법이 정반대가 된다.
+`kubectl`과 Node.js는 기본값 기준으로 **둘 다 OS 키체인을 무시**하지만, trust 소스의 성격이 달라서 해법이 정반대가 된다.
 
 - **kubectl**: trust 소스가 **폐쇄 PKI**(cluster CA pinning)다. 회사 CA를 넣으면 "진짜 우리 cluster의 API 서버인가" 라는 검증 자체가 무의미해지므로 넣으면 안 된다. 해법은 SSL Inspection 경로를 회피하거나 bypass를 요청하는 것이다.
-- **Node.js**: trust 소스가 **공개 PKI**(범용 CA bundle)다. 원래 DigiCert 같은 공인 CA를 신뢰하는 구조이므로, 회사 CA를 추가해 주면 "회사 방화벽이 재서명한 인증서도 공인 인증서와 같은 수준으로 신뢰한다"는 의미가 되고, 이것이 정확히 원하는 동작이다. `NODE_EXTRA_CA_CERTS`가 Node.js의 표준 해법이다.
+- **Node.js**: trust 소스가 **공개 PKI**(범용 CA bundle)다. 원래 DigiCert 같은 공인 CA를 신뢰하는 구조이므로, 회사 CA를 추가해 주면 "회사 방화벽이 재서명한 인증서도 공인 인증서와 같은 수준으로 신뢰한다"는 의미가 되고, 이것이 정확히 원하는 동작이다. `NODE_EXTRA_CA_CERTS`가 Node.js의 대표적인 해법이고, 최근 런타임에는 OS 저장소를 쓰게 하는 옵션(`--use-system-ca`)도 있다.
 
 같은 "SSL Inspection으로 인증서가 바뀌었다"는 현상이지만, **클라이언트가 무엇을 신뢰하고 있느냐**에 따라 대응이 완전히 달라진다. VPN/프록시 환경에서 TLS 관련 에러를 만나면, 에러 메시지보다 먼저 **해당 도구가 어떤 trust 소스를 사용하는지**를 파악하는 것이 가장 빠른 진단 경로다.
 
 이번 트러블슈팅에서 가장 헷갈렸던 건, macOS 키체인에 회사 CA가 "항상 신뢰"로 등록되어 있어서 브라우저에서는 모든 게 정상으로 보였다는 점이다. 같은 머신에서 브라우저는 되는데 CLI 도구만 안 되면, 도구 자체의 버그나 설정 실수를 먼저 의심하게 된다. 그게 아니라 **trust 소스가 다르다**는 걸 떠올리기까지가 돌아가는 길이었다.
 
-잘 되던 도구가 네트워크 환경을 바꾼 직후 `self signed certificate in certificate chain`을 뱉기 시작했다면, VPN/프록시 경로 변화를 먼저 의심하자. 그리고 Node.js 기반 도구라면 `NODE_EXTRA_CA_CERTS`가 해법이다. 다만 회사 VPN 정책이 바뀌면 PEM 파일도 갱신해야 하므로, 어느 날 갑자기 다시 깨지면 인증서 파일 날짜부터 확인해 보자.
+잘 되던 도구가 네트워크 환경을 바꾼 직후 `self signed certificate in certificate chain`을 뱉기 시작했다면, VPN/프록시 경로 변화를 먼저 의심하자. 그리고 Node.js 기반 도구라면 `NODE_EXTRA_CA_CERTS`가 해법이다. 다만 회사 VPN 정책이 바뀌면 PEM 파일도 갱신해야 하므로, 어느 날 갑자기 다시 깨지면 인증서 파일 날짜부터 확인해 보자. 도구가 OS 저장소를 직접 읽을 수 있다면(`--use-system-ca`, Claude Code 2.1.101 이후의 기본 동작) 이런 갱신 부담은 없다.
 
 <br>

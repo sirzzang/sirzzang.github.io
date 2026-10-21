@@ -19,6 +19,7 @@ tags:
   - SSL-Inspection
   - MITM
   - RKE2
+last_modified_at: 2026-10-21
 ---
 
 <br>
@@ -56,7 +57,7 @@ $ scp bootstrap:/etc/rancher/rke2/rke2.yaml ~/.kube/config
 
 3. 해결
    - 임시: bootstrap 노드에 SSH로 접속해서 작업 (인증서 문제 자체를 회피)
-   - 임시: `kubectl config set-cluster ... --insecure-skip-tls-verify=true` (보안 위험 인지 후 잠깐만)
+   - 임시: `kubectl --insecure-skip-tls-verify get nodes`처럼 일회성 플래그로 검증 생략 (보안 위험 인지 후 잠깐만. `kubectl config set-cluster`로 켜면 kubeconfig의 CA가 지워진다)
    - 근본: 인프라/네트워크팀에 해당 IP:포트의 SSL Inspection bypass(권장) 또는 VPN 라우팅 분기 적용을 요청
 
 <br>
@@ -183,7 +184,7 @@ subject=CN=rke2-server-ca@1770348093
 SSL Inspection과 SSL Interception은 실무에서 혼용되지만, 엄밀히는 초점이 다르다.
 
 - **SSL/TLS Interception**(가로채기): 방화벽이 TLS 세션을 중간에서 끊고 양쪽에 별도 세션을 맺는 MITM 동작 자체에 초점을 둔 표현이다. 보안 커뮤니티, RFC, 기술 논문에서 주로 쓴다.
-- **SSL/TLS Inspection**(검사): 그렇게 복호화한 트래픽을 보안 정책에 따라 검사하는 목적에 초점을 둔 표현이다. 방화벽/보안 벤더(Palo Alto, Fortinet, Zscaler 등)가 제품 기능명으로 주로 쓴다. "가로채는 게 아니라 검사하는 것이다"라는 뉘앙스가 담겨 있다.
+- **SSL/TLS Inspection**(검사): 그렇게 복호화한 트래픽을 보안 정책에 따라 검사하는 목적에 초점을 둔 표현이다. 방화벽/보안 벤더(Fortinet, Zscaler 등)가 제품 기능명으로 주로 쓴다. Palo Alto Networks처럼 같은 기능을 Decryption(SSL Forward Proxy)이라 부르는 벤더도 있다. "가로채는 게 아니라 검사하는 것이다"라는 뉘앙스가 담겨 있다.
 
 즉 interception은 수단이고 inspection은 목적이다. inspection을 하려면 interception이 반드시 선행되어야 한다. 이 글에서 문제가 되는 동작은 "방화벽이 TLS를 가로채서 재서명한다"는 interception 쪽이지만, 회사가 이것을 하는 이유는 트래픽 검사(inspection)이므로, 벤더/인프라팀이 쓰는 표현을 따라 SSL Inspection으로 표기한다.
 
@@ -235,17 +236,17 @@ TLS handshake 이후 실제 요청·응답이 오가는 과정도 릴레이가 �
 구체적으로 방화벽이 보는 것은 다음과 같다.
 
 - 방화벽은 TCP 연결 위로 ClientHello 패킷이 보이는 순간 이 연결을 SSL Inspection 대상으로 가져간다
-- 포트가 6443이든 443이든 8443이든 무관하다. TLS 트래픽이면 동일하게 처리한다
+- inspection 정책에 포트(서비스) 조건을 따로 걸지 않았다면, 포트가 6443이든 443이든 8443이든 무관하다. TLS 트래픽이면 동일하게 처리한다
 - 따라서 "이게 `kube-apiserver` 인증서인지 인지해서" 가 아니라, "TLS 연결이니까 일단 가로챈다" 가 정확한 표현이다
 
 조금 더 정확히 보면, 많은 방화벽은 ClientHello 안의 **SNI(Server Name Indication)** 값을 보고 inspection 여부를 분기한다. 이것 역시 클라이언트가 보내는 정보다. SNI와 SAN의 역할 차이, 그리고 서버가 SNI를 어떻게 처리하는지에 대한 자세한 내용은 [SNI와 SAN 글]({% post_url 2026-04-25-CS-TLS-SNI-SAN %})에서 별도로 정리했다.
 
-- SNI는 TLS 1.2부터 표준화된 ClientHello 확장 필드로, 클라이언트가 "지금 접속하려는 서버 호스트명"을 **암호화 이전 평문**으로 실어 보낸다. 원래 목적은 한 IP에 여러 TLS 사이트(virtual host)가 올라가 있을 때 서버가 올바른 인증서를 골라 응답하도록 하기 위해서다.
-- 평문이라는 특성 때문에 방화벽도 별도 복호화 없이 SNI를 읽을 수 있다. 그래서 inspecting firewall은 **SNI 기준으로 정책을 분기**한다 — 예를 들어 `*.bank.com` 같이 민감한 도메인은 inspection 대상에서 제외하는 식이다.
-- 그런데 `kubectl`이 **IP 주소로 직접 연결**하는 경우(이번 사례의 `https://10.50.31.10:6443`처럼) Go의 `crypto/tls`는 RFC 6066 권고에 따라 **SNI를 비워 보낸다**. SNI는 호스트명을 위한 필드이고 IP literal은 여기에 들어갈 수 없기 때문이다.
-- 결과적으로 SNI 기반 bypass 룰이 정책에 있더라도 매칭되지 않고, 이 연결은 **"기타 TLS"로 분류되어 일괄 inspection 대상**이 되기 쉽다.
+- SNI는 2003년 RFC 3546에서 TLS 확장으로 처음 정의된 ClientHello 확장 필드로(현재 정의는 RFC 6066 §3), 클라이언트가 "지금 접속하려는 서버 호스트명"을 **암호화 이전 평문**으로 실어 보낸다. 원래 목적은 한 IP에 여러 TLS 사이트(virtual host)가 올라가 있을 때 서버가 올바른 인증서를 골라 응답하도록 하기 위해서다.
+- 평문이라는 특성 때문에 방화벽도 별도 복호화 없이 SNI를 읽을 수 있다. 그래서 inspecting firewall은 **SNI 기준으로 정책을 분기**한다 — 예를 들어 SNI로 사이트의 URL 카테고리를 판정해, 금융·의료처럼 민감한 카테고리의 사이트는 inspection 대상에서 제외하는 식이다.
+- 그런데 `kubectl`이 **IP 주소로 직접 연결**하는 경우(이번 사례의 `https://10.50.31.10:6443`처럼) Go의 `crypto/tls`는 **SNI를 비워 보낸다**. RFC 6066이 SNI의 HostName에 IP literal을 넣는 것을 허용하지 않기 때문이다("Literal IPv4 and IPv6 addresses are not permitted in HostName").
+- 결과적으로 SNI 기반 bypass 룰이 정책에 있더라도 매칭되지 않는다. 목적지 IP 기준으로 따로 제외해 두지 않았다면, 이 연결은 **기본 inspection 정책을 그대로 따르게** 되기 쉽다.
 
-정리하면 이렇다. 방화벽의 inspection 판단은 **ClientHello 시점에 완결**된다. SNI 같은 메타정보로 bypass 분기가 가능하지만, 이번 사례처럼 SNI가 비어 있으면 매칭될 단서가 없어 일괄 inspection 경로로 떨어진다. 그리고 일단 inspection 대상이 된 연결은 **서버 응답에 무엇이 담겨 있든 — 인증서가 공인 CA든 사설 CA든 — 무조건 가로채서 재서명**한다. SNI에 대한 자세한 사양은 [RFC 6066 §3](https://datatracker.ietf.org/doc/html/rfc6066#section-3)을 참고하자.
+정리하면 이렇다. 방화벽이 이 연결을 inspection할지는 **주로 ClientHello 시점의 정보**(목적지 IP·포트, SNI)로 정한다. SNI 같은 메타정보로 bypass 분기가 가능하지만, 이번 사례처럼 SNI가 비어 있으면 매칭될 단서가 없어 기본 inspection 경로로 떨어진다. 그리고 일단 inspection 대상이 된 연결은 **서버 응답에 무엇이 담겨 있든 — 인증서가 공인 CA든 사설 CA든 — 가로채서 재서명**한다. 서버 인증서에 따라 달라지는 것은 재서명 여부가 아니라 어느 CA로 재서명하느냐인데, 이는 [아래 절](#trust-ca와-untrust-ca)에서 다룬다. SNI에 대한 자세한 사양은 [RFC 6066 §3](https://datatracker.ietf.org/doc/html/rfc6066#section-3)을 참고하자.
 
 ## CA만 바꾸는가, 인증서를 새로 만드는가
 
@@ -260,21 +261,31 @@ TLS handshake 이후 실제 요청·응답이 오가는 과정도 릴레이가 �
 
 ## Trust CA와 Untrust CA
 
-방화벽 CA 이름에 `Untrust`가 들어 있는 점도 짚어둘 만하다. 회사 방화벽은 보통 두 종류의 내부 CA를 두고, **대상 서버에서 받은 인증서를 자기가 아는 공인 CA 목록으로 검증할 수 있느냐**에 따라 다른 CA로 재서명한다.
+방화벽 CA 이름에 `Untrust`가 들어 있는 점도 짚어둘 만하다. SSL Inspection을 하는 방화벽은 보통 재서명용 CA를 두 개 두고, **방화벽이 원래 서버에 대신 연결해 받은 인증서를 자기 신뢰 CA 목록으로 검증할 수 있느냐**에 따라 둘 중 하나로 재서명한다. 대표적으로 Palo Alto Networks 문서는 이 둘을 Forward Trust 인증서와 Forward Untrust 인증서라고 부른다.
 
-- `*_Trust_*`: 방화벽이 알려진 정상 카테고리(예: 검증된 SaaS, 화이트리스트된 도메인)로 분류한 트래픽에 사용. 구체적으로는 대상 서버의 인증서가 공인 CA(DigiCert, Let's Encrypt 등)로 서명되어 있어 검증 가능한 경우다. 예를 들어 `google.com`에 연결하면 공인 CA 체인이 확인되므로 Trust CA로 재서명한다.
-- `*_Untrust_*`: 방화벽이 분류하지 못했거나 알려지지 않은 카테고리로 판단한 트래픽에 사용. 구체적으로는 대상 서버의 인증서가 공인 CA로 검증되지 않는 경우다. 자체 서명(self-signed) 인증서이거나, 사설 PKI의 CA가 서명한 인증서가 여기에 해당한다.
+- `*_Trust_*`: 원래 서버 인증서가 방화벽의 신뢰 CA 목록으로 검증되는 경우에 사용한다. 이 목록은 방화벽에 기본으로 들어 있는 공인 CA(DigiCert, Let's Encrypt 등)에 관리자가 추가한 CA를 더한 것이다. 예를 들어 `google.com`에 연결하면 공인 CA 체인이 확인되므로 Trust CA로 재서명한다.
+- `*_Untrust_*`: 원래 서버 인증서가 그 목록으로 검증되지 않는 경우에 사용한다. 자체 서명(self-signed) 인증서이거나, 관리자가 신뢰 목록에 넣지 않은 사설 PKI의 CA가 서명한 인증서가 여기에 해당한다.
 
-`kube-apiserver` 트래픽이 `Untrust`로 분류된 이유가 바로 이것이다. 방화벽이 `kube-apiserver`에 대신 연결해서 받은 서버 인증서의 issuer가 `rke2-server-ca` → RKE2 클러스터가 자체적으로 만든 사설 CA다. 방화벽의 공인 CA 목록에는 당연히 없으므로 "신뢰할 수 없는 인증서"로 판단하고 Untrust CA로 재서명한 것이다. 사용자나 관리자 입장에서 보면 "내부 인프라 트래픽인데 왜 untrust냐" 싶지만, 방화벽은 이 맥락을 알지 못하고 오직 인증서의 CA 체인만 보고 판단한다.
+[앞 절](#방화벽은-응답-인증서를-보고-가로채는가)에서 본 URL 카테고리와 헷갈리기 쉬운데, 둘은 쓰이는 단계가 다르다. 카테고리는 **이 연결을 복호화할지 말지**를 정하는 정책 조건이고, ClientHello 시점에 판단한다. Trust와 Untrust는 **복호화하기로 한 연결을 어느 CA로 재서명할지**의 문제이고, 방화벽이 서버에서 원래 인증서를 받은 뒤(위 handshake의 ③ 이후)에 정해진다. 기준은 카테고리가 아니라 원래 서버 인증서의 검증 결과다.
 
-Trust와 Untrust를 둘로 나누는 1차 목적은 **방화벽/보안 담당자가 정책·로그·감사·리포트를 나누기 위한 쪽**에 가깝다(벤더·설정마다 다름).
+`kube-apiserver` 트래픽이 `Untrust`로 재서명된 이유가 바로 이것이다. 방화벽이 `kube-apiserver`에 대신 연결해서 받은 서버 인증서의 issuer가 `rke2-server-ca` → RKE2 클러스터가 자체적으로 만든 사설 CA다. 관리자가 이 CA를 방화벽 신뢰 목록에 따로 넣어 두지 않았으니 "신뢰할 수 없는 인증서"로 판단하고 Untrust CA로 재서명한 것이다. 사용자나 관리자 입장에서 보면 "내부 인프라 트래픽인데 왜 untrust냐" 싶지만, 방화벽은 이 맥락을 알지 못하고 오직 인증서의 CA 체인만 보고 판단한다.
 
-- **정책·검사 강도**: Untrust(공인 CA로 검증되지 않은 대상) 쪽에 더 꼼꼼한 DLP, 차단, 로그 레벨을 걸고, Trust 쪽은 상대적으로 약하게 두는 식의 분기가 흔하다.
-- **리포트·감사**: "알 수 없는 TLS" 흐름과 "알려진 공인 사이트로 열리는 흐름"을 집계·식별하는 용도로 쓰인다.
+같은 회사 도메인 아래의 사내 서비스 두 개에 각각 접속해 보면 이 기준이 그대로 드러난다.
 
-최종 사용자 입장에서도 **아예 체감이 없는 것은 아니다.** 인증서 상세를 열어보면 발급자(Issuer)에 `*_Trust_*` / `*_Untrust_*` 같은 이름이 찍혀 있어 구분할 수 있고, 정책을 Untrust 쪽에만 엄하게 건 환경에서는 차단·경고 페이지를 Untrust 흐름에서만 겪는 식의 차이가 날 수 있다. 반면 브라우저 주소창 자물쇠만 보면, 회사 루트 CA가 설치된 환경에서는 둘 다 비슷해 보이는 경우가 많다.
+| 사내 서비스 | 원래 서버 인증서 발급자 | 재서명 CA |
+|---|---|---|
+| 서비스 A | 공인 CA | Trust CA |
+| 서비스 B | 사내 사설 CA | Untrust CA |
 
-**다만 이번 글의 `kubectl` 상황**에서는, Trust든 Untrust든 결국 **방화벽이 만든 MITM 인증서**이고, kubeconfig에 박힌 CA는 `rke2-server-ca`뿐이므로 — **검증 실패라는 점에서 구분할 실익이 없다.** 둘 다 cluster CA로는 검증할 수 없다. Trust/Untrust는 **이 연결의 상대(원 서버) 인증서를 공인 체인으로 믿을 수 있느냐**에 따른 방화벽 내부 라벨이지만, `kubectl`의 cluster CA pinning과는 별도 축이다.
+둘 다 같은 회사 도메인의 사내 서비스인데, 결과를 가른 것은 원래 인증서의 발급자뿐이었다.
+
+그렇다면 왜 굳이 CA를 둘로 나눌까. 방화벽이 모든 연결을 회사 CA 하나로 재서명한다고 생각해 보자. 원래라면 브라우저 경고가 떠야 할 사이트(자체 서명 인증서나, 알 수 없는 CA가 서명한 인증서를 쓰는 사이트)도, 회사 CA를 신뢰하는 PC에서는 멀쩡한 사이트처럼 보이게 된다. 방화벽이 끼어드는 바람에 사용자가 받아야 할 경고가 사라지는 것이다.
+
+Untrust CA는 이 경고를 살려 두기 위한 장치다. Palo Alto Networks 문서는 Forward Trust 인증서는 클라이언트의 trust store에 배포하되, Forward Untrust 인증서는 클라이언트에 설치하지 말라고 안내한다. 그러면 원래 인증서를 믿을 수 있는 사이트는 회사 CA 덕분에 정상으로 보이고, 원래부터 믿을 수 없던 사이트는 Untrust CA로 재서명되어 클라이언트에서 그대로 인증서 경고가 뜬다.
+
+> 이 환경도 그렇게 구성되어 있다. macOS 시스템 키체인에는 회사 루트 CA와 Trust CA 두 개(RSA용, ECDSA용)만 있고, Untrust 쪽은 중간 CA도 루트 CA도 없다. Trust CA가 두 개인 것은 재서명 인증서의 키 알고리즘이 원래 서버 인증서를 따라가기 때문이다. RSA 인증서를 쓰는 사이트는 RSA용 Trust CA로, ECDSA 인증서를 쓰는 `google.com`은 `ExampleCorp_Trust_ECDSA`로 재서명되어 있었다. `kube-apiserver`가 `ExampleCorp_Untrust_ECDSA`로 재서명된 것도 같은 이치로, 받은 인증서의 공개키가 RKE2가 만든 원래 인증서처럼 ECDSA(P-256)였다.
+
+**다만 이번 글의 `kubectl` 상황**에서는, Trust든 Untrust든 결국 **방화벽이 만든 MITM 인증서**이고, kubeconfig에 박힌 CA는 `rke2-server-ca`뿐이므로 — **검증 실패라는 점에서 구분할 실익이 없다.** 둘 다 cluster CA로는 검증할 수 없다. Trust/Untrust는 **이 연결의 상대(원 서버) 인증서를 방화벽이 신뢰하는 체인으로 검증할 수 있느냐**에 따른 방화벽 내부 구분이지만, `kubectl`의 cluster CA pinning과는 별도 축이다.
 
 ## SSL Inspection의 목적
 
@@ -292,13 +303,13 @@ Trust와 Untrust를 둘로 나누는 1차 목적은 **방화벽/보안 담당자
 
 SSL Inspection이 원인이라면, 방화벽이 재서명에 사용하는 회사 CA를 kubeconfig에 등록해 놓으면 되는 것 아닌가? 기술적으로는 가능하다. 하지만 **하면 안 된다.** 그 이유를 정리해 보자.
 
-> 브라우저로 사내 사이트를 열 때는 SSL Inspection이 끼어 있어도 자물쇠 표시가 정상으로 뜬다. [다음 글]({% post_url 2026-04-25-Dev-Notion-MCP-VPN-SSL-Inspection %})의 "그런데 이건 왜 되는가" 절에서 다루겠지만, 이것은 **내 로컬 macOS 키체인에 회사 CA가 이미 신뢰됨으로 등록되어 있기 때문**이다. 그러니 같은 방식으로 kubeconfig에도 회사 CA를 등록하면 안 되는가 하는 의문이 자연스레 떠오른 것이다.
+> 브라우저로 웹 사이트를 열 때는 SSL Inspection이 끼어 있어도 대부분 자물쇠 표시가 정상으로 뜬다. [다음 글]({% post_url 2026-04-25-Dev-Notion-MCP-VPN-SSL-Inspection %})의 "그런데 이건 왜 되는가" 절에서 다루겠지만, 이것은 **내 로컬 macOS 키체인에 회사 CA(정확히는 Trust CA)가 이미 신뢰됨으로 등록되어 있기 때문**이다. 그러니 같은 방식으로 kubeconfig에도 회사 CA를 등록하면 안 되는가 하는 의문이 자연스레 떠오른 것이다.
 
 ## kubeconfig CA는 cluster 전용 trust anchor
 
 `kubectl`은 kubeconfig에 `certificate-authority-data`(또는 `certificate-authority`) 필드가 지정되어 있으면 **OS 시스템 trust store(macOS 키체인 등)를 보지 않고** 오직 해당 필드의 CA만을 신뢰 기준으로 사용한다. 즉 키체인에 회사 CA가 등록되어 있는지 여부는 이 상황의 `kubectl`에게는 무관한 정보다.
 
-> 참고로, kubeconfig에 CA가 아예 지정되어 있지 않고 `insecure-skip-tls-verify`도 꺼져 있는 경우에는 client-go가 시스템 루트 CA로 폴백한다. 다만 RKE2·EKS 등 일반적인 클러스터 배포는 `certificate-authority-data`를 항상 채워 주므로, 실제로는 "kubeconfig CA만 신뢰" 상태로 동작한다.
+> 참고로, kubeconfig에 CA가 아예 지정되어 있지 않고 `insecure-skip-tls-verify`도 꺼져 있는 경우에는 client-go가 시스템 루트 CA로 폴백한다. 다만 RKE2·EKS 등 일반적인 클러스터 배포는 `certificate-authority-data`를 항상 채워 주므로, 실제로는 "kubeconfig CA만 신뢰" 상태로 동작한다. 설령 시스템 루트 CA로 폴백하더라도 이 환경에서는 소용이 없다. 키체인에 있는 회사 CA는 Trust CA뿐이고, `kube-apiserver` 인증서를 재서명한 Untrust CA는 없기 때문이다.
 
 이는 의도된 설계다. cluster CA는 그 cluster를 관리하는 주체(여기서는 RKE2)가 직접 만들고 관리하는 폐쇄 PKI이기 때문에, 그 CA가 서명한 인증서만 진짜 API 서버임을 보장할 수 있다. 시스템 trust store에 등록된 공개 CA들은 이 cluster와 무관하므로, 처음부터 검증 후보에 들이지 않는다.
 
@@ -310,6 +321,7 @@ SSL Inspection이 원인이라면, 방화벽이 재서명에 사용하는 회사
    - 회사 방화벽이 만들어 주는 어떤 서버 인증서든 `CN=kube-apiserver`로만 서명해서 보내면 통과한다
    - 즉 "이 연결의 끝이 진짜 우리 cluster의 API 서버인가" 라는 근본 검증이 사라진다
    - 이론상 회사 방화벽 자체가 침해되거나 정책이 변경되면, 가짜 API 서버로 트래픽이 돌아가도 알아챌 수 없다
+   - 게다가 이번에 `kube-apiserver` 인증서를 재서명한 것은 Untrust CA다. kubeconfig에 넣게 될 CA가 바로, [앞에서 본 것처럼](#trust-ca와-untrust-ca) 클라이언트에 설치하지 않도록 되어 있는 그 인증서다. 원래 서버를 믿을 수 없을 때 경고를 띄우려고 둔 CA를 신뢰하는 셈이다
 
 2. 운영: **사무실/VPN 환경에서 kubeconfig가 분기된다**
    - 사무실에서 직접 연결할 때는 방화벽을 안 거치므로 진짜 cluster CA(rke2-server-ca)가 서명한 인증서가 그대로 온다
@@ -334,7 +346,7 @@ SSL Inspection이 원인이라면, 방화벽이 재서명에 사용하는 회사
 | 방법 | 방식 | 처리 주체 | 비고 |
 |---|---|---|---|
 | bootstrap 노드 SSH | VPN 경로 자체를 우회. 노드 안에서 직접 작업 | 본인 | 즉시 적용. bootstrap 노드 본래 목적과도 부합 |
-| `insecure-skip-tls-verify=true` | 서버 인증서 검증을 명시적으로 건너뜀 | 본인 | 임시용. MITM 위험·운영 리스크 인지 필요 |
+| `--insecure-skip-tls-verify` (일회성 플래그) | 서버 인증서 검증을 명시적으로 건너뜀 | 본인 | 임시용. MITM 위험 인지 필요. kubeconfig에 저장하는 방식은 CA가 지워지므로 피함 |
 | SSL Inspection bypass | 방화벽 정책에서 해당 IP:포트를 SSL 검사 제외 | 방화벽 관리자 | 방화벽은 통과하지만 복호화·재서명을 안 함. 일반적으로 가장 깔끔 |
 | VPN 라우팅 분기 | 클러스터 대역만 inspecting firewall을 거치지 않는 경로로 라우팅 | VPN 관리자 | 토폴로지가 받쳐 줄 때만 가능. 흔히 "split tunnel"로도 불리지만 의미가 다름 |
 
@@ -346,24 +358,33 @@ SSL Inspection이 원인이라면, 방화벽이 재서명에 사용하는 회사
 
 ## insecure-skip-tls-verify (임시 한정)
 
-로컬 `kubectl`을 꼭 써야 하는 경우, 검증을 명시적으로 끄는 옵션이 있다.
+로컬 `kubectl`을 꼭 써야 하는 경우, 검증을 명시적으로 끄는 옵션이 있다. 명령마다 붙이는 **일회성 플래그**로 쓰는 것이 좋다.
 
 ```bash
-# TLS 검증 끄기 (임시)
+# TLS 검증 끄기 (이 명령 한 번에만 적용, kubeconfig는 바뀌지 않음)
+$ kubectl --insecure-skip-tls-verify get nodes
+```
+
+같은 설정을 `kubectl config set-cluster`로 kubeconfig에 저장할 수도 있지만, 권하지 않는다. `set-cluster`는 insecure 모드를 켤 때 그 cluster의 `certificate-authority`·`certificate-authority-data`를 **함께 지운다**. 나중에 `--insecure-skip-tls-verify=false`로 되돌려도 지워진 CA는 돌아오지 않는다.
+
+```bash
+# 권하지 않음: cluster CA가 kubeconfig에서 지워진다
 $ kubectl config set-cluster <cluster-name> --insecure-skip-tls-verify=true
 
-# 작업 끝나면 반드시 되돌리기
+# 되돌려도 CA는 복구되지 않는다
 $ kubectl config set-cluster <cluster-name> --insecure-skip-tls-verify=false
 ```
+
+되돌린 뒤의 kubeconfig에는 CA도 insecure 설정도 없으므로, [앞에서 본 것처럼](#kubeconfig-ca는-cluster-전용-trust-anchor) client-go는 시스템 루트 CA로 검증한다. 시스템 루트 CA에는 `rke2-server-ca`도 회사 Untrust CA도 없으니, 사무실에서도 VPN에서도 검증에 실패한다. 이미 이렇게 됐다면 cluster CA 파일로 다시 채우거나(`kubectl config set-cluster <cluster-name> --certificate-authority=<ca.crt> --embed-certs=true`), bootstrap 노드의 `rke2.yaml`을 다시 복사해 오면 된다.
+
+> `kubectl config set clusters.<cluster-name>.insecure-skip-tls-verify true`처럼 범용 `config set`으로 필드만 바꾸면 CA는 지워지지 않는다. 대신 CA와 insecure 설정이 함께 남아 `specifying a root certificates file with the insecure flag is not allowed` 에러로 아예 연결이 안 된다. client-go가 둘을 동시에 설정하는 것을 허용하지 않기 때문이다. 일회성 플래그로 insecure를 켜면 kubeconfig의 CA를 그 명령에서만 비우도록 처리되어 있어 이 충돌이 없다.
 
 기능 자체는 잘 동작하지만, 사용 시 다음을 인지하고 있어야 한다.
 
 - **MITM에 무방비**: 서버 인증서를 전혀 검증하지 않으므로 가짜 API 서버에 연결돼도 모른다. 다만 회사 VPN 안에서 사설 IP로만 도달 가능한 대상이라 실제 공격 가능성은 낮은 편이다
-- **켜놓고 잊기 쉽다**: 작업 후 되돌리지 않으면 이후에도 계속 검증 없이 동작한다
-- **다른 cluster에 영향**: 같은 kubeconfig에 다른 cluster 컨텍스트를 추가할 때 의도치 않게 적용될 수 있다
 - **권한 측면 위험**: RKE2의 `/etc/rancher/rke2/rke2.yaml`을 그대로 가져온 kubeconfig는 일반적으로 `system:masters` 그룹(= cluster-admin 권한)에 매핑된다. 이런 강한 권한의 자격증명을 검증 없이 사용하면 보안 감사에서 지적받기 쉽다
 
-따라서 굳이 쓰려면, **SSL Inspection bypass 등 인프라 쪽에서 진짜 cluster CA가 서명한 인증서를 다시 받을 수 있게 될 때까지** 잠깐 쓰는 임시 옵션으로만 두고, 그 이후에는 반드시 끄자.
+따라서 굳이 쓰려면, **SSL Inspection bypass 등 인프라 쪽에서 진짜 cluster CA가 서명한 인증서를 다시 받을 수 있게 될 때까지** 잠깐 쓰는 임시 옵션으로만 두자.
 
 ## SSL Inspection bypass와 VPN 라우팅 분기
 
