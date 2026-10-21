@@ -19,7 +19,7 @@ tags:
   - Toleration
   - Scheduling Gate
   - Topology Spread Constraints
-last_modified_at: 2026-10-15
+last_modified_at: 2026-10-21
 ---
 
 <br>
@@ -101,11 +101,22 @@ Scheduling Gate가 설정된 상태에서는 파드의 스케줄링 지시자(sc
 | 외부 승인 워크플로우 | 비용 승인, 라이선스 확인 등 외부 시스템의 승인을 받은 후에만 스케줄링 |
 | 리소스 쿼터 관리 | 클러스터 리소스가 확보될 때까지 스케줄링을 보류하여 불필요한 스케줄링 시도 방지. [Kueue](https://kueue.sigs.k8s.io/)는 plain 파드를 관리할 때 이 방식으로 진입 시점을 제어한다(Job 계열은 `suspend`를 쓴다) |
 | CI/CD 파이프라인 연동 | 배포 파이프라인에서 특정 단계가 완료된 후에만 파드 스케줄링 |
-| 동적 스케줄링 조건 설정 | 게이트가 설정된 동안 nodeSelector나 affinity를 조건에 맞게 설정한 뒤 게이트 제거 |
+| 동적 스케줄링 조건 설정 | 게이트가 설정된 동안 nodeSelector나 affinity를 조건에 맞게 설정한 뒤 게이트 제거. [Kueue TAS](#사례-kueue-tas의-배치-주입)가 이 방식이다 |
 
 Scheduling Gate의 핵심 이점은, 스케줄링 불가능한 파드가 스케줄러의 큐에서 반복적으로 시도되는 것을 방지한다는 것이다. 게이트가 없으면 파드는 Active Queue → 스케줄링 실패 → Backoff/Unschedulable Queue → 다시 Active Queue 순환을 반복하며 스케줄러에 불필요한 부하를 준다. Cluster Autoscaler 등 외부 컴포넌트도 이러한 파드를 "스케줄링 불가능"으로 인식하여 불필요한 스케일링 판단을 할 수 있다.
 
 Kueue가 이 메커니즘(plain 파드)과 `suspend`(Job 계열)로 fair-share·borrowing 같은 큐 정책을 구현하는 방식은 [5편 - Volcano vs Kueue]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#volcano-vs-kueue-접근-방식의-차이)에서 다룬다.
+
+### 사례: Kueue TAS의 배치 주입
+
+표의 마지막 행을 실제로 쓰는 예가 Kueue의 TAS(Topology Aware Scheduling)다. 잡의 워커를 같은 노드·랙 같은 한 토폴로지 도메인에 모으고 싶을 때, 파드마다 따로 평가되는 affinity로는 그룹 전체의 배치를 보장하기 어렵다([5편 - bin packing과 affinity의 위치]({% post_url 2025-11-05-Kubernetes-Scheduling-05 %}#bin-packing과-affinity의-위치)). TAS는 이 판단을 잡 단위로 먼저 내리고, 결과를 파드마다 nodeSelector로 내려 준다.
+
+1. Kueue가 잡을 들여보낼지 정하는 입장(admission) 단계에서, 자신이 추적하는 노드 용량으로 잡의 파드 묶음(PodSet) 전체의 배치를 계산해 Kueue의 Workload 오브젝트에 기록한다
+2. 파드는 `kueue.x-k8s.io/topology` 게이트가 걸린 채 생성된다. Job 계열은 Kueue가 잡을 풀 때 파드 템플릿에 게이트를 넣고, plain 파드는 생성 시 webhook이 넣는다
+3. Kueue 컨트롤러가 파드마다 배정된 도메인의 노드 라벨을 `spec.nodeSelector`에 추가하면서, 같은 패치에서 게이트를 제거한다
+4. `kube-scheduler`는 그 nodeSelector가 허락한 노드 안에서만 고른다. 가장 낮은 토폴로지 수준이 `kubernetes.io/hostname`이면 노드 하나로 고정된다
+
+앞서 본 두 규칙이 이 흐름의 전제다. 게이트는 생성 시에만 붙일 수 있으므로 Kueue는 파드가 만들어질 때 게이트를 넣는다. 게이트가 걸린 동안에는 nodeSelector를 추가하는 방향의 변경만 허용되므로, 배치 결과를 나중에 주입할 수 있다. 요청은 워커 PodSet의 파드 템플릿에 `kueue.x-k8s.io/podset-required-topology`(한 도메인에 다 들어가야 입장) 또는 `kueue.x-k8s.io/podset-preferred-topology`(안 되면 상위 수준으로 올라가 여러 도메인에 나눠 입장) annotation을 달아서 한다. TAS는 Kueue v0.14부터 beta이고 기본으로 켜져 있지만, ResourceFlavor의 `spec.topologyName`으로 Topology를 연결해야 동작한다(Kueue v0.20.2 소스·문서 기준, 2026년 10월 확인).
 
 <br>
 

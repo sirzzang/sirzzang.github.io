@@ -18,7 +18,7 @@ tags:
   - Coscheduling
   - Volcano
   - Kueue
-last_modified_at: 2026-10-15
+last_modified_at: 2026-10-21
 ---
 
 <br>
@@ -458,7 +458,7 @@ KubeRay가 대표적인 예다. KubeRay 오퍼레이터는 `batch-scheduler` 설
 gang scheduling은 "다 같이 놓을 수 있나"를 풀고, "어디에 놓을까"는 배치 정책(Score)이 따로 푼다. 둘을 함께 쓸 때 위치를 정해야 하는 설정이 있다.
 
 - **bin packing**: `NodeResourcesFit`의 `scoringStrategy`를 MostAllocated나 RequestedToCapacityRatio로 바꾸고 `nvidia.com/gpu`에 가중치를 준다([4편 - 해결: MostAllocated 또는 RequestedToCapacityRatio]({% post_url 2025-11-05-Kubernetes-Scheduling-04 %}#해결-mostallocated-또는-requestedtocapacityratio)). GPU를 일부 노드에 몰아 채워 큰 잡이 통째로 들어갈 빈 노드를 남기므로, gang 대기와 단편화를 줄이는 방향이다
-- **pod affinity·토폴로지**: 같은 잡의 워커를 가까운 토폴로지에 두는 방법으로 preferred pod affinity를 생각할 수 있지만, 파드 단위 사이클에서는 먼저 놓인 파드를 뒤 파드가 따라가는 방식이라 그룹 전체의 배치를 보장하지 않는다. 노드를 통째로 쓰는 학습 파드라면 같은 노드 affinity는 의미가 없고, 랙·NVLink 같은 토폴로지 배치가 필요하다. 그룹 단위 토폴로지 배치는 Kueue TAS, Volcano의 HyperNode 기반 배치, 네이티브 KEP-5732가 다룬다(검증 범위 밖). `requiredDuringScheduling`은 조건을 맞추지 못하면 파드가 계속 Pending이 되고, gang과 함께 쓰면 Permit 대기를 길게 만들 수 있다
+- **pod affinity·토폴로지**: 같은 잡의 워커를 가까운 토폴로지에 두는 방법으로 preferred pod affinity를 생각할 수 있지만, 파드 단위 사이클에서는 먼저 놓인 파드를 뒤 파드가 따라가는 방식이라 그룹 전체의 배치를 보장하지 않는다. 노드를 통째로 쓰는 학습 파드라면 같은 노드 affinity는 의미가 없고, 랙·NVLink 같은 토폴로지 배치가 필요하다. 그룹 단위 토폴로지 배치는 Kueue TAS([3편 - 사례: Kueue TAS의 배치 주입]({% post_url 2025-11-05-Kubernetes-Scheduling-03 %}#사례-kueue-tas의-배치-주입)), Volcano의 HyperNode 기반 배치, 네이티브 KEP-5732가 다룬다(Volcano·KEP-5732는 검증 범위 밖). `requiredDuringScheduling`은 조건을 맞추지 못하면 파드가 계속 Pending이 되고, gang과 함께 쓰면 Permit 대기를 길게 만들 수 있다
 
 kube-scheduler 계열에서 bin packing(`NodeResourcesFit`의 `scoringStrategy`)은 프로필 설정이므로 **그룹 파드가 쓰는 프로필**에 두어야 한다. 그룹 파드는 자기 `schedulerName`의 프로필로 스케줄링되므로(Coscheduling이면 커스텀 빌드 kube-scheduler의 프로필, 네이티브 gang scheduling이면 보통 `default-scheduler`), 다른 프로필에만 bin packing을 넣으면 그룹 파드에는 적용되지 않는다. pod affinity는 프로필이 아니라 파드 스펙 필드이므로, 파드를 만드는 워크로드 컨트롤러의 템플릿에 넣어야 한다. 프로필에서는 `InterPodAffinity` 플러그인이 켜져 있는지(기본 활성)와 가중치만 정한다. 프로필 개념이 없는 Volcano는 `volcano-scheduler` ConfigMap의 `tiers`에 binpack·nodeorder 플러그인을 둔다. 반대로 그룹 워크로드용 프로필에만 bin packing을 적용하면 다른 워크로드에는 영향이 없다. bin packing은 배치 시점의 점수만 바꿀 뿐, 이미 단편화된 상태를 재배치하지는 않는다(재배치는 Descheduler 영역이다).
 
