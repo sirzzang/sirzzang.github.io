@@ -1,0 +1,947 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Gitea] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.4.2. 주소 설계와 운영 트러블슈팅 - Eraser’s StudyLog</title>
+<meta name="description" content="Mac IP가 바뀌자 Gitea로의 push가 끊기고, 이를 고치려던 helm upgrade가 멈춘 과정을 주소 설계와 파드 교체 전략으로 정리해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Gitea] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.4.2. 주소 설계와 운영 트러블슈팅">
+<meta property="og:url" content="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting/">
+
+
+  <meta property="og:description" content="Mac IP가 바뀌자 Gitea로의 push가 끊기고, 이를 고치려던 helm upgrade가 멈춘 과정을 주소 설계와 파드 교체 전략으로 정리해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-10-24T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-10-25T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/MLOps/" >MLOps</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS·Infra</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Programming/" >Programming</a>
+            </li><li class="masthead__menu-item">
+              <a href="/series/" >Series</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Gitea] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.4.2. 주소 설계와 운영 트러블슈팅">
+    <meta itemprop="description" content="Mac IP가 바뀌자 Gitea로의 push가 끊기고, 이를 고치려던 helm upgrade가 멈춘 과정을 주소 설계와 파드 교체 전략으로 정리해 보자.">
+    <meta itemprop="datePublished" content="2026-10-24T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-10-25T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Gitea] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.4.2. 주소 설계와 운영 트러블슈팅
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-10-24T00:00:00+09:00">2026년 10월 24일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  9 분 소요
+
+
+            
+          </p>
+          
+          <p class="page__context"><a href="/categories/MLOps/#mlops-foundation">MLOps › 인프라 기반</a><span class="page__context-sep">·</span><a href="/categories/Kubernetes/#k8s-operations">Kubernetes › 운영</a><span class="page__context-sep">·</span><span class="page__nature">스터디</span></p>
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#gitea-접속-주체와-주소">Gitea 접속 주체와 주소</a>
+    <ul>
+      <li><a href="#localhost와-checkout-주소">localhost와 checkout 주소</a></li>
+    </ul>
+  </li>
+  <li><a href="#트러블슈팅">트러블슈팅</a>
+    <ul>
+      <li><a href="#사례-1-mac-ip-변경">사례 1: Mac IP 변경</a>
+        <ul>
+          <li><a href="#증상-75초-뒤-실패한-push">증상: 75초 뒤 실패한 push</a></li>
+          <li><a href="#증거-현재-ip와-저장된-주소의-불일치">증거: 현재 IP와 저장된 주소의 불일치</a></li>
+          <li><a href="#원인-변경된-ip와-셸에-남은-mypc">원인: 변경된 IP와 셸에 남은 MYPC</a></li>
+          <li><a href="#해결-remote와-root_url-갱신">해결: remote와 ROOT_URL 갱신</a></li>
+        </ul>
+      </li>
+      <li><a href="#사례-2-helm-upgrade-시간-초과">사례 2: helm upgrade 시간 초과</a>
+        <ul>
+          <li><a href="#증상-context-deadline-exceeded와-두-파드">증상: context deadline exceeded와 두 파드</a></li>
+          <li><a href="#증거-실패한-리비전과-변경된-values">증거: 실패한 리비전과 변경된 values</a></li>
+          <li><a href="#원인-파드-중첩과-파일-잠금-후보">원인: 파드 중첩과 파일 잠금 후보</a></li>
+          <li><a href="#해결-파드-수-조정과-recreate-전환">해결: 파드 수 조정과 Recreate 전환</a></li>
+        </ul>
+      </li>
+      <li><a href="#재발-방지">재발 방지</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Machine Learning Platform Engineering Study 1주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>Mac의 <code class="highlighter-rouge">git push</code>는 LAN IP를, 브라우저는 <code class="highlighter-rouge">localhost</code>를 사용했다. LAN IP가 바뀌어도 브라우저는 열려 있어 push 실패와 서버 장애를 구분해야 했다</li>
+  <li>러너 등록과 실제 CI 잡의 checkout은 클러스터 내부 주소를 사용했다. checkout 주소를 <code class="highlighter-rouge">ROOT_URL</code>과 동일하게 예상했던 설명은 run #1 로그와 달랐다</li>
+  <li>IP를 고치던 <code class="highlighter-rouge">helm upgrade --wait</code>는 새 파드가 준비되지 않아 실패했다. Helm 리비전이 실패해도 values는 이미 바뀌어 있었다</li>
+  <li>Gitea 파드를 <code class="highlighter-rouge">0 → 1</code>개로 조정한 뒤 정상화됐고 교체 전략을 Recreate로 바꿨다.</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="gitea-접속-주체와-주소">Gitea 접속 주체와 주소</h1>
+
+<p>책 3.4.1절에 대응하는 실습을 확장한 운영 기록이다. 책의 GitLab 대신 설치한 Gitea에서 Mac IP 변경과 파드 교체 실패를 연이어 겪었다. <a href="/MLOps-ML-Platform-Engineering-03-04-01-Gitea-Actions-Runner/">3.4.1편</a>의 서버·러너 구성이 전제다.</p>
+
+<p>같은 Gitea라도 접속 주체가 어디에서 실행되는지에 따라 주소가 달라진다. <code class="highlighter-rouge">ROOT_URL</code>은 Gitea가 외부에 알리는 기본 URL이며, 웹에서 만드는 링크와 clone 주소 등에 사용한다. 러너가 서버에 등록할 때 쓰는 <code class="highlighter-rouge">giteaRootURL</code>과는 설정 위치가 다르다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>접속 주체 또는 사용처</th>
+      <th>실행 위치</th>
+      <th>실습에서 쓴 주소</th>
+      <th>설정 위치</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>브라우저</td>
+      <td>Mac</td>
+      <td><code class="highlighter-rouge">http://localhost:30000</code></td>
+      <td>kind <code class="highlighter-rouge">extraPortMappings</code>로 노출</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">git push</code></td>
+      <td>Mac</td>
+      <td><code class="highlighter-rouge">http://192.168.0.38:30000/…</code> → <code class="highlighter-rouge">.78</code>로 수정</td>
+      <td>app-ci의 <code class="highlighter-rouge">git remote</code></td>
+    </tr>
+    <tr>
+      <td>러너 등록과 잡 요청</td>
+      <td>runner 컨테이너</td>
+      <td><code class="highlighter-rouge">http://gitea-http.gitea.svc.cluster.local:3000</code></td>
+      <td><code class="highlighter-rouge">values-runner.yaml</code>의 <code class="highlighter-rouge">giteaRootURL</code></td>
+    </tr>
+    <tr>
+      <td>잡의 <code class="highlighter-rouge">actions/checkout</code></td>
+      <td>dind 안 잡 컨테이너</td>
+      <td>같은 내부 DNS 주소(run #1 실측)</td>
+      <td>러너 등록에 사용한 주소와 일치</td>
+    </tr>
+    <tr>
+      <td>웹의 clone 주소와 생성 링크</td>
+      <td>Gitea가 생성</td>
+      <td><code class="highlighter-rouge">http://192.168.0.38:30000/</code> → <code class="highlighter-rouge">.78</code>로 수정</td>
+      <td><code class="highlighter-rouge">gitea.config.server.DOMAIN</code>·<code class="highlighter-rouge">ROOT_URL</code></td>
+    </tr>
+    <tr>
+      <td>이후 Argo CD의 저장소 조회</td>
+      <td>argocd 파드</td>
+      <td>Mac LAN IP의 <code class="highlighter-rouge">30000</code></td>
+      <td>Application의 <code class="highlighter-rouge">repoURL</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Argo CD는 Git에 선언한 상태와 클러스터 상태를 맞추는 GitOps 도구다. 당시 IP 변경 사건 때는 아직 설치 전이었고, 이후 실습에서는 <code class="highlighter-rouge">repoURL</code>에 Mac LAN IP를 넣었다. <!-- LINK: 3.4.4편 --></p>
+
+<pre><code class="language-mermaid">flowchart LR
+  %% 실제 접속 주소에 따른 두 경로
+  subgraph M[Mac]
+    B[브라우저 localhost:30000]
+    C[git push LAN IP:30000]
+  end
+  K[kind 포트 매핑과 NodePort 30000]
+  S[gitea-http Service 3000]
+  G[Gitea 파드 3000]
+  R[runner 파드]
+  J[dind 안 잡 컨테이너]
+  N[dind 잡 브리지와 파드 네트워크]
+  B --&gt; K
+  C --&gt; K
+  K --&gt; S --&gt; G
+  R --&gt;|내부 DNS로 잡 요청| S
+  J --&gt;|checkout| N --&gt;|내부 DNS의 Service 주소| S
+</code></pre>
+<center><sup>AI를 이용해 직접 그린 도식. Mac의 외부 접근과 러너·잡의 내부 Service 접근 경로</sup></center>
+
+<h2 id="localhost와-checkout-주소">localhost와 checkout 주소</h2>
+
+<p><code class="highlighter-rouge">localhost</code>는 호출하는 프로세스가 속한 네트워크 공간의 루프백 주소다. Mac의 브라우저에서 쓰는 <code class="highlighter-rouge">localhost</code>와 파드 안에서 쓰는 <code class="highlighter-rouge">localhost</code>는 서로 다른 대상을 가리킨다. 잡 컨테이너는 러너 파드와도 별도 네트워크 공간을 가진다. <a href="https://docs.gitea.com/usage/actions/design/#connection-2-job-containers-to-gitea-instance">Gitea Actions 설계 문서</a>도 러너 등록 주소에 루프백을 쓰면 잡의 저장소 접근이 실패할 수 있음을 설명한다.</p>
+
+<p>처음에는 <code class="highlighter-rouge">ROOT_URL</code>을 checkout도 사용한다고 예상했다. 하지만 run #1의 test_code 로그는 내부 주소에서 앱 코드를 받았음을 보여 줬다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># run #1 test_code의 git fetch 결과
+From http://gitea-http.gitea.svc.cluster.local:3000/mlops/gitea-ci-example
+</code></pre></div></div>
+
+<p>이 실행에서 잡 컨테이너는 클러스터 DNS 이름을 해석해 저장소를 가져왔다. checkout은 이 실행에서 성공했다. 러너의 <code class="highlighter-rouge">server_url</code>을 구성하는 정확한 코드 경로는 실습 버전의 소스로 확인하지 못했으므로, 주소 선택은 이 실행의 관찰 결과로 한정한다.</p>
+
+<p>Mac LAN IP를 쓰는 범위는 Mac의 remote, 웹에 표시할 URL, 이후 IP로 등록한 Argo CD <code class="highlighter-rouge">repoURL</code>이다. 내부 주소를 쓰는 러너 설정은 유지했다.</p>
+
+<p><br /></p>
+
+<h1 id="트러블슈팅">트러블슈팅</h1>
+
+<h2 id="사례-1-mac-ip-변경">사례 1: Mac IP 변경</h2>
+
+<h3 id="증상-75초-뒤-실패한-push">증상: 75초 뒤 실패한 push</h3>
+
+<p>Gitea를 설치할 때 Mac IP는 <code class="highlighter-rouge">192.168.0.38</code>이었다. 약 3시간 뒤 같은 공유기에 연결된 상태에서 앱을 push했는데, 75초 정도 기다린 뒤 연결 오류가 났다. 브라우저의 <code class="highlighter-rouge">localhost:30000</code>은 계속 열렸다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 당시 셸에 남아 있던 주소와 실패한 명령</span>
+<span class="nb">echo</span> <span class="s2">"</span><span class="nv">$MYPC</span><span class="s2">"</span>
+<span class="c"># 192.168.0.38</span>
+git push <span class="nt">-u</span> origin main <span class="nt">--force</span>
+
+<span class="c"># 실행 결과</span>
+<span class="c"># fatal: unable to access 'https://192.168.0.38:30000/mlops/gitea-ci-example.git/': Failed to connect to 192.168.0.38 port 30000 after 75005 ms: Couldn't connect to server</span>
+</code></pre></div></div>
+
+<p>이때 remote를 추가하고 바꾸는 과정에서 <code class="highlighter-rouge">https://</code>도 섞였다. 실습 Gitea의 <code class="highlighter-rouge">30000</code>은 HTTP로 노출했으므로 IP와 함께 프로토콜도 고쳐야 했다.</p>
+
+<h3 id="증거-현재-ip와-저장된-주소의-불일치">증거: 현재 IP와 저장된 주소의 불일치</h3>
+
+<p><code class="highlighter-rouge">ipconfig getifaddr</code>는 Mac 인터페이스의 IPv4 주소를 읽는다. 현재 값은 <code class="highlighter-rouge">.78</code>인데 셸 변수와 원격 주소, Gitea 설정은 <code class="highlighter-rouge">.38</code>이었다. 아래 remote 조회는 프로토콜을 HTTP로 고친 뒤에도 옛 IP가 남아 있던 시점이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 현재 Mac IP</span>
+ipconfig getifaddr en0
+<span class="c"># 192.168.0.78</span>
+
+<span class="c"># 앱 저장소의 remote</span>
+git remote <span class="nt">-v</span>
+<span class="c"># origin  http://192.168.0.38:30000/mlops/gitea-ci-example.git (fetch)</span>
+<span class="c"># origin  http://192.168.0.38:30000/mlops/gitea-ci-example.git (push)</span>
+
+<span class="c"># Helm에 저장된 사용자 지정 값</span>
+helm get values <span class="nt">-n</span> gitea gitea | <span class="nb">grep</span> <span class="nt">-E</span> <span class="s1">'DOMAIN|ROOT_URL'</span>
+<span class="c"># DOMAIN: 192.168.0.38</span>
+<span class="c"># ROOT_URL: http://192.168.0.38:30000/</span>
+
+<span class="c"># localhost 경로의 HTTP 응답</span>
+curl <span class="nt">-s</span> <span class="nt">-o</span> /dev/null <span class="nt">-w</span> <span class="s1">'%{http_code}\n'</span> http://localhost:30000
+<span class="c"># 200</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">curl</code>은 HTTP 요청을 보내는 명령이다. <code class="highlighter-rouge">kubectl -n gitea get pod,svc</code>에서도 Gitea는 <code class="highlighter-rouge">1/1 Running</code>, 러너는 <code class="highlighter-rouge">2/2 Running</code>이고 HTTP Service는 <code class="highlighter-rouge">3000:30000/TCP</code>였다. 서버 실행과 localhost 경로는 정상이었지만, push는 옛 LAN IP에 연결하고 있었다.</p>
+
+<p><code class="highlighter-rouge">after 75005 ms</code>는 연결을 맺는 동안 약 75초가 걸렸다는 뜻이다. Mac의 커널 설정을 읽는 <code class="highlighter-rouge">sysctl net.inet.tcp.keepinit</code> 값은 <code class="highlighter-rouge">75000</code>이었고, <a href="https://github.com/apple-oss-distributions/xnu/blob/main/bsd/netinet/tcp_timer.h">Apple XNU 소스</a>는 연결 성립 전 대기 제한을 75초로 정의한다. 관찰된 대기 시간은 이 설정과 부합한다. 당시 패킷을 캡처하지 않아 정확한 재전송 과정까지 확인하지는 못했다.</p>
+
+<p>시간 초과만으로 특정 IP에 기기가 없다고 확정할 수는 없다. 방화벽의 폐기나 경로 문제도 후보가 된다. 즉시 <code class="highlighter-rouge">Connection refused</code>가 나오는 경우는 거부 응답을 받은 것이므로, 목적지와 포트의 수신 상태를 살펴야 한다. 이번 IP 오류의 직접 증거는 <code class="highlighter-rouge">ipconfig</code>와 저장된 주소의 불일치다.</p>
+
+<h3 id="원인-변경된-ip와-셸에-남은-mypc">원인: 변경된 IP와 셸에 남은 MYPC</h3>
+
+<p>셸 변수 <code class="highlighter-rouge">MYPC</code>는 값을 대입한 시점의 문자열을 유지한다. 인터페이스 IP가 바뀌어도 자동으로 갱신되지 않는다. 이 값을 이용해 만든 Git remote와 <code class="highlighter-rouge">ROOT_URL</code>도 옛 IP로 고정돼 있었다.</p>
+
+<p>IP가 <code class="highlighter-rouge">.38 → .78</code>로 바뀐 것은 출력으로 확인했다. 공유기의 DHCP(Dynamic Host Configuration Protocol, 동적 호스트 설정 프로토콜) 재할당을 원인으로 추정했지만, 공유기 임대 기록은 확인하지 않았다.</p>
+
+<h3 id="해결-remote와-root_url-갱신">해결: remote와 ROOT_URL 갱신</h3>
+
+<p>주소를 다시 읽고 remote를 HTTP의 새 IP로 바꿨다. <code class="highlighter-rouge">~/ml-study</code>는 실습 저장소 경로를 줄인 표기다. 원본 앱·차트는 <code class="highlighter-rouge">~/ml-study/chapters/ch03-k8s</code>, 별도 Git 저장소는 <code class="highlighter-rouge">~/ml-study/chapters/app-ci</code>에 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># app-ci에서 현재 주소로 remote 갱신</span>
+<span class="nb">cd</span> ~/ml-study/chapters/app-ci
+<span class="nv">MYPC</span><span class="o">=</span><span class="k">$(</span>ipconfig getifaddr en0<span class="k">)</span>
+git remote set-url origin <span class="s2">"http://</span><span class="nv">$MYPC</span><span class="s2">:30000/mlops/gitea-ci-example.git"</span>
+git remote <span class="nt">-v</span>
+
+<span class="c"># 실행 결과</span>
+<span class="c"># origin  http://192.168.0.78:30000/mlops/gitea-ci-example.git (fetch)</span>
+<span class="c"># origin  http://192.168.0.78:30000/mlops/gitea-ci-example.git (push)</span>
+
+<span class="c"># 실습 저장소의 기존 원격 커밋을 교체한 push</span>
+git push <span class="nt">-u</span> origin main <span class="nt">--force</span>
+
+<span class="c"># 실행 결과 발췌</span>
+<span class="c"># To http://192.168.0.78:30000/mlops/gitea-ci-example.git</span>
+<span class="c"># + 786f1b3...c11f2c2 main → main (forced update)</span>
+<span class="c"># branch 'main' set up to track 'origin/main'.</span>
+</code></pre></div></div>
+
+<p>새 IP로는 인증 정보를 다시 입력했고 push가 성공했다. <code class="highlighter-rouge">--force</code>는 이 실습에서 원격의 기존 커밋을 덮어쓴 옵션이다. 주소를 고치는 데 강제 push가 필요한 것은 아니다.</p>
+
+<p>이후 Gitea가 생성하는 URL도 맞추려고 Helm upgrade를 실행했다. <code class="highlighter-rouge">--reuse-values</code>는 기존 사용자 지정 값을 재사용하면서 새로 준 값을 합치는 옵션이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 기존 값을 유지하고 Gitea의 외부 URL 변경</span>
+helm upgrade gitea gitea <span class="nt">--repo</span> https://dl.gitea.com/charts/ <span class="se">\</span>
+  <span class="nt">--version</span> 12.7.0 <span class="nt">-n</span> gitea <span class="nt">--reuse-values</span> <span class="se">\</span>
+  <span class="nt">--set</span> <span class="s2">"gitea.config.server.DOMAIN=</span><span class="nv">$MYPC</span><span class="s2">"</span> <span class="se">\</span>
+  <span class="nt">--set</span> <span class="s2">"gitea.config.server.ROOT_URL=http://</span><span class="nv">$MYPC</span><span class="s2">:30000/"</span> <span class="se">\</span>
+  <span class="nt">--wait</span>
+</code></pre></div></div>
+
+<p>push는 복구됐지만 이 명령은 5분 뒤 실패했다. 주소 변경이 파드 교체를 일으키면서 <a href="#사례-2-helm-upgrade-시간-초과">두 번째 사례</a>로 이어졌다.</p>
+
+<h2 id="사례-2-helm-upgrade-시간-초과">사례 2: helm upgrade 시간 초과</h2>
+
+<h3 id="증상-context-deadline-exceeded와-두-파드">증상: context deadline exceeded와 두 파드</h3>
+
+<p>Helm이 <code class="highlighter-rouge">Error: UPGRADE FAILED: context deadline exceeded</code>를 출력했다. 파드 목록에는 기존 Gitea와 새 Gitea가 함께 있었고, 새 파드만 재시작을 반복했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># upgrade 실패 후 파드 상태</span>
+kubectl <span class="nt">-n</span> gitea get pod
+
+<span class="c"># 실행 결과</span>
+<span class="c"># NAME                     READY STATUS             RESTARTS      AGE</span>
+<span class="c"># gitea-6799485489-hdd2q    1/1   Running            0             3h31m</span>
+<span class="c"># gitea-7f8865779c-nxvp6    0/1   CrashLoopBackOff   5 (117s ago)  5m56s</span>
+<span class="c"># runner-runner-0           2/2   Running            0             28m</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">CrashLoopBackOff</code>는 컨테이너가 반복해서 종료돼 재시작 간격을 늘리며 기다리는 상태다. 이름의 ReplicaSet 해시와 AGE를 보면 <code class="highlighter-rouge">6799485489</code>가 기존 파드, <code class="highlighter-rouge">7f8865779c</code>가 새 파드였다. Deployment와 ReplicaSet의 연결은 <a href="/MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/">3.3.3편</a>에서 다뤘다.</p>
+
+<h3 id="증거-실패한-리비전과-변경된-values">증거: 실패한 리비전과 변경된 values</h3>
+
+<p>Helm의 리비전(revision)은 릴리스 변경 이력의 번호다. <code class="highlighter-rouge">helm history</code>는 그 번호와 상태를, <code class="highlighter-rouge">helm get values</code>는 릴리스에 저장된 사용자 지정 값을 보여 준다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 릴리스 상태와 저장된 주소를 함께 조회</span>
+helm <span class="nb">history</span> <span class="nt">-n</span> gitea gitea
+
+<span class="c"># 실행 결과 중 리비전·상태·설명</span>
+<span class="c"># 1  deployed  Install complete</span>
+<span class="c"># 2  failed    Upgrade "gitea" failed: context deadline exceeded</span>
+
+helm get values <span class="nt">-n</span> gitea gitea | <span class="nb">grep</span> <span class="nt">-E</span> <span class="s1">'DOMAIN|ROOT_URL'</span>
+<span class="c"># DOMAIN: 192.168.0.78</span>
+<span class="c"># ROOT_URL: http://192.168.0.78:30000/</span>
+</code></pre></div></div>
+
+<p>리비전 2는 실패했지만 values에는 새 주소가 저장돼 있었다. <code class="highlighter-rouge">--wait</code>는 리소스가 준비될 때까지 기다리는 옵션이며, 당시 명령의 기본 timeout은 5분이다. 이 명령에는 실패 시 자동 복구 옵션이 없었다. <strong>대기 실패가 이미 적용한 값을 모두 되돌렸다는 뜻은 아니다.</strong> 옵션 동작은 <a href="https://helm.sh/docs/v3/helm/helm_upgrade/">Helm upgrade 문서</a>를 참고한다.</p>
+
+<p>처음에는 실패한 새 파드를 지웠다. 그러나 ReplicaSet이 같은 설정의 파드를 다시 만들었고, 그 파드도 종료됐다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 새 파드 삭제 후 관찰한 변화</span>
+kubectl <span class="nt">-n</span> gitea delete pod gitea-7f8865779c-nxvp6
+kubectl <span class="nt">-n</span> gitea get pod <span class="nt">-w</span>
+
+<span class="c"># 실행 결과 발췌</span>
+<span class="c"># gitea-6799485489-hdd2q  1/1 Running 0           3h32m</span>
+<span class="c"># gitea-7f8865779c-d8vqm  0/1 Running 0           11s</span>
+<span class="c"># gitea-7f8865779c-d8vqm  0/1 Error   0           14s</span>
+<span class="c"># gitea-7f8865779c-d8vqm  0/1 Running 1 (1s ago)  15s</span>
+</code></pre></div></div>
+
+<h3 id="원인-파드-중첩과-파일-잠금-후보">원인: 파드 중첩과 파일 잠금 후보</h3>
+
+<p>RollingUpdate는 기존 파드를 유지하면서 새 파드로 점진적으로 교체하는 전략이다. Gitea 차트 <code class="highlighter-rouge">12.7.0</code>의 기본값은 <code class="highlighter-rouge">maxSurge: 100%</code>, <code class="highlighter-rouge">maxUnavailable: 0</code>이었다. replica가 1개일 때도 새 파드 한 개를 추가하고, 새 파드가 준비될 때까지 기존 파드를 유지할 수 있다.</p>
+
+<p>두 파드는 같은 PVC의 <code class="highlighter-rouge">/data</code>를 사용했다. <a href="/MLOps-ML-Platform-Engineering-03-04-01-Gitea-Actions-Runner/#단일-파드와-파일-기반-상태">3.4.1편의 파일 기반 상태 구성</a>에는 SQLite DB와 LevelDB 큐가 있다. <a href="https://github.com/google/leveldb/blob/main/doc/index.md#concurrency">LevelDB 문서</a>에 따르면 같은 DB는 한 번에 한 프로세스만 열 수 있고 운영체제 잠금을 사용한다. Gitea의 <code class="highlighter-rouge">queue.TYPE: level</code>은 이 방식의 큐다.</p>
+
+<p>따라서 기존 Gitea가 큐를 연 상태에서 새 Gitea가 같은 큐를 열려 했다는 가설이 성립한다. 기존 파드가 없어진 뒤 새 파드가 바로 Ready가 된 것도 이 가설을 뒷받침한다. 다만 새 파드의 종료 직전 로그에서 잠금 메시지를 직접 확인하지 못해 <strong>LevelDB 잠금을 확정 원인으로 판정하지 않았다.</strong></p>
+
+<p>같은 상황을 다시 조사한다면 새 파드가 종료되기 직전의 로그가 필요하다. <code class="highlighter-rouge">--previous</code>는 해당 컨테이너의 이전 실행 로그를 조회하는 옵션이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 재발 시 새 파드 이름을 넣어 확인할 명령</span>
+kubectl <span class="nt">-n</span> gitea logs <span class="s1">'&lt;new-pod&gt;'</span> <span class="nt">-c</span> gitea <span class="nt">--previous</span> <span class="nt">--tail</span><span class="o">=</span>30
+</code></pre></div></div>
+
+<h3 id="해결-파드-수-조정과-recreate-전환">해결: 파드 수 조정과 Recreate 전환</h3>
+
+<p>Gitea Deployment를 0개로 줄여 기존·새 파드를 모두 내린 뒤 1개로 복구했다. 새 설정의 파드는 11초에 <code class="highlighter-rouge">1/1 Running</code>이 됐다. 러너는 계속 실행 중이었다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Gitea 파드를 모두 종료</span>
+kubectl <span class="nt">-n</span> gitea scale deploy gitea <span class="nt">--replicas</span><span class="o">=</span>0
+<span class="c"># deployment.apps/gitea scaled</span>
+kubectl <span class="nt">-n</span> gitea get pod <span class="nt">-w</span>
+<span class="c"># runner-runner-0  2/2 Running 0 34m</span>
+
+<span class="c"># 새 설정의 파드 하나만 실행</span>
+kubectl <span class="nt">-n</span> gitea scale deploy gitea <span class="nt">--replicas</span><span class="o">=</span>1
+<span class="c"># deployment.apps/gitea scaled</span>
+kubectl <span class="nt">-n</span> gitea get pod <span class="nt">-w</span>
+<span class="c"># gitea-7f8865779c-jzbxs  0/1 Running 0 6s</span>
+<span class="c"># gitea-7f8865779c-jzbxs  1/1 Running 0 11s</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">get pod -w</code>는 계속 변경을 관찰하므로 결과를 본 뒤 <code class="highlighter-rouge">Ctrl-C</code>로 종료하고 다음 명령을 실행한다. 기존 파드 하나만 지우는 대신 전체 replica 수를 0으로 만든 것은, 롤링 중인 기존 ReplicaSet이 파드를 다시 만드는 상황까지 함께 끝내기 위해서였다.</p>
+
+<p>그 뒤 교체 전략을 Recreate로 바꿨다. Recreate는 기존 파드를 내린 뒤 새 파드를 생성하는 전략이다. 단일 Gitea가 잠시 중단되는 대신 교체 중 두 프로세스가 같은 파일 상태에 접근하는 상황을 피한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 다음 교체부터 Recreate 적용</span>
+helm upgrade gitea gitea <span class="nt">--repo</span> https://dl.gitea.com/charts/ <span class="se">\</span>
+  <span class="nt">--version</span> 12.7.0 <span class="nt">-n</span> gitea <span class="nt">--reuse-values</span> <span class="se">\</span>
+  <span class="nt">--set</span> strategy.type<span class="o">=</span>Recreate <span class="nt">--set</span> strategy.rollingUpdate<span class="o">=</span>null <span class="se">\</span>
+  <span class="nt">--wait</span> <span class="nt">--timeout</span> 8m
+
+<span class="c"># 실행 결과 발췌</span>
+<span class="c"># Release "gitea" has been upgraded. Happy Helming!</span>
+<span class="c"># NAME: gitea</span>
+<span class="c"># NAMESPACE: gitea</span>
+<span class="c"># STATUS: deployed</span>
+<span class="c"># REVISION: 3</span>
+</code></pre></div></div>
+
+<p>리비전 3이 <code class="highlighter-rouge">deployed</code>가 됐고, 후속 조회에서 Deployment 전략도 <code class="highlighter-rouge">{"type":"Recreate"}</code>였다. 메모리 세션을 쓰므로 파드 교체 뒤 웹에는 다시 로그인했다. 업데이트 전략 일반론은 <a href="/dev/Dev-Kubernetes-Deployment-Failure-1/">Deployment 교체 전략</a>과 연결된다.</p>
+
+<p>실제 명령에는 <code class="highlighter-rouge">strategy.rollingUpdate=null</code>도 들어갔다. 쿠버네티스 API는 Recreate와 <code class="highlighter-rouge">rollingUpdate</code> 필드를 함께 보내면 <a href="https://github.com/kubernetes/kubernetes/blob/v1.29.14/pkg/apis/apps/validation/validation.go#L466-L480">검증에서 거부한다</a>. 다만 <strong>이 차트 12.7.0은 전략이 RollingUpdate일 때만 해당 필드를 렌더한다.</strong> <code class="highlighter-rouge">helm template</code>에 <code class="highlighter-rouge">strategy.type=Recreate</code>만 넘겨도 생성된 Deployment에는 <code class="highlighter-rouge">type: Recreate</code>만 있었다. 이 버전의 템플릿은 <code class="highlighter-rouge">type</code> 설정만으로 두 필드가 함께 생성되는 상황을 막는다.</p>
+
+<h2 id="재발-방지">재발 방지</h2>
+
+<p>주소 변경과 파드 교체를 함께 점검해야 한다. 이번 복구에서 직접 확인한 조치는 remote·URL 갱신과 replica 조정, Recreate 전환이다. DHCP 예약, Argo CD의 내부 주소 전환, <code class="highlighter-rouge">host.docker.internal</code> 대체는 이 환경에서 시험하지 않았다.</p>
+
+<ul>
+  <li>주소를 쓰는 명령 직전에 <code class="highlighter-rouge">MYPC</code>를 다시 읽고 빈 값이면 인터페이스부터 확인한다. <code class="highlighter-rouge">networksetup -listallhardwareports</code>는 Mac의 하드웨어 포트와 인터페이스 이름을 나열한다</li>
+  <li>집 공유기에서는 DHCP 예약으로 주소 변화를 줄이는 방법을 검토할 수 있다. 다른 네트워크로 이동할 때는 주소를 다시 확인한다</li>
+  <li>IP 기반 <code class="highlighter-rouge">repoURL</code>을 쓴 Argo CD도 변경 대상이다. 클러스터 내부 Service 주소를 사용하면 Mac LAN IP에 대한 의존성을 줄일 수 있다. 이후 실습은 LAN IP를 사용했다. <!-- LINK: 3.4.4편 --></li>
+  <li><code class="highlighter-rouge">host.docker.internal</code> 같은 이름을 쓰려면 Mac·파드·잡 각각에서 이름 해석과 접근을 확인해야 한다</li>
+  <li>파일 상태를 공유하는 단일 파드 앱은 교체 중 중첩 실행을 허용할 수 있는지 검토하고 전략을 정한다. 이번 구성은 Recreate로 바꿨다</li>
+  <li><code class="highlighter-rouge">--wait</code>가 실패하면 <code class="highlighter-rouge">helm history</code>, <code class="highlighter-rouge">helm get values</code>, <code class="highlighter-rouge">kubectl get pod</code>를 함께 확인한다. 파드를 삭제하기 전에는 ReplicaSet 해시와 AGE로 대상을 구분한다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>첫 문제는 Mac의 접속 주소가 낡은 것이었다. 두 번째 문제는 그 주소를 바꾸는 작업이 파드 교체를 일으키면서 나타났다. 네트워크 설정 변경도 애플리케이션의 상태 저장 방식과 배포 전략에 영향을 받을 수 있다.</p>
+
+<p>로컬 ML 플랫폼에도 Mac, 파드, 잡 컨테이너, GitOps 도구가 각자의 주소를 가진다. 접속 주체와 설정 위치를 표로 관리하고, 변경 후에는 설정값과 실제 실행 상태를 함께 확인하는 것이 운영의 기본이다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://docs.gitea.com/usage/actions/design/">Gitea Actions 네트워크 설계</a></li>
+  <li><a href="https://docs.gitea.com/administration/config-cheat-sheet/">Gitea 설정</a></li>
+  <li><a href="https://dl.gitea.com/charts/gitea-12.7.0.tgz">Gitea 차트 12.7.0</a></li>
+  <li><a href="https://helm.sh/docs/v3/helm/helm_upgrade/">Helm 3 upgrade</a></li>
+  <li><a href="https://github.com/google/leveldb/blob/main/doc/index.md#concurrency">LevelDB 동시 접근</a></li>
+  <li><a href="https://github.com/kubernetes/kubernetes/blob/v1.29.14/pkg/apis/apps/validation/validation.go#L466-L480">Kubernetes 1.29.14 Deployment 전략 검증</a></li>
+  <li><a href="https://github.com/apple-oss-distributions/xnu/blob/main/bsd/netinet/tcp_timer.h">Apple XNU TCP 타이머</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#gitea" class="page__taxonomy-item" rel="tag">Gitea</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#helm" class="page__taxonomy-item" rel="tag">Helm</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kind" class="page__taxonomy-item" rel="tag">kind</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#machine-learning-platform-engineering-study-week-1" class="page__taxonomy-item" rel="tag">Machine-Learning-Platform-Engineering-Study-Week-1</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#machine-learning-platform-engineering-study" class="page__taxonomy-item" rel="tag">Machine-Learning-Platform-Engineering-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#rollingupdate" class="page__taxonomy-item" rel="tag">RollingUpdate</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#troubleshooting" class="page__taxonomy-item" rel="tag">Troubleshooting</a>
+    
+    </span>
+  </p>
+
+
+
+
+  <p class="page__taxonomy">
+  <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 분류: </strong>
+  <span itemprop="keywords"><a href="/categories/MLOps/#mlops-foundation" class="page__taxonomy-item" rel="tag">MLOps › 인프라 기반</a><a href="/categories/Kubernetes/#k8s-operations" class="page__taxonomy-item" rel="tag">Kubernetes › 운영</a><span class="page__taxonomy-item page__nature">스터디</span></span>
+</p>
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-25">October 25, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BGitea%5D+%EB%A8%B8%EC%8B%A0%EB%9F%AC%EB%8B%9D+%ED%94%8C%EB%9E%AB%ED%8F%BC+%EC%97%94%EC%A7%80%EB%8B%88%EC%96%B4%EB%A7%81%3A+K8s%EC%99%80+CI%2FCD+-+3.4.2.+%EC%A3%BC%EC%86%8C+%EC%84%A4%EA%B3%84%EC%99%80+%EC%9A%B4%EC%98%81+%ED%8A%B8%EB%9F%AC%EB%B8%94%EC%8A%88%ED%8C%85%20https%3A%2F%2Fsirzzang.github.io%2F%2FMLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2FMLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2FMLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2FMLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting%2F?color=green&label=hits&size=small" alt="hit count">
+      
+  <nav class="pagination">
+    
+      <a href="/MLOps-ML-Platform-Engineering-03-04-01-Gitea-Actions-Runner/" class="pagination--pager" title="[Gitea] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.4.1. Gitea와 Actions 러너
+">이전</a>
+    
+    
+      <a href="#" class="pagination--pager disabled">다음</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/MLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>

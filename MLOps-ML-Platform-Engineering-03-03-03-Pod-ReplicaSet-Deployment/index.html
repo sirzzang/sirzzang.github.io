@@ -1,0 +1,1091 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.3. Pod, ReplicaSet, Deployment - Eraser’s StudyLog</title>
+<meta name="description" content="hello-joker를 Pod, ReplicaSet, Deployment로 띄워 복제 수 유지와 롤링 업데이트를 관찰하고, port-forward가 파드에 닿는 경로를 확인해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.3. Pod, ReplicaSet, Deployment">
+<meta property="og:url" content="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/">
+
+
+  <meta property="og:description" content="hello-joker를 Pod, ReplicaSet, Deployment로 띄워 복제 수 유지와 롤링 업데이트를 관찰하고, port-forward가 파드에 닿는 경로를 확인해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-10-24T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-10-25T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/MLOps/" >MLOps</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS·Infra</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Programming/" >Programming</a>
+            </li><li class="masthead__menu-item">
+              <a href="/series/" >Series</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.3. Pod, ReplicaSet, Deployment">
+    <meta itemprop="description" content="hello-joker를 Pod, ReplicaSet, Deployment로 띄워 복제 수 유지와 롤링 업데이트를 관찰하고, port-forward가 파드에 닿는 경로를 확인해 보자.">
+    <meta itemprop="datePublished" content="2026-10-24T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-10-25T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.3. Pod, ReplicaSet, Deployment
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-10-24T00:00:00+09:00">2026년 10월 24일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  8 분 소요
+
+
+            
+          </p>
+          
+          <p class="page__context"><a href="/categories/MLOps/#mlops-foundation">MLOps › 인프라 기반</a><span class="page__context-sep">·</span><a href="/categories/Kubernetes/#k8s-workload">Kubernetes › 워크로드 설정</a><span class="page__context-sep">·</span><span class="page__nature">스터디</span></p><p class="page__series"><a href="/series/#ml-platform-engineering-k8s-cicd">시리즈 · 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD</a> (6 / 8)<span class="page__series-sep">·</span><a href="/MLOps-ML-Platform-Engineering-03-03-02-Kind-Node-Internals/" title="[kind] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.2. kind 노드 내부: kindnet, 네임스페이스, containerd">← 이전 편</a><span class="page__series-sep">·</span><a href="/MLOps-ML-Platform-Engineering-03-03-04-Service-Networking/" title="[Kubernetes] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.4. Service와 클러스터 안 트래픽 경로">다음 편 →</a></p>
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#오브젝트-관계-지도">오브젝트 관계 지도</a>
+    <ul>
+      <li><a href="#설정-참조-파일의-오류">설정 참조 파일의 오류</a></li>
+    </ul>
+  </li>
+  <li><a href="#pod">Pod</a>
+    <ul>
+      <li><a href="#매니페스트와-실행">매니페스트와 실행</a></li>
+      <li><a href="#port-forward-연결과-종료">port-forward 연결과 종료</a></li>
+      <li><a href="#port-forward-동작-원리">port-forward 동작 원리</a></li>
+    </ul>
+  </li>
+  <li><a href="#replicaset">ReplicaSet</a>
+    <ul>
+      <li><a href="#매니페스트의-선택-조건과-템플릿">매니페스트의 선택 조건과 템플릿</a></li>
+      <li><a href="#파드-재생성과-복제-수-확장">파드 재생성과 복제 수 확장</a></li>
+    </ul>
+  </li>
+  <li><a href="#deployment">Deployment</a>
+    <ul>
+      <li><a href="#생성과-replicaset-확인">생성과 ReplicaSet 확인</a></li>
+      <li><a href="#이미지-변경과-롤링-업데이트">이미지 변경과 롤링 업데이트</a></li>
+      <li><a href="#롤백과-정리">롤백과 정리</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Machine Learning Platform Engineering Study 1주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>Pod는 컨테이너 실행 단위, ReplicaSet은 파드 복제 수 유지 단위, Deployment는 ReplicaSet을 통한 배포와 업데이트 단위다</li>
+  <li>단독 파드를 실행한 뒤 ReplicaSet의 파드 재생성과 3개에서 4개로의 확장을 확인했다</li>
+  <li>Deployment의 이미지 태그를 <code class="highlighter-rouge">v1</code>에서 <code class="highlighter-rouge">v2</code>로 바꾸자 새 ReplicaSet이 늘고 기존 ReplicaSet이 줄었다. 롤백에서는 기존 <code class="highlighter-rouge">v1</code> ReplicaSet이 다시 확장됐다</li>
+  <li><code class="highlighter-rouge">kubectl port-forward</code>는 API 서버와 노드의 스트리밍 경로를 통해 선택한 파드의 TCP 포트에 연결한다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="오브젝트-관계-지도">오브젝트 관계 지도</h1>
+
+<p>책 3.3.3절에 대응하는 실습이다. <a href="/MLOps-ML-Platform-Engineering-03-03-01-Kind-Cluster-API-Access/">3.3.1편</a>에서 만든 kind 클러스터에 hello-joker를 실행한다. 실습 위치는 <code class="highlighter-rouge">~/ml-study/chapters/ch03-k8s</code>로, 실습 저장소 경로를 줄인 표기다.</p>
+
+<p>매니페스트(manifest)는 쿠버네티스 오브젝트의 원하는 상태를 선언한 파일이다. 같은 앱을 실행해도 어떤 오브젝트에 선언하는지에 따라 파드 수와 업데이트를 관리하는 주체가 달라진다.</p>
+
+<p><img src="https://sirzzang.github.io//assets/images/mlpe-ch03-manifest-map.png" alt="ch03 매니페스트의 선택 관계와 소유 관계" class="align-center" /></p>
+<center><sup>AI를 이용해 직접 그린 도식. ch03 매니페스트에서 점선은 레이블 선택, 가는 실선은 오브젝트에 적힌 참조를 나타낸다.</sup></center>
+
+<p>지도에서 <code class="highlighter-rouge">app=fast-api</code>는 레이블(label), 이를 조건으로 오브젝트를 찾는 설정은 셀렉터(selector)다. <code class="highlighter-rouge">ownerReferences</code>는 자식 오브젝트에 저장되는 소유자 참조다. 그래서 지도에서는 파드 → ReplicaSet → Deployment 방향으로 소유자를 가리킨다. Service는 셀렉터로 통신 대상을 찾는다. Service의 포트와 요청 경로는 <a href="/MLOps-ML-Platform-Engineering-03-03-04-Service-Networking/">3.3.4편</a>에서 확인한다.</p>
+
+<h2 id="설정-참조-파일의-오류">설정 참조 파일의 오류</h2>
+
+<p>지도의 아래쪽에는 ConfigMap과 Secret도 있다. ConfigMap은 일반 설정 데이터를, Secret은 비밀번호 같은 민감 데이터를 전달하는 오브젝트다. 책 3.3.5절의 이 예제는 실행하지 않았고, 파일을 읽어 참조 오류를 확인했다.</p>
+
+<p><code class="highlighter-rouge">k8s/pod-using-secret.yaml</code>에는 두 문제가 있다.</p>
+
+<ul>
+  <li><code class="highlighter-rouge">test-secret</code>을 <code class="highlighter-rouge">configMapKeyRef</code>로 찾는다. Secret을 참조하려면 <code class="highlighter-rouge">secretKeyRef</code>를 사용해야 한다</li>
+  <li>파드가 찾는 키는 <code class="highlighter-rouge">database-username</code>과 <code class="highlighter-rouge">database-password</code>인데, <code class="highlighter-rouge">k8s/secret.yaml</code>의 키는 <code class="highlighter-rouge">database_username</code>과 <code class="highlighter-rouge">database_password</code>다</li>
+</ul>
+
+<p>참조할 오브젝트의 종류와 키 이름을 모두 맞춰야 한다. 설정 주입 방식은 <a href="/kubernetes/Kubernetes-Pod-Volume-04-ConfigMap-Secret-DownwardAPI-Projected/">ConfigMap과 Secret 참조</a>에서 다뤘다.</p>
+
+<p><br /></p>
+
+<h1 id="pod">Pod</h1>
+
+<p>파드(Pod)는 쿠버네티스에서 컨테이너를 실행하는 가장 작은 배포 단위다. 하나 이상의 컨테이너가 네트워크 네임스페이스를 공유하고, 볼륨을 함께 마운트할 수 있다. 이번 파드는 FastAPI 앱 컨테이너 하나를 실행한다.</p>
+
+<h2 id="매니페스트와-실행">매니페스트와 실행</h2>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># k8s/pod.yaml: hello-joker 컨테이너 하나를 실행한다</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">joker</span>
+  <span class="na">labels</span><span class="pi">:</span>
+    <span class="na">app</span><span class="pi">:</span> <span class="s">fast-api</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">containers</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">hello-joker</span>
+      <span class="na">image</span><span class="pi">:</span> <span class="s">&lt;dockerhub-user&gt;/hello-joker:v1</span>
+      <span class="na">ports</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">containerPort</span><span class="pi">:</span> <span class="s">8083</span>
+</code></pre></div></div>
+
+<p>이미지는 <a href="/MLOps-ML-Platform-Engineering-03-02-02-Docker-Multi-Arch-Build-Push/">3.2.2편</a>에서 만든 공개 멀티 플랫폼 이미지다. M1 Mac의 kind 노드는 arm64이므로 노드 안 containerd가 목록에서 <code class="highlighter-rouge">linux/arm64</code> 이미지를 선택한다. <code class="highlighter-rouge">containerPort</code>는 앱의 수신 포트를 선언한다. 실제 소켓은 진입 스크립트의 <code class="highlighter-rouge">uvicorn --host 0.0.0.0 --port 8083</code>이 연다.</p>
+
+<p><code class="highlighter-rouge">kubectl</code>은 쿠버네티스 API를 호출하는 CLI다. <code class="highlighter-rouge">create -f</code>로 파일의 오브젝트를 생성하고, <code class="highlighter-rouge">get -w</code>로 상태 변화를 계속 관찰한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 생성 후 상태 변화 관찰</span>
+kubectl create <span class="nt">-f</span> k8s/pod.yaml
+kubectl get pod <span class="nt">-w</span>
+
+<span class="c"># 실행 결과</span>
+NAME    READY   STATUS              RESTARTS   AGE
+joker   0/1     ContainerCreating   0          15s
+joker   1/1     Running             0          21s
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">kubectl describe</code>는 상세 상태와 이벤트를 보여 준다. <code class="highlighter-rouge">joker</code>는 <code class="highlighter-rouge">ml-study-control-plane</code>에 배치됐고, 파드 IP는 <code class="highlighter-rouge">10.244.0.7</code>이었다. 이벤트는 이미지 pull → 컨테이너 생성 → 시작 순서였다.</p>
+
+<p><code class="highlighter-rouge">kubectl exec</code>는 컨테이너 안에서 명령을 실행한다. <code class="highlighter-rouge">env</code>로 환경변수를 보니 <code class="highlighter-rouge">PYTHONPATH=/app</code>과 <code class="highlighter-rouge">KUBERNETES_SERVICE_HOST=10.96.0.1</code> 등이 있었다. <code class="highlighter-rouge">ENVIRONMENT</code> 변수는 없었다. Dockerfile에는 <code class="highlighter-rouge">ENV PYTHONPATH</code>만 있고, 파드에도 별도 <code class="highlighter-rouge">env</code> 설정이 없다. 환경변수 설정 방법은 <a href="/kubernetes/Kubernetes-Application-Config-01-Command-Args-Env/">컨테이너 환경변수</a>에서 다뤘다.</p>
+
+<p><code class="highlighter-rouge">kubectl logs</code>는 컨테이너의 로그를 조회한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 앱이 실제로 수신하는 주소와 포트 확인</span>
+kubectl logs joker
+
+<span class="c"># 실행 결과</span>
+INFO:     Started server process <span class="o">[</span>11]
+INFO:     Waiting <span class="k">for </span>application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8083 <span class="o">(</span>Press CTRL+C to quit<span class="o">)</span>
+</code></pre></div></div>
+
+<h2 id="port-forward-연결과-종료">port-forward 연결과 종료</h2>
+
+<p><code class="highlighter-rouge">kubectl port-forward</code>는 로컬 TCP 포트로 들어온 연결을 파드의 포트에 전달하는 명령이다. <code class="highlighter-rouge">curl</code>은 HTTP 요청을 보내고, <code class="highlighter-rouge">jq</code>는 JSON 출력을 읽기 좋게 정렬한다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Mac의 8080 포트에서 파드의 8083 포트로 전달</span>
+kubectl port-forward joker 8080:8083 &amp;
+
+<span class="c"># 다른 터미널에서 앱 호출</span>
+curl <span class="nt">-s</span> localhost:8080 | jq
+
+<span class="c"># 실행 결과</span>
+<span class="o">{</span>
+  <span class="s2">"random_joke"</span>: <span class="s2">"I went to a street where the houses were numbered 8k, 16k, 32k, 64k, 128k, 256kand 512k. It was a trip down Memory Lane."</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>스터디 노트에 책의 port-forward 명령 포트가 잘못 적혀 있다는 메모가 있다. 이 앱에서 <code class="highlighter-rouge">8083</code>이 맞다는 근거는 진입 스크립트, Uvicorn 로그, <code class="highlighter-rouge">8080:8083</code>으로 받은 응답이다. <strong>파드를 대상으로 지정하면 앱이 듣는 포트로 연결하고, Service를 지정하면 Service의 <code class="highlighter-rouge">port</code>를 대응하는 <code class="highlighter-rouge">targetPort</code>로 해석한다.</strong> <a href="https://kubernetes.io/docs/reference/kubectl/generated/kubectl_port-forward/">kubectl 명령 문서</a>에도 Service 포트를 이용하는 예제가 있다.</p>
+
+<p>백그라운드 실행에서도 포워딩 로그는 같은 터미널에 출력됐다. 로그를 파일로 보낼 때는 다음과 같이 리다이렉션할 수 있다. <code class="highlighter-rouge">jobs</code>는 현재 셸의 작업 목록을 보여 주고, <code class="highlighter-rouge">kill %1</code>은 그 목록의 1번 작업에 종료 신호를 보낸다. <code class="highlighter-rouge">lsof</code>는 프로세스가 연 파일과 소켓을 조회하는 도구다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 로그를 파일에 저장하는 실행 예</span>
+kubectl port-forward pod/joker 8080:8083 <span class="o">&gt;</span> /tmp/pf.log 2&gt;&amp;1 &amp;
+
+<span class="c"># 작업 번호를 확인하고 해당 포워딩 종료</span>
+<span class="nb">jobs
+kill</span> %1
+
+<span class="c"># 8080 포트를 사용하는 프로세스 확인</span>
+lsof <span class="nt">-i</span> :8080
+</code></pre></div></div>
+
+<p>실습에서는 포워딩 작업을 직접 종료한 다음 <code class="highlighter-rouge">kubectl delete pod joker</code>로 파드를 지웠다. 파드 삭제 시 포워딩 프로세스가 어떻게 끝나는지는 따로 시험하지 않았다. 공식 명령 문서는 선택한 파드가 종료되면 세션이 끝나므로 명령을 다시 실행해야 한다고 설명한다.</p>
+
+<h2 id="port-forward-동작-원리">port-forward 동작 원리</h2>
+
+<p>포워딩은 API 서버의 <code class="highlighter-rouge">pods/joker/portforward</code> 하위 리소스에 요청하면서 시작된다. 기존 SPDY 경로의 POST 요청에는 역할 기반 접근 제어(RBAC)에서 <code class="highlighter-rouge">pods/portforward</code>의 <code class="highlighter-rouge">create</code> 권한이 필요하다. API 서버는 파드가 배치된 노드의 kubelet으로 요청을 넘긴다. kubelet은 컨테이너 런타임 인터페이스(CRI)를 통해 스트리밍 URL을 얻고, 그 URL로 연결을 프록시한다. v1.29.14의 <a href="https://github.com/kubernetes/kubernetes/blob/v1.29.14/pkg/kubelet/server/server.go"><code class="highlighter-rouge">getPortForward</code>와 <code class="highlighter-rouge">proxyStream</code></a>에 이 흐름이 있다.</p>
+
+<p>노드의 containerd는 파드 샌드박스의 네트워크 네임스페이스 안에서 <code class="highlighter-rouge">localhost:8083</code>에 TCP로 접속하고, 연결 양쪽의 바이트를 복사한다. 실습 노드의 containerd 2.0.2도 <a href="https://github.com/containerd/containerd/blob/v2.0.2/internal/cri/server/sandbox_portforward_linux.go">이 구현</a>을 사용한다.</p>
+
+<pre><code class="language-mermaid">sequenceDiagram
+    %% 연결 설정 후 요청 데이터가 지나는 경로
+    participant C as curl
+    participant K as Mac의 kubectl
+    participant A as API 서버
+    participant L as 노드 kubelet
+    participant R as containerd 스트리밍 서버
+    participant P as 파드 netns의 앱
+    K-&gt;&gt;A: portforward 연결 요청
+    A-&gt;&gt;L: 파드가 있는 노드로 프록시
+    L-&gt;&gt;R: CRI로 받은 스트리밍 URL에 프록시
+    C-&gt;&gt;K: localhost:8080에 HTTP 요청
+    K-&gt;&gt;A: 연결 안의 데이터 스트림
+    A-&gt;&gt;L: 데이터 중계
+    L-&gt;&gt;R: 데이터 중계
+    R-&gt;&gt;P: netns 안 localhost:8083에 TCP 연결
+    P--&gt;&gt;C: 같은 경로를 역으로 거쳐 응답
+</code></pre>
+<center><sup>AI를 이용해 직접 그린 도식. port-forward의 연결 설정과 요청 데이터 중계 경로.</sup></center>
+
+<p>여기서 SPDY와 WebSocket은 <strong>kubectl과 서버 사이에서 데이터를 운반하는 방식</strong>이다. SPDY는 한 연결 안에서 여러 논리 스트림을 다중화하는 프로토콜이다. WebSocket은 HTTP 업그레이드로 시작해 양방향 메시지를 주고받는 프로토콜이다. Kubernetes의 port-forward 전환 구현은 SPDY 프레임을 WebSocket으로 터널링한다. 로컬 TCP 연결마다 데이터 스트림과 오류 스트림 한 쌍을 사용하는 구조는 유지된다. <a href="https://www.kubernetes.dev/resources/keps/4006/">KEP-4006</a></p>
+
+<p><code class="highlighter-rouge">PortForwardWebsockets</code>는 서버 v1.30에서 도입됐고, v1.31부터 기본 활성화됐다. kubectl도 v1.31부터 WebSocket을 기본 시도한다. v1.35.2의 <a href="https://github.com/kubernetes/kubectl/blob/v0.35.2/pkg/cmd/portforward/portforward.go">클라이언트 구현</a>은 업그레이드 실패 등의 조건에서 SPDY로 폴백한다. <a href="https://kubernetes.io/blog/2024/08/20/websockets-transition/">전환 안내</a></p>
+
+<p>2026-10-24에 조회한 로컬 kubectl은 v1.35.2이고 실습 서버는 v1.29.14다. 이 서버 버전과 구현을 대조하면 SPDY 경로로 연결되는 조건이다. 다만 실습 당시의 클라이언트 버전과 협상 로그는 남아 있지 않아 당시 폴백 과정을 직접 확인하지는 못했다. 이 버전 조합은 공식 지원 범위인 API 서버 기준 ±1 마이너 버전도 벗어난다. <a href="https://kubernetes.io/releases/version-skew-policy/#kubectl">버전 차이 지원 정책</a></p>
+
+<p>이 경로는 Service의 가상 IP와 kube-proxy 규칙을 통과하지 않는다. <code class="highlighter-rouge">svc/</code>나 <code class="highlighter-rouge">deploy/</code>를 지정해도 시작할 때 파드 하나를 선택하며, 여러 파드로 부하를 분산하거나 교체된 파드에 자동으로 재연결하지 않는다. kind에서는 <a href="/MLOps-ML-Platform-Engineering-03-03-01-Kind-Cluster-API-Access/">3.3.1편의 API 서버 접근 경로</a>를 사용하므로 앱 포트를 위한 <code class="highlighter-rouge">extraPortMappings</code>가 없어도 호출할 수 있다.</p>
+
+<p>디버깅에 필요한 핵심은 로컬 포트, 선택한 파드, API 서버를 통과하는 TCP 연결이다. 프록시 설정과 스트리밍 제약은 <a href="/kubernetes/Kubernetes-Kubeconfig-03/#proxy-url">kubeconfig의 proxy-url</a>에 정리했다.</p>
+
+<p><br /></p>
+
+<h1 id="replicaset">ReplicaSet</h1>
+
+<p>레플리카셋(ReplicaSet)은 셀렉터에 맞는 파드의 수를 선언한 복제 수에 맞추는 오브젝트다. 컨트롤러가 현재 상태와 원하는 상태를 비교해 부족한 파드를 만들거나 초과한 파드를 지운다.</p>
+
+<h2 id="매니페스트의-선택-조건과-템플릿">매니페스트의 선택 조건과 템플릿</h2>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># k8s/replicaset.yaml: app=fast-api 파드 3개 유지</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">apps/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">ReplicaSet</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">joker-replicaset</span>
+  <span class="na">labels</span><span class="pi">:</span>
+    <span class="na">app</span><span class="pi">:</span> <span class="s">fast-api</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">replicas</span><span class="pi">:</span> <span class="s">3</span>
+  <span class="na">selector</span><span class="pi">:</span>
+    <span class="na">matchLabels</span><span class="pi">:</span>
+      <span class="na">app</span><span class="pi">:</span> <span class="s">fast-api</span>
+  <span class="na">template</span><span class="pi">:</span>
+    <span class="na">metadata</span><span class="pi">:</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">joker</span>
+      <span class="na">labels</span><span class="pi">:</span>
+        <span class="na">app</span><span class="pi">:</span> <span class="s">fast-api</span>
+    <span class="na">spec</span><span class="pi">:</span>
+      <span class="na">containers</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">hello-joker</span>
+          <span class="na">image</span><span class="pi">:</span> <span class="s">&lt;dockerhub-user&gt;/hello-joker:v1</span>
+          <span class="na">ports</span><span class="pi">:</span>
+            <span class="pi">-</span> <span class="na">containerPort</span><span class="pi">:</span> <span class="s">8083</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">selector.matchLabels</code>는 관리할 파드의 조건이고, <code class="highlighter-rouge">template</code>은 새 파드를 만들 때 사용할 명세다. 템플릿의 레이블이 셀렉터와 일치해야 한다. <code class="highlighter-rouge">template.metadata.name</code>이 <code class="highlighter-rouge">joker</code>여도 실제 생성되는 이름에는 ReplicaSet 이름과 접미사가 붙는다.</p>
+
+<p>공식 문서에 따르면 같은 네임스페이스에서 셀렉터에 맞고 다른 컨트롤러가 소유하지 않는 파드는 ReplicaSet이 입양할 수 있다. 지도에서 단독 <code class="highlighter-rouge">joker</code> 파드가 ReplicaSet으로 향하는 선이 이 경우다. 실습에서는 단독 파드를 먼저 삭제했으므로 입양 동작은 시험하지 않았다. <a href="https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/#how-a-replicaset-works">ReplicaSet의 파드 소유 관계</a></p>
+
+<h2 id="파드-재생성과-복제-수-확장">파드 재생성과 복제 수 확장</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># ReplicaSet 생성과 복제 수 확인</span>
+kubectl create <span class="nt">-f</span> k8s/replicaset.yaml
+kubectl get replicasets,pod <span class="nt">-owide</span>
+
+<span class="c"># 실행 결과 중 ReplicaSet</span>
+NAME                              DESIRED   CURRENT   READY   AGE   CONTAINERS    IMAGES                          SELECTOR
+replicaset.apps/joker-replicaset   3         3         3       8s    hello-joker   &lt;dockerhub-user&gt;/hello-joker:v1   <span class="nv">app</span><span class="o">=</span>fast-api
+
+<span class="c"># 파드 하나 삭제</span>
+kubectl delete pod joker-replicaset-hmfbp
+</code></pre></div></div>
+
+<p>다른 터미널에서 <code class="highlighter-rouge">kubectl get pod -owide -w</code>로 관찰하니 삭제한 파드가 <code class="highlighter-rouge">Terminating</code>으로 바뀌는 동안 <code class="highlighter-rouge">joker-replicaset-fjncn</code>이 새로 생성됐다. 새 파드는 1초 뒤 <code class="highlighter-rouge">Running</code>이 됐고 IP는 <code class="highlighter-rouge">10.244.0.11</code>이었다. 파드 이름과 IP가 바뀌면서 복제 수 3개를 유지했다.</p>
+
+<p><code class="highlighter-rouge">kubectl scale</code>은 오브젝트의 원하는 복제 수를 변경하는 명령이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 원하는 복제 수를 4개로 변경</span>
+kubectl scale replicaset joker-replicaset <span class="nt">--replicas</span> 4
+
+<span class="c"># 실행 결과</span>
+replicaset.apps/joker-replicaset scaled
+</code></pre></div></div>
+
+<p>네 번째 파드 <code class="highlighter-rouge">joker-replicaset-vm6bg</code>가 생성됐고, 조회 결과 <code class="highlighter-rouge">DESIRED</code>, <code class="highlighter-rouge">CURRENT</code>, <code class="highlighter-rouge">READY</code>가 모두 4였다. 실습을 마친 뒤 <code class="highlighter-rouge">kubectl delete replicasets joker-replicaset</code>을 실행하자 소유한 파드 네 개도 종료됐다.</p>
+
+<p><br /></p>
+
+<h1 id="deployment">Deployment</h1>
+
+<p>디플로이먼트(Deployment)는 파드 템플릿과 복제 수를 선언하고, ReplicaSet을 관리해 배포 상태를 조정하는 오브젝트다. 템플릿 변경에 따른 롤링 업데이트(rolling update)와 이전 리비전으로의 롤백(rollback)을 제공한다.</p>
+
+<pre><code class="language-mermaid">flowchart LR
+    %% 생성과 관리 방향
+    D[Deployment] --&gt;|템플릿별 생성과 복제 수 조정| R[ReplicaSet]
+    R --&gt;|생성과 복제 수 유지| P[Pod]
+    P --&gt; C[hello-joker 컨테이너]
+</code></pre>
+<center><sup>출처: 『머신러닝 플랫폼 엔지니어링』 그림 3.5. AI를 이용해 재구성했다</sup></center>
+
+<h2 id="생성과-replicaset-확인">생성과 ReplicaSet 확인</h2>
+
+<p><code class="highlighter-rouge">k8s/deployment.yaml</code>은 앞의 ReplicaSet 매니페스트와 같은 <code class="highlighter-rouge">replicas: 3</code>, 셀렉터, 파드 템플릿을 사용한다. 오브젝트 종류와 이름은 다음과 같다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># k8s/deployment.yaml의 오브젝트 선언</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">apps/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Deployment</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">joker-deployment</span>
+  <span class="na">labels</span><span class="pi">:</span>
+    <span class="na">app</span><span class="pi">:</span> <span class="s">fast-api</span>
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Deployment와 하위 오브젝트 조회</span>
+kubectl create <span class="nt">-f</span> k8s/deployment.yaml
+kubectl get deployments,replicasets,pod <span class="nt">-owide</span>
+
+<span class="c"># 실행 결과 중 Deployment</span>
+NAME                               READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS    IMAGES                          SELECTOR
+deployment.apps/joker-deployment   3/3     3            3           9s    hello-joker   &lt;dockerhub-user&gt;/hello-joker:v1   <span class="nv">app</span><span class="o">=</span>fast-api
+</code></pre></div></div>
+
+<p>하위 ReplicaSet의 이름은 <code class="highlighter-rouge">joker-deployment-77cbff5455</code>였다. ReplicaSet과 파드에는 <code class="highlighter-rouge">pod-template-hash=77cbff5455</code> 레이블이 붙었다. 이 해시는 파드 템플릿에서 계산되어 같은 Deployment 안의 서로 다른 템플릿을 구분한다. 생성된 파드 세 개의 IP는 <code class="highlighter-rouge">10.244.0.13</code>~<code class="highlighter-rouge">10.244.0.15</code>였다.</p>
+
+<h2 id="이미지-변경과-롤링-업데이트">이미지 변경과 롤링 업데이트</h2>
+
+<p><code class="highlighter-rouge">k8s/deployment.yaml</code>의 이미지 태그를 <code class="highlighter-rouge">v2</code>로 바꾸고 적용했다. <code class="highlighter-rouge">kubectl apply</code>는 파일의 선언을 클러스터 오브젝트에 반영한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># 파드 템플릿의 이미지 필드 변경</span>
+<span class="na">image</span><span class="pi">:</span> <span class="s">&lt;dockerhub-user&gt;/hello-joker:v2</span>
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 한 터미널에서 파드 변화를 관찰</span>
+kubectl get pods <span class="nt">-owide</span> <span class="nt">-w</span>
+
+<span class="c"># 다른 터미널에서 변경 적용</span>
+kubectl apply <span class="nt">-f</span> k8s/deployment.yaml
+</code></pre></div></div>
+
+<p>새 ReplicaSet <code class="highlighter-rouge">joker-deployment-5b78d974b8</code>의 첫 파드가 <code class="highlighter-rouge">Running</code>이 된 뒤 기존 파드가 종료되기 시작했다. <code class="highlighter-rouge">kubectl describe deployment joker-deployment</code>의 <code class="highlighter-rouge">ScalingReplicaSet</code> 이벤트에도 같은 순서가 남았다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 이벤트 Message 발췌
+Scaled up replica set joker-deployment-5b78d974b8 to 1
+Scaled down replica set joker-deployment-77cbff5455 to 2 from 3
+Scaled up replica set joker-deployment-5b78d974b8 to 2 from 1
+Scaled down replica set joker-deployment-77cbff5455 to 1 from 2
+Scaled up replica set joker-deployment-5b78d974b8 to 3 from 2
+Scaled down replica set joker-deployment-77cbff5455 to 0 from 1
+</code></pre></div></div>
+
+<p>완료 뒤에는 <code class="highlighter-rouge">v2</code> ReplicaSet의 파드 복제 수가 3, <code class="highlighter-rouge">v1</code> ReplicaSet의 파드 복제 수가 0이었다. 기본 RollingUpdate 전략의 <code class="highlighter-rouge">maxSurge</code>와 <code class="highlighter-rouge">maxUnavailable</code>은 각각 25%다. 복제 수가 3이면 추가 허용 수는 올림해 1, 사용 불가 허용 수는 내림해 0이 된다. 파드 교체 조건과 설정의 영향은 <a href="/dev/Dev-Kubernetes-Deployment-Failure-1/">Deployment 업데이트 전략</a>에서 다뤘다. 이번에는 파드 상태와 이벤트를 관찰했고, 업데이트 중 HTTP 요청의 실패율은 측정하지 않았다.</p>
+
+<h2 id="롤백과-정리">롤백과 정리</h2>
+
+<p><code class="highlighter-rouge">kubectl rollout undo</code>는 Deployment의 파드 템플릿을 이전 리비전으로 되돌리는 명령이다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 이전 리비전으로 롤백하고 결과 조회</span>
+kubectl rollout undo deployment/joker-deployment
+kubectl get deployments,replicasets,pod <span class="nt">-owide</span>
+</code></pre></div></div>
+
+<p>기존 <code class="highlighter-rouge">v1</code> ReplicaSet <code class="highlighter-rouge">77cbff5455</code>의 파드 복제 수가 다시 3으로 늘고, <code class="highlighter-rouge">v2</code> ReplicaSet <code class="highlighter-rouge">5b78d974b8</code>의 파드 복제 수는 0으로 줄었다. 파드는 새로 만들어져 IP가 <code class="highlighter-rouge">10.244.0.19</code>~<code class="highlighter-rouge">10.244.0.21</code>이었다.</p>
+
+<p>실습 후 Deployment를 삭제하고, 로컬 <code class="highlighter-rouge">k8s/deployment.yaml</code>의 이미지 태그도 <code class="highlighter-rouge">v1</code>으로 돌렸다. <code class="highlighter-rouge">rollout undo</code>가 바꾸는 대상은 클러스터의 Deployment다. 로컬 파일에 <code class="highlighter-rouge">v2</code>가 남은 채 다시 apply하면 그 선언이 적용된다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>오브젝트</th>
+      <th>선언하는 것</th>
+      <th>실습에서 관찰한 동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Pod</td>
+      <td>실행할 컨테이너</td>
+      <td>앱 기동과 port-forward 응답</td>
+    </tr>
+    <tr>
+      <td>ReplicaSet</td>
+      <td>파드 템플릿과 복제 수</td>
+      <td>파드 삭제 후 재생성, 3개에서 4개로 확장</td>
+    </tr>
+    <tr>
+      <td>Deployment</td>
+      <td>배포할 템플릿과 업데이트 전략</td>
+      <td>새 ReplicaSet으로 교체, 이전 리비전으로 롤백</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>ML 플랫폼의 서빙 API와 관리 서비스도 컨테이너를 실행하고 복제 수를 유지하며 버전을 바꿔야 한다. 이번 실습은 그 워크로드 관리 계층에 해당한다. 파드 교체 뒤에도 같은 주소로 요청하려면 <a href="/MLOps-ML-Platform-Engineering-03-03-04-Service-Networking/">3.3.4편의 Service</a>가 필요하다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/">Kubernetes ReplicaSet</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/">Kubernetes Deployment</a></li>
+  <li><a href="https://kubernetes.io/docs/reference/kubectl/generated/kubectl_port-forward/">kubectl port-forward</a></li>
+  <li><a href="https://kubernetes.io/blog/2024/08/20/websockets-transition/">Kubernetes 1.31의 WebSocket 전환</a></li>
+  <li><a href="https://www.kubernetes.dev/resources/keps/4006/">KEP-4006</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#deployment" class="page__taxonomy-item" rel="tag">Deployment</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#machine-learning-platform-engineering-study-week-1" class="page__taxonomy-item" rel="tag">Machine-Learning-Platform-Engineering-Study-Week-1</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#machine-learning-platform-engineering-study" class="page__taxonomy-item" rel="tag">Machine-Learning-Platform-Engineering-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#pod" class="page__taxonomy-item" rel="tag">Pod</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#port-forward" class="page__taxonomy-item" rel="tag">port-forward</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#replicaset" class="page__taxonomy-item" rel="tag">ReplicaSet</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#rolling-update" class="page__taxonomy-item" rel="tag">Rolling-Update</a>
+    
+    </span>
+  </p>
+
+
+
+
+  <p class="page__taxonomy">
+  <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 분류: </strong>
+  <span itemprop="keywords"><a href="/categories/MLOps/#mlops-foundation" class="page__taxonomy-item" rel="tag">MLOps › 인프라 기반</a><a href="/categories/Kubernetes/#k8s-workload" class="page__taxonomy-item" rel="tag">Kubernetes › 워크로드 설정</a><span class="page__taxonomy-item page__nature">스터디</span></span>
+</p>
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-25">October 25, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+%EB%A8%B8%EC%8B%A0%EB%9F%AC%EB%8B%9D+%ED%94%8C%EB%9E%AB%ED%8F%BC+%EC%97%94%EC%A7%80%EB%8B%88%EC%96%B4%EB%A7%81%3A+K8s%EC%99%80+CI%2FCD+-+3.3.3.+Pod%2C+ReplicaSet%2C+Deployment%20https%3A%2F%2Fsirzzang.github.io%2F%2FMLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2FMLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2FMLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2FMLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment%2F?color=green&label=hits&size=small" alt="hit count">
+      <nav class="pagination">
+    
+      <a href="/MLOps-ML-Platform-Engineering-03-03-02-Kind-Node-Internals/" class="pagination--pager" title="[kind] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.2. kind 노드 내부: kindnet, 네임스페이스, containerd
+">이전 편</a>
+    
+    
+      <a href="/MLOps-ML-Platform-Engineering-03-03-04-Service-Networking/" class="pagination--pager" title="[Kubernetes] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.4. Service와 클러스터 안 트래픽 경로
+">다음 편</a>
+    
+  </nav>
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>

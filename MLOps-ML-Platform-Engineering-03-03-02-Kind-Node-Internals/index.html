@@ -1,0 +1,1049 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[kind] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.2. kind 노드 내부: kindnet, 네임스페이스, containerd - Eraser’s StudyLog</title>
+<meta name="description" content="kind 노드 안에서 kindnet이 만든 veth와 경로를 파드에 연결하고, 리눅스 네임스페이스와 containerd 런타임 계층을 확인해 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[kind] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.2. kind 노드 내부: kindnet, 네임스페이스, containerd">
+<meta property="og:url" content="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-03-02-Kind-Node-Internals/">
+
+
+  <meta property="og:description" content="kind 노드 안에서 kindnet이 만든 veth와 경로를 파드에 연결하고, 리눅스 네임스페이스와 containerd 런타임 계층을 확인해 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-10-24T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-10-25T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-03-02-Kind-Node-Internals/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/MLOps/" >MLOps</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS·Infra</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Programming/" >Programming</a>
+            </li><li class="masthead__menu-item">
+              <a href="/series/" >Series</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[kind] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.2. kind 노드 내부: kindnet, 네임스페이스, containerd">
+    <meta itemprop="description" content="kind 노드 안에서 kindnet이 만든 veth와 경로를 파드에 연결하고, 리눅스 네임스페이스와 containerd 런타임 계층을 확인해 보자.">
+    <meta itemprop="datePublished" content="2026-10-24T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-10-25T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[kind] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.2. kind 노드 내부: kindnet, 네임스페이스, containerd
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-10-24T00:00:00+09:00">2026년 10월 24일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  9 분 소요
+
+
+            
+          </p>
+          
+          <p class="page__context"><a href="/categories/MLOps/#mlops-foundation">MLOps › 인프라 기반</a><span class="page__context-sep">·</span><a href="/categories/Kubernetes/#k8s-networking">Kubernetes › 네트워킹</a><span class="page__context-sep">·</span><span class="page__nature">스터디</span></p><p class="page__series"><a href="/series/#ml-platform-engineering-k8s-cicd">시리즈 · 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD</a> (5 / 8)<span class="page__series-sep">·</span><a href="/MLOps-ML-Platform-Engineering-03-03-01-Kind-Cluster-API-Access/" title="[kind] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.1. kind 클러스터와 API 서버 접근 경로">← 이전 편</a><span class="page__series-sep">·</span><a href="/MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/" title="[Kubernetes] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.3. Pod, ReplicaSet, Deployment">다음 편 →</a></p>
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#kind-노드의-런타임-계층">kind 노드의 런타임 계층</a></li>
+  <li><a href="#kindnet-해부">kindnet 해부</a>
+    <ul>
+      <li><a href="#cni-구성과-파드-대역">CNI 구성과 파드 대역</a></li>
+      <li><a href="#networkpolicy-지원-범위">NetworkPolicy 지원 범위</a></li>
+      <li><a href="#다른-cni와의-비교">다른 CNI와의 비교</a></li>
+    </ul>
+  </li>
+  <li><a href="#검증-파드-netns와-veth-쌍">검증: 파드 netns와 veth 쌍</a>
+    <ul>
+      <li><a href="#노드-라우트와-인터페이스">노드 라우트와 인터페이스</a></li>
+      <li><a href="#파드-쪽-인터페이스와-게이트웨이">파드 쪽 인터페이스와 게이트웨이</a></li>
+      <li><a href="#ip-할당-기록에서-파드-이름까지">IP 할당 기록에서 파드 이름까지</a></li>
+    </ul>
+  </li>
+  <li><a href="#리눅스-네임스페이스와-쿠버네티스-네임스페이스">리눅스 네임스페이스와 쿠버네티스 네임스페이스</a>
+    <ul>
+      <li><a href="#이름과-격리-대상의-차이">이름과 격리 대상의 차이</a></li>
+      <li><a href="#coredns-프로세스의-공유-범위">CoreDNS 프로세스의 공유 범위</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Machine Learning Platform Engineering Study 1주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>Mac의 <code class="highlighter-rouge">docker ps</code>에는 kind 노드 컨테이너만 보이고, 파드 컨테이너는 노드 안의 containerd가 관리한다</li>
+  <li>이 클러스터의 kindnet은 <code class="highlighter-rouge">ptp</code>, <code class="highlighter-rouge">host-local</code>, <code class="highlighter-rouge">portmap</code> CNI 플러그인과 kindnetd로 구성된다. 파드와 노드는 브리지 없이 veth와 라우트로 연결된다</li>
+  <li>CoreDNS의 <code class="highlighter-rouge">10.244.0.2</code>를 노드의 veth, 파드 netns, host-local 할당 기록, CRI 샌드박스 정보에 차례로 대조했다</li>
+  <li>리눅스 네임스페이스는 커널 자원의 격리 단위이고, 쿠버네티스 네임스페이스는 API 리소스의 이름·관리 범위다. 쿠버네티스 네임스페이스를 나누는 것만으로 통신이 차단되지는 않는다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="kind-노드의-런타임-계층">kind 노드의 런타임 계층</h1>
+
+<p>책 3.3.1절 후반에 대응하는 실습이다. <a href="/MLOps-ML-Platform-Engineering-03-03-01-Kind-Cluster-API-Access/">3.3.1편</a>에서 생성한 노드 안으로 들어가, 파드 네트워크와 컨테이너가 실제로 어떻게 구성되는지 확인했다.</p>
+
+<p>Mac에서 <code class="highlighter-rouge">docker ps</code>를 실행하면 <code class="highlighter-rouge">ml-study-control-plane</code>이 보인다. 하지만 <code class="highlighter-rouge">kubectl get pods -A</code>의 CoreDNS나 API 서버 파드가 각각 Docker 컨테이너 목록에 나오는 것은 아니다. <strong>Docker가 관리하는 노드 컨테이너 안에 별도의 containerd가 있기 때문</strong>이다.</p>
+
+<pre><code class="language-mermaid">flowchart TB
+  %% 바깥 Docker와 노드 내부 CRI 런타임의 관리 범위
+  M[Mac] --&gt; D[Docker Desktop]
+  subgraph VM[Linux VM]
+    subgraph N[ml-study-control-plane 노드 컨테이너]
+      K[kubelet] --&gt;|CRI 요청| C[containerd]
+      C --&gt; S[containerd shim]
+      S --&gt;|생성 및 시작| R[runc]
+      R --&gt; P[파드 컨테이너 프로세스]
+    end
+  end
+  D --&gt;|노드 컨테이너 실행| N
+</code></pre>
+<center><sup>AI를 이용해 직접 그린 도식. Docker의 노드 컨테이너와 그 안에서 동작하는 쿠버네티스 런타임의 관계</sup></center>
+
+<p><strong>CRI(Container Runtime Interface, 컨테이너 런타임 인터페이스)</strong>는 kubelet이 컨테이너 런타임에 파드와 컨테이너 관리를 요청하는 인터페이스다. 이 클러스터에서 kubelet이 사용하는 런타임은 containerd 2.0.2이고, 하위 런타임인 runc는 OCI(Open Container Initiative)의 컨테이너 실행 규격을 구현한다. runc가 컨테이너 프로세스를 생성·시작하며, 실행 중인 컨테이너의 관리는 containerd와 컨테이너 사이를 중계하는 shim 프로세스를 통해 이어진다. 그림의 화살표는 실행 요청 관계를 나타낸다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 노드 런타임 확인</span>
+kubectl <span class="nt">--context</span> kind-ml-study get nodes <span class="nt">-o</span> wide
+<span class="c"># CONTAINER-RUNTIME 열: containerd://2.0.2</span>
+
+<span class="c"># 노드 안 런타임과 컨테이너를 조회하는 명령</span>
+docker <span class="nb">exec </span>ml-study-control-plane crictl version
+docker <span class="nb">exec </span>ml-study-control-plane crictl ps
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">crictl</code>은 CRI를 통해 조회하고, <code class="highlighter-rouge">ctr</code>은 containerd를 직접 다루는 도구다. <code class="highlighter-rouge">ctr</code>로 쿠버네티스 컨테이너를 볼 때 사용하는 containerd의 <code class="highlighter-rouge">k8s.io</code> 네임스페이스 역시 뒤에서 다룰 <a href="#리눅스-네임스페이스와-쿠버네티스-네임스페이스">리눅스·쿠버네티스 네임스페이스</a>와 별개다. 명령 선택은 <a href="/dev/Dev-Container-Runtime-CLI-Missing-Node-Image-Query/">노드 이미지 조회</a>, 런타임 구성은 <a href="/kubernetes/Kubernetes-Kubeadm-01-3/">containerd 설치</a>와 <a href="/dev/Container-Containerd-Configuration/">containerd 설정</a>을 참고한다. Docker와 containerd의 이미지 저장 경로 차이는 <a href="/dev/Dev-Container-Duplicate-Container-Images-1/">이미지 중복 저장 구조</a>에서 다뤘다.</p>
+
+<p><br /></p>
+
+<h1 id="kindnet-해부">kindnet 해부</h1>
+
+<h2 id="cni-구성과-파드-대역">CNI 구성과 파드 대역</h2>
+
+<p><strong>CNI(Container Network Interface, 컨테이너 네트워크 인터페이스)</strong>는 컨테이너 네트워크를 설정하는 플러그인의 호출 규약이다. 쿠버네티스에서는 런타임이 파드의 네트워크 공간을 준비하고 CNI 플러그인을 호출해 인터페이스·주소·경로를 설정한다. 전체 호출 순서는 <a href="/kubernetes/Kubernetes-Networking-03-CNI-Flow/">CNI 동작 흐름</a>에 정리되어 있다.</p>
+
+<p>kind의 기본 네트워크 구성은 kindnet이다. 실행 중인 kindnetd 이미지와 노드의 CNI 설정 파일을 확인했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 노드마다 네트워크를 관리하는 DaemonSet의 이미지</span>
+kubectl <span class="nt">--context</span> kind-ml-study <span class="nt">-n</span> kube-system get ds kindnet <span class="se">\</span>
+  <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.spec.template.spec.containers[0].image}'</span>
+<span class="c"># docker.io/kindest/kindnetd:v20250214-acbabc1a</span>
+
+<span class="c"># 노드의 CNI 설정과 파드 CIDR 확인</span>
+docker <span class="nb">exec </span>ml-study-control-plane <span class="nb">cat</span> /etc/cni/net.d/10-kindnet.conflist
+kubectl <span class="nt">--context</span> kind-ml-study get node ml-study-control-plane <span class="se">\</span>
+  <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.spec.podCIDR}'</span>
+<span class="c"># 10.244.0.0/24</span>
+</code></pre></div></div>
+
+<p><strong>IPAM(IP Address Management, IP 주소 관리)</strong>은 주소 할당·회수를 담당한다. <code class="highlighter-rouge">10-kindnet.conflist</code>에는 <code class="highlighter-rouge">ptp</code>의 IPAM으로 <code class="highlighter-rouge">host-local</code>이 지정되어 있고, 그 뒤에 <code class="highlighter-rouge">portmap</code>이 연결되어 있었다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구성 요소</th>
+      <th>하는 일</th>
+      <th>이 클러스터의 근거</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">ptp</code></td>
+      <td>파드와 노드 사이의 veth 쌍과 경로 구성</td>
+      <td>노드에 파드별 veth와 호스트 경로 존재</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">host-local</code></td>
+      <td>노드의 파드 대역에서 IP를 할당하고 파일로 상태 관리</td>
+      <td><code class="highlighter-rouge">10.244.0.0/24</code>, <code class="highlighter-rouge">/run/cni-ipam-state</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">portmap</code></td>
+      <td>파드의 <code class="highlighter-rouge">hostPort</code>에 필요한 포트 전달 규칙 구성</td>
+      <td><code class="highlighter-rouge">portMappings: true</code>; hostPort 파드 동작은 시험하지 않음</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">kindnetd</code></td>
+      <td>CNI 설정 파일 생성, 다른 노드의 파드 대역 경로와 masquerade 관리</td>
+      <td>kindnet DaemonSet과 노드의 설정 파일</td>
+    </tr>
+  </tbody>
+</table>
+
+<details>
+  <summary>노드의 CNI 설정 파일</summary>
+
+  <!-- 노드의 CNI 플러그인 체인과 IPAM 설정 -->
+  <div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="w">
+  </span><span class="s2">"cniVersion"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0.3.1"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"kindnet"</span><span class="p">,</span><span class="w">
+  </span><span class="s2">"plugins"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w">
+    </span><span class="p">{</span><span class="w">
+      </span><span class="s2">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ptp"</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"ipMasq"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"ipam"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+        </span><span class="s2">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"host-local"</span><span class="p">,</span><span class="w">
+        </span><span class="s2">"dataDir"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/run/cni-ipam-state"</span><span class="p">,</span><span class="w">
+        </span><span class="s2">"routes"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="s2">"dst"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0.0.0.0/0"</span><span class="w"> </span><span class="p">}],</span><span class="w">
+        </span><span class="s2">"ranges"</span><span class="p">:</span><span class="w"> </span><span class="p">[[{</span><span class="w"> </span><span class="s2">"subnet"</span><span class="p">:</span><span class="w"> </span><span class="s2">"10.244.0.0/24"</span><span class="w"> </span><span class="p">}]]</span><span class="w">
+      </span><span class="p">},</span><span class="w">
+      </span><span class="s2">"mtu"</span><span class="p">:</span><span class="w"> </span><span class="mi">65535</span><span class="w">
+    </span><span class="p">},</span><span class="w">
+    </span><span class="p">{</span><span class="w">
+      </span><span class="s2">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"portmap"</span><span class="p">,</span><span class="w">
+      </span><span class="s2">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s2">"portMappings"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span><span class="w">
+    </span><span class="p">}</span><span class="w">
+  </span><span class="p">]</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre></div>  </div>
+
+  <p><code class="highlighter-rouge">ptp</code>의 <code class="highlighter-rouge">ipMasq: false</code>는 클러스터 전체에서 주소 변환을 하지 않는다는 뜻이 아니다. kindnetd가 별도로 masquerade를 관리한다. <code class="highlighter-rouge">ranges</code>의 대역은 이 노드에 배정된 <code class="highlighter-rouge">spec.podCIDR</code>과 일치한다.</p>
+
+</details>
+
+<p>이 구성은 파드 패킷을 그대로 노드의 라우트로 전달한다. VXLAN 같은 오버레이는 노드 사이에서 원래 패킷을 다른 패킷 안에 캡슐화하는 방식이다. 오버레이 통신에도 노드 간 연결·방화벽·MTU 조건이 필요하다.</p>
+
+<p>eBPF는 커널의 특정 지점에 프로그램을 실행하는 기술이고, 관측 기능은 통신 흐름과 허용·차단 결과를 보여주는 기능이다. 이 kindnet 구성에는 Cilium의 eBPF 데이터 경로나 Hubble 같은 흐름 관측 기능이 없다. 이번 실습은 기본 인터페이스와 라우팅 테이블을 직접 조회했다.</p>
+
+<h2 id="networkpolicy-지원-범위">NetworkPolicy 지원 범위</h2>
+
+<p>NetworkPolicy는 파드의 인바운드·아웃바운드 통신 허용 조건을 정의하는 쿠버네티스 리소스다. 이를 실제로 집행하는 네트워크 구현이 함께 있어야 한다.</p>
+
+<p>kind는 <a href="https://github.com/kubernetes-sigs/kind/releases/tag/v0.24.0">v0.24.0 릴리스</a>에서 <code class="highlighter-rouge">kube-network-policies</code> 기반 지원을 추가했다. 이는 쿠버네티스 노드 버전 <code class="highlighter-rouge">v1.29.14</code>와 다른 버전 축이다. 실습 이미지 태그의 커밋에 해당하는 <a href="https://github.com/kubernetes-sigs/kind/blob/acbabc1a/images/kindnetd/cmd/kindnetd/main.go">kindnetd 소스</a>에도 정책 컨트롤러 구성이 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실습 당시 kindnet ClusterRole의 리소스와 권한 조회</span>
+kubectl <span class="nt">--context</span> kind-ml-study get clusterrole kindnet <span class="se">\</span>
+  <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{range .rules[*]}{.resources}{" "}{.verbs}{"\n"}{end}'</span>
+
+<span class="c"># 실행 결과 중 정책 조회 권한</span>
+<span class="c"># ["networkpolicies"] ["list","watch"]</span>
+</code></pre></div></div>
+
+<p>이 권한은 컨트롤러가 정책을 읽을 수 있다는 근거다. <strong>권한이 있는 것과 통신 차단을 검증한 것은 다르다.</strong> 이번 기록에는 deny 정책을 적용한 통신 시험이 없으므로, 버전·소스의 지원 여부와 정책 집행 실측을 구분한다.</p>
+
+<h2 id="다른-cni와의-비교">다른 CNI와의 비교</h2>
+
+<p>네트워크 구현은 IP 할당, 노드 사이 전달 방식, 정책 집행을 나눠 비교하면 차이가 명확하다. 아래는 대표 구성의 비교이며, 대체 CNI 설치나 성능 비교를 이 클러스터에서 실행한 것은 아니다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구현</th>
+      <th>IPAM</th>
+      <th>노드 간 전달</th>
+      <th>NetworkPolicy</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>이 실습의 kindnet</td>
+      <td>노드 PodCIDR에서 host-local 할당</td>
+      <td>다른 노드의 파드 대역으로 직접 라우팅</td>
+      <td>kind 0.24.0부터 기본 지원, 실습에서는 차단 시험 없음</td>
+    </tr>
+    <tr>
+      <td>K3s의 Flannel</td>
+      <td>노드별 대역과 host-local</td>
+      <td>기본 VXLAN, 스터디 설정은 <code class="highlighter-rouge">host-gw</code> 직접 라우팅</td>
+      <td>K3s 내장 정책 컨트롤러가 담당</td>
+    </tr>
+    <tr>
+      <td>Calico</td>
+      <td>Calico IPAM 등 선택</td>
+      <td>BGP 기반 라우팅 또는 IPIP·VXLAN</td>
+      <td>표준·확장 정책 지원</td>
+    </tr>
+    <tr>
+      <td>Cilium</td>
+      <td>cluster-pool 등 여러 IPAM 모드</td>
+      <td>VXLAN·Geneve 또는 native routing</td>
+      <td>표준·확장 정책 지원</td>
+    </tr>
+    <tr>
+      <td>AWS VPC CNI</td>
+      <td>VPC의 ENI 주소·프리픽스 활용</td>
+      <td>VPC 네트워크로 전달</td>
+      <td>지원 버전·환경에서 기능 활성화 필요</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>K3s의 정책 집행은 Flannel의 패킷 전달 기능과 구분된다. <a href="https://docs.k3s.io/networking/networking-services/#network-policy-controller">K3s 공식 문서</a>는 kube-router의 정책 컨트롤러 라이브러리를 내장한다고 설명한다. Cilium 역시 eBPF를 사용한다는 사실만으로 오버레이인지 직접 라우팅인지 정해지지는 않는다. <a href="https://docs.cilium.io/en/stable/network/concepts/routing/">라우팅 모드</a>와 <a href="https://docs.cilium.io/en/stable/network/concepts/ipam/">IPAM 모드</a>는 별도 선택이다.</p>
+
+<p>Calico의 선택지는 <a href="https://docs.tigera.io/calico/latest/networking/determine-best-networking">네트워킹 구성 문서</a>, VPC CNI의 구조는 <a href="/kubernetes/Kubernetes-EKS-02-01-01-EKS-VPC-CNI/">EKS VPC CNI</a>, 정책 지원 조건은 <a href="https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy.html">EKS NetworkPolicy 문서</a>를 참고한다. kind에서 다른 CNI를 시험하려면 생성 설정의 <code class="highlighter-rouge">networking.disableDefaultCNI: true</code>로 기본 CNI를 끄고 별도 설치하는 방식을 사용할 수 있다.</p>
+
+<p><br /></p>
+
+<h1 id="검증-파드-netns와-veth-쌍">검증: 파드 netns와 veth 쌍</h1>
+
+<h2 id="노드-라우트와-인터페이스">노드 라우트와 인터페이스</h2>
+
+<p><strong>네트워크 네임스페이스(network namespace, netns)</strong>는 인터페이스·주소·라우팅 테이블 등을 분리하는 리눅스 커널 기능이다. <strong>veth(virtual Ethernet)</strong>는 두 인터페이스가 쌍으로 동작하는 가상 네트워크 장치로, 한쪽으로 보낸 패킷이 다른 쪽에 전달된다.</p>
+
+<p>Mac의 <code class="highlighter-rouge">ifconfig</code>에서는 이 파드 veth가 보이지 않는다. Docker Desktop VM 안 노드의 netns에 있기 때문이다. 노드 안에는 <code class="highlighter-rouge">ifconfig</code>도 없어 <code class="highlighter-rouge">ip</code> 명령으로 확인했다. 실습 노드에는 <code class="highlighter-rouge">tcpdump</code> 역시 없었다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 이후 조회에 사용할 노드 이름</span>
+<span class="nv">N</span><span class="o">=</span>ml-study-control-plane
+
+<span class="c"># 노드의 IPv4 라우팅 테이블</span>
+docker <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$N</span><span class="s2">"</span> ip route
+
+<span class="c"># 실행 결과</span>
+<span class="c"># default via 172.18.0.1 dev eth0</span>
+<span class="c"># 10.244.0.2 dev veth0e6de46f scope host</span>
+<span class="c"># 10.244.0.3 dev veth608a53f2 scope host</span>
+<span class="c"># 10.244.0.4 dev vethdd068c62 scope host</span>
+<span class="c"># 172.18.0.0/16 dev eth0 proto kernel scope link src 172.18.0.2</span>
+</code></pre></div></div>
+
+<p>일반 파드 세 개에 대해 각각 veth로 가는 경로가 있다. <code class="highlighter-rouge">10.244.0.2</code>는 <code class="highlighter-rouge">coredns-76f75df574-h99t8</code>, <code class="highlighter-rouge">10.244.0.3</code>은 다른 CoreDNS 파드, <code class="highlighter-rouge">10.244.0.4</code>는 local-path-provisioner다. API 서버·etcd·kube-proxy 등 <code class="highlighter-rouge">hostNetwork</code> 파드는 노드의 네트워크 공간을 공유해 <code class="highlighter-rouge">172.18.0.2</code>를 사용한다.</p>
+
+<p>CoreDNS 하나를 골라 노드 쪽 인터페이스를 확인했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 파드 10.244.0.2로 가는 veth와 반대편 netns 조회</span>
+docker <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$N</span><span class="s2">"</span> ip <span class="nt">-d</span> link show veth0e6de46f
+<span class="c"># 실행 결과 핵심 필드</span>
+<span class="c"># 12: veth0e6de46f@if11: ...</span>
+<span class="c"># link-netns cni-bd656c65-1c54-76d4-02d9-09cf30fd424e</span>
+
+<span class="c"># 노드 쪽 주소와 실제 경로 선택</span>
+docker <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$N</span><span class="s2">"</span> ip <span class="nt">-br</span> addr show veth0e6de46f
+<span class="c"># veth0e6de46f@if11 UP 10.244.0.1/32 ...</span>
+docker <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$N</span><span class="s2">"</span> ip route get 10.244.0.2
+<span class="c"># 10.244.0.2 dev veth0e6de46f src 10.244.0.1 uid 0</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">ip route get</code>은 목적지에 대해 커널이 선택하는 경로를 조회한다. 패킷을 실제로 보내는 명령은 아니지만, <code class="highlighter-rouge">10.244.0.2</code>의 전달 인터페이스가 <code class="highlighter-rouge">veth0e6de46f</code>라는 점을 확인할 수 있다.</p>
+
+<h2 id="파드-쪽-인터페이스와-게이트웨이">파드 쪽 인터페이스와 게이트웨이</h2>
+
+<p><code class="highlighter-rouge">link-netns</code>의 이름으로 반대편 네트워크 공간에 들어갔다. 아래 이름과 veth 이름은 당시 값이며 파드를 재생성하면 바뀔 수 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 노드에서 이름으로 접근할 수 있는 파드 netns 목록</span>
+docker <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$N</span><span class="s2">"</span> ip netns list
+<span class="c"># cni-bd656c65-1c54-76d4-02d9-09cf30fd424e (id: 1)</span>
+<span class="c"># cni-8a5d35c6-ca1b-1a9f-a0b1-92a8e6a58ba4 (id: 3)</span>
+<span class="c"># cni-15aa94d7-bf54-8d89-6080-d41b8641c169 (id: 2)</span>
+
+<span class="c"># 위 link-netns에서 확인한 이름</span>
+<span class="nv">POD_NETNS</span><span class="o">=</span>cni-bd656c65-1c54-76d4-02d9-09cf30fd424e
+docker <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$N</span><span class="s2">"</span> ip netns <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$POD_NETNS</span><span class="s2">"</span> ip <span class="nt">-br</span> addr
+<span class="c"># 실행 결과 중 파드 인터페이스</span>
+<span class="c"># eth0@if12 UP 10.244.0.2/24 ...</span>
+
+docker <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$N</span><span class="s2">"</span> ip netns <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$POD_NETNS</span><span class="s2">"</span> ip route
+<span class="c"># default via 10.244.0.1 dev eth0</span>
+<span class="c"># 10.244.0.0/24 via 10.244.0.1 dev eth0 src 10.244.0.2</span>
+<span class="c"># 10.244.0.1 dev eth0 scope link src 10.244.0.2</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">ip netns exec</code>는 <strong>노드에 설치된 <code class="highlighter-rouge">ip</code>를 대상 netns에서 실행</strong>한다. CoreDNS 이미지에 셸이나 네트워크 도구가 없어도 인터페이스를 조회할 수 있는 이유다.</p>
+
+<pre><code class="language-mermaid">flowchart LR
+  %% 두 네트워크 네임스페이스의 veth와 라우트
+  subgraph P[CoreDNS 파드 netns]
+    E["eth0 번호 11&lt;br/&gt;10.244.0.2/24"]
+    G["default via 10.244.0.1"]
+    G --&gt; E
+  end
+  subgraph N[노드 netns]
+    V["veth0e6de46f 번호 12&lt;br/&gt;10.244.0.1/32"]
+    R["10.244.0.2 dev veth0e6de46f"]
+    R --&gt; V
+  end
+  E &lt;--&gt;|veth 쌍| V
+</code></pre>
+<center><sup>AI를 이용해 직접 그린 도식. CoreDNS 파드의 eth0와 노드의 veth를 잇는 주소와 경로</sup></center>
+
+<p>노드의 <code class="highlighter-rouge">veth0e6de46f@if11</code>에서 <code class="highlighter-rouge">12</code>는 자기 인터페이스 번호이고, <code class="highlighter-rouge">@if11</code>은 반대편 번호다. 파드에서는 <code class="highlighter-rouge">eth0@if12</code>로 보인다. 그런데 노드의 다른 veth 두 개도 모두 <code class="highlighter-rouge">@if11</code>이었다. 인터페이스 번호는 netns마다 별도로 관리되므로 다른 파드에서도 11번이 나올 수 있다. <strong>번호만으로 파드를 특정하지 말고 <code class="highlighter-rouge">link-netns</code>를 함께 대조해야 한다.</strong></p>
+
+<p><code class="highlighter-rouge">ptp</code> 구성에서는 노드 쪽 veth들이 같은 게이트웨이 주소 <code class="highlighter-rouge">10.244.0.1/32</code>를 사용한다. 노드는 각 파드 IP의 개별 경로로 전달 대상을 결정하고, 파드는 같은 노드의 다른 파드로 보낼 때도 게이트웨이를 거친다. <code class="highlighter-rouge">cni0</code> 브리지로 연결하는 <a href="/kubernetes/Kubernetes-Kubeadm-01-5/">Flannel 실습</a>과 다른 구조다. Docker의 바깥 <code class="highlighter-rouge">kind</code> 네트워크가 bridge 드라이버라는 사실과, 노드 안 파드 연결에 브리지를 쓰지 않는다는 사실은 양립한다.</p>
+
+<h2 id="ip-할당-기록에서-파드-이름까지">IP 할당 기록에서 파드 이름까지</h2>
+
+<p>처음에는 <code class="highlighter-rouge">kubectl get pods -A -o wide</code>에서 같은 IP를 찾아 CoreDNS로 연결했다. 이를 반대 방향으로 확인하려고 host-local의 할당 기록에서 시작했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 이 IP를 할당받은 CNI 컨테이너 식별자와 인터페이스</span>
+docker <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$N</span><span class="s2">"</span> <span class="nb">cat</span> /run/cni-ipam-state/kindnet/10.244.0.2
+<span class="c"># d88d5b61d447929e4bb78880396ed43adbe8abac514773f69ce56fc68b950cf9</span>
+<span class="c"># eth0</span>
+
+<span class="c"># 이 구성에서는 위 식별자가 CRI 파드 샌드박스 ID다</span>
+docker <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$N</span><span class="s2">"</span> crictl inspectp <span class="se">\</span>
+  d88d5b61d447929e4bb78880396ed43adbe8abac514773f69ce56fc68b950cf9
+</code></pre></div></div>
+
+<p><strong>파드 샌드박스(Pod sandbox)</strong>는 런타임이 파드의 공유 실행 환경을 준비하는 단위다. <code class="highlighter-rouge">crictl inspectp</code> 출력의 관련 필드를 대조하면 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>출력 필드</th>
+      <th>값</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">status.metadata.name</code></td>
+      <td><code class="highlighter-rouge">coredns-76f75df574-h99t8</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">status.metadata.namespace</code></td>
+      <td><code class="highlighter-rouge">kube-system</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">status.network.ip</code></td>
+      <td><code class="highlighter-rouge">10.244.0.2</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">info.cniResult.Interfaces.eth0.Sandbox</code></td>
+      <td><code class="highlighter-rouge">/var/run/netns/cni-bd656c65-1c54-76d4-02d9-09cf30fd424e</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">info.pid</code></td>
+      <td><code class="highlighter-rouge">1399</code></td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">info.runtimeType</code></td>
+      <td><code class="highlighter-rouge">io.containerd.runc.v2</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>IP와 파드 이름뿐 아니라 netns 경로도 <code class="highlighter-rouge">link-netns</code>의 이름과 일치했다. 따라서 <code class="highlighter-rouge">10.244.0.2 → veth0e6de46f → 해당 netns → 샌드박스 ID → CoreDNS 파드</code>를 서로 다른 조회 결과로 연결할 수 있었다.</p>
+
+<p><br /></p>
+
+<h1 id="리눅스-네임스페이스와-쿠버네티스-네임스페이스">리눅스 네임스페이스와 쿠버네티스 네임스페이스</h1>
+
+<h2 id="이름과-격리-대상의-차이">이름과 격리 대상의 차이</h2>
+
+<p>CoreDNS에 <code class="highlighter-rouge">kubectl exec</code>를 시도할 때 <code class="highlighter-rouge">-n kube-system</code>을 빠뜨려 NotFound가 나왔다. 이는 API가 기본 네임스페이스에서 파드 이름을 찾았기 때문이다. 반면 <code class="highlighter-rouge">ip netns exec cni-...</code>는 그 파드가 사용하는 리눅스 네트워크 공간에서 명령을 실행한다. 두 명령의 네임스페이스는 같은 개념이 아니다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구분</th>
+      <th>리눅스 네임스페이스</th>
+      <th>쿠버네티스 네임스페이스</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>정의</td>
+      <td>커널 자원의 가시성과 식별자 범위를 분리하는 기능</td>
+      <td>API 리소스 이름과 관리 범위를 나누는 객체</td>
+    </tr>
+    <tr>
+      <td>대상</td>
+      <td>net, pid, mnt, uts, ipc, user, cgroup, time 등</td>
+      <td>네임스페이스 범위의 파드·Service 등</td>
+    </tr>
+    <tr>
+      <td>확인</td>
+      <td><code class="highlighter-rouge">lsns</code>, <code class="highlighter-rouge">/proc/&lt;pid&gt;/ns</code>, <code class="highlighter-rouge">ip netns list</code></td>
+      <td><code class="highlighter-rouge">kubectl get namespaces</code></td>
+    </tr>
+    <tr>
+      <td>격리의 의미</td>
+      <td>종류에 따라 네트워크·PID·마운트 등의 뷰를 분리</td>
+      <td>이름 범위 제공, RBAC·할당량 적용 단위; 자동 네트워크 차단은 아님</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>쿠버네티스 네임스페이스의 접근 권한과 할당량은 각각 RBAC와 ResourceQuota로 설정한다. 네임스페이스가 다른 파드 사이의 통신 제한에는 NetworkPolicy와 집행 구현이 필요하다. 기본 네트워크 모델은 <a href="/kubernetes/Kubernetes-Networking-00-Model/">쿠버네티스 네트워킹 모델</a>과 연결된다.</p>
+
+<h2 id="coredns-프로세스의-공유-범위">CoreDNS 프로세스의 공유 범위</h2>
+
+<p>CoreDNS 프로세스의 리눅스 네임스페이스를 <code class="highlighter-rouge">lsns</code>로 확인했다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 노드 내부 CoreDNS 프로세스 하나 선택</span>
+<span class="nv">P</span><span class="o">=</span><span class="k">$(</span>docker <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$N</span><span class="s2">"</span> pgrep <span class="nt">-x</span> coredns | head <span class="nt">-1</span><span class="k">)</span>
+docker <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$N</span><span class="s2">"</span> lsns <span class="nt">-p</span> <span class="s2">"</span><span class="nv">$P</span><span class="s2">"</span> <span class="nt">-o</span> TYPE,NS,PATH
+
+<span class="c"># 실행 결과</span>
+<span class="c"># TYPE           NS PATH</span>
+<span class="c"># time   4026531834 /proc/1/ns/time</span>
+<span class="c"># user   4026531837 /proc/1/ns/user</span>
+<span class="c"># net    4026532864 /proc/1399/ns/net</span>
+<span class="c"># uts    4026533271 /proc/1399/ns/uts</span>
+<span class="c"># ipc    4026533272 /proc/1399/ns/ipc</span>
+<span class="c"># mnt    4026533274 /proc/1596/ns/mnt</span>
+<span class="c"># pid    4026533275 /proc/1596/ns/pid</span>
+<span class="c"># cgroup 4026533276 /proc/1596/ns/cgroup</span>
+
+<span class="c"># net·uts·ipc의 PATH에 등장한 프로세스 확인</span>
+docker <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$N</span><span class="s2">"</span> <span class="nb">cat</span> /proc/1399/comm
+<span class="c"># pause</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">PATH</code>는 해당 네임스페이스에 접근할 수 있는 프로세스 경로다. 그 프로세스가 네임스페이스를 독점 소유한다는 뜻은 아니다. 이 출력에서는 net·uts·ipc에 pause 프로세스 경로가, mnt·pid·cgroup에 CoreDNS 프로세스 경로가 나왔다. user·time은 노드 PID 1의 경로였다.</p>
+
+<p>pause 컨테이너는 파드의 공유 네임스페이스를 유지한다. <strong>같은 파드의 컨테이너끼리 <code class="highlighter-rouge">localhost</code>로 통신하는 이유는 netns를 공유하기 때문</strong>이다. 이 기본 구성에서는 PID 네임스페이스가 컨테이너별이지만, 파드의 <code class="highlighter-rouge">shareProcessNamespace</code> 같은 설정에 따라 달라질 수 있다. cgroup 네임스페이스는 프로세스에 보이는 cgroup 경로를 분리하고, 실제 자원 사용량 제한은 cgroup 설정이 담당한다.</p>
+
+<p>pause와 파드 통신은 <a href="/kubernetes/Kubernetes-Networking-01-Pod-to-Pod/">파드 간 통신</a>, 격리와 자원 관리의 차이는 <a href="/dev/Dev-MLflow-System-Metrics-Container-Isolation/">컨테이너 격리와 시스템 지표</a>에서 다뤘다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>노드 컨테이너 안에서 주소·경로·netns·런타임 정보를 함께 조회하니, <code class="highlighter-rouge">kubectl</code>에 보이는 파드를 실제 리눅스 네트워크 구성에 연결할 수 있었다. 이 편에서 확인한 것은 단일 노드의 CoreDNS와 기본 kindnet 구성이다. veth와 netns를 직접 만드는 과정은 <a href="/cs/CS-Container-Networking-Namespace/">컨테이너 네트워크 네임스페이스 실습</a>에서 더 깊이 다룬다.</p>
+
+<p>ML 플랫폼에서도 파이프라인 작업이나 서빙 파드는 이 런타임과 네트워크 위에서 실행된다. 앱 연결 문제를 조사할 때 <strong>Docker 노드 컨테이너, 파드 샌드박스, API 네임스페이스, 리눅스 netns 중 무엇을 조회하는지</strong> 구분해야 관찰 결과를 잘못 해석하지 않는다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://kind.sigs.k8s.io/docs/user/configuration/#disable-default-cni">kind 기본 CNI 설정</a></li>
+  <li><a href="https://github.com/kubernetes-sigs/kind/releases/tag/v0.24.0">kind 0.24.0 릴리스</a></li>
+  <li><a href="https://github.com/kubernetes-sigs/kind/blob/acbabc1a/images/kindnetd/cmd/kindnetd/main.go">실습 이미지 커밋의 kindnetd 소스</a></li>
+  <li><a href="https://www.cni.dev/plugins/current/main/ptp/">CNI ptp 플러그인</a></li>
+  <li><a href="https://www.cni.dev/plugins/current/ipam/host-local/">CNI host-local 플러그인</a></li>
+  <li><a href="https://www.cni.dev/plugins/current/meta/portmap/">CNI portmap 플러그인</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/">쿠버네티스 네임스페이스</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#cni" class="page__taxonomy-item" rel="tag">CNI</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#containerd" class="page__taxonomy-item" rel="tag">containerd</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kindnet" class="page__taxonomy-item" rel="tag">kindnet</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kind" class="page__taxonomy-item" rel="tag">kind</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#machine-learning-platform-engineering-study-week-1" class="page__taxonomy-item" rel="tag">Machine-Learning-Platform-Engineering-Study-Week-1</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#machine-learning-platform-engineering-study" class="page__taxonomy-item" rel="tag">Machine-Learning-Platform-Engineering-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#veth" class="page__taxonomy-item" rel="tag">veth</a>
+    
+    </span>
+  </p>
+
+
+
+
+  <p class="page__taxonomy">
+  <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 분류: </strong>
+  <span itemprop="keywords"><a href="/categories/MLOps/#mlops-foundation" class="page__taxonomy-item" rel="tag">MLOps › 인프라 기반</a><a href="/categories/Kubernetes/#k8s-networking" class="page__taxonomy-item" rel="tag">Kubernetes › 네트워킹</a><span class="page__taxonomy-item page__nature">스터디</span></span>
+</p>
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-25">October 25, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5Bkind%5D+%EB%A8%B8%EC%8B%A0%EB%9F%AC%EB%8B%9D+%ED%94%8C%EB%9E%AB%ED%8F%BC+%EC%97%94%EC%A7%80%EB%8B%88%EC%96%B4%EB%A7%81%3A+K8s%EC%99%80+CI%2FCD+-+3.3.2.+kind+%EB%85%B8%EB%93%9C+%EB%82%B4%EB%B6%80%3A+kindnet%2C+%EB%84%A4%EC%9E%84%EC%8A%A4%ED%8E%98%EC%9D%B4%EC%8A%A4%2C+containerd%20https%3A%2F%2Fsirzzang.github.io%2F%2FMLOps-ML-Platform-Engineering-03-03-02-Kind-Node-Internals%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2FMLOps-ML-Platform-Engineering-03-03-02-Kind-Node-Internals%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2FMLOps-ML-Platform-Engineering-03-03-02-Kind-Node-Internals%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2FMLOps-ML-Platform-Engineering-03-03-02-Kind-Node-Internals%2F?color=green&label=hits&size=small" alt="hit count">
+      <nav class="pagination">
+    
+      <a href="/MLOps-ML-Platform-Engineering-03-03-01-Kind-Cluster-API-Access/" class="pagination--pager" title="[kind] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.1. kind 클러스터와 API 서버 접근 경로
+">이전 편</a>
+    
+    
+      <a href="/MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/" class="pagination--pager" title="[Kubernetes] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.3. Pod, ReplicaSet, Deployment
+">다음 편</a>
+    
+  </nav>
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-03-02-Kind-Node-Internals/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/MLOps-ML-Platform-Engineering-03-03-02-Kind-Node-Internals"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>
