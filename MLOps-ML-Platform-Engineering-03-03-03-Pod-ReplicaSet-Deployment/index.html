@@ -462,7 +462,7 @@ window.MathJax = {
 
 
 
-  8 분 소요
+  9 분 소요
 
 
             
@@ -625,7 +625,7 @@ curl <span class="nt">-s</span> localhost:8080 | jq
 <span class="o">}</span>
 </code></pre></div></div>
 
-<p>스터디 노트에 책의 port-forward 명령 포트가 잘못 적혀 있다는 메모가 있다. 이 앱에서 <code class="highlighter-rouge">8083</code>이 맞다는 근거는 진입 스크립트, Uvicorn 로그, <code class="highlighter-rouge">8080:8083</code>으로 받은 응답이다. <strong>파드를 대상으로 지정하면 앱이 듣는 포트로 연결하고, Service를 지정하면 Service의 <code class="highlighter-rouge">port</code>를 대응하는 <code class="highlighter-rouge">targetPort</code>로 해석한다.</strong> <a href="https://kubernetes.io/docs/reference/kubectl/generated/kubectl_port-forward/">kubectl 명령 문서</a>에도 Service 포트를 이용하는 예제가 있다.</p>
+<p>스터디 자료는 책의 port-forward 명령 포트가 잘못됐다고 짚고 <code class="highlighter-rouge">8080:8083</code>으로 고쳐 안내한다. 이 앱에서 <code class="highlighter-rouge">8083</code>이 맞다는 근거는 진입 스크립트, Uvicorn 로그, <code class="highlighter-rouge">8080:8083</code>으로 받은 응답이다. <strong>파드를 대상으로 지정하면 앱이 듣는 포트로 연결하고, Service를 지정하면 Service의 <code class="highlighter-rouge">port</code>를 대응하는 <code class="highlighter-rouge">targetPort</code>로 해석한다.</strong> <a href="https://kubernetes.io/docs/reference/kubectl/generated/kubectl_port-forward/">kubectl 명령 문서</a>에도 Service 포트를 이용하는 예제가 있다.</p>
 
 <p>백그라운드 실행에서도 포워딩 로그는 같은 터미널에 출력됐다. 로그를 파일로 보낼 때는 다음과 같이 리다이렉션할 수 있다. <code class="highlighter-rouge">jobs</code>는 현재 셸의 작업 목록을 보여 주고, <code class="highlighter-rouge">kill %1</code>은 그 목록의 1번 작업에 종료 신호를 보낸다. <code class="highlighter-rouge">lsof</code>는 프로세스가 연 파일과 소켓을 조회하는 도구다.</p>
 
@@ -640,7 +640,7 @@ kill</span> %1
 lsof <span class="nt">-i</span> :8080
 </code></pre></div></div>
 
-<p>실습에서는 포워딩 작업을 직접 종료한 다음 <code class="highlighter-rouge">kubectl delete pod joker</code>로 파드를 지웠다. 파드 삭제 시 포워딩 프로세스가 어떻게 끝나는지는 따로 시험하지 않았다. 공식 명령 문서는 선택한 파드가 종료되면 세션이 끝나므로 명령을 다시 실행해야 한다고 설명한다.</p>
+<p>실습에서는 포워딩 작업을 직접 종료한 다음 <code class="highlighter-rouge">kubectl delete pod joker</code>로 파드를 지웠다. 공식 명령 문서는 선택한 파드가 종료되면 세션이 끝나므로 명령을 다시 실행해야 한다고 설명한다.</p>
 
 <h2 id="port-forward-동작-원리">port-forward 동작 원리</h2>
 
@@ -672,7 +672,15 @@ lsof <span class="nt">-i</span> :8080
 
 <p><code class="highlighter-rouge">PortForwardWebsockets</code>는 서버 v1.30에서 도입됐고, v1.31부터 기본 활성화됐다. kubectl도 v1.31부터 WebSocket을 기본 시도한다. v1.35.2의 <a href="https://github.com/kubernetes/kubectl/blob/v0.35.2/pkg/cmd/portforward/portforward.go">클라이언트 구현</a>은 업그레이드 실패 등의 조건에서 SPDY로 폴백한다. <a href="https://kubernetes.io/blog/2024/08/20/websockets-transition/">전환 안내</a></p>
 
-<p>2026-10-24에 조회한 로컬 kubectl은 v1.35.2이고 실습 서버는 v1.29.14다. 이 서버 버전과 구현을 대조하면 SPDY 경로로 연결되는 조건이다. 다만 실습 당시의 클라이언트 버전과 협상 로그는 남아 있지 않아 당시 폴백 과정을 직접 확인하지는 못했다. 이 버전 조합은 공식 지원 범위인 API 서버 기준 ±1 마이너 버전도 벗어난다. <a href="https://kubernetes.io/releases/version-skew-policy/#kubectl">버전 차이 지원 정책</a></p>
+<p>로컬 kubectl은 v1.35.2이고 실습 서버는 v1.29.14다. <code class="highlighter-rouge">-v</code>는 kubectl 로그의 상세 수준을 정하는 옵션이며, <code class="highlighter-rouge">-v=6</code>에서는 요청과 응답 상태가 보인다. 같은 앱의 파드에 port-forward를 실행하면 실제 협상 과정이 기록된다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># kubectl -n online-ml-svc port-forward deploy/hello-joker 18083:8083 -v=6 출력 발췌(2026-10-25)
+tunneling_dialer.go:75] Before WebSocket Upgrade Connection...
+fallback_dialer.go:53] fallback to secondary dialer from primary dialer err: unable to upgrade streaming request: websocket: bad handshake (400 Bad Request): query parameter "port" is required
+round_trippers.go:632] "Response" verb="POST" url=".../pods/hello-joker-84f7c45f84-6x6tq/portforward" status="101 Switching Protocols"
+</code></pre></div></div>
+
+<p>kubectl은 먼저 WebSocket 업그레이드를 시도했고, v1.29 서버가 이를 400으로 거절하자 SPDY로 폴백해 <code class="highlighter-rouge">101 Switching Protocols</code>로 연결했다. 이 버전 조합은 공식 지원 범위인 API 서버 기준 ±1 마이너 버전도 벗어난다. <a href="https://kubernetes.io/releases/version-skew-policy/#kubectl">버전 차이 지원 정책</a></p>
 
 <p>이 경로는 Service의 가상 IP와 kube-proxy 규칙을 통과하지 않는다. <code class="highlighter-rouge">svc/</code>나 <code class="highlighter-rouge">deploy/</code>를 지정해도 시작할 때 파드 하나를 선택하며, 여러 파드로 부하를 분산하거나 교체된 파드에 자동으로 재연결하지 않는다. kind에서는 <a href="/MLOps-ML-Platform-Engineering-03-03-01-Kind-Cluster-API-Access/">3.3.1편의 API 서버 접근 경로</a>를 사용하므로 앱 포트를 위한 <code class="highlighter-rouge">extraPortMappings</code>가 없어도 호출할 수 있다.</p>
 

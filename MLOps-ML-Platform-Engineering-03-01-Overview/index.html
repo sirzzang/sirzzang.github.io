@@ -644,7 +644,7 @@
 </code></pre>
 <center><sup>AI를 이용해 직접 그린 도식. kind 노드와 BuildKit이 Docker Desktop Linux VM의 메모리를 공유한다</sup></center>
 
-<p>메모리 설정을 올리기 전 실습 기록의 사용량은 다음과 같았다. <code class="highlighter-rouge">docker stats</code>는 컨테이너별 CPU·메모리 사용량을 조회하는 명령이다.</p>
+<p><code class="highlighter-rouge">docker stats</code>는 컨테이너별 CPU·메모리 사용량과 한도를 보여 주는 명령이다. 메모리 설정을 올리기 전에 이 명령으로 잰 사용량은 다음과 같았다.</p>
 
 <table>
   <thead>
@@ -684,6 +684,18 @@ docker info <span class="nt">--format</span> <span class="s1">'{{.MemTotal}}'</s
 16748941312
 </code></pre></div></div>
 
+<p>설정을 올린 뒤에는 <code class="highlighter-rouge">docker stats</code>의 한도도 모든 컨테이너에서 15.6GiB로 바뀌었다. 이때 실행 중인 컨테이너는 kind 노드 하나와 BuildKit 두 개였다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 컨테이너별 메모리 사용량과 한도를 한 번만 조회</span>
+docker stats <span class="nt">--no-stream</span> <span class="nt">--format</span> <span class="s1">'table {{.Name}}\t{{.MemUsage}}'</span>
+
+<span class="c"># 실행 결과(2026-10-25)</span>
+<span class="c"># NAME                             MEM USAGE / LIMIT</span>
+<span class="c"># buildx_buildkit_multi0           102.6MiB / 15.6GiB</span>
+<span class="c"># ml-study-control-plane           2.756GiB / 15.6GiB</span>
+<span class="c"># buildx_buildkit_multiplatform0   93.96MiB / 15.6GiB</span>
+</code></pre></div></div>
+
 <p>메모리가 부족할 때는 파드 배치와 실행 중 실패를 구분해야 한다. 스케줄러는 파드의 메모리 요청량(requests)이 노드의 남은 할당 가능 자원에 들어가는지 판단한다. 맞는 노드가 없으면 파드는 <code class="highlighter-rouge">Pending</code>에 머물고 <code class="highlighter-rouge">Insufficient memory</code> 이벤트가 발생할 수 있다. 실행 중에는 컨테이너의 메모리 제한 초과로 OOM 종료가 발생하거나, 노드의 메모리 압박에 대응해 kubelet이 파드를 축출할 수 있다. <a href="https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/">Kubernetes 자원 관리</a>에서 요청량과 제한의 역할을 구분한다.</p>
 
 <p>실습 후 노드 컨테이너를 멈추려면 <code class="highlighter-rouge">docker stop</code>, 다시 시작하려면 <code class="highlighter-rouge">docker start</code>를 사용한다. kind에는 클러스터를 일시 중지하는 <code class="highlighter-rouge">stop</code> 명령이 없다. <code class="highlighter-rouge">kind delete cluster</code>는 노드 컨테이너를 삭제하므로 그 안에 저장된 클러스터 상태도 사라진다. 다음은 중지·시작에 사용하는 명령이다.</p>
@@ -696,8 +708,6 @@ docker start ml-study-control-plane
 </code></pre></div></div>
 
 <p>16GB 설정값과 Mac에서 실제로 점유하는 메모리는 구분해야 한다. VM과 컨테이너의 사용량·캐시·회수 상태에 따라 호스트 메모리 사용량이 달라진다. <a href="https://docs.docker.com/desktop/use-desktop/resource-saver/">Resource Saver</a>는 실행 중인 컨테이너가 없는 상태로 기본 5분이 지나면 Linux VM을 중지하는 기능이다. kind 노드가 실행 중이면 이 조건을 충족하지 못한다.</p>
-
-<p>여기서 직접 확인한 것은 설정 변경과 <code class="highlighter-rouge">MemTotal</code> 값이다. 이 Mac에서 메모리 부족 장애를 재현하거나, Docker Desktop 재시작 시 노드의 자동 기동과 중지·시작 후 클러스터 복구를 시험하지는 않았다.</p>
 
 <h2 id="실습-가능-여부-판정-기준">실습 가능 여부 판정 기준</h2>
 
@@ -738,9 +748,9 @@ docker start ml-study-control-plane
   </tbody>
 </table>
 
-<p>실습 저장소의 2026-10-21 점검 기록에서는 책 코드 전체에 <code class="highlighter-rouge">cuda</code>, <code class="highlighter-rouge">nvidia.com/gpu</code>, <code class="highlighter-rouge">set_gpu_limit</code> 문자열이 없었다. 2주차의 Kubeflow는 여러 구성 요소의 이미지를 함께 설치하므로 이미지마다 아키텍처와 버전 호환성을 확인해야 한다. 당시 점검 메모는 약 80개 이미지를 대상으로 삼았다. 이 단계에서는 Kubeflow 전체 설치와 메모리 사용량을 직접 확인하지 않았다.</p>
+<p>2026-10-21에 실습 저장소의 책 코드 전체를 검색했을 때 <code class="highlighter-rouge">cuda</code>, <code class="highlighter-rouge">nvidia.com/gpu</code>, <code class="highlighter-rouge">set_gpu_limit</code> 문자열은 없었다. 2주차의 Kubeflow는 여러 구성 요소의 이미지를 함께 설치하므로 이미지마다 아키텍처와 버전 호환성을 확인해야 하며, 이때 점검 대상으로 잡은 이미지는 약 80개였다.</p>
 
-<p>사내 VPN을 켠 상태에서는 TLS 복호화에 사용되는 인증서를 컨테이너와 파드가 신뢰하지 못해 HTTPS 요청이 <code class="highlighter-rouge">x509</code> 오류로 실패했다. 실습은 VPN을 끈 상태에서 진행했다. 인증서 신뢰 경로는 <a href="/dev/Dev-Kubectl-VPN-SSL-Inspection/">kubectl과 VPN의 TLS 복호화</a>, <a href="/dev/Dev-Notion-MCP-VPN-SSL-Inspection/">Notion MCP의 인증서 오류</a>에 정리돼 있다.</p>
+<p>사내 VPN 중에는 보안 장비가 HTTPS 통신을 중간에서 복호화해 검사하는 TLS 검사(SSL inspection)를 하는 경우가 있다. 이때 장비는 접속한 사이트의 원래 인증서 대신, 회사 루트 인증서로 다시 서명한 인증서를 내려보낸다. Mac에는 회사가 배포한 루트 인증서가 키체인에 설치돼 있어 브라우저는 정상 동작한다. 반면 컨테이너와 파드는 이미지 안에 든 인증서 목록만 신뢰하므로, 회사 루트 인증서로 서명된 인증서를 검증하지 못한다. 그래서 VPN을 켠 상태에서는 컨테이너와 파드 안의 패키지 설치와 이미지 pull이 <code class="highlighter-rouge">x509: certificate signed by unknown authority</code> 오류로 실패했다. 실습은 VPN을 끈 상태에서 진행했다. 인증서 신뢰 경로는 <a href="/dev/Dev-Kubectl-VPN-SSL-Inspection/">kubectl과 VPN의 TLS 복호화</a>, <a href="/dev/Dev-Notion-MCP-VPN-SSL-Inspection/">Notion MCP의 인증서 오류</a>에 정리돼 있다.</p>
 
 <p><br /></p>
 
