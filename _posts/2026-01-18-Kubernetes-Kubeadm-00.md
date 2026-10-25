@@ -14,6 +14,7 @@ tags:
   - On-Premise-K8s-Hands-On-Study
   - On-Premise-K8s-Hands-On-Study-Week-3
 
+last_modified_at: 2026-10-25
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 On-Premise K8s Hands-on Study 3주차 학습 내용을 기반으로 합니다.*
@@ -221,7 +222,7 @@ sudo kubeadm upgrade node
 > **참고**: `kubeadm upgrade`는 컨트롤 플레인 컴포넌트만 업그레이드한다. kubelet과 kubectl은 별도로 업그레이드해야 한다. 이 역시 kubeadm의 설계 철학(부트스트래핑만 담당)과 일관된다.
 
 
-# kubeadm Bootstrap 신뢰 모델 {#init과-join의-신뢰-모델}
+# kubeadm Bootstrap 신뢰 모델<a id="init과-join의-신뢰-모델"></a>
 
 `kubeadm init`이 완료되면 다음과 같은 `kubeadm join` 명령어가 출력된다.
 
