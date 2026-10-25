@@ -396,9 +396,9 @@
 
 <ul>
   <li>Mac의 <code class="highlighter-rouge">git push</code>는 LAN IP를, 브라우저는 <code class="highlighter-rouge">localhost</code>를 사용했다. LAN IP가 바뀌어도 브라우저는 열려 있어 push 실패와 서버 장애를 구분해야 했다</li>
-  <li>러너 등록과 실제 CI 잡의 checkout은 클러스터 내부 주소를 사용했다. checkout 주소를 <code class="highlighter-rouge">ROOT_URL</code>과 동일하게 예상했던 설명은 run #1 로그와 달랐다</li>
+  <li>러너 등록과 CI 잡의 checkout은 클러스터 내부 주소를 사용했다(run #1 로그). Mac LAN IP를 넣은 <code class="highlighter-rouge">ROOT_URL</code>은 웹 화면의 clone 주소와 링크에 쓰였다</li>
   <li>IP를 고치던 <code class="highlighter-rouge">helm upgrade --wait</code>는 새 파드가 준비되지 않아 실패했다. Helm 리비전이 실패해도 values는 이미 바뀌어 있었다</li>
-  <li>Gitea 파드를 <code class="highlighter-rouge">0 → 1</code>개로 조정한 뒤 정상화됐고 교체 전략을 Recreate로 바꿨다.</li>
+  <li>Gitea 파드를 <code class="highlighter-rouge">0 → 1</code>개로 조정한 뒤 정상화됐고 교체 전략을 Recreate로 바꿨다</li>
 </ul>
 
 <p><br /></p>
@@ -441,7 +441,7 @@
       <td>잡의 <code class="highlighter-rouge">actions/checkout</code></td>
       <td>dind 안 잡 컨테이너</td>
       <td>같은 내부 DNS 주소(run #1 실측)</td>
-      <td>러너 등록에 사용한 주소와 일치</td>
+      <td>별도 설정 없음. run #1에서는 <code class="highlighter-rouge">giteaRootURL</code>과 같은 주소</td>
     </tr>
     <tr>
       <td>웹의 clone 주소와 생성 링크</td>
@@ -621,7 +621,7 @@ helm get values <span class="nt">-n</span> gitea gitea | <span class="nb">grep</
 <span class="c"># ROOT_URL: http://192.168.0.78:30000/</span>
 </code></pre></div></div>
 
-<p>리비전 2는 실패했지만 values에는 새 주소가 저장돼 있었다. <code class="highlighter-rouge">--wait</code>는 리소스가 준비될 때까지 기다리는 옵션이며, 당시 명령의 기본 timeout은 5분이다. 이 명령에는 실패 시 자동 복구 옵션이 없었다. <strong>대기 실패가 이미 적용한 값을 모두 되돌렸다는 뜻은 아니다.</strong> 옵션 동작은 <a href="https://helm.sh/docs/v3/helm/helm_upgrade/">Helm upgrade 문서</a>를 참고한다.</p>
+<p>리비전 2는 실패했지만 values에는 새 주소가 저장돼 있었다. <code class="highlighter-rouge">--wait</code>는 리소스가 준비될 때까지 기다리는 옵션이며, 당시 명령의 기본 timeout은 5분이다. 이 명령에는 실패하면 이전 리비전으로 되돌리는 <code class="highlighter-rouge">--atomic</code>을 주지 않았다. <strong>대기 실패가 이미 적용한 값을 모두 되돌렸다는 뜻은 아니다.</strong> 옵션 동작은 <a href="https://helm.sh/docs/v3/helm/helm_upgrade/">Helm upgrade 문서</a>를 참고한다.</p>
 
 <p>처음에는 실패한 새 파드를 지웠다. 그러나 ReplicaSet이 같은 설정의 파드를 다시 만들었고, 그 파드도 종료됐다.</p>
 
@@ -686,9 +686,9 @@ helm upgrade gitea gitea <span class="nt">--repo</span> https://dl.gitea.com/cha
 <span class="c"># REVISION: 3</span>
 </code></pre></div></div>
 
-<p>리비전 3이 <code class="highlighter-rouge">deployed</code>가 됐고, 후속 조회에서 Deployment 전략도 <code class="highlighter-rouge">{"type":"Recreate"}</code>였다. 메모리 세션을 쓰므로 파드 교체 뒤 웹에는 다시 로그인했다. 업데이트 전략 일반론은 <a href="/dev/Dev-Kubernetes-Deployment-Failure-1/">Deployment 교체 전략</a>과 연결된다.</p>
+<p>리비전 3이 <code class="highlighter-rouge">deployed</code>가 됐고, 후속 조회에서 Deployment 전략도 <code class="highlighter-rouge">{"type":"Recreate"}</code>였다. 메모리 세션을 쓰므로 파드 교체 뒤 웹에는 다시 로그인했다. 업데이트 전략 일반론은 <a href="/dev/Dev-Kubernetes-Deployment-Failure-1/#배포-전략">Deployment 교체 전략</a>과 연결된다.</p>
 
-<p>실제 명령에는 <code class="highlighter-rouge">strategy.rollingUpdate=null</code>도 들어갔다. 쿠버네티스 API는 Recreate와 <code class="highlighter-rouge">rollingUpdate</code> 필드를 함께 보내면 <a href="https://github.com/kubernetes/kubernetes/blob/v1.29.14/pkg/apis/apps/validation/validation.go#L466-L480">검증에서 거부한다</a>. 다만 <strong>이 차트 12.7.0은 전략이 RollingUpdate일 때만 해당 필드를 렌더한다.</strong> <code class="highlighter-rouge">helm template</code>에 <code class="highlighter-rouge">strategy.type=Recreate</code>만 넘겨도 생성된 Deployment에는 <code class="highlighter-rouge">type: Recreate</code>만 있었다. 이 버전의 템플릿은 <code class="highlighter-rouge">type</code> 설정만으로 두 필드가 함께 생성되는 상황을 막는다.</p>
+<p>실제 명령에는 <code class="highlighter-rouge">strategy.rollingUpdate=null</code>도 들어갔다. 쿠버네티스 API는 Recreate와 <code class="highlighter-rouge">rollingUpdate</code> 필드를 함께 보내면 <a href="https://github.com/kubernetes/kubernetes/blob/v1.29.14/pkg/apis/apps/validation/validation.go#L521-L540">검증에서 거부한다</a>. 다만 <strong>이 차트 12.7.0은 전략이 RollingUpdate일 때만 해당 필드를 렌더한다.</strong> <code class="highlighter-rouge">helm template</code>에 <code class="highlighter-rouge">strategy.type=Recreate</code>만 넘겨도 생성된 Deployment에는 <code class="highlighter-rouge">type: Recreate</code>만 있었다. 이 버전의 템플릿은 <code class="highlighter-rouge">type</code> 설정만으로 두 필드가 함께 생성되는 상황을 막는다.</p>
 
 <h2 id="재발-방지">재발 방지</h2>
 
@@ -721,7 +721,7 @@ helm upgrade gitea gitea <span class="nt">--repo</span> https://dl.gitea.com/cha
   <li><a href="https://dl.gitea.com/charts/gitea-12.7.0.tgz">Gitea 차트 12.7.0</a></li>
   <li><a href="https://helm.sh/docs/v3/helm/helm_upgrade/">Helm 3 upgrade</a></li>
   <li><a href="https://github.com/google/leveldb/blob/main/doc/index.md#concurrency">LevelDB 동시 접근</a></li>
-  <li><a href="https://github.com/kubernetes/kubernetes/blob/v1.29.14/pkg/apis/apps/validation/validation.go#L466-L480">Kubernetes 1.29.14 Deployment 전략 검증</a></li>
+  <li><a href="https://github.com/kubernetes/kubernetes/blob/v1.29.14/pkg/apis/apps/validation/validation.go#L521-L540">Kubernetes 1.29.14 Deployment 전략 검증</a></li>
   <li><a href="https://github.com/apple-oss-distributions/xnu/blob/main/bsd/netinet/tcp_timer.h">Apple XNU TCP 타이머</a></li>
 </ul>
 

@@ -332,7 +332,7 @@
 
 
 
-  7 분 소요
+  8 분 소요
 
 
             
@@ -405,7 +405,7 @@
 <ul>
   <li><code class="highlighter-rouge">test_code → build_image → update_helm_chart</code>를 <code class="highlighter-rouge">needs</code>로 연결했다. 테스트가 성공하면 이미지를 올리고, 그 태그를 Helm 차트에 커밋한다</li>
   <li>첫 push에는 <code class="highlighter-rouge">ci.yaml</code>이 0바이트라 워크플로가 인식되지 않았다. 내용을 채운 run #1에서는 Secrets에 넣은 계정명을 <code class="highlighter-rouge">vars</code>로 읽어 이미지 이름이 깨졌다</li>
-  <li>run #2에서 세 잡이 성공했다. 이미지 태그는 <code class="highlighter-rouge">9fc8cad1</code>, 차트 갱신 커밋은 <code class="highlighter-rouge">37ae87f</code>였고, checkout과 push는 클러스터 내부 Gitea 주소를 사용했다</li>
+  <li>run #2에서 세 잡이 성공해 이미지 <code class="highlighter-rouge">9fc8cad1</code>을 올리고, 차트 갱신 커밋 <code class="highlighter-rouge">37ae87f</code>를 자동 토큰으로 push했다</li>
 </ul>
 
 <p><br /></p>
@@ -461,7 +461,7 @@
     U --&gt; G[Gitea main&lt;br/&gt;skip ci 커밋]
     G --&gt; A[Argo CD 동기화]
 </code></pre>
-<center><sup>AI를 이용해 직접 그린 도식. 세 CI 잡의 의존 관계와 이미지·차트 변경의 전달 경로.</sup></center>
+<center><sup>AI를 이용해 직접 그린 도식. 세 CI 잡의 의존 관계와 이미지·차트 변경의 전달 경로</sup></center>
 
 <p><code class="highlighter-rouge">on.push.branches: [main]</code>은 실행 대상 브랜치를 고른다. 차트를 갱신하는 잡도 <code class="highlighter-rouge">main</code>에 push하므로, 이 필터만으로 재실행을 막을 수는 없다. 차트 커밋에는 실행을 건너뛰도록 <code class="highlighter-rouge">[skip ci]</code>를 넣었다. Gitea v1.27에는 Actions 자동 토큰 사용자가 만든 이벤트의 재귀 실행을 막는 처리도 있다(<a href="https://github.com/go-gitea/gitea/blob/v1.27.0/services/actions/notifier_helper.go">Gitea v1.27 소스</a>).</p>
 
@@ -504,7 +504,7 @@
 
 <p>자동 토큰은 Gitea가 Actions 잡에 발급하는 인증 수단이다. 사용자가 직접 만들어 등록하는 개인 액세스 토큰(Personal Access Token, PAT)과 발급·관리 방식이 다르다. 책의 GitLab 예제는 별도 액세스 토큰으로 차트 변경을 push하지만, 이 워크플로는 <code class="highlighter-rouge">actions/checkout@v4</code>가 기본 토큰으로 구성한 Git 인증을 사용한다.</p>
 
-<p><a href="https://docs.gitea.com/1.27/usage/actions/token-permissions/">Gitea 1.27의 토큰 권한 문서</a>는 잡 단위 <code class="highlighter-rouge">permissions</code>와 <code class="highlighter-rouge">contents</code> 범위를 지원한다고 설명한다. <code class="highlighter-rouge">contents: write</code>는 코드·릴리스 쓰기 권한 요청이며, 실제 권한에는 저장소·소유자 설정의 상한도 적용된다. run #2에서는 이 설정으로 같은 저장소에 push했다. <code class="highlighter-rouge">MY_ACCESS_TOKEN</code>은 워크플로에 등장하지 않는다.</p>
+<p><a href="https://docs.gitea.com/1.27/usage/actions/token-permissions/">Gitea 1.27의 토큰 권한 문서</a>는 잡 단위 <code class="highlighter-rouge">permissions</code>와 <code class="highlighter-rouge">contents</code> 범위를 지원한다고 설명한다. <code class="highlighter-rouge">contents: write</code>는 코드·릴리스 쓰기 권한 요청이며, 실제 권한에는 저장소·소유자 설정의 상한도 적용된다. run #2에서는 이 설정으로 같은 저장소에 push했다.</p>
 
 <h2 id="세-잡의-실행-내용">세 잡의 실행 내용</h2>
 
@@ -661,19 +661,40 @@ ERROR: failed to build: invalid tag "/hello-joker:0d9be204": invalid reference f
 
 <p>세 잡의 결과는 <code class="highlighter-rouge">test_code</code> 2초, <code class="highlighter-rouge">build_image</code> 2분 23초, <code class="highlighter-rouge">update_helm_chart</code> 2초로 모두 성공이었다.</p>
 
+<p><code class="highlighter-rouge">test_code</code>가 run #1의 44초보다 짧았던 데는 두 가지 이유가 있다. 잡 이미지가 이미 dind에 있어 다시 받지 않았다. 또 <code class="highlighter-rouge">setup-python</code>이 설치한 Python과 pip 패키지가 run #1의 결과로 남아 있었다. 러너는 잡 컨테이너마다 dind의 <code class="highlighter-rouge">act-toolcache</code> 볼륨을 <code class="highlighter-rouge">/opt/hostedtoolcache</code>에 연결한다. 작업 공간은 잡마다 새로 준비되지만, 이 도구 캐시는 잡과 실행 사이에 공유된다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># run #2 test_code 로그의 pip 출력 발췌
+Requirement already satisfied: fastapi==0.95.2 in /opt/hostedtoolcache/Python/3.10.22/arm64/lib/python3.10/site-packages
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># dind의 Docker 볼륨 목록</span>
+kubectl <span class="nt">-n</span> gitea <span class="nb">exec </span>runner-runner-0 <span class="nt">-c</span> dind <span class="nt">--</span> docker volume <span class="nb">ls</span>
+
+<span class="c"># 실행 결과</span>
+<span class="c"># DRIVER    VOLUME NAME</span>
+<span class="c"># local     act-toolcache</span>
+</code></pre></div></div>
+
 <p><img src="https://sirzzang.github.io//assets/images/mlpe-ch03-ci-run2.png" alt="Gitea Actions run 2 성공" class="align-center" /></p>
-<center><sup>직접 캡처. run #2에서 세 잡이 성공했고 build_image의 빌드·push 단계가 완료됐다.</sup></center>
+<center><sup>직접 캡처. run #2에서 세 잡이 성공했고 build_image의 빌드·push 단계가 완료됐다</sup></center>
 
 <h2 id="이미지-태그와-플랫폼">이미지 태그와 플랫폼</h2>
 
 <p>build 로그에서 계정명은 <code class="highlighter-rouge">***</code>로 가려졌고 이미지 태그는 <code class="highlighter-rouge">9fc8cad1</code>이었다. Docker Hub에도 같은 태그가 생겼다. 플랫폼은 <code class="highlighter-rouge">linux/arm64</code> 하나였으며, 화면의 digest 앞자리 <code class="highlighter-rouge">c09f5bf621b8</code>은 로그의 이미지 manifest digest와 일치했다.</p>
 
 <p><img src="https://sirzzang.github.io//assets/images/mlpe-ch03-ci-dockerhub.png" alt="CI가 만든 Docker Hub 태그" class="align-center" /></p>
-<center><sup>직접 캡처. 9fc8cad1은 linux/arm64이고, 앞선 수동 빌드의 v2는 amd64와 arm64를 포함한다.</sup></center>
+<center><sup>직접 캡처. 9fc8cad1은 linux/arm64이고, 앞선 수동 빌드의 v2는 amd64와 arm64를 포함한다</sup></center>
 
 <p>로그에는 <code class="highlighter-rouge">exporting manifest list</code>와 <code class="highlighter-rouge">exporting attestation manifest</code>도 있었다. attestation은 빌드 출처 같은 부가 정보를 담는다. manifest list가 출력됐다는 사실만으로 실행 가능한 CPU 아키텍처가 여러 개라는 뜻은 아니다. 이번에는 Docker Hub의 플랫폼 목록과 이미지 manifest를 함께 확인했다. amd64와 arm64 이미지를 함께 배포하는 빌드는 <a href="/MLOps-ML-Platform-Engineering-03-02-02-Docker-Multi-Arch-Build-Push/">3.2.2편</a>에서 다룬다.</p>
 
-<p>이 출력만으로 dind의 실제 이미지 저장소 backend를 확정하지는 않았다. <code class="highlighter-rouge">docker info</code>의 storage driver 확인이 더 필요하다.</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># dind의 이미지 저장소 확인</span>
+kubectl <span class="nt">-n</span> gitea <span class="nb">exec </span>runner-runner-0 <span class="nt">-c</span> dind <span class="nt">--</span> docker info <span class="nt">--format</span> <span class="s1">'{{.Driver}} {{json .DriverStatus}}'</span>
+
+<span class="c"># 실행 결과</span>
+<span class="c"># overlayfs [["driver-type","io.containerd.snapshotter.v1"]]</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">driver-type</code>의 <code class="highlighter-rouge">io.containerd.snapshotter.v1</code>은 dind의 Docker가 containerd 이미지 저장소를 사용한다는 뜻이다. 이 저장소는 manifest list와 attestation manifest를 함께 저장한다. 클래식 이미지 저장소에서 두 아키텍처를 <code class="highlighter-rouge">--load</code>하지 못했던 <a href="/MLOps-ML-Platform-Engineering-03-02-02-Docker-Multi-Arch-Build-Push/">3.2.2편</a>의 Mac 환경과는 저장소 종류가 다르다.</p>
 
 <h2 id="차트-갱신-커밋">차트 갱신 커밋</h2>
 
@@ -685,7 +706,21 @@ ERROR: failed to build: invalid tag "/hello-joker:0d9be204": invalid reference f
 Job succeeded
 </code></pre></div></div>
 
-<p>arm64 잡 컨테이너에서 다운로드한 <code class="highlighter-rouge">yq_linux_amd64</code>도 실행됐다. Mac 실습에서 Rosetta로 실행한 yq 4.2.0 확인과 일치한다. 다른 arm64 러너에서의 amd64 바이너리 실행은 시험하지 않았다.</p>
+<p>arm64 잡 컨테이너에서 다운로드한 <code class="highlighter-rouge">yq_linux_amd64</code>도 실행됐다. binfmt_misc는 실행 파일 형식별로 사용할 해석기를 등록하는 리눅스 커널 기능이다. 잡 컨테이너는 kind 노드와 같은 Docker Desktop VM 커널을 사용하며, 노드에서 본 등록 목록에는 x86_64 실행 파일용 처리기가 있었다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># kind 노드에서 x86_64 실행 파일 처리기 확인</span>
+docker <span class="nb">exec </span>ml-study-control-plane sh <span class="nt">-c</span> <span class="s1">'head -2 /proc/sys/fs/binfmt_misc/rosetta /proc/sys/fs/binfmt_misc/x86_64'</span>
+
+<span class="c"># 실행 결과</span>
+<span class="c"># ==&gt; /proc/sys/fs/binfmt_misc/rosetta &lt;==</span>
+<span class="c"># enabled</span>
+<span class="c"># interpreter /run/rosetta/rosetta</span>
+<span class="c"># ==&gt; /proc/sys/fs/binfmt_misc/x86_64 &lt;==</span>
+<span class="c"># enabled</span>
+<span class="c"># interpreter /usr/bin/qemu-x86_64</span>
+</code></pre></div></div>
+
+<p>두 처리기 중 yq를 실행한 쪽과, 이런 처리기가 없는 arm64 러너에서의 동작은 확인하지 않았다.</p>
 
 <p>CI가 원격 <code class="highlighter-rouge">main</code>에 커밋을 하나 추가했으므로 로컬 <code class="highlighter-rouge">app-ci</code>는 그만큼 뒤에 남는다. 다음 변경을 올리기 전에 <code class="highlighter-rouge">git pull</code>로 차트 갱신 커밋을 가져온다.</p>
 

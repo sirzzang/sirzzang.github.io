@@ -332,7 +332,7 @@
 
 
 
-  12 분 소요
+  13 분 소요
 
 
             
@@ -627,7 +627,7 @@ kubectl <span class="nt">-n</span> gitea get svc,ep
   </tbody>
 </table>
 
-<p>이 역할은 <a href="https://dl.gitea.com/charts/gitea-12.7.0.tgz">Gitea 차트 12.7.0</a>의 템플릿과 사용자 출력이 일치했다. 이 중 설정용 Secret은 스크립트와 설정 문자열을 담는다.</p>
+<p>표의 생성 주체와 역할은 <a href="https://dl.gitea.com/charts/gitea-12.7.0.tgz">Gitea 차트 12.7.0</a>의 템플릿과 클러스터의 Secret 목록을 대조해 확인했다. 차트가 만든 Secret 세 개는 초기화 스크립트와 설정 문자열을 담는다.</p>
 
 <p>이 구성은 파드 하나와 <code class="highlighter-rouge">/data</code> 하나에 파일 상태가 모인다. LevelDB는 같은 DB를 한 프로세스만 열 수 있어, 교체 중 두 Gitea 프로세스가 같은 큐를 여는 상황을 피해야 한다. 실제 설정 변경 중 발생한 재시작과 교체 전략 변경은 <a href="/MLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting/#사례-2-helm-upgrade-시간-초과">3.4.2편</a>에서 다룬다. Helm 설치 결과도 메모리 캐시·세션과 LevelDB 큐를 운영용 구성으로 권장하지 않는다는 경고를 출력했다.</p>
 
@@ -763,7 +763,27 @@ kubectl <span class="nt">-n</span> gitea <span class="nb">exec </span>runner-run
 
 <p>같은 로그에서 러너는 <code class="highlighter-rouge">actions/checkout@v4</code>와 <code class="highlighter-rouge">actions/setup-python@v5</code>의 코드를 GitHub에서 내려받았다. 액션 코드 다운로드는 러너가, 앱 저장소 checkout은 잡 컨테이너가 수행한다. 이 구성은 외부 액션·이미지·패키지를 받으므로 인터넷 접근도 필요하다.</p>
 
-<p>잡 안 <code class="highlighter-rouge">docker build</code>의 데몬 연결은 별도로 봐야 한다. 러너가 잡을 생성할 때 사용하는 소켓과 잡 컨테이너에 전달하는 Docker 연결 설정은 구분된다. run #2의 Docker 클라이언트·서버 조회와 이미지 빌드는 성공했지만, 당시 잡 컨테이너의 소켓 마운트 전체는 수집하지 않았다. 이 이미지 버전의 <code class="highlighter-rouge">container.docker_host</code>·<code class="highlighter-rouge">valid_volumes</code> 기본값까지 연결한 소스 확인은 남아 있다. (<a href="/MLOps-ML-Platform-Engineering-03-04-03-CI-Workflow/">3.4.3편</a> 참고)</p>
+<p>잡 안 <code class="highlighter-rouge">docker build</code>의 데몬 연결은 별도로 봐야 한다. 러너가 잡을 생성할 때 사용하는 소켓과 잡 컨테이너에 전달하는 Docker 연결은 러너 설정의 <code class="highlighter-rouge">container.docker_host</code>가 정한다. 실습 러너의 설정 파일에는 이 키가 없어 기본값인 빈 문자열이 적용된다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 러너에 적용된 설정 파일</span>
+kubectl <span class="nt">-n</span> gitea <span class="nb">exec </span>runner-runner-0 <span class="nt">-c</span> runner <span class="nt">--</span> <span class="nb">cat</span> /runner/config.yaml
+
+<span class="c"># 실행 결과 중 container 항목</span>
+<span class="c"># container:</span>
+<span class="c">#   require_docker: true</span>
+<span class="c">#   docker_timeout: 300s</span>
+
+<span class="c"># runner 2.0.1이 출력하는 기본 설정의 docker_host 설명</span>
+kubectl <span class="nt">-n</span> gitea <span class="nb">exec </span>runner-runner-0 <span class="nt">-c</span> runner <span class="nt">--</span> gitea-runner generate-config | <span class="nb">grep</span> <span class="nt">-B3</span> <span class="s1">'docker_host:'</span>
+
+<span class="c"># 실행 결과</span>
+<span class="c">#   # If it's empty, runner will find an available docker host automatically.</span>
+<span class="c">#   # If it's "-", runner will find an available docker host automatically, but the docker host won't be mounted to the job containers and service containers.</span>
+<span class="c">#   # If it's not empty or "-", the specified docker host will be used. An error will be returned if it doesn't work.</span>
+<span class="c">#   docker_host: ""</span>
+</code></pre></div></div>
+
+<p>기본 설정의 설명대로라면 빈 값일 때 러너가 찾은 Docker 호스트는 잡 컨테이너에도 마운트된다. run #2 잡의 <code class="highlighter-rouge">docker version</code>이 dind 이미지와 같은 서버 버전 29.5.2를 출력했고 이미지 빌드도 성공했다. 잡 컨테이너의 마운트 목록 자체는 수집하지 않았다. (<a href="/MLOps-ML-Platform-Engineering-03-04-03-CI-Workflow/">3.4.3편</a> 참고)</p>
 
 <h2 id="dind를-쓰는-이유와-다른-방식">DinD를 쓰는 이유와 다른 방식</h2>
 
