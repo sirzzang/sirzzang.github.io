@@ -353,18 +353,18 @@
                 <ul class="toc__menu">
   <li><a href="#tldr">TL;DR</a></li>
   <li><a href="#service-개념">Service 개념</a></li>
-  <li><a href="#nodeport">NodePort</a>
-    <ul>
-      <li><a href="#매니페스트와-세-포트">매니페스트와 세 포트</a></li>
-      <li><a href="#mac과-다른-pc에서의-호출">Mac과 다른 PC에서의 호출</a></li>
-    </ul>
-  </li>
   <li><a href="#clusterip">ClusterIP</a>
     <ul>
       <li><a href="#ip와-서비스명-호출">IP와 서비스명 호출</a></li>
       <li><a href="#coredns-이름-해석">CoreDNS 이름 해석</a></li>
       <li><a href="#kube-proxy의-iptables-dnat">kube-proxy의 iptables DNAT</a></li>
       <li><a href="#clusterip와-ping">ClusterIP와 ping</a></li>
+    </ul>
+  </li>
+  <li><a href="#nodeport">NodePort</a>
+    <ul>
+      <li><a href="#매니페스트와-세-포트">매니페스트와 세 포트</a></li>
+      <li><a href="#mac과-다른-pc에서의-호출">Mac과 다른 PC에서의 호출</a></li>
     </ul>
   </li>
   <li><a href="#loadbalancer">LoadBalancer</a></li>
@@ -394,8 +394,8 @@
 
 <ul>
   <li>Service는 파드가 교체돼도 사용할 수 있는 주소와 포트를 제공한다. 셀렉터가 선택한 파드의 IP와 포트가 통신 대상이 된다</li>
-  <li>NodePort <code class="highlighter-rouge">30420</code>을 kind의 호스트 포트 매핑과 연결해 Mac과 같은 LAN의 다른 PC에서 앱 응답을 받았다</li>
   <li>ClusterIP 호출, 서비스명 호출, 파드의 DNS 설정과 노드의 iptables 규칙을 확인했다. 별도의 <code class="highlighter-rouge">nslookup</code>에는 <code class="highlighter-rouge">NXDOMAIN</code>도 기록됐다</li>
+  <li>NodePort <code class="highlighter-rouge">30420</code>을 kind의 호스트 포트 매핑과 연결해 Mac과 같은 LAN의 다른 PC에서 앱 응답을 받았다</li>
   <li>kind의 기본 구성에는 LoadBalancer를 구현할 컨트롤러가 없어 외부 주소가 <code class="highlighter-rouge">&lt;pending&gt;</code>으로 남았다</li>
 </ul>
 
@@ -416,117 +416,11 @@
 </code></pre>
 <center><sup>출처: 『머신러닝 플랫폼 엔지니어링』 그림 3.6. AI를 이용해 재구성했다</sup></center>
 
-<p>이번에는 NodePort, ClusterIP, LoadBalancer 세 유형을 차례로 적용한다. 먼저 <a href="/MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/">3.3.3편</a>에서 지운 Deployment를 <code class="highlighter-rouge">v1</code> 이미지로 다시 만들어 백엔드 파드 세 개를 준비했다. 실습 위치 <code class="highlighter-rouge">~/ml-study/chapters/ch03-k8s</code>는 실습 저장소 경로를 줄인 표기이고, <code class="highlighter-rouge">kubectl apply -f</code>는 파일의 선언을 클러스터에 반영한다.</p>
+<p>이번에는 ClusterIP, NodePort, LoadBalancer 세 유형을 차례로 적용한다. 뒤의 유형은 앞의 유형 위에 외부 노출 경로를 더한다. 먼저 <a href="/MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/">3.3.3편</a>에서 지운 Deployment를 <code class="highlighter-rouge">v1</code> 이미지로 다시 만들어 백엔드 파드 세 개를 준비했다. 실습 위치 <code class="highlighter-rouge">~/ml-study/chapters/ch03-k8s</code>는 실습 저장소 경로를 줄인 표기이고, <code class="highlighter-rouge">kubectl apply -f</code>는 파일의 선언을 클러스터에 반영한다.</p>
 
 <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># hello-joker 파드 3개 준비</span>
 kubectl apply <span class="nt">-f</span> k8s/deployment.yaml
 </code></pre></div></div>
-
-<p><br /></p>
-
-<h1 id="nodeport">NodePort</h1>
-
-<p>NodePort는 클러스터의 노드 포트를 통해 Service에 접근하게 하는 유형이다. 이 실습에서 앱은 파드 안 <code class="highlighter-rouge">8083</code>에서 수신하고, Service 포트는 <code class="highlighter-rouge">80</code>, 노드 포트는 <code class="highlighter-rouge">30420</code>이다.</p>
-
-<h2 id="매니페스트와-세-포트">매니페스트와 세 포트</h2>
-
-<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># k8s/node-port-service.yaml</span>
-<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
-<span class="na">kind</span><span class="pi">:</span> <span class="s">Service</span>
-<span class="na">metadata</span><span class="pi">:</span>
-  <span class="na">name</span><span class="pi">:</span> <span class="s">joker-nodeport-service</span>
-<span class="na">spec</span><span class="pi">:</span>
-  <span class="na">type</span><span class="pi">:</span> <span class="s">NodePort</span>
-  <span class="na">ports</span><span class="pi">:</span>
-    <span class="pi">-</span> <span class="na">targetPort</span><span class="pi">:</span> <span class="s">8083</span>
-      <span class="na">port</span><span class="pi">:</span> <span class="s">80</span>
-      <span class="na">nodePort</span><span class="pi">:</span> <span class="s">30420</span>
-  <span class="na">selector</span><span class="pi">:</span>
-    <span class="na">app</span><span class="pi">:</span> <span class="s">fast-api</span>
-</code></pre></div></div>
-
-<table>
-  <thead>
-    <tr>
-      <th>필드</th>
-      <th>값</th>
-      <th>역할</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code class="highlighter-rouge">port</code></td>
-      <td>80</td>
-      <td>Service의 클러스터 IP로 접근할 때 사용하는 포트</td>
-    </tr>
-    <tr>
-      <td><code class="highlighter-rouge">targetPort</code></td>
-      <td>8083</td>
-      <td>선택된 파드에서 앱이 수신하는 포트</td>
-    </tr>
-    <tr>
-      <td><code class="highlighter-rouge">nodePort</code></td>
-      <td>30420</td>
-      <td>노드 주소를 통해 접근할 때 사용하는 포트</td>
-    </tr>
-  </tbody>
-</table>
-
-<p>NodePort로 들어온 패킷은 노드의 전달 규칙을 통해 파드의 <code class="highlighter-rouge">8083</code>으로 향한다. Service 포트 <code class="highlighter-rouge">80</code>에서 별도 프로세스가 패킷을 받아 다시 보내는 것은 아니다. 포트 역할을 혼동했던 사례는 <a href="/dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion/">Service 포트와 노출 포트</a>에 있다.</p>
-
-<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Service 생성과 연결 대상 확인</span>
-kubectl apply <span class="nt">-f</span> k8s/node-port-service.yaml
-kubectl get svc,ep joker-nodeport-service <span class="nt">-owide</span>
-
-<span class="c"># 실행 결과</span>
-NAME                             TYPE       CLUSTER-IP     EXTERNAL-IP   PORT<span class="o">(</span>S<span class="o">)</span>        AGE   SELECTOR
-service/joker-nodeport-service   NodePort   10.96.39.173   &lt;none&gt;        80:30420/TCP   17s   <span class="nv">app</span><span class="o">=</span>fast-api
-
-NAME                               ENDPOINTS                                            AGE
-endpoints/joker-nodeport-service   10.244.0.22:8083,10.244.0.23:8083,10.244.0.24:8083   17s
-</code></pre></div></div>
-
-<p><code class="highlighter-rouge">svc</code>는 Service, <code class="highlighter-rouge">ep</code>는 Endpoints의 단축 이름이다. 출력에는 같은 Deployment의 파드 세 개와 <code class="highlighter-rouge">8083</code> 포트가 연결 대상으로 나타났다.</p>
-
-<h2 id="mac과-다른-pc에서의-호출">Mac과 다른 PC에서의 호출</h2>
-
-<p>Mac의 Docker Desktop에서는 kind 노드가 Linux VM 안의 컨테이너로 실행된다. <a href="/MLOps-ML-Platform-Engineering-03-03-01-Kind-Cluster-API-Access/">3.3.1편</a>의 <code class="highlighter-rouge">extraPortMappings</code>에는 호스트 <code class="highlighter-rouge">30420</code> → 노드 컨테이너 <code class="highlighter-rouge">30420</code> 매핑이 있다.</p>
-
-<pre><code class="language-mermaid">flowchart LR
-    %% Mac 포트 매핑과 NodePort 전달 경로
-    M[Mac localhost:30420] --&gt; D[Docker Desktop 포트 매핑]
-    D --&gt; N[노드 nodePort 30420]
-    N --&gt; R[Service의 kube-proxy 규칙]
-    R --&gt; P[파드 targetPort 8083]
-    S[ClusterIP의 port 80] --&gt; R
-</code></pre>
-<center><sup>출처: 『머신러닝 플랫폼 엔지니어링』 그림 3.7. AI를 이용해 재구성했다. Mac의 포트 매핑과 두 접근 경로를 함께 나타냈다</sup></center>
-
-<p><code class="highlighter-rouge">curl</code>은 HTTP 요청을 보내는 도구다. Mac에서 포트 매핑을 통해 호출하자 농담 JSON이 반환됐다.</p>
-
-<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Mac에서 NodePort 호출</span>
-curl <span class="nt">-s</span> http://localhost:30420
-
-<span class="c"># 실행 결과</span>
-<span class="o">{</span><span class="s2">"random_joke"</span>:<span class="s2">"How do you generate a random string? Put a first year Computer Science student inVim and ask them to save and exit."</span><span class="o">}</span>
-</code></pre></div></div>
-
-<p>다른 PC에서는 Mac의 LAN 주소로 요청했다. <code class="highlighter-rouge">ifconfig</code>는 네트워크 인터페이스의 주소와 상태를 보여 주는 도구다. 당시 Mac의 <code class="highlighter-rouge">en0</code>에서 확인한 IPv4 주소를 사용했다.</p>
-
-<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># ifconfig 출력 중 en0의 IPv4 주소
-inet 192.168.0.10 netmask 0xffffff00 broadcast 192.168.0.255
-</code></pre></div></div>
-
-<p><code class="highlighter-rouge">jq</code>는 JSON 출력의 구조를 보기 좋게 정렬한다.</p>
-
-<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 같은 LAN의 다른 PC에서 호출</span>
-other-pc:~<span class="nv">$ </span>curl <span class="nt">-s</span> http://192.168.0.10:30420 | jq
-<span class="o">{</span>
-  <span class="s2">"random_joke"</span>: <span class="s2">"What's the object-oriented way to become wealthy? Inheritance."</span>
-<span class="o">}</span>
-</code></pre></div></div>
-
-<p>포트 매핑이 <code class="highlighter-rouge">0.0.0.0</code>에 바인딩되어 있어 LAN 인터페이스로도 요청을 받을 수 있었다. 호출 확인 뒤 <code class="highlighter-rouge">kubectl delete -f k8s/node-port-service.yaml</code>로 Service를 삭제했다.</p>
 
 <p><br /></p>
 
@@ -562,7 +456,7 @@ service/joker-cluster-ip-service   ClusterIP   10.96.179.55   &lt;none&gt;      
 kubectl run curl-test <span class="nt">--rm</span> <span class="nt">-it</span> <span class="nt">--image</span><span class="o">=</span>curlimages/curl:latest <span class="nt">--</span> sh
 </code></pre></div></div>
 
-<p><code class="highlighter-rouge">kubectl run</code>은 파드를 생성한다. 이 명령은 셸에 연결하고, 종료 후 <code class="highlighter-rouge">--rm</code>에 따라 파드를 지운다. 파드 안에서 <code class="highlighter-rouge">http://10.96.179.55:80</code>과 <code class="highlighter-rouge">http://joker-cluster-ip-service</code>로 각각 호출해 앱 응답을 받았다. HTTP 기본 포트가 80이어서 서비스명 호출에서는 포트를 생략할 수 있다.</p>
+<p><code class="highlighter-rouge">port</code>는 Service의 클러스터 IP로 접근할 때 쓰는 포트다. <code class="highlighter-rouge">targetPort</code>는 선택된 파드에서 앱이 수신하는 포트다. <code class="highlighter-rouge">kubectl run</code>은 파드를 생성한다. 이 명령은 셸에 연결하고, 종료 후 <code class="highlighter-rouge">--rm</code>에 따라 파드를 지운다. 파드 안에서 <code class="highlighter-rouge">http://10.96.179.55:80</code>과 <code class="highlighter-rouge">http://joker-cluster-ip-service</code>로 각각 호출해 앱 응답을 받았다. HTTP 기본 포트가 80이어서 서비스명 호출에서는 포트를 생략할 수 있다.</p>
 
 <div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 임시 파드 안에서 서비스명 호출</span>
 ~<span class="nv">$ </span>curl <span class="nt">-s</span> http://joker-cluster-ip-service
@@ -635,7 +529,7 @@ docker <span class="nb">exec </span>ml-study-control-plane iptables-save <span c
 
 </details>
 
-<p>규칙의 연결은 <strong><code class="highlighter-rouge">KUBE-SERVICES</code> → <code class="highlighter-rouge">KUBE-SVC-…</code> → <code class="highlighter-rouge">KUBE-SEP-…</code> → DNAT</strong>다. 첫 번째 엔드포인트는 1/3 확률로 선택한다. 거기서 선택되지 않은 연결의 1/2이 두 번째로 가고, 나머지가 세 번째로 간다. 결과적으로 각 엔드포인트의 선택 확률은 1/3이다. NodePort 요청은 <code class="highlighter-rouge">KUBE-NODEPORTS</code>에서 Service의 <code class="highlighter-rouge">KUBE-SVC-…</code> 체인으로 연결된다.</p>
+<p>규칙의 연결은 <strong><code class="highlighter-rouge">KUBE-SERVICES</code> → <code class="highlighter-rouge">KUBE-SVC-…</code> → <code class="highlighter-rouge">KUBE-SEP-…</code> → DNAT</strong>다. 첫 번째 엔드포인트는 1/3 확률로 선택한다. 거기서 선택되지 않은 연결의 1/2이 두 번째로 가고, 나머지가 세 번째로 간다. 결과적으로 각 엔드포인트의 선택 확률은 1/3이다.</p>
 
 <p>conntrack은 커널이 연결 상태와 NAT 매핑을 추적하는 기능이다. 같은 TCP 연결의 후속 패킷은 처음 선택한 파드로 전달되고, 응답에는 역방향 주소 변환이 적용된다. HTTP keep-alive로 같은 연결을 재사용하면 그 연결 안에서는 같은 파드가 요청을 받는다. 커널 처리 과정은 <a href="/kubernetes/Kubernetes-Networking-Linux-Stack/">iptables와 conntrack</a>에서 다뤘다.</p>
 
@@ -644,6 +538,112 @@ docker <span class="nb">exec </span>ml-study-control-plane iptables-save <span c
 <p>ClusterIP의 동작을 <code class="highlighter-rouge">ping</code>으로 확인할 수 없는 이유도 위 규칙에서 보인다. 이번 iptables 모드의 ClusterIP는 인터페이스에 할당한 주소가 아니라 전달 규칙에서 사용하는 가상 주소다. 위 규칙은 <code class="highlighter-rouge">-p tcp --dport 80</code>을 매칭하므로 ICMP Echo 요청인 <code class="highlighter-rouge">ping</code>은 이 Service 전달 경로를 시험하지 못한다. HTTP Service의 동작은 해당 포트로 요청해 확인하는 것이 맞다.</p>
 
 <p>IPVS(IP Virtual Server)는 Linux 커널의 전송 계층 부하 분산 기능이다. kube-proxy를 IPVS 모드로 쓰면 서비스 IP를 <code class="highlighter-rouge">kube-ipvs0</code>이라는 더미 인터페이스에 바인딩하므로(<a href="https://github.com/kubernetes/kubernetes/blob/v1.29.14/pkg/proxy/ipvs/proxier.go">v1.29.14 IPVS 구현</a>), ClusterIP가 인터페이스에 없다는 설명은 iptables 모드에 한정된다.</p>
+
+<p><br /></p>
+
+<h1 id="nodeport">NodePort</h1>
+
+<p>NodePort는 ClusterIP에 더해 클러스터 노드의 포트로도 Service에 접근하게 하는 유형이다. 이 실습에서 앱은 파드 안 <code class="highlighter-rouge">8083</code>에서 수신하고, Service 포트는 <code class="highlighter-rouge">80</code>, 노드 포트는 <code class="highlighter-rouge">30420</code>이다.</p>
+
+<h2 id="매니페스트와-세-포트">매니페스트와 세 포트</h2>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># k8s/node-port-service.yaml</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Service</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">joker-nodeport-service</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">type</span><span class="pi">:</span> <span class="s">NodePort</span>
+  <span class="na">ports</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">targetPort</span><span class="pi">:</span> <span class="s">8083</span>
+      <span class="na">port</span><span class="pi">:</span> <span class="s">80</span>
+      <span class="na">nodePort</span><span class="pi">:</span> <span class="s">30420</span>
+  <span class="na">selector</span><span class="pi">:</span>
+    <span class="na">app</span><span class="pi">:</span> <span class="s">fast-api</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>필드</th>
+      <th>값</th>
+      <th>역할</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">port</code></td>
+      <td>80</td>
+      <td>Service의 클러스터 IP로 접근할 때 사용하는 포트</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">targetPort</code></td>
+      <td>8083</td>
+      <td>선택된 파드에서 앱이 수신하는 포트</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">nodePort</code></td>
+      <td>30420</td>
+      <td>노드 주소를 통해 접근할 때 사용하는 포트</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>NodePort로 들어온 패킷도 <a href="#kube-proxy의-iptables-dnat">앞에서 본 kube-proxy 규칙</a>을 거쳐 파드의 <code class="highlighter-rouge">8083</code>으로 향한다. 노드 포트 요청은 <code class="highlighter-rouge">KUBE-NODEPORTS</code> 체인에서 같은 Service의 <code class="highlighter-rouge">KUBE-SVC-…</code> 체인으로 이어진다. Service 포트 <code class="highlighter-rouge">80</code>에서 별도 프로세스가 패킷을 받아 다시 보내는 것은 아니다. 포트 역할을 혼동했던 사례는 <a href="/dev/Dev-Kubernetes-Service-Port-Exposed-Port-Confusion/">Service 포트와 노출 포트</a>에 있다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Service 생성과 연결 대상 확인</span>
+kubectl apply <span class="nt">-f</span> k8s/node-port-service.yaml
+kubectl get svc,ep joker-nodeport-service <span class="nt">-owide</span>
+
+<span class="c"># 실행 결과</span>
+NAME                             TYPE       CLUSTER-IP     EXTERNAL-IP   PORT<span class="o">(</span>S<span class="o">)</span>        AGE   SELECTOR
+service/joker-nodeport-service   NodePort   10.96.39.173   &lt;none&gt;        80:30420/TCP   17s   <span class="nv">app</span><span class="o">=</span>fast-api
+
+NAME                               ENDPOINTS                                            AGE
+endpoints/joker-nodeport-service   10.244.0.22:8083,10.244.0.23:8083,10.244.0.24:8083   17s
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">svc</code>는 Service, <code class="highlighter-rouge">ep</code>는 Endpoints의 단축 이름이다. 출력에는 같은 Deployment의 파드 세 개와 <code class="highlighter-rouge">8083</code> 포트가 연결 대상으로 나타났다.</p>
+
+<h2 id="mac과-다른-pc에서의-호출">Mac과 다른 PC에서의 호출</h2>
+
+<p>Mac의 Docker Desktop에서는 kind 노드가 Linux VM 안의 컨테이너로 실행된다. <a href="/MLOps-ML-Platform-Engineering-03-03-01-Kind-Cluster-API-Access/">3.3.1편</a>의 <code class="highlighter-rouge">extraPortMappings</code>에는 호스트 <code class="highlighter-rouge">30420</code> → 노드 컨테이너 <code class="highlighter-rouge">30420</code> 매핑이 있다.</p>
+
+<pre><code class="language-mermaid">flowchart LR
+    %% Mac 포트 매핑과 NodePort 전달 경로
+    M[Mac localhost:30420] --&gt; D[Docker Desktop 포트 매핑]
+    D --&gt; N[노드 nodePort 30420]
+    N --&gt; R[Service의 kube-proxy 규칙]
+    R --&gt; P[파드 targetPort 8083]
+    S[ClusterIP의 port 80] --&gt; R
+</code></pre>
+<center><sup>출처: 『머신러닝 플랫폼 엔지니어링』 그림 3.7. AI를 이용해 재구성했다. Mac의 포트 매핑과 두 접근 경로를 함께 나타냈다</sup></center>
+
+<p><code class="highlighter-rouge">curl</code>은 HTTP 요청을 보내는 도구다. Mac에서 포트 매핑을 통해 호출하자 농담 JSON이 반환됐다.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Mac에서 NodePort 호출</span>
+curl <span class="nt">-s</span> http://localhost:30420
+
+<span class="c"># 실행 결과</span>
+<span class="o">{</span><span class="s2">"random_joke"</span>:<span class="s2">"How do you generate a random string? Put a first year Computer Science student inVim and ask them to save and exit."</span><span class="o">}</span>
+</code></pre></div></div>
+
+<p>다른 PC에서는 Mac의 LAN 주소로 요청했다. <code class="highlighter-rouge">ifconfig</code>는 네트워크 인터페이스의 주소와 상태를 보여 주는 도구다. 당시 Mac의 <code class="highlighter-rouge">en0</code>에서 확인한 IPv4 주소를 사용했다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># ifconfig 출력 중 en0의 IPv4 주소
+inet 192.168.0.10 netmask 0xffffff00 broadcast 192.168.0.255
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">jq</code>는 JSON 출력의 구조를 보기 좋게 정렬한다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 같은 LAN의 다른 PC에서 호출</span>
+other-pc:~<span class="nv">$ </span>curl <span class="nt">-s</span> http://192.168.0.10:30420 | jq
+<span class="o">{</span>
+  <span class="s2">"random_joke"</span>: <span class="s2">"What's the object-oriented way to become wealthy? Inheritance."</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>포트 매핑이 <code class="highlighter-rouge">0.0.0.0</code>에 바인딩되어 있어 LAN 인터페이스로도 요청을 받을 수 있었다. 호출 확인 뒤 <code class="highlighter-rouge">kubectl delete -f k8s/node-port-service.yaml</code>로 Service를 삭제했다.</p>
 
 <p><br /></p>
 

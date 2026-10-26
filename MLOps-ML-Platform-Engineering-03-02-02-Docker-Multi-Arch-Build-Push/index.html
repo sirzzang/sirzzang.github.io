@@ -364,13 +364,13 @@
       <li><a href="#베이스-이미지와-빌더-준비">베이스 이미지와 빌더 준비</a></li>
       <li><a href="#arm64-이미지의-로컬-실행">arm64 이미지의 로컬 실행</a></li>
       <li><a href="#두-아키텍처-빌드와-docker-hub-푸시">두 아키텍처 빌드와 Docker Hub 푸시</a></li>
+      <li><a href="#v2-응답-구분">v2 응답 구분</a></li>
     </ul>
   </li>
   <li><a href="#검증-manifest-list-읽기">검증: manifest list 읽기</a>
     <ul>
       <li><a href="#index와-플랫폼별-다이제스트">index와 플랫폼별 다이제스트</a></li>
       <li><a href="#attestation과-docker-hub-화면">attestation과 Docker Hub 화면</a></li>
-      <li><a href="#v2-응답-구분">v2 응답 구분</a></li>
     </ul>
   </li>
   <li><a href="#트러블슈팅">트러블슈팅</a>
@@ -476,7 +476,7 @@ Cannot load builder default: Cannot connect to the Docker daemon at unix:///var/
   </tbody>
 </table>
 
-<p><code class="highlighter-rouge">docker</code> 드라이버는 빌드 결과를 Docker Engine의 이미지 저장소에 바로 넣는다. <a href="https://docs.docker.com/build/building/multi-platform/">Docker 멀티 플랫폼 빌드 문서</a>에 따르면 이 드라이버로 멀티 플랫폼 빌드를 하려면 containerd 이미지 저장소를 켜야 한다. 이 Mac의 Docker Desktop은 클래식 저장소를 쓰고 있었으므로(<a href="#트러블슈팅">트러블슈팅</a>), 두 아키텍처 빌드에는 <code class="highlighter-rouge">docker-container</code> 드라이버 빌더를 쓰고 결과를 레지스트리에 바로 올렸다. 별도 컨테이너로 실행되는 BuildKit은 위 표처럼 내장 BuildKit과 버전이 다를 수 있다.</p>
+<p><code class="highlighter-rouge">docker</code> 드라이버는 빌드 결과를 Docker Engine의 이미지 저장소에 바로 넣는다. <a href="https://docs.docker.com/build/building/multi-platform/">Docker 멀티 플랫폼 빌드 문서</a>에 따르면 이 드라이버로 멀티 플랫폼 빌드를 하려면 containerd 이미지 저장소를 켜야 한다. 이 Mac의 Docker Desktop은 여러 플랫폼을 묶은 manifest list를 저장하지 못하는 클래식 이미지 저장소를 쓰고 있었으므로(<a href="#트러블슈팅">트러블슈팅</a>), 두 아키텍처 빌드에는 <code class="highlighter-rouge">docker-container</code> 드라이버 빌더를 쓰고 결과를 레지스트리에 바로 올렸다. 별도 컨테이너로 실행되는 BuildKit은 위 표처럼 내장 BuildKit과 버전이 다를 수 있다.</p>
 
 <h2 id="default-빌더-오류">default 빌더 오류</h2>
 
@@ -595,6 +595,16 @@ docker buildx imagetools inspect <span class="s2">"</span><span class="nv">$DHID
 
 <p>실제 빌드는 <code class="highlighter-rouge">docker-container:multi</code>에서 완료됐다. arm64 단계는 앞선 빌드의 캐시를 재사용했고, amd64 단계는 새로 실행했다. M1에서 amd64 단계는 에뮬레이션으로 실행된다. 시스템 패키지 설치 단계는 arm64 빌드에서 13.0초, amd64 빌드에서 26.3초였다.</p>
 
+<h2 id="v2-응답-구분">v2 응답 구분</h2>
+
+<p>이후 Deployment 업데이트를 구분하기 위해 응답에 <code class="highlighter-rouge">version</code>을 추가하고 v2 이미지를 따로 푸시했다. 현재 실습 저장소의 <code class="highlighter-rouge">main.py</code>에도 이 변경이 들어 있다.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># v2에서 바뀐 반환 값: 농담과 함께 버전 표시</span>
+<span class="k">return</span> <span class="p">{</span><span class="s">"version"</span><span class="p">:</span> <span class="s">"v2"</span><span class="p">,</span> <span class="s">"random_joke"</span><span class="p">:</span> <span class="n">random_joke</span><span class="p">}</span>
+</code></pre></div></div>
+
+<p>버전 문자열은 요청이 어느 앱 버전에 도달했는지 확인하기 위한 것이다. 여기서는 v1의 빌드와 조회 결과를 분석했으며, v2의 롤링 업데이트는 <a href="/MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/#이미지-변경과-롤링-업데이트">3.3.3편의 파드 배포 실습</a>에 해당한다.</p>
+
 <p><br /></p>
 
 <h1 id="검증-manifest-list-읽기">검증: manifest list 읽기</h1>
@@ -666,16 +676,6 @@ sha256:5ebc7ebff2461f86c114dbbd464914296fccf4da9d1a1d21f57b74a2d4030a6d
 <center><sup>직접 캡처. Docker Hub의 v1 태그 아래 linux/amd64와 linux/arm64 이미지가 표시된다</sup></center>
 
 <p>Docker Hub 화면의 두 다이제스트도 CLI 결과와 일치한다. 같은 태그를 받더라도 런타임은 대상 플랫폼에 맞는 이미지를 선택한다. arm64 kind 노드에는 arm64 이미지가 필요하다. 파드 배포에서 이 태그를 사용하는 과정은 <a href="/MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/">3.3.3편</a>에서 다룬다.</p>
-
-<h2 id="v2-응답-구분">v2 응답 구분</h2>
-
-<p>이후 Deployment 업데이트를 구분하기 위해 응답에 <code class="highlighter-rouge">version</code>을 추가하고 v2 이미지를 따로 푸시했다. 현재 실습 저장소의 <code class="highlighter-rouge">main.py</code>에도 이 변경이 들어 있다.</p>
-
-<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># v2에서 바뀐 반환 값: 농담과 함께 버전 표시</span>
-<span class="k">return</span> <span class="p">{</span><span class="s">"version"</span><span class="p">:</span> <span class="s">"v2"</span><span class="p">,</span> <span class="s">"random_joke"</span><span class="p">:</span> <span class="n">random_joke</span><span class="p">}</span>
-</code></pre></div></div>
-
-<p>버전 문자열은 요청이 어느 앱 버전에 도달했는지 확인하기 위한 것이다. 여기서는 v1의 빌드와 조회 결과를 분석했으며, v2의 롤링 업데이트는 <a href="/MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/#이미지-변경과-롤링-업데이트">3.3.3편의 파드 배포 실습</a>에 해당한다.</p>
 
 <p><br /></p>
 
