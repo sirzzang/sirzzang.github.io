@@ -37,7 +37,7 @@
 
 
 
-  <meta property="article:modified_time" content="2026-10-25T00:00:00+09:00">
+  <meta property="article:modified_time" content="2026-10-26T00:00:00+09:00">
 
 
 
@@ -312,7 +312,7 @@
     <meta itemprop="headline" content="[kind] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.2. kind 노드 내부: kindnet, 네임스페이스, containerd">
     <meta itemprop="description" content="kind 노드 안에서 kindnet이 만든 veth와 경로를 파드에 연결하고, 리눅스 네임스페이스와 containerd 런타임 계층을 확인해 보자.">
     <meta itemprop="datePublished" content="2026-10-24T00:00:00+09:00">
-    <meta itemprop="dateModified" content="2026-10-25T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-10-26T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
@@ -519,15 +519,15 @@ kubectl <span class="nt">--context</span> kind-ml-study get node ml-study-contro
 
 </details>
 
-<p>이 구성은 파드 패킷을 그대로 노드의 라우트로 전달한다. VXLAN 같은 오버레이는 노드 사이에서 원래 패킷을 다른 패킷 안에 캡슐화하는 방식이다. 오버레이 통신에도 노드 간 연결·방화벽·MTU 조건이 필요하다.</p>
+<p>이 구성은 파드 패킷을 캡슐화하지 않고 노드의 라우트로 그대로 전달한다. VXLAN 같은 오버레이는 노드 사이에서 원래 패킷을 다른 패킷 안에 넣어 보내는 방식이다.</p>
 
-<p>eBPF는 커널의 특정 지점에 프로그램을 실행하는 기술이고, 관측 기능은 통신 흐름과 허용·차단 결과를 보여주는 기능이다. 이 kindnet 구성에는 Cilium의 eBPF 데이터 경로나 Hubble 같은 흐름 관측 기능이 없다. 이번 실습은 기본 인터페이스와 라우팅 테이블을 직접 조회했다.</p>
+<p>eBPF는 커널의 특정 지점에서 프로그램을 실행하는 기술이다. Cilium처럼 eBPF로 데이터 경로를 구현하고 Hubble로 통신 흐름을 보여 주는 CNI와 달리, 이 kindnet 구성에는 흐름을 관측하는 기능이 없다. 그래서 이 글은 인터페이스와 라우팅 테이블을 직접 조회했다.</p>
 
 <h2 id="networkpolicy-지원-범위">NetworkPolicy 지원 범위</h2>
 
 <p>NetworkPolicy는 파드의 인바운드·아웃바운드 통신 허용 조건을 정의하는 쿠버네티스 리소스다. 이를 실제로 집행하는 네트워크 구현이 함께 있어야 한다.</p>
 
-<p>kind는 <a href="https://github.com/kubernetes-sigs/kind/releases/tag/v0.24.0">v0.24.0 릴리스</a>에서 <code class="highlighter-rouge">kube-network-policies</code> 기반 지원을 추가했다. 이는 쿠버네티스 노드 버전 <code class="highlighter-rouge">v1.29.14</code>와 다른 버전 축이다. 실습 이미지 태그의 커밋에 해당하는 <a href="https://github.com/kubernetes-sigs/kind/blob/acbabc1a/images/kindnetd/cmd/kindnetd/main.go">kindnetd 소스</a>에도 정책 컨트롤러 구성이 있다.</p>
+<p>kind는 <a href="https://github.com/kubernetes-sigs/kind/releases/tag/v0.24.0">v0.24.0</a>부터 <code class="highlighter-rouge">kube-network-policies</code> 기반으로 NetworkPolicy를 지원한다. 여기서 버전은 kind 도구의 버전이며, 노드의 쿠버네티스 버전(<code class="highlighter-rouge">v1.29.14</code>)과는 별개다. 실습에 쓴 kindnetd 이미지 태그의 커밋 <a href="https://github.com/kubernetes-sigs/kind/blob/acbabc1a/images/kindnetd/cmd/kindnetd/main.go">소스</a>에도 정책 컨트롤러가 들어 있고, 클러스터의 kindnet ClusterRole에는 정책을 읽는 권한이 있었다.</p>
 
 <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 실습 당시 kindnet ClusterRole의 리소스와 권한 조회</span>
 kubectl <span class="nt">--context</span> kind-ml-study get clusterrole kindnet <span class="se">\</span>
@@ -537,11 +537,11 @@ kubectl <span class="nt">--context</span> kind-ml-study get clusterrole kindnet 
 <span class="c"># ["networkpolicies"] ["list","watch"]</span>
 </code></pre></div></div>
 
-<p>이 권한은 컨트롤러가 정책을 읽을 수 있다는 근거다. <strong>권한이 있는 것과 통신 차단을 검증한 것은 다르다.</strong> 이번 실습에서는 deny 정책을 적용한 통신을 시험하지 않았으므로, 여기서 확인한 것은 버전과 소스의 지원 여부까지다.</p>
+<p>다만 소스와 권한은 정책을 집행할 수 있다는 근거일 뿐이다. deny 정책을 적용한 통신 차단은 이번에 시험하지 않았다.</p>
 
 <h2 id="다른-cni와의-비교">다른 CNI와의 비교</h2>
 
-<p>네트워크 구현은 IP 할당, 노드 사이 전달 방식, 정책 집행을 나눠 비교하면 차이가 명확하다. 아래는 대표 구성의 비교이며, 대체 CNI 설치나 성능 비교를 이 클러스터에서 실행한 것은 아니다.</p>
+<p>네트워크 구현은 IP 할당, 노드 사이 전달 방식, 정책 집행을 나눠 비교하면 차이가 명확하다. 아래는 대표 구성을 문서 기준으로 비교한 것이다.</p>
 
 <table>
   <thead>
@@ -598,7 +598,7 @@ kubectl <span class="nt">--context</span> kind-ml-study get clusterrole kindnet 
 
 <p><strong>네트워크 네임스페이스(network namespace, netns)</strong>는 인터페이스·주소·라우팅 테이블 등을 분리하는 리눅스 커널 기능이다. <strong>veth(virtual Ethernet)</strong>는 두 인터페이스가 쌍으로 동작하는 가상 네트워크 장치로, 한쪽으로 보낸 패킷이 다른 쪽에 전달된다.</p>
 
-<p>Mac의 <code class="highlighter-rouge">ifconfig</code>에서는 이 파드 veth가 보이지 않는다. Docker Desktop VM 안 노드의 netns에 있기 때문이다. 노드 안에는 <code class="highlighter-rouge">ifconfig</code>도 없어 <code class="highlighter-rouge">ip</code> 명령으로 확인했다. 실습 노드에는 <code class="highlighter-rouge">tcpdump</code> 역시 없었다.</p>
+<p>파드의 veth는 Docker Desktop VM 안, 노드의 netns에 있으므로 Mac의 <code class="highlighter-rouge">ifconfig</code>에는 보이지 않는다. 그래서 <code class="highlighter-rouge">docker exec</code>로 노드에 들어가 <code class="highlighter-rouge">ip</code> 명령으로 조회했다. 노드 이미지에는 <code class="highlighter-rouge">ifconfig</code>가 없다.</p>
 
 <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 이후 조회에 사용할 노드 이름</span>
 <span class="nv">N</span><span class="o">=</span>ml-study-control-plane
@@ -891,7 +891,7 @@ docker <span class="nb">exec</span> <span class="s2">"</span><span class="nv">$N
 </p>
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-25">October 25, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-26">October 26, 2026</time></p>
         
       </footer>
 

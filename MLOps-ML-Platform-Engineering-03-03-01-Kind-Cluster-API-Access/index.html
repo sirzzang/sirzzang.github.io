@@ -37,7 +37,7 @@
 
 
 
-  <meta property="article:modified_time" content="2026-10-25T00:00:00+09:00">
+  <meta property="article:modified_time" content="2026-10-26T00:00:00+09:00">
 
 
 
@@ -312,7 +312,7 @@
     <meta itemprop="headline" content="[kind] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.1. kind 클러스터와 API 서버 접근 경로">
     <meta itemprop="description" content="kind로 실습 클러스터를 만들고, Mac의 kubectl이 Docker Desktop VM 안 API 서버에 닿는 경로와 인증서를 확인해 보자.">
     <meta itemprop="datePublished" content="2026-10-24T00:00:00+09:00">
-    <meta itemprop="dateModified" content="2026-10-25T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-10-26T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
@@ -463,7 +463,7 @@
   </tbody>
 </table>
 
-<p>그림은 역할 구분이다. 이번 단일 노드 kind에서는 컨트롤 플레인 구성 요소와 파드 실행 구성 요소가 같은 노드에 있다. 이 실습에서는 API 서버가 접근 접점이고 kubelet과 런타임이 실행을 담당한다는 구분까지면 충분하다. 전체 구성은 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-02-Kubernetes-Introduction-and-Integration-with-GenAI/">쿠버네티스 개요</a>와 <a href="https://kubernetes.io/docs/concepts/overview/components/">공식 구성 요소 문서</a>를 참고한다.</p>
+<p>그림은 역할 구분이다. 이번 단일 노드 kind에서는 컨트롤 플레인 구성 요소와 파드 실행 구성 요소가 같은 노드에 있다. 이 글에서 확인하는 것은 이 가운데 Mac에서 API 서버까지의 접속 경로다. 전체 구성은 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-02-Kubernetes-Introduction-and-Integration-with-GenAI/">쿠버네티스 개요</a>와 <a href="https://kubernetes.io/docs/concepts/overview/components/">공식 구성 요소 문서</a>를 참고한다.</p>
 
 <h2 id="실습-클러스터-선택">실습 클러스터 선택</h2>
 
@@ -492,9 +492,9 @@
   </tbody>
 </table>
 
-<p>스터디가 버전을 올린 이유는 뒤에 설치하는 Gitea Actions 러너와의 호환성이다. 다만 <a href="https://dl.gitea.com/charts/actions-0.1.2.tgz">공식 배포 차트 <code class="highlighter-rouge">actions-0.1.2.tgz</code></a>의 <code class="highlighter-rouge">Chart.yaml</code>에는 최소 쿠버네티스 버전을 선언하는 <code class="highlighter-rouge">kubeVersion</code> 필드가 없다. 확인 가능한 근거는 StatefulSet 템플릿에서 Docker-in-Docker(DinD) 컨테이너를 <code class="highlighter-rouge">initContainers</code> 아래에 두고 <code class="highlighter-rouge">restartPolicy: Always</code>를 지정한다는 점이다. 이는 앱 컨테이너와 함께 계속 실행되는 native sidecar 기능을 사용한다. <a href="https://kubernetes.io/docs/tutorials/configuration/pod-sidecar-containers/">공식 sidecar 가이드</a>에 따르면 이 기능은 1.29에서 beta로 기본 활성화되었다. 따라서 1.29 선택은 이 기능과 연결해서 이해할 수 있지만, 차트의 명시적 최소 지원 버전 선언과는 구분해야 한다.</p>
+<p>스터디가 버전을 1.29로 올린 이유는 뒤에 설치하는 Gitea Actions 러너다. 러너 차트(<a href="https://dl.gitea.com/charts/actions-0.1.2.tgz"><code class="highlighter-rouge">actions-0.1.2.tgz</code></a>)의 StatefulSet 템플릿은 Docker-in-Docker(DinD) 컨테이너를 <code class="highlighter-rouge">initContainers</code> 아래에 두고 <code class="highlighter-rouge">restartPolicy: Always</code>를 지정한다. 앱 컨테이너와 함께 계속 실행되는 네이티브 사이드카(native sidecar) 선언이며, <a href="https://kubernetes.io/docs/tutorials/configuration/pod-sidecar-containers/">공식 sidecar 가이드</a>에 따르면 이 기능은 1.29에서 beta로 기본 활성화됐다. 차트의 <code class="highlighter-rouge">Chart.yaml</code>에는 최소 쿠버네티스 버전을 선언하는 <code class="highlighter-rouge">kubeVersion</code> 필드가 없으므로, 1.29라는 요구는 차트 메타데이터가 아니라 이 기능에서 나온다.</p>
 
-<p>K3s 방안은 Traefik을 비활성화하고 kubeconfig 파일 모드를 <code class="highlighter-rouge">644</code>로 설정했다. 스터디 자료는 Flannel의 <code class="highlighter-rouge">host-gw</code> 설정을 DinD의 MTU 문제를 피하기 위한 선택으로 설명한다.</p>
+<p>참고로 스터디의 K3s 방안은 Traefik을 비활성화하고 kubeconfig 파일 모드를 <code class="highlighter-rouge">644</code>로 설정한다. Flannel은 <code class="highlighter-rouge">host-gw</code> 백엔드를 쓰는데, 스터디 자료는 이를 DinD의 MTU 문제를 피하기 위한 선택으로 설명한다. 이 MTU 문제는 <a href="/MLOps-ML-Platform-Engineering-03-04-01-Gitea-Actions-Runner/#잡-컨테이너의-네트워크-층">3.4.1편</a>에서 다시 다룬다.</p>
 
 <p><br /></p>
 
@@ -715,9 +715,7 @@ docker <span class="nb">exec </span>ml-study-control-plane openssl x509 <span cl
   </tbody>
 </table>
 
-<p>실습 포트를 <code class="highlighter-rouge">0.0.0.0</code>에 바인딩하면 Mac의 LAN 주소(예: <code class="highlighter-rouge">192.168.0.10</code>)로 들어오는 연결도 받을 수 있다. 이는 파드나 DinD에서 Mac 쪽 공개 서비스에 접근할 때 필요한 조건 중 하나다. 파드 안 <code class="highlighter-rouge">localhost</code>는 Mac이 아닌 파드 자신의 네트워크 공간을 가리킨다. 실제 접근 가능 여부에는 라우팅과 방화벽도 영향을 준다. 뒤의 실습에서 Argo CD는 이 경로(Mac LAN IP의 30000)로 Gitea 저장소를 받았고, CI 잡의 checkout은 클러스터 내부 주소를 썼다(<a href="/MLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting/#gitea-접속-주체와-주소">3.4.2편</a>).</p>
-
-<p>같은 이유로 이 설정은 루프백 전용 공개가 아니다. 다른 기기에서도 네트워크·방화벽 조건이 허용하면 접근할 수 있으므로, 로컬 실습 서비스의 공개 범위를 판단할 때 바인딩 주소를 함께 확인해야 한다.</p>
+<p>실습 포트는 <code class="highlighter-rouge">0.0.0.0</code>에 바인딩했으므로 Mac의 LAN 주소(예: <code class="highlighter-rouge">192.168.0.10</code>)로 들어오는 연결도 받는다. 파드 안의 <code class="highlighter-rouge">localhost</code>는 Mac이 아니라 파드 자신을 가리키기 때문에, 파드나 DinD 잡에서 Mac 쪽 서비스에 접근하려면 이렇게 LAN 주소로 열린 포트가 필요하다. 뒤의 실습에서 Argo CD는 이 경로(Mac LAN IP의 30000)로 Gitea 저장소를 받았고, CI 잡의 checkout은 클러스터 내부 주소를 썼다(<a href="/MLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting/#gitea-접속-주체와-주소">3.4.2편</a>). 같은 이유로 이 포트는 루프백 전용이 아니어서, 네트워크와 방화벽이 허용하면 다른 기기에서도 접근할 수 있다. 로컬 실습 서비스의 공개 범위를 판단할 때는 바인딩 주소를 함께 확인한다.</p>
 
 <table>
   <thead>
@@ -831,7 +829,7 @@ docker <span class="nb">exec </span>ml-study-control-plane openssl x509 <span cl
 </p>
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-25">October 25, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-26">October 26, 2026</time></p>
         
       </footer>
 

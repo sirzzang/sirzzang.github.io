@@ -37,7 +37,7 @@
 
 
 
-  <meta property="article:modified_time" content="2026-10-25T00:00:00+09:00">
+  <meta property="article:modified_time" content="2026-10-26T00:00:00+09:00">
 
 
 
@@ -312,7 +312,7 @@
     <meta itemprop="headline" content="[Gitea] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.4.1. Gitea와 Actions 러너">
     <meta itemprop="description" content="클러스터에 Gitea와 Actions 러너를 올리고, CI 서버와 러너가 나뉘는 구조와 러너 파드 안 dind의 역할을 해부해 보자.">
     <meta itemprop="datePublished" content="2026-10-24T00:00:00+09:00">
-    <meta itemprop="dateModified" content="2026-10-25T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-10-26T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
@@ -470,7 +470,7 @@
 
 <h1 id="gitea-워크로드-해부">Gitea 워크로드 해부</h1>
 
-<p>Helm은 values 파일을 차트 템플릿에 적용해 쿠버네티스 리소스를 만드는 도구다. 앱 차트를 직접 만든 과정은 <a href="/MLOps-ML-Platform-Engineering-03-03-05-Helm-Chart/">3.3.5편</a>에서 다뤘다. 여기서는 배포된 Gitea의 리소스부터 확인했다.</p>
+<p>Gitea와 러너는 각자의 Helm 차트로 설치했다. Helm은 values 파일을 차트 템플릿에 적용해 쿠버네티스 리소스를 만드는 도구이며, 앱 차트를 직접 만든 과정은 <a href="/MLOps-ML-Platform-Engineering-03-03-05-Helm-Chart/">3.3.5편</a>에서 다뤘다. 설치 명령은 <a href="#gitea와-러너-설치">뒤에서</a> 보고, 여기서는 설치된 리소스부터 확인한다.</p>
 
 <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 설치 직후 kind 클러스터의 워크로드 조회</span>
 kubectl <span class="nt">-n</span> gitea get deploy,sts,pod <span class="nt">-o</span> wide
@@ -629,7 +629,7 @@ kubectl <span class="nt">-n</span> gitea get svc,ep
 
 <p>표의 생성 주체와 역할은 <a href="https://dl.gitea.com/charts/gitea-12.7.0.tgz">Gitea 차트 12.7.0</a>의 템플릿과 클러스터의 Secret 목록을 대조해 확인했다. 차트가 만든 Secret 세 개는 초기화 스크립트와 설정 문자열을 담는다.</p>
 
-<p>이 구성은 파드 하나와 <code class="highlighter-rouge">/data</code> 하나에 파일 상태가 모인다. LevelDB는 같은 DB를 한 프로세스만 열 수 있어, 교체 중 두 Gitea 프로세스가 같은 큐를 여는 상황을 피해야 한다. 실제 설정 변경 중 발생한 재시작과 교체 전략 변경은 <a href="/MLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting/#사례-2-helm-upgrade-시간-초과">3.4.2편</a>에서 다룬다. Helm 설치 결과도 메모리 캐시·세션과 LevelDB 큐를 운영용 구성으로 권장하지 않는다는 경고를 출력했다.</p>
+<p>이 구성은 파드 하나와 <code class="highlighter-rouge">/data</code> 하나에 파일 상태가 모인다. LevelDB는 같은 DB를 한 프로세스만 열 수 있어, 교체 중 두 Gitea 프로세스가 같은 큐를 여는 상황을 피해야 한다. Helm 설치 결과도 메모리 캐시·세션과 LevelDB 큐를 운영용 구성으로 권장하지 않는다는 경고를 출력했다. 실제 설정 변경 중 발생한 재시작과 교체 전략 변경은 <a href="/MLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting/#사례-2-helm-upgrade-시간-초과">3.4.2편</a>에서 다룬다.</p>
 
 <p><br /></p>
 
@@ -797,7 +797,7 @@ kubectl <span class="nt">-n</span> gitea <span class="nb">exec </span>runner-run
 
 <h2 id="잡-컨테이너의-네트워크-층">잡 컨테이너의 네트워크 층</h2>
 
-<p>외부 다운로드의 경로는 잡 컨테이너 → dind의 Docker 네트워크 → 파드 netns → kind 노드 → Docker Desktop VM으로 이어진다. MTU(Maximum Transmission Unit, 최대 전송 단위)는 링크에서 보낼 수 있는 패킷 크기다. 경로의 MTU가 더 작고 패킷 크기를 줄이는 과정이 제대로 동작하지 않으면 작은 요청은 성공하면서 큰 전송이 멈출 수 있다.</p>
+<p>잡 컨테이너는 액션 코드, 이미지, 패키지를 외부에서 받는다. 이 다운로드는 잡 컨테이너 → dind의 Docker 네트워크 → 파드 netns → kind 노드 → Docker Desktop VM을 거친다. MTU(Maximum Transmission Unit, 최대 전송 단위)는 링크에서 보낼 수 있는 패킷 크기다. 경로의 MTU가 더 작고 패킷 크기를 줄이는 과정이 제대로 동작하지 않으면 작은 요청은 성공하면서 큰 전송이 멈출 수 있다.</p>
 
 <p>스터디의 K3s 구성은 Flannel VXLAN을 쓸 때 MTU 우회를 두었다가 host-gw로 바꾸며 제거했다. 내 kind 환경에서는 이 장애를 겪지 않았고, 층별 MTU 조정도 시험하지 않았다. 다음은 같은 증상이 생겼을 때 구분할 확인 지점이다.</p>
 
@@ -893,7 +893,7 @@ helm install runner actions <span class="nt">--repo</span> https://dl.gitea.com/
 
 </details>
 
-<p>최초 설치에는 <code class="highlighter-rouge">Recreate</code> 옵션이 없었다. 이후 주소를 바꾸는 upgrade에서 문제가 생겨 <code class="highlighter-rouge">--set strategy.type=Recreate --set strategy.rollingUpdate=null</code>을 추가했다. 그 경위와 적용 결과는 <a href="/MLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting/#해결-파드-수-조정과-recreate-전환">3.4.2편</a>에 있다.</p>
+<p>이 설치 명령은 Gitea Deployment의 기본 교체 전략(RollingUpdate)을 그대로 쓴다. 이후 주소를 바꾸는 upgrade에서 문제가 생겨 <code class="highlighter-rouge">--set strategy.type=Recreate --set strategy.rollingUpdate=null</code>을 추가했고, 그 경위와 적용 결과는 <a href="/MLOps-ML-Platform-Engineering-03-04-02-Gitea-Address-Troubleshooting/#해결-파드-수-조정과-recreate-전환">3.4.2편</a>에 있다.</p>
 
 <p>Gitea와 러너 릴리스 모두 <code class="highlighter-rouge">STATUS: deployed</code>, <code class="highlighter-rouge">REVISION: 1</code>로 설치됐다. Mac에서 <code class="highlighter-rouge">http://localhost:30000</code>을 열자 Gitea <code class="highlighter-rouge">1.27.0</code> 화면이 나왔다.</p>
 
@@ -1026,7 +1026,7 @@ git push <span class="nt">-u</span> origin main <span class="nt">--force</span>
 </p>
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-25">October 25, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-26">October 26, 2026</time></p>
         
       </footer>
 

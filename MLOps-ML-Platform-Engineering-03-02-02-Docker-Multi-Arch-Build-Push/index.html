@@ -37,7 +37,7 @@
 
 
 
-  <meta property="article:modified_time" content="2026-10-25T00:00:00+09:00">
+  <meta property="article:modified_time" content="2026-10-26T00:00:00+09:00">
 
 
 
@@ -312,7 +312,7 @@
     <meta itemprop="headline" content="[Docker] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.2.2. 멀티 아키텍처 이미지 빌드와 푸시">
     <meta itemprop="description" content="M1 Mac에서 buildx로 amd64와 arm64 이미지를 함께 만들어 Docker Hub에 올리고, manifest list로 결과를 확인해 보자.">
     <meta itemprop="datePublished" content="2026-10-24T00:00:00+09:00">
-    <meta itemprop="dateModified" content="2026-10-25T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-10-26T00:00:00+09:00">
 
     <div class="page__inner-wrap">
       
@@ -431,33 +431,7 @@ flowchart LR
 
 <h2 id="빌더와-드라이버">빌더와 드라이버</h2>
 
-<p>Buildx는 Docker CLI에서 빌드를 요청하고 빌더를 관리하는 도구이고, BuildKit은 실제 빌드를 수행하는 엔진이다. 빌더(builder)는 BuildKit이 실행되는 환경을 나타내며, 드라이버(driver)는 그 환경을 어떻게 구성할지 정한다.</p>
-
-<table>
-  <thead>
-    <tr>
-      <th>드라이버</th>
-      <th>BuildKit 실행 위치</th>
-      <th>이번 환경에서의 사용</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code class="highlighter-rouge">docker</code></td>
-      <td>Docker Engine에 내장</td>
-      <td><code class="highlighter-rouge">desktop-linux</code> 빌더, BuildKit v0.17.3</td>
-    </tr>
-    <tr>
-      <td><code class="highlighter-rouge">docker-container</code></td>
-      <td>Docker 컨테이너</td>
-      <td>기존 <code class="highlighter-rouge">multiplatform</code> 빌더, BuildKit v0.28.1</td>
-    </tr>
-  </tbody>
-</table>
-
-<p>별도 컨테이너의 BuildKit은 내장 버전과 다를 수 있다. <code class="highlighter-rouge">docker-container</code>만 멀티 플랫폼 빌드를 지원한다는 뜻은 아니다. 현재 Docker 문서상 <code class="highlighter-rouge">docker</code> 드라이버도 containerd 이미지 저장소를 사용하면 멀티 플랫폼 빌드를 지원한다. 이번에는 <a href="https://docs.docker.com/build/building/multi-platform/">별도 빌더로 빌드하고 레지스트리에 직접 출력하는 방식</a>을 사용했다.</p>
-
-<p><code class="highlighter-rouge">docker buildx ls</code>는 빌더 목록을 보여 준다. 처음 확인한 결과를 플랫폼 목록만 줄여 발췌했다.</p>
+<p>Buildx는 Docker CLI에서 빌드를 요청하고 빌더를 관리하는 도구다. BuildKit은 실제 빌드를 수행하는 엔진이다. 빌더(builder)는 BuildKit이 실행되는 환경이고, 드라이버(driver)는 그 환경을 어떻게 구성할지 정한다. <code class="highlighter-rouge">docker buildx build</code>는 선택된 빌더의 BuildKit에서 실행되므로, 두 아키텍처를 빌드하기 전에 어떤 빌더가 있고 무엇이 선택돼 있는지부터 확인했다. <code class="highlighter-rouge">docker buildx ls</code>는 빌더 목록을 보여 주는 명령이다.</p>
 
 <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># docker buildx ls 실행 결과 발췌
 NAME/NODE          DRIVER/ENDPOINT    STATUS   BUILDKIT   PLATFORMS
@@ -478,15 +452,43 @@ Cannot load builder default: Cannot connect to the Docker daemon at unix:///var/
   <li><code class="highlighter-rouge">PLATFORMS</code>: 지원하는 플랫폼. <code class="highlighter-rouge">(+2)</code>와 <code class="highlighter-rouge">...</code>는 출력에서 묶거나 생략한 항목</li>
 </ul>
 
+<p>출력에는 빌더가 세 개 있었다. 선택된 <code class="highlighter-rouge">multiplatform</code>은 이 Mac에 전부터 있던 <code class="highlighter-rouge">docker-container</code> 빌더이고, <code class="highlighter-rouge">desktop-linux</code>는 Docker Desktop이 제공하는 <code class="highlighter-rouge">docker</code> 드라이버 빌더다. 오류 상태인 <code class="highlighter-rouge">default</code>는 <a href="#default-빌더-오류">다음 절</a>에서 다룬다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>드라이버</th>
+      <th>BuildKit 실행 위치</th>
+      <th>이 Mac의 빌더</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">docker</code></td>
+      <td>Docker Engine에 내장</td>
+      <td><code class="highlighter-rouge">desktop-linux</code>, BuildKit v0.17.3</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">docker-container</code></td>
+      <td>별도 Docker 컨테이너</td>
+      <td><code class="highlighter-rouge">multiplatform</code>, BuildKit v0.28.1</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">docker</code> 드라이버는 빌드 결과를 Docker Engine의 이미지 저장소에 바로 넣는다. <a href="https://docs.docker.com/build/building/multi-platform/">Docker 멀티 플랫폼 빌드 문서</a>에 따르면 이 드라이버로 멀티 플랫폼 빌드를 하려면 containerd 이미지 저장소를 켜야 한다. 이 Mac의 Docker Desktop은 클래식 저장소를 쓰고 있었으므로(<a href="#트러블슈팅">트러블슈팅</a>), 두 아키텍처 빌드에는 <code class="highlighter-rouge">docker-container</code> 드라이버 빌더를 쓰고 결과를 레지스트리에 바로 올렸다. 별도 컨테이너로 실행되는 BuildKit은 위 표처럼 내장 BuildKit과 버전이 다를 수 있다.</p>
+
 <h2 id="default-빌더-오류">default 빌더 오류</h2>
 
-<p>오류가 난 <code class="highlighter-rouge">default</code>와 실제 빌드에 쓰는 빌더는 접속 대상이 달랐다. Docker 컨텍스트(context)는 Docker Engine에 접속할 엔드포인트 등의 설정을 담는다. 엔드포인트가 유닉스 소켓이면, 그 경로에 소켓이 있어야 접속할 수 있다.</p>
+<p><code class="highlighter-rouge">default</code> 빌더의 오류는 빌드에 영향을 주지 않았다. 빌드에 쓰는 빌더와 접속 대상이 달랐기 때문이다. Docker 컨텍스트(context)는 Docker Engine에 접속할 엔드포인트 등의 설정을 담는다. <code class="highlighter-rouge">default</code> 컨텍스트는 <code class="highlighter-rouge">/var/run/docker.sock</code>을, 현재 선택된 <code class="highlighter-rouge">desktop-linux</code> 컨텍스트는 사용자 홈 아래의 소켓을 가리켰다.</p>
 
 <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># docker context ls 실행 결과
 NAME              DESCRIPTION                               DOCKER ENDPOINT
 default           Current DOCKER_HOST based configuration   unix:///var/run/docker.sock
 desktop-linux *   Docker Desktop                            unix:///Users/&lt;user&gt;/.docker/run/docker.sock
 </code></pre></div></div>
+
+<p>오류 메시지에 나온 <code class="highlighter-rouge">/var/run/docker.sock</code>에는 파일이 없었다.</p>
 
 <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># default가 사용하려는 소켓의 존재 확인</span>
 <span class="nb">ls</span> <span class="nt">-l</span> /var/run/docker.sock
@@ -495,41 +497,12 @@ desktop-linux *   Docker Desktop                            unix:///Users/&lt;us
 <span class="nb">ls</span>: /var/run/docker.sock: No such file or directory
 </code></pre></div></div>
 
-<p>명령들이 확인하는 대상은 순서대로 이어진다.</p>
-
-<table>
-  <thead>
-    <tr>
-      <th>확인</th>
-      <th>출력에서 알 수 있는 것</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code class="highlighter-rouge">docker buildx ls</code></td>
-      <td>오류 빌더는 <code class="highlighter-rouge">default</code>, 정상 빌더의 엔드포인트는 <code class="highlighter-rouge">desktop-linux</code></td>
-    </tr>
-    <tr>
-      <td>오류 메시지와 <code class="highlighter-rouge">docker context ls</code></td>
-      <td>실패한 접속 경로는 <code class="highlighter-rouge">/var/run/docker.sock</code>, 현재 컨텍스트는 다른 소켓 사용</td>
-    </tr>
-    <tr>
-      <td><code class="highlighter-rouge">ls -l /var/run/docker.sock</code></td>
-      <td>실패한 경로에 파일 자체가 없음</td>
-    </tr>
-    <tr>
-      <td><code class="highlighter-rouge">sudo docker buildx ls</code></td>
-      <td>같은 오류가 지속됨. 앞선 파일 부재 증거와 일치</td>
-    </tr>
-  </tbody>
-</table>
-
-<p><code class="highlighter-rouge">sudo</code>의 결과만으로 모든 권한 문제를 배제하는 것은 아니다. 여기서는 <strong>실패한 엔드포인트에 소켓이 없다는 직접 확인</strong>이 원인 판정의 근거다. <code class="highlighter-rouge">desktop-linux</code>를 쓰는 빌더는 이미 실행 중이었고, 이후 빌드도 성공했다.</p>
+<p>Docker Desktop의 <strong>Allow the default Docker socket to be used</strong>는 <code class="highlighter-rouge">/var/run/docker.sock</code> 심볼릭 링크를 만드는 옵션이다. <a href="https://docs.docker.com/desktop/setup/install/mac-permission-requirements/#installing-symlinks">Mac 권한 설정 문서</a>에 따르면 이 옵션을 끄면 링크와 이를 다시 만드는 시작 작업도 생성하지 않는다. 이 Mac에서는 옵션이 꺼져 있었다.</p>
 
 <p><img src="https://sirzzang.github.io//assets/images/mlpe-ch03-docker-default-socket-setting.png" alt="Docker Desktop Advanced의 기본 소켓 설정" class="align-center" /></p>
 <center><sup>직접 캡처. Docker Desktop Advanced 설정에서 기본 Docker 소켓 사용 옵션이 꺼져 있다</sup></center>
 
-<p>Docker Desktop의 <strong>Allow the default Docker socket to be used</strong>는 <code class="highlighter-rouge">/var/run/docker.sock</code> 심볼릭 링크를 만드는 옵션이다. <a href="https://docs.docker.com/desktop/setup/install/mac-permission-requirements/#installing-symlinks">Mac 권한 설정 문서</a>에 따르면 이 옵션을 끄면 링크와 이를 다시 만드는 시작 작업도 생성하지 않는다. 이번에는 이 옵션을 변경하지 않고 정상 빌더로 진행했다.</p>
+<p>빌드는 <code class="highlighter-rouge">desktop-linux</code> 컨텍스트로 접속하는 빌더에서 하므로 이 옵션은 바꾸지 않았다.</p>
 
 <p><br /></p>
 
@@ -547,7 +520,7 @@ head <span class="nt">-n</span> 1 Dockerfile
 FROM python:3.10-slim-bookworm
 </code></pre></div></div>
 
-<p>처음에는 <code class="highlighter-rouge">multiplatform</code>이 있었지만, 실습 명령은 <code class="highlighter-rouge">multi</code>라는 빌더를 새로 만들었다.</p>
+<p>빌더는 스터디 자료대로 <code class="highlighter-rouge">docker-container</code> 드라이버의 <code class="highlighter-rouge">multi</code>를 새로 만들어 선택했다. 같은 드라이버인 기존 <code class="highlighter-rouge">multiplatform</code>을 선택해도 빌드 방식은 같다.</p>
 
 <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 새 빌더 생성 후 선택</span>
 docker buildx create <span class="nt">--name</span> multi <span class="nt">--driver</span> docker-container <span class="nt">--use</span>
@@ -556,11 +529,11 @@ docker buildx create <span class="nt">--name</span> multi <span class="nt">--dri
 <span class="c"># docker buildx use multi</span>
 </code></pre></div></div>
 
-<p>스터디 자료의 명령은 생성 뒤에 <code class="highlighter-rouge">2&gt;/dev/null || docker buildx use multi</code>를 붙였다. 이는 오류 출력을 숨기고 <strong>어떤 이유로든</strong> 생성에 실패하면 기존 빌더 선택을 시도한다. 실패 원인이 “이미 존재함”인지 구분하는 검사는 아니다. 기존 <code class="highlighter-rouge">multiplatform</code>을 계속 선택해 사용하는 방법도 있다.</p>
+<p>스터디 자료의 명령은 생성 뒤에 <code class="highlighter-rouge">2&gt;/dev/null || docker buildx use multi</code>를 붙여, 이미 <code class="highlighter-rouge">multi</code>가 있어 생성이 실패하면 선택으로 넘어가게 했다. 다만 오류 출력을 숨기고 실패 원인을 가리지 않으므로, 다른 이유로 생성이 실패해도 같은 경로로 넘어간다.</p>
 
 <h2 id="arm64-이미지의-로컬-실행">arm64 이미지의 로컬 실행</h2>
 
-<p>로컬 확인에는 arm64 하나만 빌드했다. <code class="highlighter-rouge">--load</code>는 빌드 결과를 로컬 Docker 이미지 저장소에 적재하는 옵션이다.</p>
+<p>두 아키텍처를 함께 로컬에 적재하는 빌드는 이 Mac에서 실패하므로(<a href="#트러블슈팅">트러블슈팅</a>), 로컬 확인에는 arm64 하나만 빌드했다. <code class="highlighter-rouge">--load</code>는 빌드 결과를 로컬 Docker 이미지 저장소에 적재하는 옵션이다.</p>
 
 <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># M1에서 실행할 arm64 이미지 빌드 및 로컬 적재</span>
 docker buildx build <span class="nt">--platform</span> linux/arm64 <span class="nt">-t</span> hello-joker:v1 <span class="nb">.</span> <span class="nt">--load</span>
@@ -592,7 +565,7 @@ curl <span class="nt">-s</span> localhost:8081 | jq
 <span class="o">}</span>
 </code></pre></div></div>
 
-<p>실행 터미널에서 <code class="highlighter-rouge">Ctrl+C</code>를 누르자 종료 로그가 나왔고, <code class="highlighter-rouge">--rm</code>으로 컨테이너가 삭제됐다. 남은 컨테이너를 확인할 때도 이 앱으로 범위를 좁혔다.</p>
+<p>실행 터미널에서 <code class="highlighter-rouge">Ctrl+C</code>를 누르자 종료 로그가 나왔고, <code class="highlighter-rouge">--rm</code>으로 컨테이너가 삭제됐다. 스터디 자료의 정리 명령은 전체 컨테이너를 삭제하는데, 이 Mac에서는 같은 Docker Engine에서 kind 노드와 BuildKit 컨테이너도 실행 중이라 함께 지워진다. 그래서 남은 컨테이너를 확인할 때도 이 앱으로 범위를 좁혔다. kind 노드의 구조는 <a href="/MLOps-ML-Platform-Engineering-03-03-01-Kind-Cluster-API-Access/">3.3.1편</a>에서 다룬다.</p>
 
 <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 이 이미지로 실행한 컨테이너만 조회</span>
 docker ps <span class="nt">-a</span> <span class="nt">--filter</span> <span class="nv">ancestor</span><span class="o">=</span>hello-joker:v1
@@ -600,8 +573,6 @@ docker ps <span class="nt">-a</span> <span class="nt">--filter</span> <span clas
 <span class="c"># 남은 컨테이너가 있으면 확인한 ID만 지정해 삭제</span>
 <span class="c"># docker rm -f &lt;container-id&gt;</span>
 </code></pre></div></div>
-
-<p>스터디의 전체 컨테이너 삭제 명령을 그대로 쓰면 kind 노드와 BuildKit 컨테이너도 삭제된다. 같은 Docker Engine에서 실행 중이므로 앱 컨테이너만 정리해야 한다. kind 노드의 구조는 <a href="/MLOps-ML-Platform-Engineering-03-03-01-Kind-Cluster-API-Access/">3.3.1편</a>에서 다룬다.</p>
 
 <h2 id="두-아키텍처-빌드와-docker-hub-푸시">두 아키텍처 빌드와 Docker Hub 푸시</h2>
 
@@ -620,15 +591,15 @@ docker buildx build <span class="se">\</span>
 docker buildx imagetools inspect <span class="s2">"</span><span class="nv">$DHID</span><span class="s2">/hello-joker:v1"</span>
 </code></pre></div></div>
 
-<p><code class="highlighter-rouge">-t</code>에서 Docker Hub 계정까지 포함한 이름을 지정했으므로 별도의 <code class="highlighter-rouge">docker tag</code>가 필요 없다. <code class="highlighter-rouge">--push</code>는 결과를 레지스트리로 내보낸다. <code class="highlighter-rouge">--load</code>도 <code class="highlighter-rouge">--push</code>도 지정하지 않은 <code class="highlighter-rouge">docker-container</code> 빌드는 성공하더라도, 결과가 빌드 캐시에만 남을 수 있으므로 배포 가능한 이미지가 저장됐는지 따로 확인해야 한다.</p>
+<p><code class="highlighter-rouge">-t</code>에서 Docker Hub 계정까지 포함한 이름을 지정했으므로 별도의 <code class="highlighter-rouge">docker tag</code>가 필요 없다. <code class="highlighter-rouge">--push</code>는 결과를 레지스트리로 내보낸다. <code class="highlighter-rouge">docker-container</code> 빌더는 결과를 Docker Engine에 바로 넣지 않으므로, <code class="highlighter-rouge">--load</code>나 <code class="highlighter-rouge">--push</code> 없이 빌드하면 결과가 빌드 캐시에만 남는다.</p>
 
-<p>실제 빌드는 <code class="highlighter-rouge">docker-container:multi</code>에서 완료됐다. arm64 단계는 앞선 빌드의 캐시를 재사용했고, amd64 단계는 새로 실행했다. 시스템 패키지 설치 단계는 이전 arm64 빌드에서 13.0초, amd64 빌드에서 26.3초였다. Docker Desktop은 다른 아키텍처의 빌드에 에뮬레이션을 지원해 이 경우 느려질 수 있지만, 두 시간은 다운로드와 캐시 조건을 통제하지 않은 관찰값이다.</p>
+<p>실제 빌드는 <code class="highlighter-rouge">docker-container:multi</code>에서 완료됐다. arm64 단계는 앞선 빌드의 캐시를 재사용했고, amd64 단계는 새로 실행했다. M1에서 amd64 단계는 에뮬레이션으로 실행된다. 시스템 패키지 설치 단계는 arm64 빌드에서 13.0초, amd64 빌드에서 26.3초였다.</p>
 
 <p><br /></p>
 
 <h1 id="검증-manifest-list-읽기">검증: manifest list 읽기</h1>
 
-<p><code class="highlighter-rouge">imagetools inspect</code>는 이미지 레이어를 내려받지 않고 레지스트리의 manifest 정보만 조회한다. 그래서 이번에 확인한 것은 로컬의 <strong>arm64 앱 실행</strong>과 레지스트리의 <strong>두 플랫폼 이미지 등록</strong>이다.</p>
+<p><code class="highlighter-rouge">imagetools inspect</code>는 이미지 레이어를 내려받지 않고 레지스트리의 manifest 정보만 조회한다. amd64 이미지는 실행하지 않았으므로, 여기서는 두 플랫폼 이미지가 레지스트리에 등록됐는지와 로컬에서 실행한 arm64 이미지가 같은 내용인지를 확인한다.</p>
 
 <h2 id="index와-플랫폼별-다이제스트">index와 플랫폼별 다이제스트</h2>
 
@@ -689,7 +660,7 @@ sha256:5ebc7ebff2461f86c114dbbd464914296fccf4da9d1a1d21f57b74a2d4030a6d
 
 <p>어테스테이션(attestation)은 이미지에 붙는 빌드 관련 메타데이터다. 프로비넌스(provenance)는 그중 빌드의 재료와 과정에 관한 정보를 담는다. BuildKit은 기본적으로 최소 수준의 provenance를 생성하며, 이번처럼 <code class="highlighter-rouge">docker-container</code> 빌더에서 레지스트리로 푸시하면 index에 함께 저장할 수 있다. 클래식 이미지 저장소에 <code class="highlighter-rouge">--load</code>하는 경로는 이를 보존하지 못한다. <a href="https://docs.docker.com/build/metadata/attestations/">Docker build attestations 문서</a>에서 출력 경로와 저장소의 조건을 설명한다.</p>
 
-<p>두 <code class="highlighter-rouge">unknown/unknown</code> 항목에는 <code class="highlighter-rouge">vnd.docker.reference.type: attestation-manifest</code>가 있었고, <code class="highlighter-rouge">vnd.docker.reference.digest</code>는 각각의 실행 이미지 manifest를 가리켰다. 실행할 대상이 아니므로 플랫폼을 <code class="highlighter-rouge">unknown/unknown</code>으로 표시한다. 자세한 형식은 <a href="https://docs.docker.com/build/metadata/attestations/attestation-storage/">attestation 저장 구조</a>를 참고하면 된다. 기본 provenance는 빌드 옵션 <code class="highlighter-rouge">--provenance=false</code>로 뺄 수 있다. 이번에는 이 옵션을 쓰지 않았고, attestation 내부(predicate)도 열어 보지 않았다.</p>
+<p>두 <code class="highlighter-rouge">unknown/unknown</code> 항목에는 <code class="highlighter-rouge">vnd.docker.reference.type: attestation-manifest</code>가 있었고, <code class="highlighter-rouge">vnd.docker.reference.digest</code>는 각각의 실행 이미지 manifest를 가리켰다. 실행할 대상이 아니므로 플랫폼을 <code class="highlighter-rouge">unknown/unknown</code>으로 표시한다. 자세한 형식은 <a href="https://docs.docker.com/build/metadata/attestations/attestation-storage/">attestation 저장 구조</a>를 참고하면 된다. 기본 provenance는 빌드 옵션 <code class="highlighter-rouge">--provenance=false</code>로 뺄 수 있으며, 이번에는 이 옵션 없이 빌드해 attestation이 함께 올라갔다.</p>
 
 <p><img src="https://sirzzang.github.io//assets/images/mlpe-ch03-dockerhub-multiarch-tags.png" alt="Docker Hub의 v1 태그에 등록된 amd64와 arm64 이미지" class="align-center" /></p>
 <center><sup>직접 캡처. Docker Hub의 v1 태그 아래 linux/amd64와 linux/arm64 이미지가 표시된다</sup></center>
@@ -878,7 +849,7 @@ flowchart LR
 </p>
 
         
-          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-25">October 25, 2026</time></p>
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-26">October 26, 2026</time></p>
         
       </footer>
 
