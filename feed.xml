@@ -1,4 +1,828 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-10-26T16:39:21+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[Argo CD] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.4.4. Argo CD</title><link href="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-04-04-Argo-CD/" rel="alternate" type="text/html" title="[Argo CD] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.4.4. Argo CD" /><published>2026-10-25T00:00:00+09:00</published><updated>2026-10-26T00:00:00+09:00</updated><id>https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-04-04-Argo-CD</id><content type="html" xml:base="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-04-04-Argo-CD/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Machine Learning Platform Engineering Study 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-10-29T13:57:40+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[Kubernetes] 노드 객체와 호스트가 어긋날 때: NotReady 뒤에 숨은 세 가지 사례와 노드 이관 절차</title><link href="https://sirzzang.github.io//dev/Dev-Kubernetes-Node-Object-Host-State-Mismatch/" rel="alternate" type="text/html" title="[Kubernetes] 노드 객체와 호스트가 어긋날 때: NotReady 뒤에 숨은 세 가지 사례와 노드 이관 절차" /><published>2026-10-29T00:00:00+09:00</published><updated>2026-10-29T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-Kubernetes-Node-Object-Host-State-Mismatch</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-Kubernetes-Node-Object-Host-State-Mismatch/">&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;결과&lt;/strong&gt;: 온프레미스 RKE2 클러스터에서 노드 13대를 다른 팀으로 넘기는 3주 동안, Node 객체가 말하는 것과 호스트의 실제 상태가 세 번 어긋났다. 호스트 정리 전에 재부팅된 노드 중 2대는 IP만 바뀐 채 기존 객체에 붙고 3대는 새 이름의 새 노드로 붙었다. &lt;code class=&quot;highlighter-rouge&quot;&gt;NotReady&lt;/code&gt;로만 보이던 3대는 6일 동안 다른 클러스터에 소속돼 있었다. “호스트 정리 완료” 회신과 &lt;code class=&quot;highlighter-rouge&quot;&gt;NotReady&lt;/code&gt;는 서로를 증명하지 못했다&lt;/li&gt;
+  &lt;li&gt;세 사례의 공통 원인은 하나다. 클러스터가 노드에 대해 아는 것은 &lt;strong&gt;마지막으로 신호를 받은 시각&lt;/strong&gt;뿐이다. 호스트가 꺼졌는지, 네트워크가 끊겼는지, 다른 클러스터로 갔는지는 Node 객체 어디에도 남지 않는다. 여기에 RKE2의 등록 구조가 겹친다. agent 설정이 호스트에 남아 있으면 재부팅만으로 다시 붙는다. 설정의 server 주소만 바꾸면 원래 클러스터의 Node 객체는 그대로 둔 채 다른 클러스터에 등록된다. 워커가 server 토큰으로 붙어 있다면 그 호스트에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-server&lt;/code&gt;가 켜지는 순간 etcd 멤버가 되기도 한다&lt;/li&gt;
+  &lt;li&gt;그래서 Node 객체를 지우기 전에 게이트를 두었다. 정리 완료 회신, agent가 멈춘 시각과 Lease 정지 시각의 대조, etcd 멤버와 다른 노드 상태의 기준선 비교, 삭제 직전 객체 보존, 삭제 뒤 재합류 없음 확인(두 번)이다. 돌려받은 노드는 Node 객체를 지우지 않고 node-password secret만 지운 뒤 원래 클러스터 버전으로 다시 설치했다&lt;/li&gt;
+  &lt;li&gt;Kubernetes도 RKE2도 Rancher도 호스트를 대신 정리해 주지 않는다. Rancher가 프로비저닝한 클러스터에서도 노드 삭제는 Node 객체와 etcd 멤버까지이고 호스트의 RKE2 제거는 사람 몫이다(2026년 10월, Rancher 2.15 문서 기준)&lt;/li&gt;
+  &lt;li&gt;아직 못 하는 것도 있다. 원래 클러스터 쪽에서 “이 노드가 다른 클러스터로 갔다”를 감지할 수단은 없다. 절차로만 막는다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;배경&quot;&gt;배경&lt;/h1&gt;
+
+&lt;h2 id=&quot;노드-이관-작업&quot;&gt;노드 이관 작업&lt;/h2&gt;
+
+&lt;p&gt;대상은 RKE2 v1.34 기반의 온프레미스 GPU 클러스터다(이하 &lt;strong&gt;클러스터 A&lt;/strong&gt;). Rancher 2.15에 기존 클러스터로 등록(import)돼 있고 워커 노드는 &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2 agent --server https://&amp;lt;cp-vip&amp;gt;:9345 --token …&lt;/code&gt; 형태로 붙어 있다(&lt;code class=&quot;highlighter-rouge&quot;&gt;&amp;lt;cp-vip&amp;gt;&lt;/code&gt;는 컨트롤 플레인 앞의 가상 IP다). 인프라 팀이 하드웨어 내구 검증용으로 쓰던 노드 13대를 세 팀으로 재분배하기로 하면서 클러스터 A에서 이 노드들을 깨끗하게 빼는 작업을 맡았다.&lt;/p&gt;
+
+&lt;p&gt;이 글에서 노드 이름은 가명이다. 4080 계열 11대는 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a01&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a11&lt;/code&gt;, 학습 풀에 있던 4090 2대는 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-b01&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-b02&lt;/code&gt;, 컨트롤 플레인은 &lt;code class=&quot;highlighter-rouge&quot;&gt;ctl-1&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;ctl-3&lt;/code&gt;, 작업 뒤에도 남는 노드 중 대조군으로 쓴 하나는 &lt;code class=&quot;highlighter-rouge&quot;&gt;keep-1&lt;/code&gt;로 적는다. 날짜는 착수일을 D+0으로 둔 상대 표기이고 IP는 문서용 대역(RFC 5737)으로 바꿨다. 시각은 KST이며 YAML 발췌에 나오는 &lt;code class=&quot;highlighter-rouge&quot;&gt;Z&lt;/code&gt;로 끝나는 값은 UTC(KST − 9시간)다. 분 단위 간격은 실측값 그대로다.&lt;/p&gt;
+
+&lt;p&gt;작업 전에 합의한 순서는 네 단계다. ① 클러스터 A에서 cordon·drain → ② 수령 팀과 인프라 팀이 호스트 정리(Rancher의 호스트 에이전트 제거 → RKE2 제거 → 재부팅) → ③ 클러스터 A에서 정리 확인 뒤 Node 삭제, 재합류 없음 확인 → ④ 수령 팀이 이름·IP를 바꿔 편입. 호스트는 인프라 팀 관할이라 우리 팀은 SSH 없이 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl&lt;/code&gt;과 모니터링 지표로만 클러스터 쪽을 본다. 이 제약이 뒤에 나오는 “구분할 수 없음”의 절반을 만든다.&lt;/p&gt;
+
+&lt;p&gt;이 글의 범위도 적어 둔다. 워커 노드만 다룬다(etcd 멤버인 서버 노드는 멤버 제거가 먼저다). 클러스터 A는 온프레미스라 인스턴스 소멸을 판정하는 cloud provider가 없다. zone 라벨이 없어 전체가 한 zone이며 노드 이름에 난수를 붙이는 &lt;code class=&quot;highlighter-rouge&quot;&gt;--with-node-id&lt;/code&gt;를 쓰지 않는다. 이 전제가 다르면 뒤의 관찰 일부가 달라진다.&lt;/p&gt;
+
+&lt;p&gt;실제로 일어난 일을 시간순으로 놓으면 이렇다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;시점&lt;/th&gt;
+      &lt;th&gt;일어난 일&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;D+1&lt;/td&gt;
+      &lt;td&gt;13대 cordon·drain 완료. 수령 팀에 호스트 정리 요청&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;D+8&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a06&lt;/code&gt;이 응답을 멈춤. 원인 불명, 이후 복귀 없음&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;D+9&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;a08&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;a09&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;a11&lt;/code&gt;이 재부팅 뒤 같은 이름으로 &lt;code class=&quot;highlighter-rouge&quot;&gt;Ready&lt;/code&gt; 복귀 (무슨 작업이었는지 모름)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;D+15&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a03&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;a05&lt;/code&gt;가 같은 이름인 채 IP만 바뀌어 기존 Node 객체에 붙음. 같은 날 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;a10&lt;/code&gt; 4대의 Lease가 12초 안에 멈춤&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;D+17&lt;/td&gt;
+      &lt;td&gt;수령 팀 명명 규칙을 따른 새 이름 &lt;code class=&quot;highlighter-rouge&quot;&gt;new-01&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;new-03&lt;/code&gt;이 cordon도 role도 없이 새 Node로 합류. 수령 팀이 옛 이름 5대와 새 이름 3대를 직접 삭제&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;D+19&lt;/td&gt;
+      &lt;td&gt;수령 팀과 순서를 다시 합의. &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a11&lt;/code&gt; 정리 회신 → 게이트 통과 → 삭제. &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a10&lt;/code&gt; 정리 회신 → 대조 불가 → 사람 판단으로 삭제&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;D+20&lt;/td&gt;
+      &lt;td&gt;남은 노드의 행방 문의. 수령 팀은 “&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a06&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;a09&lt;/code&gt;는 가져간 적 없다” — 이 답은 맞았다. 가져간 쪽은 제3의 팀이었다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;D+21&lt;/td&gt;
+      &lt;td&gt;그 팀의 클러스터 이전 스레드에 “&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;a09&lt;/code&gt;는 &lt;strong&gt;클러스터 B&lt;/strong&gt;에 붙어 있었고 방금 뺐다”는 메시지가 올라와 있었다. 같은 날 인프라 팀이 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-b01&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;b02&lt;/code&gt;를 Rancher 쪽 작업으로 삭제&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;D+22&lt;/td&gt;
+      &lt;td&gt;SSH 계정을 받아 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;a09&lt;/code&gt; 호스트 점검 → 재설치 → 클러스터 A에 복귀&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;13대의 최종 행방을 먼저 정리하면 다음과 같다. 삭제 전 게이트를 거친 노드는 둘뿐이다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;노드&lt;/th&gt;
+      &lt;th&gt;어긋남&lt;/th&gt;
+      &lt;th&gt;삭제 주체 · 게이트&lt;/th&gt;
+      &lt;th&gt;현재&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a01&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;a05&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;사례 1 (IP 변경 2대, 새 이름 3대)&lt;/td&gt;
+      &lt;td&gt;수령 팀이 직접 · 게이트 없음&lt;/td&gt;
+      &lt;td&gt;수령 팀 클러스터&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a06&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;D+8부터 응답 없음&lt;/td&gt;
+      &lt;td&gt;미삭제&lt;/td&gt;
+      &lt;td&gt;원인 불명, 객체·cordon 그대로&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;a09&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;사례 2 (클러스터 B 이중 소속)&lt;/td&gt;
+      &lt;td&gt;미삭제 · secret만 삭제 후 재편입&lt;/td&gt;
+      &lt;td&gt;클러스터 A 복귀(cordon 유지)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a10&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;사례 3 (대조 불가)&lt;/td&gt;
+      &lt;td&gt;우리 · 게이트 대조 불가, 사람 판단&lt;/td&gt;
+      &lt;td&gt;수령 팀&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a11&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;사례 3의 양성 사례&lt;/td&gt;
+      &lt;td&gt;우리 · 게이트 통과&lt;/td&gt;
+      &lt;td&gt;수령 팀 클러스터&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-b01&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;b02&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;—&lt;/td&gt;
+      &lt;td&gt;인프라 팀이 Rancher 쪽에서 · 게이트 없음&lt;/td&gt;
+      &lt;td&gt;반환 완료, 호스트 정리 여부 미확인&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h2 id=&quot;용어&quot;&gt;용어&lt;/h2&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Node 객체&lt;/strong&gt;: API server에 있는 &lt;code class=&quot;highlighter-rouge&quot;&gt;Node&lt;/code&gt; 리소스다. &lt;code class=&quot;highlighter-rouge&quot;&gt;.spec&lt;/code&gt;은 사람·컨트롤러가 쓰고(cordon, taint, 라벨) &lt;code class=&quot;highlighter-rouge&quot;&gt;.status&lt;/code&gt;는 주로 그 노드의 kubelet이 쓴다. kubelet이 처음 등록할 때 만들어지는 기록이고 그 뒤 호스트와 객체를 이어 주는 것은 heartbeat뿐이다. 호스트가 꺼져도 객체는 남고 객체를 지워도 호스트는 그대로다(이유는 &lt;a href=&quot;#기록되지-않는-단절-이유&quot;&gt;기록되지 않는 단절 이유&lt;/a&gt;, &lt;a href=&quot;#kubelet의-단-한-번-등록&quot;&gt;kubelet의 단 한 번 등록&lt;/a&gt; 절)&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;호스트&lt;/strong&gt;: 실제 서버다. RKE2가 설치된 리눅스 머신을 가리킨다. Node 이름은 기본으로 호스트 이름과 같다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;kubelet / rke2-agent&lt;/strong&gt;: kubelet은 노드에서 파드를 돌리고 자기 상태를 API server에 보고하는 에이전트다. RKE2에서는 &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-agent&lt;/code&gt; systemd 서비스가 kubelet과 containerd를 자식 프로세스로 띄운다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;supervisor&lt;/strong&gt;: RKE2 서버 노드가 9345 포트에 여는 등록 엔드포인트다. agent는 Kubernetes API(6443)보다 먼저 여기에 접속해 인증서와 설정을 받는다(&lt;a href=&quot;/kubernetes/Kubernetes-RKE2-02/&quot;&gt;RKE2 에이전트 조인 글&lt;/a&gt;)&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Lease&lt;/strong&gt;: 노드마다 하나씩 있는 경량 heartbeat 객체다(&lt;code class=&quot;highlighter-rouge&quot;&gt;kube-node-lease/&amp;lt;노드명&amp;gt;&lt;/code&gt;). kubelet이 10초마다 &lt;code class=&quot;highlighter-rouge&quot;&gt;renewTime&lt;/code&gt;을 갱신한다(&lt;a href=&quot;/kubernetes/Kubernetes-Kubelet-Node-Status/&quot;&gt;kubelet 노드 상태 보고 글&lt;/a&gt;)&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;node-password&lt;/strong&gt;: RKE2(k3s 계열)가 노드 이름의 주인을 확인하는 비밀번호다. 호스트의 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/rancher/node/password&lt;/code&gt;와 클러스터의 secret이 짝을 이룬다(&lt;a href=&quot;#node-password&quot;&gt;node-password&lt;/a&gt; 절)&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;bootID / system UUID&lt;/strong&gt;: 둘 다 kubelet이 &lt;code class=&quot;highlighter-rouge&quot;&gt;.status.nodeInfo&lt;/code&gt;에 보고한다. bootID는 커널이 부팅마다 새로 만드는 난수라서 값이 바뀌었다면 재부팅 뒤 이 클러스터에 다시 보고했다는 뜻이다. system UUID는 메인보드 펌웨어에 고정된 값이라 이름·IP가 바뀌어도 같은 호스트인지 알려 준다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Rancher&lt;/strong&gt;: 여러 Kubernetes 클러스터를 등록해 관리하는 서버다. 자신도 Kubernetes 위에서 돌며 그 클러스터를 local, 관리 대상을 다운스트림이라 부른다. 다운스트림 노드의 호스트에 &lt;code class=&quot;highlighter-rouge&quot;&gt;rancher-system-agent&lt;/code&gt;라는 보조 에이전트를 둘 수 있다(&lt;a href=&quot;#system-agent와-plan&quot;&gt;system-agent와 Plan&lt;/a&gt; 절)&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;kube-state-metrics&lt;/strong&gt;: API 객체의 상태를 Prometheus 지표로 내보내는 컴포넌트다. 객체가 사라지면 다음 수집부터 지표도 사라지지만 Prometheus에는 보존 기간(이 클러스터는 10일) 안의 과거 샘플이 그대로 남아 있다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;cordon / drain&lt;/strong&gt;: cordon은 &lt;code class=&quot;highlighter-rouge&quot;&gt;spec.unschedulable&lt;/code&gt;을 켜 새 파드가 오지 않게 하는 조작이고 drain은 cordon 뒤 기존 파드를 내보내는 조작이다(&lt;a href=&quot;/kubernetes/Kubernetes-Scheduling-03/#cordon의-기술적-의미&quot;&gt;스케줄링 글의 cordon 절&lt;/a&gt;)&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;게이트&lt;/strong&gt;: 다음 단계로 가기 전에 통과해야 하는 검사 묶음이다. 이 글에서는 “Node 객체를 지워도 되는가”를 판정하는 검사를 가리킨다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;이 글의 결론을 한 장으로 그리면 다음과 같다. 이유는 &lt;a href=&quot;#노드-상태의-관찰-구조&quot;&gt;노드 상태의 관찰 구조&lt;/a&gt; 절에 있다.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart LR
+    A[&quot;호스트 전원 꺼짐&quot;] --&amp;gt; S
+    B[&quot;네트워크 단절&quot;] --&amp;gt; S
+    C[&quot;agent가 다른 클러스터로 재시작&quot;] --&amp;gt; S
+    S[&quot;Lease 갱신 정지&amp;lt;br/&amp;gt;→ 50~55초 뒤 Ready=Unknown&amp;lt;br/&amp;gt;→ unreachable taint&amp;lt;br/&amp;gt;bootID · 생성 시각 불변&quot;]
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;현상-세-가지-불일치&quot;&gt;현상: 세 가지 불일치&lt;/h1&gt;
+
+&lt;h2 id=&quot;새-이름으로-돌아온-노드&quot;&gt;새 이름으로 돌아온 노드&lt;/h2&gt;
+
+&lt;p&gt;D+1에 cordon·drain을 마친 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a01&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;a05&lt;/code&gt;는 cordon과 role 라벨, GPU taint가 붙은 채 &lt;code class=&quot;highlighter-rouge&quot;&gt;NotReady&lt;/code&gt;로 남아 있었다. 호스트 정리가 끝났다는 회신은 없었다.&lt;/p&gt;
+
+&lt;h3 id=&quot;관찰&quot;&gt;관찰&lt;/h3&gt;
+
+&lt;p&gt;D+15에 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a03&lt;/code&gt;과 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a05&lt;/code&gt;의 InternalIP가 바뀌었다. 호스트 이름은 그대로였으므로 기존 Node 객체에 붙었고 cordon과 라벨은 유지됐다. 서비스 네트워크 경보가 잠깐 Pending(Prometheus 알림의 대기 상태. 지속 조건을 채우기 전에 풀리면 통보되지 않는다)까지 갔다가 풀렸다.&lt;/p&gt;
+
+&lt;p&gt;D+17 낮에는 처음 보는 이름 &lt;code class=&quot;highlighter-rouge&quot;&gt;new-01&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;new-02&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;new-03&lt;/code&gt;이 Node로 합류했다. 수령 팀의 명명 규칙을 따른 이름이었고 IP도 그 팀 대역이었다. 이 노드들에는 cordon도, role 라벨도, GPU taint도 없었다.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-promql&quot;&gt;# 지난 5일 창에서 1분마다 본 unschedulable의 최솟값 → 0이면 cordon 없이 시작한 노드
+min_over_time(kube_node_spec_unschedulable{node=~&quot;new-0[1-3]&quot;}[5d:1m])   # 0
+
+# role 라벨 시리즈가 아예 없음
+kube_node_role{node=~&quot;new-0[1-3]&quot;}                                          # (no data)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;노드를 고르는 조건이 느슨한 파드가 즉시 옮겨 갔다. CI 러너의 listener 파드 18개(nodeSelector 없음)가 새 노드로 가서 1시간 40분 동안 각각 85~112회 재생성됐다(재생성의 원인은 확인하지 않았다). GPU Operator와 노드 검사용 DaemonSet 파드도 떴다. 학습 파드는 role 라벨 조건이 있어 가지 않았다. &lt;code class=&quot;highlighter-rouge&quot;&gt;node-not-ready&lt;/code&gt; 경보는 3분 Pending 뒤 풀렸고 방치 노드 경보는 72시간 조건이라 울리지 않았다(&lt;a href=&quot;#알림의-노드-존재-조인&quot;&gt;알림의 노드 존재 조인&lt;/a&gt; 절). 통보된 알림은 0건이다.&lt;/p&gt;
+
+&lt;p&gt;같은 날 오후, 옛 이름 5대와 새 이름 3대가 동시에 사라졌다. 우리 게이트를 거치지 않은 삭제였다. 이틀 뒤 수령 팀이 “주말에 호스트 이름을 바꾼 채 클러스터 A에 붙어 버린 것을 발견해 급히 직접 제거했다”고 알려 왔다.&lt;/p&gt;
+
+&lt;p&gt;어느 호스트가 어느 새 이름이 됐는지는 system UUID로 맞췄다. kube-state-metrics의 &lt;code class=&quot;highlighter-rouge&quot;&gt;kube_node_info&lt;/code&gt;에 &lt;code class=&quot;highlighter-rouge&quot;&gt;system_uuid&lt;/code&gt; 라벨이 있어 지워진 노드도 Prometheus 보존 기간 안에서는 대조할 수 있다.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-promql&quot;&gt;# 같은 system_uuid를 가진 옛 이름과 새 이름
+kube_node_info{system_uuid=&quot;…&quot;}   # node=&quot;gpu-a02&quot; 와 node=&quot;new-01&quot;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&quot;configyaml과-노드-이름&quot;&gt;config.yaml과 노드 이름&lt;/h3&gt;
+
+&lt;p&gt;수령 팀이 호스트 정리 전에 이름과 IP를 바꾸고 재부팅했다. 호스트에는 클러스터 A의 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/rancher/rke2/config.yaml&lt;/code&gt;(server 주소와 토큰)이 남아 있었고 &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-agent&lt;/code&gt;는 systemd에 enable돼 있었다. 부팅하자 agent가 클러스터 A의 supervisor에 등록했는데 Node 이름은 호스트 이름이라 새 이름으로 등록됐다. 이름이 바뀐 노드는 클러스터 입장에서 처음 보는 노드다. 옛 Node 객체의 cordon·라벨·taint는 옛 객체에 남고 새 객체는 빈손으로 시작한다. 이름이 그대로였던 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a03&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;a05&lt;/code&gt;가 cordon을 유지한 것과 대비된다(구조는 &lt;a href=&quot;#rke2-agent-등록과-노드의-정체성&quot;&gt;RKE2 agent 등록과 노드의 정체성&lt;/a&gt; 절).&lt;/p&gt;
+
+&lt;h2 id=&quot;notready-뒤의-이중-소속&quot;&gt;NotReady 뒤의 이중 소속&lt;/h2&gt;
+
+&lt;h3 id=&quot;관찰-1&quot;&gt;관찰&lt;/h3&gt;
+
+&lt;p&gt;D+15 오후, &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;a08&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;a09&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;a10&lt;/code&gt;의 Lease 갱신이 12초 안에 연달아 멈췄다. kubelet(10250 포트)·node-exporter(9100 포트)·dcgm-exporter(GPU 지표)도 같은 분에 끊겼다. 수령 팀이 “다음 주 이동 설치를 위해 셧다운한다”고 미리 알려 둔 터라 당시에는 셧다운으로 해석했다. D+22 재편입 직전의 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt; 객체를 보면 다음과 같다(실측 발췌, 이름·UID만 가명).&lt;/p&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# kubectl get node gpu-a07 -o yaml (발췌)&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;metadata&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;creationTimestamp&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;D-180&quot;&lt;/span&gt;            &lt;span class=&quot;c1&quot;&gt;# 반년 전 편입 당시 그대로&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;labels&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;s&quot;&gt;node-role.kubernetes.io/burnin&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;true&quot;&lt;/span&gt;
+    &lt;span class=&quot;s&quot;&gt;plan.cattle.io/cluster-name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;c-xxxxx&lt;/span&gt;    &lt;span class=&quot;c1&quot;&gt;# Rancher가 찍는 라벨&lt;/span&gt;
+    &lt;span class=&quot;s&quot;&gt;plan.cattle.io/machine-kind&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;Node&lt;/span&gt;
+    &lt;span class=&quot;s&quot;&gt;plan.cattle.io/machine-name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;machine-xxxxx&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;spec&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;unschedulable&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;no&quot;&gt;true&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;taints&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;key&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;nvidia.com/gpu&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;effect&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;NoSchedule&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;key&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;node.kubernetes.io/unschedulable&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;effect&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;NoSchedule&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;timeAdded&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;D+1T…&quot;&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;key&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;node.kubernetes.io/unreachable&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;effect&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;NoSchedule&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;timeAdded&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;D+15T05:24:35Z&quot;&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;key&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;node.kubernetes.io/unreachable&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;effect&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;NoExecute&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;timeAdded&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;D+15T05:24:45Z&quot;&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;status&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;conditions&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;MemoryPressure&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;status&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;Unknown&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;reason&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;NodeStatusUnknown&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;lastHeartbeatTime&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;D+15T05:23:24Z&quot;&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;Ready&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;status&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;Unknown&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;reason&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;NodeStatusUnknown&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;message&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;Kubelet stopped posting node status.&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;lastHeartbeatTime&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;D+15T05:23:24Z&quot;&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;lastTransitionTime&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;D+15T05:24:35Z&quot;&lt;/span&gt;
+  &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;NetworkUnavailable&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;status&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;False&quot;&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;reason&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;FlannelIsUp&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;lastHeartbeatTime&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;D+9T…&quot;&lt;/span&gt;           &lt;span class=&quot;c1&quot;&gt;# 마지막 재부팅 때 값이 그대로&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;nodeInfo&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;bootID&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;b71434d8-…&lt;/span&gt;                    &lt;span class=&quot;c1&quot;&gt;# D+9 재부팅 이후 값 그대로&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;kubeletVersion&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;v1.34.3+rke2r3&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# kubectl -n kube-node-lease get lease gpu-a07 -o yaml (발췌)&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;spec&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;holderIdentity&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;gpu-a07&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;leaseDurationSeconds&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;40&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;renewTime&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;D+15T05:23:42.676430Z&quot;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;Ready&lt;/code&gt;가 &lt;code class=&quot;highlighter-rouge&quot;&gt;NotReady&lt;/code&gt;가 아니라 &lt;code class=&quot;highlighter-rouge&quot;&gt;Unknown&lt;/code&gt;인 이유, &lt;code class=&quot;highlighter-rouge&quot;&gt;unreachable&lt;/code&gt; taint가 두 개이고 10초 차이가 나는 이유, bootID의 뜻은 뒤의 &lt;a href=&quot;#노드-상태의-관찰-구조&quot;&gt;노드 상태의 관찰 구조&lt;/a&gt; 절에서 이어 본다.&lt;/p&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;metadata.managedFields&lt;/code&gt;(API server가 필드별 마지막 수정자와 시각을 기록하는 메타데이터)로 D+15 이후 이 객체를 고친 주체를 보면 kubelet(status, 05:23:24Z) → kube-controller-manager(status condition과 taint) → Rancher의 &lt;code class=&quot;highlighter-rouge&quot;&gt;cattle-cluster-agent&lt;/code&gt;(D+18, 라벨) 순이다. 다른 kubelet이 쓴 흔적은 없다. node-password secret도 반년 전 생성 시각 그대로였다.&lt;/p&gt;
+
+&lt;p&gt;여기까지는 &lt;strong&gt;전원이 꺼진 노드와 완전히 같은 모양&lt;/strong&gt;이다.&lt;/p&gt;
+
+&lt;h3 id=&quot;호스트-저널&quot;&gt;호스트 저널&lt;/h3&gt;
+
+&lt;p&gt;D+21, 다른 팀의 클러스터 이전 스레드에 “&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;a09&lt;/code&gt;는 클러스터 B에서 제거했다. rke2-agent는 중지하고 자동 시작만 껐으며 RKE2 설치와 설정은 그대로 두었다”는 메시지가 올라왔다. D+22에 SSH 계정을 받아 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;journalctl -u rke2-agent&lt;/code&gt;를 보니 이렇다. 클러스터 B는 v1.30 계열이다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;시각 (KST)&lt;/th&gt;
+      &lt;th&gt;호스트에서 일어난 일&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;D+15 14:23:45&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-agent&lt;/code&gt; 재시작. server가 &lt;code class=&quot;highlighter-rouge&quot;&gt;https://&amp;lt;cluster-b-server&amp;gt;:9345&lt;/code&gt;로 바뀌고 바이너리는 v1.36.5(어디서 온 바이너리인지는 모른다)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;D+15 14:54 ~ 15:25&lt;/td&gt;
+      &lt;td&gt;재시작 반복(클러스터 B와의 버전 불일치로 추정)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;D+15 15:29:38&lt;/td&gt;
+      &lt;td&gt;v1.30.11로 재설치. &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/rancher/rke2&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/rancher/node/password&lt;/code&gt;가 이 시각에 다시 생성됨&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;D+15 16:27&lt;/td&gt;
+      &lt;td&gt;클러스터 B의 Rancher 등록 완료&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;D+21 17:04:11&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-agent&lt;/code&gt; Stopped(클러스터 B에서 제거)&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;클러스터 A의 Lease가 멈춘 시각(위 YAML의 &lt;code class=&quot;highlighter-rouge&quot;&gt;05:23:42Z&lt;/code&gt; = KST 14:23:42)과 agent가 클러스터 B로 재시작된 시각(14:23:45)이 3초 차이다.&lt;/p&gt;
+
+&lt;p&gt;호스트 상태도 함께 적어 둔다. &lt;code class=&quot;highlighter-rouge&quot;&gt;config.yaml&lt;/code&gt;의 server는 클러스터 B, agent load balancer 파일의 &lt;code class=&quot;highlighter-rouge&quot;&gt;ServerAddresses&lt;/code&gt;에는 클러스터 B의 서버 2대, &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-agent&lt;/code&gt;는 disabled/failed, &lt;code class=&quot;highlighter-rouge&quot;&gt;rancher-system-agent&lt;/code&gt;는 enabled/active였다. containerd-shim 13개(컨테이너마다 하나씩 뜨는 중계 프로세스), &lt;code class=&quot;highlighter-rouge&quot;&gt;cali*&lt;/code&gt; 인터페이스 8개(파드마다 만들어지는 가상 NIC), &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/lib/kubelet&lt;/code&gt; 아래 파드 볼륨 마운트 17개도 남아 있었다. 클러스터 B의 파드가 호스트에서 아직 돌고 있었다.&lt;/p&gt;
+
+&lt;h3 id=&quot;원-클러스터가-아는-것&quot;&gt;원 클러스터가 아는 것&lt;/h3&gt;
+
+&lt;p&gt;클러스터 A에서는 이 6일 동안 &lt;code class=&quot;highlighter-rouge&quot;&gt;Ready=Unknown&lt;/code&gt;, 멈춘 Lease, 변하지 않는 bootID, 동시에 끊긴 지표만 보였다. 4대의 Lease가 12초 안에 같이 멈춘 “일괄 작업의 모양”이 유일한 힌트였는데 그마저 일괄 셧다운과 구분되지 않는다. 네 번째 노드 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a10&lt;/code&gt;은 같은 분에 멈췄으므로 같은 일괄 작업으로 추정하지만 클러스터 B에 있었다는 확인은 받지 못했다.&lt;/p&gt;
+
+&lt;p&gt;이중 소속으로 클러스터 A의 데이터가 꼬였는지도 확인했다. Node 객체는 위 &lt;code class=&quot;highlighter-rouge&quot;&gt;managedFields&lt;/code&gt;대로 다른 kubelet이 손대지 않았다. 이 노드의 GPU 지표는 7일 최댓값이 0, 로그 수집기에 들어온 줄도 D+15 이후 0이다. 클러스터 B의 kubelet은 클러스터 B의 API server에만 썼으므로 클러스터 A 쪽 객체는 멈춘 채 보존됐다. 어긋난 쪽은 객체가 가리키는 호스트의 소속이었다. server 주소만 바꿔도 왜 이렇게 되는지는 뒤에서 본다(&lt;a href=&quot;#멈춘-agent와-떠난-agent&quot;&gt;멈춘 agent와 떠난 agent&lt;/a&gt; 절).&lt;/p&gt;
+
+&lt;h2 id=&quot;정리-회신과-notready의-증명력&quot;&gt;정리 회신과 NotReady의 증명력&lt;/h2&gt;
+
+&lt;p&gt;D+19 수령 팀과 순서를 다시 합의한 뒤, 호스트 정리 회신이 오면 노드별로 게이트를 돌렸다. 두 노드가 대비된다.&lt;/p&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a11&lt;/code&gt;은 양성 사례다. 회신은 “15:09 정리 완료”였고 클러스터 쪽은 마지막 heartbeat 15:05:35, Lease 마지막 갱신 15:07:56, &lt;code class=&quot;highlighter-rouge&quot;&gt;Ready=Unknown&lt;/code&gt; 전환 15:08:48이었다. Lease가 멈추고 52초 뒤에 &lt;code class=&quot;highlighter-rouge&quot;&gt;Unknown&lt;/code&gt;이 됐고 회신 시각과 5분 안에 맞는다. 재부팅 뒤 45분 동안 bootID가 바뀌지 않았으니 호스트가 다시 등록한 적도 없다. 게이트를 통과해 삭제했다.&lt;/p&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a10&lt;/code&gt;은 아니었다. 회신에는 정리 시각도 재부팅 여부도 없었고 클러스터 쪽 Lease는 D+15에 멈춰 있었다. 그 시각은 정리 시각이 아니었다. &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;a09&lt;/code&gt;가 클러스터 B로 재시작된 시각과 같은 분이라 같은 일괄 작업으로 추정할 뿐이다. “회신 시각 ±5분”이라는 대조 자체가 성립하지 않았다. “bootID가 D+15 이후 그대로다 = 그 뒤로 클러스터 A에 한 번도 보고하지 않았다”만 확인할 수 있었다.&lt;/p&gt;
+
+&lt;p&gt;이 노드는 재부팅 여부를 더 묻지 않고 삭제했다. 같은 담당자의 회신이 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a11&lt;/code&gt;에서 실측과 맞았고 최악의 경우가 “cordon 없는 재합류”라는 것을 알고 그 위험을 받아들인 결정이다. 게이트를 비켜 간 유일한 노드다.&lt;/p&gt;
+
+&lt;p&gt;여기서 “셧다운 상태의 &lt;code class=&quot;highlighter-rouge&quot;&gt;NotReady&lt;/code&gt;는 정리의 증거가 아니다”라는 원칙이 나왔다. Node 객체를 남겨 둔 채 호스트가 정리 전에 재기동하면 cordon된 채로 다시 붙을 뿐이라 무해하다(&lt;a href=&quot;#kubelet의-단-한-번-등록&quot;&gt;kubelet의 단 한 번 등록&lt;/a&gt; 절). 반대로 정리 증거 없이 객체를 지우면 다음 재기동 때 cordon 없는 새 노드가 된다. D+9에 네 노드가 재부팅 뒤 같은 이름으로 &lt;code class=&quot;highlighter-rouge&quot;&gt;Ready&lt;/code&gt;에 돌아온 것 자체가 “호스트에 RKE2가 남아 있다”는 클러스터 쪽 증거이기도 했다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;노드-상태의-관찰-구조&quot;&gt;노드 상태의 관찰 구조&lt;/h1&gt;
+
+&lt;p&gt;세 사례의 바탕에는 Node Controller가 노드를 판정하는 방식이 있다. 구조는 &lt;a href=&quot;/kubernetes/Kubernetes-Kubelet-Node-Status/&quot;&gt;kubelet 노드 상태 보고 글&lt;/a&gt;에서 다뤘으므로 이 글에 필요한 부분만 적는다.&lt;/p&gt;
+
+&lt;h2 id=&quot;heartbeat와-unknown-판정&quot;&gt;heartbeat와 Unknown 판정&lt;/h2&gt;
+
+&lt;p&gt;kubelet은 두 경로로 살아 있음을 알린다. 10초마다 Lease의 &lt;code class=&quot;highlighter-rouge&quot;&gt;renewTime&lt;/code&gt;을 갱신하고 변경이 있을 때와 5분마다 Node &lt;code class=&quot;highlighter-rouge&quot;&gt;.status&lt;/code&gt;를 PATCH한다. kube-controller-manager 안의 node lifecycle controller(이하 Node Controller)는 5초마다 둘 중 하나라도 바뀌었으면 자기 시계로 “마지막 신호 시각”을 갱신한다. 그 시각에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;nodeMonitorGracePeriod&lt;/code&gt;(v1.32부터 기본 50초)가 지나면 &lt;code class=&quot;highlighter-rouge&quot;&gt;Ready&lt;/code&gt;를 &lt;code class=&quot;highlighter-rouge&quot;&gt;Unknown&lt;/code&gt;으로 바꾼다. 판정 기준은 Lease의 만기가 아니라 &lt;code class=&quot;highlighter-rouge&quot;&gt;renewTime&lt;/code&gt;이 전진했는지다. 전환은 &lt;code class=&quot;highlighter-rouge&quot;&gt;renewTime&lt;/code&gt; 기준 50~55초 사이에 일어난다(50초 grace period에 5초 순회 주기가 겹친다). &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a11&lt;/code&gt;은 Lease 마지막 갱신(15:07:56)에서 전환(15:08:48)까지 52초, &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt;은 53초였다. 이 클러스터의 kube-controller-manager에는 관련 플래그가 없어 기본값이 적용된다.&lt;/p&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl get nodes&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;STATUS&lt;/code&gt; 열은 &lt;code class=&quot;highlighter-rouge&quot;&gt;Ready&lt;/code&gt;가 &lt;code class=&quot;highlighter-rouge&quot;&gt;True&lt;/code&gt;가 아니면 모두 &lt;code class=&quot;highlighter-rouge&quot;&gt;NotReady&lt;/code&gt;로 보여 주지만 condition 값은 셋이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;False&lt;/code&gt;는 kubelet이 살아 있으면서 런타임·네트워크 문제로 스스로 보고하는 값(reason &lt;code class=&quot;highlighter-rouge&quot;&gt;KubeletNotReady&lt;/code&gt;)이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;Unknown&lt;/code&gt;은 신호가 끊겨 Node Controller가 덮어쓴 값(reason &lt;code class=&quot;highlighter-rouge&quot;&gt;NodeStatusUnknown&lt;/code&gt;)이다. 세 사례의 노드는 모두 &lt;code class=&quot;highlighter-rouge&quot;&gt;Unknown&lt;/code&gt;이었다. kubelet이 아무것도 보고하지 않아 컨트롤러가 이 값을 썼다. 이때 &lt;code class=&quot;highlighter-rouge&quot;&gt;MemoryPressure&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;DiskPressure&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;PIDPressure&lt;/code&gt;도 함께 &lt;code class=&quot;highlighter-rouge&quot;&gt;Unknown&lt;/code&gt;이 되고 &lt;code class=&quot;highlighter-rouge&quot;&gt;NetworkUnavailable&lt;/code&gt;은 마지막 값이 남는다. 앞의 YAML 발췌가 그 모양이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;unreachable-taint&quot;&gt;unreachable taint&lt;/h2&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;Ready&lt;/code&gt;가 &lt;code class=&quot;highlighter-rouge&quot;&gt;Unknown&lt;/code&gt;이 되면 Node Controller는 &lt;code class=&quot;highlighter-rouge&quot;&gt;node.kubernetes.io/unreachable&lt;/code&gt; taint를 붙인다(&lt;code class=&quot;highlighter-rouge&quot;&gt;False&lt;/code&gt;일 때는 &lt;code class=&quot;highlighter-rouge&quot;&gt;not-ready&lt;/code&gt;). NoSchedule은 condition 변경 이벤트를 받아 거의 즉시 붙는다. NoExecute는 별도 루프가 zone(토폴로지 라벨로 묶은 노드 그룹. 라벨이 없으면 전체가 한 zone) 단위 rate limiter를 거쳐 붙인다. 기본값은 초당 0.1개(&lt;code class=&quot;highlighter-rouge&quot;&gt;--node-eviction-rate&lt;/code&gt;)이고 burst가 1이라 첫 노드는 즉시 받고 그 다음부터는 토큰이 10초마다 하나씩 나온다. 12초 안에 4대가 연달아 &lt;code class=&quot;highlighter-rouge&quot;&gt;Unknown&lt;/code&gt;이 되자 두 번째 노드부터 최대 10초씩 밀렸다. 앞 발췌의 10초 차이(05:24:35 → 05:24:45)가 그것이다. 한 zone에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;Unknown&lt;/code&gt; 비율이 임계(기본 55%)를 넘으면 limiter가 더 느려지거나 멈추는데 이때는 4/34대라 해당하지 않았다. 작은 클러스터에서 절반 넘게 뺀다면 taint 타이밍이 달라진다.&lt;/p&gt;
+
+&lt;p&gt;NoExecute taint가 붙으면 파드에 기본으로 주입된 300초 toleration이 지난 뒤 taint-eviction-controller가 파드를 내보낸다(&lt;a href=&quot;https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/#taint-based-evictions&quot;&gt;Taint based Evictions&lt;/a&gt;). 이미 drain된 노드라 내보낼 파드는 없었다.&lt;/p&gt;
+
+&lt;h2 id=&quot;기록되지-않는-단절-이유&quot;&gt;기록되지 않는 단절 이유&lt;/h2&gt;
+
+&lt;p&gt;Node 객체와 Lease에는 마지막 heartbeat 시각과 &lt;code class=&quot;highlighter-rouge&quot;&gt;.status.nodeInfo&lt;/code&gt;(bootID, machineID, systemUUID)만 남는다. kubelet에는 “떠난다”고 알리는 경로가 없다(Graceful Node Shutdown을 켠 경우 종료 직전 &lt;code class=&quot;highlighter-rouge&quot;&gt;Ready=False&lt;/code&gt;에 “node is shutting down”이 잠깐 남지만 기본은 꺼져 있고 grace period 뒤 &lt;code class=&quot;highlighter-rouge&quot;&gt;Unknown&lt;/code&gt;으로 덮인다). &lt;a href=&quot;#용어&quot;&gt;배경 절의 그림&lt;/a&gt;이 이것이다. 전원이 꺼져도, 네트워크가 끊겨도, 다른 클러스터로 가도 원래 클러스터에서는 같은 상태로 수렴한다.&lt;/p&gt;
+
+&lt;p&gt;이는 cloud provider가 없는 온프레미스 이야기다. 클라우드처럼 인스턴스 소멸을 판정하는 controller가 있는 환경에서는 인스턴스가 사라지면 Node 객체도 지워지므로 모양이 달라진다.&lt;/p&gt;
+
+&lt;p&gt;구분할 수 있는 신호는 모두 클러스터 API 밖에 있다. 호스트의 10250 포트나 ping 응답, 호스트의 &lt;code class=&quot;highlighter-rouge&quot;&gt;config.yaml&lt;/code&gt;과 agent load balancer 파일에 적힌 server 주소, 다른 클러스터에 같은 이름의 Node가 새로 생겼는지, 그리고 Rancher가 있다면 그쪽의 노드 목록이다. 우리 팀은 호스트에 접근할 수 없었고 클러스터 B의 노드 목록도 볼 수 없었으므로 6일 동안 셧다운과 이탈을 가를 수단이 없었다.&lt;/p&gt;
+
+&lt;p&gt;bootID 변화는 “재부팅 뒤 같은 클러스터에 다시 등록됐다”를 알려 주지만 다른 클러스터에 등록된 경우에는 원래 클러스터의 bootID가 갱신되지 않는다. 그래서 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt;의 bootID는 D+9 값에 머물렀다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;rke2-agent-등록과-노드의-정체성&quot;&gt;RKE2 agent 등록과 노드의 정체성&lt;/h1&gt;
+
+&lt;p&gt;사례 1(새 이름으로 재합류)과 사례 2(이중 소속)는 RKE2가 노드를 등록하는 방식에서 나온다. upstream Kubernetes의 kubelet 등록 위에 RKE2(k3s 계열)가 얹은 층을 순서대로 본다. 아래 내용은 k3s &lt;code class=&quot;highlighter-rouge&quot;&gt;release-1.34&lt;/code&gt; 소스와 RKE2 문서를 기준으로 2026년 10월에 확인했다.&lt;/p&gt;
+
+&lt;h2 id=&quot;supervisor와-configyaml&quot;&gt;supervisor와 config.yaml&lt;/h2&gt;
+
+&lt;p&gt;upstream에서 노드 편입은 kubelet이 kube-apiserver(6443)에 bootstrap 토큰으로 접속해 인증서를 발급받고 Node를 등록하는 과정이다(&lt;a href=&quot;/kubernetes/Kubernetes-Kubeadm-02-1/&quot;&gt;kubeadm join 글&lt;/a&gt;). RKE2는 그 앞에 supervisor 단계를 둔다. agent는 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/rancher/rke2/config.yaml&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;server&lt;/code&gt;(포트 9345)와 &lt;code class=&quot;highlighter-rouge&quot;&gt;token&lt;/code&gt;으로 supervisor의 &lt;code class=&quot;highlighter-rouge&quot;&gt;/v1-rke2/*&lt;/code&gt; 엔드포인트에 접속해 CA, kubelet 인증서, kube-proxy 인증서, 설정을 받는다. 이때 HTTP 헤더에 노드 이름과 node-password를 함께 보낸다. 받은 kubeconfig로 kubelet이 붙는 곳은 로컬 agent load balancer(&lt;code class=&quot;highlighter-rouge&quot;&gt;127.0.0.1:6443&lt;/code&gt;)이고 이 LB가 서버들의 6443으로 중계한다(&lt;a href=&quot;/kubernetes/Kubernetes-RKE2-02/#load-balancer-json&quot;&gt;RKE2 조인 글의 load balancer JSON 절&lt;/a&gt;).&lt;/p&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# /etc/rancher/rke2/config.yaml (워커)&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;server&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;https://&amp;lt;cp-vip&amp;gt;:9345&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;token&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;K10&amp;lt;CA 해시&amp;gt;::server:&amp;lt;비밀번호&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;토큰에는 종류가 있다. 서버에 &lt;code class=&quot;highlighter-rouge&quot;&gt;agent-token&lt;/code&gt;을 따로 두지 않으면 agent도 &lt;strong&gt;server 토큰&lt;/strong&gt;을 쓴다(위 형식의 &lt;code class=&quot;highlighter-rouge&quot;&gt;::server:&lt;/code&gt;가 그 표시다). RKE2에서 토큰은 호스트가 “누구인지”를 증명하는 유일한 자격이라 server 토큰을 가진 호스트가 &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2 server&lt;/code&gt;로 기동하면 supervisor는 &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2:server&lt;/code&gt; 역할을 주고 &lt;code class=&quot;highlighter-rouge&quot;&gt;/v1-rke2/server-bootstrap&lt;/code&gt;을 열어 준다. 그 호스트는 etcd 멤버가 된다. etcd는 서버 노드들이 다수결(quorum)로 운영하는 저장소라 멤버가 하나 늘면 다수결의 기준이 바뀐다(&lt;a href=&quot;/dev/Dev-Kubernetes-Split-Brain-01/#etcd-클러스터와-raft-합의-알고리즘&quot;&gt;Split Brain 글의 etcd와 Raft 절&lt;/a&gt;). 이 클러스터의 워커는 모두 server 토큰으로 붙어 있어서 호스트에 설정이 남은 채 &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-server&lt;/code&gt; 서비스가 켜지면 컨트롤 플레인 etcd에 멤버가 하나 늘어나는 경로가 열려 있다. 실제로 몇 주 전 그렇게 들어온 워커를 etcd에서 떼어 낸 적이 있다(절차는 &lt;a href=&quot;/dev/Dev-Kubernetes-Split-Brain-01/#올바른-제거재조인-절차&quot;&gt;같은 글의 제거·재조인 절&lt;/a&gt;과 같다). &lt;code class=&quot;highlighter-rouge&quot;&gt;agent-token&lt;/code&gt;을 두면 agent는 &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2:agent&lt;/code&gt; 역할만 받아 server-bootstrap이 403이 된다.&lt;/p&gt;
+
+&lt;h2 id=&quot;node-password&quot;&gt;node-password&lt;/h2&gt;
+
+&lt;p&gt;upstream에서 노드의 정체성은 Node 이름과 kubelet 인증서(&lt;code class=&quot;highlighter-rouge&quot;&gt;system:node:&amp;lt;이름&amp;gt;&lt;/code&gt;)다. RKE2는 여기에 &lt;strong&gt;node-password&lt;/strong&gt;를 더한다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;호스트: agent가 처음 기동할 때 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/rancher/node/password&lt;/code&gt;에 16바이트 난수를 만든다&lt;/li&gt;
+  &lt;li&gt;클러스터: supervisor가 그 값을 scrypt로(단방향으로) 해시해 &lt;code class=&quot;highlighter-rouge&quot;&gt;kube-system/&amp;lt;노드명&amp;gt;.node-password.rke2&lt;/code&gt; secret(type &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2.cattle.io/node-password&lt;/code&gt;, 생성 뒤 수정 불가)에 저장한다&lt;/li&gt;
+  &lt;li&gt;이후 같은 이름으로 등록 요청이 오면 해시를 대조하고 다르면 거부한다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Node password rejected, duplicate hostname or contents of '/etc/rancher/node/password'
+may not match server node-passwd entry, try enabling a unique node name with the --with-node-id flag
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;이 secret은 Node를 &lt;code class=&quot;highlighter-rouge&quot;&gt;ownerReferences&lt;/code&gt;(부모 객체를 가리키는 메타데이터. 부모가 지워지면 garbage collector가 자식을 지운다)로 가진다. 이 클러스터에서 실측한 값이다.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; kube-system get secret keep-1.node-password.rke2 &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;jsonpath&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'{.metadata.ownerReferences}'&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;# [{&quot;apiVersion&quot;:&quot;v1&quot;,&quot;kind&quot;:&quot;Node&quot;,&quot;name&quot;:&quot;keep-1&quot;,&quot;uid&quot;:&quot;…&quot;}]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;그래서 Node를 지우면 secret도 함께 지워진다. k3s가 2025년 10월에 node-password를 전용 컨트롤러로 옮기며 ownerReference 방식으로 바꿨다. 그 이전 버전에서는 노드 컨트롤러가 Node 삭제 이벤트에서 secret을 직접 지웠다. 어느 쪽이든 결과는 같다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;strong&gt;참고&lt;/strong&gt;: 이름이 같은 두 호스트가 번갈아 붙는 것을 막는 장치가 이 password다. 사례 2에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt;은 클러스터 B로 재설치되며 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/rancher/node/password&lt;/code&gt;가 새로 만들어졌다. 돌아올 때 클러스터 A의 secret 해시와 맞지 않으므로 Node 객체를 지우거나 secret만 지워야 다시 등록된다. 우리는 secret만 지웠다(&lt;a href=&quot;#복귀-노드의-재편입&quot;&gt;복귀 노드의 재편입&lt;/a&gt; 절). 에러 문구의 &lt;code class=&quot;highlighter-rouge&quot;&gt;--with-node-id&lt;/code&gt;를 쓰는 클러스터라면 이름에 난수가 붙어 재설치가 항상 새 Node가 되므로 이 글의 이름 기반 대조 대신 system UUID가 유일한 추적 수단이다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;h2 id=&quot;kubelet의-단-한-번-등록&quot;&gt;kubelet의 단 한 번 등록&lt;/h2&gt;
+
+&lt;p&gt;kubelet은 기동 후 처음 한 번만 Node를 등록한다(&lt;code class=&quot;highlighter-rouge&quot;&gt;registerWithAPIServer&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;registrationCompleted&lt;/code&gt;). 등록이 끝난 뒤 누군가 Node를 지우면 kubelet은 “node not found”로 status PATCH에 실패할 뿐 다시 만들지 않는다. Lease도 마찬가지다. Lease가 Node와 함께 지워지면 kubelet의 lease controller는 새 Lease를 만들 때 ownerReference를 채우려고 Node를 조회한다. 그 조회가 실패해 만들지 못하고 재시도만 반복한다. Node도 Lease도 kubelet이 재시작하기 전에는 돌아오지 않는다.&lt;/p&gt;
+
+&lt;p&gt;재등록의 계기는 프로세스 재시작이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-agent.service&lt;/code&gt;는 &lt;code class=&quot;highlighter-rouge&quot;&gt;Restart=always&lt;/code&gt;라서 어떤 이유로든 프로세스가 끝나면 5초 뒤 다시 뜨고 그때 kubelet이 다시 등록한다. 재부팅은 당연히 포함된다.&lt;/p&gt;
+
+&lt;p&gt;같은 이름으로 다시 등록하면 API server가 &lt;code class=&quot;highlighter-rouge&quot;&gt;AlreadyExists&lt;/code&gt;를 돌려주고 kubelet은 기존 객체를 자기 기준으로 맞춘다(reconcile). 이때 kubelet이 손대는 것은 기본 라벨(hostname, os, arch 등)과 &lt;code class=&quot;highlighter-rouge&quot;&gt;nvidia.com/gpu&lt;/code&gt; 같은 확장 자원 정도다. &lt;code class=&quot;highlighter-rouge&quot;&gt;spec.unschedulable&lt;/code&gt;, taint, 사람이 붙인 라벨과 annotation은 그대로 남는다. InternalIP가 바뀌면 &lt;code class=&quot;highlighter-rouge&quot;&gt;.status.addresses&lt;/code&gt;가 갱신된다. 사례 1에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a03&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;a05&lt;/code&gt;는 이렇게 IP만 바뀐 채 cordon을 유지했다. 사례 3의 “정리 전 재기동은 무해하다”도 이 동작에 근거한다.&lt;/p&gt;
+
+&lt;p&gt;다른 이름으로 등록하면 새 객체다. 설정 출처가 있는 것만 돌아온다. &lt;code class=&quot;highlighter-rouge&quot;&gt;config.yaml&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;node-label&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;node-taint&lt;/code&gt;, k3s가 찍는 &lt;code class=&quot;highlighter-rouge&quot;&gt;k3s.io/*&lt;/code&gt; annotation, Rancher가 찍는 &lt;code class=&quot;highlighter-rouge&quot;&gt;plan.cattle.io/*&lt;/code&gt; 라벨이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl&lt;/code&gt;로 붙인 cordon·role 라벨·taint·annotation은 없다. &lt;code class=&quot;highlighter-rouge&quot;&gt;new-01&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;03&lt;/code&gt;이 빈손으로 시작한 이유다.&lt;/p&gt;
+
+&lt;h2 id=&quot;node-삭제의-연쇄&quot;&gt;Node 삭제의 연쇄&lt;/h2&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl delete node&lt;/code&gt;는 API server의 객체 하나를 지운다. 호스트는 그대로다. 대신 객체 쪽에서는 연쇄가 일어난다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;함께 사라지는 것&lt;/th&gt;
+      &lt;th&gt;메커니즘&lt;/th&gt;
+      &lt;th&gt;소요&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Lease (&lt;code class=&quot;highlighter-rouge&quot;&gt;kube-node-lease/&amp;lt;노드&amp;gt;&lt;/code&gt;)&lt;/td&gt;
+      &lt;td&gt;Node ownerReference → garbage collector&lt;/td&gt;
+      &lt;td&gt;수 초&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;CSINode (노드별 CSI 드라이버 등록 객체)&lt;/td&gt;
+      &lt;td&gt;Node ownerReference → garbage collector&lt;/td&gt;
+      &lt;td&gt;수 초&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;node-password secret&lt;/td&gt;
+      &lt;td&gt;Node ownerReference → garbage collector (RKE2)&lt;/td&gt;
+      &lt;td&gt;수 초&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;그 노드에 바인딩된 파드 (DaemonSet·static 파드 포함)&lt;/td&gt;
+      &lt;td&gt;PodGC(고아 파드를 치우는 컨트롤러): 20초 루프 + 40초 격리 뒤 그 노드의 파드를 한 번에 강제 삭제&lt;/td&gt;
+      &lt;td&gt;40~80초&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a11&lt;/code&gt; 삭제 때 실측한 값은 삭제 56초 뒤 관측에서 DaemonSet 파드 14개가 남아 있었고 1분 20초 뒤 관측에서 0개였다. secret·Lease·CSINode는 1분 안에 &lt;code class=&quot;highlighter-rouge&quot;&gt;NotFound&lt;/code&gt;였다. 이 클러스터에서 노드 수와 node-password secret 수는 항상 같았다(34/34 → 33/33 → 32/32 → 30/30).&lt;/p&gt;
+
+&lt;p&gt;static 파드(kubelet이 호스트의 매니페스트 파일에서 직접 띄우는 파드. kube-proxy 등)는 API server에 비친 객체(mirror pod)만 사라지고 호스트의 프로세스는 kubelet이 계속 돌린다. 호스트가 살아 있다면 호스트에는 아무 일도 일어나지 않는다.&lt;/p&gt;
+
+&lt;h2 id=&quot;멈춘-agent와-떠난-agent&quot;&gt;멈춘 agent와 떠난 agent&lt;/h2&gt;
+
+&lt;p&gt;“rke2-agent를 멈췄다”는 “클러스터에서 뺐다”와 다르다. &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-agent.service&lt;/code&gt;는 &lt;code class=&quot;highlighter-rouge&quot;&gt;KillMode=process&lt;/code&gt;라 &lt;code class=&quot;highlighter-rouge&quot;&gt;systemctl stop&lt;/code&gt;이 메인 &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2&lt;/code&gt; 프로세스만 죽이고 &lt;code class=&quot;highlighter-rouge&quot;&gt;ExecStopPost&lt;/code&gt;가 cgroup 안에서 이름이 &lt;code class=&quot;highlighter-rouge&quot;&gt;containerd&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;kubelet&lt;/code&gt;인 프로세스만 골라 죽인다. containerd-shim과 컨테이너는 대상이 아니라서 살아남는다. 결과적으로 재시작이나 업그레이드 중에도 컨테이너는 유지된다.&lt;/p&gt;
+
+&lt;div class=&quot;language-ini highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# /usr/local/lib/systemd/system/rke2-agent.service (발췌. RPM 설치는 /usr/lib/systemd/system/)
+&lt;/span&gt;&lt;span class=&quot;nn&quot;&gt;[Service]&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;Type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;notify&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;KillMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;process&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;Delegate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;yes&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;TimeoutStartSec&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;0&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;Restart&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;always&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;RestartSec&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;5s&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;ExecStopPost&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;-/bin/sh -c &quot;systemd-cgls /system.slice/%n | grep -Eo '[0-9]+ (containerd|kubelet)' | awk '{print $1}' | xargs -r kill&quot;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;이 동작 탓에 사례 2에서 클러스터 B가 agent를 멈춘 뒤에도 shim 13개와 &lt;code class=&quot;highlighter-rouge&quot;&gt;cali*&lt;/code&gt; 인터페이스 8개, 파드 볼륨 마운트 17개가 남아 있었다. 이것까지 지우는 것이 &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-killall.sh&lt;/code&gt;이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-uninstall.sh&lt;/code&gt;는 killall 뒤에 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/rancher/rke2&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/rancher/node&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/lib/rancher/rke2&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/lib/kubelet&lt;/code&gt;, CNI 디렉터리, 로그, 바이너리와 unit까지 지운다. 다시 설치하면 node-password가 새로 생긴다.&lt;/p&gt;
+
+&lt;p&gt;멈춘 agent는 &lt;code class=&quot;highlighter-rouge&quot;&gt;systemctl start&lt;/code&gt; 한 번이면 같은 설정으로 다시 등록한다. agent가 멈춰 있는 것은 “일시 정지”이고 “빠진 상태”로 볼 수 없다.&lt;/p&gt;
+
+&lt;p&gt;반대로 &lt;code class=&quot;highlighter-rouge&quot;&gt;config.yaml&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;server&lt;/code&gt;만 바꿔 재시작하면 agent는 새 클러스터에 등록한다. 옛 클러스터에는 아무것도 알리지 않는다. agent load balancer 파일(&lt;code class=&quot;highlighter-rouge&quot;&gt;/var/lib/rancher/rke2/agent/etc/rke2-agent-load-balancer.json&lt;/code&gt;)에 옛 서버 목록이 남아 있지만 기동 시 &lt;code class=&quot;highlighter-rouge&quot;&gt;ServerURL&lt;/code&gt;이 현재 &lt;code class=&quot;highlighter-rouge&quot;&gt;server&lt;/code&gt;와 다르면 새 값으로 덮어쓴다. 즉 “옛 클러스터를 기억해 돌아오는” 일은 없다. 이중 소속의 원인은 그 파일이 아니라 server 주소를 바꾼 것 자체다. 옛 클러스터의 Node 객체, node-password secret, cordon과 taint는 손대는 주체가 없어 그대로 남는다.&lt;/p&gt;
+
+&lt;h2 id=&quot;upstream-kubernetes와-rke2의-차이&quot;&gt;upstream Kubernetes와 RKE2의 차이&lt;/h2&gt;
+
+&lt;p&gt;노드 수명 주기 관점에서 두 층을 나란히 놓으면 다음과 같다(Rancher 층은 다음 절).&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;관점&lt;/th&gt;
+      &lt;th&gt;upstream Kubernetes (kubeadm 기준)&lt;/th&gt;
+      &lt;th&gt;RKE2 / k3s&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;등록 경로&lt;/td&gt;
+      &lt;td&gt;kubelet → kube-apiserver 6443 (bootstrap 토큰으로 인증서 발급)&lt;/td&gt;
+      &lt;td&gt;agent → supervisor 9345에서 인증서·설정 수령 → kubelet → 로컬 LB 127.0.0.1:6443 → 서버 6443&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;노드 정체성&lt;/td&gt;
+      &lt;td&gt;Node 이름 + kubelet 인증서&lt;/td&gt;
+      &lt;td&gt;+ node-password (호스트 파일 ↔ secret). 불일치 시 등록 거부&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;토큰&lt;/td&gt;
+      &lt;td&gt;bootstrap 토큰 (인증서 발급용, 기본 24시간 만료)&lt;/td&gt;
+      &lt;td&gt;정적 server 토큰 또는 agent 토큰 (만료 없음. &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2 token create&lt;/code&gt;로 만드는 bootstrap 토큰은 기본 24시간 만료). agent 토큰을 따로 두지 않으면 워커도 server 토큰 → etcd 합류 경로&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Node 삭제 시 연쇄&lt;/td&gt;
+      &lt;td&gt;Lease·CSINode (ownerReference), 파드 (PodGC)&lt;/td&gt;
+      &lt;td&gt;+ node-password secret&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;같은 이름 재등록&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;AlreadyExists&lt;/code&gt; → reconcile, spec 유지&lt;/td&gt;
+      &lt;td&gt;+ password 해시 일치 필요. Node(또는 secret)를 지워야 새 password로 등록 가능&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;프로세스 정지&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;systemctl stop kubelet&lt;/code&gt; 뒤에도 컨테이너는 containerd가 유지&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-agent&lt;/code&gt; stop은 kubelet·containerd까지 죽이되 shim·컨테이너는 남김. 전부 지우려면 &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-killall.sh&lt;/code&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;호스트 정리&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;kubeadm reset&lt;/code&gt; (사람)&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-uninstall.sh&lt;/code&gt; (사람). &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/rancher/node&lt;/code&gt;까지 지움&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;upstream에 없는 것은 node-password와 supervisor 층, 그리고 server 토큰으로 워커가 etcd 멤버가 될 수 있다는 점이다. 반대로 “Node를 지워도 호스트는 모른다”, “kubelet은 한 번만 등록한다”, “Node 객체만으로는 꺼짐과 이탈을 구분할 수 없다”는 upstream과 RKE2가 같다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;rancher의-노드-관리-층&quot;&gt;Rancher의 노드 관리 층&lt;/h1&gt;
+
+&lt;p&gt;이 클러스터는 Rancher 2.15에 등록돼 있다. Rancher가 노드 수명 주기에 어디까지 관여하는지는 클러스터를 Rancher에 어떻게 넣었느냐에 따라 다르다. 아래는 Rancher 2.15 문서와 소스를 2026년 10월 기준으로 확인한 내용이고 2.14 이전과는 다른 부분이 있다.&lt;/p&gt;
+
+&lt;h2 id=&quot;imported-클러스터와-custom-클러스터&quot;&gt;imported 클러스터와 custom 클러스터&lt;/h2&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;구분&lt;/th&gt;
+      &lt;th&gt;imported(registered) 클러스터&lt;/th&gt;
+      &lt;th&gt;custom 클러스터&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;만드는 방법&lt;/td&gt;
+      &lt;td&gt;이미 있는 RKE2/k3s 클러스터에 &lt;code class=&quot;highlighter-rouge&quot;&gt;cattle-cluster-agent&lt;/code&gt;를 배포해 등록&lt;/td&gt;
+      &lt;td&gt;Rancher UI에서 클러스터를 만들고, 호스트에서 등록 명령을 실행하면 &lt;code class=&quot;highlighter-rouge&quot;&gt;rancher-system-agent&lt;/code&gt;가 RKE2를 설치&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;노드의 상위 객체 (Rancher local 클러스터에 있음)&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;management.cattle.io/v3 Node&lt;/code&gt; (&lt;code class=&quot;highlighter-rouge&quot;&gt;machine-xxxxx&lt;/code&gt;) — 다운스트림 Node를 거울처럼 비춤&lt;/td&gt;
+      &lt;td&gt;Cluster API(CAPI)의 &lt;code class=&quot;highlighter-rouge&quot;&gt;Machine&lt;/code&gt; (&lt;code class=&quot;highlighter-rouge&quot;&gt;custom-xxxxx&lt;/code&gt;)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;다운스트림 Node에 찍는 라벨&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;plan.cattle.io/machine-kind: Node&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;machine-name: machine-xxxxx&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;cluster-name: c-xxxxx&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;plan.cattle.io/machine-kind: Machine&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;machine-name: custom-xxxxx&lt;/code&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;UI에서 노드 삭제&lt;/td&gt;
+      &lt;td&gt;메뉴 없음. &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl delete node&lt;/code&gt;뿐&lt;/td&gt;
+      &lt;td&gt;Machine 삭제 → drain(설정 시) → etcd 멤버 제거 → 다운스트림 Node 삭제까지 자동&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;호스트 정리&lt;/td&gt;
+      &lt;td&gt;사람&lt;/td&gt;
+      &lt;td&gt;&lt;strong&gt;사람&lt;/strong&gt; (&lt;code class=&quot;highlighter-rouge&quot;&gt;rancher-system-agent-uninstall.sh&lt;/code&gt; → &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-uninstall.sh&lt;/code&gt;)&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;사례 2 발췌의 &lt;code class=&quot;highlighter-rouge&quot;&gt;plan.cattle.io/machine-kind: Node&lt;/code&gt; 라벨이 이 클러스터가 imported임을 말해 준다. 이 라벨 조합은 Rancher 2.15가 imported RKE2/k3s 클러스터의 노드에 찍는 것이고 custom이었다면 &lt;code class=&quot;highlighter-rouge&quot;&gt;Machine&lt;/code&gt;이 찍힌다. 다운스트림 클러스터에는 어느 경우에도 &lt;code class=&quot;highlighter-rouge&quot;&gt;Machine&lt;/code&gt; 객체가 없다.&lt;/p&gt;
+
+&lt;h2 id=&quot;호스트-정리의-책임&quot;&gt;호스트 정리의 책임&lt;/h2&gt;
+
+&lt;p&gt;custom 클러스터라면 Rancher가 호스트까지 치워 줄 것이라고 기대하기 쉽다. 실제로는 Machine 삭제의 연쇄가 다운스트림 Node 객체 삭제에서 끝난다. 호스트의 RKE2와 &lt;code class=&quot;highlighter-rouge&quot;&gt;rancher-system-agent&lt;/code&gt; 제거는 문서(Clean Cluster Nodes)의 RKE2 절이 두 스크립트(호스트에 설치되는 &lt;code class=&quot;highlighter-rouge&quot;&gt;/usr/local/bin/rancher-system-agent-uninstall.sh&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-uninstall.sh&lt;/code&gt;. 문서는 전자를 GitHub의 &lt;code class=&quot;highlighter-rouge&quot;&gt;system-agent-uninstall.sh&lt;/code&gt;로 안내한다)의 수동 실행을 요구한다. 같은 문서 서두에 “Active 상태 노드를 지우면 자동으로 정리된다”는 문장이 있지만 RKE1 시절 서술이 남은 것이고 RKE2/k3s 절은 수동 스크립트를 요구한다. imported 클러스터는 애초에 UI에 노드 삭제가 없다. 어느 종류든 호스트 정리는 운영자 몫이다. 이 글의 세 사례는 모두 그 정리가 Node 삭제보다 늦거나 빠지면서 생겼다. custom 클러스터라면 뒤에 나오는 삭제 전 게이트를 Machine 삭제 앞에 두어야 한다.&lt;/p&gt;
+
+&lt;h2 id=&quot;system-agent와-plan&quot;&gt;system-agent와 Plan&lt;/h2&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;rancher-system-agent&lt;/code&gt;는 호스트에서 systemd 서비스로 돌며 Rancher 서버가 내려 주는 plan(호스트에서 실행할 작업 정의)을 실행한다. 연결 정보는 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/lib/rancher/agent&lt;/code&gt;에, 설정은 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/rancher/agent&lt;/code&gt;에 있다. 2.14까지는 custom 클러스터에만 설치됐는데 2.15부터는 imported RKE2/k3s 클러스터에도 &lt;code class=&quot;highlighter-rouge&quot;&gt;cattle-system&lt;/code&gt; 네임스페이스의 &lt;code class=&quot;highlighter-rouge&quot;&gt;system-agent-upgrader&lt;/code&gt; Plan(system-upgrade-controller가 노드마다 Job으로 실행하는 작업 정의)이 배포되어 노드마다 system-agent를 설치·갱신한다(암호화 키 회전·etcd 스냅샷 같은 운영 작업용, 기본 활성화).&lt;/p&gt;
+
+&lt;p&gt;이 Plan이 노드마다 띄우는 &lt;code class=&quot;highlighter-rouge&quot;&gt;apply-system-agent-upgrader-on-&amp;lt;노드&amp;gt;-with-&amp;lt;해시&amp;gt;&lt;/code&gt; Job은 의도치 않게 호스트 상태의 간접 지표가 됐다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;new-01&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;03&lt;/code&gt;이 붙자 Job 3개가 바로 성공했다. 호스트에 system-agent가 이미 있었다고 추정하는 근거다(신규 설치도 빠르므로 확정은 아니다)&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NotReady&lt;/code&gt; 노드에서는 Job 파드가 Pending인 채 17시간 넘게 남았다&lt;/li&gt;
+  &lt;li&gt;돌아온 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;a09&lt;/code&gt;에는 클러스터 B 시절에 실패한 Job 3개가 Failed로 남아 Plan이 다시 적용되지 않았다. 그래서 재편입 직후 호스트에 system-agent가 없었다. Failed Job을 지워야 Plan이 다시 돈다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;호스트를 다른 클러스터로 옮길 때 system-agent를 먼저 지우는 목적은 옛 클러스터의 plan이 적용되는 창을 없애고 그 뒤 &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-uninstall.sh&lt;/code&gt;로 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/rancher/node&lt;/code&gt;와 데이터 디렉터리를 비워 node-password와 클러스터 상태를 초기화하는 것이다. 다른 클러스터의 등록 명령이 기존 서비스를 멈추고 연결 정보를 덮어쓰므로 지우지 않아도 등록은 된다.&lt;/p&gt;
+
+&lt;h2 id=&quot;두-개의-관리-평면&quot;&gt;두 개의 관리 평면&lt;/h2&gt;
+
+&lt;p&gt;이 작업에서 우리 게이트를 거치지 않고 Node가 지워진 일이 두 번 있다. D+17 수령 팀이 8대를 지운 것과 D+21 인프라 팀이 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-b01&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;b02&lt;/code&gt;를 “Rancher 쪽 작업”으로 지운 것이다. imported 클러스터에는 UI의 노드 삭제가 없으므로 둘 다 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl&lt;/code&gt;(Rancher의 kubectl 셸을 포함해) 경로였을 것으로 보이지만 어느 계정으로 어떻게 지웠는지는 확인하지 못했다.&lt;/p&gt;
+
+&lt;p&gt;Rancher가 있으면 클러스터에 손을 대는 평면이 둘이 된다. 우리 팀의 kubeconfig와 Rancher의 권한 체계다. 삭제 전 게이트는 스크립트라 어느 평면에서도 강제되지 않는다. 다른 평면에서 지워진 노드는 게이트 없이 사라진다. 그 뒤로는 사후 확인(재합류 없음, 알림 변화)만 남는다. 강제 수단 후보는 &lt;a href=&quot;#아직-못-하는-것&quot;&gt;아직 못 하는 것&lt;/a&gt; 절에 적었다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;대처&quot;&gt;대처&lt;/h1&gt;
+
+&lt;h2 id=&quot;삭제-전-게이트&quot;&gt;삭제 전 게이트&lt;/h2&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NotReady&lt;/code&gt;만 보고 지우지 않기로 하면서 노드별로 다음 다섯 항목을 두었다. (a)·(b)는 사람이, (c)~(e)는 스크립트가 본다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;항목&lt;/th&gt;
+      &lt;th&gt;내용&lt;/th&gt;
+      &lt;th&gt;걸러 내는 것&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;(a) 대상 확인&lt;/td&gt;
+      &lt;td&gt;회신의 호스트 이름이 대상 목록에 있고 워커 노드임&lt;/td&gt;
+      &lt;td&gt;비대상 노드 오삭제&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;(b) 정리 완료 회신&lt;/td&gt;
+      &lt;td&gt;호스트 정리(system-agent 제거 → RKE2 제거 → 재부팅)가 끝났다는 담당자 회신. &lt;strong&gt;RKE2를 제거한 시각&lt;/strong&gt;(또는 agent를 멈춘 시각)을 함께 받는다&lt;/td&gt;
+      &lt;td&gt;셧다운만 된 노드&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;(c) 시각 대조&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;Ready != True&lt;/code&gt;이고 Lease &lt;code class=&quot;highlighter-rouge&quot;&gt;renewTime&lt;/code&gt;이 (b)의 제거 시각 ±5분 안에 멈춤&lt;/td&gt;
+      &lt;td&gt;정리와 무관한 시점에 멈춘 노드 (사례 3의 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a10&lt;/code&gt;)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;(d) 기준선 비교&lt;/td&gt;
+      &lt;td&gt;etcd 멤버 ID 집합(etcd static 파드에 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl exec&lt;/code&gt;로 &lt;code class=&quot;highlighter-rouge&quot;&gt;etcdctl member list&lt;/code&gt;), 대상 밖 노드의 &lt;code class=&quot;highlighter-rouge&quot;&gt;Ready&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;unschedulable&lt;/code&gt;, MetalLB(LoadBalancer IP를 광고하는 노드) 배치가 작업 전 기준선과 같음&lt;/td&gt;
+      &lt;td&gt;작업 중 다른 노드에 번진 영향, etcd 멤버 유입&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;(e) 재등록 없음&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;rke2.io/node-args&lt;/code&gt; annotation(agent 기동 인자 기록)과 role 라벨이 기준선과 같고, &lt;code class=&quot;highlighter-rouge&quot;&gt;Ready&lt;/code&gt;로 돌아온 적 없음&lt;/td&gt;
+      &lt;td&gt;정리 뒤 다시 붙은 노드&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;(c)의 기준 시각을 재부팅 완료 시각으로 받으면 Lease 정지와 10분 넘게 벌어져 늘 “대조 불가”가 된다. Lease는 agent가 죽는 순간 멈추므로 RKE2 제거(또는 &lt;code class=&quot;highlighter-rouge&quot;&gt;systemctl stop rke2-agent&lt;/code&gt;) 시각을 받아야 한다. 사람이 볼 값은 다음 셋이다.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; kube-node-lease get lease &amp;lt;노드&amp;gt; &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;jsonpath&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'{.spec.renewTime}'&lt;/span&gt;
+kubectl get node &amp;lt;노드&amp;gt; &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;jsonpath&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'{.status.conditions[?(@.type==&quot;Ready&quot;)].lastHeartbeatTime}'&lt;/span&gt;
+kubectl get node &amp;lt;노드&amp;gt; &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;jsonpath&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'{.status.nodeInfo.bootID}'&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;통과하면 Node와 Lease의 JSON을 저장한 뒤 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl delete node&lt;/code&gt;를 실행하고 secret·Lease·CSINode·파드가 모두 &lt;code class=&quot;highlighter-rouge&quot;&gt;NotFound&lt;/code&gt;인지 확인한다.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart TD
+    R[&quot;정리 완료 회신 (제거 시각 포함)&quot;] --&amp;gt; A{&quot;(a) 대상 · 워커&quot;}
+    A --&amp;gt;|통과| C{&quot;(c) Lease 정지 시각&amp;lt;br/&amp;gt;= 제거 시각 ±5분&quot;}
+    C --&amp;gt;|통과| D{&quot;(d)(e) 기준선 비교&quot;}
+    D --&amp;gt;|통과| S[&quot;Node · Lease JSON 저장&quot;]
+    S --&amp;gt; X[&quot;kubectl delete node&quot;]
+    X --&amp;gt; V[&quot;secret · Lease · CSINode · 파드&amp;lt;br/&amp;gt;NotFound 확인&quot;]
+    V --&amp;gt; N[&quot;다음 날 1차 / 편입 뒤 2차&amp;lt;br/&amp;gt;재합류 없음 확인&quot;]
+    A --&amp;gt;|실패| H[&quot;중단 · 사람 판단&quot;]
+    C --&amp;gt;|대조 불가| H
+    D --&amp;gt;|실패| H
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;(c)의 “±5분”은 사람이 본다. 스크립트는 &lt;code class=&quot;highlighter-rouge&quot;&gt;Ready != True&lt;/code&gt;만 확인하고 heartbeat와 Lease 시각을 출력한다. &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a10&lt;/code&gt;처럼 대조가 성립하지 않는 경우는 스크립트가 통과시키지 않고 사람 판단으로 넘어간다.&lt;/p&gt;
+
+&lt;h2 id=&quot;판정의-신뢰-조건&quot;&gt;판정의 신뢰 조건&lt;/h2&gt;
+
+&lt;p&gt;게이트 스크립트를 만들며 “통과”가 거짓이 되는 경우를 먼저 막았다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;부재는 &lt;code class=&quot;highlighter-rouge&quot;&gt;NotFound&lt;/code&gt;만 인정한다.&lt;/strong&gt; API 호출이 실패하면 “없음”이 아니라 &lt;code class=&quot;highlighter-rouge&quot;&gt;ERROR&lt;/code&gt;다. 수집 단계에서 rc가 0이 아니거나 JSON이 깨지면 판정 전체를 무효로 한다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;양성 대조군을 둔다.&lt;/strong&gt; 남는 노드 &lt;code class=&quot;highlighter-rouge&quot;&gt;keep-1&lt;/code&gt;의 Node, 그 위 파드, node-password secret이 있어야 판정이 유효하다. 대조군이 없으면 “대조군 실패 — 이 실행의 판정은 전부 무효”로 끝난다. 빈 입력과 rc=1 입력으로 실제 무효 처리되는지 시험했다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;절대값 대신 기준선과 비교한다.&lt;/strong&gt; DaemonSet 수, GPU 합계, MetalLB 광고 노드, etcd 멤버 ID는 작업 전 기준선을 저장해 두고 “기준선 − 대상 몫”과 비교한다. etcd 멤버가 바뀌면 기준선을 다시 뜬다(실제로 작업 중 죽은 멤버 하나를 떼어 내서 기준선을 다시 만들었다)&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;삭제 직전 객체를 보존한다.&lt;/strong&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;-o json&lt;/code&gt;으로 Node와 Lease를 저장한다. 삭제는 되돌릴 수 없다. 나중에 “그때 무슨 상태였나”를 물을 때 남는 유일한 자료다. 첫 노드(&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a11&lt;/code&gt;)에서 이걸 빼먹어 두 번째부터 넣었다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;재합류-없음-확인&quot;&gt;재합류 없음 확인&lt;/h2&gt;
+
+&lt;p&gt;Node를 지운 뒤 호스트가 다시 붙는지는 두 번 본다. 다음 날, 그리고 수령 팀이 편입을 마친 뒤다. 보는 것은 기준선 시각(&lt;code class=&quot;highlighter-rouge&quot;&gt;BASELINE_TS&lt;/code&gt;, 기준선을 뜬 시각) 이후 생성된 Node와 node-password secret이 0개인지, 대상 IP나 수령 팀 명명 규칙(&lt;code class=&quot;highlighter-rouge&quot;&gt;^new-&lt;/code&gt;)을 가진 Node가 0개인지, etcd 멤버가 그대로인지, 남은 대상 노드의 heartbeat·bootID·Lease가 변하지 않았는지다.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 기준선 시각 이후 생성된 Node (0이어야 함)&lt;/span&gt;
+kubectl get nodes &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;jsonpath&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'{range .items[*]}{.metadata.creationTimestamp}{&quot; &quot;}{.metadata.name}{&quot;\n&quot;}{end}'&lt;/span&gt; &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+  | awk &lt;span class=&quot;nt&quot;&gt;-v&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;t&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$BASELINE_TS&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'$1 &amp;gt; t'&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;# 같은 식으로 node-password secret&lt;/span&gt;
+kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; kube-system get secrets &lt;span class=&quot;nt&quot;&gt;--field-selector&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;rke2.cattle.io/node-password &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;jsonpath&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'{range .items[*]}{.metadata.creationTimestamp}{&quot; &quot;}{.metadata.name}{&quot;\n&quot;}{end}'&lt;/span&gt; &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+  | awk &lt;span class=&quot;nt&quot;&gt;-v&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;t&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$BASELINE_TS&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'$1 &amp;gt; t'&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;이 식에도 양성 대조를 붙였다. 임계 시각을 두 달 전으로 바꾸면 그 사이 편입된 노드 3대가 잡혀야 하고 IP 패턴에 남아 있는 대상 노드를 넣으면 그 노드가 잡혀야 한다. 둘 다 잡히는 것을 확인한 뒤에야 “0건”을 믿었다.&lt;/p&gt;
+
+&lt;p&gt;사례 1에서 보듯 이름이 바뀐 호스트는 같은 이름을 기준으로 한 검사를 빠져나간다. 그래서 같은 이름 대신 “기준선 이후 생긴 것”과 IP·이름 패턴으로 본다. 그래도 완전하지는 않다. IP도 이름 규칙도 바뀌면 잡지 못한다. 그리고 사후 확인은 재합류를 발견할 뿐 사례 1 같은 피해를 막지는 못한다.&lt;/p&gt;
+
+&lt;h2 id=&quot;복귀-노드의-재편입&quot;&gt;복귀 노드의 재편입&lt;/h2&gt;
+
+&lt;p&gt;클러스터 B에서 돌아온 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a07&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;a09&lt;/code&gt;는 처음에 &lt;code class=&quot;highlighter-rouge&quot;&gt;config.yaml&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;server&lt;/code&gt;만 클러스터 A로 되돌리면 될 것으로 봤다. 호스트를 열어 보니 두 가지가 막았다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;버전 skew&lt;/strong&gt;: 클러스터 B가 v1.30.11로 재설치해 두었다. 클러스터 A의 API server는 v1.34.3이고 kubelet은 API server보다 최대 3 마이너 버전까지만 낮을 수 있다. 4 마이너 차이는 정책 밖이다. RKE2는 kubelet이 바이너리에 묶여 있으므로 RKE2 자체를 다시 설치해야 한다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;node-password 불일치&lt;/strong&gt;: 재설치 때 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/rancher/node/password&lt;/code&gt;가 새로 생겼다. 클러스터 A의 secret 해시와 다르므로 등록이 거부된다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Node 객체는 지우지 않기로 했다. 지우면 cordon·role 라벨·GPU taint·podCIDR이 사라지고 남기면 재등록 때 그대로 유지된다. 대신 node-password secret만 지웠다. 순서는 다음과 같다.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;호스트에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;rancher-system-agent-uninstall.sh&lt;/code&gt; → &lt;code class=&quot;highlighter-rouge&quot;&gt;rke2-uninstall.sh&lt;/code&gt;. 게이트 (b)는 재부팅을 요구하지만 여기서는 같은 팀이 바로 재설치하므로 재부팅 대신 RKE2 인터페이스·파드 마운트·unit이 모두 사라진 것을 직접 확인하고 진행했다&lt;/li&gt;
+  &lt;li&gt;클러스터 A에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl -n kube-system delete secret gpu-a07.node-password.rke2&lt;/code&gt; (삭제 전 백업)&lt;/li&gt;
+  &lt;li&gt;호스트에 클러스터 A와 같은 버전(v1.34.3+rke2r3)으로 RKE2 agent 설치, &lt;code class=&quot;highlighter-rouge&quot;&gt;config.yaml&lt;/code&gt;에 클러스터 A의 server·token&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;Ready&lt;/code&gt; 복귀 확인, 새 secret 생성 확인, &lt;code class=&quot;highlighter-rouge&quot;&gt;unreachable&lt;/code&gt; taint 소멸과 cordon 유지 확인&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;cattle-system&lt;/code&gt;에 남은 Failed &lt;code class=&quot;highlighter-rouge&quot;&gt;apply-system-agent-upgrader-*&lt;/code&gt; Job 삭제 → 새 Job 성공과 호스트의 system-agent 설치 확인&lt;/li&gt;
+  &lt;li&gt;노드 정합 점검(&lt;a href=&quot;/MLOps-GPU-Node-Lifecycle-Auto-Isolation/#편입-게이트-편입-스킬과-정합-점검&quot;&gt;GPU 노드 생애주기 글의 편입 게이트&lt;/a&gt;) 통과 후 uncordon은 별도 결정&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;돌아온 호스트가 “그 호스트”인지는 Node의 &lt;code class=&quot;highlighter-rouge&quot;&gt;systemUUID&lt;/code&gt;, 커널 버전, GPU 수를 기준선과 대조했다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;재발-방지와-이관-절차&quot;&gt;재발 방지와 이관 절차&lt;/h1&gt;
+
+&lt;h2 id=&quot;알림의-노드-존재-조인&quot;&gt;알림의 노드 존재 조인&lt;/h2&gt;
+
+&lt;p&gt;방치 노드 알림(72시간 내내 cordon이거나 72시간 내내 &lt;code class=&quot;highlighter-rouge&quot;&gt;NotReady&lt;/code&gt;)은 노드가 지금 존재하는지를 보지 않았다. Prometheus 보존 기간(10일)이 72시간보다 길어서 지운 노드도 창 안에 샘플이 남아 있는 동안 계속 울린다. &lt;code class=&quot;highlighter-rouge&quot;&gt;kube_node_info&lt;/code&gt;는 kube-state-metrics가 현재 객체만 내보내므로 Node가 사라지면 다음 수집에서 시리즈가 끊긴다. 이걸 존재 조건으로 조인했다.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-promql&quot;&gt;# 수정 전
+(min_over_time(kube_node_spec_unschedulable[72h]) == 1)
+  or (max_over_time(kube_node_status_condition{condition=&quot;Ready&quot;,status=&quot;true&quot;}[72h]) == 0)
+
+# 수정 후 — kube_node_info에 지금 있는 node 라벨만 남긴다
+(
+  (min_over_time(kube_node_spec_unschedulable[72h]) == 1)
+  or (max_over_time(kube_node_status_condition{condition=&quot;Ready&quot;,status=&quot;true&quot;}[72h]) == 0)
+)
+and on (node) group by (node) (kube_node_info)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a11&lt;/code&gt;과 &lt;code class=&quot;highlighter-rouge&quot;&gt;gpu-a10&lt;/code&gt;을 지운 뒤 각각 2분과 1분 안에 이 알림이 &lt;code class=&quot;highlighter-rouge&quot;&gt;MissingSeries&lt;/code&gt;(Grafana 알림에서 데이터가 사라진 상태)로 꺼졌다. 수정 전 식이었다면 삭제 뒤 72시간 동안 더 울렸을 것이다.&lt;/p&gt;
+
+&lt;h2 id=&quot;노드-이관-6단계&quot;&gt;노드 이관 6단계&lt;/h2&gt;
+
+&lt;p&gt;이번 일을 바탕으로 클러스터 간 워커 이동 절차를 제안서로 썼다(인프라 팀과 합의 전). 워커 노드 한정이다. 서버 노드는 etcd 멤버 제거가 선행하고 Rancher custom 클러스터에서는 3단계 게이트를 Machine 삭제 앞에 둔다. 역할은 넷이다. 요청자, 빼는 쪽 클러스터, 인프라 팀(호스트), 받는 쪽 클러스터.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;sequenceDiagram
+    participant Q as 요청자
+    participant A as 빼는 쪽 클러스터
+    participant I as 인프라 팀 (호스트)
+    participant B as 받는 쪽 클러스터
+    Q-&amp;gt;&amp;gt;A: 0. 요청 (대상 · 행선지 · 유형 · 기한, 스레드 하나)
+    A-&amp;gt;&amp;gt;A: 1. 비우기 (cordon · drain · 알림 정리)
+    A-&amp;gt;&amp;gt;I: &quot;1단계 완료&quot;
+    I-&amp;gt;&amp;gt;I: 2. 호스트 정리 (system-agent 제거 → RKE2 제거 → 재부팅, 전용 마운트 해제)
+    I-&amp;gt;&amp;gt;A: &quot;2단계 완료 (RKE2 제거 시각)&quot;
+    A-&amp;gt;&amp;gt;A: 3. 게이트 → Node 삭제 → 재합류 없음 1차 확인
+    A-&amp;gt;&amp;gt;I: &quot;3단계 완료&quot;
+    I-&amp;gt;&amp;gt;I: 4. 호스트 준비 (이름 · IP · OS · 드라이버)
+    I-&amp;gt;&amp;gt;B: &quot;4단계 완료&quot;
+    B-&amp;gt;&amp;gt;B: 5. 편입 (받는 클러스터 버전 · role · taint · GPU 확인)
+    B-&amp;gt;&amp;gt;A: &quot;5단계 완료&quot; → 재합류 없음 2차 확인
+    B-&amp;gt;&amp;gt;Q: 6. 기록 (소속 · 기간 · 반환 예정일)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;단계 자체보다 “하지 말 것”이 더 중요하다. 세 사례가 각각 하나씩 어겼다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;하지 말 것&lt;/th&gt;
+      &lt;th&gt;이유&lt;/th&gt;
+      &lt;th&gt;어긴 사례&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;2단계 전에 이름·IP를 바꾸거나 재부팅하지 않는다&lt;/td&gt;
+      &lt;td&gt;재부팅만으로 재합류하고, 이름이 바뀌면 cordon 없는 새 노드가 된다&lt;/td&gt;
+      &lt;td&gt;사례 1&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;agent를 멈춘 것을 “뺐다”로 치지 않는다&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;KillMode=process&lt;/code&gt;라 컨테이너가 남고, 누가 켜면 다시 붙는다&lt;/td&gt;
+      &lt;td&gt;사례 2 (돌려받을 때)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;3단계 전에 다른 클러스터에 편입하지 않는다&lt;/td&gt;
+      &lt;td&gt;빼는 쪽은 “꺼짐”과 “딴 데 붙음”을 구분하지 못한다&lt;/td&gt;
+      &lt;td&gt;사례 2&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;server 주소만 바꿔 옮기지 않는다&lt;/td&gt;
+      &lt;td&gt;원래 클러스터의 Node 객체·컨테이너·네트워크 설정이 남고 버전도 안 맞는다&lt;/td&gt;
+      &lt;td&gt;사례 2&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NotReady&lt;/code&gt;를 정리 완료로 읽지 않는다&lt;/td&gt;
+      &lt;td&gt;셧다운도 이탈도 같은 모양이다. 회신과 시각 대조가 필요하다&lt;/td&gt;
+      &lt;td&gt;사례 3&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;완료 공유를 여러 곳에 흩지 않는다&lt;/td&gt;
+      &lt;td&gt;다른 스레드에 올라온 “클러스터 B에 두었다”는 메시지를 6일 뒤에 봤다&lt;/td&gt;
+      &lt;td&gt;사례 2&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h2 id=&quot;아직-못-하는-것&quot;&gt;아직 못 하는 것&lt;/h2&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;다른 클러스터로의 이탈 감지.&lt;/strong&gt; 빼는 쪽 클러스터의 API 객체만으로는 불가능하다. 절차(“3단계 전 편입 금지”)로만 막는다. 같은 Rancher 서버에 두 클러스터가 다 등록돼 있다면 Rancher 쪽에서 같은 호스트가 두 곳에 보이는지 확인할 수 있을지 모르지만 확인하지 못했다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;다른 평면의 삭제 경로.&lt;/strong&gt; 수령 팀과 인프라 팀이 어떤 권한으로 클러스터 A의 Node를 지웠는지 확인하지 못했다. 게이트는 우리 스크립트에서만 강제된다. 후보는 &lt;code class=&quot;highlighter-rouge&quot;&gt;nodes&lt;/code&gt; delete 권한을 운영 그룹으로 좁히는 것과, 게이트 통과 annotation이 없는 Node 삭제를 ValidatingAdmissionPolicy로 거부하는 것이다. 아직 넣지 않았다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;모르는 이름의 노드 합류 알림.&lt;/strong&gt; 사례 1의 &lt;code class=&quot;highlighter-rouge&quot;&gt;new-01&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;03&lt;/code&gt;은 어떤 알림에도 잡히지 않았다. role 라벨이 없고 생성 시각이 최근인 Node를 경보로 올리는 식을 후보로 두었고 아직 넣지 않았다&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;알림 silence.&lt;/strong&gt; 작업 중 걸어 둔 silence 하나가 만료 전에 사라졌다(원인 미상). 알림 라우팅이 &lt;code class=&quot;highlighter-rouge&quot;&gt;group_by [alertname]&lt;/code&gt;에 6시간 반복이라 대상 8대를 silence해도 범위 밖 노드 때문에 같은 메시지가 계속 왔다. silence는 “걸었다”는 기록과 별개로 존재를 다시 읽어야 한다. 묶음 알림에서는 효과가 없다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Node 객체는 마지막 보고의 기록이고 호스트를 그대로 비추지 않는다. 보고가 멈춘 이유는 기록되지 않는다. &lt;code class=&quot;highlighter-rouge&quot;&gt;Ready=Unknown&lt;/code&gt;, 멈춘 Lease, 변하지 않는 bootID는 호스트 꺼짐·네트워크 단절·다른 클러스터 이탈에서 모두 같다&lt;/li&gt;
+  &lt;li&gt;RKE2 agent는 &lt;code class=&quot;highlighter-rouge&quot;&gt;config.yaml&lt;/code&gt;의 server와 token, 호스트의 node-password로 등록한다. 설정이 남아 있으면 재부팅만으로 재합류한다. 이름이 바뀌면 새 노드가 되고 server만 바꾸면 원래 클러스터 객체는 남긴 채 다른 클러스터에 등록된다. Node를 지우면 Lease·CSINode·node-password secret·파드가 함께 사라지지만 호스트는 모른다&lt;/li&gt;
+  &lt;li&gt;Rancher는 노드 위에 관리 객체를 하나 더 두지만(imported는 management Node, custom은 CAPI Machine) 어느 쪽도 호스트의 RKE2를 대신 지우지 않는다&lt;/li&gt;
+  &lt;li&gt;그래서 Node 삭제는 “정리 완료 회신 + RKE2 제거 시각과 Lease 정지 시각 대조 + 기준선 비교 + 객체 보존 + 재합류 없음 확인(2회)”을 거친다. 돌려받은 노드는 Node 객체를 남기고 node-password secret만 지운 뒤 같은 버전으로 재설치한다&lt;/li&gt;
+  &lt;li&gt;이름이 바뀐 재합류는 &lt;code class=&quot;highlighter-rouge&quot;&gt;system_uuid&lt;/code&gt;로 역추적하고 사라진 노드의 알림은 &lt;code class=&quot;highlighter-rouge&quot;&gt;kube_node_info&lt;/code&gt; 존재 조인으로 끈다. 이탈 감지는 아직 없다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-Kubelet-Node-Status/&quot;&gt;kubelet의 노드 상태 보고 구조&lt;/a&gt; — heartbeat·Lease·Node Controller 판정&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-RKE2-02/&quot;&gt;RKE2 에이전트 노드 조인&lt;/a&gt; — supervisor 9345와 config.yaml, load balancer JSON&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/kubernetes/Kubernetes-Kubeadm-02-1/&quot;&gt;kubeadm join&lt;/a&gt; — upstream의 노드 편입&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/dev/Dev-Kubernetes-Split-Brain-01/&quot;&gt;K3s Split Brain 트러블슈팅&lt;/a&gt; — etcd 멤버십과 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl delete node&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/MLOps-GPU-Node-Lifecycle-Auto-Isolation/&quot;&gt;GPU 클러스터 노드 생애주기 자동화&lt;/a&gt; — 편입 게이트와 정합 점검&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/concepts/architecture/nodes/&quot;&gt;Nodes — Kubernetes 공식 문서&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/releases/version-skew-policy/&quot;&gt;Version Skew Policy — Kubernetes 공식 문서&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/#taint-based-evictions&quot;&gt;Taint based Evictions — Kubernetes 공식 문서&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://docs.k3s.io/architecture&quot;&gt;K3s Architecture — Node password 절&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://docs.rke2.io/security/token&quot;&gt;RKE2 Token&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://docs.rke2.io/install/uninstall&quot;&gt;RKE2 Uninstall&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/rancher/rke2/blob/master/bundle/lib/systemd/system/rke2-agent.service&quot;&gt;rke2-agent.service (rancher/rke2)&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://documentation.suse.com/cloudnative/rancher-manager/v2.15/en/cluster-deployment/register-existing-clusters.html&quot;&gt;Rancher 2.15: Registering Existing Clusters&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://documentation.suse.com/cloudnative/rancher-manager/v2.15/en/cluster-admin/manage-clusters/clean-cluster-nodes.html&quot;&gt;Rancher 2.15: Clean Cluster Nodes&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://documentation.suse.com/cloudnative/rancher-manager/v2.15/en/cluster-admin/manage-clusters/nodes-and-machine-pools.html&quot;&gt;Rancher 2.15: Nodes and Machine Pools&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://cluster-api.sigs.k8s.io/tasks/automated-machine-management/machine_deletions&quot;&gt;Cluster API: Machine deletion process&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/kubernetes/kube-state-metrics/blob/main/docs/metrics/cluster/node-metrics.md&quot;&gt;kube-state-metrics: Node metrics&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="RKE2" /><category term="Rancher" /><category term="Node" /><category term="Lease" /><category term="kubelet" /><category term="Node-Lifecycle" /><category term="MLOps" /><summary type="html">클러스터에서 노드를 빼는 작업 중 Node 객체와 호스트 상태가 어긋난 세 사례를 보고, 그 뒤에 있는 heartbeat·RKE2 등록·Rancher 구조와 이관 절차를 정리해 보자.</summary></entry><entry><title type="html">[Argo CD] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.4.4. Argo CD</title><link href="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-04-04-Argo-CD/" rel="alternate" type="text/html" title="[Argo CD] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.4.4. Argo CD" /><published>2026-10-25T00:00:00+09:00</published><updated>2026-10-26T00:00:00+09:00</updated><id>https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-04-04-Argo-CD</id><content type="html" xml:base="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-04-04-Argo-CD/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Machine Learning Platform Engineering Study 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -3624,399 +4448,4 @@ docker &lt;span class=&quot;nb&quot;&gt;exec &lt;/span&gt;ml-study-control-plane
   &lt;li&gt;&lt;a href=&quot;https://gitea.com/gitea/helm-actions&quot;&gt;Gitea Actions 차트 저장소&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="kind" /><category term="kubeconfig" /><category term="TLS" /><category term="Docker-Desktop" /><category term="Machine-Learning-Platform-Engineering-Study" /><category term="Machine-Learning-Platform-Engineering-Study-Week-1" /><summary type="html">kind로 실습 클러스터를 만들고, Mac의 kubectl이 Docker Desktop VM 안 API 서버에 닿는 경로와 인증서를 확인해 보자.</summary></entry><entry><title type="html">[Docker] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.2.2. 멀티 아키텍처 이미지 빌드와 푸시</title><link href="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-02-02-Docker-Multi-Arch-Build-Push/" rel="alternate" type="text/html" title="[Docker] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.2.2. 멀티 아키텍처 이미지 빌드와 푸시" /><published>2026-10-24T00:00:00+09:00</published><updated>2026-10-26T00:00:00+09:00</updated><id>https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-02-02-Docker-Multi-Arch-Build-Push</id><content type="html" xml:base="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-02-02-Docker-Multi-Arch-Build-Push/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Machine Learning Platform Engineering Study 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;M1 Mac에서 로컬 실행은 &lt;code class=&quot;highlighter-rouge&quot;&gt;linux/arm64 --load&lt;/code&gt;, Docker Hub 업로드는 &lt;code class=&quot;highlighter-rouge&quot;&gt;linux/amd64,linux/arm64 --push&lt;/code&gt;로 나눠 확인했다&lt;/li&gt;
-  &lt;li&gt;당시 사용한 클래식 이미지 저장소는 manifest list를 담지 못해 두 아키텍처를 함께 &lt;code class=&quot;highlighter-rouge&quot;&gt;--load&lt;/code&gt;하면 실패했다&lt;/li&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;default&lt;/code&gt; 빌더의 오류는 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/run/docker.sock&lt;/code&gt; 부재였다. &lt;code class=&quot;highlighter-rouge&quot;&gt;desktop-linux&lt;/code&gt;에 연결한 별도 빌더의 빌드는 정상 동작했다&lt;/li&gt;
-  &lt;li&gt;레지스트리의 index 아래에서 amd64와 arm64 manifest를 확인했다. 추가 &lt;code class=&quot;highlighter-rouge&quot;&gt;unknown/unknown&lt;/code&gt; 두 항목은 실행 이미지가 아닌 attestation manifest였다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;이미지-빌드와-레지스트리&quot;&gt;이미지 빌드와 레지스트리&lt;/h1&gt;
-
-&lt;p&gt;책 3.2.3절에 대응하는 실습이다. &lt;a href=&quot;/MLOps-ML-Platform-Engineering-03-02-01-Docker-App-Dockerfile/&quot;&gt;3.2.1편&lt;/a&gt;의 앱과 Dockerfile을 이미지로 만들고, 다른 머신에서 받을 수 있도록 Docker Hub에 올렸다.&lt;/p&gt;
-
-&lt;p&gt;컨테이너 레지스트리(container registry)는 이미지와 그 메타데이터를 저장하고 배포하는 서비스다. 로컬에서 빌드한 결과를 레지스트리에 푸시(push)하면 서버는 같은 이미지 참조로 풀(pull)해 컨테이너를 실행할 수 있다.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;%% 그림 3.3의 빌드와 배포 경로 재구성
-flowchart LR
-    A[로컬 앱 코드와 Dockerfile] --&amp;gt;|빌드| B[컨테이너 이미지]
-    B --&amp;gt;|push| C[컨테이너 레지스트리]
-    C --&amp;gt;|pull| D[서버의 이미지]
-    D --&amp;gt;|실행| E[컨테이너]
-&lt;/code&gt;&lt;/pre&gt;
-&lt;center&gt;&lt;sup&gt;출처: 『머신러닝 플랫폼 엔지니어링』 그림 3.3. AI를 이용해 재구성했다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;hello-joker:v1&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;v1&lt;/code&gt;은 태그(tag)다. 버전이나 Git 커밋 ID로 이름을 붙일 수 있지만, 태그는 나중에 다른 내용을 가리킬 수도 있다. 내용이 같은지 비교할 때는 다이제스트(digest)를 본다. 두 식별자의 차이는 &lt;a href=&quot;/cs/CS-Container-Image/#이미지-참조-태그와-다이제스트&quot;&gt;이미지 참조&lt;/a&gt;에 정리했다.&lt;/p&gt;
-
-&lt;p&gt;M1 Mac의 CPU 아키텍처는 arm64다. x86 서버용 amd64 이미지와 실행할 바이너리가 다르므로, 두 환경에 제공하려면 플랫폼별 이미지를 만들어 같은 태그 아래 묶는다. 이 목록을 Docker에서는 manifest list, OCI 형식에서는 image index라고 부른다. 이번 출력은 OCI image index이며, &lt;a href=&quot;/cs/CS-Container-Image/#하드웨어-아키텍처&quot;&gt;하드웨어 아키텍처와 이미지 이식성&lt;/a&gt;에서 다룬 조건이 여기에도 적용된다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;buildx와-빌더-해부&quot;&gt;buildx와 빌더 해부&lt;/h1&gt;
-
-&lt;h2 id=&quot;빌더와-드라이버&quot;&gt;빌더와 드라이버&lt;/h2&gt;
-
-&lt;p&gt;Buildx는 Docker CLI에서 빌드를 요청하고 빌더를 관리하는 도구다. BuildKit은 실제 빌드를 수행하는 엔진이다. 빌더(builder)는 BuildKit이 실행되는 환경이고, 드라이버(driver)는 그 환경을 어떻게 구성할지 정한다. &lt;code class=&quot;highlighter-rouge&quot;&gt;docker buildx build&lt;/code&gt;는 선택된 빌더의 BuildKit에서 실행되므로, 두 아키텍처를 빌드하기 전에 어떤 빌더가 있고 무엇이 선택돼 있는지부터 확인했다. &lt;code class=&quot;highlighter-rouge&quot;&gt;docker buildx ls&lt;/code&gt;는 빌더 목록을 보여 주는 명령이다.&lt;/p&gt;
-
-&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# docker buildx ls 실행 결과 발췌
-NAME/NODE          DRIVER/ENDPOINT    STATUS   BUILDKIT   PLATFORMS
-multiplatform*     docker-container
-  multiplatform0   desktop-linux     running  v0.28.1    linux/amd64 (+2), linux/arm64, ...
-desktop-linux      docker
-  desktop-linux    desktop-linux     running  v0.17.3    linux/amd64 (+2), linux/arm64, ...
-default                              error
-
-Cannot load builder default: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;NAME/NODE&lt;/code&gt;: 빌더와 그 아래 실행 노드. &lt;code class=&quot;highlighter-rouge&quot;&gt;*&lt;/code&gt;는 선택된 빌더&lt;/li&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;DRIVER/ENDPOINT&lt;/code&gt;: 빌더 드라이버와 노드의 접속 대상&lt;/li&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;STATUS&lt;/code&gt;: 실행 상태. 새 빌더는 처음 빌드하기 전 &lt;code class=&quot;highlighter-rouge&quot;&gt;inactive&lt;/code&gt;일 수 있음&lt;/li&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;BUILDKIT&lt;/code&gt;: 해당 실행 환경의 BuildKit 버전&lt;/li&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;PLATFORMS&lt;/code&gt;: 지원하는 플랫폼. &lt;code class=&quot;highlighter-rouge&quot;&gt;(+2)&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;...&lt;/code&gt;는 출력에서 묶거나 생략한 항목&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;출력에는 빌더가 세 개 있었다. 선택된 &lt;code class=&quot;highlighter-rouge&quot;&gt;multiplatform&lt;/code&gt;은 이 Mac에 전부터 있던 &lt;code class=&quot;highlighter-rouge&quot;&gt;docker-container&lt;/code&gt; 빌더이고, &lt;code class=&quot;highlighter-rouge&quot;&gt;desktop-linux&lt;/code&gt;는 Docker Desktop이 제공하는 &lt;code class=&quot;highlighter-rouge&quot;&gt;docker&lt;/code&gt; 드라이버 빌더다. 오류 상태인 &lt;code class=&quot;highlighter-rouge&quot;&gt;default&lt;/code&gt;는 &lt;a href=&quot;#default-빌더-오류&quot;&gt;다음 절&lt;/a&gt;에서 다룬다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;드라이버&lt;/th&gt;
-      &lt;th&gt;BuildKit 실행 위치&lt;/th&gt;
-      &lt;th&gt;이 Mac의 빌더&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;docker&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;Docker Engine에 내장&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;desktop-linux&lt;/code&gt;, BuildKit v0.17.3&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;docker-container&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;별도 Docker 컨테이너&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;multiplatform&lt;/code&gt;, BuildKit v0.28.1&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;docker&lt;/code&gt; 드라이버는 빌드 결과를 Docker Engine의 이미지 저장소에 바로 넣는다. &lt;a href=&quot;https://docs.docker.com/build/building/multi-platform/&quot;&gt;Docker 멀티 플랫폼 빌드 문서&lt;/a&gt;에 따르면 이 드라이버로 멀티 플랫폼 빌드를 하려면 containerd 이미지 저장소를 켜야 한다. 이 Mac의 Docker Desktop은 여러 플랫폼을 묶은 manifest list를 저장하지 못하는 클래식 이미지 저장소를 쓰고 있었으므로(&lt;a href=&quot;#트러블슈팅&quot;&gt;트러블슈팅&lt;/a&gt;), 두 아키텍처 빌드에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;docker-container&lt;/code&gt; 드라이버 빌더를 쓰고 결과를 레지스트리에 바로 올렸다. 별도 컨테이너로 실행되는 BuildKit은 위 표처럼 내장 BuildKit과 버전이 다를 수 있다.&lt;/p&gt;
-
-&lt;h2 id=&quot;default-빌더-오류&quot;&gt;default 빌더 오류&lt;/h2&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;default&lt;/code&gt; 빌더의 오류는 빌드에 영향을 주지 않았다. 빌드에 쓰는 빌더와 접속 대상이 달랐기 때문이다. Docker 컨텍스트(context)는 Docker Engine에 접속할 엔드포인트 등의 설정을 담는다. &lt;code class=&quot;highlighter-rouge&quot;&gt;default&lt;/code&gt; 컨텍스트는 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/run/docker.sock&lt;/code&gt;을, 현재 선택된 &lt;code class=&quot;highlighter-rouge&quot;&gt;desktop-linux&lt;/code&gt; 컨텍스트는 사용자 홈 아래의 소켓을 가리켰다.&lt;/p&gt;
-
-&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# docker context ls 실행 결과
-NAME              DESCRIPTION                               DOCKER ENDPOINT
-default           Current DOCKER_HOST based configuration   unix:///var/run/docker.sock
-desktop-linux *   Docker Desktop                            unix:///Users/&amp;lt;user&amp;gt;/.docker/run/docker.sock
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;오류 메시지에 나온 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/run/docker.sock&lt;/code&gt;에는 파일이 없었다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# default가 사용하려는 소켓의 존재 확인&lt;/span&gt;
-&lt;span class=&quot;nb&quot;&gt;ls&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-l&lt;/span&gt; /var/run/docker.sock
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과&lt;/span&gt;
-&lt;span class=&quot;nb&quot;&gt;ls&lt;/span&gt;: /var/run/docker.sock: No such file or directory
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Docker Desktop의 &lt;strong&gt;Allow the default Docker socket to be used&lt;/strong&gt;는 &lt;code class=&quot;highlighter-rouge&quot;&gt;/var/run/docker.sock&lt;/code&gt; 심볼릭 링크를 만드는 옵션이다. &lt;a href=&quot;https://docs.docker.com/desktop/setup/install/mac-permission-requirements/#installing-symlinks&quot;&gt;Mac 권한 설정 문서&lt;/a&gt;에 따르면 이 옵션을 끄면 링크와 이를 다시 만드는 시작 작업도 생성하지 않는다. 이 Mac에서는 옵션이 꺼져 있었다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/mlpe-ch03-docker-default-socket-setting.png&quot; alt=&quot;Docker Desktop Advanced의 기본 소켓 설정&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-&lt;center&gt;&lt;sup&gt;직접 캡처. Docker Desktop Advanced 설정에서 기본 Docker 소켓 사용 옵션이 꺼져 있다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;빌드는 &lt;code class=&quot;highlighter-rouge&quot;&gt;desktop-linux&lt;/code&gt; 컨텍스트로 접속하는 빌더에서 하므로 이 옵션은 바꾸지 않았다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;적용과-관찰&quot;&gt;적용과 관찰&lt;/h1&gt;
-
-&lt;h2 id=&quot;베이스-이미지와-빌더-준비&quot;&gt;베이스 이미지와 빌더 준비&lt;/h2&gt;
-
-&lt;p&gt;앱 디렉터리에서 베이스 이미지부터 확인했다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# ~/ml-study는 실습 저장소 경로를 줄인 표기&lt;/span&gt;
-&lt;span class=&quot;nb&quot;&gt;cd&lt;/span&gt; ~/ml-study/chapters/ch03-k8s
-head &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; 1 Dockerfile
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과&lt;/span&gt;
-FROM python:3.10-slim-bookworm
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;빌더는 스터디 자료대로 &lt;code class=&quot;highlighter-rouge&quot;&gt;docker-container&lt;/code&gt; 드라이버의 &lt;code class=&quot;highlighter-rouge&quot;&gt;multi&lt;/code&gt;를 새로 만들어 선택했다. 같은 드라이버인 기존 &lt;code class=&quot;highlighter-rouge&quot;&gt;multiplatform&lt;/code&gt;을 선택해도 빌드 방식은 같다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 새 빌더 생성 후 선택&lt;/span&gt;
-docker buildx create &lt;span class=&quot;nt&quot;&gt;--name&lt;/span&gt; multi &lt;span class=&quot;nt&quot;&gt;--driver&lt;/span&gt; docker-container &lt;span class=&quot;nt&quot;&gt;--use&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# 이미 multi를 만들었다면 생성 대신 선택만 수행&lt;/span&gt;
-&lt;span class=&quot;c&quot;&gt;# docker buildx use multi&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;스터디 자료의 명령은 생성 뒤에 &lt;code class=&quot;highlighter-rouge&quot;&gt;2&amp;gt;/dev/null || docker buildx use multi&lt;/code&gt;를 붙여, 이미 &lt;code class=&quot;highlighter-rouge&quot;&gt;multi&lt;/code&gt;가 있어 생성이 실패하면 선택으로 넘어가게 했다. 다만 오류 출력을 숨기고 실패 원인을 가리지 않으므로, 다른 이유로 생성이 실패해도 같은 경로로 넘어간다.&lt;/p&gt;
-
-&lt;h2 id=&quot;arm64-이미지의-로컬-실행&quot;&gt;arm64 이미지의 로컬 실행&lt;/h2&gt;
-
-&lt;p&gt;두 아키텍처를 함께 로컬에 적재하는 빌드는 이 Mac에서 실패하므로(&lt;a href=&quot;#트러블슈팅&quot;&gt;트러블슈팅&lt;/a&gt;), 로컬 확인에는 arm64 하나만 빌드했다. &lt;code class=&quot;highlighter-rouge&quot;&gt;--load&lt;/code&gt;는 빌드 결과를 로컬 Docker 이미지 저장소에 적재하는 옵션이다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# M1에서 실행할 arm64 이미지 빌드 및 로컬 적재&lt;/span&gt;
-docker buildx build &lt;span class=&quot;nt&quot;&gt;--platform&lt;/span&gt; linux/arm64 &lt;span class=&quot;nt&quot;&gt;-t&lt;/span&gt; hello-joker:v1 &lt;span class=&quot;nb&quot;&gt;.&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--load&lt;/span&gt;
-docker images hello-joker
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과 발췌&lt;/span&gt;
-REPOSITORY    TAG   IMAGE ID       CREATED          SIZE
-hello-joker   v1    5ebc7ebff246   26 seconds ago   539MB
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;컨테이너 안 Uvicorn은 8083에서 수신한다. &lt;code class=&quot;highlighter-rouge&quot;&gt;-p 8081:8083&lt;/code&gt;은 Mac의 8081을 컨테이너의 8083에 연결한다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 종료 시 자동 삭제되는 컨테이너로 실행&lt;/span&gt;
-docker run &lt;span class=&quot;nt&quot;&gt;--rm&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-it&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-p&lt;/span&gt; 8081:8083 hello-joker:v1
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과 발췌&lt;/span&gt;
-INFO:     Started server process &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;7]
-INFO:     Uvicorn running on http://0.0.0.0:8083 &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;Press CTRL+C to quit&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;다른 터미널에서 호스트의 8081 포트로 호출했다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 호스트의 매핑된 포트로 요청&lt;/span&gt;
-curl &lt;span class=&quot;nt&quot;&gt;-s&lt;/span&gt; localhost:8081 | jq
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과&lt;/span&gt;
-&lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
-  &lt;span class=&quot;s2&quot;&gt;&quot;random_joke&quot;&lt;/span&gt;: &lt;span class=&quot;s2&quot;&gt;&quot;You don't have to know how the computer works, just how to work the computer.&quot;&lt;/span&gt;
-&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;실행 터미널에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;Ctrl+C&lt;/code&gt;를 누르자 종료 로그가 나왔고, &lt;code class=&quot;highlighter-rouge&quot;&gt;--rm&lt;/code&gt;으로 컨테이너가 삭제됐다. 스터디 자료의 정리 명령은 전체 컨테이너를 삭제하는데, 이 Mac에서는 같은 Docker Engine에서 kind 노드와 BuildKit 컨테이너도 실행 중이라 함께 지워진다. 그래서 남은 컨테이너를 확인할 때도 이 앱으로 범위를 좁혔다. kind 노드의 구조는 &lt;a href=&quot;/MLOps-ML-Platform-Engineering-03-03-01-Kind-Cluster-API-Access/&quot;&gt;3.3.1편&lt;/a&gt;에서 다룬다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 이 이미지로 실행한 컨테이너만 조회&lt;/span&gt;
-docker ps &lt;span class=&quot;nt&quot;&gt;-a&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--filter&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;ancestor&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;hello-joker:v1
-
-&lt;span class=&quot;c&quot;&gt;# 남은 컨테이너가 있으면 확인한 ID만 지정해 삭제&lt;/span&gt;
-&lt;span class=&quot;c&quot;&gt;# docker rm -f &amp;lt;container-id&amp;gt;&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h2 id=&quot;두-아키텍처-빌드와-docker-hub-푸시&quot;&gt;두 아키텍처 빌드와 Docker Hub 푸시&lt;/h2&gt;
-
-&lt;p&gt;로컬 실행을 확인한 뒤, amd64와 arm64를 함께 빌드해 Docker Hub로 직접 보냈다. 아래 계정 변수는 자신의 Docker Hub 계정으로 바꾼다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 계정명을 지정하고 로그인&lt;/span&gt;
-&lt;span class=&quot;nv&quot;&gt;DHID&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'&amp;lt;dockerhub-user&amp;gt;'&lt;/span&gt;
-docker login
-
-&lt;span class=&quot;c&quot;&gt;# 플랫폼별 이미지를 같은 태그로 묶어 레지스트리에 출력&lt;/span&gt;
-docker buildx build &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
-  &lt;span class=&quot;nt&quot;&gt;--platform&lt;/span&gt; linux/amd64,linux/arm64 &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
-  &lt;span class=&quot;nt&quot;&gt;-t&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$DHID&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;/hello-joker:v1&quot;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;.&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--push&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# 레지스트리의 이미지 메타데이터 확인&lt;/span&gt;
-docker buildx imagetools inspect &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$DHID&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;/hello-joker:v1&quot;&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;-t&lt;/code&gt;에서 Docker Hub 계정까지 포함한 이름을 지정했으므로 별도의 &lt;code class=&quot;highlighter-rouge&quot;&gt;docker tag&lt;/code&gt;가 필요 없다. &lt;code class=&quot;highlighter-rouge&quot;&gt;--push&lt;/code&gt;는 결과를 레지스트리로 내보낸다. &lt;code class=&quot;highlighter-rouge&quot;&gt;docker-container&lt;/code&gt; 빌더는 결과를 Docker Engine에 바로 넣지 않으므로, &lt;code class=&quot;highlighter-rouge&quot;&gt;--load&lt;/code&gt;나 &lt;code class=&quot;highlighter-rouge&quot;&gt;--push&lt;/code&gt; 없이 빌드하면 결과가 빌드 캐시에만 남는다.&lt;/p&gt;
-
-&lt;p&gt;실제 빌드는 &lt;code class=&quot;highlighter-rouge&quot;&gt;docker-container:multi&lt;/code&gt;에서 완료됐다. arm64 단계는 앞선 빌드의 캐시를 재사용했고, amd64 단계는 새로 실행했다. M1에서 amd64 단계는 에뮬레이션으로 실행된다. 시스템 패키지 설치 단계는 arm64 빌드에서 13.0초, amd64 빌드에서 26.3초였다.&lt;/p&gt;
-
-&lt;h2 id=&quot;v2-응답-구분&quot;&gt;v2 응답 구분&lt;/h2&gt;
-
-&lt;p&gt;이후 Deployment 업데이트를 구분하기 위해 응답에 &lt;code class=&quot;highlighter-rouge&quot;&gt;version&lt;/code&gt;을 추가하고 v2 이미지를 따로 푸시했다. 현재 실습 저장소의 &lt;code class=&quot;highlighter-rouge&quot;&gt;main.py&lt;/code&gt;에도 이 변경이 들어 있다.&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# v2에서 바뀐 반환 값: 농담과 함께 버전 표시&lt;/span&gt;
-&lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;version&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;v2&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;random_joke&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;random_joke&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;버전 문자열은 요청이 어느 앱 버전에 도달했는지 확인하기 위한 것이다. 여기서는 v1의 빌드와 조회 결과를 분석했으며, v2의 롤링 업데이트는 &lt;a href=&quot;/MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/#이미지-변경과-롤링-업데이트&quot;&gt;3.3.3편의 파드 배포 실습&lt;/a&gt;에 해당한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;검증-manifest-list-읽기&quot;&gt;검증: manifest list 읽기&lt;/h1&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;imagetools inspect&lt;/code&gt;는 이미지 레이어를 내려받지 않고 레지스트리의 manifest 정보만 조회한다. amd64 이미지는 실행하지 않았으므로, 여기서는 두 플랫폼 이미지가 레지스트리에 등록됐는지와 로컬에서 실행한 arm64 이미지가 같은 내용인지를 확인한다.&lt;/p&gt;
-
-&lt;h2 id=&quot;index와-플랫폼별-다이제스트&quot;&gt;index와 플랫폼별 다이제스트&lt;/h2&gt;
-
-&lt;p&gt;출력의 핵심 항목은 다음과 같다.&lt;/p&gt;
-
-&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# imagetools inspect 출력의 index 부분
-Name:      docker.io/&amp;lt;dockerhub-user&amp;gt;/hello-joker:v1
-MediaType: application/vnd.oci.image.index.v1+json
-Digest:    sha256:01115bdc2a1babf288f962efa55a0fec3e6442d049a259c202afc056c00f99eb
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;그 아래 manifest 네 개는 역할이 다르다.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;Platform&lt;/th&gt;
-      &lt;th&gt;다이제스트 접두어&lt;/th&gt;
-      &lt;th&gt;역할&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;linux/amd64&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;58fded8efadd&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;amd64 실행 이미지의 manifest&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;linux/arm64&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;6d63206c03a1&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;arm64 실행 이미지의 manifest&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;unknown/unknown&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;7201e9bcf8d5&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;amd64를 참조하는 attestation manifest&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;unknown/unknown&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;67d199a4ad18&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;arm64를 참조하는 attestation manifest&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;index 다이제스트는 빌드 로그의 &lt;code class=&quot;highlighter-rouge&quot;&gt;exporting manifest list&lt;/code&gt; 값과 같았다. arm64 manifest 다이제스트도 로컬 빌드 로그와 같았다.&lt;/p&gt;
-
-&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# 로컬 arm64 빌드와 레지스트리 조회에서 일치한 manifest digest
-sha256:6d63206c03a15c67f2b3eab6afca44752121d8ab8bdef8836109e4947daed63f
-
-# 두 빌드 로그에서 일치한 arm64 config digest
-sha256:5ebc7ebff2461f86c114dbbd464914296fccf4da9d1a1d21f57b74a2d4030a6d
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;로컬 &lt;code class=&quot;highlighter-rouge&quot;&gt;docker images&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;IMAGE ID&lt;/code&gt;는 config digest의 앞부분인 &lt;code class=&quot;highlighter-rouge&quot;&gt;5ebc7ebff246&lt;/code&gt;이었다. manifest digest와 IMAGE ID는 서로 다른 대상을 식별한다. 이 두 값을 각각 대조하면, 로컬에서 실행한 arm64 이미지의 내용이 레지스트리에도 올라갔음을 확인할 수 있다.&lt;/p&gt;
-
-&lt;h2 id=&quot;attestation과-docker-hub-화면&quot;&gt;attestation과 Docker Hub 화면&lt;/h2&gt;
-
-&lt;p&gt;어테스테이션(attestation)은 이미지에 붙는 빌드 관련 메타데이터다. 프로비넌스(provenance)는 그중 빌드의 재료와 과정에 관한 정보를 담는다. BuildKit은 기본적으로 최소 수준의 provenance를 생성하며, 이번처럼 &lt;code class=&quot;highlighter-rouge&quot;&gt;docker-container&lt;/code&gt; 빌더에서 레지스트리로 푸시하면 index에 함께 저장할 수 있다. 클래식 이미지 저장소에 &lt;code class=&quot;highlighter-rouge&quot;&gt;--load&lt;/code&gt;하는 경로는 이를 보존하지 못한다. &lt;a href=&quot;https://docs.docker.com/build/metadata/attestations/&quot;&gt;Docker build attestations 문서&lt;/a&gt;에서 출력 경로와 저장소의 조건을 설명한다.&lt;/p&gt;
-
-&lt;p&gt;두 &lt;code class=&quot;highlighter-rouge&quot;&gt;unknown/unknown&lt;/code&gt; 항목에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;vnd.docker.reference.type: attestation-manifest&lt;/code&gt;가 있었고, &lt;code class=&quot;highlighter-rouge&quot;&gt;vnd.docker.reference.digest&lt;/code&gt;는 각각의 실행 이미지 manifest를 가리켰다. 실행할 대상이 아니므로 플랫폼을 &lt;code class=&quot;highlighter-rouge&quot;&gt;unknown/unknown&lt;/code&gt;으로 표시한다. 자세한 형식은 &lt;a href=&quot;https://docs.docker.com/build/metadata/attestations/attestation-storage/&quot;&gt;attestation 저장 구조&lt;/a&gt;를 참고하면 된다. 기본 provenance는 빌드 옵션 &lt;code class=&quot;highlighter-rouge&quot;&gt;--provenance=false&lt;/code&gt;로 뺄 수 있으며, 이번에는 이 옵션 없이 빌드해 attestation이 함께 올라갔다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/mlpe-ch03-dockerhub-multiarch-tags.png&quot; alt=&quot;Docker Hub의 v1 태그에 등록된 amd64와 arm64 이미지&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-&lt;center&gt;&lt;sup&gt;직접 캡처. Docker Hub의 v1 태그 아래 linux/amd64와 linux/arm64 이미지가 표시된다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;Docker Hub 화면의 두 다이제스트도 CLI 결과와 일치한다. 같은 태그를 받더라도 런타임은 대상 플랫폼에 맞는 이미지를 선택한다. arm64 kind 노드에는 arm64 이미지가 필요하다. 파드 배포에서 이 태그를 사용하는 과정은 &lt;a href=&quot;/MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/&quot;&gt;3.3.3편&lt;/a&gt;에서 다룬다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;트러블슈팅&quot;&gt;트러블슈팅&lt;/h1&gt;
-
-&lt;h2 id=&quot;증상&quot;&gt;증상&lt;/h2&gt;
-
-&lt;p&gt;처음에는 스터디의 멀티 아키텍처 빌드 명령에 &lt;code class=&quot;highlighter-rouge&quot;&gt;--load&lt;/code&gt;를 붙여 그대로 실행했다. 빌드 결과를 로컬로 내보내는 단계에서 사용할 수 없는 조합이라는 오류가 즉시 발생했다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 당시 실패한 명령&lt;/span&gt;
-docker buildx build &lt;span class=&quot;nt&quot;&gt;--platform&lt;/span&gt; linux/amd64,linux/arm64 &lt;span class=&quot;nt&quot;&gt;-t&lt;/span&gt; hello-joker:v1 &lt;span class=&quot;nb&quot;&gt;.&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--load&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과&lt;/span&gt;
-ERROR: docker exporter does not currently support exporting manifest lists
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h2 id=&quot;증거&quot;&gt;증거&lt;/h2&gt;
-
-&lt;p&gt;같은 Dockerfile을 &lt;code class=&quot;highlighter-rouge&quot;&gt;linux/arm64&lt;/code&gt; 하나로 &lt;code class=&quot;highlighter-rouge&quot;&gt;--load&lt;/code&gt;하면 성공했고 앱도 실행됐다. 두 아키텍처를 지정해 &lt;code class=&quot;highlighter-rouge&quot;&gt;--push&lt;/code&gt;했을 때도 성공했다. 이 차이는 앱 코드나 두 플랫폼 빌드 자체보다 &lt;strong&gt;결과를 어디에 어떤 형식으로 내보내는가&lt;/strong&gt;와 관련된다.&lt;/p&gt;
-
-&lt;h2 id=&quot;원인&quot;&gt;원인&lt;/h2&gt;
-
-&lt;p&gt;클래식 이미지 저장소는 여러 플랫폼을 묶는 image index와 manifest list를 지원하지 않는다. 당시 Mac 환경에서는 이 저장소를 사용해 멀티 플랫폼 결과를 로컬에 적재할 수 없었다. &lt;a href=&quot;https://docs.docker.com/desktop/features/containerd/&quot;&gt;Docker Desktop의 이미지 저장소 문서&lt;/a&gt;에서 확인할 수 있는 제한이다.&lt;/p&gt;
-
-&lt;p&gt;실습 환경은 Docker Desktop 4.37.2(Docker Engine 27.4.0)였다. 글을 쓰는 시점에도 이 Mac의 저장소 드라이버는 클래식 저장소인 &lt;code class=&quot;highlighter-rouge&quot;&gt;overlay2&lt;/code&gt;였다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 현재 Docker Engine이 쓰는 저장소 드라이버 확인&lt;/span&gt;
-docker info | &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;storage driver&quot;&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과&lt;/span&gt;
- Storage Driver: overlay2
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;containerd 이미지 저장소를 쓰면 &lt;code class=&quot;highlighter-rouge&quot;&gt;docker info&lt;/code&gt;의 드라이버 정보에 &lt;code class=&quot;highlighter-rouge&quot;&gt;io.containerd.snapshotter.v1&lt;/code&gt;이 나온다(&lt;a href=&quot;https://docs.docker.com/engine/storage/containerd/&quot;&gt;Engine 문서&lt;/a&gt;). 현재 Docker 문서는 containerd 이미지 저장소를 기본으로 설명하므로, 다른 환경에서는 실제 설정을 확인해야 한다.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;%% 이번 클래식 저장소 환경의 출력 경로
-flowchart LR
-    B[BuildKit 빌더] --&amp;gt;|arm64 단독 --load| L[로컬 클래식 이미지 저장소]
-    L --&amp;gt; R[Mac에서 컨테이너 실행]
-    B --&amp;gt;|amd64와 arm64 --push| I[레지스트리의 image index]
-    I --&amp;gt; A[amd64 manifest]
-    I --&amp;gt; M[arm64 manifest]
-    I --&amp;gt; P[attestation manifest 2개]
-&lt;/code&gt;&lt;/pre&gt;
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. 로컬 실행용 단일 플랫폼 출력과 레지스트리의 멀티 플랫폼 출력 경로&lt;/sup&gt;&lt;/center&gt;
-
-&lt;h2 id=&quot;해결&quot;&gt;해결&lt;/h2&gt;
-
-&lt;p&gt;이번에 확인한 해결은 설정을 바꾸지 않고 출력 경로를 나누는 것이었다. arm64 하나만 &lt;code class=&quot;highlighter-rouge&quot;&gt;--load&lt;/code&gt;해 실행하고, 두 아키텍처는 &lt;code class=&quot;highlighter-rouge&quot;&gt;--push&lt;/code&gt;로 레지스트리에 올렸다.&lt;/p&gt;
-
-&lt;p&gt;다른 방법은 Docker Desktop의 &lt;strong&gt;Use containerd for pulling and storing images&lt;/strong&gt;를 켜는 것이다. 이 옵션을 위해 Mac에 containerd를 별도로 설치할 필요는 없다. Docker Desktop에 포함된 이미지 저장 방식을 바꾸는 설정이다. containerd는 Docker Engine이 컨테이너 실행에도 사용하는 런타임이며, &lt;strong&gt;런타임으로 사용한다는 사실과 이미지 저장소로 사용한다는 사실은 구분해야 한다.&lt;/strong&gt; &lt;a href=&quot;/dev/Dev-Container-Duplicate-Container-Images-1/&quot;&gt;dockerd와 containerd의 이미지 저장 구조&lt;/a&gt;에서 그 차이를 다뤘다.&lt;/p&gt;
-
-&lt;p&gt;문서상 전환 전의 이미지와 컨테이너는 삭제되지 않고 비활성 저장소에 남으며, 원래 저장소로 돌아오면 다시 보인다. kind 노드 컨테이너도 영향을 받을 수 있다. 이 저장소 전환은 시험하지 않았다.&lt;/p&gt;
-
-&lt;p&gt;스터디 자료에는 가시다님의 OrbStack 환경에서 두 아키텍처를 함께 &lt;code class=&quot;highlighter-rouge&quot;&gt;--load&lt;/code&gt;한 결과가 있다. &lt;a href=&quot;https://docs.docker.com/engine/storage/containerd/&quot;&gt;Engine 문서&lt;/a&gt;는 29.0 이상 &lt;strong&gt;신규 설치&lt;/strong&gt;의 기본값이 containerd 저장소이고, 기존 설치를 업그레이드하면 이전 저장소를 유지한다고 설명한다. 같은 명령이라도 이미지 저장소의 종류에 따라 결과가 달라진다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;단계&lt;/th&gt;
-      &lt;th&gt;스터디 자료의 OrbStack 흐름&lt;/th&gt;
-      &lt;th&gt;내 Mac에서 확인한 흐름&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;로컬 적재&lt;/td&gt;
-      &lt;td&gt;두 플랫폼 함께 &lt;code class=&quot;highlighter-rouge&quot;&gt;--load&lt;/code&gt;&lt;/td&gt;
-      &lt;td&gt;arm64만 &lt;code class=&quot;highlighter-rouge&quot;&gt;--load&lt;/code&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;실행&lt;/td&gt;
-      &lt;td&gt;호스트 8081 → 컨테이너 8083&lt;/td&gt;
-      &lt;td&gt;동일, &lt;code class=&quot;highlighter-rouge&quot;&gt;--rm&lt;/code&gt; 추가&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;정리&lt;/td&gt;
-      &lt;td&gt;전체 컨테이너 삭제 명령 포함&lt;/td&gt;
-      &lt;td&gt;앱 컨테이너만 정리&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;업로드&lt;/td&gt;
-      &lt;td&gt;로컬 이미지에 계정 태그를 붙여 push&lt;/td&gt;
-      &lt;td&gt;두 플랫폼 빌드에서 바로 &lt;code class=&quot;highlighter-rouge&quot;&gt;--push&lt;/code&gt;&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;멀티 아키텍처 이미지가 필요하다는 판단과, 그 결과를 로컬에 저장할 수 있다는 판단은 별개였다. 이번에는 빌더의 접속 경로, 출력 대상, 플랫폼별 manifest를 각각 확인해 빌드에서 레지스트리까지 연결했다.&lt;/p&gt;
-
-&lt;p&gt;ML 플랫폼에서는 학습과 서빙 컴포넌트를 여러 노드에서 실행한다. 이때 노드 아키텍처에 맞는 이미지가 있는지는 배포 전에 확인할 기본 조건이다. Kubeflow처럼 여러 이미지를 함께 설치하는 구성에도 같은 확인이 필요하다. 레지스트리를 직접 운영하는 확장 과제는 Harbor이며, 이번 실습에서는 Docker Hub를 사용했다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.docker.com/build/building/multi-platform/&quot;&gt;Docker multi-platform builds&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.docker.com/build/builders/drivers/&quot;&gt;Docker Buildx 빌더 드라이버&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.docker.com/desktop/features/containerd/&quot;&gt;Docker Desktop containerd image store&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.docker.com/engine/storage/containerd/&quot;&gt;Docker Engine containerd image store&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.docker.com/desktop/setup/install/mac-permission-requirements/&quot;&gt;Docker Desktop Mac 권한과 소켓 설정&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.docker.com/build/metadata/attestations/&quot;&gt;Build attestations&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.docker.com/reference/cli/docker/buildx/imagetools/inspect/&quot;&gt;docker buildx imagetools inspect&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Docker" /><category term="buildx" /><category term="BuildKit" /><category term="Multi-Arch" /><category term="Docker-Hub" /><category term="Machine-Learning-Platform-Engineering-Study" /><category term="Machine-Learning-Platform-Engineering-Study-Week-1" /><summary type="html">M1 Mac에서 buildx로 amd64와 arm64 이미지를 함께 만들어 Docker Hub에 올리고, manifest list로 결과를 확인해 보자.</summary></entry></feed>
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="kind" /><category term="kubeconfig" /><category term="TLS" /><category term="Docker-Desktop" /><category term="Machine-Learning-Platform-Engineering-Study" /><category term="Machine-Learning-Platform-Engineering-Study-Week-1" /><summary type="html">kind로 실습 클러스터를 만들고, Mac의 kubectl이 Docker Desktop VM 안 API 서버에 닿는 경로와 인증서를 확인해 보자.</summary></entry></feed>
