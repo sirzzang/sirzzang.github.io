@@ -15,8 +15,8 @@ tags:
   - NodeStatus
   - Lease
   - Node Controller
+last_modified_at: 2026-10-29
 ---
-
 <br>
 
 # 개요
@@ -42,21 +42,21 @@ kubelet  →  API server (Node .status PATCH)  →  etcd 저장
 
 Kubernetes 리소스의 `.spec`과 `.status`는 각각 다른 역할을 한다.
 
-- **`.spec`**: **desired state**. 사용자나 상위 컨트롤러가 "이렇게 되길 원한다"고 선언하는 부분이다.
-- **`.status`**: **observed state**. 에이전트나 컨트롤러가 "지금 실제로 이렇게 보인다"고 보고하는 부분이다.
+- **`.spec`**: **desired state**. 사용자나 상위 컨트롤러가 ***"이렇게 되길 원한다"***고 선언하는 부분이다.
+- **`.status`**: **observed state**. 에이전트나 컨트롤러가 ***"지금 실제로 이렇게 보인다"***고 보고하는 부분이다.
 
 이 **spec / status 분리**는 Pod, Deployment, Service 등 대부분의 Kubernetes 리소스에 동일하게 적용된다.
 
 ## Node에서의 적용
 
-Node 리소스에도 같은 패턴이 적용된다. Node는 `core/v1` API(`apiVersion: v1`, `kind: Node`)에 속하고, `.spec`과 `.status`는 각각 다른 Go 타입으로 정의된다.
+Node 리소스에도 같은 패턴이 적용된다. Node는 `core/v1` API(`apiVersion: v1`, `kind: Node`)에 속하고 `.spec`과 `.status`는 각각 다른 Go 타입으로 정의된다.
 
-| 부분 | 누가 작성 | 정의 타입 |
-|------|-----------|-----------|
-| `.spec` | 사용자, 컨트롤러 (taints, `podCIDR`, `unschedulable` 등) | `NodeSpec` |
-| `.status` | **kubelet** (이 필드의 유일한 writer) | `NodeStatus` |
+| 부분        | 누가 작성                                                                                     | 정의 타입      |
+| ----------- | --------------------------------------------------------------------------------------------- | -------------- |
+| `.spec`   | 사용자, 컨트롤러 (taints, `podCIDR`, `unschedulable` 등)                                  | `NodeSpec`   |
+| `.status` | **kubelet** (주 writer. node lifecycle controller, cloud node controller도 일부를 쓴다) | `NodeStatus` |
 
-Node가 다른 리소스와 다른 점은 **`.status`의 writer가 클러스터 안의 컨트롤러가 아니라, 해당 노드에서 돌아가는 kubelet**이라는 것이다.
+Node `.status`의 **주 writer는 해당 노드에서 돌아가는 kubelet**이다(Pod `.status`도 마찬가지로 kubelet이 쓴다). 다만 유일한 writer는 아니다. kube-controller-manager 안의 **node lifecycle controller**는 heartbeat가 끊긴 노드의 `Ready` 등 condition을 `Unknown`으로 덮어쓰고 cloud-controller-manager의 node controller는 `.status.addresses`를 PATCH한다. RBAC만 있으면 `kubectl patch node <이름> --subresource=status`로 사람이 쓸 수도 있다. kubelet이 자기 노드의 `.status`만 쓰도록 제한하는 것은 Node authorizer와 `NodeRestriction` admission plugin이다. 이 글에서는 보고하는 쪽인 kubelet에 집중한다.
 
 ## `NodeStatus` 스키마
 
@@ -81,18 +81,18 @@ type ContainerImage struct {
 }
 ```
 
-`kubectl get node <이름> -o json`으로 보이는 `.status` 트리가 곧 이 스키마의 직렬화(serialization) 결과이고, kubelet은 이 형태에 맞춰 채운 뒤 API server에 PATCH한다.
+`kubectl get node <이름> -o json`으로 보이는 `.status` 트리가 곧 이 스키마의 직렬화(serialization) 결과이고 kubelet은 이 형태에 맞춰 채운 뒤 API server에 PATCH한다.
 
 ## 주요 필드 요약
 
-| 필드 | 내용 |
-|------|------|
-| `.status.conditions` | Ready, MemoryPressure, DiskPressure, PIDPressure 등 [노드 상태 조건](https://kubernetes.io/docs/reference/node/node-status/#condition) |
-| `.status.capacity` / `.allocatable` | CPU, 메모리, GPU 등 스케줄링에 쓰이는 리소스 |
-| `.status.images[]` | 노드에 캐시된 컨테이너 이미지 목록 |
-| `.status.nodeInfo` | OS, 커널 버전, kubelet 버전, container runtime 버전 |
-| `.status.addresses` | InternalIP, Hostname 등 |
-| `.status.daemonEndpoints` | kubelet이 노출하는 포트 등 |
+| 필드                                    | 내용                                                                                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `.status.conditions`                  | Ready, MemoryPressure, DiskPressure, PIDPressure 등 [노드 상태 조건](https://kubernetes.io/docs/reference/node/node-status/#condition) |
+| `.status.capacity` / `.allocatable` | CPU, 메모리, GPU 등 스케줄링에 쓰이는 리소스                                                                                          |
+| `.status.images[]`                    | 노드에 캐시된 컨테이너 이미지 목록                                                                                                    |
+| `.status.nodeInfo`                    | OS, 커널 버전, kubelet 버전, container runtime 버전                                                                                   |
+| `.status.addresses`                   | InternalIP, Hostname 등                                                                                                               |
+| `.status.daemonEndpoints`             | kubelet이 노출하는 포트 등                                                                                                            |
 
 `.status.conditions`의 JSON 예시를 보면 다음과 같다.
 
@@ -117,7 +117,7 @@ type ContainerImage struct {
 }
 ```
 
-각 condition에는 `lastHeartbeatTime`(마지막으로 해당 조건이 갱신된 시각)과 `lastTransitionTime`(상태가 마지막으로 변경된 시각)이 기록된다. Node Controller는 이 시각 정보를 보고 노드의 health를 판단한다.
+각 condition에는 `lastHeartbeatTime`(마지막으로 해당 조건이 갱신된 시각)과 `lastTransitionTime`(상태가 마지막으로 변경된 시각)이 기록된다. Node Controller는 `lastHeartbeatTime` 값이 **바뀌었는지**만 보고 자기 시계로 "마지막으로 신호를 본 시각"을 갱신한다. 값 자체를 현재 시각과 빼지는 않는다. 노드와 컨트롤 플레인의 시계가 어긋나도 판정에 영향이 없는 이유다. 자세한 판정 방식은 뒤에서 다룬다.
 
 <br>
 
@@ -125,7 +125,7 @@ type ContainerImage struct {
 
 ## kubelet은 stateless에 가깝다
 
-kubelet은 `.status`를 **로컬 디스크에 별도로 영속화하지 않는다**. 설정된 주기마다(기본 10초) 그때그때 수집하여 메모리에 조립한 뒤, API server에 PATCH로 반영한다. 장기 저장은 etcd(API server 경유)가 담당하고, kubelet 쪽은 stateless에 가깝다.
+kubelet은 `.status`를 **로컬 디스크에 별도로 영속화하지 않는다**. 설정된 주기마다(기본 10초) 수집하여 메모리에 조립한 뒤, API server에 PATCH로 반영한다. 머신 정보나 이미지 목록처럼 일부 항목은 kubelet 내부 캐시에서 읽지만 디스크에 `.status`를 남기지는 않는다. 장기 저장은 etcd(API server 경유)가 담당하고 kubelet 쪽은 stateless에 가깝다.
 
 ## 한 주기 안에서의 흐름
 
@@ -133,12 +133,12 @@ kubelet의 상태 보고는 한 주기 안에서 다음 세 단계로 이루어�
 
 **1단계: 각 setter/gatherer가 정보를 수집한다.**
 
-| 수집 대상 | 정보 소스 | 수집 방식 |
-|-----------|-----------|-----------|
-| images | CRI(Container Runtime Interface) 런타임 (containerd 등) | `ListImages` 등 CRI RPC로 캐시된 이미지 메타데이터 수집 |
-| conditions | 시스템 메트릭 | cgroup, `/proc` 등에서 메모리/디스크/PID 압박(pressure) 여부 판단 |
-| capacity / allocatable | 하드웨어 정보 | cgroup, sysfs 등에서 CPU, 메모리, 확장 리소스(GPU 등) 읽기 |
-| nodeInfo | OS 정보 | `/etc/os-release`, `uname` 등으로 OS, 커널, kubelet, 런타임 버전 수집 |
+| 수집 대상              | 정보 소스                                               | 수집 방식                                                                 |
+| ---------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------- |
+| images                 | CRI(Container Runtime Interface) 런타임 (containerd 등) | `ListImages` 등 CRI RPC로 캐시된 이미지 메타데이터 수집                 |
+| conditions             | 시스템 메트릭                                           | cgroup, `/proc` 등에서 메모리/디스크/PID 압박(pressure) 여부 판단       |
+| capacity / allocatable | 하드웨어 정보                                           | cgroup, sysfs 등에서 CPU, 메모리, 확장 리소스(GPU 등) 읽기                |
+| nodeInfo               | OS 정보                                                 | `/etc/os-release`, `uname` 등으로 OS, 커널, kubelet, 런타임 버전 수집 |
 
 **2단계: `.status` 구조체를 메모리에 조립한다.**
 
@@ -146,7 +146,7 @@ kubelet의 상태 보고는 한 주기 안에서 다음 세 단계로 이루어�
 
 **3단계: 변경이 있으면 API server에 PATCH한다.**
 
-직전에 API server에 보고한 값(또는 직전 주기의 스냅샷)과 비교하여, 의미 있는 변경이 있을 때만 PATCH를 보낸다. 변경이 없으면 PATCH를 생략할 수 있다(Lease 기반 최적화, 강제 보고 주기는 뒤에서 다룬다).
+직전에 API server에 보고한 값과 비교하여, 의미 있는 변경이 있을 때만 PATCH를 보낸다. 이때 `lastHeartbeatTime`만 바뀐 것은 변경으로 치지 않는다. 변경이 없으면 PATCH를 생략할 수 있다(Lease 기반 최적화, 강제 보고 주기는 뒤에서 다룬다).
 
 정리하면 **매번 fresh 수집 → in-memory 조립 → (필요 시) PATCH**다.
 
@@ -156,15 +156,17 @@ kubelet의 상태 보고는 한 주기 안에서 다음 세 단계로 이루어�
 
 kubelet과 Node Controller는 **보고하는 쪽**과 **감시하는 쪽**으로 역할이 분리되어 있다. 이 구도를 먼저 이해해야 이후의 설정과 Lease 최적화를 잘 이해할 수 있다.
 
-| 역할 | 주체 | 동작 |
-|------|------|------|
-| 상태 보고 | kubelet | 자기 노드의 `.status`를 API server에 직접 PATCH |
-| 상태 감시 | Node Controller | 모든 노드의 `.status`(또는 Lease)를 읽어서 health 판단 |
-| NotReady 판정 | Node Controller | grace period(기본 40초) 초과 시 condition 변경 |
-| Taint 추가 | Node Controller | NotReady → `node.kubernetes.io/not-ready` taint (NoSchedule/NoExecute) |
-| Pod eviction(축출) | Node Controller | NoExecute taint로 인한 Pod 축출 |
+| 역할               | 주체                      | 동작                                                                                                                                        |
+| ------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 상태 보고          | kubelet                   | 자기 노드의 `.status`를 API server에 직접 PATCH                                                                                           |
+| 상태 감시          | Node Controller           | 모든 노드의 `.status` heartbeat와 Lease를 읽어서 health 판단. **둘 중 하나라도** 갱신되면 살아 있다고 본다                          |
+| Unknown 판정       | Node Controller           | grace period(기본 50초, v1.31까지 40초) 동안 신호가 없으면 `Ready` condition을 `Unknown`으로 변경                                       |
+| Taint 추가         | Node Controller           | `Ready=False` → `node.kubernetes.io/not-ready`, `Ready=Unknown` → `node.kubernetes.io/unreachable` taint (NoSchedule + NoExecute) |
+| Pod eviction(축출) | taint-eviction-controller | NoExecute taint가 붙은 노드의 Pod를 toleration 시간(기본 300초) 뒤 축출. v1.29부터 Node Controller에서 분리됐다                             |
 
-kubelet은 **자기 자신만 보고**하고, Node Controller는 **전체 노드를 감시**한다. 이 분리 덕분에 kubelet이 죽더라도 Node Controller가 heartbeat 갱신이 멈춘 것을 감지하여 NotReady를 판정할 수 있다. kubelet이 스스로 "나 죽었다"고 보고하지 않아도 되는 구조다.
+kubelet은 **자기 자신만 보고**하고 Node Controller는 **전체 노드를 감시**한다. 이 분리 덕분에 kubelet이 죽더라도 Node Controller가 heartbeat 갱신이 멈춘 것을 감지하여 `Ready`를 `Unknown`으로 바꿀 수 있다. kubelet이 스스로 "나 죽었다"고 보고하지 않아도 되는 구조다.
+
+여기서 `Ready` condition의 값을 구분해 둘 필요가 있다. `False`는 **kubelet이 살아 있으면서** 컨테이너 런타임이나 네트워크 문제로 스스로 보고하는 값(reason `KubeletNotReady`)이고 `Unknown`은 **Node Controller가 신호 부재를 보고** 쓰는 값(reason `NodeStatusUnknown`)이다. 이때 `MemoryPressure`, `DiskPressure`, `PIDPressure`도 함께 `Unknown`이 된다. `kubectl get nodes`의 `STATUS` 열은 둘 다 `NotReady`로 표시하므로, 구분하려면 `-o yaml`로 condition을 직접 봐야 한다. 붙는 taint도 다르다. `False`에는 `not-ready`, `Unknown`에는 `unreachable`이 붙는다.
 
 <br>
 
@@ -174,66 +176,74 @@ kubelet은 **자기 자신만 보고**하고, Node Controller는 **전체 노드
 
 kubelet과 kube-controller-manager에는 노드 상태 보고와 관련된 네 가지 핵심 설정이 있다. 설정 파일에서는 `KubeletConfiguration` / `KubeControllerManagerConfiguration`의 **camelCase 필드명**으로, 커맨드라인에서는 대응하는 **`--kebab-case` 플래그**로 지정한다.
 
-위 두 개는 **보고하는 쪽(kubelet)**의 설정이고, 아래 두 개는 **감시하는 쪽(Node Controller)**의 설정이다.
+위 두 개는 **보고하는 쪽(kubelet)**의 설정이고 아래 두 개는 **감시하는 쪽(Node Controller)**의 설정이다.
 
-| 설정 파일 필드 | 대응 플래그 | 적용 위치 | 기본값 | 의미 |
-|---------------|-------------|-----------|--------|------|
-| `nodeStatusUpdateFrequency` | `--node-status-update-frequency` | kubelet | **10초** | kubelet이 `.status`를 API server에 PATCH하는 주기 |
-| `nodeStatusReportFrequency` | `--node-status-report-frequency` | kubelet | **5분** | 변경이 없어도 강제 보고하는 주기 |
-| `nodeMonitorPeriod` | `--node-monitor-period` | kube-controller-manager | **5초** | Node Controller가 노드 상태를 확인(polling)하는 주기 |
-| `nodeMonitorGracePeriod` | `--node-monitor-grace-period` | kube-controller-manager | **40초** | 이 시간 동안 보고가 없으면 NotReady 판정 |
+| 설정 파일 필드                | 대응 플래그                        | 적용 위치               | 기본값                          | 의미                                                 |
+| ----------------------------- | ---------------------------------- | ----------------------- | ------------------------------- | ---------------------------------------------------- |
+| `nodeStatusUpdateFrequency` | `--node-status-update-frequency` | kubelet                 | **10초**                  | kubelet이 `.status`를 API server에 PATCH하는 주기  |
+| `nodeStatusReportFrequency` | `--node-status-report-frequency` | kubelet                 | **5분**                   | 변경이 없어도 강제 보고하는 주기                     |
+| `nodeMonitorPeriod`         | `--node-monitor-period`          | kube-controller-manager | **5초**                   | Node Controller가 노드 상태를 확인(polling)하는 주기 |
+| `nodeMonitorGracePeriod`    | `--node-monitor-grace-period`    | kube-controller-manager | **50초** (v1.31까지 40초) | 이 시간 동안 신호가 없으면 `Ready=Unknown` 판정    |
 
 이 설정들이 어떻게 맞물려 동작하는지 보면 다음과 같다.
 
-1. kubelet은 **10초마다** 노드 상태를 수집하고, 변경이 있으면 API server에 PATCH
+1. kubelet은 **10초마다** 노드 상태를 수집하고 변경이 있으면 API server에 PATCH
 2. 변경이 없으면 PATCH를 스킵하되, **5분마다** 강제로 한 번 보고 (stale 방지)
-3. Node Controller는 **5초마다** 각 노드의 마지막 보고 시각을 확인
-4. **40초** 동안 보고가 없으면 → NotReady condition 설정
+3. Node Controller는 **5초마다** informer 캐시의 Node와 Lease를 순회하며 마지막 신호 시각을 확인
+4. **50초** 동안 신호가 없으면 → `Ready` condition을 `Unknown`으로 설정
 
-크기 순으로 보면 `nodeMonitorPeriod`(5s) < `nodeStatusUpdateFrequency`(10s) < `nodeMonitorGracePeriod`(40s) < `nodeStatusReportFrequency`(5m)이다. Node Controller가 가장 자주 체크하고(5초), kubelet이 그 다음으로 자주 보고하며(10초), 40초 무응답이면 NotReady가 되는 구조다.
+크기 순으로 보면 `nodeMonitorPeriod`(5s) < `nodeStatusUpdateFrequency`(10s) < `nodeMonitorGracePeriod`(50s) < `nodeStatusReportFrequency`(5m)이다. Node Controller가 가장 자주 체크하고(5초), kubelet이 그 다음으로 자주 보고하며(10초), 50초 무응답이면 `Unknown`이 되는 구조다. 기본값 50초는 v1.32에서 바뀐 값이다. v1.31까지는 40초였는데, HTTP/2 연결 끊김 감지 시간과 겹쳐 노드 전체가 한꺼번에 NotReady로 보이는 문제가 있어 늘렸다. 뒤에 나오는 `nodeLeaseDurationSeconds`의 기본값 40과 우연히 같은 숫자였을 뿐 둘은 무관하다.
 
-동일한 설정을 파일과 플래그에 동시에 지정하면, 일반적으로 **플래그가 파일 값을 덮어쓴다**. 실제 유효값을 확인하려면 둘 다 확인해야 한다.
+> **참고**: `nodeStatusReportFrequency`를 비워 두고 `nodeStatusUpdateFrequency`만 지정하면, 하위 호환을 위해 **`nodeStatusReportFrequency`가 `nodeStatusUpdateFrequency`와 같은 값으로 묶인다**. 예를 들어 `--node-status-update-frequency=10s`만 넣으면 강제 보고 주기도 10초가 되어, 뒤에서 설명할 "변경 시에만 PATCH" 최적화가 사실상 꺼진다. RKE2나 k3s에서 `--kubelet-arg`로 하나만 바꿀 때 빠지기 쉬운 함정이므로 둘을 항상 함께 지정하는 것이 안전하다.
+
+동일한 설정을 파일과 플래그에 동시에 지정하면 **플래그가 파일 값을 덮어쓴다**. 우선순위는 낮은 쪽부터 feature gate 플래그 < `--config` 파일 < `--config-dir` 조각 파일(파일명 정렬, 뒤가 앞을 덮음) < 나머지 플래그 순이다. 실제 유효값을 확인하려면 모두 확인해야 한다.
 
 ## 이미지 보고
 
 kubelet이 `.status.images[]`에 보고하는 이미지 목록과 관련된 설정도 있다.
 
-| 설정 파일 필드 | 대응 플래그 | 기본값 | 의미 |
-|---------------|-------------|--------|------|
-| `nodeStatusMaxImages` | `--node-status-max-images` | **50** | 보고할 최대 이미지 수. 초과 시 크기가 큰 순으로 우선. **-1**이면 무제한 |
-| `imageGCHighThresholdPercent` | `--image-gc-high-threshold` | 85 | 디스크 사용률이 이 값 이상이면 이미지 GC 시작 |
-| `imageGCLowThresholdPercent` | `--image-gc-low-threshold` | 80 | GC 후 이 수준까지 정리 |
-| `imageMinimumGCAge` | `--image-minimum-gc-age` | 2분 | 이 시간 이상 미사용된 이미지만 GC 대상 |
+| 설정 파일 필드                  | 대응 플래그                   | 기본값       | 의미                                                                                                         |
+| ------------------------------- | ----------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------ |
+| `nodeStatusMaxImages`         | `--node-status-max-images`  | **50** | 보고할 최대 이미지 수. 초과 시 크기가 큰 순으로 우선. **-1**이면 무제한, **0**이면 보고하지 않음 |
+| `imageGCHighThresholdPercent` | `--image-gc-high-threshold` | 85           | 디스크 사용률이 이 값 이상이면 이미지 GC 시작                                                                |
+| `imageGCLowThresholdPercent`  | `--image-gc-low-threshold`  | 80           | GC 후 이 수준까지 정리                                                                                       |
+| `imageMinimumGCAge`           | `--image-minimum-gc-age`    | 2분          | 이 시간 이상 미사용된 이미지만 GC 대상                                                                       |
+| `imageMaximumGCAge`           | `--image-maximum-gc-age`    | 0s (비활성)  | 이 시간 이상 미사용된 이미지는 디스크 사용률과 무관하게 GC. kubelet 재시작 시 추적이 초기화된다              |
 
-`nodeStatusMaxImages`의 기본값이 50이므로, 노드에 50개가 넘는 이미지가 있으면 `kubectl`로 조회할 때 일부가 누락된다. 이미지가 많은 환경에서는 50을 쉽게 초과할 수 있다. 정확한 전수 조회가 필요하면 이 값을 `-1`(무제한) 또는 충분히 큰 값으로 변경해야 한다.
+정확한 전수 조회가 필요하면 `nodeStatusMaxImages`를 `-1`(무제한) 또는 충분히 큰 값으로 변경해야 한다. 기본값이 50이므로, 노드에 50개가 넘는 이미지가 있으면 `kubectl`로 조회할 때 일부가 누락된다. 이미지가 많은 환경에서는 50을 쉽게 초과할 수 있다.
 
 ## 설정 확인 방법
 
 kubelet의 보고 주기나 이미지 설정이 실제로 어떤 값으로 동작하는지 확인하는 방법은 여러 가지가 있다.
 
-| 방법 | 명령어 | 특징 |
-|------|--------|------|
-| 프로세스 인자 확인 | `ps aux \| grep kubelet` | 노드 SSH 필요. 플래그 값만 보임, config 파일 값은 따로 확인 |
-| config 파일 직접 확인 | `cat /var/lib/kubelet/config.yaml` | 노드 SSH 필요. 배포 도구마다 경로가 다름 |
-| ConfigMap 확인 | `kubectl get cm kubelet-config -n kube-system` | kubeadm 기반에서만 존재. RKE2, k3s 등에서는 없을 수 있음 |
-| configz API | `curl .../nodes/<노드>/proxy/configz` | **가장 확실**. 현재 유효값을 반환. `kubectl proxy` 필요 |
+| 방법                  | 명령어                                                   | 특징                                                                                         |
+| --------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 프로세스 인자 확인    | `ps aux \| grep kubelet`                                | 노드 SSH 필요. 플래그 값만 보임, config 파일 값은 따로 확인                                  |
+| config 파일 직접 확인 | `cat /var/lib/kubelet/config.yaml`                     | 노드 SSH 필요. 배포 도구마다 경로가 다름                                                     |
+| ConfigMap 확인        | `kubectl get cm kubelet-config -n kube-system`         | kubeadm 기반에서만 존재. RKE2, k3s 등에서는 없을 수 있음                                     |
+| configz API           | `kubectl get --raw /api/v1/nodes/<노드>/proxy/configz` | **가장 확실**. 현재 유효값을 반환. `enableDebuggingHandlers: false`인 노드에서는 404 |
 
 kubelet config 파일의 위치는 배포 도구에 따라 다르다.
 
-| 배포 도구 | config 경로 |
-|-----------|-------------|
-| kubeadm | `/var/lib/kubelet/config.yaml` |
-| RKE2 | `--config-dir` 디렉토리 아래 조각 파일 (예: `/var/lib/rancher/rke2/agent/etc/kubelet.conf.d/`) |
-| k3s | `/var/lib/rancher/k3s/agent/etc/kubelet.conf` |
+| 배포 도구     | config 경로                                                                                                            |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| kubeadm       | `/var/lib/kubelet/config.yaml`                                                                                       |
+| RKE2 (v1.32+) | `/var/lib/rancher/rke2/agent/etc/kubelet.conf.d/00-rke2-defaults.conf` + 같은 디렉토리의 조각 파일(`--config-dir`) |
+| k3s (v1.32+)  | `/var/lib/rancher/k3s/agent/etc/kubelet.conf.d/00-k3s-defaults.conf` + 같은 디렉토리의 조각 파일                     |
 
-`ps`에서 kubelet의 `--config` 또는 `--config-dir` 플래그를 확인한 뒤 해당 경로를 따라가면 된다.
+`ps`에서 kubelet의 `--config` 또는 `--config-dir` 플래그를 확인한 뒤 해당 경로를 따라가면 된다. RKE2와 k3s는 v1.31 이전에는 설정 파일 없이 `--kubelet-arg` 플래그만으로 kubelet을 띄웠으므로, 그 버전에서는 `ps` 출력이 전부다.
+
+> **참고**: RKE2에서는 kubelet과 kube-controller-manager를 사용자가 직접 띄우지 않고 RKE2 supervisor가 띄운다. 그래서 이 글의 설정을 바꾸려면 `/etc/rancher/rke2/config.yaml`에 `kubelet-arg: ["node-status-update-frequency=10s", "node-status-report-frequency=5m"]`, `kube-controller-manager-arg: ["node-monitor-grace-period=50s"]`처럼 적고 rke2 서비스를 재시작한다. 이 값들은 supervisor가 플래그로 전달하므로 `ps`와 configz에서 보인다. kubeadm의 `kubelet-config` ConfigMap 같은 단일 출처가 없어서 노드마다 config.yaml이 다르면 노드마다 유효값이 달라질 수 있다.
 
 이 중 **configz API가 가장 확실**하다. configz는 kubelet이 API server의 node proxy로 노출하는 **현재 유효 설정(effective configuration)**이다. config 파일과 플래그가 동시에 존재할 때, 플래그가 파일 값을 덮어쓰는 경우가 있는데, configz는 이런 우선순위가 모두 적용된 최종 결과를 보여준다.
 
 ```bash
-# configz API 호출 (kubectl proxy 필요)
+# configz API 호출 (kubectl proxy 경유)
 kubectl proxy --port=18001 &
 curl http://127.0.0.1:18001/api/v1/nodes/<노드명>/proxy/configz | jq .
+
+# kubectl proxy 없이 바로 호출
+kubectl get --raw /api/v1/nodes/<노드명>/proxy/configz | jq .
 ```
 
 <details markdown="1">
@@ -257,7 +267,7 @@ curl http://127.0.0.1:18001/api/v1/nodes/<노드명>/proxy/configz | jq .
 
 </details>
 
-예를 들어, config 파일에 `syncFrequency: 1m0s`라고 적혀 있더라도 프로세스 인자로 `--sync-frequency=30s`가 지정되어 있으면, configz에는 `30s`가 나온다. 이처럼 **configz가 "실제 유효값"을 보여주므로**, 배포 도구와 관계없이 가장 확실한 확인 방법이다.
+위 예시의 `syncFrequency`(30s)와 `fileCheckFrequency`(5s)는 플래그로 덮어쓴 값이다(기본값은 1m, 20s). 예를 들어, config 파일에 `syncFrequency: 1m0s`라고 적혀 있더라도 프로세스 인자로 `--sync-frequency=30s`가 지정되어 있으면, configz에는 `30s`가 나온다. 이처럼 **configz가 "실제 유효값"을 보여주므로**, 배포 도구와 관계없이 가장 확실한 확인 방법이다.
 
 <br>
 
@@ -265,11 +275,11 @@ curl http://127.0.0.1:18001/api/v1/nodes/<노드명>/proxy/configz | jq .
 
 ## 기존 방식의 문제
 
-Kubernetes 1.14 이전에는 kubelet이 **10초마다 Node `.status` 전체를 PATCH**했다. `.status`에는 conditions, images 배열(이미지 50개 x names + sizeBytes), capacity, allocatable, nodeInfo, addresses 등이 모두 포함되어 있어 **한 번의 PATCH가 수 KB에서 이미지가 많으면 수십 KB**에 달한다. 노드 수가 수백~수천 대인 클러스터에서는 이 PATCH가 **etcd write throughput과 API server 처리량에 직접적인 부담**이 된다.
+Kubernetes 1.14(`NodeLease` 기능 게이트가 beta로 기본 활성화된 버전) 이전에는 kubelet이 **10초마다 Node `.status`를 PATCH**했다. PATCH 요청 자체는 변경분만 담지만 etcd는 Node 오브젝트 전체를 새로 쓰므로, 비용은 오브젝트 크기에 비례한다. `.status`에는 conditions, images 배열(이미지 50개 x names + sizeBytes), capacity, allocatable, nodeInfo, addresses 등이 모두 포함되어 있어 **한 번의 PATCH가 수 KB에서 이미지가 많으면 수십 KB**에 달한다. 노드 수가 수백~수천 대인 클러스터에서는 이 PATCH가 **etcd write throughput과 API server 처리량에 직접적인 부담**이 된다.
 
 ## Lease란
 
-Lease는 Kubernetes의 `coordination.k8s.io/v1` API 그룹에 속하는 리소스로, 본래 분산 시스템의 **리스(lease) / 잠금(lock)** 메커니즘을 위해 설계되었다. 노드 heartbeat 용도에서는 각 노드마다 `kube-node-lease` 네임스페이스에 Lease 오브젝트가 하나씩 존재하며, kubelet이 이 오브젝트의 `renewTime` 필드를 주기적으로 갱신한다.
+Lease는 Kubernetes의 `coordination.k8s.io/v1` API 그룹에 속하는 리소스로, 본래 분산 시스템의 **리스(lease) / 잠금(lock)** 메커니즘을 위해 설계되었다. 노드 heartbeat 용도에서는 각 노드마다 `kube-node-lease` 네임스페이스에 Lease 오브젝트가 하나씩 존재하며 kubelet이 이 오브젝트의 `renewTime` 필드를 주기적으로 갱신한다.
 
 ```yaml
 # kubectl get lease -n kube-node-lease <노드명> -o yaml
@@ -290,24 +300,28 @@ Lease 오브젝트 전체가 **수백 바이트**에 불과하다. 갱신할 때
 
 Lease 최적화는 heartbeat **빈도를 줄이는 것이 아니다**. 10초마다 한 번이라는 빈도는 동일하다. 핵심은 **"자주 쓰는 것은 가볍게, 무거운 것은 드물게"** 분리한 것이다.
 
-| 무엇을 | 어떻게 | 주기 | 관련 설정 | 크기 |
-|--------|--------|------|-----------|------|
-| liveness (살아 있는가) | Lease `renewTime` 갱신 | 10초 | `nodeStatusUpdateFrequency` | **수백 바이트** |
-| status (상태가 변했는가) | Node `.status` 전체 PATCH | 변경 시, 또는 5분마다 강제 | `nodeStatusReportFrequency` | **수 KB ~ 수십 KB** |
-| health 판단 | Node Controller가 Lease 갱신 시각 확인 | 5초 | `nodeMonitorPeriod` | (읽기) |
-| NotReady 판정 | Lease 갱신이 멈춘 지 40초 경과 | - | `nodeMonitorGracePeriod` | - |
+다만 이 10초는 `nodeStatusUpdateFrequency`에서 오는 값이 아니다. Lease 갱신 주기는 **`nodeLeaseDurationSeconds`의 1/4**(기본 40초 × 0.25 = 10초)로 계산되며 `nodeStatusUpdateFrequency`와는 별개다. 따라서 `nodeStatusUpdateFrequency`를 바꿔도 heartbeat 간격은 변하지 않고 heartbeat를 늦추려면 `nodeLeaseDurationSeconds`를 올려야 한다. 또 `leaseDurationSeconds`는 kubelet이 Lease에 적어 넣는 값일 뿐, Node Controller는 이 만기를 보지 않고 `renewTime`이 전진했는지만 본다.
+
+| 무엇을                   | 어떻게                                                                     | 주기                       | 관련 설정                            | 크기                      |
+| ------------------------ | -------------------------------------------------------------------------- | -------------------------- | ------------------------------------ | ------------------------- |
+| liveness (살아 있는가)   | Lease `renewTime` 갱신                                                   | 10초                       | `nodeLeaseDurationSeconds` × 0.25 | **수백 바이트**     |
+| status (상태가 변했는가) | Node `.status` 전체 PATCH                                                | 변경 시, 또는 5분마다 강제 | `nodeStatusReportFrequency`        | **수 KB ~ 수십 KB** |
+| health 판단              | Node Controller가 Lease `renewTime` 또는 `.status` heartbeat 변화 확인 | 5초                        | `nodeMonitorPeriod`                | (읽기)                    |
+| Unknown 판정             | 마지막 신호 후 50초 경과                                                   | -                          | `nodeMonitorGracePeriod`           | -                         |
+
+Node Controller 입장에서 Lease는 "더 자주 오는 신호"일 뿐이다. 필수는 아니다. Lease `renewTime`이 전진했거나 `.status`의 `lastHeartbeatTime`이 바뀌었거나, **둘 중 하나라도** 있으면 살아 있다고 보고 자기 시계로 "마지막 신호 시각"을 갱신한다. 그 시각에서 `nodeMonitorGracePeriod`가 지나면 `Ready`를 `Unknown`으로 바꾼다. Lease만 갱신되고 `.status`가 한 번도 오지 않아도 healthy로 간주한다.
 
 1.14 이전과 비교하면 다음과 같다.
 
-| 구분 | 1.14 이전 | 1.14 이후 (Lease) |
-|------|-----------|-------------------|
-| 10초마다 하는 일 | Node `.status` 전체 PATCH (수 KB~수십 KB) | Lease `renewTime` 갱신 (수백 바이트) |
-| Node `.status` PATCH | 10초마다 매번 | 변경 시 + 5분마다 강제만 |
-| Node Controller의 liveness 판단 기준 | `.status.conditions[].lastHeartbeatTime` | Lease `renewTime` |
+| 구분                                 | 1.14 이전                                   | 1.14 이후 (Lease)                                               |
+| ------------------------------------ | ------------------------------------------- | --------------------------------------------------------------- |
+| 10초마다 하는 일                     | Node `.status` 전체 PATCH (수 KB~수십 KB) | Lease `renewTime` 갱신 (수백 바이트)                          |
+| Node `.status` PATCH               | 10초마다 매번                               | 변경 시 + 5분마다 강제만                                        |
+| Node Controller의 liveness 판단 기준 | `.status.conditions[].lastHeartbeatTime`  | Lease `renewTime` 또는 `lastHeartbeatTime` (둘 중 하나라도) |
 
 노드 1,000대 클러스터를 기준으로 단순 계산하면, 10초마다 etcd에 쓰는 양이 **~10KB x 1,000 = ~10MB** (이전)에서 **~0.3KB x 1,000 = ~300KB** (Lease)로 줄어든다. 무거운 `.status` PATCH는 5분에 한 번으로 빈도가 낮아지므로, 전체적인 etcd/API server 부하가 크게 감소한다.
 
-이 최적화의 설계 배경은 KEP(Kubernetes Enhancement Proposal) [KEP-589: Efficient Node Heartbeats](https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/589-efficient-node-heartbeats)에서 확인할 수 있다. 이전 자료에서는 **KEP-0009**로 인용되기도 한다.
+이 최적화의 설계 배경은 KEP(Kubernetes Enhancement Proposal) [KEP-589: Efficient Node Heartbeats](https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/589-efficient-node-heartbeats)에서 확인할 수 있다. 이전 자료에서는 **KEP-0009**로 인용되기도 한다. `NodeLease`는 1.14에서 beta(기본 활성화), 1.17에서 GA가 되었고 `nodeStatusReportFrequency`의 기본값이 5분이 된 것도 1.17부터다.
 
 <br>
 
@@ -315,12 +329,12 @@ Lease 최적화는 heartbeat **빈도를 줄이는 것이 아니다**. 10초마�
 
 kubelet의 노드 상태 보고 구조를 요약하면 다음과 같다.
 
-1. kubelet은 자기 노드의 `.status`를 **API server에 직접 PATCH**한다(보고). Node Controller는 이 데이터를 읽어서 health를 판단한다(감시).
-2. Node `.status`는 `NodeStatus` 스키마를 따르며, conditions, capacity/allocatable, images, nodeInfo 등을 포함한다.
+1. kubelet은 자기 노드의 `.status`를 **API server에 직접 PATCH**한다(보고). Node Controller는 이 데이터와 Lease를 읽어서 health를 판단하고 신호가 끊기면 condition을 직접 덮어쓴다(감시).
+2. Node `.status`는 `NodeStatus` 스키마를 따르며 conditions, capacity/allocatable, images, nodeInfo 등을 포함한다.
 3. kubelet은 매 주기(기본 10초) **fresh 수집 → in-memory 조립 → 변경 시 PATCH**하는 stateless 구조다.
-4. 보고 관련 설정은 보고 주기(4개), 이미지 보고(`nodeStatusMaxImages` 등)로 나뉘며, configz API로 실제 유효값을 확인할 수 있다.
-5. Kubernetes 1.14+부터 **Lease 기반 최적화**로, 자주 쓰는 heartbeat는 경량 Lease로, 무거운 `.status` PATCH는 변경 시 + 5분 강제로 분리했다.
-6. kubelet이 죽으면 Lease 갱신이 멈추고, Node Controller가 grace period(40초) 후 **NotReady**를 판정한다.
+4. 보고 관련 설정은 보고 주기(4개), 이미지 보고(`nodeStatusMaxImages` 등)로 나뉘며 configz API로 실제 유효값을 확인할 수 있다.
+5. Kubernetes 1.14+부터 **Lease 기반 최적화**로, 자주 쓰는 heartbeat는 경량 Lease로, 무거운 `.status` PATCH는 변경 시 + 5분 강제로 분리했다. Lease 갱신 주기는 `nodeLeaseDurationSeconds`의 1/4(기본 10초)이며 Node Controller는 Lease와 `.status` heartbeat 중 하나라도 갱신되면 살아 있다고 본다.
+6. kubelet이 죽으면 Lease 갱신이 멈추고 Node Controller가 grace period(기본 50초) 후 `Ready`를 **`Unknown`**으로 바꾸고 `unreachable` taint를 붙인다. `kubectl get nodes`에는 `NotReady`로 표시된다.
 
 <br>
 
@@ -329,6 +343,8 @@ kubelet의 노드 상태 보고 구조를 요약하면 다음과 같다.
 - [Node Status - Kubernetes 공식 문서](https://kubernetes.io/docs/reference/node/node-status/)
 - [Node Heartbeats - Kubernetes 공식 문서](https://kubernetes.io/docs/reference/node/node-status/#heartbeats)
 - [Node Controller - Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/architecture/nodes/#node-controller)
+- [kube-controller-manager 플래그 레퍼런스 - Kubernetes 공식 문서](https://kubernetes.io/docs/reference/command-line-tools-reference/kube-controller-manager/)
+- [Taint based Evictions - Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/#taint-based-evictions)
 - [Kubelet Configuration (v1beta1) - Kubernetes API Reference](https://kubernetes.io/docs/reference/config-api/kubelet-config.v1beta1/)
 - [Container Image Garbage Collection - Kubernetes 공식 문서](https://kubernetes.io/docs/concepts/architecture/garbage-collection/#container-image-garbage-collection)
 - [KEP-589: Efficient Node Heartbeats](https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/589-efficient-node-heartbeats)
