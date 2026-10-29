@@ -9,7 +9,7 @@
   <head>
     <meta charset="utf-8">
 
-<!-- begin _includes/seo.html --><title>[Kubernetes] 노드 객체와 호스트가 어긋날 때: NotReady 뒤에 숨은 세 가지 사례와 노드 이관 절차 - Eraser’s StudyLog</title>
+<!-- begin _includes/seo.html --><title>[Kubernetes] 노드 객체와 호스트가 어긋날 때: NotReady 뒤의 세 가지 사례와 노드 이관 절차 - Eraser’s StudyLog</title>
 <meta name="description" content="클러스터에서 노드를 빼는 작업 중 Node 객체와 호스트 상태가 어긋난 세 사례를 보고, 그 뒤에 있는 heartbeat·RKE2 등록·Rancher 구조와 이관 절차를 정리해 보자. ">
 
 
@@ -19,7 +19,7 @@
 <meta property="og:type" content="article">
 <meta property="og:locale" content="ko">
 <meta property="og:site_name" content="Eraser's StudyLog">
-<meta property="og:title" content="[Kubernetes] 노드 객체와 호스트가 어긋날 때: NotReady 뒤에 숨은 세 가지 사례와 노드 이관 절차">
+<meta property="og:title" content="[Kubernetes] 노드 객체와 호스트가 어긋날 때: NotReady 뒤의 세 가지 사례와 노드 이관 절차">
 <meta property="og:url" content="https://sirzzang.github.io//dev/Dev-Kubernetes-Node-Object-Host-State-Mismatch/">
 
 
@@ -309,7 +309,7 @@
 
 
   <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
-    <meta itemprop="headline" content="[Kubernetes] 노드 객체와 호스트가 어긋날 때: NotReady 뒤에 숨은 세 가지 사례와 노드 이관 절차">
+    <meta itemprop="headline" content="[Kubernetes] 노드 객체와 호스트가 어긋날 때: NotReady 뒤의 세 가지 사례와 노드 이관 절차">
     <meta itemprop="description" content="클러스터에서 노드를 빼는 작업 중 Node 객체와 호스트 상태가 어긋난 세 사례를 보고, 그 뒤에 있는 heartbeat·RKE2 등록·Rancher 구조와 이관 절차를 정리해 보자.">
     <meta itemprop="datePublished" content="2026-10-29T00:00:00+09:00">
     <meta itemprop="dateModified" content="2026-10-29T00:00:00+09:00">
@@ -318,7 +318,7 @@
       
         <header>
 		  
-          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] 노드 객체와 호스트가 어긋날 때: NotReady 뒤에 숨은 세 가지 사례와 노드 이관 절차
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] 노드 객체와 호스트가 어긋날 때: NotReady 뒤의 세 가지 사례와 노드 이관 절차
 </h1>
           
           <p class="page__meta">
@@ -332,7 +332,7 @@
 
 
 
-  28 분 소요
+  29 분 소요
 
 
             
@@ -356,24 +356,25 @@
     <ul>
       <li><a href="#노드-이관-작업">노드 이관 작업</a></li>
       <li><a href="#용어">용어</a></li>
+      <li><a href="#세-사례의-공통-구조">세 사례의 공통 구조</a></li>
     </ul>
   </li>
   <li><a href="#현상-세-가지-불일치">현상: 세 가지 불일치</a>
     <ul>
-      <li><a href="#새-이름으로-돌아온-노드">새 이름으로 돌아온 노드</a>
+      <li><a href="#사례-1-새-이름으로-돌아온-노드">사례 1: 새 이름으로 돌아온 노드</a>
         <ul>
           <li><a href="#관찰">관찰</a></li>
           <li><a href="#configyaml과-노드-이름">config.yaml과 노드 이름</a></li>
         </ul>
       </li>
-      <li><a href="#notready-뒤의-이중-소속">NotReady 뒤의 이중 소속</a>
+      <li><a href="#사례-2-notready-뒤의-이중-소속">사례 2: NotReady 뒤의 이중 소속</a>
         <ul>
           <li><a href="#관찰-1">관찰</a></li>
           <li><a href="#호스트-저널">호스트 저널</a></li>
           <li><a href="#원-클러스터가-아는-것">원 클러스터가 아는 것</a></li>
         </ul>
       </li>
-      <li><a href="#정리-회신과-notready의-증명력">정리 회신과 NotReady의 증명력</a></li>
+      <li><a href="#사례-3-정리-회신과-notready의-증명력">사례 3: 정리 회신과 NotReady의 증명력</a></li>
     </ul>
   </li>
   <li><a href="#노드-상태의-관찰-구조">노드 상태의 관찰 구조</a>
@@ -431,11 +432,11 @@
 <h1 id="tldr">TL;DR</h1>
 
 <ul>
-  <li><strong>결과</strong>: 온프레미스 RKE2 클러스터에서 노드 13대를 다른 팀으로 넘기는 3주 동안, Node 객체가 말하는 것과 호스트의 실제 상태가 세 번 어긋났다. 호스트 정리 전에 재부팅된 노드 중 2대는 IP만 바뀐 채 기존 객체에 붙고 3대는 새 이름의 새 노드로 붙었다. <code class="highlighter-rouge">NotReady</code>로만 보이던 3대는 6일 동안 다른 클러스터에 소속돼 있었다. “호스트 정리 완료” 회신과 <code class="highlighter-rouge">NotReady</code>는 서로를 증명하지 못했다</li>
-  <li>세 사례의 공통 원인은 하나다. 클러스터가 노드에 대해 아는 것은 <strong>마지막으로 신호를 받은 시각</strong>뿐이다. 호스트가 꺼졌는지, 네트워크가 끊겼는지, 다른 클러스터로 갔는지는 Node 객체 어디에도 남지 않는다. 여기에 RKE2의 등록 구조가 겹친다. agent 설정이 호스트에 남아 있으면 재부팅만으로 다시 붙는다. 설정의 server 주소만 바꾸면 원래 클러스터의 Node 객체는 그대로 둔 채 다른 클러스터에 등록된다. 워커가 server 토큰으로 붙어 있다면 그 호스트에서 <code class="highlighter-rouge">rke2-server</code>가 켜지는 순간 etcd 멤버가 되기도 한다</li>
-  <li>그래서 Node 객체를 지우기 전에 게이트를 두었다. 정리 완료 회신, agent가 멈춘 시각과 Lease 정지 시각의 대조, etcd 멤버와 다른 노드 상태의 기준선 비교, 삭제 직전 객체 보존, 삭제 뒤 재합류 없음 확인(두 번)이다. 돌려받은 노드는 Node 객체를 지우지 않고 node-password secret만 지운 뒤 원래 클러스터 버전으로 다시 설치했다</li>
-  <li>Kubernetes도 RKE2도 Rancher도 호스트를 대신 정리해 주지 않는다. Rancher가 프로비저닝한 클러스터에서도 노드 삭제는 Node 객체와 etcd 멤버까지이고 호스트의 RKE2 제거는 사람 몫이다(2026년 10월, Rancher 2.15 문서 기준)</li>
-  <li>아직 못 하는 것도 있다. 원래 클러스터 쪽에서 “이 노드가 다른 클러스터로 갔다”를 감지할 수단은 없다. 절차로만 막는다</li>
+  <li>온프레미스 RKE2 클러스터에서 워커 노드를 다른 팀으로 넘기는 동안, Kubernetes API에 등록된 Node 객체가 말하는 상태와 호스트의 실제 상태가 세 번 어긋났다. 호스트 정리 전에 재부팅된 노드가 IP만 바뀐 채 또는 새 이름으로 다시 붙었고(<a href="#사례-1-새-이름으로-돌아온-노드">사례 1</a>), <code class="highlighter-rouge">NotReady</code>로만 보이던 노드가 6일 동안 다른 클러스터에 소속돼 있었고(<a href="#사례-2-notready-뒤의-이중-소속">사례 2</a>), “호스트 정리 완료” 회신과 <code class="highlighter-rouge">NotReady</code>는 서로를 증명하지 못했다(<a href="#사례-3-정리-회신과-notready의-증명력">사례 3</a>)</li>
+  <li>세 사례의 공통 원인은 하나다. 클러스터가 노드에 대해 아는 것은 <strong>마지막으로 신호를 받은 시각</strong>뿐이다. 호스트가 꺼졌는지, 네트워크가 끊겼는지, 다른 클러스터로 갔는지는 Node 객체 어디에도 남지 않고, 셋 다 원래 클러스터에서는 같은 모양(<code class="highlighter-rouge">Ready=Unknown</code>, 멈춘 Lease, 그대로인 bootID)으로 보인다</li>
+  <li>여기에 RKE2의 등록 구조가 겹친다. agent 설정이 호스트에 남아 있으면 재부팅만으로 다시 붙고, <code class="highlighter-rouge">server</code> 주소만 바꾸면 원래 클러스터의 Node 객체는 남긴 채 다른 클러스터에 등록되며, server 토큰으로 붙은 워커는 <code class="highlighter-rouge">rke2-server</code>가 켜지는 순간 etcd 멤버가 될 수 있다</li>
+  <li>따라서 노드를 뺄 때 Node 객체 삭제는 <code class="highlighter-rouge">NotReady</code>가 아니라 호스트 정리의 증거를 보고 결정해야 한다. 이번 작업에서는 정리 완료 회신, RKE2 제거 시각과 Lease 정지 시각의 대조, 기준선 비교, 삭제 직전 객체 보존, 재합류 없음 확인 두 번을 게이트로 두었고, 돌려받은 노드는 Node 객체를 남기고 node-password secret만 지운 뒤 같은 버전으로 재설치했다. 다른 클러스터로의 이탈은 원래 클러스터 쪽에서 감지할 수단이 없어 이 절차로만 막는다</li>
+  <li>어느 층도 호스트의 RKE2를 대신 지우지 않는다. Kubernetes의 <code class="highlighter-rouge">kubectl delete node</code>는 API 객체와 거기에 딸린 객체만 지우고, RKE2는 거기에 node-password secret을 더할 뿐이며, Rancher도 imported·custom 어느 유형에서든 호스트 정리는 사람 몫이다(2026년 10월, Rancher 2.15 문서 기준)</li>
 </ul>
 
 <p><br /></p>
@@ -444,15 +445,19 @@
 
 <h2 id="노드-이관-작업">노드 이관 작업</h2>
 
-<p>대상은 RKE2 v1.34 기반의 온프레미스 GPU 클러스터다(이하 <strong>클러스터 A</strong>). Rancher 2.15에 기존 클러스터로 등록(import)돼 있고 워커 노드는 <code class="highlighter-rouge">rke2 agent --server https://&lt;cp-vip&gt;:9345 --token …</code> 형태로 붙어 있다(<code class="highlighter-rouge">&lt;cp-vip&gt;</code>는 컨트롤 플레인 앞의 가상 IP다). 인프라 팀이 하드웨어 내구 검증용으로 쓰던 노드 13대를 세 팀으로 재분배하기로 하면서 클러스터 A에서 이 노드들을 깨끗하게 빼는 작업을 맡았다.</p>
+<p>회사에서 RKE2 v1.34 기반의 온프레미스 GPU 클러스터(이하 <strong>클러스터 A</strong>)를 운영하고 있다. 운영 대상인 클러스터는 Rancher 2.15에 기존 클러스터로 등록(import)돼 있고 워커 노드는 <code class="highlighter-rouge">rke2 agent --server https://&lt;cp-vip&gt;:9345 --token …</code> 형태로 붙어 있다(<code class="highlighter-rouge">&lt;cp-vip&gt;</code>는 컨트롤 플레인 앞의 가상 IP다). 이 클러스터에는 제품 하드웨어 내구 검증용 워크로드를 띄우기 위해 사용하던 노드 13대가 들어와 있었는데, 검증이 끝나 이 노드들을 세 팀에 재분배하기로 했다. 클러스터 A에서 13대를 깨끗하게 빼는 일이 우리 팀 몫이 됐다. 이 글은 그중 워커 노드를 빼며 겪었던 사례들을 다뤄 보고자 한다.</p>
 
-<p>이 글에서 노드 이름은 가명이다. 4080 계열 11대는 <code class="highlighter-rouge">gpu-a01</code>~<code class="highlighter-rouge">gpu-a11</code>, 학습 풀에 있던 4090 2대는 <code class="highlighter-rouge">gpu-b01</code>·<code class="highlighter-rouge">gpu-b02</code>, 컨트롤 플레인은 <code class="highlighter-rouge">ctl-1</code>~<code class="highlighter-rouge">ctl-3</code>, 작업 뒤에도 남는 노드 중 대조군으로 쓴 하나는 <code class="highlighter-rouge">keep-1</code>로 적는다. 날짜는 착수일을 D+0으로 둔 상대 표기이고 IP는 문서용 대역(RFC 5737)으로 바꿨다. 시각은 KST이며 YAML 발췌에 나오는 <code class="highlighter-rouge">Z</code>로 끝나는 값은 UTC(KST − 9시간)다. 분 단위 간격은 실측값 그대로다.</p>
+<blockquote>
+  <p>etcd 멤버인 서버 노드는 멤버 제거가 먼저라 절차가 다르다.</p>
+</blockquote>
 
-<p>작업 전에 합의한 순서는 네 단계다. ① 클러스터 A에서 cordon·drain → ② 수령 팀과 인프라 팀이 호스트 정리(Rancher의 호스트 에이전트 제거 → RKE2 제거 → 재부팅) → ③ 클러스터 A에서 정리 확인 뒤 Node 삭제, 재합류 없음 확인 → ④ 수령 팀이 이름·IP를 바꿔 편입. 호스트는 인프라 팀 관할이라 우리 팀은 SSH 없이 <code class="highlighter-rouge">kubectl</code>과 모니터링 지표로만 클러스터 쪽을 본다. 이 제약이 뒤에 나오는 “구분할 수 없음”의 절반을 만든다.</p>
+<p>노드 하나를 다른 클러스터로 옮기려면 네 단계가 순서대로 진행돼야 한다. ① 클러스터 A에서 cordon·drain → ② 호스트 정리(Rancher의 호스트 에이전트 제거 → RKE2 제거 → 재부팅) → ③ 클러스터 A에서 정리 확인 뒤 Node 삭제, 재합류 없음 확인 → ④ 받는 쪽이 이름·IP를 바꿔 편입. 호스트는 인프라 팀 관할이라 ②와 ④는 다른 팀이 맡고, 우리 팀은 SSH 없이 <code class="highlighter-rouge">kubectl</code>과 모니터링 지표로만 클러스터 쪽을 본다. 즉 ③에서 “호스트 정리가 끝났다”를 우리가 직접 확인할 수단이 없다. 클러스터 쪽에서 보이는 상태로 호스트 상태를 추정해야 했고, 뒤의 세 사례는 모두 이 추정이 실제와 달랐던 경우다.</p>
 
-<p>이 글의 범위도 적어 둔다. 워커 노드만 다룬다(etcd 멤버인 서버 노드는 멤버 제거가 먼저다). 클러스터 A는 온프레미스라 인스턴스 소멸을 판정하는 cloud provider가 없다. zone 라벨이 없어 전체가 한 zone이며 노드 이름에 난수를 붙이는 <code class="highlighter-rouge">--with-node-id</code>를 쓰지 않는다. 이 전제가 다르면 뒤의 관찰 일부가 달라진다.</p>
+<blockquote>
+  <p>이 글에서 노드 이름은 가명이다. 4080 계열 11대는 <code class="highlighter-rouge">gpu-a01</code>~<code class="highlighter-rouge">gpu-a11</code>, 학습 풀에 있던 4090 2대는 <code class="highlighter-rouge">gpu-b01</code>·<code class="highlighter-rouge">gpu-b02</code>, 컨트롤 플레인은 <code class="highlighter-rouge">ctl-1</code>~<code class="highlighter-rouge">ctl-3</code>, 작업 뒤에도 남는 노드 중 대조군으로 쓴 하나는 <code class="highlighter-rouge">keep-1</code>로 적는다. 날짜는 착수일을 D+0으로 둔 상대 표기이고 IP는 문서용 대역(RFC 5737)으로 바꿨다. 시각은 KST이며 YAML 발췌에 나오는 <code class="highlighter-rouge">Z</code>로 끝나는 값은 UTC(KST − 9시간)다. 분 단위 간격은 실측값 그대로다.</p>
+</blockquote>
 
-<p>실제로 일어난 일을 시간순으로 놓으면 이렇다.</p>
+<p>실제 진행을 시간순으로 놓으면 다음과 같다.</p>
 
 <table>
   <thead>
@@ -464,15 +469,15 @@
   <tbody>
     <tr>
       <td>D+1</td>
-      <td>13대 cordon·drain 완료. 수령 팀에 호스트 정리 요청</td>
+      <td>13대 cordon·drain 완료. 호스트 정리 단계로 넘김</td>
     </tr>
     <tr>
       <td>D+8</td>
-      <td><code class="highlighter-rouge">gpu-a06</code>이 응답을 멈춤. 원인 불명, 이후 복귀 없음</td>
+      <td><code class="highlighter-rouge">gpu-a06</code>의 신호가 멈춤. 이후 복귀 없음</td>
     </tr>
     <tr>
       <td>D+9</td>
-      <td><code class="highlighter-rouge">gpu-a07</code>·<code class="highlighter-rouge">a08</code>·<code class="highlighter-rouge">a09</code>·<code class="highlighter-rouge">a11</code>이 재부팅 뒤 같은 이름으로 <code class="highlighter-rouge">Ready</code> 복귀 (무슨 작업이었는지 모름)</td>
+      <td><code class="highlighter-rouge">gpu-a07</code>·<code class="highlighter-rouge">a08</code>·<code class="highlighter-rouge">a09</code>·<code class="highlighter-rouge">a11</code>이 재부팅 뒤 같은 이름으로 <code class="highlighter-rouge">Ready</code> 복귀</td>
     </tr>
     <tr>
       <td>D+15</td>
@@ -480,19 +485,15 @@
     </tr>
     <tr>
       <td>D+17</td>
-      <td>수령 팀 명명 규칙을 따른 새 이름 <code class="highlighter-rouge">new-01</code>~<code class="highlighter-rouge">new-03</code>이 cordon도 role도 없이 새 Node로 합류. 수령 팀이 옛 이름 5대와 새 이름 3대를 직접 삭제</td>
+      <td>새 이름 <code class="highlighter-rouge">new-01</code>~<code class="highlighter-rouge">new-03</code>이 cordon도 role도 없이 새 Node로 합류. 같은 날 옛 이름 5대와 새 이름 3대가 게이트 밖에서 삭제됨</td>
     </tr>
     <tr>
       <td>D+19</td>
-      <td>수령 팀과 순서를 다시 합의. <code class="highlighter-rouge">gpu-a11</code> 정리 회신 → 게이트 통과 → 삭제. <code class="highlighter-rouge">gpu-a10</code> 정리 회신 → 대조 불가 → 사람 판단으로 삭제</td>
-    </tr>
-    <tr>
-      <td>D+20</td>
-      <td>남은 노드의 행방 문의. 수령 팀은 “<code class="highlighter-rouge">gpu-a06</code>~<code class="highlighter-rouge">a09</code>는 가져간 적 없다” — 이 답은 맞았다. 가져간 쪽은 제3의 팀이었다</td>
+      <td>순서를 다시 맞춘 뒤 노드별 게이트 시작. <code class="highlighter-rouge">gpu-a11</code>은 정리 회신 → 게이트 통과 → 삭제. <code class="highlighter-rouge">gpu-a10</code>은 정리 회신은 있었으나 시각 대조가 성립하지 않아 사람 판단으로 삭제</td>
     </tr>
     <tr>
       <td>D+21</td>
-      <td>그 팀의 클러스터 이전 스레드에 “<code class="highlighter-rouge">gpu-a07</code>~<code class="highlighter-rouge">a09</code>는 <strong>클러스터 B</strong>에 붙어 있었고 방금 뺐다”는 메시지가 올라와 있었다. 같은 날 인프라 팀이 <code class="highlighter-rouge">gpu-b01</code>·<code class="highlighter-rouge">b02</code>를 Rancher 쪽 작업으로 삭제</td>
+      <td><code class="highlighter-rouge">gpu-a07</code>~<code class="highlighter-rouge">a09</code>가 D+15부터 <strong>클러스터 B</strong>에 붙어 있었음을 확인. 같은 날 <code class="highlighter-rouge">gpu-b01</code>·<code class="highlighter-rouge">b02</code>가 Rancher 쪽 작업으로 삭제됨</td>
     </tr>
     <tr>
       <td>D+22</td>
@@ -508,7 +509,7 @@
     <tr>
       <th>노드</th>
       <th>어긋남</th>
-      <th>삭제 주체 · 게이트</th>
+      <th>삭제 경로 · 게이트</th>
       <th>현재</th>
     </tr>
   </thead>
@@ -516,8 +517,8 @@
     <tr>
       <td><code class="highlighter-rouge">gpu-a01</code>~<code class="highlighter-rouge">a05</code></td>
       <td>사례 1 (IP 변경 2대, 새 이름 3대)</td>
-      <td>수령 팀이 직접 · 게이트 없음</td>
-      <td>수령 팀 클러스터</td>
+      <td>게이트 밖 (D+17)</td>
+      <td>받는 쪽 클러스터</td>
     </tr>
     <tr>
       <td><code class="highlighter-rouge">gpu-a06</code></td>
@@ -534,19 +535,19 @@
     <tr>
       <td><code class="highlighter-rouge">gpu-a10</code></td>
       <td>사례 3 (대조 불가)</td>
-      <td>우리 · 게이트 대조 불가, 사람 판단</td>
-      <td>수령 팀</td>
+      <td>게이트 대조 불가 · 사람 판단</td>
+      <td>받는 쪽 클러스터</td>
     </tr>
     <tr>
       <td><code class="highlighter-rouge">gpu-a11</code></td>
       <td>사례 3의 양성 사례</td>
-      <td>우리 · 게이트 통과</td>
-      <td>수령 팀 클러스터</td>
+      <td>게이트 통과</td>
+      <td>받는 쪽 클러스터</td>
     </tr>
     <tr>
       <td><code class="highlighter-rouge">gpu-b01</code>·<code class="highlighter-rouge">b02</code></td>
       <td>—</td>
-      <td>인프라 팀이 Rancher 쪽에서 · 게이트 없음</td>
+      <td>게이트 밖 (D+21, Rancher 쪽 작업)</td>
       <td>반환 완료, 호스트 정리 여부 미확인</td>
     </tr>
   </tbody>
@@ -568,7 +569,9 @@
   <li><strong>게이트</strong>: 다음 단계로 가기 전에 통과해야 하는 검사 묶음이다. 이 글에서는 “Node 객체를 지워도 되는가”를 판정하는 검사를 가리킨다</li>
 </ul>
 
-<p>이 글의 결론을 한 장으로 그리면 다음과 같다. 이유는 <a href="#노드-상태의-관찰-구조">노드 상태의 관찰 구조</a> 절에 있다.</p>
+<h2 id="세-사례의-공통-구조">세 사례의 공통 구조</h2>
+
+<p>세 사례를 한 장으로 그리면 다음과 같다. 이유는 <a href="#노드-상태의-관찰-구조">노드 상태의 관찰 구조</a> 절에 있다.</p>
 
 <pre><code class="language-mermaid">flowchart LR
     A["호스트 전원 꺼짐"] --&gt; S
@@ -581,7 +584,7 @@
 
 <h1 id="현상-세-가지-불일치">현상: 세 가지 불일치</h1>
 
-<h2 id="새-이름으로-돌아온-노드">새 이름으로 돌아온 노드</h2>
+<h2 id="사례-1-새-이름으로-돌아온-노드">사례 1: 새 이름으로 돌아온 노드</h2>
 
 <p>D+1에 cordon·drain을 마친 <code class="highlighter-rouge">gpu-a01</code>~<code class="highlighter-rouge">a05</code>는 cordon과 role 라벨, GPU taint가 붙은 채 <code class="highlighter-rouge">NotReady</code>로 남아 있었다. 호스트 정리가 끝났다는 회신은 없었다.</p>
 
@@ -589,7 +592,7 @@
 
 <p>D+15에 <code class="highlighter-rouge">gpu-a03</code>과 <code class="highlighter-rouge">gpu-a05</code>의 InternalIP가 바뀌었다. 호스트 이름은 그대로였으므로 기존 Node 객체에 붙었고 cordon과 라벨은 유지됐다. 서비스 네트워크 경보가 잠깐 Pending(Prometheus 알림의 대기 상태. 지속 조건을 채우기 전에 풀리면 통보되지 않는다)까지 갔다가 풀렸다.</p>
 
-<p>D+17 낮에는 처음 보는 이름 <code class="highlighter-rouge">new-01</code>·<code class="highlighter-rouge">new-02</code>·<code class="highlighter-rouge">new-03</code>이 Node로 합류했다. 수령 팀의 명명 규칙을 따른 이름이었고 IP도 그 팀 대역이었다. 이 노드들에는 cordon도, role 라벨도, GPU taint도 없었다.</p>
+<p>D+17 낮에는 처음 보는 이름 <code class="highlighter-rouge">new-01</code>·<code class="highlighter-rouge">new-02</code>·<code class="highlighter-rouge">new-03</code>이 Node로 합류했다. 이름과 IP 대역은 이 노드들을 받기로 한 팀의 것이었다. 이 노드들에는 cordon도, role 라벨도, GPU taint도 없었다.</p>
 
 <pre><code class="language-promql"># 지난 5일 창에서 1분마다 본 unschedulable의 최솟값 → 0이면 cordon 없이 시작한 노드
 min_over_time(kube_node_spec_unschedulable{node=~"new-0[1-3]"}[5d:1m])   # 0
@@ -600,7 +603,7 @@ kube_node_role{node=~"new-0[1-3]"}                                          # (n
 
 <p>노드를 고르는 조건이 느슨한 파드가 즉시 옮겨 갔다. CI 러너의 listener 파드 18개(nodeSelector 없음)가 새 노드로 가서 1시간 40분 동안 각각 85~112회 재생성됐다(재생성의 원인은 확인하지 않았다). GPU Operator와 노드 검사용 DaemonSet 파드도 떴다. 학습 파드는 role 라벨 조건이 있어 가지 않았다. <code class="highlighter-rouge">node-not-ready</code> 경보는 3분 Pending 뒤 풀렸고 방치 노드 경보는 72시간 조건이라 울리지 않았다(<a href="#알림의-노드-존재-조인">알림의 노드 존재 조인</a> 절). 통보된 알림은 0건이다.</p>
 
-<p>같은 날 오후, 옛 이름 5대와 새 이름 3대가 동시에 사라졌다. 우리 게이트를 거치지 않은 삭제였다. 이틀 뒤 수령 팀이 “주말에 호스트 이름을 바꾼 채 클러스터 A에 붙어 버린 것을 발견해 급히 직접 제거했다”고 알려 왔다.</p>
+<p>같은 날 오후, 옛 이름 5대와 새 이름 3대가 동시에 사라졌다. 우리 게이트를 거치지 않은 삭제였다. 경위는 이틀 뒤에 확인했다. 이름을 바꿔 재부팅한 호스트가 클러스터 A에 다시 붙은 것을 발견한 쪽에서 Node를 바로 지운 것이었다.</p>
 
 <p>어느 호스트가 어느 새 이름이 됐는지는 system UUID로 맞췄다. kube-state-metrics의 <code class="highlighter-rouge">kube_node_info</code>에 <code class="highlighter-rouge">system_uuid</code> 라벨이 있어 지워진 노드도 Prometheus 보존 기간 안에서는 대조할 수 있다.</p>
 
@@ -610,13 +613,13 @@ kube_node_info{system_uuid="…"}   # node="gpu-a02" 와 node="new-01"
 
 <h3 id="configyaml과-노드-이름">config.yaml과 노드 이름</h3>
 
-<p>수령 팀이 호스트 정리 전에 이름과 IP를 바꾸고 재부팅했다. 호스트에는 클러스터 A의 <code class="highlighter-rouge">/etc/rancher/rke2/config.yaml</code>(server 주소와 토큰)이 남아 있었고 <code class="highlighter-rouge">rke2-agent</code>는 systemd에 enable돼 있었다. 부팅하자 agent가 클러스터 A의 supervisor에 등록했는데 Node 이름은 호스트 이름이라 새 이름으로 등록됐다. 이름이 바뀐 노드는 클러스터 입장에서 처음 보는 노드다. 옛 Node 객체의 cordon·라벨·taint는 옛 객체에 남고 새 객체는 빈손으로 시작한다. 이름이 그대로였던 <code class="highlighter-rouge">gpu-a03</code>·<code class="highlighter-rouge">a05</code>가 cordon을 유지한 것과 대비된다(구조는 <a href="#rke2-agent-등록과-노드의-정체성">RKE2 agent 등록과 노드의 정체성</a> 절).</p>
+<p>호스트 정리 전에 이름과 IP가 바뀌고 재부팅됐다. 호스트에는 클러스터 A의 <code class="highlighter-rouge">/etc/rancher/rke2/config.yaml</code>(server 주소와 토큰)이 남아 있었고 <code class="highlighter-rouge">rke2-agent</code>는 systemd에 enable돼 있었다. 부팅하자 agent가 클러스터 A의 supervisor에 등록했는데 Node 이름은 호스트 이름이라 새 이름으로 등록됐다. 이름이 바뀐 노드는 클러스터 입장에서 처음 보는 노드다. 옛 Node 객체의 cordon·라벨·taint는 옛 객체에 남고 새 객체는 빈손으로 시작한다. 이름이 그대로였던 <code class="highlighter-rouge">gpu-a03</code>·<code class="highlighter-rouge">a05</code>가 cordon을 유지한 것과 대비된다(구조는 <a href="#rke2-agent-등록과-노드의-정체성">RKE2 agent 등록과 노드의 정체성</a> 절).</p>
 
-<h2 id="notready-뒤의-이중-소속">NotReady 뒤의 이중 소속</h2>
+<h2 id="사례-2-notready-뒤의-이중-소속">사례 2: NotReady 뒤의 이중 소속</h2>
 
 <h3 id="관찰-1">관찰</h3>
 
-<p>D+15 오후, <code class="highlighter-rouge">gpu-a07</code>·<code class="highlighter-rouge">a08</code>·<code class="highlighter-rouge">a09</code>·<code class="highlighter-rouge">a10</code>의 Lease 갱신이 12초 안에 연달아 멈췄다. kubelet(10250 포트)·node-exporter(9100 포트)·dcgm-exporter(GPU 지표)도 같은 분에 끊겼다. 수령 팀이 “다음 주 이동 설치를 위해 셧다운한다”고 미리 알려 둔 터라 당시에는 셧다운으로 해석했다. D+22 재편입 직전의 <code class="highlighter-rouge">gpu-a07</code> 객체를 보면 다음과 같다(실측 발췌, 이름·UID만 가명).</p>
+<p>D+15 오후, <code class="highlighter-rouge">gpu-a07</code>·<code class="highlighter-rouge">a08</code>·<code class="highlighter-rouge">a09</code>·<code class="highlighter-rouge">a10</code>의 Lease 갱신이 12초 안에 연달아 멈췄다. kubelet(10250 포트)·node-exporter(9100 포트)·dcgm-exporter(GPU 지표)도 같은 분에 끊겼다. 이동 설치를 위한 셧다운이 예고돼 있던 시점이라 당시에는 셧다운으로 해석했다. D+22 재편입 직전의 <code class="highlighter-rouge">gpu-a07</code> 객체를 보면 다음과 같다(실측 발췌, 이름·UID만 가명).</p>
 
 <div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># kubectl get node gpu-a07 -o yaml (발췌)</span>
 <span class="na">metadata</span><span class="pi">:</span>
@@ -676,7 +679,7 @@ kube_node_info{system_uuid="…"}   # node="gpu-a02" 와 node="new-01"
 
 <h3 id="호스트-저널">호스트 저널</h3>
 
-<p>D+21, 다른 팀의 클러스터 이전 스레드에 “<code class="highlighter-rouge">gpu-a07</code>~<code class="highlighter-rouge">a09</code>는 클러스터 B에서 제거했다. rke2-agent는 중지하고 자동 시작만 껐으며 RKE2 설치와 설정은 그대로 두었다”는 메시지가 올라왔다. D+22에 SSH 계정을 받아 <code class="highlighter-rouge">gpu-a07</code>의 <code class="highlighter-rouge">journalctl -u rke2-agent</code>를 보니 이렇다. 클러스터 B는 v1.30 계열이다.</p>
+<p>D+21에 <code class="highlighter-rouge">gpu-a07</code>~<code class="highlighter-rouge">a09</code>가 클러스터 B에 붙어 있었고 그날 클러스터 B에서 제거됐다는 것을 확인했다. 제거 방식은 rke2-agent를 중지하고 자동 시작을 끈 것이었고 RKE2 설치와 설정은 호스트에 그대로 남아 있었다. D+22에 SSH 계정을 받아 <code class="highlighter-rouge">gpu-a07</code>의 <code class="highlighter-rouge">journalctl -u rke2-agent</code>를 보니 이렇다. 클러스터 B는 v1.30 계열이다.</p>
 
 <table>
   <thead>
@@ -692,7 +695,7 @@ kube_node_info{system_uuid="…"}   # node="gpu-a02" 와 node="new-01"
     </tr>
     <tr>
       <td>D+15 14:54 ~ 15:25</td>
-      <td>재시작 반복(클러스터 B와의 버전 불일치로 추정)</td>
+      <td>재시작 반복. 원인은 확인하지 않았다</td>
     </tr>
     <tr>
       <td>D+15 15:29:38</td>
@@ -711,23 +714,23 @@ kube_node_info{system_uuid="…"}   # node="gpu-a02" 와 node="new-01"
 
 <p>클러스터 A의 Lease가 멈춘 시각(위 YAML의 <code class="highlighter-rouge">05:23:42Z</code> = KST 14:23:42)과 agent가 클러스터 B로 재시작된 시각(14:23:45)이 3초 차이다.</p>
 
-<p>호스트 상태도 함께 적어 둔다. <code class="highlighter-rouge">config.yaml</code>의 server는 클러스터 B, agent load balancer 파일의 <code class="highlighter-rouge">ServerAddresses</code>에는 클러스터 B의 서버 2대, <code class="highlighter-rouge">rke2-agent</code>는 disabled/failed, <code class="highlighter-rouge">rancher-system-agent</code>는 enabled/active였다. containerd-shim 13개(컨테이너마다 하나씩 뜨는 중계 프로세스), <code class="highlighter-rouge">cali*</code> 인터페이스 8개(파드마다 만들어지는 가상 NIC), <code class="highlighter-rouge">/var/lib/kubelet</code> 아래 파드 볼륨 마운트 17개도 남아 있었다. 클러스터 B의 파드가 호스트에서 아직 돌고 있었다.</p>
+<p>그때 호스트 상태는 다음과 같았다. <code class="highlighter-rouge">config.yaml</code>의 server는 클러스터 B, agent load balancer 파일의 <code class="highlighter-rouge">ServerAddresses</code>에는 클러스터 B의 서버 2대, <code class="highlighter-rouge">rke2-agent</code>는 disabled/failed, <code class="highlighter-rouge">rancher-system-agent</code>는 enabled/active였다. containerd-shim 13개(컨테이너마다 하나씩 뜨는 중계 프로세스), <code class="highlighter-rouge">cali*</code> 인터페이스 8개(파드마다 만들어지는 가상 NIC), <code class="highlighter-rouge">/var/lib/kubelet</code> 아래 파드 볼륨 마운트 17개도 남아 있었다. 클러스터 B의 파드가 호스트에서 아직 돌고 있었다.</p>
 
 <h3 id="원-클러스터가-아는-것">원 클러스터가 아는 것</h3>
 
-<p>클러스터 A에서는 이 6일 동안 <code class="highlighter-rouge">Ready=Unknown</code>, 멈춘 Lease, 변하지 않는 bootID, 동시에 끊긴 지표만 보였다. 4대의 Lease가 12초 안에 같이 멈춘 “일괄 작업의 모양”이 유일한 힌트였는데 그마저 일괄 셧다운과 구분되지 않는다. 네 번째 노드 <code class="highlighter-rouge">gpu-a10</code>은 같은 분에 멈췄으므로 같은 일괄 작업으로 추정하지만 클러스터 B에 있었다는 확인은 받지 못했다.</p>
+<p>클러스터 A에서는 이 6일 동안 <code class="highlighter-rouge">Ready=Unknown</code>, 멈춘 Lease, 변하지 않는 bootID, 동시에 끊긴 지표만 보였다. 4대의 Lease가 12초 안에 같이 멈춘 “일괄 작업의 모양”이 유일한 힌트였는데 그마저 일괄 셧다운과 구분되지 않는다. 네 번째 노드 <code class="highlighter-rouge">gpu-a10</code>은 같은 분에 멈췄으므로 같은 일괄 작업으로 추정하지만 클러스터 B에 있었는지는 확인하지 못했다.</p>
 
 <p>이중 소속으로 클러스터 A의 데이터가 꼬였는지도 확인했다. Node 객체는 위 <code class="highlighter-rouge">managedFields</code>대로 다른 kubelet이 손대지 않았다. 이 노드의 GPU 지표는 7일 최댓값이 0, 로그 수집기에 들어온 줄도 D+15 이후 0이다. 클러스터 B의 kubelet은 클러스터 B의 API server에만 썼으므로 클러스터 A 쪽 객체는 멈춘 채 보존됐다. 어긋난 쪽은 객체가 가리키는 호스트의 소속이었다. server 주소만 바꿔도 왜 이렇게 되는지는 뒤에서 본다(<a href="#멈춘-agent와-떠난-agent">멈춘 agent와 떠난 agent</a> 절).</p>
 
-<h2 id="정리-회신과-notready의-증명력">정리 회신과 NotReady의 증명력</h2>
+<h2 id="사례-3-정리-회신과-notready의-증명력">사례 3: 정리 회신과 NotReady의 증명력</h2>
 
-<p>D+19 수령 팀과 순서를 다시 합의한 뒤, 호스트 정리 회신이 오면 노드별로 게이트를 돌렸다. 두 노드가 대비된다.</p>
+<p>D+19부터는 호스트 정리 회신이 오면 노드별로 게이트를 돌렸다. 두 노드가 대비된다.</p>
 
 <p><code class="highlighter-rouge">gpu-a11</code>은 양성 사례다. 회신은 “15:09 정리 완료”였고 클러스터 쪽은 마지막 heartbeat 15:05:35, Lease 마지막 갱신 15:07:56, <code class="highlighter-rouge">Ready=Unknown</code> 전환 15:08:48이었다. Lease가 멈추고 52초 뒤에 <code class="highlighter-rouge">Unknown</code>이 됐고 회신 시각과 5분 안에 맞는다. 재부팅 뒤 45분 동안 bootID가 바뀌지 않았으니 호스트가 다시 등록한 적도 없다. 게이트를 통과해 삭제했다.</p>
 
-<p><code class="highlighter-rouge">gpu-a10</code>은 아니었다. 회신에는 정리 시각도 재부팅 여부도 없었고 클러스터 쪽 Lease는 D+15에 멈춰 있었다. 그 시각은 정리 시각이 아니었다. <code class="highlighter-rouge">gpu-a07</code>~<code class="highlighter-rouge">a09</code>가 클러스터 B로 재시작된 시각과 같은 분이라 같은 일괄 작업으로 추정할 뿐이다. “회신 시각 ±5분”이라는 대조 자체가 성립하지 않았다. “bootID가 D+15 이후 그대로다 = 그 뒤로 클러스터 A에 한 번도 보고하지 않았다”만 확인할 수 있었다.</p>
+<p><code class="highlighter-rouge">gpu-a10</code>은 아니었다. 회신에 정리 시각이 없었고 클러스터 쪽 Lease는 D+15에 멈춰 있었다. 그 시각은 정리 시각이 아니었다. <code class="highlighter-rouge">gpu-a07</code>~<code class="highlighter-rouge">a09</code>가 클러스터 B로 재시작된 시각과 같은 분이라 같은 일괄 작업으로 추정할 뿐이다. “회신 시각 ±5분”이라는 대조 자체가 성립하지 않았다. “bootID가 D+15 이후 그대로다 = 그 뒤로 클러스터 A에 한 번도 보고하지 않았다”만 확인할 수 있었다.</p>
 
-<p>이 노드는 재부팅 여부를 더 묻지 않고 삭제했다. 같은 담당자의 회신이 <code class="highlighter-rouge">gpu-a11</code>에서 실측과 맞았고 최악의 경우가 “cordon 없는 재합류”라는 것을 알고 그 위험을 받아들인 결정이다. 게이트를 비켜 간 유일한 노드다.</p>
+<p>이 노드는 추가 확인 없이 삭제했다. 같은 작업 묶음의 <code class="highlighter-rouge">gpu-a11</code> 회신이 실측과 맞았고 최악의 경우가 “cordon 없는 재합류”라는 것을 알고 그 위험을 받아들인 결정이다. 게이트를 비켜 간 유일한 노드다.</p>
 
 <p>여기서 “셧다운 상태의 <code class="highlighter-rouge">NotReady</code>는 정리의 증거가 아니다”라는 원칙이 나왔다. Node 객체를 남겨 둔 채 호스트가 정리 전에 재기동하면 cordon된 채로 다시 붙을 뿐이라 무해하다(<a href="#kubelet의-단-한-번-등록">kubelet의 단 한 번 등록</a> 절). 반대로 정리 증거 없이 객체를 지우면 다음 재기동 때 cordon 없는 새 노드가 된다. D+9에 네 노드가 재부팅 뒤 같은 이름으로 <code class="highlighter-rouge">Ready</code>에 돌아온 것 자체가 “호스트에 RKE2가 남아 있다”는 클러스터 쪽 증거이기도 했다.</p>
 
@@ -751,7 +754,7 @@ kube_node_info{system_uuid="…"}   # node="gpu-a02" 와 node="new-01"
 
 <h2 id="기록되지-않는-단절-이유">기록되지 않는 단절 이유</h2>
 
-<p>Node 객체와 Lease에는 마지막 heartbeat 시각과 <code class="highlighter-rouge">.status.nodeInfo</code>(bootID, machineID, systemUUID)만 남는다. kubelet에는 “떠난다”고 알리는 경로가 없다(Graceful Node Shutdown을 켠 경우 종료 직전 <code class="highlighter-rouge">Ready=False</code>에 “node is shutting down”이 잠깐 남지만 기본은 꺼져 있고 grace period 뒤 <code class="highlighter-rouge">Unknown</code>으로 덮인다). <a href="#용어">배경 절의 그림</a>이 이것이다. 전원이 꺼져도, 네트워크가 끊겨도, 다른 클러스터로 가도 원래 클러스터에서는 같은 상태로 수렴한다.</p>
+<p>Node 객체와 Lease에는 마지막 heartbeat 시각과 <code class="highlighter-rouge">.status.nodeInfo</code>(bootID, machineID, systemUUID)만 남는다. kubelet에는 “떠난다”고 알리는 경로가 없다(Graceful Node Shutdown을 켠 경우 종료 직전 <code class="highlighter-rouge">Ready=False</code>에 “node is shutting down”이 잠깐 남지만 기본은 꺼져 있고 grace period 뒤 <code class="highlighter-rouge">Unknown</code>으로 덮인다). <a href="#세-사례의-공통-구조">배경 절의 그림</a>이 이것이다. 전원이 꺼져도, 네트워크가 끊겨도, 다른 클러스터로 가도 원래 클러스터에서는 같은 상태로 수렴한다.</p>
 
 <p>이는 cloud provider가 없는 온프레미스 이야기다. 클라우드처럼 인스턴스 소멸을 판정하는 controller가 있는 환경에서는 인스턴스가 사라지면 Node 객체도 지워지므로 모양이 달라진다.</p>
 
@@ -869,6 +872,8 @@ may not match server node-passwd entry, try enabling a unique node name with the
 
 <p>이 동작 탓에 사례 2에서 클러스터 B가 agent를 멈춘 뒤에도 shim 13개와 <code class="highlighter-rouge">cali*</code> 인터페이스 8개, 파드 볼륨 마운트 17개가 남아 있었다. 이것까지 지우는 것이 <code class="highlighter-rouge">rke2-killall.sh</code>이다. <code class="highlighter-rouge">rke2-uninstall.sh</code>는 killall 뒤에 <code class="highlighter-rouge">/etc/rancher/rke2</code>, <code class="highlighter-rouge">/etc/rancher/node</code>, <code class="highlighter-rouge">/var/lib/rancher/rke2</code>, <code class="highlighter-rouge">/var/lib/kubelet</code>, CNI 디렉터리, 로그, 바이너리와 unit까지 지운다. 다시 설치하면 node-password가 새로 생긴다.</p>
 
+<p>두 스크립트가 지우지 않는 것도 있다. kube-proxy를 IPVS 모드로 쓰는 노드에서는 kube-proxy가 커널에 넣어 둔 IPVS 가상 서버 표가 그대로 남는다. killall은 <code class="highlighter-rouge">kube-ipvs0</code> 인터페이스와 iptables의 <code class="highlighter-rouge">KUBE-</code> 규칙을 지우지만 이 표를 비우는 단계는 없다. 표는 커널 메모리에 있어 재부팅하면 사라지므로, 절차대로 재부팅하는 호스트에서는 드러나지 않는다. 재부팅 없이 정리한 호스트에서는 다르다. IPVS는 호스트에서 나가는 패킷도 목적지가 표에 있으면 가로채므로, 그 호스트에서 클러스터의 LoadBalancer IP로 보낸 연결이 이미 사라진 파드 IP로 넘어가 시간 초과가 된다. 클러스터 밖의 다른 호스트에서는 같은 IP가 라우터를 거쳐 MetalLB 노드로 정상 도달하므로, 바깥에서 확인한 “닿는다”가 그 호스트의 경로를 보증하지 않는다. 이 글의 노드들과 별개로, Kubernetes 밖의 서비스가 돌고 있어 재부팅할 수 없는 노드 한 대를 뺄 때 겪었다. 정리 직후 그 호스트에서 LoadBalancer IP가 시간 초과였고 <code class="highlighter-rouge">/proc/net/ip_vs</code>에 가상 서버 208개가 남아 있었다. <code class="highlighter-rouge">ipvsadm -C</code>로 비우자 바로 응답했다. 재부팅을 생략하는 호스트에서는 이 명령이 재부팅을 대신한다.</p>
+
 <p>멈춘 agent는 <code class="highlighter-rouge">systemctl start</code> 한 번이면 같은 설정으로 다시 등록한다. agent가 멈춰 있는 것은 “일시 정지”이고 “빠진 상태”로 볼 수 없다.</p>
 
 <p>반대로 <code class="highlighter-rouge">config.yaml</code>의 <code class="highlighter-rouge">server</code>만 바꿔 재시작하면 agent는 새 클러스터에 등록한다. 옛 클러스터에는 아무것도 알리지 않는다. agent load balancer 파일(<code class="highlighter-rouge">/var/lib/rancher/rke2/agent/etc/rke2-agent-load-balancer.json</code>)에 옛 서버 목록이 남아 있지만 기동 시 <code class="highlighter-rouge">ServerURL</code>이 현재 <code class="highlighter-rouge">server</code>와 다르면 새 값으로 덮어쓴다. 즉 “옛 클러스터를 기억해 돌아오는” 일은 없다. 이중 소속의 원인은 그 파일이 아니라 server 주소를 바꾼 것 자체다. 옛 클러스터의 Node 객체, node-password secret, cordon과 taint는 손대는 주체가 없어 그대로 남는다.</p>
@@ -975,7 +980,7 @@ may not match server node-passwd entry, try enabling a unique node name with the
 
 <h2 id="호스트-정리의-책임">호스트 정리의 책임</h2>
 
-<p>custom 클러스터라면 Rancher가 호스트까지 치워 줄 것이라고 기대하기 쉽다. 실제로는 Machine 삭제의 연쇄가 다운스트림 Node 객체 삭제에서 끝난다. 호스트의 RKE2와 <code class="highlighter-rouge">rancher-system-agent</code> 제거는 문서(Clean Cluster Nodes)의 RKE2 절이 두 스크립트(호스트에 설치되는 <code class="highlighter-rouge">/usr/local/bin/rancher-system-agent-uninstall.sh</code>와 <code class="highlighter-rouge">rke2-uninstall.sh</code>. 문서는 전자를 GitHub의 <code class="highlighter-rouge">system-agent-uninstall.sh</code>로 안내한다)의 수동 실행을 요구한다. 같은 문서 서두에 “Active 상태 노드를 지우면 자동으로 정리된다”는 문장이 있지만 RKE1 시절 서술이 남은 것이고 RKE2/k3s 절은 수동 스크립트를 요구한다. imported 클러스터는 애초에 UI에 노드 삭제가 없다. 어느 종류든 호스트 정리는 운영자 몫이다. 이 글의 세 사례는 모두 그 정리가 Node 삭제보다 늦거나 빠지면서 생겼다. custom 클러스터라면 뒤에 나오는 삭제 전 게이트를 Machine 삭제 앞에 두어야 한다.</p>
+<p>custom 클러스터라면 Rancher가 호스트까지 치워 줄 것이라고 기대하기 쉽다. 실제로는 Machine 삭제의 연쇄가 다운스트림 Node 객체 삭제에서 끝난다. 호스트의 RKE2와 <code class="highlighter-rouge">rancher-system-agent</code> 제거는 문서(Clean Cluster Nodes)의 RKE2 절이 두 스크립트(호스트에 설치되는 <code class="highlighter-rouge">/usr/local/bin/rancher-system-agent-uninstall.sh</code>와 <code class="highlighter-rouge">rke2-uninstall.sh</code>. 문서는 전자를 GitHub의 <code class="highlighter-rouge">system-agent-uninstall.sh</code>로 안내한다)의 수동 실행을 요구한다. 같은 문서 서두에 “Active 상태 노드를 지우면 자동으로 정리된다”는 문장이 있지만 어느 배포판을 말하는지 특정하지 않고, RKE2/k3s 절은 수동 스크립트를 요구한다. imported 클러스터는 애초에 UI에 노드 삭제가 없다. 어느 종류든 호스트 정리는 운영자 몫이다. 이 글의 세 사례는 모두 그 정리가 Node 삭제보다 늦거나 빠지면서 생겼다. custom 클러스터라면 뒤에 나오는 삭제 전 게이트를 Machine 삭제 앞에 두어야 한다.</p>
 
 <h2 id="system-agent와-plan">system-agent와 Plan</h2>
 
@@ -993,7 +998,7 @@ may not match server node-passwd entry, try enabling a unique node name with the
 
 <h2 id="두-개의-관리-평면">두 개의 관리 평면</h2>
 
-<p>이 작업에서 우리 게이트를 거치지 않고 Node가 지워진 일이 두 번 있다. D+17 수령 팀이 8대를 지운 것과 D+21 인프라 팀이 <code class="highlighter-rouge">gpu-b01</code>·<code class="highlighter-rouge">b02</code>를 “Rancher 쪽 작업”으로 지운 것이다. imported 클러스터에는 UI의 노드 삭제가 없으므로 둘 다 <code class="highlighter-rouge">kubectl</code>(Rancher의 kubectl 셸을 포함해) 경로였을 것으로 보이지만 어느 계정으로 어떻게 지웠는지는 확인하지 못했다.</p>
+<p>이 작업에서 우리 게이트를 거치지 않고 Node가 지워진 일이 두 번 있다. D+17의 8대와 D+21의 <code class="highlighter-rouge">gpu-b01</code>·<code class="highlighter-rouge">b02</code>다. 둘 다 우리 팀의 kubeconfig가 아닌 경로였고, imported 클러스터에는 UI의 노드 삭제가 없으므로 남는 경로는 <code class="highlighter-rouge">kubectl</code>(Rancher의 kubectl 셸 포함)뿐이다. 어느 계정으로 지웠는지는 확인하지 못했다.</p>
 
 <p>Rancher가 있으면 클러스터에 손을 대는 평면이 둘이 된다. 우리 팀의 kubeconfig와 Rancher의 권한 체계다. 삭제 전 게이트는 스크립트라 어느 평면에서도 강제되지 않는다. 다른 평면에서 지워진 노드는 게이트 없이 사라진다. 그 뒤로는 사후 확인(재합류 없음, 알림 변화)만 남는다. 강제 수단 후보는 <a href="#아직-못-하는-것">아직 못 하는 것</a> 절에 적었다.</p>
 
@@ -1044,8 +1049,11 @@ may not match server node-passwd entry, try enabling a unique node name with the
 
 <p>(c)의 기준 시각을 재부팅 완료 시각으로 받으면 Lease 정지와 10분 넘게 벌어져 늘 “대조 불가”가 된다. Lease는 agent가 죽는 순간 멈추므로 RKE2 제거(또는 <code class="highlighter-rouge">systemctl stop rke2-agent</code>) 시각을 받아야 한다. 사람이 볼 값은 다음 셋이다.</p>
 
-<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl <span class="nt">-n</span> kube-node-lease get lease &lt;노드&gt; <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.spec.renewTime}'</span>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Lease 마지막 갱신 시각 — (c)의 대조 기준</span>
+kubectl <span class="nt">-n</span> kube-node-lease get lease &lt;노드&gt; <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.spec.renewTime}'</span>
+<span class="c"># kubelet이 마지막으로 status를 쓴 시각</span>
 kubectl get node &lt;노드&gt; <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.conditions[?(@.type=="Ready")].lastHeartbeatTime}'</span>
+<span class="c"># 재부팅 뒤 다시 보고했는지 — 기준선과 값이 다르면 재등록된 것</span>
 kubectl get node &lt;노드&gt; <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.nodeInfo.bootID}'</span>
 </code></pre></div></div>
 
@@ -1106,7 +1114,7 @@ kubectl <span class="nt">-n</span> kube-system get secrets <span class="nt">--fi
 <p>Node 객체는 지우지 않기로 했다. 지우면 cordon·role 라벨·GPU taint·podCIDR이 사라지고 남기면 재등록 때 그대로 유지된다. 대신 node-password secret만 지웠다. 순서는 다음과 같다.</p>
 
 <ol>
-  <li>호스트에서 <code class="highlighter-rouge">rancher-system-agent-uninstall.sh</code> → <code class="highlighter-rouge">rke2-uninstall.sh</code>. 게이트 (b)는 재부팅을 요구하지만 여기서는 같은 팀이 바로 재설치하므로 재부팅 대신 RKE2 인터페이스·파드 마운트·unit이 모두 사라진 것을 직접 확인하고 진행했다</li>
+  <li>호스트에서 <code class="highlighter-rouge">rancher-system-agent-uninstall.sh</code> → <code class="highlighter-rouge">rke2-uninstall.sh</code>. 게이트 (b)는 재부팅을 요구하지만 여기서는 같은 팀이 바로 재설치하므로 재부팅 대신 RKE2 인터페이스·파드 마운트·unit이 모두 사라진 것을 직접 확인하고 진행했다. 바로 재설치하면 kube-proxy가 IPVS 표를 다시 쓰므로 괜찮지만, 재설치 없이 둘 호스트라면 <a href="#멈춘-agent와-떠난-agent">남은 IPVS 표</a>를 먼저 비워야 한다</li>
   <li>클러스터 A에서 <code class="highlighter-rouge">kubectl -n kube-system delete secret gpu-a07.node-password.rke2</code> (삭제 전 백업)</li>
   <li>호스트에 클러스터 A와 같은 버전(v1.34.3+rke2r3)으로 RKE2 agent 설치, <code class="highlighter-rouge">config.yaml</code>에 클러스터 A의 server·token</li>
   <li><code class="highlighter-rouge">Ready</code> 복귀 확인, 새 secret 생성 확인, <code class="highlighter-rouge">unreachable</code> taint 소멸과 cordon 유지 확인</li>
@@ -1140,7 +1148,7 @@ and on (node) group by (node) (kube_node_info)
 
 <h2 id="노드-이관-6단계">노드 이관 6단계</h2>
 
-<p>이번 일을 바탕으로 클러스터 간 워커 이동 절차를 제안서로 썼다(인프라 팀과 합의 전). 워커 노드 한정이다. 서버 노드는 etcd 멤버 제거가 선행하고 Rancher custom 클러스터에서는 3단계 게이트를 Machine 삭제 앞에 둔다. 역할은 넷이다. 요청자, 빼는 쪽 클러스터, 인프라 팀(호스트), 받는 쪽 클러스터.</p>
+<p>이번 일을 바탕으로 클러스터 간 워커 이동 절차를 제안서로 썼다(아직 제안 단계다). 워커 노드 한정이다. 서버 노드는 etcd 멤버 제거가 선행하고 Rancher custom 클러스터에서는 3단계 게이트를 Machine 삭제 앞에 둔다. 역할은 넷이다. 요청자, 빼는 쪽 클러스터, 인프라 팀(호스트), 받는 쪽 클러스터.</p>
 
 <pre><code class="language-mermaid">sequenceDiagram
     participant Q as 요청자
@@ -1168,7 +1176,7 @@ and on (node) group by (node) (kube_node_info)
     <tr>
       <th>하지 말 것</th>
       <th>이유</th>
-      <th>어긴 사례</th>
+      <th>해당 사례</th>
     </tr>
   </thead>
   <tbody>
@@ -1198,9 +1206,14 @@ and on (node) group by (node) (kube_node_info)
       <td>사례 3</td>
     </tr>
     <tr>
-      <td>완료 공유를 여러 곳에 흩지 않는다</td>
-      <td>다른 스레드에 올라온 “클러스터 B에 두었다”는 메시지를 6일 뒤에 봤다</td>
+      <td>편입 완료를 빼는 쪽 클러스터에 알린다</td>
+      <td>빼는 쪽은 편입 사실을 6일 뒤에 알았다</td>
       <td>사례 2</td>
+    </tr>
+    <tr>
+      <td>재부팅을 생략한 호스트를 IPVS 표를 비우지 않은 채 두지 않는다</td>
+      <td>killall은 커널 IPVS 표를 지우지 않아, 그 호스트에서 클러스터 LoadBalancer IP로 나가는 연결이 막힌다</td>
+      <td>이 글 뒤의 다른 노드</td>
     </tr>
   </tbody>
 </table>
@@ -1209,9 +1222,9 @@ and on (node) group by (node) (kube_node_info)
 
 <ul>
   <li><strong>다른 클러스터로의 이탈 감지.</strong> 빼는 쪽 클러스터의 API 객체만으로는 불가능하다. 절차(“3단계 전 편입 금지”)로만 막는다. 같은 Rancher 서버에 두 클러스터가 다 등록돼 있다면 Rancher 쪽에서 같은 호스트가 두 곳에 보이는지 확인할 수 있을지 모르지만 확인하지 못했다</li>
-  <li><strong>다른 평면의 삭제 경로.</strong> 수령 팀과 인프라 팀이 어떤 권한으로 클러스터 A의 Node를 지웠는지 확인하지 못했다. 게이트는 우리 스크립트에서만 강제된다. 후보는 <code class="highlighter-rouge">nodes</code> delete 권한을 운영 그룹으로 좁히는 것과, 게이트 통과 annotation이 없는 Node 삭제를 ValidatingAdmissionPolicy로 거부하는 것이다. 아직 넣지 않았다</li>
+  <li><strong>다른 평면의 삭제 경로.</strong> 게이트 밖에서 Node를 지운 두 경로가 어떤 권한이었는지 확인하지 못했다. 게이트는 우리 스크립트에서만 강제된다. 후보는 <code class="highlighter-rouge">nodes</code> delete 권한을 운영 그룹으로 좁히는 것과, 게이트 통과 annotation이 없는 Node 삭제를 ValidatingAdmissionPolicy(API server가 CEL 식으로 요청을 검사해 거부하는 admission 정책)로 거부하는 것이다. 아직 넣지 않았다</li>
   <li><strong>모르는 이름의 노드 합류 알림.</strong> 사례 1의 <code class="highlighter-rouge">new-01</code>~<code class="highlighter-rouge">03</code>은 어떤 알림에도 잡히지 않았다. role 라벨이 없고 생성 시각이 최근인 Node를 경보로 올리는 식을 후보로 두었고 아직 넣지 않았다</li>
-  <li><strong>알림 silence.</strong> 작업 중 걸어 둔 silence 하나가 만료 전에 사라졌다(원인 미상). 알림 라우팅이 <code class="highlighter-rouge">group_by [alertname]</code>에 6시간 반복이라 대상 8대를 silence해도 범위 밖 노드 때문에 같은 메시지가 계속 왔다. silence는 “걸었다”는 기록과 별개로 존재를 다시 읽어야 한다. 묶음 알림에서는 효과가 없다</li>
+  <li><strong>알림 silence.</strong> silence는 Alertmanager에서 조건에 맞는 알림을 정해진 시간 동안 묵음 처리하는 설정이다. 작업 중 걸어 둔 silence 하나가 만료 전에 사라졌다(원인 미상). 알림 라우팅이 <code class="highlighter-rouge">group_by [alertname]</code>(같은 알림 이름을 한 통으로 묶는 설정)에 6시간 반복이라 대상 8대를 silence해도 범위 밖 노드 때문에 같은 메시지가 계속 왔다. silence는 “걸었다”는 기록과 별개로 존재를 다시 읽어야 한다. 묶음 알림에서는 효과가 없다</li>
 </ul>
 
 <p><br /></p>
@@ -1326,7 +1339,7 @@ and on (node) group by (node) (kube_node_info)
     <h4 class="page__share-title">공유하기</h4>
   
 
-  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+%EB%85%B8%EB%93%9C+%EA%B0%9D%EC%B2%B4%EC%99%80+%ED%98%B8%EC%8A%A4%ED%8A%B8%EA%B0%80+%EC%96%B4%EA%B8%8B%EB%82%A0+%EB%95%8C%3A+NotReady+%EB%92%A4%EC%97%90+%EC%88%A8%EC%9D%80+%EC%84%B8+%EA%B0%80%EC%A7%80+%EC%82%AC%EB%A1%80%EC%99%80+%EB%85%B8%EB%93%9C+%EC%9D%B4%EA%B4%80+%EC%A0%88%EC%B0%A8%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-Node-Object-Host-State-Mismatch%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+%EB%85%B8%EB%93%9C+%EA%B0%9D%EC%B2%B4%EC%99%80+%ED%98%B8%EC%8A%A4%ED%8A%B8%EA%B0%80+%EC%96%B4%EA%B8%8B%EB%82%A0+%EB%95%8C%3A+NotReady+%EB%92%A4%EC%9D%98+%EC%84%B8+%EA%B0%80%EC%A7%80+%EC%82%AC%EB%A1%80%EC%99%80+%EB%85%B8%EB%93%9C+%EC%9D%B4%EA%B4%80+%EC%A0%88%EC%B0%A8%20https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-Node-Object-Host-State-Mismatch%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
 
   <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fdev%2FDev-Kubernetes-Node-Object-Host-State-Mismatch%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
 
