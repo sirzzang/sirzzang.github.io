@@ -17,7 +17,7 @@ tags:
   - command
   - args
   - environment-variable
-last_modified_at: 2026-09-13
+last_modified_at: 2026-10-30
 ---
 
 *[Kubernetes in Action 2nd Edition](https://www.manning.com/books/kubernetes-in-action-second-edition) 8장의 학습 내용을 기반으로 합니다.*
@@ -548,7 +548,7 @@ INITIAL_STATUS_MESSAGE=This status message is set in the pod spec.
 
 1. **컨테이너 이미지:** Dockerfile의 `ENV`로 설정 (`PATH`, `NODE_VERSION`, `YARN_VERSION` 등). `PATH`도 OS 커널이 아니라 베이스 이미지의 Dockerfile이 설정한다.
 2. **kubelet 기본 주입 (항상):** kubelet이 컨테이너 런타임에 Pod 이름을 hostname으로 설정하도록 지시하고, 셸/런타임이 이를 `HOSTNAME` 환경 변수로 노출한다. `KUBERNETES_SERVICE_HOST`, `KUBERNETES_SERVICE_PORT` 등 `default/kubernetes` Service에 대한 변수도 모든 Pod에 항상 주입된다.
-3. **kubelet Service Link 주입 (조건부):** 같은 네임스페이스의 모든 Service를 훑어 `{SVC}_SERVICE_HOST`, `{SVC}_PORT` 등의 변수를 자동 주입한다. `enableServiceLinks: true`(기본값)일 때만 동작하며, docker-compose의 `--link`에서 유래한 레거시 호환 기능이다(11장에서 다룸). 앱 환경 변수와 이름이 충돌하면 기동 실패를 일으킬 수 있다.
+3. **kubelet Service Link 주입 (조건부):** 같은 네임스페이스의 모든 Service를 훑어 `{SVC}_SERVICE_HOST`, `{SVC}_PORT` 등의 변수를 자동 주입한다. `enableServiceLinks: true`(기본값)일 때만 동작하며, Docker의 레거시 컨테이너 링크(`docker run --link`)와 호환되도록 남은 기능이다. 앱 환경 변수와 이름이 충돌하면 기동 실패를 일으킬 수 있다. 실제 사례는 [vLLM 기동 실패 글]({% post_url 2026-04-09-Kubernetes-EKS-GPU-TroubleShooting-03-02-vLLM-TroubleShooting %}#예상치-못한-장애--vllm_port-env-충돌)에서 다룬다.
 4. **파드 매니페스트:** `spec.containers[].env` / `spec.containers[].envFrom`으로 직접 설정 (`POD_NAME`, `INITIAL_STATUS_MESSAGE`). **같은 이름의 변수가 있으면 위 1\~3을 덮어쓰므로 우선순위가 가장 높다.**
 
 각 변수의 값은 출처에 따라 변하는 조건이 다르다.
