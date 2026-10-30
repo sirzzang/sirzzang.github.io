@@ -1,4 +1,629 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-10-30T14:38:38+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[Kubeflow Pipelines] 머신러닝 플랫폼 엔지니어링: MLflow와 Feast - 4.1.2. 2주차 실습 환경 구성</title><link href="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-04-01-02-Lab-Environment/" rel="alternate" type="text/html" title="[Kubeflow Pipelines] 머신러닝 플랫폼 엔지니어링: MLflow와 Feast - 4.1.2. 2주차 실습 환경 구성" /><published>2026-10-29T00:00:00+09:00</published><updated>2026-10-30T00:00:00+09:00</updated><id>https://sirzzang.github.io//MLOps-ML-Platform-Engineering-04-01-02-Lab-Environment</id><content type="html" xml:base="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-04-01-02-Lab-Environment/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Machine Learning Platform Engineering Study 2주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="https://sirzzang.github.io//feed.xml" rel="self" type="application/atom+xml" /><link href="https://sirzzang.github.io//" rel="alternate" type="text/html" /><updated>2026-10-30T18:58:20+09:00</updated><id>https://sirzzang.github.io//</id><title type="html">Eraser’s StudyLog</title><subtitle>공부한 것을 기록하는 공간입니다.</subtitle><author><name>Eraser</name></author><entry><title type="html">[Kubernetes] Service 이름이 만든 환경 변수와 앱 설정 변수 충돌 트러블슈팅</title><link href="https://sirzzang.github.io//dev/Dev-Kubernetes-Service-Link-Env-Collision/" rel="alternate" type="text/html" title="[Kubernetes] Service 이름이 만든 환경 변수와 앱 설정 변수 충돌 트러블슈팅" /><published>2026-10-30T00:00:00+09:00</published><updated>2026-10-30T00:00:00+09:00</updated><id>https://sirzzang.github.io//dev/Dev-Kubernetes-Service-Link-Env-Collision</id><content type="html" xml:base="https://sirzzang.github.io//dev/Dev-Kubernetes-Service-Link-Env-Collision/">&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;kubelet은 같은 네임스페이스의 Service마다 &lt;code class=&quot;highlighter-rouge&quot;&gt;{SVC}_PORT=tcp://IP:포트&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;{SVC}_SERVICE_HOST&lt;/code&gt; 같은 환경 변수를 파드에 자동으로 넣는다. 매니페스트에 적지 않은 변수라도 이름이 겹치면 앱은 그 값을 자기 설정으로 읽는다&lt;/li&gt;
+  &lt;li&gt;앱 설정 변수 접두어(&lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_*&lt;/code&gt;)와 Service 이름(&lt;code class=&quot;highlighter-rouge&quot;&gt;collector-metrics&lt;/code&gt;)이 같은 단어에서 출발하면 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_METRICS_PORT&lt;/code&gt;처럼 정확히 겹치는 이름이 하나쯤 생긴다. 이번에는 수집기가 &lt;code class=&quot;highlighter-rouge&quot;&gt;tcp://…&lt;/code&gt;를 &lt;code class=&quot;highlighter-rouge&quot;&gt;int()&lt;/code&gt;로 읽다 죽어 1시간 반 동안 재시작을 반복했다. 로컬 시험과 CI는 kubelet이 없는 환경이라 이 충돌을 잡지 못한다&lt;/li&gt;
+  &lt;li&gt;파드 spec에 &lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks: false&lt;/code&gt;를 두면 같은 네임스페이스 Service의 변수만 빠진다. apiserver 주소 &lt;code class=&quot;highlighter-rouge&quot;&gt;KUBERNETES_SERVICE_HOST&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;, DNS, ServiceAccount 토큰은 그대로 남는다&lt;/li&gt;
+  &lt;li&gt;직접 만드는 앱은 설정 변수 이름을 &lt;code class=&quot;highlighter-rouge&quot;&gt;_SERVICE_HOST&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;_SERVICE_PORT&lt;/code&gt;(&lt;code class=&quot;highlighter-rouge&quot;&gt;_SERVICE_PORT_{포트이름}&lt;/code&gt; 포함)·&lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT_{번호}_{프로토콜}*&lt;/code&gt;로 끝나지 않게 짓는다. 남의 이미지는 이름을 바꿀 수 없으니 &lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks: false&lt;/code&gt;가 유일한 손잡이다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;들어가며&quot;&gt;들어가며&lt;/h1&gt;
+
+&lt;p&gt;사내 학습 플랫폼에서 GPU 작업 기록을 남기는 수집기를 만들고 있다. 학습이 끝나면 클러스터에서 그 학습의 오브젝트와 이벤트가 정리되어 사라지므로, 누가 언제 어떤 GPU로 무엇을 돌렸는지는 돌고 있는 동안 읽어 두지 않으면 나중에 얻을 수 없다. 그래서 클러스터를 주기적으로 읽어 DB에 쌓는 수집기를 두기로 했고 그 첫 버전을 dev 클러스터에 배포했다.&lt;/p&gt;
+
+&lt;p&gt;로컬 시험과 CI를 다 통과한 이미지였는데 클러스터에 올리자마자 파드가 죽고 또 죽었다. 로그 끝은 이랬다.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;    &lt;span class=&quot;n&quot;&gt;metrics_port&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;int&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;os&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;environ&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;COLLECTOR_METRICS_PORT&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;9090&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)),&lt;/span&gt;
+                 &lt;span class=&quot;o&quot;&gt;^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;ValueError&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;invalid&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;literal&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;int&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;base&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;10&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'tcp://10.43.113.242:9090'&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;죽은 줄은 환경 변수 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_METRICS_PORT&lt;/code&gt;를 읽어 &lt;code class=&quot;highlighter-rouge&quot;&gt;int()&lt;/code&gt;로 바꾸는 곳이다. 이름대로 지표 서버가 열 포트 번호를 기대하는 설정이고 없으면 기본값 &lt;code class=&quot;highlighter-rouge&quot;&gt;&quot;9090&quot;&lt;/code&gt;을 쓴다. 그런데 &lt;code class=&quot;highlighter-rouge&quot;&gt;int()&lt;/code&gt;에 들어온 값은 &lt;code class=&quot;highlighter-rouge&quot;&gt;tcp://10.43.113.242:9090&lt;/code&gt;, 숫자가 아니라 URI였다. 이 환경 변수가 비어 있지 않았고 누군가 거기에 URI를 넣었다. 매니페스트 어디에도 이 변수를 적은 적이 없었다. 값을 준 사람이 없는 변수에 값이 들어 있었다.&lt;/p&gt;
+
+&lt;p&gt;범인은 kubelet이었다. &lt;a href=&quot;/kubernetes/Kubernetes-Application-Config-01-Command-Args-Env/&quot;&gt;컨테이너 환경 변수 글&lt;/a&gt;에서 파드 안 환경 변수의 출처를 이미지의 &lt;code class=&quot;highlighter-rouge&quot;&gt;ENV&lt;/code&gt;, kubelet이 항상 넣는 것, kubelet이 Service마다 넣는 것, 파드 매니페스트의 &lt;code class=&quot;highlighter-rouge&quot;&gt;env&lt;/code&gt; 네 가지로 나눈 적이 있는데 그중 세 번째가 실제로 앱을 죽였다.&lt;/p&gt;
+
+&lt;p&gt;같은 메커니즘으로 vLLM이 기동에 실패한 사례는 &lt;a href=&quot;/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-02-vLLM-TroubleShooting/#예상치-못한-장애--vllm_port-env-충돌&quot;&gt;vLLM 기동 실패 글&lt;/a&gt;에서 다룬 적이 있다. 그때도 매니페스트는 &lt;code class=&quot;highlighter-rouge&quot;&gt;VLLM_PORT&lt;/code&gt;를 주지 않았다. vLLM 이미지가 읽는 변수 &lt;code class=&quot;highlighter-rouge&quot;&gt;VLLM_PORT&lt;/code&gt;를 Service 이름 &lt;code class=&quot;highlighter-rouge&quot;&gt;vllm&lt;/code&gt;이 채운 것이고, 변수 이름은 남이 정한 것이라 바꿀 수 없었다.&lt;/p&gt;
+
+&lt;p&gt;이번에는 앱도 우리가 만들었고 설정 변수 접두어 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_&lt;/code&gt;와 Service 이름 &lt;code class=&quot;highlighter-rouge&quot;&gt;collector-metrics&lt;/code&gt;도 우리가 지었다. 양쪽 이름이 모두 우리 손에 있었는데도 겹쳤고 &lt;strong&gt;매니페스트 어디에도 값을 주지 않은, 아무도 쓰지 않는 설정 변수 하나&lt;/strong&gt;가 채워져 앱은 그것을 정수로 읽으려다 죽었다. “매니페스트에 없는 변수는 비어 있다”는 직관이 여기서 깨진다.&lt;/p&gt;
+
+&lt;p&gt;이 글은 이 문제 상황과 트러블슈팅을 계기로 kubelet이 그 변수를 어떻게 만드는지, 끄면 무엇이 남는지, 왜 로컬과 CI에서 잡히지 않았는지를 다룬다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;사례-환경&quot;&gt;사례 환경&lt;/h1&gt;
+
+&lt;p&gt;수집기는 Deployment 하나다. 학습 네임스페이스의 파드·Job·이벤트와 클러스터의 노드를 30초마다 목록으로 읽어 앱 DB에 쌓는다. ArgoCD가 Git의 매니페스트를 dev 클러스터에 반영하고, 수집기는 ServiceAccount 토큰으로 apiserver를 읽고 DNS 이름으로 DB에 붙는다. Prometheus가 지표를 긁어 가도록 ClusterIP Service를 하나 붙여 두었다.&lt;/p&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;na&quot;&gt;apiVersion&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;apps/v1&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;kind&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;Deployment&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;metadata&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;collector&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;namespace&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;app-dev&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;spec&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;replicas&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;1&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;template&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;metadata&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;labels&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;s&quot;&gt;app.kubernetes.io/component&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;collector&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;spec&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;serviceAccountName&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;collector&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;containers&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;collector&lt;/span&gt;
+          &lt;span class=&quot;na&quot;&gt;image&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;registry.example.com/myorg/collector@sha256:…&lt;/span&gt;
+          &lt;span class=&quot;na&quot;&gt;args&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;pi&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;collect&quot;&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;]&lt;/span&gt;
+          &lt;span class=&quot;na&quot;&gt;env&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;COLLECTOR_TARGETS&lt;/span&gt;
+              &lt;span class=&quot;na&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;[{&quot;namespace&quot;:&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt; &lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;train-dev&quot;,&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt; &lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;resources&quot;:&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt; &lt;/span&gt;&lt;span class=&quot;s&quot;&gt;[&quot;pods&quot;,&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt; &lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;jobs&quot;,&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt; &lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;events&quot;]},&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt; &lt;/span&gt;&lt;span class=&quot;s&quot;&gt;…]'&lt;/span&gt;
+            &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;COLLECTOR_INTERVAL_SECONDS&lt;/span&gt;
+              &lt;span class=&quot;na&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;30&quot;&lt;/span&gt;
+            &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;COLLECTOR_HEARTBEAT_FILE&lt;/span&gt;
+              &lt;span class=&quot;na&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;/tmp/collector-heartbeat&lt;/span&gt;
+            &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;PGHOST&lt;/span&gt;
+              &lt;span class=&quot;na&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;app-postgres&lt;/span&gt;
+            &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;PGPORT&lt;/span&gt;
+              &lt;span class=&quot;na&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;5432&quot;&lt;/span&gt;
+            &lt;span class=&quot;c1&quot;&gt;# PGUSER·PGPASSWORD·PGSSLMODE … 생략&lt;/span&gt;
+          &lt;span class=&quot;na&quot;&gt;ports&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;metrics&lt;/span&gt;
+              &lt;span class=&quot;na&quot;&gt;containerPort&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;9090&lt;/span&gt;
+&lt;span class=&quot;nn&quot;&gt;---&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;apiVersion&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;v1&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;kind&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;Service&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;metadata&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;collector-metrics&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;namespace&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;app-dev&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;spec&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;ClusterIP&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;selector&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;s&quot;&gt;app.kubernetes.io/component&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;collector&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;ports&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;metrics&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;port&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;9090&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;targetPort&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;metrics&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;수집기 앱은 설정을 환경 변수에서 읽도록 구현해 두었다. 읽는 환경 변수의 접두어는 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_&lt;/code&gt;다.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nd&quot;&gt;@classmethod&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;from_env&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;cls&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CollectorSettings&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;c&quot;&gt;# apiserver 주소. 매니페스트가 아니라 kubelet이 모든 파드에 넣어 주는 변수다 — 뒤에서 다시 나온다&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;host&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;os&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;environ&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;KUBERNETES_SERVICE_HOST&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;port&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;os&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;environ&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;KUBERNETES_SERVICE_PORT&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;443&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;not&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;host&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;raise&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;SettingsError&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;KUBERNETES_SERVICE_HOST 가 없다 — 클러스터 안에서만 돈다&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;cls&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+        &lt;span class=&quot;c&quot;&gt;# 아래 COLLECTOR_* 는 매니페스트의 env 로 준다 (위 Deployment 의 env 목록)&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;targets&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;parse_targets&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;os&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;environ&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;COLLECTOR_TARGETS&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)),&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;interval_seconds&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;int&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;os&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;environ&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;COLLECTOR_INTERVAL_SECONDS&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;30&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)),&lt;/span&gt;
+        &lt;span class=&quot;c&quot;&gt;# 지표 서버 포트. 매니페스트가 값을 주지 않아 기본값 9090 으로만 쓰인다.&lt;/span&gt;
+        &lt;span class=&quot;c&quot;&gt;# containerPort·Service 포트도 9090 고정이고, 시험은 env 대신 생성자로 metrics_port=0 을 넘긴다&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;metrics_port&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;int&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;os&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;environ&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;COLLECTOR_METRICS_PORT&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;9090&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)),&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;heartbeat_file&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;os&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;environ&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;COLLECTOR_HEARTBEAT_FILE&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;/tmp/collector-heartbeat&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;
+        &lt;span class=&quot;err&quot;&gt;…&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_METRICS_PORT&lt;/code&gt;를 눈여겨보자. 이 변수는 꼭 줘야 하는 설정이 아니다. 주면 그 값으로, 안 주면 9090으로 지표 서버를 열도록 해 둔 선택적 손잡이다. 다른 설정처럼 env로 덮어쓸 수 있게 해 두자는 습관으로 만들었는데, 정작 포트는 &lt;code class=&quot;highlighter-rouge&quot;&gt;containerPort&lt;/code&gt;·Service·Dockerfile에서 모두 9090으로 고정이라 바꿀 일이 없었다. 그래서 위 Deployment의 &lt;code class=&quot;highlighter-rouge&quot;&gt;env&lt;/code&gt; 목록에도, 시험 코드에도 이 변수에 값을 주는 곳이 없다. 기본값으로만 쓰이는, 있을 이유가 없는 설정이었다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;증상&quot;&gt;증상&lt;/h1&gt;
+
+&lt;p&gt;인프라 PR이 머지되고 ArgoCD가 앱 DB → 마이그레이션 → 수집기 순으로 반영을 마쳤다. 반영 직후 ArgoCD Application은 &lt;code class=&quot;highlighter-rouge&quot;&gt;Synced&lt;/code&gt; / &lt;code class=&quot;highlighter-rouge&quot;&gt;Healthy&lt;/code&gt;였다. 그런데 수집기 파드가 재시작을 반복했다.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; app-dev get pod &lt;span class=&quot;nt&quot;&gt;-l&lt;/span&gt; app.kubernetes.io/component&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;collector
+NAME                         READY   STATUS             RESTARTS      AGE
+collector-bd7c99fc6-7bgrk    0/1     CrashLoopBackOff   5 &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;30s ago&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;   4m
+
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; app-dev logs deploy/collector &lt;span class=&quot;nt&quot;&gt;--tail&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;5
+    &lt;span class=&quot;nv&quot;&gt;metrics_port&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;int&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;os.environ.get&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;COLLECTOR_METRICS_PORT&quot;&lt;/span&gt;, &lt;span class=&quot;s2&quot;&gt;&quot;9090&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;))&lt;/span&gt;,
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: invalid literal &lt;span class=&quot;k&quot;&gt;for &lt;/span&gt;int&lt;span class=&quot;o&quot;&gt;()&lt;/span&gt; with base 10: &lt;span class=&quot;s1&quot;&gt;'tcp://10.43.113.242:9090'&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;int()&lt;/code&gt;에 들어간 값이 &lt;code class=&quot;highlighter-rouge&quot;&gt;tcp://10.43.113.242:9090&lt;/code&gt;이다. 매니페스트가 주지 않은 변수에 값이 들어 있는데 심지어 그 값이 URI다.&lt;/p&gt;
+
+&lt;p&gt;파드는 죽고 있는데, 아이러니하게 ArgoCD에서 본 Application 배포 상태는 &lt;code class=&quot;highlighter-rouge&quot;&gt;Healthy&lt;/code&gt;였다. 모순처럼 보이지만 ArgoCD가 Deployment를 어떻게 판정하는지 따라가면 설명이 된다.&lt;/p&gt;
+
+&lt;p&gt;ArgoCD는 Deployment의 &lt;code class=&quot;highlighter-rouge&quot;&gt;Available&lt;/code&gt; 레플리카가 기대 수만큼 있으면 &lt;code class=&quot;highlighter-rouge&quot;&gt;Healthy&lt;/code&gt;, 모자라면 &lt;code class=&quot;highlighter-rouge&quot;&gt;Progressing&lt;/code&gt;으로 본다. &lt;code class=&quot;highlighter-rouge&quot;&gt;Available&lt;/code&gt;은 파드가 Ready일 때 세고 Ready는 readinessProbe가 있으면 프로브가 통과한 뒤에, 없으면 컨테이너가 뜨는 즉시 된다. 이 수집기에는 readinessProbe가 없다. 그래서 컨테이너가 뜨는 순간 Ready → &lt;code class=&quot;highlighter-rouge&quot;&gt;Available&lt;/code&gt; → &lt;code class=&quot;highlighter-rouge&quot;&gt;Healthy&lt;/code&gt;가 되고, 몇 초 뒤 설정을 읽다 죽으면 &lt;code class=&quot;highlighter-rouge&quot;&gt;Progressing&lt;/code&gt;으로 떨어지며, 다음 재시작에서 다시 &lt;code class=&quot;highlighter-rouge&quot;&gt;Healthy&lt;/code&gt;가 된다.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart LR
+    A[&quot;컨테이너 시작&quot;] --&amp;gt;|&quot;readinessProbe 없음&amp;lt;br/&amp;gt;→ 즉시 Ready&quot;| B[&quot;Available 1/1&amp;lt;br/&amp;gt;ArgoCD: Healthy&quot;]
+    B --&amp;gt;|&quot;설정 읽다 ValueError&quot;| C[&quot;Available 0/1&amp;lt;br/&amp;gt;ArgoCD: Progressing&quot;]
+    C --&amp;gt;|&quot;CrashLoopBackOff 재시작&quot;| A
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;반영 직후 조회는 이 순환에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;Healthy&lt;/code&gt;인 순간을, 2분 뒤 조회는 &lt;code class=&quot;highlighter-rouge&quot;&gt;Progressing&lt;/code&gt;인 순간을 봤다. ArgoCD 상태는 “컨테이너가 떴다”까지만 말해 준다. 이 수집기의 기동 성공은 로그의 “수집 시작” 줄과 DB의 대상 상태 표로 판정해야 했다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;진단&quot;&gt;진단&lt;/h1&gt;
+
+&lt;p&gt;풀어야 할 질문은 두 가지다.&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;매니페스트가 주지 않은 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_METRICS_PORT&lt;/code&gt;에 누가 값을 넣었나&lt;/li&gt;
+  &lt;li&gt;왜 하필 URI인가.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;단서는 값의 꼴 &lt;code class=&quot;highlighter-rouge&quot;&gt;tcp://IP:포트&lt;/code&gt;다. 어딘가 낯이 익다. kubelet은 파드와 같은 네임스페이스에 Service가 있으면 그 이름을 딴 환경 변수를 파드에 넣어 주는데, 그중 &lt;code class=&quot;highlighter-rouge&quot;&gt;{SVC}_PORT&lt;/code&gt;라는 변수의 값이 정확히 &lt;code class=&quot;highlighter-rouge&quot;&gt;tcp://ClusterIP:포트&lt;/code&gt; 꼴이다. 환경 변수의 다른 출처(이미지 &lt;code class=&quot;highlighter-rouge&quot;&gt;ENV&lt;/code&gt;, 매니페스트 &lt;code class=&quot;highlighter-rouge&quot;&gt;env&lt;/code&gt;)는 사람이 적은 값만 넣으니, 적은 적 없는 URI를 만들어 낼 수 있는 곳은 여기뿐이다.&lt;/p&gt;
+
+&lt;p&gt;그렇다면 Service 이름 &lt;code class=&quot;highlighter-rouge&quot;&gt;collector-metrics&lt;/code&gt;가 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_METRICS_PORT&lt;/code&gt;를 만들었다는 가설이 선다. 이 가설이 맞다면 세 가지가 들어맞아야 한다.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;값의 IP·포트와 일치하는 Service가 같은 네임스페이스에 있다&lt;/li&gt;
+  &lt;li&gt;그 변수를 넣을지 정하는 파드 spec 필드 &lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks&lt;/code&gt;가 켜져 있다(기본값 &lt;code class=&quot;highlighter-rouge&quot;&gt;true&lt;/code&gt;)&lt;/li&gt;
+  &lt;li&gt;컨테이너 env 목록에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_METRICS_PORT&lt;/code&gt;가 없다(있었다면 그쪽이 이겼을 것이다)&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;차례로 확인했다.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 1. 같은 네임스페이스의 Service collector-metrics 의 ClusterIP·포트가 오류 값 tcp://10.43.113.242:9090 과 같은가&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; app-dev get svc collector-metrics &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;jsonpath&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'clusterIP={.spec.clusterIP} port={.spec.ports[0].port}{&quot;\n&quot;}'&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;clusterIP&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;10.43.113.242 &lt;span class=&quot;nv&quot;&gt;port&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;9090
+
+&lt;span class=&quot;c&quot;&gt;# 2. 파드 spec 의 enableServiceLinks 가 꺼져 있지 않은가 (비어 있으면 기본값 true)&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; app-dev get deploy collector &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;jsonpath&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'enableServiceLinks={.spec.template.spec.enableServiceLinks}{&quot;\n&quot;}'&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;enableServiceLinks&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;
+
+&lt;span class=&quot;c&quot;&gt;# 3. 컨테이너 env 목록에 COLLECTOR_METRICS_PORT 가 없는가 (있으면 그 값이 Service 변수를 덮었을 것)&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; app-dev get deploy collector &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; &lt;span class=&quot;nv&quot;&gt;jsonpath&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'{.spec.template.spec.containers[0].env[*].name}{&quot;\n&quot;}'&lt;/span&gt;
+COLLECTOR_TARGETS COLLECTOR_INTERVAL_SECONDS COLLECTOR_HEARTBEAT_FILE PGHOST PGPORT PGDATABASE PGUSER PGPASSWORD PGSSLMODE PGCONNECT_TIMEOUT PGOPTIONS
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;오류 값 &lt;code class=&quot;highlighter-rouge&quot;&gt;tcp://10.43.113.242:9090&lt;/code&gt;은 Service &lt;code class=&quot;highlighter-rouge&quot;&gt;collector-metrics&lt;/code&gt;의 ClusterIP와 포트다&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks&lt;/code&gt;는 비어 있다. 비어 있으면 켜진 것이다. 기본값 &lt;code class=&quot;highlighter-rouge&quot;&gt;true&lt;/code&gt;는 Deployment 템플릿이 아니라 Pod 객체를 만들 때 붙기 때문에 템플릿 조회에는 찍히지 않는다(&lt;a href=&quot;https://github.com/kubernetes/kubernetes/blob/release-1.33/pkg/apis/core/v1/defaults.go#L204-L207&quot;&gt;defaults.go#L204-L207&lt;/a&gt;, 기본값은 &lt;a href=&quot;https://github.com/kubernetes/kubernetes/blob/release-1.33/staging/src/k8s.io/api/core/v1/types.go#L4437&quot;&gt;types.go#L4437&lt;/a&gt;)&lt;/li&gt;
+  &lt;li&gt;컨테이너 env 목록에 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_METRICS_PORT&lt;/code&gt;는 없다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;죽는 파드라 &lt;code class=&quot;highlighter-rouge&quot;&gt;exec&lt;/code&gt;가 안 될 때는 같은 네임스페이스에 임시 파드를 띄워 어떤 서비스 링크 변수가 들어오는지 직접 볼 수 있다.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; app-dev run tmp &lt;span class=&quot;nt&quot;&gt;--rm&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-it&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--restart&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;Never &lt;span class=&quot;nt&quot;&gt;--image&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;busybox &lt;span class=&quot;nt&quot;&gt;--&lt;/span&gt; env | &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'_PORT='&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;확인 결과를 합쳐 보면 kubelet이 Service 이름 &lt;code class=&quot;highlighter-rouge&quot;&gt;collector-metrics&lt;/code&gt;를 대문자와 밑줄로 바꿔 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_METRICS_PORT=tcp://10.43.113.242:9090&lt;/code&gt;을 넣었고 앱은 그 이름을 자기 설정으로 읽었다.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart LR
+    SVC[&quot;Service&amp;lt;br/&amp;gt;collector-metrics&amp;lt;br/&amp;gt;ClusterIP 10.43.113.242:9090&quot;]
+    K[&quot;kubelet&amp;lt;br/&amp;gt;(enableServiceLinks: true)&quot;]
+    ENV[&quot;파드 환경 변수&amp;lt;br/&amp;gt;COLLECTOR_METRICS_SERVICE_HOST=10.43.113.242&amp;lt;br/&amp;gt;COLLECTOR_METRICS_SERVICE_PORT=9090&amp;lt;br/&amp;gt;&amp;lt;b&amp;gt;COLLECTOR_METRICS_PORT=tcp://10.43.113.242:9090&amp;lt;/b&amp;gt;&amp;lt;br/&amp;gt;COLLECTOR_METRICS_PORT_9090_TCP=…&quot;]
+    APP[&quot;앱 settings.py&amp;lt;br/&amp;gt;int(environ['COLLECTOR_METRICS_PORT'])&quot;]
+    ERR[&quot;ValueError&quot;]
+    SVC --&amp;gt; K --&amp;gt; ENV --&amp;gt; APP --&amp;gt; ERR
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;원인&quot;&gt;원인&lt;/h1&gt;
+
+&lt;p&gt;원인은 두 단계로 나눠 적었다. &lt;a href=&quot;#요약&quot;&gt;요약&lt;/a&gt;에는 kubelet이 무엇을 하는지 결과만 적었고 그 근거를 소스에서 확인한 과정은 &lt;a href=&quot;#kubelet-소스로-따라가기&quot;&gt;kubelet 소스로 따라가기&lt;/a&gt;에 따로 뒀다. 소스까지 볼 생각이 없다면 &lt;a href=&quot;#이름이-겹친-이유&quot;&gt;이름이 겹친 이유&lt;/a&gt;까지만 읽고 &lt;a href=&quot;#해결&quot;&gt;해결&lt;/a&gt;로 넘어가도 이 글을 따라가는 데 지장이 없다.&lt;/p&gt;
+
+&lt;h2 id=&quot;요약&quot;&gt;요약&lt;/h2&gt;
+
+&lt;p&gt;kubelet은 파드의 컨테이너를 만들 때 환경 변수를 두 묶음으로 조립한다. 컨테이너 spec의 &lt;code class=&quot;highlighter-rouge&quot;&gt;env&lt;/code&gt;를 먼저 넣고 Service에서 만든 변수는 그 이름이 아직 없을 때만 덧붙인다. 그래서 같은 이름이면 &lt;code class=&quot;highlighter-rouge&quot;&gt;env&lt;/code&gt;가 이긴다. &lt;a href=&quot;/kubernetes/Kubernetes-Application-Config-01-Command-Args-Env/&quot;&gt;컨테이너 환경 변수 글&lt;/a&gt;의 “파드 매니페스트가 우선순위가 가장 높다”가 이 순서다.&lt;/p&gt;
+
+&lt;p&gt;Service에서 만드는 변수는 다시 두 묶음으로 나뉜다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;묶음&lt;/th&gt;
+      &lt;th&gt;대상&lt;/th&gt;
+      &lt;th&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks&lt;/code&gt;의 영향&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;apiserver&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;default&lt;/code&gt; 네임스페이스의 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubernetes&lt;/code&gt; Service → &lt;code class=&quot;highlighter-rouge&quot;&gt;KUBERNETES_SERVICE_HOST&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;KUBERNETES_SERVICE_PORT&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;KUBERNETES_PORT*&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;없음. 항상 넣는다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;서비스 링크&lt;/td&gt;
+      &lt;td&gt;파드와 같은 네임스페이스의 모든 Service → &lt;code class=&quot;highlighter-rouge&quot;&gt;{SVC}_SERVICE_HOST&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;{SVC}_SERVICE_PORT&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;{SVC}_PORT&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;{SVC}_PORT_{n}_{proto}*&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;true&lt;/code&gt;(기본값)일 때만 넣는다&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;둘째 묶음에서 보는 것은 네임스페이스와 플래그뿐이다. Service가 이 파드를 selector로 가리키든 말든 상관없다. 같은 네임스페이스에 있기만 하면 변수가 들어간다. 두 묶음 모두 ClusterIP가 있는 Service만 대상이라 headless Service(&lt;code class=&quot;highlighter-rouge&quot;&gt;clusterIP: None&lt;/code&gt;)는 변수를 만들지 않는다.&lt;/p&gt;
+
+&lt;p&gt;변수 이름은 Service 이름을 대문자로 바꾸고 &lt;code class=&quot;highlighter-rouge&quot;&gt;-&lt;/code&gt;를 &lt;code class=&quot;highlighter-rouge&quot;&gt;_&lt;/code&gt;로 바꿔 만든다. &lt;code class=&quot;highlighter-rouge&quot;&gt;collector-metrics&lt;/code&gt;는 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_METRICS&lt;/code&gt;가 된다. 이 접두어에 &lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;가 붙은 변수의 값이 &lt;code class=&quot;highlighter-rouge&quot;&gt;tcp://ClusterIP:포트&lt;/code&gt;다. Docker의 레거시 컨테이너 링크(&lt;code class=&quot;highlighter-rouge&quot;&gt;docker run --link&lt;/code&gt;)가 만들던 변수 꼴을 그대로 따른 것이라 값이 URI다. &lt;code class=&quot;highlighter-rouge&quot;&gt;{SVC}_PORT&lt;/code&gt;는 Service의 첫 포트에만 생기고 포트마다 &lt;code class=&quot;highlighter-rouge&quot;&gt;{SVC}_PORT_{번호}_{프로토콜}&lt;/code&gt;과 그 뒤에 &lt;code class=&quot;highlighter-rouge&quot;&gt;_PROTO&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;_ADDR&lt;/code&gt;가 붙은 변수가 따로 생긴다.&lt;/p&gt;
+
+&lt;p&gt;이번 사례에서 매니페스트의 &lt;code class=&quot;highlighter-rouge&quot;&gt;env&lt;/code&gt;에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_METRICS_PORT&lt;/code&gt;가 없었다. 그래서 덮어쓸 것이 없었고 서비스 링크가 만든 값이 그대로 앱에 도달했다. 반대로 매니페스트에 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_METRICS_PORT: &quot;9090&quot;&lt;/code&gt;을 명시했다면 그쪽이 이겨서 문제가 드러나지 않았을 것이다. 쓰는 곳이 없는 설정이라 아무도 값을 주지 않았고 그 탓에 수집기가 죽었다.&lt;/p&gt;
+
+&lt;h2 id=&quot;이름이-겹친-이유&quot;&gt;이름이 겹친 이유&lt;/h2&gt;
+
+&lt;p&gt;접두어만 같아서는 겹치지 않는다. 두 이름을 나란히 놓으면 어디서 맞아떨어졌는지 보인다.&lt;/p&gt;
+
+&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;앱 설정:   COLLECTOR_ + METRICS_PORT
+Service:   collector-metrics → COLLECTOR_METRICS + _PORT
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;앱 설정 접두어 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_&lt;/code&gt;가 Service 이름의 첫 단어와 같고, 설정 이름 &lt;code class=&quot;highlighter-rouge&quot;&gt;METRICS_PORT&lt;/code&gt;가 Service 이름의 나머지 &lt;code class=&quot;highlighter-rouge&quot;&gt;metrics&lt;/code&gt;에 &lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;를 붙인 것과 같다. 둘 다 맞아야 한 글자도 안 틀리고 겹친다. 이번에 그렇게 된 것은 우연이라기보다 둘이 같은 것을 가리키는 이름이기 때문이다. 수집기의 지표 포트 설정은 &lt;code class=&quot;highlighter-rouge&quot;&gt;METRICS_PORT&lt;/code&gt;라 짓고, 수집기의 지표 Service는 &lt;code class=&quot;highlighter-rouge&quot;&gt;collector-metrics&lt;/code&gt;라 짓는 것이 각각 자연스러운 작명인데, kubelet의 변환을 거치면 이 둘이 같은 자리에서 만난다.&lt;/p&gt;
+
+&lt;p&gt;이 네임스페이스의 다른 Service(앱 DB의 &lt;code class=&quot;highlighter-rouge&quot;&gt;app-postgres*&lt;/code&gt;, 화면의 &lt;code class=&quot;highlighter-rouge&quot;&gt;web&lt;/code&gt;)가 만드는 접두어 &lt;code class=&quot;highlighter-rouge&quot;&gt;APP_POSTGRES_&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;WEB_&lt;/code&gt;은 앱이 읽는 어떤 변수와도 겹치지 않았다. 겹치는 것은 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_METRICS_PORT&lt;/code&gt; 하나였다. DB 접속에 쓰는 PostgreSQL 클라이언트(libpq) 변수 &lt;code class=&quot;highlighter-rouge&quot;&gt;PGHOST&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;PGPORT&lt;/code&gt;는 &lt;code class=&quot;highlighter-rouge&quot;&gt;PG&lt;/code&gt; 뒤에 밑줄이 없어 어떤 Service 이름으로도 만들어질 수 없다.&lt;/p&gt;
+
+&lt;p&gt;같은 꼴의 충돌은 다른 곳에서도 보고된다. Service 이름이 &lt;code class=&quot;highlighter-rouge&quot;&gt;redis&lt;/code&gt;면 &lt;code class=&quot;highlighter-rouge&quot;&gt;REDIS_PORT=tcp://…&lt;/code&gt;가 들어가는데 &lt;code class=&quot;highlighter-rouge&quot;&gt;REDIS_PORT&lt;/code&gt;를 포트 번호로 읽는 클라이언트 라이브러리가 많다. vLLM의 &lt;code class=&quot;highlighter-rouge&quot;&gt;VLLM_PORT&lt;/code&gt;도 같은 경우다.&lt;/p&gt;
+
+&lt;h2 id=&quot;kubelet-소스로-따라가기&quot;&gt;kubelet 소스로 따라가기&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href=&quot;#요약&quot;&gt;요약&lt;/a&gt;의 세 가지 사실을 kubelet 소스에서 확인한다. 2026년 10월 release-1.33 기준이고 어느 파일의 어느 함수를 봐야 하는지는 AI의 도움을 받아 찾아 따라갔다. 아래 발췌와 줄 링크는 그 결과를 소스와 대조한 것이다.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;조립 순서.&lt;/strong&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;makeEnvironmentVariables&lt;/code&gt;의 끝부분이다. 컨테이너 &lt;code class=&quot;highlighter-rouge&quot;&gt;env&lt;/code&gt;(&lt;code class=&quot;highlighter-rouge&quot;&gt;tmpEnv&lt;/code&gt;)를 먼저 결과에 넣고, Service 변수(&lt;code class=&quot;highlighter-rouge&quot;&gt;serviceEnv&lt;/code&gt;)는 같은 이름이 없을 때만 덧붙인다(&lt;a href=&quot;https://github.com/kubernetes/kubernetes/blob/release-1.33/pkg/kubelet/kubelet_pods.go#L905-L919&quot;&gt;kubelet_pods.go#L905-L919&lt;/a&gt;).&lt;/p&gt;
+
+&lt;details&gt;
+  &lt;summary&gt;&lt;b&gt;kubelet 소스 — makeEnvironmentVariables: 컨테이너 env 먼저, Service 변수는 이름이 없을 때만&lt;/b&gt;&lt;/summary&gt;
+
+  &lt;div class=&quot;language-go highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;// pkg/kubelet/kubelet_pods.go — makeEnvironmentVariables&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;// Append the env vars&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;k&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tmpEnv&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;            &lt;/span&gt;&lt;span class=&quot;c&quot;&gt;// tmpEnv = 컨테이너 spec의 env·envFrom&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;append&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kubecontainer&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;EnvVar&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Name&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Value&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;})&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+
+	&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;// Append remaining service env vars.&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;k&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;serviceEnv&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;        &lt;/span&gt;&lt;span class=&quot;c&quot;&gt;// serviceEnv = Service에서 만든 변수&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;_&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;present&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tmpEnv&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;present&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;   &lt;/span&gt;&lt;span class=&quot;c&quot;&gt;// 같은 이름이 이미 있으면 건너뛴다&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+			&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;append&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kubecontainer&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;EnvVar&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Name&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Value&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;})&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;  &lt;/div&gt;
+
+&lt;/details&gt;
+
+&lt;p&gt;&lt;strong&gt;두 묶음.&lt;/strong&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;serviceEnv&lt;/code&gt;는 같은 파일의 &lt;code class=&quot;highlighter-rouge&quot;&gt;getServiceEnvVarMap&lt;/code&gt;이 만든다. &lt;code class=&quot;highlighter-rouge&quot;&gt;if&lt;/code&gt; 분기가 첫 묶음(&lt;code class=&quot;highlighter-rouge&quot;&gt;default&lt;/code&gt; 네임스페이스의 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubernetes&lt;/code&gt; Service, 플래그와 무관), &lt;code class=&quot;highlighter-rouge&quot;&gt;else if&lt;/code&gt; 분기가 둘째 묶음(같은 네임스페이스의 Service, &lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks&lt;/code&gt;가 켜졌을 때만)이다. 앞머리의 &lt;code class=&quot;highlighter-rouge&quot;&gt;IsServiceIPSet&lt;/code&gt; 검사가 headless Service를 거른다(&lt;a href=&quot;https://github.com/kubernetes/kubernetes/blob/release-1.33/pkg/kubelet/kubelet_pods.go#L656-L696&quot;&gt;kubelet_pods.go#L656-L696&lt;/a&gt;).&lt;/p&gt;
+
+&lt;details&gt;
+  &lt;summary&gt;&lt;b&gt;kubelet 소스 — getServiceEnvVarMap: 두 묶음을 가르는 if / else if&lt;/b&gt;&lt;/summary&gt;
+
+  &lt;div class=&quot;language-go highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;// pkg/kubelet/kubelet_pods.go — getServiceEnvVarMap&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;var&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;masterServices&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sets&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;New&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;](&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;kubernetes&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+
+&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;func&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kl&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Kubelet&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;getServiceEnvVarMap&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ns&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;enableServiceLinks&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;bool&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;error&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;k&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;services&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;service&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;services&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;// ignore services where ClusterIP is &quot;None&quot; or empty&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v1helper&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;IsServiceIPSet&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;service&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+			&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;continue&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;serviceName&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;service&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Name&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+
+		&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;// We always want to add environment variabled for master services&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;// from the default namespace, even if enableServiceLinks is false.&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;// We also add environment variables for other services in the same&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;// namespace, if enableServiceLinks is true.&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;service&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Namespace&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;metav1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NamespaceDefault&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;masterServices&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Has&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;serviceName&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+			&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;_&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;exists&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;serviceMap&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;serviceName&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;exists&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+				&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;serviceMap&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;serviceName&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;service&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+			&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;k&quot;&gt;else&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;service&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Namespace&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ns&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;enableServiceLinks&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+			&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;serviceMap&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;serviceName&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;service&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;  &lt;/div&gt;
+
+&lt;/details&gt;
+
+&lt;p&gt;&lt;strong&gt;이름과 값.&lt;/strong&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;pkg/kubelet/envvars/envvars.go&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;makeEnvVariableName&lt;/code&gt;이 이름을 변환하고(&lt;a href=&quot;https://github.com/kubernetes/kubernetes/blob/release-1.33/pkg/kubelet/envvars/envvars.go#L64-L70&quot;&gt;envvars.go#L64-L70&lt;/a&gt;), &lt;code class=&quot;highlighter-rouge&quot;&gt;makeLinkVariables&lt;/code&gt;가 &lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;를 붙여 &lt;code class=&quot;highlighter-rouge&quot;&gt;tcp://ClusterIP:포트&lt;/code&gt; 값을 만든다(&lt;a href=&quot;https://github.com/kubernetes/kubernetes/blob/release-1.33/pkg/kubelet/envvars/envvars.go#L72-L110&quot;&gt;envvars.go#L72-L110&lt;/a&gt;). 주석의 “Docker special-cases the first port”에 따라 &lt;code class=&quot;highlighter-rouge&quot;&gt;{SVC}_PORT&lt;/code&gt;는 첫 포트에만 생긴다.&lt;/p&gt;
+
+&lt;details&gt;
+  &lt;summary&gt;&lt;b&gt;kubelet 소스 — makeEnvVariableName · makeLinkVariables: 이름 변환과 tcp://… 값 조립&lt;/b&gt;&lt;/summary&gt;
+
+  &lt;div class=&quot;language-go highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;// pkg/kubelet/envvars/envvars.go&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;func&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;makeEnvVariableName&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;str&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;return&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;strings&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ToUpper&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;strings&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Replace&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;str&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;-&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;_&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;   &lt;/span&gt;&lt;span class=&quot;c&quot;&gt;// collector-metrics → COLLECTOR_METRICS&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+
+&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;func&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;makeLinkVariables&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;service&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Service&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[]&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;EnvVar&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;prefix&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;makeEnvVariableName&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;service&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;all&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[]&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;EnvVar&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{}&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;k&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;service&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Spec&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Ports&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sp&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;service&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Spec&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Ports&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;hostPort&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;net&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;JoinHostPort&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;service&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Spec&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ClusterIP&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;strconv&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Itoa&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sp&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Port&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)))&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+
+		&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;m&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+			&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;// Docker special-cases the first port.&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+			&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;all&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;append&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;all&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;EnvVar&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+				&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Name&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;  &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;prefix&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;_PORT&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;                                          &lt;/span&gt;&lt;span class=&quot;c&quot;&gt;// COLLECTOR_METRICS_PORT&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+				&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Value&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;fmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Sprintf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;%s://%s&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;strings&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ToLower&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;protocol&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;hostPort&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;c&quot;&gt;// tcp://10.43.113.242:9090&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+			&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;})&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;portPrefix&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;fmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Sprintf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;%s_PORT_%d_%s&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;prefix&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sp&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Port&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;strings&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ToUpper&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;protocol&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;all&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;append&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;all&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[]&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;EnvVar&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+			&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Name&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;portPrefix&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Value&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;fmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Sprintf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;%s://%s&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;strings&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ToLower&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;protocol&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;hostPort&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)},&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+			&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Name&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;portPrefix&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;_PROTO&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Value&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;strings&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ToLower&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;protocol&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)},&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+			&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Name&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;portPrefix&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;_PORT&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Value&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;strconv&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Itoa&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sp&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Port&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))},&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+			&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Name&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;portPrefix&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;_ADDR&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Value&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;service&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Spec&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ClusterIP&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+		&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;...&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+	&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;return&lt;/span&gt;&lt;span class=&quot;x&quot;&gt; &lt;/span&gt;&lt;span class=&quot;n&quot;&gt;all&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;  &lt;/div&gt;
+
+&lt;/details&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;strong&gt;참고&lt;/strong&gt;: Docker 레거시 컨테이너 링크&lt;/p&gt;
+
+  &lt;p&gt;사용자 정의 네트워크와 내장 DNS가 생기기 전(Docker 1.9, 2015년 이전) 기본 브리지 네트워크에서 컨테이너끼리 서로를 찾는 방법이었다. &lt;code class=&quot;highlighter-rouge&quot;&gt;docker run --link &amp;lt;컨테이너&amp;gt;:&amp;lt;별칭&amp;gt;&lt;/code&gt;으로 띄우면 Docker가 받는 쪽 컨테이너에 두 가지를 해 준다. &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/hosts&lt;/code&gt;에 별칭을 등록하고 상대 컨테이너의 IP·포트를 환경 변수로 넣어 준다.&lt;/p&gt;
+
+  &lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;docker run &lt;span class=&quot;nt&quot;&gt;-d&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--name&lt;/span&gt; redis redis
+docker run &lt;span class=&quot;nt&quot;&gt;--link&lt;/span&gt; redis:redis app      &lt;span class=&quot;c&quot;&gt;# app 컨테이너 안에 다음 변수가 생긴다&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;  &lt;/div&gt;
+
+  &lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;REDIS_PORT&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;tcp://172.17.0.2:6379
+&lt;span class=&quot;nv&quot;&gt;REDIS_PORT_6379_TCP&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;tcp://172.17.0.2:6379
+&lt;span class=&quot;nv&quot;&gt;REDIS_PORT_6379_TCP_PROTO&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;tcp
+&lt;span class=&quot;nv&quot;&gt;REDIS_PORT_6379_TCP_PORT&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;6379
+&lt;span class=&quot;nv&quot;&gt;REDIS_PORT_6379_TCP_ADDR&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;172.17.0.2
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;  &lt;/div&gt;
+
+  &lt;p&gt;별칭을 대문자로 바꾼 접두어, 첫 포트만 받는 &lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;tcp://IP:포트&lt;/code&gt; 값, 포트마다 붙는 &lt;code class=&quot;highlighter-rouge&quot;&gt;_PROTO&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;_ADDR&lt;/code&gt;. 위 &lt;code class=&quot;highlighter-rouge&quot;&gt;makeLinkVariables&lt;/code&gt;가 만드는 것과 같은 꼴이다(차이는 “첫 포트”의 기준뿐이다. Docker는 노출 포트 중 번호가 가장 낮은 것, Kubernetes는 Service 포트 목록의 첫 항목이다). Kubernetes는 초기부터 이 변수를 읽도록 짜인 앱이 그대로 돌게 하려고 같은 이름과 값을 넣기로 했고, 거기에 자기 몫으로 &lt;code class=&quot;highlighter-rouge&quot;&gt;_SERVICE_HOST&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;_SERVICE_PORT&lt;/code&gt;를 더했다. Docker 쪽에서는 사용자 정의 네트워크의 DNS로 대체되어 “legacy”라 부르며 제거 예정으로 두었고, Kubernetes 쪽에서도 DNS가 표준이 된 뒤 이 변수는 호환용으로만 남았다. 그 호환용 변수가 10년 뒤 이름 충돌을 냈다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;해결&quot;&gt;해결&lt;/h1&gt;
+
+&lt;h2 id=&quot;대안&quot;&gt;대안&lt;/h2&gt;
+
+&lt;p&gt;고칠 수 있는 자리는 인프라 매니페스트와 앱 코드 두 곳이다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;방법&lt;/th&gt;
+      &lt;th&gt;어디서&lt;/th&gt;
+      &lt;th&gt;막는 범위&lt;/th&gt;
+      &lt;th&gt;반영까지&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;① 서비스 링크 끄기(&lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks: false&lt;/code&gt;)&lt;/td&gt;
+      &lt;td&gt;인프라 매니페스트 한 줄&lt;/td&gt;
+      &lt;td&gt;이 파드에 들어오는 서비스 링크 변수 전부. 앞으로 Service를 더해도 겹칠 일이 없다&lt;/td&gt;
+      &lt;td&gt;머지 즉시&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;② 앱 변수 이름 바꾸기&lt;/td&gt;
+      &lt;td&gt;앱 PR → 이미지 빌드 → 매니페스트의 이미지 digest(&lt;code class=&quot;highlighter-rouge&quot;&gt;@sha256:…&lt;/code&gt;) 갱신 PR&lt;/td&gt;
+      &lt;td&gt;이 이름 하나. &lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;로 끝나는 다른 이름은 여전히 겹칠 수 있다&lt;/td&gt;
+      &lt;td&gt;이미지 한 바퀴&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;③ 앱에서 그 변수를 없애고 9090 고정&lt;/td&gt;
+      &lt;td&gt;②와 같은 경로&lt;/td&gt;
+      &lt;td&gt;이 이름 자체가 사라진다(쓰지 않는 설정 제거)&lt;/td&gt;
+      &lt;td&gt;이미지 한 바퀴&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;①은 당장 수집기를 살리는 데 가장 빠르고 ②·③은 앱 이미지를 다시 빌드해 배포하는 한 바퀴가 필요하다. ②는 이름만 바꾸는 것이라 &lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;로 끝나는 다른 설정이 생기면 같은 일이 반복되고, ③은 쓰지 않는 설정을 지우는 것이라 이 이름이 아예 사라진다.&lt;/p&gt;
+
+&lt;h2 id=&quot;서비스-링크-해제-시-남는-변수&quot;&gt;서비스 링크 해제 시 남는 변수&lt;/h2&gt;
+
+&lt;p&gt;①을 고르려면 먼저 확인할 것이 있었다. 수집기는 apiserver 주소를 &lt;code class=&quot;highlighter-rouge&quot;&gt;KUBERNETES_SERVICE_HOST&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;에서 읽는다. 서비스 링크를 끄면 이것까지 빠지는가.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;수집기가 찾는 것&lt;/th&gt;
+      &lt;th&gt;찾는 방법&lt;/th&gt;
+      &lt;th&gt;끈 뒤&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;앱 DB&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;PGHOST=app-postgres&lt;/code&gt;(DNS 이름)&lt;/td&gt;
+      &lt;td&gt;영향 없음. DNS는 이 설정과 별개다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;apiserver&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;KUBERNETES_SERVICE_HOST&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;남는다. kubelet은 &lt;code class=&quot;highlighter-rouge&quot;&gt;default/kubernetes&lt;/code&gt; Service 변수를 이 설정과 상관없이 넣는다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;ServiceAccount 토큰·CA&lt;/td&gt;
+      &lt;td&gt;마운트된 파일&lt;/td&gt;
+      &lt;td&gt;영향 없음&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;지표 포트&lt;/td&gt;
+      &lt;td&gt;자기 설정(기본 9090)&lt;/td&gt;
+      &lt;td&gt;③ 없이 끄기만 해도 기본값 9090이 제대로 읽힌다&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;리뷰 셋 모두 “apiserver 변수는 남는다”고 답했지만 kubelet 소스를 대조하지는 못했다. 기억에 기댄 판단이었다. 같은 클러스터에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks: false&lt;/code&gt;로 도는 파드들(cert-manager, NFD)이 방증이지만 셸도 &lt;code class=&quot;highlighter-rouge&quot;&gt;printenv&lt;/code&gt;도 없는 최소 이미지라 그 자리에서 확인하지는 않았다(&lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl debug&lt;/code&gt;로 임시 컨테이너를 붙여 &lt;code class=&quot;highlighter-rouge&quot;&gt;/proc/1/environ&lt;/code&gt;을 읽는 방법은 있다). 그래서 수정 뒤 수집기 파드 안에서 직접 찍었다. 값 셋만 찍은 것은 env 전체를 찍으면 &lt;code class=&quot;highlighter-rouge&quot;&gt;PGPASSWORD&lt;/code&gt;가 같이 나오기 때문이다.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; app-dev &lt;span class=&quot;nb&quot;&gt;exec &lt;/span&gt;deploy/collector &lt;span class=&quot;nt&quot;&gt;--&lt;/span&gt; python &lt;span class=&quot;nt&quot;&gt;-c&lt;/span&gt; &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+    &lt;span class=&quot;s1&quot;&gt;'import os; print([os.environ.get(k) for k in (&quot;KUBERNETES_SERVICE_HOST&quot;,&quot;KUBERNETES_SERVICE_PORT&quot;,&quot;COLLECTOR_METRICS_PORT&quot;)])'&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'10.43.0.1'&lt;/span&gt;, &lt;span class=&quot;s1&quot;&gt;'443'&lt;/span&gt;, None]
+
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;kubectl &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; app-dev logs deploy/collector &lt;span class=&quot;nt&quot;&gt;--tail&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;1
+… INFO collector.run 수집 시작 &lt;span class=&quot;nv&quot;&gt;run&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;1 대상 7개 주기 30s
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;KUBERNETES_SERVICE_HOST&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;는 남고 겹치던 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_METRICS_PORT&lt;/code&gt;는 없다. 수집기가 apiserver 목록 읽기와 DB 접속을 포함한 시작 점검을 통과해 첫 주기를 돌았다.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;strong&gt;참고&lt;/strong&gt;: 끄는 범위&lt;/p&gt;
+
+  &lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks: false&lt;/code&gt;는 “같은 네임스페이스 Service의 변수”만 뺀다. &lt;code class=&quot;highlighter-rouge&quot;&gt;kubernetes&lt;/code&gt; Service 변수, DNS, ServiceAccount 토큰은 이 필드와 무관하다. &lt;a href=&quot;#kubelet-소스로-따라가기&quot;&gt;kubelet 소스로 따라가기&lt;/a&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;getServiceEnvVarMap&lt;/code&gt;에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;if&lt;/code&gt; 분기가 &lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks&lt;/code&gt;를 보지 않는 것이 그 근거다. 지금은 “Service마다 환경 변수가 자동으로 들어가고, 끄면 같은 네임스페이스 것만 빠진다”까지만 알면 충분하다.&lt;/p&gt;
+
+  &lt;p&gt;하나 더. 서비스 링크 변수는 파드가 만들어지는 시점에 있던 Service의 스냅샷이다. 공식 문서는 이 방식으로 Service를 찾으려면 클라이언트 파드보다 Service를 먼저 만들어야 하고 DNS를 쓰면 순서를 신경 쓸 필요가 없다고 적는다. Service가 나중에 바뀌어도 컨테이너는 재시작되지 않으니 이 변수를 읽어 다른 Service를 찾는 앱은 오래된 주소를 들고 있을 수 있다. 끄는 쪽이 기본인 이유가 하나 더 있다.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;h2 id=&quot;선택과-적용&quot;&gt;선택과 적용&lt;/h2&gt;
+
+&lt;p&gt;①과 ③을 둘 다 했다. ①만 있으면 나중에 누가 이 줄을 빼거나 새 Deployment에 빠뜨렸을 때 다시 겹친다. ③만으로는 이미지가 한 바퀴 도는 동안 수집기가 계속 죽어 있다. ③은 코드를 줄이는 변경이라 비용이 거의 없다. 그래서 ①로 먼저 살리고 이미 계획된 다음 앱 PR에 ③을 넣었다.&lt;/p&gt;
+
+&lt;p&gt;인프라 쪽은 파드 spec에 한 줄과 주석이다.&lt;/p&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;    &lt;span class=&quot;na&quot;&gt;spec&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;serviceAccountName&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;collector&lt;/span&gt;
+      &lt;span class=&quot;c1&quot;&gt;# Service 마다 kubelet 이 넣는 &amp;lt;이름&amp;gt;_PORT 등의 env 를 끈다 — Service collector-metrics 가 만드는&lt;/span&gt;
+      &lt;span class=&quot;c1&quot;&gt;# COLLECTOR_METRICS_PORT=tcp://… 가 수집기 설정 env 와 이름이 겹쳐 기동이 실패한다. DB 는 PGHOST(DNS)로 찾고,&lt;/span&gt;
+      &lt;span class=&quot;c1&quot;&gt;# apiserver 주소 KUBERNETES_SERVICE_HOST/_PORT(수집기가 쓴다)는 이 설정과 무관하게 들어간다&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;enableServiceLinks&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;no&quot;&gt;false&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;앱 쪽은 &lt;code class=&quot;highlighter-rouge&quot;&gt;from_env&lt;/code&gt;의 해당 줄에서 env 읽기를 지우고 고정값으로 바꿨다. 시험이 생성자로 &lt;code class=&quot;highlighter-rouge&quot;&gt;metrics_port=0&lt;/code&gt;을 넘기므로 &lt;code class=&quot;highlighter-rouge&quot;&gt;CollectorSettings&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;metrics_port&lt;/code&gt; 필드는 남겨 두었다.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;        &lt;span class=&quot;c&quot;&gt;# containerPort·Service 와 같은 고정 값 — env 로 두면 Service collector-metrics 의&lt;/span&gt;
+        &lt;span class=&quot;c&quot;&gt;# 서비스 링크 env(COLLECTOR_METRICS_PORT=tcp://…)와 겹친다&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;metrics_port&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;9090&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;한계&quot;&gt;한계&lt;/h2&gt;
+
+&lt;p&gt;둘 다 해도 이번 수집기 하나만 고쳤다. 남는 구멍이 셋 있다.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;①은 파드 spec마다 넣어야 한다. 네임스페이스나 클러스터 기본값이 없어서 새 Deployment에 빠뜨리면 그 파드에서 다시 겹친다&lt;/li&gt;
+  &lt;li&gt;③은 &lt;code class=&quot;highlighter-rouge&quot;&gt;COLLECTOR_METRICS_PORT&lt;/code&gt; 하나를 지운 것이다. 다음 설정 이름이 또 &lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;로 끝나면 같은 일이 생긴다&lt;/li&gt;
+  &lt;li&gt;둘 다 기동 실패를 더 빨리 알아채게 해 주지는 않는다. readinessProbe가 없는 한 ArgoCD는 다음 실패도 &lt;code class=&quot;highlighter-rouge&quot;&gt;Healthy&lt;/code&gt;로 보인다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;이 셋을 메우는 것이 다음 절이다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;재발-방지&quot;&gt;재발 방지&lt;/h1&gt;
+
+&lt;h2 id=&quot;사전-검출-실패-경위&quot;&gt;사전 검출 실패 경위&lt;/h2&gt;
+
+&lt;p&gt;수집기는 머지 전에 로컬 시험, CI의 이미지 검사, 리뷰 세 번을 거쳤다. 전부 통과했다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;단계&lt;/th&gt;
+      &lt;th&gt;환경&lt;/th&gt;
+      &lt;th&gt;서비스 링크 변수&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;로컬 pytest&lt;/td&gt;
+      &lt;td&gt;개발 머신&lt;/td&gt;
+      &lt;td&gt;없음&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;CI 이미지 검사&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;docker run&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;없음. kubelet이 아니라 Docker가 띄운다&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;코드 리뷰&lt;/td&gt;
+      &lt;td&gt;코드와 매니페스트만&lt;/td&gt;
+      &lt;td&gt;읽는 사람이 Service 이름과 env 접두어를 나란히 놓지 않으면 보이지 않는다&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;서비스 링크 변수는 kubelet이 파드를 만들 때 넣는다. kubelet이 없는 환경에서는 어떤 시험도 이 충돌을 재현하지 못한다. 처음 클러스터에 올라간 순간이 첫 시험이었다.&lt;/p&gt;
+
+&lt;p&gt;시간순으로 보면 이렇다. 수집기가 죽어 있던 1시간 반 동안 DB에는 아무것도 쓰이지 않았다. 설정을 읽다 죽어 접속까지 가지 못했기 때문이다. 알림 규칙 둘 중 “수집기 지표 없음”(지표가 10분간 없음)이 울려 장애를 잡았다. “CrashLoopBackOff”(15분 안 재시작 5회 초과가 15분 지속)는 울리지 않았다. 재시작 간격이 10초에서 두 배씩 늘어 5분 상한에 닿으면 15분에 3회라 임계에 못 미친다. 처음 15분만 조건이 참이었고 지속 시간을 채우기 전에 풀렸다.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;시각(KST)&lt;/th&gt;
+      &lt;th&gt;일&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;14:33&lt;/td&gt;
+      &lt;td&gt;인프라 PR 머지, ArgoCD 반영&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;14:34&lt;/td&gt;
+      &lt;td&gt;수집기 첫 기동 실패, 재시작 시작&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;14:44&lt;/td&gt;
+      &lt;td&gt;“수집기 지표 없음” 알림&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;16:00&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks: false&lt;/code&gt; PR 머지&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;16:01&lt;/td&gt;
+      &lt;td&gt;새 파드 첫 수집, 재시작 0&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;16:02&lt;/td&gt;
+      &lt;td&gt;알림 해제&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;머지 시각은 14:33이지만 수집 시작 시각은 DB에 남은 첫 수집 주기 16:01이다. 그 사이 끝나고 정리된 오브젝트와 1시간이 지난 이벤트는 다시 얻지 못한다.&lt;/p&gt;
+
+&lt;p&gt;로컬·CI·리뷰 어디에서도 잡히지 않는 부류이니, 막으려면 앱의 이름 규칙과 인프라의 기본 설정, 그리고 기동 실패 감지 세 층에서 막아야 한다. &lt;a href=&quot;#해결&quot;&gt;해결&lt;/a&gt;의 한계 셋에 하나씩 대응한다.&lt;/p&gt;
+
+&lt;h2 id=&quot;앱-설정-변수-이름-규칙&quot;&gt;앱: 설정 변수 이름 규칙&lt;/h2&gt;
+
+&lt;p&gt;서비스 링크 변수의 꼴은 &lt;code class=&quot;highlighter-rouge&quot;&gt;_SERVICE_HOST&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;_SERVICE_PORT&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;_SERVICE_PORT_{포트이름}&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT_{번호}_{프로토콜}&lt;/code&gt;(과 그 뒤에 &lt;code class=&quot;highlighter-rouge&quot;&gt;_PROTO&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;_ADDR&lt;/code&gt;가 붙은 것)로 정해져 있다. 설정 변수 이름을 이 꼴로 끝나지 않게 지으면 어떤 Service 이름과도 겹치지 않는다. 앱 README에 한 줄을 두고 소스에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;environ&lt;/code&gt;으로 읽는 이름을 훑는 정적 시험을 하나 더했다.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;test_no_service_link_shaped_env_names&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;():&lt;/span&gt;
+    &lt;span class=&quot;c&quot;&gt;# kubelet 이 같은 네임스페이스 Service 마다 넣는 &amp;lt;이름&amp;gt;_PORT·_SERVICE_HOST·_SERVICE_PORT* 와 겹치는 이름을 설정에 쓰지 않는다&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;read&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;re&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;compile&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;r'environ(?:\.get)?[(\[]\s*&quot;([A-Z0-9_]+)&quot;'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;link&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;re&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;compile&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;r&quot;_(PORT|SERVICE_HOST|SERVICE_PORT)(_|$)&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;hits&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;p&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;SRC&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rglob&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;*.py&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;n&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;read&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;findall&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;read_text&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;())&lt;/span&gt;
+            &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;link&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;search&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;n&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;not&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;KUBERNETES_SERVICE_HOST&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;KUBERNETES_SERVICE_PORT&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)]&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;assert&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;hits&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;이 시험은 &lt;code class=&quot;highlighter-rouge&quot;&gt;os.environ.get(&quot;…&quot;)&lt;/code&gt; 꼴만 본다. pydantic-settings처럼 필드 이름에서 env 이름을 만드는 방식을 쓰면 잡지 못한다. 이름 규칙은 직접 만드는 앱에만 적용할 수 있다. vLLM이나 Redis 클라이언트처럼 남의 이미지가 읽는 변수 이름은 바꿀 수 없으니 그쪽은 아래 인프라 설정으로만 막을 수 있다.&lt;/p&gt;
+
+&lt;h2 id=&quot;인프라-enableservicelinks-기본-적용&quot;&gt;인프라: enableServiceLinks 기본 적용&lt;/h2&gt;
+
+&lt;p&gt;이 네임스페이스의 파드는 모두 DNS로 서로를 찾는다. 서비스 링크 변수를 읽는 곳이 없으니 앱 파드에 &lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks: false&lt;/code&gt;를 기본으로 둔다. &lt;a href=&quot;/kubernetes/Kubernetes-EKS-GPU-TroubleShooting-03-02-vLLM-TroubleShooting/#운영-함정-3가지&quot;&gt;vLLM 기동 실패 글&lt;/a&gt;에서도 같은 결론을 냈다.&lt;/p&gt;
+
+&lt;p&gt;그런데 이게 원래 권장되는 방법인지, 권장이라면 Kubernetes는 왜 아직 기본으로 넣어 주는지가 궁금해서 찾아봤다(2026년 10월 기준).&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;공식 문서의 권고는 “DNS를 써라”까지다.&lt;/strong&gt; &lt;a href=&quot;https://kubernetes.io/docs/concepts/services-networking/service/#discovering-services&quot;&gt;Service 문서&lt;/a&gt;는 서비스를 찾는 방법으로 환경 변수와 DNS 둘을 소개하고 DNS 애드온은 “almost always should” 설치하라고 적는다. 환경 변수 방식에는 Service를 클라이언트 파드보다 먼저 만들어야 한다는 제약을 적어 두었다. 끄라는 말은 없다.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;끄는 옵션 자체가 “DNS를 쓰라”는 뜻으로 만들어졌다.&lt;/strong&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks&lt;/code&gt;를 도입한 &lt;a href=&quot;https://github.com/kubernetes/kubernetes/pull/68754&quot;&gt;PR #68754&lt;/a&gt;(1.13)의 설명은 “Services should be accessed by DNS, not by environment variables”로 시작한다. 이 변수가 Docker의 deprecated &lt;code class=&quot;highlighter-rouge&quot;&gt;--link&lt;/code&gt;에서 온 것이라는 점도 함께 적었다.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;기본값을 &lt;code class=&quot;highlighter-rouge&quot;&gt;false&lt;/code&gt;로 바꾸자는 요청은 두 번 있었고 기본값은 그대로다.&lt;/strong&gt; 2020년 &lt;a href=&quot;https://github.com/kubernetes/kubernetes/issues/92226&quot;&gt;#92226&lt;/a&gt;에 메인테이너 liggitt은 “changing defaults in an existing API is not backwards compatible”, “changing this particular default would break many existing users”라고 답하고 닫았다. 2023년 &lt;a href=&quot;https://github.com/kubernetes/kubernetes/issues/121787&quot;&gt;#121787&lt;/a&gt;에서는 Service가 많은 네임스페이스에서 변수가 수천 개로 불어 Java 컨테이너가 죽은 사례까지 붙었고, thockin도 “the ‘I want a different default’ case is THE motivation”이라고 인정했지만 결론은 같았다. “Changing defaults is a breaking change.” 기본값을 바꾸려면 core API를 v2로 올려야 한다는 얘기까지 나왔다.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;그래서 메인테이너가 가리킨 방법이 정책 엔진이다.&lt;/strong&gt; 같은 이슈에서 thockin은 “Using gatekeeper or kyverno is something that can work NOW”라고 적었다. 기본값은 못 바꾸니 클러스터 운영자가 admission 단계에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;false&lt;/code&gt;를 넣으라는 것이다.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;정리하면 이렇다. 이 변수는 Docker &lt;code class=&quot;highlighter-rouge&quot;&gt;--link&lt;/code&gt; 호환용으로 처음부터 있었고 프로젝트는 DNS로 옮겨 가라고 말하면서도 core/v1 API의 하위 호환 약속 때문에 기본값은 손대지 못한다. “주입하지 않는 쪽으로 바뀌어 왔어야 하지 않나”는 질문에 답하자면, 그 변화는 API 기본값 대신 &lt;strong&gt;운영자의 정책 층&lt;/strong&gt;에서 일어나야 한다. 이 필드는 파드 spec에만 있고 네임스페이스나 클러스터 수준 기본값이 없다. 그래서 Helm 공통 차트나 Kustomize base에 심어 두거나, Kyverno 같은 정책 엔진의 mutate 규칙으로 필드가 없을 때만 &lt;code class=&quot;highlighter-rouge&quot;&gt;false&lt;/code&gt;를 넣는 식으로 강제한다. 이 변수를 실제로 읽는 앱이 네임스페이스에 있는지만 먼저 확인하면 된다.&lt;/p&gt;
+
+&lt;h2 id=&quot;인프라-기동-실패-감지&quot;&gt;인프라: 기동 실패 감지&lt;/h2&gt;
+
+&lt;p&gt;이 수집기에는 readinessProbe가 없어 ArgoCD가 기동 실패를 보지 못했다. heartbeat 파일을 확인하는 readinessProbe나 &lt;code class=&quot;highlighter-rouge&quot;&gt;minReadySeconds&lt;/code&gt;를 두면 설정을 읽다 죽는 파드는 &lt;code class=&quot;highlighter-rouge&quot;&gt;Available&lt;/code&gt;로 잡히지 않고, &lt;code class=&quot;highlighter-rouge&quot;&gt;progressDeadlineSeconds&lt;/code&gt;가 지나면 ArgoCD가 &lt;code class=&quot;highlighter-rouge&quot;&gt;Degraded&lt;/code&gt;로 알린다. 이 수집기에는 아직 두지 않았다.&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;kubelet은 파드와 같은 네임스페이스의 Service마다 &lt;code class=&quot;highlighter-rouge&quot;&gt;{SVC}_PORT=tcp://IP:포트&lt;/code&gt; 꼴의 환경 변수를 넣는다. 매니페스트에 없는 변수라도 앱이 그 이름을 읽으면 그 값이 들어간다&lt;/li&gt;
+  &lt;li&gt;앱 설정 접두어와 Service 이름이 같은 단어에서 출발하면 &lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;로 끝나는 이름 하나가 정확히 겹친다. 이번에는 아무도 쓰지 않는 설정이 그 하나였다&lt;/li&gt;
+  &lt;li&gt;kubelet이 없는 로컬·CI 환경에서는 재현되지 않아 클러스터에 처음 올린 뒤에야 드러난다. readinessProbe가 없으면 ArgoCD &lt;code class=&quot;highlighter-rouge&quot;&gt;Healthy&lt;/code&gt;도 판정 근거가 아니다&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks: false&lt;/code&gt;는 같은 네임스페이스 Service의 변수만 뺀다. &lt;code class=&quot;highlighter-rouge&quot;&gt;KUBERNETES_SERVICE_HOST&lt;/code&gt;/&lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;, DNS, ServiceAccount 토큰은 남는다. 리뷰가 기억으로 답한 것은 파드 안에서 값을 찍어 확인한다&lt;/li&gt;
+  &lt;li&gt;인프라는 &lt;code class=&quot;highlighter-rouge&quot;&gt;enableServiceLinks: false&lt;/code&gt;를 앱 파드의 기본으로 둔다. 직접 만드는 앱은 설정 변수 이름을 &lt;code class=&quot;highlighter-rouge&quot;&gt;_PORT&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;_SERVICE_HOST&lt;/code&gt;·&lt;code class=&quot;highlighter-rouge&quot;&gt;_SERVICE_PORT&lt;/code&gt;로 끝나지 않게 짓고 쓰지 않는 설정은 지운다. 남의 이미지는 이름을 바꿀 수 없으니 끄는 수밖에 없다&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="k8s" /><category term="Service" /><category term="kubelet" /><category term="environment-variable" /><category term="enableServiceLinks" /><category term="ArgoCD" /><summary type="html">매니페스트에 적지도 않은 설정 변수를 kubelet이 채워 넣어 앱이 기동에 실패한 사례를 통해, 서비스 링크 환경 변수가 어떻게 만들어지고 끄면 무엇이 남는지 알아 보자.</summary></entry><entry><title type="html">[Kubeflow Pipelines] 머신러닝 플랫폼 엔지니어링: MLflow와 Feast - 4.1.2. 2주차 실습 환경 구성</title><link href="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-04-01-02-Lab-Environment/" rel="alternate" type="text/html" title="[Kubeflow Pipelines] 머신러닝 플랫폼 엔지니어링: MLflow와 Feast - 4.1.2. 2주차 실습 환경 구성" /><published>2026-10-29T00:00:00+09:00</published><updated>2026-10-30T00:00:00+09:00</updated><id>https://sirzzang.github.io//MLOps-ML-Platform-Engineering-04-01-02-Lab-Environment</id><content type="html" xml:base="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-04-01-02-Lab-Environment/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Machine Learning Platform Engineering Study 2주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
 
 &lt;p&gt;&lt;br /&gt;&lt;/p&gt;
 
@@ -4619,361 +5244,4 @@ curl &lt;span class=&quot;nt&quot;&gt;-s&lt;/span&gt; localhost:8080
   &lt;li&gt;&lt;a href=&quot;https://github.com/kubernetes-sigs/cloud-provider-kind&quot;&gt;cloud-provider-kind&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="Service" /><category term="NodePort" /><category term="kube-proxy" /><category term="iptables" /><category term="CoreDNS" /><category term="Machine-Learning-Platform-Engineering-Study" /><category term="Machine-Learning-Platform-Engineering-Study-Week-1" /><summary type="html">kind에서 Service의 세 유형을 적용하고, CoreDNS 설정과 kube-proxy의 iptables 규칙으로 앱에 닿는 요청 경로를 확인해 보자.</summary></entry><entry><title type="html">[Kubernetes] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.3. Pod, ReplicaSet, Deployment</title><link href="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/" rel="alternate" type="text/html" title="[Kubernetes] 머신러닝 플랫폼 엔지니어링: K8s와 CI/CD - 3.3.3. Pod, ReplicaSet, Deployment" /><published>2026-10-24T00:00:00+09:00</published><updated>2026-10-26T00:00:00+09:00</updated><id>https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment</id><content type="html" xml:base="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-03-03-03-Pod-ReplicaSet-Deployment/">&lt;p&gt;&lt;em&gt;&lt;a href=&quot;https://www.linkedin.com/in/gasida99/&quot;&gt;서종호(가시다)&lt;/a&gt;님의 Machine Learning Platform Engineering Study 1주차 학습 내용을 기반으로 합니다.&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;tldr&quot;&gt;TL;DR&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Pod는 컨테이너 실행 단위, ReplicaSet은 파드 복제 수 유지 단위, Deployment는 ReplicaSet을 통한 배포와 업데이트 단위다&lt;/li&gt;
-  &lt;li&gt;단독 파드를 실행한 뒤 ReplicaSet의 파드 재생성과 3개에서 4개로의 확장을 확인했다&lt;/li&gt;
-  &lt;li&gt;Deployment의 이미지 태그를 &lt;code class=&quot;highlighter-rouge&quot;&gt;v1&lt;/code&gt;에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;v2&lt;/code&gt;로 바꾸자 새 ReplicaSet이 늘고 기존 ReplicaSet이 줄었다. 롤백에서는 기존 &lt;code class=&quot;highlighter-rouge&quot;&gt;v1&lt;/code&gt; ReplicaSet이 다시 확장됐다&lt;/li&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl port-forward&lt;/code&gt;는 API 서버와 노드의 스트리밍 경로를 통해 선택한 파드의 TCP 포트에 연결한다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;오브젝트-관계-지도&quot;&gt;오브젝트 관계 지도&lt;/h1&gt;
-
-&lt;p&gt;책 3.3.3절에 대응하는 실습이다. &lt;a href=&quot;/MLOps-ML-Platform-Engineering-03-03-01-Kind-Cluster-API-Access/&quot;&gt;3.3.1편&lt;/a&gt;에서 만든 kind 클러스터에 hello-joker를 실행한다. 실습 위치는 &lt;code class=&quot;highlighter-rouge&quot;&gt;~/ml-study/chapters/ch03-k8s&lt;/code&gt;로, 실습 저장소 경로를 줄인 표기다.&lt;/p&gt;
-
-&lt;p&gt;매니페스트(manifest)는 쿠버네티스 오브젝트의 원하는 상태를 선언한 파일이다. 같은 앱을 실행해도 어떤 오브젝트에 선언하는지에 따라 파드 수와 업데이트를 관리하는 주체가 달라진다.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://sirzzang.github.io//assets/images/mlpe-ch03-manifest-map.png&quot; alt=&quot;ch03 매니페스트의 선택 관계와 소유 관계&quot; class=&quot;align-center&quot; /&gt;&lt;/p&gt;
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. ch03 매니페스트에서 점선은 레이블 선택, 가는 실선은 오브젝트에 적힌 참조를 나타낸다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;지도에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;app=fast-api&lt;/code&gt;는 레이블(label), 이를 조건으로 오브젝트를 찾는 설정은 셀렉터(selector)다. &lt;code class=&quot;highlighter-rouge&quot;&gt;ownerReferences&lt;/code&gt;는 자식 오브젝트에 저장되는 소유자 참조다. 그래서 지도에서는 파드 → ReplicaSet → Deployment 방향으로 소유자를 가리킨다. Service는 셀렉터로 통신 대상을 찾는다. Service의 포트와 요청 경로는 &lt;a href=&quot;/MLOps-ML-Platform-Engineering-03-03-04-Service-Networking/&quot;&gt;3.3.4편&lt;/a&gt;에서 확인한다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;pod&quot;&gt;Pod&lt;/h1&gt;
-
-&lt;p&gt;파드(Pod)는 쿠버네티스에서 컨테이너를 실행하는 가장 작은 배포 단위다. 하나 이상의 컨테이너가 네트워크 네임스페이스를 공유하고, 볼륨을 함께 마운트할 수 있다. 이번 파드는 FastAPI 앱 컨테이너 하나를 실행한다.&lt;/p&gt;
-
-&lt;h2 id=&quot;매니페스트와-실행&quot;&gt;매니페스트와 실행&lt;/h2&gt;
-
-&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# k8s/pod.yaml: hello-joker 컨테이너 하나를 실행한다&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;apiVersion&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;v1&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;kind&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;Pod&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;metadata&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-  &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;joker&lt;/span&gt;
-  &lt;span class=&quot;na&quot;&gt;labels&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-    &lt;span class=&quot;na&quot;&gt;app&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;fast-api&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;spec&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-  &lt;span class=&quot;na&quot;&gt;containers&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-    &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;hello-joker&lt;/span&gt;
-      &lt;span class=&quot;na&quot;&gt;image&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&amp;lt;dockerhub-user&amp;gt;/hello-joker:v1&lt;/span&gt;
-      &lt;span class=&quot;na&quot;&gt;ports&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-        &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;containerPort&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;8083&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;이미지는 &lt;a href=&quot;/MLOps-ML-Platform-Engineering-03-02-02-Docker-Multi-Arch-Build-Push/&quot;&gt;3.2.2편&lt;/a&gt;에서 만든 공개 멀티 플랫폼 이미지다. M1 Mac의 kind 노드는 arm64이므로 노드 안 containerd가 목록에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;linux/arm64&lt;/code&gt; 이미지를 선택한다. &lt;code class=&quot;highlighter-rouge&quot;&gt;containerPort&lt;/code&gt;는 앱의 수신 포트를 선언한다. 실제 소켓은 진입 스크립트의 &lt;code class=&quot;highlighter-rouge&quot;&gt;uvicorn --host 0.0.0.0 --port 8083&lt;/code&gt;이 연다.&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl&lt;/code&gt;은 쿠버네티스 API를 호출하는 CLI다. &lt;code class=&quot;highlighter-rouge&quot;&gt;create -f&lt;/code&gt;로 파일의 오브젝트를 생성하고, &lt;code class=&quot;highlighter-rouge&quot;&gt;get -w&lt;/code&gt;로 상태 변화를 계속 관찰한다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 생성 후 상태 변화 관찰&lt;/span&gt;
-kubectl create &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; k8s/pod.yaml
-kubectl get pod &lt;span class=&quot;nt&quot;&gt;-w&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과&lt;/span&gt;
-NAME    READY   STATUS              RESTARTS   AGE
-joker   0/1     ContainerCreating   0          15s
-joker   1/1     Running             0          21s
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl describe&lt;/code&gt;는 상세 상태와 이벤트를 보여 준다. &lt;code class=&quot;highlighter-rouge&quot;&gt;joker&lt;/code&gt;는 &lt;code class=&quot;highlighter-rouge&quot;&gt;ml-study-control-plane&lt;/code&gt;에 배치됐고, 파드 IP는 &lt;code class=&quot;highlighter-rouge&quot;&gt;10.244.0.7&lt;/code&gt;이었다. 이벤트는 이미지 pull → 컨테이너 생성 → 시작 순서였다.&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl exec&lt;/code&gt;는 컨테이너 안에서 명령을 실행한다. &lt;code class=&quot;highlighter-rouge&quot;&gt;env&lt;/code&gt;로 환경변수를 보니 &lt;code class=&quot;highlighter-rouge&quot;&gt;PYTHONPATH=/app&lt;/code&gt;과 &lt;code class=&quot;highlighter-rouge&quot;&gt;KUBERNETES_SERVICE_HOST=10.96.0.1&lt;/code&gt; 등이 있었다. 스터디 자료의 Dockerfile 예시에 있던 &lt;code class=&quot;highlighter-rouge&quot;&gt;ENVIRONMENT&lt;/code&gt; 변수는 없었다(&lt;a href=&quot;/MLOps-ML-Platform-Engineering-03-02-01-Docker-App-Dockerfile/#베이스-이미지-교체&quot;&gt;3.2.1편&lt;/a&gt;). 실습 Dockerfile에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;ENV PYTHONPATH&lt;/code&gt;만 있고, 파드에도 별도 &lt;code class=&quot;highlighter-rouge&quot;&gt;env&lt;/code&gt; 설정이 없다. 환경변수 설정 방법은 &lt;a href=&quot;/kubernetes/Kubernetes-Application-Config-01-Command-Args-Env/&quot;&gt;컨테이너 환경변수&lt;/a&gt;에서 다뤘다.&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl logs&lt;/code&gt;는 컨테이너의 로그를 조회한다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 앱이 실제로 수신하는 주소와 포트 확인&lt;/span&gt;
-kubectl logs joker
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과&lt;/span&gt;
-INFO:     Started server process &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;11]
-INFO:     Waiting &lt;span class=&quot;k&quot;&gt;for &lt;/span&gt;application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8083 &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;Press CTRL+C to quit&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h2 id=&quot;port-forward-연결과-종료&quot;&gt;port-forward 연결과 종료&lt;/h2&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl port-forward&lt;/code&gt;는 로컬 TCP 포트로 들어온 연결을 파드의 포트에 전달하는 명령이다. &lt;code class=&quot;highlighter-rouge&quot;&gt;curl&lt;/code&gt;은 HTTP 요청을 보내고, &lt;code class=&quot;highlighter-rouge&quot;&gt;jq&lt;/code&gt;는 JSON 출력을 읽기 좋게 정렬한다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# Mac의 8080 포트에서 파드의 8083 포트로 전달&lt;/span&gt;
-kubectl port-forward joker 8080:8083 &amp;amp;
-
-&lt;span class=&quot;c&quot;&gt;# 다른 터미널에서 앱 호출&lt;/span&gt;
-curl &lt;span class=&quot;nt&quot;&gt;-s&lt;/span&gt; localhost:8080 | jq
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과&lt;/span&gt;
-&lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
-  &lt;span class=&quot;s2&quot;&gt;&quot;random_joke&quot;&lt;/span&gt;: &lt;span class=&quot;s2&quot;&gt;&quot;I went to a street where the houses were numbered 8k, 16k, 32k, 64k, 128k, 256kand 512k. It was a trip down Memory Lane.&quot;&lt;/span&gt;
-&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;스터디 자료는 책의 port-forward 명령 포트가 잘못됐다고 짚고 &lt;code class=&quot;highlighter-rouge&quot;&gt;8080:8083&lt;/code&gt;으로 고쳐 안내한다. 이 앱에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;8083&lt;/code&gt;이 맞다는 근거는 진입 스크립트, Uvicorn 로그, &lt;code class=&quot;highlighter-rouge&quot;&gt;8080:8083&lt;/code&gt;으로 받은 응답이다. &lt;strong&gt;파드를 대상으로 지정하면 앱이 듣는 포트로 연결하고, Service를 지정하면 Service의 &lt;code class=&quot;highlighter-rouge&quot;&gt;port&lt;/code&gt;를 대응하는 &lt;code class=&quot;highlighter-rouge&quot;&gt;targetPort&lt;/code&gt;로 해석한다.&lt;/strong&gt; &lt;a href=&quot;https://kubernetes.io/docs/reference/kubectl/generated/kubectl_port-forward/&quot;&gt;kubectl 명령 문서&lt;/a&gt;에도 Service 포트를 이용하는 예제가 있다.&lt;/p&gt;
-
-&lt;p&gt;백그라운드 실행에서도 포워딩 로그는 같은 터미널에 출력됐다. 로그를 파일로 보낼 때는 다음과 같이 리다이렉션할 수 있다. &lt;code class=&quot;highlighter-rouge&quot;&gt;jobs&lt;/code&gt;는 현재 셸의 작업 목록을 보여 주고, &lt;code class=&quot;highlighter-rouge&quot;&gt;kill %1&lt;/code&gt;은 그 목록의 1번 작업에 종료 신호를 보낸다. &lt;code class=&quot;highlighter-rouge&quot;&gt;lsof&lt;/code&gt;는 프로세스가 연 파일과 소켓을 조회하는 도구다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 로그를 파일에 저장하는 실행 예&lt;/span&gt;
-kubectl port-forward pod/joker 8080:8083 &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; /tmp/pf.log 2&amp;gt;&amp;amp;1 &amp;amp;
-
-&lt;span class=&quot;c&quot;&gt;# 작업 번호를 확인하고 해당 포워딩 종료&lt;/span&gt;
-&lt;span class=&quot;nb&quot;&gt;jobs
-kill&lt;/span&gt; %1
-
-&lt;span class=&quot;c&quot;&gt;# 8080 포트를 사용하는 프로세스 확인&lt;/span&gt;
-lsof &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; :8080
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;실습에서는 포워딩 작업을 직접 종료한 다음 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl delete pod joker&lt;/code&gt;로 파드를 지웠다. 공식 명령 문서는 선택한 파드가 종료되면 세션이 끝나므로 명령을 다시 실행해야 한다고 설명한다.&lt;/p&gt;
-
-&lt;h2 id=&quot;port-forward-동작-원리&quot;&gt;port-forward 동작 원리&lt;/h2&gt;
-
-&lt;p&gt;포워딩은 API 서버의 &lt;code class=&quot;highlighter-rouge&quot;&gt;pods/joker/portforward&lt;/code&gt; 하위 리소스에 요청하면서 시작된다. 기존 SPDY 경로의 POST 요청에는 역할 기반 접근 제어(RBAC)에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;pods/portforward&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;create&lt;/code&gt; 권한이 필요하다. API 서버는 파드가 배치된 노드의 kubelet으로 요청을 넘긴다. kubelet은 컨테이너 런타임 인터페이스(CRI)를 통해 스트리밍 URL을 얻고, 그 URL로 연결을 프록시한다. v1.29.14의 &lt;a href=&quot;https://github.com/kubernetes/kubernetes/blob/v1.29.14/pkg/kubelet/server/server.go&quot;&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;getPortForward&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;proxyStream&lt;/code&gt;&lt;/a&gt;에 이 흐름이 있다.&lt;/p&gt;
-
-&lt;p&gt;노드의 containerd는 파드 샌드박스의 네트워크 네임스페이스 안에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;localhost:8083&lt;/code&gt;에 TCP로 접속하고, 연결 양쪽의 바이트를 복사한다. 실습 노드의 containerd 2.0.2도 &lt;a href=&quot;https://github.com/containerd/containerd/blob/v2.0.2/internal/cri/server/sandbox_portforward_linux.go&quot;&gt;이 구현&lt;/a&gt;을 사용한다.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;sequenceDiagram
-    %% 연결 설정 후 요청 데이터가 지나는 경로
-    participant C as curl
-    participant K as Mac의 kubectl
-    participant A as API 서버
-    participant L as 노드 kubelet
-    participant R as containerd 스트리밍 서버
-    participant P as 파드 netns의 앱
-    K-&amp;gt;&amp;gt;A: portforward 연결 요청
-    A-&amp;gt;&amp;gt;L: 파드가 있는 노드로 프록시
-    L-&amp;gt;&amp;gt;R: CRI로 받은 스트리밍 URL에 프록시
-    C-&amp;gt;&amp;gt;K: localhost:8080에 HTTP 요청
-    K-&amp;gt;&amp;gt;A: 연결 안의 데이터 스트림
-    A-&amp;gt;&amp;gt;L: 데이터 중계
-    L-&amp;gt;&amp;gt;R: 데이터 중계
-    R-&amp;gt;&amp;gt;P: netns 안 localhost:8083에 TCP 연결
-    P--&amp;gt;&amp;gt;C: 같은 경로를 역으로 거쳐 응답
-&lt;/code&gt;&lt;/pre&gt;
-&lt;center&gt;&lt;sup&gt;AI를 이용해 직접 그린 도식. port-forward의 연결 설정과 요청 데이터 중계 경로&lt;/sup&gt;&lt;/center&gt;
-
-&lt;p&gt;여기서 SPDY와 WebSocket은 &lt;strong&gt;kubectl과 서버 사이에서 데이터를 운반하는 방식&lt;/strong&gt;이다. SPDY는 한 연결 안에서 여러 논리 스트림을 다중화하는 프로토콜이다. WebSocket은 HTTP 업그레이드로 시작해 양방향 메시지를 주고받는 프로토콜이다. Kubernetes의 port-forward 전환 구현은 SPDY 프레임을 WebSocket으로 터널링한다. 로컬 TCP 연결마다 데이터 스트림과 오류 스트림 한 쌍을 사용하는 구조는 유지된다(&lt;a href=&quot;https://www.kubernetes.dev/resources/keps/4006/&quot;&gt;KEP-4006&lt;/a&gt;).&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;PortForwardWebsockets&lt;/code&gt;는 서버 v1.30에서 도입됐고, v1.31부터 기본 활성화됐다. kubectl도 v1.31부터 WebSocket을 기본 시도한다. v1.35.2의 &lt;a href=&quot;https://github.com/kubernetes/kubectl/blob/v0.35.2/pkg/cmd/portforward/portforward.go&quot;&gt;클라이언트 구현&lt;/a&gt;은 업그레이드 실패 등의 조건에서 SPDY로 폴백한다(&lt;a href=&quot;https://kubernetes.io/blog/2024/08/20/websockets-transition/&quot;&gt;전환 안내&lt;/a&gt;).&lt;/p&gt;
-
-&lt;p&gt;로컬 kubectl은 v1.35.2이고 실습 서버는 v1.29.14다. &lt;code class=&quot;highlighter-rouge&quot;&gt;-v&lt;/code&gt;는 kubectl 로그의 상세 수준을 정하는 옵션이며, &lt;code class=&quot;highlighter-rouge&quot;&gt;-v=6&lt;/code&gt;에서는 요청과 응답 상태가 보인다. 같은 앱의 파드에 port-forward를 실행하면 실제 협상 과정이 기록된다.&lt;/p&gt;
-
-&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# kubectl -n online-ml-svc port-forward deploy/hello-joker 18083:8083 -v=6 출력 발췌(2026-10-25)
-tunneling_dialer.go:75] Before WebSocket Upgrade Connection...
-fallback_dialer.go:53] fallback to secondary dialer from primary dialer err: unable to upgrade streaming request: websocket: bad handshake (400 Bad Request): query parameter &quot;port&quot; is required
-round_trippers.go:632] &quot;Response&quot; verb=&quot;POST&quot; url=&quot;.../pods/hello-joker-84f7c45f84-6x6tq/portforward&quot; status=&quot;101 Switching Protocols&quot;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;kubectl은 먼저 WebSocket 업그레이드를 시도했고, v1.29 서버가 이를 400으로 거절하자 SPDY로 폴백해 &lt;code class=&quot;highlighter-rouge&quot;&gt;101 Switching Protocols&lt;/code&gt;로 연결했다. 이 버전 조합은 kubectl의 공식 지원 범위인 API 서버 기준 ±1 마이너 버전(&lt;a href=&quot;https://kubernetes.io/releases/version-skew-policy/#kubectl&quot;&gt;버전 차이 지원 정책&lt;/a&gt;)도 벗어난다.&lt;/p&gt;
-
-&lt;p&gt;이 경로는 Service의 가상 IP와 kube-proxy 규칙을 통과하지 않는다. &lt;code class=&quot;highlighter-rouge&quot;&gt;svc/&lt;/code&gt;나 &lt;code class=&quot;highlighter-rouge&quot;&gt;deploy/&lt;/code&gt;를 지정해도 시작할 때 파드 하나를 선택하며, 여러 파드로 부하를 분산하거나 교체된 파드에 자동으로 재연결하지 않는다. kind에서는 &lt;a href=&quot;/MLOps-ML-Platform-Engineering-03-03-01-Kind-Cluster-API-Access/&quot;&gt;3.3.1편의 API 서버 접근 경로&lt;/a&gt;를 사용하므로 앱 포트를 위한 &lt;code class=&quot;highlighter-rouge&quot;&gt;extraPortMappings&lt;/code&gt;가 없어도 호출할 수 있다.&lt;/p&gt;
-
-&lt;p&gt;프록시를 거치는 환경에서는 이 스트리밍 연결이 제약을 받을 수 있다. kubeconfig의 프록시 설정과 스트리밍 제약은 &lt;a href=&quot;/kubernetes/Kubernetes-Kubeconfig-03/#proxy-url&quot;&gt;kubeconfig의 proxy-url&lt;/a&gt;에 정리했다.&lt;/p&gt;
-
-&lt;h2 id=&quot;설정-참조-파일의-오류&quot;&gt;설정 참조 파일의 오류&lt;/h2&gt;
-
-&lt;p&gt;&lt;a href=&quot;#오브젝트-관계-지도&quot;&gt;오브젝트 관계 지도&lt;/a&gt;의 아래쪽에는 ConfigMap과 Secret을 참조하는 파드 예제도 있다. ConfigMap은 일반 설정 데이터를, Secret은 비밀번호 같은 민감 데이터를 전달하는 오브젝트다. 책 3.3.5절의 이 예제는 실행하지 않았고, 파일을 읽어 참조 오류를 확인했다.&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;k8s/pod-using-secret.yaml&lt;/code&gt;에는 두 문제가 있다.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;test-secret&lt;/code&gt;을 &lt;code class=&quot;highlighter-rouge&quot;&gt;configMapKeyRef&lt;/code&gt;로 찾는다. Secret을 참조하려면 &lt;code class=&quot;highlighter-rouge&quot;&gt;secretKeyRef&lt;/code&gt;를 사용해야 한다&lt;/li&gt;
-  &lt;li&gt;파드가 찾는 키는 &lt;code class=&quot;highlighter-rouge&quot;&gt;database-username&lt;/code&gt;과 &lt;code class=&quot;highlighter-rouge&quot;&gt;database-password&lt;/code&gt;인데, &lt;code class=&quot;highlighter-rouge&quot;&gt;k8s/secret.yaml&lt;/code&gt;의 키는 &lt;code class=&quot;highlighter-rouge&quot;&gt;database_username&lt;/code&gt;과 &lt;code class=&quot;highlighter-rouge&quot;&gt;database_password&lt;/code&gt;다&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;참조할 오브젝트의 종류와 키 이름을 모두 맞춰야 한다. 설정 주입 방식은 &lt;a href=&quot;/kubernetes/Kubernetes-Pod-Volume-04-ConfigMap-Secret-DownwardAPI-Projected/&quot;&gt;ConfigMap과 Secret 참조&lt;/a&gt;에서 다뤘다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;replicaset&quot;&gt;ReplicaSet&lt;/h1&gt;
-
-&lt;p&gt;레플리카셋(ReplicaSet)은 셀렉터에 맞는 파드의 수를 선언한 복제 수에 맞추는 오브젝트다. 컨트롤러가 현재 상태와 원하는 상태를 비교해 부족한 파드를 만들거나 초과한 파드를 지운다.&lt;/p&gt;
-
-&lt;h2 id=&quot;매니페스트의-선택-조건과-템플릿&quot;&gt;매니페스트의 선택 조건과 템플릿&lt;/h2&gt;
-
-&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# k8s/replicaset.yaml: app=fast-api 파드 3개 유지&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;apiVersion&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;apps/v1&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;kind&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;ReplicaSet&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;metadata&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-  &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;joker-replicaset&lt;/span&gt;
-  &lt;span class=&quot;na&quot;&gt;labels&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-    &lt;span class=&quot;na&quot;&gt;app&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;fast-api&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;spec&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-  &lt;span class=&quot;na&quot;&gt;replicas&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;3&lt;/span&gt;
-  &lt;span class=&quot;na&quot;&gt;selector&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-    &lt;span class=&quot;na&quot;&gt;matchLabels&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-      &lt;span class=&quot;na&quot;&gt;app&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;fast-api&lt;/span&gt;
-  &lt;span class=&quot;na&quot;&gt;template&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-    &lt;span class=&quot;na&quot;&gt;metadata&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-      &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;joker&lt;/span&gt;
-      &lt;span class=&quot;na&quot;&gt;labels&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-        &lt;span class=&quot;na&quot;&gt;app&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;fast-api&lt;/span&gt;
-    &lt;span class=&quot;na&quot;&gt;spec&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-      &lt;span class=&quot;na&quot;&gt;containers&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-        &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;hello-joker&lt;/span&gt;
-          &lt;span class=&quot;na&quot;&gt;image&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&amp;lt;dockerhub-user&amp;gt;/hello-joker:v1&lt;/span&gt;
-          &lt;span class=&quot;na&quot;&gt;ports&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-            &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;containerPort&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;8083&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;selector.matchLabels&lt;/code&gt;는 관리할 파드의 조건이고, &lt;code class=&quot;highlighter-rouge&quot;&gt;template&lt;/code&gt;은 새 파드를 만들 때 사용할 명세다. 템플릿의 레이블이 셀렉터와 일치해야 한다. &lt;code class=&quot;highlighter-rouge&quot;&gt;template.metadata.name&lt;/code&gt;이 &lt;code class=&quot;highlighter-rouge&quot;&gt;joker&lt;/code&gt;여도 실제 생성되는 이름에는 ReplicaSet 이름과 접미사가 붙는다.&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/#how-a-replicaset-works&quot;&gt;공식 문서&lt;/a&gt;에 따르면 같은 네임스페이스에서 셀렉터에 맞고 다른 컨트롤러가 소유하지 않는 파드는 ReplicaSet이 입양할 수 있다. 지도에서 단독 &lt;code class=&quot;highlighter-rouge&quot;&gt;joker&lt;/code&gt; 파드가 ReplicaSet으로 향하는 선이 이 경우다. 실습에서는 단독 파드를 먼저 삭제해 입양은 일어나지 않았다.&lt;/p&gt;
-
-&lt;h2 id=&quot;파드-재생성과-복제-수-확장&quot;&gt;파드 재생성과 복제 수 확장&lt;/h2&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# ReplicaSet 생성과 복제 수 확인&lt;/span&gt;
-kubectl create &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; k8s/replicaset.yaml
-kubectl get replicasets,pod &lt;span class=&quot;nt&quot;&gt;-owide&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과 중 ReplicaSet&lt;/span&gt;
-NAME                              DESIRED   CURRENT   READY   AGE   CONTAINERS    IMAGES                          SELECTOR
-replicaset.apps/joker-replicaset   3         3         3       8s    hello-joker   &amp;lt;dockerhub-user&amp;gt;/hello-joker:v1   &lt;span class=&quot;nv&quot;&gt;app&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;fast-api
-
-&lt;span class=&quot;c&quot;&gt;# 파드 하나 삭제&lt;/span&gt;
-kubectl delete pod joker-replicaset-hmfbp
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;다른 터미널에서 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl get pod -owide -w&lt;/code&gt;로 관찰하니 삭제한 파드가 &lt;code class=&quot;highlighter-rouge&quot;&gt;Terminating&lt;/code&gt;으로 바뀌는 동안 &lt;code class=&quot;highlighter-rouge&quot;&gt;joker-replicaset-fjncn&lt;/code&gt;이 새로 생성됐다. 새 파드는 1초 뒤 &lt;code class=&quot;highlighter-rouge&quot;&gt;Running&lt;/code&gt;이 됐고 IP는 &lt;code class=&quot;highlighter-rouge&quot;&gt;10.244.0.11&lt;/code&gt;이었다. 파드 이름과 IP가 바뀌면서 복제 수 3개를 유지했다.&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl scale&lt;/code&gt;은 오브젝트의 원하는 복제 수를 변경하는 명령이다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 원하는 복제 수를 4개로 변경&lt;/span&gt;
-kubectl scale replicaset joker-replicaset &lt;span class=&quot;nt&quot;&gt;--replicas&lt;/span&gt; 4
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과&lt;/span&gt;
-replicaset.apps/joker-replicaset scaled
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;네 번째 파드 &lt;code class=&quot;highlighter-rouge&quot;&gt;joker-replicaset-vm6bg&lt;/code&gt;가 생성됐고, 조회 결과 &lt;code class=&quot;highlighter-rouge&quot;&gt;DESIRED&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;CURRENT&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;READY&lt;/code&gt;가 모두 4였다. 실습을 마친 뒤 &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl delete replicasets joker-replicaset&lt;/code&gt;을 실행하자 소유한 파드 네 개도 종료됐다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;deployment&quot;&gt;Deployment&lt;/h1&gt;
-
-&lt;p&gt;디플로이먼트(Deployment)는 파드 템플릿과 복제 수를 선언하고, ReplicaSet을 관리해 배포 상태를 조정하는 오브젝트다. 템플릿 변경에 따른 롤링 업데이트(rolling update)와 이전 리비전으로의 롤백(rollback)을 제공한다.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;flowchart LR
-    %% 생성과 관리 방향
-    D[Deployment] --&amp;gt;|템플릿별 생성과 복제 수 조정| R[ReplicaSet]
-    R --&amp;gt;|생성과 복제 수 유지| P[Pod]
-    P --&amp;gt; C[hello-joker 컨테이너]
-&lt;/code&gt;&lt;/pre&gt;
-&lt;center&gt;&lt;sup&gt;출처: 『머신러닝 플랫폼 엔지니어링』 그림 3.5. AI를 이용해 재구성했다&lt;/sup&gt;&lt;/center&gt;
-
-&lt;h2 id=&quot;생성과-replicaset-확인&quot;&gt;생성과 ReplicaSet 확인&lt;/h2&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;k8s/deployment.yaml&lt;/code&gt;은 앞의 ReplicaSet 매니페스트와 같은 &lt;code class=&quot;highlighter-rouge&quot;&gt;replicas: 3&lt;/code&gt;, 셀렉터, 파드 템플릿을 사용한다. 오브젝트 종류와 이름은 다음과 같다.&lt;/p&gt;
-
-&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# k8s/deployment.yaml의 오브젝트 선언&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;apiVersion&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;apps/v1&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;kind&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;Deployment&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;metadata&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-  &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;joker-deployment&lt;/span&gt;
-  &lt;span class=&quot;na&quot;&gt;labels&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
-    &lt;span class=&quot;na&quot;&gt;app&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;fast-api&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# Deployment와 하위 오브젝트 조회&lt;/span&gt;
-kubectl create &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; k8s/deployment.yaml
-kubectl get deployments,replicasets,pod &lt;span class=&quot;nt&quot;&gt;-owide&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# 실행 결과 중 Deployment&lt;/span&gt;
-NAME                               READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS    IMAGES                          SELECTOR
-deployment.apps/joker-deployment   3/3     3            3           9s    hello-joker   &amp;lt;dockerhub-user&amp;gt;/hello-joker:v1   &lt;span class=&quot;nv&quot;&gt;app&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;fast-api
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;하위 ReplicaSet의 이름은 &lt;code class=&quot;highlighter-rouge&quot;&gt;joker-deployment-77cbff5455&lt;/code&gt;였다. ReplicaSet과 파드에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;pod-template-hash=77cbff5455&lt;/code&gt; 레이블이 붙었다. 이 해시는 파드 템플릿에서 계산되어 같은 Deployment 안의 서로 다른 템플릿을 구분한다. 생성된 파드 세 개의 IP는 &lt;code class=&quot;highlighter-rouge&quot;&gt;10.244.0.13&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;10.244.0.15&lt;/code&gt;였다.&lt;/p&gt;
-
-&lt;h2 id=&quot;이미지-변경과-롤링-업데이트&quot;&gt;이미지 변경과 롤링 업데이트&lt;/h2&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;k8s/deployment.yaml&lt;/code&gt;의 이미지 태그를 &lt;code class=&quot;highlighter-rouge&quot;&gt;v2&lt;/code&gt;로 바꾸고 적용했다. &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl apply&lt;/code&gt;는 파일의 선언을 클러스터 오브젝트에 반영한다.&lt;/p&gt;
-
-&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# 파드 템플릿의 이미지 필드 변경&lt;/span&gt;
-&lt;span class=&quot;na&quot;&gt;image&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&amp;lt;dockerhub-user&amp;gt;/hello-joker:v2&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 한 터미널에서 파드 변화를 관찰&lt;/span&gt;
-kubectl get pods &lt;span class=&quot;nt&quot;&gt;-owide&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-w&lt;/span&gt;
-
-&lt;span class=&quot;c&quot;&gt;# 다른 터미널에서 변경 적용&lt;/span&gt;
-kubectl apply &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; k8s/deployment.yaml
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;새 ReplicaSet &lt;code class=&quot;highlighter-rouge&quot;&gt;joker-deployment-5b78d974b8&lt;/code&gt;의 첫 파드가 &lt;code class=&quot;highlighter-rouge&quot;&gt;Running&lt;/code&gt;이 된 뒤 기존 파드가 종료되기 시작했다. &lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl describe deployment joker-deployment&lt;/code&gt;의 &lt;code class=&quot;highlighter-rouge&quot;&gt;ScalingReplicaSet&lt;/code&gt; 이벤트에도 같은 순서가 남았다.&lt;/p&gt;
-
-&lt;div class=&quot;language-text highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# 이벤트 Message 발췌
-Scaled up replica set joker-deployment-5b78d974b8 to 1
-Scaled down replica set joker-deployment-77cbff5455 to 2 from 3
-Scaled up replica set joker-deployment-5b78d974b8 to 2 from 1
-Scaled down replica set joker-deployment-77cbff5455 to 1 from 2
-Scaled up replica set joker-deployment-5b78d974b8 to 3 from 2
-Scaled down replica set joker-deployment-77cbff5455 to 0 from 1
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;완료 뒤에는 &lt;code class=&quot;highlighter-rouge&quot;&gt;v2&lt;/code&gt; ReplicaSet의 파드 복제 수가 3, &lt;code class=&quot;highlighter-rouge&quot;&gt;v1&lt;/code&gt; ReplicaSet의 파드 복제 수가 0이었다. 기본 RollingUpdate 전략의 &lt;code class=&quot;highlighter-rouge&quot;&gt;maxSurge&lt;/code&gt;와 &lt;code class=&quot;highlighter-rouge&quot;&gt;maxUnavailable&lt;/code&gt;은 각각 25%다. 복제 수가 3이면 추가 허용 수는 올림해 1, 사용 불가 허용 수는 내림해 0이 된다. 파드 교체 조건과 설정의 영향은 &lt;a href=&quot;/dev/Dev-Kubernetes-Deployment-Failure-1/&quot;&gt;Deployment 업데이트 전략&lt;/a&gt;에서 다뤘다.&lt;/p&gt;
-
-&lt;h2 id=&quot;롤백과-정리&quot;&gt;롤백과 정리&lt;/h2&gt;
-
-&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;kubectl rollout undo&lt;/code&gt;는 Deployment의 파드 템플릿을 이전 리비전으로 되돌리는 명령이다.&lt;/p&gt;
-
-&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 이전 리비전으로 롤백하고 결과 조회&lt;/span&gt;
-kubectl rollout undo deployment/joker-deployment
-kubectl get deployments,replicasets,pod &lt;span class=&quot;nt&quot;&gt;-owide&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;기존 &lt;code class=&quot;highlighter-rouge&quot;&gt;v1&lt;/code&gt; ReplicaSet &lt;code class=&quot;highlighter-rouge&quot;&gt;77cbff5455&lt;/code&gt;의 파드 복제 수가 다시 3으로 늘고, &lt;code class=&quot;highlighter-rouge&quot;&gt;v2&lt;/code&gt; ReplicaSet &lt;code class=&quot;highlighter-rouge&quot;&gt;5b78d974b8&lt;/code&gt;의 파드 복제 수는 0으로 줄었다. 파드는 새로 만들어져 IP가 &lt;code class=&quot;highlighter-rouge&quot;&gt;10.244.0.19&lt;/code&gt;~&lt;code class=&quot;highlighter-rouge&quot;&gt;10.244.0.21&lt;/code&gt;이었다.&lt;/p&gt;
-
-&lt;p&gt;실습 후 Deployment를 삭제하고, 로컬 &lt;code class=&quot;highlighter-rouge&quot;&gt;k8s/deployment.yaml&lt;/code&gt;의 이미지 태그도 &lt;code class=&quot;highlighter-rouge&quot;&gt;v1&lt;/code&gt;으로 돌렸다. &lt;code class=&quot;highlighter-rouge&quot;&gt;rollout undo&lt;/code&gt;가 바꾸는 대상은 클러스터의 Deployment다. 로컬 파일에 &lt;code class=&quot;highlighter-rouge&quot;&gt;v2&lt;/code&gt;가 남은 채 다시 apply하면 그 선언이 적용된다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;정리&quot;&gt;정리&lt;/h1&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;오브젝트&lt;/th&gt;
-      &lt;th&gt;선언하는 것&lt;/th&gt;
-      &lt;th&gt;실습에서 관찰한 동작&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Pod&lt;/td&gt;
-      &lt;td&gt;실행할 컨테이너&lt;/td&gt;
-      &lt;td&gt;앱 기동과 port-forward 응답&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;ReplicaSet&lt;/td&gt;
-      &lt;td&gt;파드 템플릿과 복제 수&lt;/td&gt;
-      &lt;td&gt;파드 삭제 후 재생성, 3개에서 4개로 확장&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;Deployment&lt;/td&gt;
-      &lt;td&gt;배포할 템플릿과 업데이트 전략&lt;/td&gt;
-      &lt;td&gt;새 ReplicaSet으로 교체, 이전 리비전으로 롤백&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;ML 플랫폼의 서빙 API와 관리 서비스도 컨테이너를 실행하고 복제 수를 유지하며 버전을 바꿔야 한다. 이번 실습은 그 워크로드 관리 계층에 해당한다. 파드 교체 뒤에도 같은 주소로 요청하려면 &lt;a href=&quot;/MLOps-ML-Platform-Engineering-03-03-04-Service-Networking/&quot;&gt;3.3.4편의 Service&lt;/a&gt;가 필요하다.&lt;/p&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
-
-&lt;h1 id=&quot;참고-링크&quot;&gt;참고 링크&lt;/h1&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/&quot;&gt;Kubernetes ReplicaSet&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/concepts/workloads/controllers/deployment/&quot;&gt;Kubernetes Deployment&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/docs/reference/kubectl/generated/kubectl_port-forward/&quot;&gt;kubectl port-forward&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://kubernetes.io/blog/2024/08/20/websockets-transition/&quot;&gt;Kubernetes 1.31의 WebSocket 전환&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.kubernetes.dev/resources/keps/4006/&quot;&gt;KEP-4006&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="Pod" /><category term="ReplicaSet" /><category term="Deployment" /><category term="port-forward" /><category term="Rolling-Update" /><category term="Machine-Learning-Platform-Engineering-Study" /><category term="Machine-Learning-Platform-Engineering-Study-Week-1" /><summary type="html">hello-joker를 Pod, ReplicaSet, Deployment로 띄워 복제 수 유지와 롤링 업데이트를 관찰하고, port-forward가 파드에 닿는 경로를 확인해 보자.</summary></entry></feed>
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;</content><author><name>Eraser</name></author><category term="Kubernetes" /><category term="Service" /><category term="NodePort" /><category term="kube-proxy" /><category term="iptables" /><category term="CoreDNS" /><category term="Machine-Learning-Platform-Engineering-Study" /><category term="Machine-Learning-Platform-Engineering-Study-Week-1" /><summary type="html">kind에서 Service의 세 유형을 적용하고, CoreDNS 설정과 kube-proxy의 iptables 규칙으로 앱에 닿는 요청 경로를 확인해 보자.</summary></entry></feed>
