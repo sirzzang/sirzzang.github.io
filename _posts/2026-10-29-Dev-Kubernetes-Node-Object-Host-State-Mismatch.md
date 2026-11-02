@@ -20,7 +20,7 @@ tags:
   - kubelet
   - Node-Lifecycle
   - MLOps
-last_modified_at: 2026-10-29
+last_modified_at: 2026-11-02
 ---
 
 <br>
@@ -327,6 +327,13 @@ kubelet은 기동 후 처음 한 번만 Node를 등록한다(`registerWithAPISer
 
 static 파드(kubelet이 호스트의 매니페스트 파일에서 직접 띄우는 파드. kube-proxy 등)는 API server에 비친 객체(mirror pod)만 사라지고 호스트의 프로세스는 kubelet이 계속 돌린다. 호스트가 살아 있다면 호스트에는 아무 일도 일어나지 않는다.
 
+정리하면 노드가 클러스터에 속해 있다는 것은 API 쪽과 호스트 쪽이 맞물려 있다는 뜻이다.
+
+- API 쪽: 위 표의 Node·Lease·CSINode·node-password secret
+- 호스트 쪽: `rke2-agent`(그 안의 kubelet), server 주소와 토큰을 담은 `config.yaml`, `/etc/rancher/node/password`
+
+`kubectl delete node`는 API 쪽만 지운다. 호스트 쪽이 남아 있으면 agent가 다음에 재시작할 때 다시 등록하고, Node와 secret이 cordon도 role 라벨도 없이 새로 생긴다. 그래서 노드를 뺄 때는 호스트 쪽을 먼저 정리하고 Node는 나중에 지운다.
+
 ## 멈춘 agent와 떠난 agent
 
 "rke2-agent를 멈췄다"는 "클러스터에서 뺐다"와 다르다. `rke2-agent.service`는 `KillMode=process`라 `systemctl stop`이 메인 `rke2` 프로세스만 죽이고 `ExecStopPost`가 cgroup 안에서 이름이 `containerd`·`kubelet`인 프로세스만 골라 죽인다. containerd-shim과 컨테이너는 대상이 아니라서 살아남는다. 결과적으로 재시작이나 업그레이드 중에도 컨테이너는 유지된다.
@@ -558,7 +565,7 @@ sequenceDiagram
 
 ## 아직 못 하는 것
 
-- **다른 클러스터로의 이탈 감지.** 빼는 쪽 클러스터의 API 객체만으로는 불가능하다. 절차("3단계 전 편입 금지")로만 막는다. 같은 Rancher 서버에 두 클러스터가 다 등록돼 있다면 Rancher 쪽에서 같은 호스트가 두 곳에 보이는지 확인할 수 있을지 모르지만 확인하지 못했다
+- **다른 클러스터로의 이탈 감지.** 빼는 쪽 클러스터의 API 객체만으로는 불가능하다. 절차("3단계 전 편입 금지")로만 막는다. 같은 Rancher 서버에 두 클러스터가 다 등록돼 있다면 Rancher 쪽에서 같은 호스트가 두 곳에 보이는지 확인할 수 있을지 모르지만 확인하지 못했다. 결국 노드가 지금 어느 클러스터에 붙어 있는지는 클러스터가 아니라 사람이 남긴 기록으로만 알 수 있다. [이관 절차](#노드-이관-6단계)의 6단계에서 소속·기간·반환 예정일을 기록하게 한 것도 이 때문이다
 - **다른 평면의 삭제 경로.** 게이트 밖에서 Node를 지운 두 경로가 어떤 권한이었는지 확인하지 못했다. 게이트는 우리 스크립트에서만 강제된다. 후보는 `nodes` delete 권한을 운영 그룹으로 좁히는 것과, 게이트 통과 annotation이 없는 Node 삭제를 ValidatingAdmissionPolicy(API server가 CEL 식으로 요청을 검사해 거부하는 admission 정책)로 거부하는 것이다. 아직 넣지 않았다
 - **모르는 이름의 노드 합류 알림.** 사례 1의 `new-01`~`03`은 어떤 알림에도 잡히지 않았다. role 라벨이 없고 생성 시각이 최근인 Node를 경보로 올리는 식을 후보로 두었고 아직 넣지 않았다
 - **알림 silence.** silence는 Alertmanager에서 조건에 맞는 알림을 정해진 시간 동안 묵음 처리하는 설정이다. 작업 중 걸어 둔 silence 하나가 만료 전에 사라졌다(원인 미상). 알림 라우팅이 `group_by [alertname]`(같은 알림 이름을 한 통으로 묶는 설정)에 6시간 반복이라 대상 8대를 silence해도 범위 밖 노드 때문에 같은 메시지가 계속 왔다. silence는 "걸었다"는 기록과 별개로 존재를 다시 읽어야 한다. 묶음 알림에서는 효과가 없다
