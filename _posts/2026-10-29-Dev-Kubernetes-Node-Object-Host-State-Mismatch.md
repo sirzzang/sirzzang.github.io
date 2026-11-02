@@ -28,7 +28,7 @@ last_modified_at: 2026-11-02
 # TL;DR
 
 - 온프레미스 RKE2 클러스터에서 워커 노드를 다른 팀으로 넘기는 동안, Kubernetes API에 등록된 Node 객체가 말하는 상태와 호스트의 실제 상태가 세 번 어긋났다. 호스트 정리 전에 재부팅된 노드가 IP만 바뀐 채 또는 새 이름으로 다시 붙었고([사례 1](#사례-1-새-이름으로-돌아온-노드)), `NotReady`로만 보이던 노드가 6일 동안 다른 클러스터에 소속돼 있었고([사례 2](#사례-2-notready-뒤의-이중-소속)), "호스트 정리 완료" 회신과 `NotReady`는 서로를 증명하지 못했다([사례 3](#사례-3-정리-회신과-notready의-증명력))
-- 세 사례의 공통 원인은 하나다. 클러스터가 노드에 대해 아는 것은 **마지막으로 신호를 받은 시각**뿐이다. 호스트가 꺼졌는지, 네트워크가 끊겼는지, 다른 클러스터로 갔는지는 Node 객체 어디에도 남지 않고, 셋 다 원래 클러스터에서는 같은 모양(`Ready=Unknown`, 멈춘 Lease, 그대로인 bootID)으로 보인다
+- 세 사례는 모두 클러스터가 노드에 대해 아는 것이 **마지막으로 신호를 받은 시각**뿐이라서 생겼다. 호스트가 꺼졌는지, 네트워크가 끊겼는지, 다른 클러스터로 갔는지는 Node 객체 어디에도 남지 않고, 셋 다 원래 클러스터에서는 같은 모양(`Ready=Unknown`, 멈춘 Lease, 그대로인 bootID)으로 보인다
 - 여기에 RKE2의 등록 구조가 겹친다. agent 설정이 호스트에 남아 있으면 재부팅만으로 다시 붙고, `server` 주소만 바꾸면 원래 클러스터의 Node 객체는 남긴 채 다른 클러스터에 등록되며, server 토큰으로 붙은 워커는 `rke2-server`가 켜지는 순간 etcd 멤버가 될 수 있다
 - 따라서 노드를 뺄 때 Node 객체 삭제는 `NotReady`가 아니라 호스트 정리의 증거를 보고 결정해야 한다. 이번 작업에서는 정리 완료 회신, RKE2 제거 시각과 Lease 정지 시각의 대조, 기준선 비교, 삭제 직전 객체 보존, 재합류 없음 확인 두 번을 게이트로 두었고, 돌려받은 노드는 Node 객체를 남기고 node-password secret만 지운 뒤 같은 버전으로 재설치했다. 다른 클러스터로의 이탈은 원래 클러스터 쪽에서 감지할 수단이 없어 이 절차로만 막는다
 - 어느 층도 호스트의 RKE2를 대신 지우지 않는다. Kubernetes의 `kubectl delete node`는 API 객체와 거기에 딸린 객체만 지우고, RKE2는 거기에 node-password secret을 더할 뿐이며, Rancher도 imported·custom 어느 유형에서든 호스트 정리는 사람 몫이다(2026년 10월, Rancher 2.15 문서 기준)
@@ -39,11 +39,11 @@ last_modified_at: 2026-11-02
 
 ## 노드 이관 작업
 
-회사에서 RKE2 v1.34 기반의 온프레미스 GPU 클러스터(이하 **클러스터 A**)를 운영하고 있다. 운영 대상인 클러스터는 Rancher 2.15에 기존 클러스터로 등록(import)돼 있고 워커 노드는 `rke2 agent --server https://<cp-vip>:9345 --token …` 형태로 붙어 있다(`<cp-vip>`는 컨트롤 플레인 앞의 가상 IP다). 이 클러스터에는 제품 하드웨어 내구 검증용 워크로드를 띄우기 위해 사용하던 노드 13대가 들어와 있었는데, 검증이 끝나 이 노드들을 세 팀에 재분배하기로 했다. 클러스터 A에서 13대를 깨끗하게 빼는 일이 우리 팀 몫이 됐다. 이 글은 그중 워커 노드를 빼며 겪었던 사례들을 다뤄 보고자 한다.
+회사에서 RKE2 v1.34 기반의 온프레미스 GPU 클러스터(이하 **클러스터 A**)를 운영하고 있다. 운영 대상인 클러스터는 Rancher 2.15에 기존 클러스터로 등록(import)돼 있고 워커 노드는 `rke2 agent --server https://<cp-vip>:9345 --token …` 형태로 붙어 있다(`<cp-vip>`는 컨트롤 플레인 앞의 가상 IP다). 이 클러스터에는 제품 하드웨어 내구 검증용 워크로드를 띄우던 노드 13대가 들어와 있었다. 검증이 끝나 이 노드들을 세 팀에 재분배하기로 했다. 클러스터 A에서 13대를 깨끗하게 빼는 일이 우리 팀 몫이 됐다. 이 글은 그중 워커 노드를 빼며 겪었던 사례들을 다뤄 보고자 한다.
 
 > etcd 멤버인 서버 노드는 멤버 제거가 먼저라 절차가 다르다.
 
-노드 하나를 다른 클러스터로 옮기려면 네 단계가 순서대로 진행돼야 한다. ① 클러스터 A에서 cordon·drain → ② 호스트 정리(Rancher의 호스트 에이전트 제거 → RKE2 제거 → 재부팅) → ③ 클러스터 A에서 정리 확인 뒤 Node 삭제, 재합류 없음 확인 → ④ 받는 쪽이 이름·IP를 바꿔 편입. 호스트는 인프라 팀 관할이라 ②와 ④는 다른 팀이 맡고, 우리 팀은 SSH 없이 `kubectl`과 모니터링 지표로만 클러스터 쪽을 본다. 즉 ③에서 "호스트 정리가 끝났다"를 우리가 직접 확인할 수단이 없다. 클러스터 쪽에서 보이는 상태로 호스트 상태를 추정해야 했고, 뒤의 세 사례는 모두 이 추정이 실제와 달랐던 경우다.
+노드 하나를 다른 클러스터로 옮기려면 네 단계가 순서대로 진행돼야 한다. ① 클러스터 A에서 cordon·drain → ② 호스트 정리(Rancher의 호스트 에이전트 제거 → RKE2 제거 → 재부팅) → ③ 클러스터 A에서 정리 확인 뒤 Node 삭제, 재합류 없음 확인 → ④ 받는 쪽이 이름·IP를 바꿔 편입. 호스트는 인프라 팀 관할이라 ②와 ④는 다른 팀이 맡는다. 우리 팀은 SSH 없이 `kubectl`과 모니터링 지표로만 클러스터 쪽을 본다. 즉 ③에서 "호스트 정리가 끝났다"를 우리가 직접 확인할 수단이 없다. 클러스터 쪽에서 보이는 상태로 호스트 상태를 추정해야 했고 뒤의 세 사례는 모두 이 추정이 실제와 달랐던 경우다.
 
 > 이 글에서 노드 이름은 가명이다. 4080 계열 11대는 `gpu-a01`~`gpu-a11`, 학습 풀에 있던 4090 2대는 `gpu-b01`·`gpu-b02`, 컨트롤 플레인은 `ctl-1`~`ctl-3`, 작업 뒤에도 남는 노드 중 대조군으로 쓴 하나는 `keep-1`로 적는다. 날짜는 착수일을 D+0으로 둔 상대 표기이고 IP는 문서용 대역(RFC 5737)으로 바꿨다. 시각은 KST이며 YAML 발췌에 나오는 `Z`로 끝나는 값은 UTC(KST − 9시간)다. 분 단위 간격은 실측값 그대로다.
 
@@ -121,7 +121,7 @@ kube_node_role{node=~"new-0[1-3]"}                                          # (n
 
 노드를 고르는 조건이 느슨한 파드가 즉시 옮겨 갔다. CI 러너의 listener 파드 18개(nodeSelector 없음)가 새 노드로 가서 1시간 40분 동안 각각 85~112회 재생성됐다(재생성의 원인은 확인하지 않았다). GPU Operator와 노드 검사용 DaemonSet 파드도 떴다. 학습 파드는 role 라벨 조건이 있어 가지 않았다. `node-not-ready` 경보는 3분 Pending 뒤 풀렸고 방치 노드 경보는 72시간 조건이라 울리지 않았다([알림의 노드 존재 조인](#알림의-노드-존재-조인) 절). 통보된 알림은 0건이다.
 
-같은 날 오후, 옛 이름 5대와 새 이름 3대가 동시에 사라졌다. 우리 게이트를 거치지 않은 삭제였다. 경위는 이틀 뒤에 확인했다. 이름을 바꿔 재부팅한 호스트가 클러스터 A에 다시 붙은 것을 발견한 쪽에서 Node를 바로 지운 것이었다.
+같은 날 오후, 옛 이름 5대와 새 이름 3대가 동시에 사라졌다. 우리 게이트를 거치지 않은 삭제였다. 경위는 이틀 뒤에 확인했다. 이름을 바꿔 재부팅한 호스트가 클러스터 A에 다시 붙었고 이를 발견한 쪽에서 Node를 바로 지웠다.
 
 어느 호스트가 어느 새 이름이 됐는지는 system UUID로 맞췄다. kube-state-metrics의 `kube_node_info`에 `system_uuid` 라벨이 있어 지워진 노드도 Prometheus 보존 기간 안에서는 대조할 수 있다.
 
@@ -216,9 +216,9 @@ D+21에 `gpu-a07`~`a09`가 클러스터 B에 붙어 있었고 그날 클러스�
 
 ### 원 클러스터가 아는 것
 
-클러스터 A에서는 이 6일 동안 `Ready=Unknown`, 멈춘 Lease, 변하지 않는 bootID, 동시에 끊긴 지표만 보였다. 4대의 Lease가 12초 안에 같이 멈춘 "일괄 작업의 모양"이 유일한 힌트였는데 그마저 일괄 셧다운과 구분되지 않는다. 네 번째 노드 `gpu-a10`은 같은 분에 멈췄으므로 같은 일괄 작업으로 추정하지만 클러스터 B에 있었는지는 확인하지 못했다.
+클러스터 A에서는 이 6일 동안 `Ready=Unknown`, 멈춘 Lease, 변하지 않는 bootID, 동시에 끊긴 지표만 보였다. 4대의 Lease가 12초 안에 같이 멈춘 일괄 작업의 모양이 유일한 힌트였는데 그마저 일괄 셧다운과 구분되지 않는다. 네 번째 노드 `gpu-a10`은 같은 분에 멈췄으므로 같은 일괄 작업으로 추정하지만 클러스터 B에 있었는지는 확인하지 못했다.
 
-이중 소속으로 클러스터 A의 데이터가 꼬였는지도 확인했다. Node 객체는 위 `managedFields`대로 다른 kubelet이 손대지 않았다. 이 노드의 GPU 지표는 7일 최댓값이 0, 로그 수집기에 들어온 줄도 D+15 이후 0이다. 클러스터 B의 kubelet은 클러스터 B의 API server에만 썼으므로 클러스터 A 쪽 객체는 멈춘 채 보존됐다. 어긋난 쪽은 객체가 가리키는 호스트의 소속이었다. server 주소만 바꿔도 왜 이렇게 되는지는 뒤에서 본다([멈춘 agent와 떠난 agent](#멈춘-agent와-떠난-agent) 절).
+이중 소속으로 클러스터 A의 데이터가 꼬였는지도 확인했다. Node 객체는 위 `managedFields`대로 다른 kubelet이 손대지 않았다. 이 노드의 GPU 지표는 7일 최댓값이 0, 로그 수집기에 들어온 줄도 D+15 이후 0이다. 클러스터 B의 kubelet은 클러스터 B의 API server에만 썼으므로 클러스터 A 쪽 객체는 멈춘 채 보존됐다. 객체가 가리키는 호스트의 소속만 어긋나 있었다. server 주소만 바꿔도 왜 이렇게 되는지는 뒤에서 본다([멈춘 agent와 떠난 agent](#멈춘-agent와-떠난-agent) 절).
 
 ## 사례 3: 정리 회신과 NotReady의 증명력
 
@@ -228,7 +228,7 @@ D+19부터는 호스트 정리 회신이 오면 노드별로 게이트를 돌렸
 
 `gpu-a10`은 아니었다. 회신에 정리 시각이 없었고 클러스터 쪽 Lease는 D+15에 멈춰 있었다. 그 시각은 정리 시각이 아니었다. `gpu-a07`~`a09`가 클러스터 B로 재시작된 시각과 같은 분이라 같은 일괄 작업으로 추정할 뿐이다. "회신 시각 ±5분"이라는 대조 자체가 성립하지 않았다. "bootID가 D+15 이후 그대로다 = 그 뒤로 클러스터 A에 한 번도 보고하지 않았다"만 확인할 수 있었다.
 
-이 노드는 추가 확인 없이 삭제했다. 같은 작업 묶음의 `gpu-a11` 회신이 실측과 맞았고 최악의 경우가 "cordon 없는 재합류"라는 것을 알고 그 위험을 받아들인 결정이다. 게이트를 비켜 간 유일한 노드다.
+이 노드는 추가 확인 없이 삭제했다. 같은 작업 묶음의 `gpu-a11` 회신이 실측과 맞았고 최악의 경우가 cordon 없는 재합류라는 것을 알고 그 위험을 받아들인 결정이다. 게이트를 비켜 간 유일한 노드다.
 
 여기서 "셧다운 상태의 `NotReady`는 정리의 증거가 아니다"라는 원칙이 나왔다. Node 객체를 남겨 둔 채 호스트가 정리 전에 재기동하면 cordon된 채로 다시 붙을 뿐이라 무해하다([kubelet의 단 한 번 등록](#kubelet의-단-한-번-등록) 절). 반대로 정리 증거 없이 객체를 지우면 다음 재기동 때 cordon 없는 새 노드가 된다. D+9에 네 노드가 재부팅 뒤 같은 이름으로 `Ready`에 돌아온 것 자체가 "호스트에 RKE2가 남아 있다"는 클러스터 쪽 증거이기도 했다.
 
@@ -242,17 +242,17 @@ D+19부터는 호스트 정리 회신이 오면 노드별로 게이트를 돌렸
 
 kubelet은 두 경로로 살아 있음을 알린다. 10초마다 Lease의 `renewTime`을 갱신하고 변경이 있을 때와 5분마다 Node `.status`를 PATCH한다. kube-controller-manager 안의 node lifecycle controller(이하 Node Controller)는 5초마다 둘 중 하나라도 바뀌었으면 자기 시계로 "마지막 신호 시각"을 갱신한다. 그 시각에서 `nodeMonitorGracePeriod`(v1.32부터 기본 50초)가 지나면 `Ready`를 `Unknown`으로 바꾼다. 판정 기준은 Lease의 만기가 아니라 `renewTime`이 전진했는지다. 전환은 `renewTime` 기준 50~55초 사이에 일어난다(50초 grace period에 5초 순회 주기가 겹친다). `gpu-a11`은 Lease 마지막 갱신(15:07:56)에서 전환(15:08:48)까지 52초, `gpu-a07`은 53초였다. 이 클러스터의 kube-controller-manager에는 관련 플래그가 없어 기본값이 적용된다.
 
-`kubectl get nodes`의 `STATUS` 열은 `Ready`가 `True`가 아니면 모두 `NotReady`로 보여 주지만 condition 값은 셋이다. `False`는 kubelet이 살아 있으면서 런타임·네트워크 문제로 스스로 보고하는 값(reason `KubeletNotReady`)이다. `Unknown`은 신호가 끊겨 Node Controller가 덮어쓴 값(reason `NodeStatusUnknown`)이다. 세 사례의 노드는 모두 `Unknown`이었다. kubelet이 아무것도 보고하지 않아 컨트롤러가 이 값을 썼다. 이때 `MemoryPressure`·`DiskPressure`·`PIDPressure`도 함께 `Unknown`이 되고 `NetworkUnavailable`은 마지막 값이 남는다. 앞의 YAML 발췌가 그 모양이다.
+`kubectl get nodes`의 `STATUS` 열은 `Ready`가 `True`가 아니면 모두 `NotReady`로 보여 주지만 condition 값은 셋이다. `False`는 kubelet이 살아 있으면서 런타임·네트워크 문제로 스스로 보고하는 값(reason `KubeletNotReady`)이다. `Unknown`은 신호가 끊겨 Node Controller가 덮어쓴 값(reason `NodeStatusUnknown`)이다. 세 사례의 노드는 모두 `Unknown`이었다. kubelet이 아무것도 보고하지 않아 컨트롤러가 이 값을 썼다. 이때 앞의 YAML 발췌처럼 `MemoryPressure`·`DiskPressure`·`PIDPressure`도 함께 `Unknown`이 되고 `NetworkUnavailable`은 마지막 값이 남는다.
 
 ## unreachable taint
 
-`Ready`가 `Unknown`이 되면 Node Controller는 `node.kubernetes.io/unreachable` taint를 붙인다(`False`일 때는 `not-ready`). NoSchedule은 condition 변경 이벤트를 받아 거의 즉시 붙는다. NoExecute는 별도 루프가 zone(토폴로지 라벨로 묶은 노드 그룹. 라벨이 없으면 전체가 한 zone) 단위 rate limiter를 거쳐 붙인다. 기본값은 초당 0.1개(`--node-eviction-rate`)이고 burst가 1이라 첫 노드는 즉시 받고 그 다음부터는 토큰이 10초마다 하나씩 나온다. 12초 안에 4대가 연달아 `Unknown`이 되자 두 번째 노드부터 최대 10초씩 밀렸다. 앞 발췌의 10초 차이(05:24:35 → 05:24:45)가 그것이다. 한 zone에서 `Unknown` 비율이 임계(기본 55%)를 넘으면 limiter가 더 느려지거나 멈추는데 이때는 4/34대라 해당하지 않았다. 작은 클러스터에서 절반 넘게 뺀다면 taint 타이밍이 달라진다.
+`Ready`가 `Unknown`이 되면 Node Controller는 `node.kubernetes.io/unreachable` taint를 붙인다(`False`일 때는 `not-ready`). NoSchedule은 condition 변경 이벤트를 받아 거의 즉시 붙는다. NoExecute는 별도 루프가 zone(토폴로지 라벨로 묶은 노드 그룹. 라벨이 없으면 전체가 한 zone) 단위 rate limiter를 거쳐 붙인다. 기본값은 초당 0.1개(`--node-eviction-rate`)이고 burst가 1이라 첫 노드는 즉시 받고 그 다음부터는 토큰이 10초마다 하나씩 나온다. 12초 안에 4대가 연달아 `Unknown`이 되자 두 번째 노드부터 최대 10초씩 밀렸다. 앞 발췌의 10초 차이(05:24:35 → 05:24:45)는 이 지연에서 생겼다. 한 zone에서 `Unknown` 비율이 임계(기본 55%)를 넘으면 limiter가 더 느려지거나 멈추는데 이때는 4/34대라 해당하지 않았다. 작은 클러스터에서 절반 넘게 뺀다면 taint 타이밍이 달라진다.
 
 NoExecute taint가 붙으면 파드에 기본으로 주입된 300초 toleration이 지난 뒤 taint-eviction-controller가 파드를 내보낸다([Taint based Evictions](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/#taint-based-evictions)). 이미 drain된 노드라 내보낼 파드는 없었다.
 
 ## 기록되지 않는 단절 이유
 
-Node 객체와 Lease에는 마지막 heartbeat 시각과 `.status.nodeInfo`(bootID, machineID, systemUUID)만 남는다. kubelet에는 "떠난다"고 알리는 경로가 없다(Graceful Node Shutdown을 켠 경우 종료 직전 `Ready=False`에 "node is shutting down"이 잠깐 남지만 기본은 꺼져 있고 grace period 뒤 `Unknown`으로 덮인다). [배경 절의 그림](#세-사례의-공통-구조)이 이것이다. 전원이 꺼져도, 네트워크가 끊겨도, 다른 클러스터로 가도 원래 클러스터에서는 같은 상태로 수렴한다.
+Node 객체와 Lease에는 마지막 heartbeat 시각과 `.status.nodeInfo`(bootID, machineID, systemUUID)만 남는다. kubelet에는 "떠난다"고 알리는 경로가 없다(Graceful Node Shutdown을 켠 경우 종료 직전 `Ready=False`에 "node is shutting down"이 잠깐 남지만 기본은 꺼져 있고 grace period 뒤 `Unknown`으로 덮인다). [배경 절의 그림](#세-사례의-공통-구조)처럼 전원이 꺼져도, 네트워크가 끊겨도, 다른 클러스터로 가도 원래 클러스터에서는 같은 상태로 수렴한다.
 
 이는 cloud provider가 없는 온프레미스 이야기다. 클라우드처럼 인스턴스 소멸을 판정하는 controller가 있는 환경에서는 인스턴스가 사라지면 Node 객체도 지워지므로 모양이 달라진다.
 
@@ -306,15 +306,15 @@ kubectl -n kube-system get secret keep-1.node-password.rke2 -o jsonpath='{.metad
 
 kubelet은 기동 후 처음 한 번만 Node를 등록한다(`registerWithAPIServer`의 `registrationCompleted`). 등록이 끝난 뒤 누군가 Node를 지우면 kubelet은 "node not found"로 status PATCH에 실패할 뿐 다시 만들지 않는다. Lease도 마찬가지다. Lease가 Node와 함께 지워지면 kubelet의 lease controller는 새 Lease를 만들 때 ownerReference를 채우려고 Node를 조회한다. 그 조회가 실패해 만들지 못하고 재시도만 반복한다. Node도 Lease도 kubelet이 재시작하기 전에는 돌아오지 않는다.
 
-재등록의 계기는 프로세스 재시작이다. `rke2-agent.service`는 `Restart=always`라서 어떤 이유로든 프로세스가 끝나면 5초 뒤 다시 뜨고 그때 kubelet이 다시 등록한다. 재부팅은 당연히 포함된다.
+재등록은 프로세스가 재시작할 때 일어난다. `rke2-agent.service`는 `Restart=always`라서 어떤 이유로든 프로세스가 끝나면 5초 뒤 다시 뜨고 그때 kubelet이 다시 등록한다. 재부팅은 당연히 포함된다.
 
 같은 이름으로 다시 등록하면 API server가 `AlreadyExists`를 돌려주고 kubelet은 기존 객체를 자기 기준으로 맞춘다(reconcile). 이때 kubelet이 손대는 것은 기본 라벨(hostname, os, arch 등)과 `nvidia.com/gpu` 같은 확장 자원 정도다. `spec.unschedulable`, taint, 사람이 붙인 라벨과 annotation은 그대로 남는다. InternalIP가 바뀌면 `.status.addresses`가 갱신된다. 사례 1에서 `gpu-a03`·`a05`는 이렇게 IP만 바뀐 채 cordon을 유지했다. 사례 3의 "정리 전 재기동은 무해하다"도 이 동작에 근거한다.
 
-다른 이름으로 등록하면 새 객체다. 설정 출처가 있는 것만 돌아온다. `config.yaml`의 `node-label`·`node-taint`, k3s가 찍는 `k3s.io/*` annotation, Rancher가 찍는 `plan.cattle.io/*` 라벨이다. `kubectl`로 붙인 cordon·role 라벨·taint·annotation은 없다. `new-01`~`03`이 빈손으로 시작한 이유다.
+다른 이름으로 등록하면 새 객체다. 설정 출처가 있는 것만 돌아온다. `config.yaml`의 `node-label`·`node-taint`, k3s가 찍는 `k3s.io/*` annotation, Rancher가 찍는 `plan.cattle.io/*` 라벨이다. `kubectl`로 붙인 cordon·role 라벨·taint·annotation은 없으므로 `new-01`~`03`은 빈손으로 시작했다.
 
 ## Node 삭제의 연쇄
 
-`kubectl delete node`는 API server의 객체 하나를 지운다. 호스트는 그대로다. 대신 객체 쪽에서는 연쇄가 일어난다.
+`kubectl delete node`는 호스트를 그대로 두고 API server의 객체 하나를 지운다. 대신 객체 쪽에서는 연쇄가 일어난다.
 
 | 함께 사라지는 것 | 메커니즘 | 소요 |
 |---|---|---|
@@ -332,7 +332,7 @@ static 파드(kubelet이 호스트의 매니페스트 파일에서 직접 띄우
 - API 쪽: 위 표의 Node·Lease·CSINode·node-password secret
 - 호스트 쪽: `rke2-agent`(그 안의 kubelet), server 주소와 토큰을 담은 `config.yaml`, `/etc/rancher/node/password`
 
-`kubectl delete node`는 API 쪽만 지운다. 호스트 쪽이 남아 있으면 agent가 다음에 재시작할 때 다시 등록하고, Node와 secret이 cordon도 role 라벨도 없이 새로 생긴다. 그래서 노드를 뺄 때는 호스트 쪽을 먼저 정리하고 Node는 나중에 지운다.
+`kubectl delete node`는 API 쪽만 지운다. 호스트 쪽이 남아 있으면 agent가 다음에 재시작할 때 다시 등록한다. 그때 Node와 secret이 cordon도 role 라벨도 없이 새로 생긴다. 그래서 노드를 뺄 때는 호스트 쪽을 먼저 정리하고 Node는 나중에 지운다.
 
 ## 멈춘 agent와 떠난 agent
 
@@ -352,11 +352,11 @@ ExecStopPost=-/bin/sh -c "systemd-cgls /system.slice/%n | grep -Eo '[0-9]+ (cont
 
 이 동작 탓에 사례 2에서 클러스터 B가 agent를 멈춘 뒤에도 shim 13개와 `cali*` 인터페이스 8개, 파드 볼륨 마운트 17개가 남아 있었다. 이것까지 지우는 것이 `rke2-killall.sh`이다. `rke2-uninstall.sh`는 killall 뒤에 `/etc/rancher/rke2`, `/etc/rancher/node`, `/var/lib/rancher/rke2`, `/var/lib/kubelet`, CNI 디렉터리, 로그, 바이너리와 unit까지 지운다. 다시 설치하면 node-password가 새로 생긴다.
 
-두 스크립트가 지우지 않는 것도 있다. kube-proxy를 IPVS 모드로 쓰는 노드에서는 kube-proxy가 커널에 넣어 둔 IPVS 가상 서버 표가 그대로 남는다. killall은 `kube-ipvs0` 인터페이스와 iptables의 `KUBE-` 규칙을 지우지만 이 표를 비우는 단계는 없다. 표는 커널 메모리에 있어 재부팅하면 사라지므로, 절차대로 재부팅하는 호스트에서는 드러나지 않는다. 재부팅 없이 정리한 호스트에서는 다르다. IPVS는 호스트에서 나가는 패킷도 목적지가 표에 있으면 가로채므로, 그 호스트에서 클러스터의 LoadBalancer IP로 보낸 연결이 이미 사라진 파드 IP로 넘어가 시간 초과가 된다. 클러스터 밖의 다른 호스트에서는 같은 IP가 라우터를 거쳐 MetalLB 노드로 정상 도달하므로, 바깥에서 확인한 "닿는다"가 그 호스트의 경로를 보증하지 않는다. 이 글의 노드들과 별개로, Kubernetes 밖의 서비스가 돌고 있어 재부팅할 수 없는 노드 한 대를 뺄 때 겪었다. 정리 직후 그 호스트에서 LoadBalancer IP가 시간 초과였고 `/proc/net/ip_vs`에 가상 서버 208개가 남아 있었다. `ipvsadm -C`로 비우자 바로 응답했다. 재부팅을 생략하는 호스트에서는 이 명령이 재부팅을 대신한다.
+두 스크립트가 지우지 않는 것도 있다. kube-proxy를 IPVS 모드로 쓰는 노드에서는 kube-proxy가 커널에 IPVS 가상 서버 표를 넣어 두는데 이 표가 그대로 남는다. killall은 `kube-ipvs0` 인터페이스와 iptables의 `KUBE-` 규칙을 지우지만 이 표를 비우는 단계는 없다. 표는 커널 메모리에 있어 재부팅하면 사라지므로 절차대로 재부팅하는 호스트에서는 드러나지 않는다. 재부팅 없이 정리한 호스트에서는 다르다. IPVS는 호스트에서 나가는 패킷도 목적지가 표에 있으면 가로챈다. 그래서 그 호스트에서 클러스터의 LoadBalancer IP로 보낸 연결이 이미 사라진 파드 IP로 넘어가 시간 초과가 된다. 클러스터 밖의 다른 호스트에서는 같은 IP가 라우터를 거쳐 MetalLB 노드로 정상 도달하므로 바깥에서 확인한 "닿는다"가 그 호스트의 경로를 보증하지 않는다. 이 글의 노드들과 별개로, Kubernetes 밖의 서비스가 돌고 있어 재부팅할 수 없는 노드 한 대를 뺄 때 겪었다. 정리 직후 그 호스트에서 LoadBalancer IP가 시간 초과였고 `/proc/net/ip_vs`에 가상 서버 208개가 남아 있었다. `ipvsadm -C`로 비우자 바로 응답했다. 재부팅을 생략하는 호스트에서는 이 명령이 재부팅을 대신한다.
 
-멈춘 agent는 `systemctl start` 한 번이면 같은 설정으로 다시 등록한다. agent가 멈춰 있는 것은 "일시 정지"이고 "빠진 상태"로 볼 수 없다.
+멈춘 agent는 `systemctl start` 한 번이면 같은 설정으로 다시 등록한다. agent가 멈춰 있는 것은 일시 정지이고 빠진 상태로 볼 수 없다.
 
-반대로 `config.yaml`의 `server`만 바꿔 재시작하면 agent는 새 클러스터에 등록한다. 옛 클러스터에는 아무것도 알리지 않는다. agent load balancer 파일(`/var/lib/rancher/rke2/agent/etc/rke2-agent-load-balancer.json`)에 옛 서버 목록이 남아 있지만 기동 시 `ServerURL`이 현재 `server`와 다르면 새 값으로 덮어쓴다. 즉 "옛 클러스터를 기억해 돌아오는" 일은 없다. 이중 소속의 원인은 그 파일이 아니라 server 주소를 바꾼 것 자체다. 옛 클러스터의 Node 객체, node-password secret, cordon과 taint는 손대는 주체가 없어 그대로 남는다.
+반대로 `config.yaml`의 `server`만 바꿔 재시작하면 agent는 새 클러스터에 등록한다. 옛 클러스터에는 아무것도 알리지 않는다. agent load balancer 파일(`/var/lib/rancher/rke2/agent/etc/rke2-agent-load-balancer.json`)에 옛 서버 목록이 남아 있지만 기동 시 `ServerURL`이 현재 `server`와 다르면 새 값으로 덮어쓴다. 즉 그 파일 때문에 "옛 클러스터를 기억해 돌아오는" 일은 없고 이중 소속은 server 주소를 바꾼 것 자체에서 생긴다. 옛 클러스터의 Node 객체, node-password secret, cordon과 taint는 손대는 주체가 없어 그대로 남는다.
 
 ## upstream Kubernetes와 RKE2의 차이
 
@@ -394,7 +394,7 @@ upstream에 없는 것은 node-password와 supervisor 층, 그리고 server 토�
 
 ## 호스트 정리의 책임
 
-custom 클러스터라면 Rancher가 호스트까지 치워 줄 것이라고 기대하기 쉽다. 실제로는 Machine 삭제의 연쇄가 다운스트림 Node 객체 삭제에서 끝난다. 호스트의 RKE2와 `rancher-system-agent` 제거는 문서(Clean Cluster Nodes)의 RKE2 절이 두 스크립트(호스트에 설치되는 `/usr/local/bin/rancher-system-agent-uninstall.sh`와 `rke2-uninstall.sh`. 문서는 전자를 GitHub의 `system-agent-uninstall.sh`로 안내한다)의 수동 실행을 요구한다. 같은 문서 서두에 "Active 상태 노드를 지우면 자동으로 정리된다"는 문장이 있지만 어느 배포판을 말하는지 특정하지 않고, RKE2/k3s 절은 수동 스크립트를 요구한다. imported 클러스터는 애초에 UI에 노드 삭제가 없다. 어느 종류든 호스트 정리는 운영자 몫이다. 이 글의 세 사례는 모두 그 정리가 Node 삭제보다 늦거나 빠지면서 생겼다. custom 클러스터라면 뒤에 나오는 삭제 전 게이트를 Machine 삭제 앞에 두어야 한다.
+custom 클러스터라면 Rancher가 호스트까지 치워 줄 것이라고 기대하기 쉽다. 실제로는 Machine 삭제의 연쇄가 다운스트림 Node 객체 삭제에서 끝난다. 호스트의 RKE2와 `rancher-system-agent` 제거는 문서(Clean Cluster Nodes)의 RKE2 절이 두 스크립트(호스트에 설치되는 `/usr/local/bin/rancher-system-agent-uninstall.sh`와 `rke2-uninstall.sh`. 문서는 전자를 GitHub의 `system-agent-uninstall.sh`로 안내한다)의 수동 실행을 요구한다. 같은 문서 서두에 "Active 상태 노드를 지우면 자동으로 정리된다"는 문장이 있지만 어느 배포판을 말하는지 특정하지 않는다. RKE2/k3s 절은 수동 스크립트를 요구한다. imported 클러스터는 애초에 UI에 노드 삭제가 없다. 어느 종류든 호스트 정리는 운영자 몫이다. 이 글의 세 사례는 모두 그 정리가 Node 삭제보다 늦거나 빠지면서 생겼다. custom 클러스터라면 뒤에 나오는 삭제 전 게이트를 Machine 삭제 앞에 두어야 한다.
 
 ## system-agent와 Plan
 
@@ -410,7 +410,7 @@ custom 클러스터라면 Rancher가 호스트까지 치워 줄 것이라고 기
 
 ## 두 개의 관리 평면
 
-이 작업에서 우리 게이트를 거치지 않고 Node가 지워진 일이 두 번 있다. D+17의 8대와 D+21의 `gpu-b01`·`b02`다. 둘 다 우리 팀의 kubeconfig가 아닌 경로였고, imported 클러스터에는 UI의 노드 삭제가 없으므로 남는 경로는 `kubectl`(Rancher의 kubectl 셸 포함)뿐이다. 어느 계정으로 지웠는지는 확인하지 못했다.
+이 작업에서 우리 게이트를 거치지 않고 Node가 지워진 일이 두 번 있다. D+17의 8대와 D+21의 `gpu-b01`·`b02`다. 둘 다 우리 팀의 kubeconfig가 아닌 경로였다. imported 클러스터에는 UI의 노드 삭제가 없으므로 남는 경로는 `kubectl`(Rancher의 kubectl 셸 포함)뿐이다. 어느 계정으로 지웠는지는 확인하지 못했다.
 
 Rancher가 있으면 클러스터에 손을 대는 평면이 둘이 된다. 우리 팀의 kubeconfig와 Rancher의 권한 체계다. 삭제 전 게이트는 스크립트라 어느 평면에서도 강제되지 않는다. 다른 평면에서 지워진 노드는 게이트 없이 사라진다. 그 뒤로는 사후 확인(재합류 없음, 알림 변화)만 남는다. 강제 수단 후보는 [아직 못 하는 것](#아직-못-하는-것) 절에 적었다.
 
@@ -482,9 +482,9 @@ kubectl -n kube-system get secrets --field-selector type=rke2.cattle.io/node-pas
   | awk -v t="$BASELINE_TS" '$1 > t'
 ```
 
-이 식에도 양성 대조를 붙였다. 임계 시각을 두 달 전으로 바꾸면 그 사이 편입된 노드 3대가 잡혀야 하고 IP 패턴에 남아 있는 대상 노드를 넣으면 그 노드가 잡혀야 한다. 둘 다 잡히는 것을 확인한 뒤에야 "0건"을 믿었다.
+이 식에도 양성 대조를 붙였다. 임계 시각을 두 달 전으로 바꾸면 그 사이 편입된 노드 3대가 잡혀야 하고 IP 패턴에 남아 있는 대상 노드를 넣으면 그 노드가 잡혀야 한다. 둘 다 잡히는 것을 확인한 뒤에야 0건을 믿었다.
 
-사례 1에서 보듯 이름이 바뀐 호스트는 같은 이름을 기준으로 한 검사를 빠져나간다. 그래서 같은 이름 대신 "기준선 이후 생긴 것"과 IP·이름 패턴으로 본다. 그래도 완전하지는 않다. IP도 이름 규칙도 바뀌면 잡지 못한다. 그리고 사후 확인은 재합류를 발견할 뿐 사례 1 같은 피해를 막지는 못한다.
+사례 1에서 보듯 이름이 바뀐 호스트는 같은 이름을 기준으로 한 검사를 빠져나간다. 그래서 같은 이름 대신 기준선 이후 생긴 것과 IP·이름 패턴으로 본다. 그래도 완전하지는 않다. IP도 이름 규칙도 바뀌면 잡지 못한다. 그리고 사후 확인은 재합류를 발견할 뿐 사례 1 같은 피해를 막지는 못한다.
 
 ## 복귀 노드의 재편입
 
@@ -495,7 +495,7 @@ kubectl -n kube-system get secrets --field-selector type=rke2.cattle.io/node-pas
 
 Node 객체는 지우지 않기로 했다. 지우면 cordon·role 라벨·GPU taint·podCIDR이 사라지고 남기면 재등록 때 그대로 유지된다. 대신 node-password secret만 지웠다. 순서는 다음과 같다.
 
-1. 호스트에서 `rancher-system-agent-uninstall.sh` → `rke2-uninstall.sh`. 게이트 (b)는 재부팅을 요구하지만 여기서는 같은 팀이 바로 재설치하므로 재부팅 대신 RKE2 인터페이스·파드 마운트·unit이 모두 사라진 것을 직접 확인하고 진행했다. 바로 재설치하면 kube-proxy가 IPVS 표를 다시 쓰므로 괜찮지만, 재설치 없이 둘 호스트라면 [남은 IPVS 표](#멈춘-agent와-떠난-agent)를 먼저 비워야 한다
+1. 호스트에서 `rancher-system-agent-uninstall.sh` → `rke2-uninstall.sh`. 게이트 (b)는 재부팅을 요구하지만 여기서는 같은 팀이 바로 재설치하므로 재부팅 대신 RKE2 인터페이스·파드 마운트·unit이 모두 사라진 것을 직접 확인하고 진행했다. 바로 재설치하면 kube-proxy가 IPVS 표를 다시 쓰므로 괜찮다. 재설치 없이 둘 호스트라면 [남은 IPVS 표](#멈춘-agent와-떠난-agent)를 먼저 비워야 한다
 2. 클러스터 A에서 `kubectl -n kube-system delete secret gpu-a07.node-password.rke2` (삭제 전 백업)
 3. 호스트에 클러스터 A와 같은 버전(v1.34.3+rke2r3)으로 RKE2 agent 설치, `config.yaml`에 클러스터 A의 server·token
 4. `Ready` 복귀 확인, 새 secret 생성 확인, `unreachable` taint 소멸과 cordon 유지 확인
@@ -551,7 +551,7 @@ sequenceDiagram
     B->>Q: 6. 기록 (소속 · 기간 · 반환 예정일)
 ```
 
-단계 자체보다 "하지 말 것"이 더 중요하다. 세 사례가 각각 하나씩 어겼다.
+단계 자체보다 "하지 말 것"이 더 중요한데 세 사례가 각각 하나씩 어겼다.
 
 | 하지 말 것 | 이유 | 해당 사례 |
 |---|---|---|
