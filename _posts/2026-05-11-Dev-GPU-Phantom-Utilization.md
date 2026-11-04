@@ -21,7 +21,7 @@ tags:
   - Kubernetes
   - Troubleshooting
   - NCCL
-last_modified_at: 2026-09-13
+last_modified_at: 2026-11-04
 ---
 
 <br>
@@ -174,7 +174,7 @@ nvidia-smi는 내부적으로 NVML(NVIDIA Management Library) API를 호출하�
 
 > Percent of time over the past sample period during which one or more kernels was executing on the GPU.
 >
-> — [NVML API Reference, `nvmlUtilization_t`](https://docs.nvidia.com/deploy/nvml-api/structnvmlUtilization__t.html)
+> — [NVML API Reference, `nvmlUtilization_t`](https://docs.nvidia.com/deploy/nvml-api/latest/api/structnvmlUtilization__t.html)
 
 핵심은 이것이 **시간 기반 측정**이라는 점이다. "샘플 구간 중 커널이 하나라도 실행 중이던 시간의 비율"이지, GPU의 SM(Streaming Multiprocessor)이 몇 개나 활용되었는지는 반영하지 않는다. 1개 SM만 쓰는 가벼운 커널이라도 샘플 구간 내내 돌고 있었으면 GPU-Util은 100%가 된다. [Modal GPU Glossary](https://modal.com/gpu-glossary/streaming-multiprocessor-utilization)가 이를 명확하게 짚는다.
 
@@ -636,7 +636,7 @@ for: 5m
 
 | 시그널 | 정상 워크로드 | Phantom |
 |---|---|---|
-| GR 엔진 activity (`DCGM_FI_PROF_GR_ENGINE_ACTIVE`) | 부하에 비례 | **100% 고정**(가설상) — 수집 시 1차 식별자 |
+| GR 엔진 activity (`DCGM_FI_PROF_GR_ENGINE_ACTIVE`) | 커널이 돌면 부하 크기와 상관없이 1.0에 가깝다 | **100% 고정**(가설상) — 단독으로는 정상 부하와 구분되지 않음 |
 | SM activity (`DCGM_FI_PROF_SM_ACTIVE`) | 부하에 비례 | **100% 고정** |
 | DRAM/메모리 activity (`DCGM_FI_PROF_DRAM_ACTIVE`) | 0보다 큼 | **0% 고정** |
 | 코어/메모리 클럭 (`DCGM_FI_DEV_SM_CLOCK`, `DCGM_FI_DEV_MEM_CLOCK`) | 부하에 따라 변동 | **최대값 stuck** |
@@ -645,7 +645,7 @@ for: 5m
 
 > **참고: 이 시그니처를 그대로 룰로 쓰기 전에**
 >
-> 위 표에서 가장 직접적인 phantom 식별자는 사실 따로 있다. DCGM에는 `DCGM_FI_PROF_GR_ENGINE_ACTIVE`라는 별도 metric이 있고, "GR(graphics/compute) 엔진이 active로 보고된 시간 비율"을 의미한다. 본 글에서 잠정 채택한 가설인 "엔진이 active 상태로 stuck"을 가장 가깝게 보여주는 값이다. 본 사건에서는 이 metric을 따로 수집하지 못해 `SM_ACTIVE`를 대신 썼다. 룰을 옮길 때 GR engine metric을 함께 보는 편이 가설과 더 정합적이다.
+> 위 표의 첫 행은 본 글의 가설과 가장 가까운 metric이다. DCGM의 `DCGM_FI_PROF_GR_ENGINE_ACTIVE`는 "GR(graphics/compute) 엔진이 active로 보고된 시간 비율"을 의미하고, 본 글에서 잠정 채택한 가설인 "엔진이 active 상태로 stuck"을 가장 가깝게 보여주는 값이다. 본 사건에서는 이 metric을 따로 수집하지 못해 `SM_ACTIVE`를 대신 썼다. 다만 이 값만으로 phantom을 가를 수는 없다. 2026년 11월에 A10G에서 재 보니 스레드 하나짜리 커널과 큰 행렬곱이 모두 1.000이었다([측정 결과]({% post_url 2026-11-04-MLOps-ML-Platform-Engineering-07-01-03-GPU-Idle-Signals %}#gr_engine_active와-sm_active)). 룰로 옮길 때는 이 metric을 단독으로 쓰지 말고 메모리와 프로세스 유무를 함께 봐야 한다.
 >
 > 또한 `SM_ACTIVE = 100%`가 항상 "GPU가 실제 연산을 풀로 한다"는 뜻은 아니다. DCGM 정의상 SM에 active warp이 하나라도 있으면 active로 카운트되며, 메모리 응답을 기다리며 대기 중인 warp까지 포함된다. 마찬가지로 `DRAM_ACTIVE`가 0에 가까운 상태도, 작은 working set으로 도는 정상 compute-bound 커널에서 나타날 수 있다. 즉 `SM_ACTIVE` 높음 + `DRAM_ACTIVE` 낮음 조합만 보고 phantom으로 단정하기는 어렵다.
 >
@@ -693,7 +693,7 @@ for: 15m
 | Compute app accounting | `nvidia-smi -q -d ACCOUNTING` | 종료된 프로세스의 잔여 record 유무 |
 | GPU별 client process list | `nvidia-smi -q -d PIDS` | NVML이 보고하는 client attachment 상태 |
 | GSP firmware 상태 | `nvidia-smi -q -d FIRMWARE` 및 `dmesg \| grep -iE 'gsp\|nvrm'` | GSP path stuck 가설 검증 |
-| GR engine 활동 | `dcgmi dmon -e 1001` (`DCGM_FI_PROF_GR_ENGINE_ACTIVE`) | "엔진 stuck" 가설의 1차 식별자 |
+| GR engine 활동 | `dcgmi dmon -e 1001` (`DCGM_FI_PROF_GR_ENGINE_ACTIVE`) | "엔진 stuck" 가설의 보조 지표. 정상 부하에서도 1.0에 가까워 단독으로는 가르지 못한다 |
 
 ## 추가 관찰: 새 워크로드에 의한 해소
 
@@ -704,8 +704,8 @@ for: 15m
 # 참고 자료
 
 - [NVIDIA Developer Forum — nvidia-smi reports phantom utilization reported on one GPU](https://forums.developer.nvidia.com/t/nvidia-smi-reports-phantom-utilization-reported-on-one-gpu/62516) — 유사 증상이 보고되어 있으나, 드라이버/아키텍처 조건이 본 사건과 달라 직접 비교는 보류
-- [NVML API Reference — nvmlDeviceGetUtilizationRates](https://docs.nvidia.com/deploy/nvml-api/group__nvmlDeviceQueries.html)
-- [NVML API Reference — nvmlUtilization_t](https://docs.nvidia.com/deploy/nvml-api/structnvmlUtilization__t.html)
+- [NVML API Reference — nvmlDeviceGetUtilizationRates](https://docs.nvidia.com/deploy/nvml-api/latest/api/group__nvmlDeviceQueries.html)
+- [NVML API Reference — nvmlUtilization_t](https://docs.nvidia.com/deploy/nvml-api/latest/api/structnvmlUtilization__t.html)
 - [Lei Mao — NVIDIA NVML GPU Statistics](https://leimao.github.io/blog/NVIDIA-NVML-GPU-Statistics/)
 - [Modal GPU Glossary — Streaming Multiprocessor Utilization](https://modal.com/gpu-glossary/streaming-multiprocessor-utilization)
 - [Stack Overflow — CUDA context destruction at host process termination](https://stackoverflow.com/questions/19184865/cuda-context-destruction-at-host-process-termination)
