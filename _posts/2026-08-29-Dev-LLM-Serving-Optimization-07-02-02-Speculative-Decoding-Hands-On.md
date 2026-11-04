@@ -17,7 +17,7 @@ tags:
   - Blackwell
   - Hands-On-LLM-Serving-and-Optimization-Study
   - Hands-On-LLM-Serving-and-Optimization-Study-Week-4
-last_modified_at: 2026-08-29
+last_modified_at: 2026-11-04
 ---
 
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Hands-On LLM Serving and Optimization Study (LLMSO) 4주차 학습 내용을 기반으로 합니다.*
@@ -61,7 +61,7 @@ last_modified_at: 2026-08-29
 
 책이 제공하는 [실습 원본 노트북](https://github.com/orca3/llm-model-inference/blob/main/ch07/SpecDecode.ipynb)은 Colab A100-SXM4-80GB를 기준으로 작성되어 있다. 이 실습은 그 대신 RTX PRO 6000 Blackwell Server Edition(96GB GDDR7) GPU 1장에서 진행했다 — 여러 사용자가 함께 쓰는 공용 GPU 노드라, 유휴 시간대를 이용했다.
 
-이 환경에서는 원본 노트북을 그대로 옮겨 실행하면 안 된다. 이유는 두 갈래다. 하나는 Blackwell이라는 하드웨어이고, 다른 하나는 공용 노드라는 운영 환경이다. 그래서 실습 파일을 손봐서 사용했다. 실제 사용한 파일은 [수정한 노트북]({{site.url}}/assets/data/llmso-ch07-speculative-decoding/llmso-ch07-speculative-decoding.ipynb)과 [setup.sh]({{site.url}}/assets/data/llmso-ch07-speculative-decoding/setup.sh)에서 볼 수 있다. 무엇을 어떻게 고쳤는지 확인해 본다.
+이 환경에서는 원본 노트북을 그대로 옮겨 실행하면 안 된다. 이유는 두 갈래다. 하나는 Blackwell이라는 하드웨어이고, 다른 하나는 공용 노드라는 운영 환경이다. 그래서 실습 파일을 손봐서 사용했다. 실제 사용한 파일은 [수정한 노트북](https://github.com/sirzzang/sirzzang.github.io/blob/master/assets/data/llmso-ch07-speculative-decoding/llmso-ch07-speculative-decoding.ipynb)과 [setup.sh](https://github.com/sirzzang/sirzzang.github.io/blob/master/assets/data/llmso-ch07-speculative-decoding/setup.sh)에서 볼 수 있다. 무엇을 어떻게 고쳤는지 확인해 본다.
 
 전체 실행 환경은 다음과 같다.
 
@@ -92,7 +92,7 @@ RTX PRO 6000 Blackwell은 compute capability 12.0(sm_120)으로, 데이터센터
 
 ## setup.sh: 실패 조기화 순서
 
-환경 준비는 노트북에 넣지 않고 [setup.sh]({{site.url}}/assets/data/llmso-ch07-speculative-decoding/setup.sh)로 분리했다. 설계 원칙은 스크립트 머리의 주석 그대로다.
+환경 준비는 노트북에 넣지 않고 [setup.sh](https://github.com/sirzzang/sirzzang.github.io/blob/master/assets/data/llmso-ch07-speculative-decoding/setup.sh)로 분리했다. 설계 원칙은 스크립트 머리의 주석 그대로다.
 
 ```bash
 # 순서 원칙: 싼 게 먼저 깨지게 한다.
@@ -163,7 +163,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 ## 헬퍼 함수 해부
 
-수정한 노트북([전체 파일]({{site.url}}/assets/data/llmso-ch07-speculative-decoding/llmso-ch07-speculative-decoding.ipynb))의 헬퍼는 셋이다.
+수정한 노트북([전체 파일](https://github.com/sirzzang/sirzzang.github.io/blob/master/assets/data/llmso-ch07-speculative-decoding/llmso-ch07-speculative-decoding.ipynb))의 헬퍼는 셋이다.
 
 **`run_vllm_bench_spec()`** — `vllm bench serve`를 subprocess로 감싸는 벤치 실행기다. 변형 이름을 받아 결과 파일을 `results/{variant}.json`으로 분리하고, 데이터셋(`--dataset-name spec_bench`), 프롬프트 수(16), 출력 길이(512), 동시성(`--max-concurrency`)을 인자로 조립한 뒤 출력을 실시간으로 흘려 보여 준다. 벤치 자체를 새로 짜는 게 아니라 vLLM에 내장된 벤치 하네스를 쓰는 것이라, 우리가 정하는 것은 워크로드 모양뿐이다.
 
@@ -438,7 +438,7 @@ JIT 발생 구간과 TTFT 이상이 네 변형에서 예외 없이 1:1로 일치
 - 처리량 순서는 수락 길이의 효율(일관성)이 설명한다. ngram은 최댓값이 제일 높지만 분산이 커서 진다 — 분산이 곧 낭비다
 - 공용 노드 실습의 안전 장치 — GPU PID·소유자 기반 정리, 포트 분리, 변형별 결과 파일 — 는 벤치의 정확성 장치이기도 했다
 
-실습 파일은 [수정한 노트북]({{site.url}}/assets/data/llmso-ch07-speculative-decoding/llmso-ch07-speculative-decoding.ipynb)과 [setup.sh]({{site.url}}/assets/data/llmso-ch07-speculative-decoding/setup.sh)에 있다. 다음 실습은 입력 재사용이 큰 워크로드를 speculative decoding의 반대편, 캐싱 쪽에서 받는 답인 LMCache다.
+실습 파일은 [수정한 노트북](https://github.com/sirzzang/sirzzang.github.io/blob/master/assets/data/llmso-ch07-speculative-decoding/llmso-ch07-speculative-decoding.ipynb)과 [setup.sh](https://github.com/sirzzang/sirzzang.github.io/blob/master/assets/data/llmso-ch07-speculative-decoding/setup.sh)에 있다. 다음 실습은 입력 재사용이 큰 워크로드를 speculative decoding의 반대편, 캐싱 쪽에서 받는 답인 LMCache다.
 
 <br>
 
