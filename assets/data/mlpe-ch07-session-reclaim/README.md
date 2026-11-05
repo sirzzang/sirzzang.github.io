@@ -40,6 +40,8 @@ dcgmi dmon -i 0 -e 203,252,155,1001,1002 -d 1000
 python3 gpu/summarize.py <기록 폴더> gpu/results
 ```
 
+기록 폴더 원본(`dmon.txt`, `phases.txt`, `procs.txt`)은 올리지 않았고 산출물 `dcgm_1s.csv`와 `summary.txt`만 `gpu/results`에 있다.
+
 단계 3은 다른 세션이 GPU를 잡고 있지 않은 클러스터에서 돌린다. 템플릿의 `arch`는 노드 아키텍처에 맞춘다.
 
 ```bash
