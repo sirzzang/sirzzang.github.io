@@ -1,0 +1,1815 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[Kubernetes] 쿠버네티스 스케줄링 - 4. 스케줄러 설정과 최적화 - Eraser’s StudyLog</title>
+<meta name="description" content="NodeResourcesFit 전략, 리소스 단편화 문제, 스케줄러 성능 튜닝, 다중 프로필 구성을 알아보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[Kubernetes] 쿠버네티스 스케줄링 - 4. 스케줄러 설정과 최적화">
+<meta property="og:url" content="https://sirzzang.github.io//kubernetes/Kubernetes-Scheduling-04/">
+
+
+  <meta property="og:description" content="NodeResourcesFit 전략, 리소스 단편화 문제, 스케줄러 성능 튜닝, 다중 프로필 구성을 알아보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2025-11-05T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-10-15T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//kubernetes/Kubernetes-Scheduling-04/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+	  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/MLOps/" >MLOps</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS·Infra</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Programming/" >Programming</a>
+            </li><li class="masthead__menu-item">
+              <a href="/series/" >Series</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+  <script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+  MathJax.Hub.Config({ TeX: { equationNumbers: { autoNumber: "all" } } });
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+<!-- <script type="text/x-mathjax-config">
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+MathJax.Hub.Register.MessageHook("Math Processing Error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+MathJax.Hub.Register.MessageHook("TeX Jax - parse error",function (message) {
+	  alert("Math Processing Error: "+message[1]);
+	});
+</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Register.StartupHook('TeX Jax Ready', function () {
+  MathJax.InputJax.TeX.prefilterHooks.Add(function (data) {
+    data.math = data.math.replace(/^% <!\[CDATA\[/, '').replace(/%\]\]>$/, '');
+  });
+});
+</script>
+
+<script type="text/javascript" async
+  src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+-->
+
+<!-- <script>
+window.MathJax = {
+  tex: {
+    tags: "ams",
+    inlineMath: [ ['$', '$'] ],
+    displayMath: [ ['$$', '$$'] ],
+    processEscapes: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/startup.js" id="MathJax-script"></script> -->
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[Kubernetes] 쿠버네티스 스케줄링 - 4. 스케줄러 설정과 최적화">
+    <meta itemprop="description" content="NodeResourcesFit 전략, 리소스 단편화 문제, 스케줄러 성능 튜닝, 다중 프로필 구성을 알아보자.">
+    <meta itemprop="datePublished" content="2025-11-05T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-10-15T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[Kubernetes] 쿠버네티스 스케줄링 - 4. 스케줄러 설정과 최적화
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2025-11-05T00:00:00+09:00">2025년 11월 05일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  20 분 소요
+
+
+            
+          </p>
+          
+          <p class="page__context"><a href="/categories/Kubernetes/#k8s-scheduling">Kubernetes › 스케줄링</a><span class="page__context-sep">·</span><a href="/categories/MLOps/#mlops-resource">MLOps › 자원 관리·스케줄링</a><span class="page__context-sep">·</span><span class="page__nature">개념</span></p><p class="page__series"><a href="/series/#kubernetes-scheduling">시리즈 · 쿠버네티스 스케줄링</a> (5 / 7)<span class="page__series-sep">·</span><a href="/kubernetes/Kubernetes-Scheduling-03/" title="[Kubernetes] 쿠버네티스 스케줄링 - 3. 스케줄링 제어">← 이전 편</a><span class="page__series-sep">·</span><a href="/kubernetes/Kubernetes-Scheduling-05/" title="[Kubernetes] 쿠버네티스 스케줄링 - 5. 파드 단위 스케줄링의 한계와 Gang Scheduling">다음 편 →</a></p>
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#들어가며">들어가며</a></li>
+  <li><a href="#kubeschedulerconfiguration">KubeSchedulerConfiguration</a>
+    <ul>
+      <li><a href="#설정-전달-방법">설정 전달 방법</a></li>
+      <li><a href="#설정-적용과-롤백">설정 적용과 롤백</a></li>
+      <li><a href="#설정-파일-구조">설정 파일 구조</a></li>
+      <li><a href="#플러그인-활성화비활성화">플러그인 활성화/비활성화</a>
+        <ul>
+          <li><a href="#multipoint">multiPoint</a></li>
+          <li><a href="#multipoint와-개별-설정의-우선순위">multiPoint와 개별 설정의 우선순위</a></li>
+          <li><a href="#-패턴-전체-비활성화와-순서-재배치">* 패턴: 전체 비활성화와 순서 재배치</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#noderesourcesfit-전략과-리소스-단편화">NodeResourcesFit 전략과 리소스 단편화</a>
+    <ul>
+      <li><a href="#noderesourcesfit-스코어링-전략">NodeResourcesFit 스코어링 전략</a>
+        <ul>
+          <li><a href="#leastallocated-기본">LeastAllocated (기본)</a></li>
+          <li><a href="#mostallocated">MostAllocated</a></li>
+          <li><a href="#requestedtocapacityratio">RequestedToCapacityRatio</a></li>
+        </ul>
+      </li>
+      <li><a href="#리소스-단편화-문제">리소스 단편화 문제</a>
+        <ul>
+          <li><a href="#단편화란">단편화란</a></li>
+          <li><a href="#현재-상태-확인하기">현재 상태 확인하기</a></li>
+          <li><a href="#gpu-리소스에서-단편화가-심한-이유">GPU 리소스에서 단편화가 심한 이유</a></li>
+          <li><a href="#해결-mostallocated-또는-requestedtocapacityratio">해결: MostAllocated 또는 RequestedToCapacityRatio</a></li>
+          <li><a href="#단편화-방지-설계-가이드">단편화 방지 설계 가이드</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#스케줄러-성능-튜닝">스케줄러 성능 튜닝</a>
+    <ul>
+      <li><a href="#percentageofnodestoscore">percentageOfNodesToScore</a>
+        <ul>
+          <li><a href="#기본값">기본값</a></li>
+          <li><a href="#트레이드오프">트레이드오프</a></li>
+          <li><a href="#프로필별-설정-v126">프로필별 설정 (v1.26+)</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><a href="#다중-프로필">다중 프로필</a>
+    <ul>
+      <li><a href="#워크로드-성격에-따른-프로필-분리">워크로드 성격에 따른 프로필 분리</a></li>
+      <li><a href="#다중-프로필의-제약">다중 프로필의 제약</a></li>
+      <li><a href="#프로필과-event-추적">프로필과 Event 추적</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>스케줄러 설정은 <strong>프로세스 1개 : Configuration 1개 : 프로필 N개</strong> 계층 구조를 가진다(<a href="/kubernetes/Kubernetes-Scheduling-01/#설정-계층-구조">1편 - 설정 계층 구조</a>). Configuration은 글로벌 설정과 프로필 목록을 포함하며, 각 프로필이 extension point별 플러그인 구성을 담당한다. 이 글은 그 Configuration을 전달·적용하는 방법과 설정 문법을 다룬다.</li>
+  <li><code class="highlighter-rouge">KubeSchedulerConfiguration</code>을 통해 스케줄러의 플러그인 구성, 스코어링 전략, 성능 파라미터를 세밀하게 설정할 수 있다. <code class="highlighter-rouge">multiPoint</code> 필드로 플러그인을 모든 extension point에 일괄 등록하고, <code class="highlighter-rouge">*</code> 패턴으로 기본 플러그인을 전부 비활성화한 뒤 순서를 재배치할 수 있다.</li>
+  <li>설정 파일만 고쳐도 스케줄러는 다시 읽지 않는다. Static Pod 환경에서는 프로세스를 재시작시켜야 하고, 설정에 오류가 있으면 스케줄러가 기동하지 못해 신규 파드가 모두 Pending에 빠진다.</li>
+  <li><code class="highlighter-rouge">NodeResourcesFit</code> 플러그인은 세 가지 스코어링 전략을 제공한다: <code class="highlighter-rouge">LeastAllocated</code>(기본, 리소스 분산), <code class="highlighter-rouge">MostAllocated</code>(bin packing, 노드 채우기), <code class="highlighter-rouge">RequestedToCapacityRatio</code>(커스텀 곡선).</li>
+  <li>GPU 등 희소 리소스는 <code class="highlighter-rouge">LeastAllocated</code> 전략에서 <strong>단편화(fragmentation)</strong> 문제가 발생하기 쉽다. 여러 노드에 GPU가 분산 배치되어, 단일 노드에서 충분한 GPU를 확보하지 못하는 상황이다. <code class="highlighter-rouge">MostAllocated</code> 전략의 <code class="highlighter-rouge">resources</code>에 <code class="highlighter-rouge">nvidia.com/gpu</code>를 넣어 완화할 수 있다. 기본 설정의 <code class="highlighter-rouge">NodeResourcesFit</code>은 cpu·memory만 점수에 넣기 때문이다.</li>
+  <li><code class="highlighter-rouge">percentageOfNodesToScore</code>로 대규모 클러스터에서의 스케줄링 지연을 줄일 수 있으며, 단일 kube-scheduler에서 여러 프로필을 운영하여 워크로드 성격에 맞는 스케줄링 정책을 적용할 수 있다.</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="들어가며">들어가며</h1>
+
+<p><a href="/kubernetes/Kubernetes-Scheduling-01/">1편</a>, <a href="/kubernetes/Kubernetes-Scheduling-02/">2편</a>, <a href="/kubernetes/Kubernetes-Scheduling-03/">3편</a>에서 스케줄링의 개념과 Scheduling Framework, 스케줄링 제어 설정까지 다뤘다. 이번 글에서는 <strong>스케줄러 자체의 설정과 최적화</strong>를 다룬다. 기준 버전은 앞 편들과 같은 v1.32다.</p>
+
+<ol>
+  <li><strong>KubeSchedulerConfiguration</strong>: 설정 전달과 적용 방법, 설정 파일 구조, 플러그인 활성화/비활성화 패턴(<code class="highlighter-rouge">multiPoint</code>, <code class="highlighter-rouge">*</code> 패턴)</li>
+  <li><strong>NodeResourcesFit 스코어링 전략</strong>: LeastAllocated, MostAllocated, RequestedToCapacityRatio 세 전략의 동작 원리와 사용 시나리오</li>
+  <li><strong>리소스 단편화 문제</strong>: 특히 GPU 환경에서 발생하는 단편화와 해결 방안</li>
+  <li><strong>스케줄러 성능 튜닝</strong>: <code class="highlighter-rouge">percentageOfNodesToScore</code>와 대규모 클러스터 최적화</li>
+  <li><strong>다중 프로필</strong>: 워크로드 성격에 따라 서로 다른 스케줄링 정책을 적용하는 구성</li>
+</ol>
+
+<blockquote>
+  <p>설정 계층 구조(Configuration → 프로필)와 프로필이 고를 수 있는 플러그인의 범위는 <a href="/kubernetes/Kubernetes-Scheduling-01/#kube-scheduler-구조">1편 - kube-scheduler 구조</a>에서 다뤘다. PodGroup 스케줄링은 <a href="/kubernetes/Kubernetes-Scheduling-05/">5편</a>에서, Extension Point의 결정권 분류와 PreScore 역할 등 Scheduling Framework 내부 동작은 <a href="/kubernetes/Kubernetes-Scheduling-06/">6편</a>에서 자세히 다룬다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h1 id="kubeschedulerconfiguration">KubeSchedulerConfiguration</h1>
+
+<p>스케줄러 프로세스, Configuration, 프로필의 계층 관계는 <a href="/kubernetes/Kubernetes-Scheduling-01/#설정-계층-구조">1편 - 설정 계층 구조</a>에서 정리했다. 여기서는 그 Configuration을 스케줄러에 전달하고 적용하는 방법부터 본다.</p>
+
+<p><br /></p>
+
+<h2 id="설정-전달-방법">설정 전달 방법</h2>
+
+<p><code class="highlighter-rouge">kube-scheduler</code>는 별도의 바이너리로, <code class="highlighter-rouge">--config</code> CLI 인자를 통해 <code class="highlighter-rouge">KubeSchedulerConfiguration</code> 파일을 전달받는다. 실행 방식은 클러스터 구성에 따라 다르다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>클러스터 유형</th>
+      <th>kube-scheduler 실행 방식</th>
+      <th>설정 전달</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>kubeadm</strong> (가장 일반적)</td>
+      <td>Static Pod (<code class="highlighter-rouge">/etc/kubernetes/manifests/kube-scheduler.yaml</code>)</td>
+      <td>ClusterConfiguration의 <code class="highlighter-rouge">scheduler.extraArgs</code>(<code class="highlighter-rouge">config</code>)와 <code class="highlighter-rouge">scheduler.extraVolumes</code>로 지정한다. 매니페스트를 직접 고치면 <code class="highlighter-rouge">kubeadm upgrade</code> 때 덮어써진다</td>
+    </tr>
+    <tr>
+      <td><strong>RKE2</strong></td>
+      <td>Static Pod (<code class="highlighter-rouge">/var/lib/rancher/rke2/agent/pod-manifests/</code>, rke2-server가 생성)</td>
+      <td><code class="highlighter-rouge">/etc/rancher/rke2/config.yaml</code>의 <code class="highlighter-rouge">kube-scheduler-arg</code>(<code class="highlighter-rouge">config=...</code>)와 <code class="highlighter-rouge">kube-scheduler-extra-mount</code>로 지정한 뒤 rke2-server를 재시작한다. 매니페스트를 직접 고친 내용은 rke2-server가 다시 쓸 때 사라진다</td>
+    </tr>
+    <tr>
+      <td><strong>systemd</strong></td>
+      <td>systemd unit file</td>
+      <td><code class="highlighter-rouge">ExecStart=kube-scheduler --config ...</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>kubeadm 기준으로 기존 Static Pod 매니페스트에 아래 항목을 더하는 구조다. 기존 <code class="highlighter-rouge">--kubeconfig</code> 등의 플래그와 <code class="highlighter-rouge">scheduler.conf</code> 마운트는 그대로 둔다(아래 발췌는 추가하는 부분만 보여 준다).</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># /etc/kubernetes/manifests/kube-scheduler.yaml (Static Pod)</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Pod</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">kube-scheduler</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">kube-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">containers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">command</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="s">kube-scheduler</span>
+    <span class="pi">-</span> <span class="s">--config=/etc/kubernetes/scheduler-config.yaml</span>  <span class="c1"># KubeSchedulerConfiguration 파일 경로</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">registry.k8s.io/kube-scheduler:v1.32.0</span>
+    <span class="na">volumeMounts</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">mountPath</span><span class="pi">:</span> <span class="s">/etc/kubernetes/scheduler-config.yaml</span>  <span class="c1"># 컨테이너 내부 경로</span>
+      <span class="na">name</span><span class="pi">:</span> <span class="s">scheduler-config</span>
+      <span class="na">readOnly</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">volumes</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">hostPath</span><span class="pi">:</span>
+      <span class="na">path</span><span class="pi">:</span> <span class="s">/etc/kubernetes/scheduler-config.yaml</span>  <span class="c1"># 호스트(control plane 노드) 경로</span>
+    <span class="na">name</span><span class="pi">:</span> <span class="s">scheduler-config</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">--config</code>로 참조하는 파일이 바로 <a href="#설정-파일-구조">아래에서 다룰</a> <code class="highlighter-rouge">KubeSchedulerConfiguration</code>이다.</p>
+
+<p><br /></p>
+
+<h2 id="설정-적용과-롤백">설정 적용과 롤백</h2>
+
+<p>설정 파일을 고치는 것과 그 설정이 적용되는 것은 별개다. <strong><code class="highlighter-rouge">kube-scheduler</code>는 설정 파일을 런타임에 다시 읽지 않는다.</strong> 프로세스를 재시작해야 반영된다.</p>
+
+<p>Static Pod 환경에서는 재시작시키는 방법을 고를 때 주의할 점이 있다. <strong>kubelet이 Static Pod을 식별하는 UID는 매니페스트 파일의 mtime이 아니라 파드 오브젝트 내용의 해시</strong>다. 소스에서 UID를 만드는 부분이 그대로 보여 준다.</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">// pkg/kubelet/config/common.go — applyDefaults()</span><span class="x">
+</span><span class="n">hasher</span><span class="x"> </span><span class="o">:=</span><span class="x"> </span><span class="n">md5</span><span class="o">.</span><span class="n">New</span><span class="p">()</span><span class="x">
+</span><span class="n">hash</span><span class="o">.</span><span class="n">DeepHashObject</span><span class="p">(</span><span class="n">hasher</span><span class="p">,</span><span class="x"> </span><span class="n">pod</span><span class="p">)</span><span class="x">   </span><span class="c">// 파드 오브젝트 내용으로 해시</span><span class="x">
+</span><span class="n">fmt</span><span class="o">.</span><span class="n">Fprintf</span><span class="p">(</span><span class="n">hasher</span><span class="p">,</span><span class="x"> </span><span class="s">"host:%s"</span><span class="p">,</span><span class="x"> </span><span class="n">nodeName</span><span class="p">)</span><span class="x">
+</span><span class="n">fmt</span><span class="o">.</span><span class="n">Fprintf</span><span class="p">(</span><span class="n">hasher</span><span class="p">,</span><span class="x"> </span><span class="s">"file:%s"</span><span class="p">,</span><span class="x"> </span><span class="n">source</span><span class="p">)</span><span class="x">
+</span><span class="n">pod</span><span class="o">.</span><span class="n">UID</span><span class="x"> </span><span class="o">=</span><span class="x"> </span><span class="n">types</span><span class="o">.</span><span class="n">UID</span><span class="p">(</span><span class="n">hex</span><span class="o">.</span><span class="n">EncodeToString</span><span class="p">(</span><span class="n">hasher</span><span class="o">.</span><span class="n">Sum</span><span class="p">(</span><span class="no">nil</span><span class="p">)[</span><span class="m">0</span><span class="o">:</span><span class="p">]))</span><span class="x">
+</span></code></pre></div></div>
+
+<p>따라서 <code class="highlighter-rouge">touch</code>로 매니페스트의 타임스탬프만 바꾸면 kubelet이 파일 이벤트는 감지하지만 재파싱 결과가 이전과 같아 <strong>파드가 재생성되지 않는다.</strong> 더구나 여기서 바꾸는 것은 매니페스트가 아니라 hostPath로 마운트된 별도 설정 파일(<code class="highlighter-rouge">scheduler-config.yaml</code>)이므로, 매니페스트 내용은 애초에 변하지 않는다.</p>
+
+<p>내용 해시를 실제로 바꾸거나 파일 자체를 없앴다 되돌리는 방법을 써야 한다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 방법 1: 매니페스트를 디렉토리 밖으로 옮겼다 되돌린다 (삭제 → 생성 이벤트)</span>
+~# mv /etc/kubernetes/manifests/kube-scheduler.yaml /root/
+~<span class="nv">$ </span>kubectl get pods <span class="nt">-n</span> kube-system <span class="nt">-l</span> <span class="nv">component</span><span class="o">=</span>kube-scheduler   <span class="c"># 사라졌는지 확인</span>
+~# mv /root/kube-scheduler.yaml /etc/kubernetes/manifests/
+
+<span class="c"># 방법 2: 매니페스트 내용을 바꿔 해시를 바꾼다 (annotation 추가 등)</span>
+~# sed <span class="nt">-i</span> <span class="s1">'s|^  name: kube-scheduler$|  name: kube-scheduler\n  annotations:\n    reload: "'</span><span class="s2">"</span><span class="k">$(</span>date +%s<span class="k">)</span><span class="s2">"</span><span class="s1">'"|'</span> <span class="se">\</span>
+     /etc/kubernetes/manifests/kube-scheduler.yaml
+
+<span class="c"># 방법 3: 컨테이너를 직접 죽인다 (kubelet이 다시 띄우며 새 설정 파일을 읽는다)</span>
+~# crictl ps <span class="nt">--name</span> kube-scheduler <span class="nt">-q</span> | xargs crictl stop
+</code></pre></div></div>
+
+<p>재시작 후에는 기동 여부를 반드시 확인한다. <strong>파드가 <code class="highlighter-rouge">Running</code>이라는 것만으로는 새 설정이 적용됐다는 보장이 되지 않으므로</strong>, 컨테이너가 실제로 재시작됐는지(<code class="highlighter-rouge">RESTARTS</code> 또는 <code class="highlighter-rouge">started at</code>)를 함께 본다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 파드 상태와 재시작 여부를 함께 확인</span>
+~<span class="nv">$ </span>kubectl get pods <span class="nt">-n</span> kube-system <span class="nt">-l</span> <span class="nv">component</span><span class="o">=</span>kube-scheduler
+
+<span class="c"># 컨테이너가 실제로 언제 시작됐는지 확인</span>
+~<span class="nv">$ </span>kubectl get pod <span class="nt">-n</span> kube-system kube-scheduler-&lt;control-plane-node&gt; <span class="se">\</span>
+    <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.containerStatuses[0].state.running.startedAt}'</span>
+
+<span class="c"># 기동 로그 확인 (설정 파싱 오류가 있으면 여기에 나온다)</span>
+~<span class="nv">$ </span>kubectl logs <span class="nt">-n</span> kube-system kube-scheduler-&lt;control-plane-node&gt; <span class="nt">--tail</span><span class="o">=</span>50
+
+<span class="c"># HA 구성이면 어느 인스턴스가 리더인지 확인한다 (새 설정은 그 인스턴스가 리더일 때만 동작한다)</span>
+~<span class="nv">$ </span>kubectl <span class="nt">-n</span> kube-system get lease kube-scheduler <span class="nt">-o</span> <span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.spec.holderIdentity}'</span>
+</code></pre></div></div>
+
+<p>설정 YAML에 오타가 있거나 존재하지 않는 플러그인 이름이 들어 있으면 <strong>스케줄러가 기동하지 못한다.</strong> 이때 클러스터에서 벌어지는 일은 다음과 같다.</p>
+
+<ul>
+  <li>이미 실행 중인 파드는 영향을 받지 않는다. 스케줄링은 배치 시점의 작업이므로, 배치가 끝난 파드는 kubelet이 계속 관리한다</li>
+  <li><strong>신규 파드는 전부 Pending에 머문다.</strong> 아무도 <code class="highlighter-rouge">spec.nodeName</code>을 채워 주지 않는다</li>
+  <li>파드가 죽고 재생성되는 워크로드도 새 파드가 뜨지 않는다</li>
+  <li>DaemonSet 파드도 스케줄러가 배치하므로(<a href="/kubernetes/Kubernetes-Scheduling-01/#사례-daemonset의-수동--스케줄러-위임-전환">1편 - DaemonSet</a>), 장애 중에 새로 붙은 노드에는 CNI·kube-proxy 같은 DaemonSet이 뜨지 않아 노드가 Ready가 되지 못할 수 있다</li>
+</ul>
+
+<p>그래서 롤백 경로를 먼저 확보해 두는 편이 적절하다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 매니페스트 디렉토리 "밖"에 백업을 둔다</span>
+~# cp /etc/kubernetes/manifests/kube-scheduler.yaml /root/kube-scheduler.yaml.bak
+~# cp /etc/kubernetes/scheduler-config.yaml /root/scheduler-config.yaml.bak
+
+<span class="c"># 문제가 생기면 되돌린다 (설정 파일 오류라면 설정 파일도 되돌려야 한다)</span>
+~# cp /root/kube-scheduler.yaml.bak /etc/kubernetes/manifests/kube-scheduler.yaml
+~# cp /root/scheduler-config.yaml.bak /etc/kubernetes/scheduler-config.yaml
+</code></pre></div></div>
+
+<p>설정 파일만 되돌리면 매니페스트 해시가 그대로라 파드가 재생성되지 않고, CrashLoopBackOff 백오프가 끝나야 새 내용이 읽힌다. 바로 반영하려면 위 방법 1(매니페스트를 디렉토리 밖으로 옮겼다 되돌리기)로 다시 띄운다.</p>
+
+<p>백업 파일을 <code class="highlighter-rouge">/etc/kubernetes/manifests/</code> <strong>안에</strong> 두면 안 된다. kubelet은 그 디렉토리의 매니페스트를 전부 읽으므로, <code class="highlighter-rouge">kube-scheduler.yaml.bak</code>도 파드로 띄우려 시도한다. 백업은 반드시 디렉토리 밖에 둔다.</p>
+
+<p>컨트롤 플레인 구성에 따라 위험도가 다르다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>구성</th>
+      <th>설정 변경 시</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>컨트롤 플레인 1대</td>
+      <td>스케줄러가 기동에 실패하면 클러스터 전체의 스케줄링이 멈춘다</td>
+    </tr>
+    <tr>
+      <td>컨트롤 플레인 HA (3대)</td>
+      <td>leader election으로 한 대만 활성 상태다. 한 대씩 순차 적용하면 나머지 중 하나가 리더가 되어 스케줄링이 계속된다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>HA 환경에서는 모든 노드에 같은 설정을 적용하는 편이 적절하다. 노드별로 설정이 다르면 리더가 바뀔 때마다 스케줄링 동작이 달라진다.</p>
+
+<blockquote>
+  <p>위 절차는 kubeadm 기준 Static Pod 환경을 전제로 정리한 것이다. 매니페스트를 직접 고쳤다면 <code class="highlighter-rouge">kubeadm upgrade</code> 전에 같은 내용을 ClusterConfiguration이나 kubeadm patches(<code class="highlighter-rouge">--patches</code>)로 옮겨 둬야 한다. RKE2는 위 표의 방식으로 바꾼다. 관리형 컨트롤 플레인은 대부분 <code class="highlighter-rouge">kube-scheduler</code> 설정을 노출하지 않는다. 예외로 AKS는 v1.33부터 preview로 in-tree 플러그인 프로필을 CRD로 받고, GKE는 autoscaling 프로필 <code class="highlighter-rouge">optimize-utilization</code>으로 할당률이 높은 노드를 선호하게 할 수 있다(시리즈 기준 버전 밖의 기능으로, 검증 범위 밖이다). 그 밖의 환경이거나 out-of-tree 플러그인이 필요하면 두 번째 스케줄러를 배포하는 방향(<a href="/kubernetes/Kubernetes-Scheduling-01/#다중-프로필과-다중-스케줄러">1편 - 다중 프로필과 다중 스케줄러</a>)으로 가야 한다.</p>
+</blockquote>
+
+<p><br /></p>
+
+<h2 id="설정-파일-구조">설정 파일 구조</h2>
+
+<p>설정 파일은 <code class="highlighter-rouge">KubeSchedulerConfiguration</code> API 오브젝트로, 스케줄러의 동작을 세밀하게 제어한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kubescheduler.config.k8s.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">KubeSchedulerConfiguration</span>        <span class="c1"># Configuration (전체 설정)</span>
+<span class="na">clientConnection</span><span class="pi">:</span>
+  <span class="na">kubeconfig</span><span class="pi">:</span> <span class="s">/etc/kubernetes/scheduler.conf</span>  <span class="c1"># 글로벌 설정. kubeadm 기준. --config를 주면 --kubeconfig 플래그는 무시되므로 여기에 적어야 한다</span>
+<span class="na">profiles</span><span class="pi">:</span>                                <span class="c1"># Profile 목록</span>
+  <span class="pi">-</span> <span class="na">schedulerName</span><span class="pi">:</span> <span class="s">default-scheduler</span>     <span class="c1"># Profile 이름 (Pod의 spec.schedulerName과 매칭)</span>
+    <span class="na">pluginConfig</span><span class="pi">:</span>                         <span class="c1"># 플러그인별 상세 설정</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">NodeResourcesFit</span>
+        <span class="na">args</span><span class="pi">:</span>
+          <span class="na">scoringStrategy</span><span class="pi">:</span>
+            <span class="na">type</span><span class="pi">:</span> <span class="s">LeastAllocated</span>
+            <span class="na">resources</span><span class="pi">:</span>
+              <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">cpu</span>
+                <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+              <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">memory</span>
+                <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+</code></pre></div></div>
+
+<p>주요 설정 영역은 다음과 같다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>영역</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">profiles</code></td>
+      <td>스케줄러 프로필 목록. 각 프로필은 고유한 <code class="highlighter-rouge">schedulerName</code>과 플러그인 구성을 가짐</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">profiles[].plugins</code></td>
+      <td>extension point별 플러그인 활성화/비활성화</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">profiles[].pluginConfig</code></td>
+      <td>플러그인별 상세 설정 (스코어링 전략, 가중치 등)</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">percentageOfNodesToScore</code></td>
+      <td>대규모 클러스터 성능 최적화 파라미터</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="플러그인-활성화비활성화">플러그인 활성화/비활성화</h2>
+
+<p>각 extension point에서 기본 플러그인을 비활성화하거나 커스텀 플러그인을 활성화할 수 있다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">profiles</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">schedulerName</span><span class="pi">:</span> <span class="s">default-scheduler</span>
+    <span class="na">plugins</span><span class="pi">:</span>
+      <span class="na">score</span><span class="pi">:</span>
+        <span class="na">disabled</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">PodTopologySpread</span>   <span class="c1"># 기본 플러그인 하나를 끈다</span>
+        <span class="na">enabled</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">MyCustomPlugin</span>      <span class="c1"># 커스텀 플러그인을 추가한다</span>
+            <span class="na">weight</span><span class="pi">:</span> <span class="s">2</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">enabled</code>로 추가한 플러그인은 기본 플러그인 <strong>뒤에</strong> 붙는다. 기본 플러그인 간의 순서를 바꾸거나, 커스텀 플러그인을 기본 플러그인 사이에 끼워넣으려면 <a href="#-패턴-전체-비활성화와-순서-재배치">아래의 <code class="highlighter-rouge">*</code> 패턴</a>을 사용해야 한다.</p>
+
+<p><br /></p>
+
+<h3 id="multipoint">multiPoint</h3>
+
+<p>하나의 플러그인이 여러 extension point를 구현하는 경우가 많다(예: <code class="highlighter-rouge">NodeResourcesFit</code>은 PreFilter, Filter, PreScore, Score 네 곳에 등록된다). <code class="highlighter-rouge">multiPoint</code> 필드를 사용하면 해당 플러그인이 구현하는 <strong>모든 extension point에 한 번에</strong> 등록할 수 있다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">profiles</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">schedulerName</span><span class="pi">:</span> <span class="s">default-scheduler</span>
+    <span class="na">plugins</span><span class="pi">:</span>
+      <span class="na">multiPoint</span><span class="pi">:</span>
+        <span class="na">enabled</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">NodeResourcesFit</span>
+            <span class="na">weight</span><span class="pi">:</span> <span class="s">2</span>
+</code></pre></div></div>
+
+<p>위 한 줄이 NodeResourcesFit을 PreFilter, Filter, PreScore, Score 네 곳에 동시에 등록한다. 플러그인이 어떤 인터페이스를 구현했는지는 스케줄러가 초기화 시점에 Go의 type assertion으로 자동 판별한다. 플러그인 구조체가 <code class="highlighter-rouge">FilterPlugin</code>, <code class="highlighter-rouge">ScorePlugin</code> 등의 인터페이스 메서드를 가지고 있으면, 해당 extension point에 자동 등록되는 구조다.</p>
+
+<p>비활성화도 동일하게 동작한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">plugins</span><span class="pi">:</span>
+  <span class="na">multiPoint</span><span class="pi">:</span>
+    <span class="na">disabled</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">TaintToleration</span>  <span class="c1"># Filter + PreScore + Score 전부에서 제거</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">kube-scheduler</code>의 기본 프로필도 내부적으로 이 방식을 사용한다. v1.32 기준 18개의 기본 플러그인이 <code class="highlighter-rouge">multiPoint</code>로 등록되어, extension point별로 일일이 나열하지 않고도 관리된다. 전체 목록은 <a href="/kubernetes/Kubernetes-Scheduling-02/#기본-플러그인과-extension-point-매핑">2편 - 기본 플러그인과 Extension Point 매핑</a>에 있다.</p>
+
+<p><br /></p>
+
+<h3 id="multipoint와-개별-설정의-우선순위">multiPoint와 개별 설정의 우선순위</h3>
+
+<p><code class="highlighter-rouge">multiPoint</code>로 전체를 등록한 뒤, 특정 extension point에서만 오버라이드할 수 있다. <strong>개별 extension point 설정이 multiPoint보다 우선</strong>한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">plugins</span><span class="pi">:</span>
+  <span class="na">multiPoint</span><span class="pi">:</span>
+    <span class="na">enabled</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">MyPlugin</span>    <span class="c1"># MyPlugin이 구현하는 모든 곳에 등록</span>
+  <span class="na">score</span><span class="pi">:</span>
+    <span class="na">disabled</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">MyPlugin</span>    <span class="c1"># 단, Score에서만은 제외</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h3 id="-패턴-전체-비활성화와-순서-재배치"><code class="highlighter-rouge">*</code> 패턴: 전체 비활성화와 순서 재배치</h3>
+
+<p><code class="highlighter-rouge">*</code>를 사용하면 해당 extension point의 모든 기본 플러그인을 한꺼번에 비활성화할 수 있다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">profiles</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">schedulerName</span><span class="pi">:</span> <span class="s">no-scoring-scheduler</span>
+    <span class="na">plugins</span><span class="pi">:</span>
+      <span class="na">preScore</span><span class="pi">:</span>
+        <span class="na">disabled</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s1">'</span><span class="s">*'</span>      <span class="c1"># PreScore 기본 플러그인 전부 제거</span>
+      <span class="na">score</span><span class="pi">:</span>
+        <span class="na">disabled</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s1">'</span><span class="s">*'</span>      <span class="c1"># Score 기본 플러그인 전부 제거 → 스코어링 생략</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>패턴</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">disabled: [{name: '*'}]</code> 만</td>
+      <td>해당 extension point의 기본 플러그인 전부 OFF</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">disabled: [{name: '*'}]</code> + <code class="highlighter-rouge">enabled: [...]</code></td>
+      <td>기본 플러그인을 전부 제거한 뒤 원하는 플러그인만 원하는 순서로 등록</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">enabled: [...]</code> 만</td>
+      <td>기본 플러그인은 그대로 유지하고, 그 뒤에 추가</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>플러그인 호출 순서를 완전히 제어</strong>하고 싶을 때, <code class="highlighter-rouge">*</code>로 전부 끄고 <code class="highlighter-rouge">enabled</code>에서 원하는 순서로 다시 나열하면 된다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">score</span><span class="pi">:</span>
+  <span class="na">disabled</span><span class="pi">:</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s1">'</span><span class="s">*'</span>           <span class="c1"># 기본 플러그인 전부 제거</span>
+  <span class="na">enabled</span><span class="pi">:</span>                <span class="c1"># 원하는 순서로 다시 등록</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">MyCustomScorer</span>
+      <span class="na">weight</span><span class="pi">:</span> <span class="s">5</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">NodeResourcesFit</span>
+      <span class="na">weight</span><span class="pi">:</span> <span class="s">2</span>
+    <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">NodeAffinity</span>
+      <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+    <span class="c1"># TaintToleration 등은 아예 안 넣음 → 비활성화</span>
+</code></pre></div></div>
+
+<p>이 패턴은 “기본 플러그인 중 일부만 선택적으로 쓰면서 순서도 바꾸고 싶다”는 요구에 유용하다.</p>
+
+<p><br /></p>
+
+<h1 id="noderesourcesfit-전략과-리소스-단편화">NodeResourcesFit 전략과 리소스 단편화</h1>
+
+<h2 id="noderesourcesfit-스코어링-전략">NodeResourcesFit 스코어링 전략</h2>
+
+<p><a href="/kubernetes/Kubernetes-Scheduling-02/#기본-score-플러그인">2편</a>에서 <code class="highlighter-rouge">NodeResourcesFit</code>은 Filter와 Score 양쪽에 등록되는 플러그인이라고 했다. 이 Score 단계의 동작을 결정하는 것이 <strong>스코어링 전략(scoringStrategy)</strong>이다. 플러그인이 각 extension point에서 무엇을 하는지는 <a href="/kubernetes/Kubernetes-Scheduling-06/#noderesourcesfit">6편 - NodeResourcesFit</a>에서 분해한다.</p>
+
+<p>세 가지 전략이 있고, 선택 기준은 다음과 같다.</p>
+
+<ul>
+  <li>노드마다 여유를 남겨 부하 급증을 흡수해야 한다 → <strong><code class="highlighter-rouge">LeastAllocated</code></strong>(기본)</li>
+  <li>노드 수를 줄여 비용을 낮추거나 GPU 단편화를 막아야 한다 → <strong><code class="highlighter-rouge">MostAllocated</code></strong></li>
+  <li>사용률 구간마다 선호를 따로 둬야 한다(예: 일정 사용률까지는 채우고 그 뒤로는 피함) → <strong><code class="highlighter-rouge">RequestedToCapacityRatio</code></strong>. 리소스별 가중치(<code class="highlighter-rouge">resources[].weight</code>)는 세 전략 모두에서 쓸 수 있다</li>
+</ul>
+
+<table>
+  <thead>
+    <tr>
+      <th>전략</th>
+      <th>방향</th>
+      <th>점수 기준</th>
+      <th>주요 시나리오</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>LeastAllocated</td>
+      <td>분산</td>
+      <td>여유 많은 노드 선호</td>
+      <td>웹 서비스, 고가용성</td>
+    </tr>
+    <tr>
+      <td>MostAllocated</td>
+      <td>집중 (bin packing)</td>
+      <td>사용률 높은 노드 선호</td>
+      <td>비용 최적화, 배치 작업</td>
+    </tr>
+    <tr>
+      <td>RequestedToCapacityRatio</td>
+      <td>커스텀</td>
+      <td>사용률-점수 곡선 정의</td>
+      <td>GPU 워크로드, 세밀 제어</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>각 전략의 점수 공식과 계산 예시는 아래에서 다룬다.</p>
+
+<h3 id="leastallocated-기본">LeastAllocated (기본)</h3>
+
+<p>리소스 사용률이 <strong>낮은</strong> 노드에 높은 점수를 부여한다. 파드를 클러스터 전체에 <strong>분산</strong>시키는 방향이다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">pluginConfig</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">NodeResourcesFit</span>
+    <span class="na">args</span><span class="pi">:</span>
+      <span class="na">scoringStrategy</span><span class="pi">:</span>
+        <span class="na">type</span><span class="pi">:</span> <span class="s">LeastAllocated</span>
+        <span class="na">resources</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">cpu</span>
+            <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">memory</span>
+            <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+</code></pre></div></div>
+
+<p>노드별 점수는 아래 공식으로 계산된다. 노드의 전체 할당 가능 리소스(<code class="highlighter-rouge">allocatable</code>) 대비 배치 후 남는 여유 비율이 클수록 높은 점수를 받는다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>score = (allocatable - requested) / allocatable * MaxScore
+</code></pre></div></div>
+
+<p>여유가 많은 노드일수록 점수가 높다. 리소스가 여러 종류(CPU, Memory 등)인 경우, 각 리소스별 점수를 설정된 가중치로 가중 평균하여 최종 점수를 산출한다.</p>
+
+<details>
+  <summary><b>계산 예시</b></summary>
+
+  <p>cpu weight: 1, memory weight: 1인 상태에서 새 파드가 cpu 2, memory 256Mi를 요청한다고 가정한다.</p>
+
+  <p><strong>Node A</strong> (여유 많음)</p>
+
+  <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Allocatable: cpu 8, memory 16Gi
+Requested:   cpu 1, memory 2Gi
+
+cpu score   = (8 - (1+2)) / 8 * 100 = 62.5
+memory score = (16Gi - (2Gi+256Mi)) / 16Gi * 100 ≈ 85.9
+final score = (62.5 * 1 + 85.9 * 1) / (1 + 1) = 74.2
+</code></pre></div>  </div>
+
+  <p><strong>Node B</strong> (여유 적음)</p>
+
+  <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Allocatable: cpu 8, memory 16Gi
+Requested:   cpu 5, memory 12Gi
+
+cpu score   = (8 - (5+2)) / 8 * 100 = 12.5
+memory score = (16Gi - (12Gi+256Mi)) / 16Gi * 100 ≈ 23.4
+final score = (12.5 * 1 + 23.4 * 1) / (1 + 1) = 18.0
+</code></pre></div>  </div>
+
+  <p>Node A(74.2) &gt; Node B(18.0)이므로, <strong>여유가 많은 Node A가 선택</strong>된다. 파드가 분산 배치되는 방향이다.</p>
+
+  <p>여기서 <code class="highlighter-rouge">Allocatable</code>은 노드가 파드에 할당할 수 있는 총량이고, <code class="highlighter-rouge">Requested</code>는 그 노드에 이미 배치된 파드들의 <code class="highlighter-rouge">requests</code> 합이다. 공식의 분모는 항상 <code class="highlighter-rouge">allocatable</code>이다.</p>
+
+  <blockquote>
+    <p><code class="highlighter-rouge">requests</code>를 지정하지 않은 컨테이너에는 <strong>Score 단계에 한해</strong> 기본값(CPU 100m, memory 200Mi)이 적용된다. Filter 단계는 실제 <code class="highlighter-rouge">requests</code>를 그대로 쓰므로 비워 두면 0으로 계산된다. 점수 계산에서만 0이 아닌 값으로 보정된다는 뜻이다.</p>
+  </blockquote>
+
+</details>
+
+<p>부하가 예측 불가능하고 급증할 수 있는 서비스(웹 서버, API 서버), 각 노드에 여유를 남겨 스파이크를 흡수해야 하는 환경, 노드 장애 시 다른 노드가 부하를 분담해야 하는 고가용성 환경에 적합하다.</p>
+
+<p>다만, 모든 노드가 비슷하게 부분 점유되므로 “비어 있는 노드”가 줄어든다. Cluster Autoscaler와 함께 사용할 때 스케일 다운 대상 노드를 만들기 어렵고, GPU 등 희소 리소스에서는 단편화 문제가 발생할 수 있다.</p>
+
+<p><br /></p>
+
+<h3 id="mostallocated">MostAllocated</h3>
+
+<p>리소스 사용률이 <strong>높은</strong> 노드에 높은 점수를 부여한다. 파드를 가능한 한 적은 수의 노드에 <strong>집중 배치하는</strong>(bin packing) 방향이다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">pluginConfig</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">NodeResourcesFit</span>
+    <span class="na">args</span><span class="pi">:</span>
+      <span class="na">scoringStrategy</span><span class="pi">:</span>
+        <span class="na">type</span><span class="pi">:</span> <span class="s">MostAllocated</span>
+        <span class="na">resources</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">cpu</span>
+            <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">memory</span>
+            <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+</code></pre></div></div>
+
+<p>노드별 점수는 아래 공식으로 계산된다. 배치 후 노드의 사용률(<code class="highlighter-rouge">requested / allocatable</code>)이 높을수록 높은 점수를 받는다. LeastAllocated와 정확히 반대 방향이다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>score = requested / allocatable * MaxScore
+</code></pre></div></div>
+
+<p>LeastAllocated와 마찬가지로, 리소스가 여러 종류인 경우 각 리소스별 점수를 가중 평균하여 최종 점수를 산출한다.</p>
+
+<details>
+  <summary><b>계산 예시</b></summary>
+
+  <p>cpu weight: 1, memory weight: 1인 상태에서 새 파드가 cpu 2, memory 256Mi를 요청한다고 가정한다. 위 LeastAllocated 예시와 동일한 노드다.</p>
+
+  <p><strong>Node A</strong> (여유 많음)</p>
+
+  <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Allocatable: cpu 8, memory 16Gi
+Requested:   cpu 1, memory 2Gi
+
+cpu score   = (1+2) / 8 * 100 = 37.5
+memory score = (2Gi+256Mi) / 16Gi * 100 ≈ 14.1
+final score = (37.5 * 1 + 14.1 * 1) / (1 + 1) = 25.8
+</code></pre></div>  </div>
+
+  <p><strong>Node B</strong> (여유 적음)</p>
+
+  <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Allocatable: cpu 8, memory 16Gi
+Requested:   cpu 5, memory 12Gi
+
+cpu score   = (5+2) / 8 * 100 = 87.5
+memory score = (12Gi+256Mi) / 16Gi * 100 ≈ 76.6
+final score = (87.5 * 1 + 76.6 * 1) / (1 + 1) = 82.0
+</code></pre></div>  </div>
+
+  <p>Node B(82.0) &gt; Node A(25.8)이므로, <strong>이미 많이 사용된 Node B가 선택</strong>된다. 파드가 한 노드에 집중 배치되는 bin packing 방향이다.</p>
+
+</details>
+
+<p>노드 수에 따라 비용이 발생하는 클라우드 환경에서 비용 최적화에 유리하며, Cluster Autoscaler와 함께 사용할 때 빈 노드를 만들어 스케일 다운을 유도할 수도 있다. 배치 작업이나 ML 학습 등 일시적 워크로드, GPU 등 희소 리소스의 단편화 방지에도 적합하다.</p>
+
+<p>다만, 특정 노드에 부하가 집중되므로 해당 노드 장애 시 영향 범위가 커지고, 리소스 경합(CPU throttling, OOM 등)이 발생할 가능성이 높아진다.</p>
+
+<p><br /></p>
+
+<h3 id="requestedtocapacityratio">RequestedToCapacityRatio</h3>
+
+<p>가장 세밀한 제어가 가능한 전략이다. <code class="highlighter-rouge">shape</code> 파라미터로 <strong>사용률-점수 매핑 곡선</strong>을 직접 정의한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">pluginConfig</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">NodeResourcesFit</span>
+    <span class="na">args</span><span class="pi">:</span>
+      <span class="na">scoringStrategy</span><span class="pi">:</span>
+        <span class="na">type</span><span class="pi">:</span> <span class="s">RequestedToCapacityRatio</span>
+        <span class="na">resources</span><span class="pi">:</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">cpu</span>
+            <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">memory</span>
+            <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+          <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">nvidia.com/gpu</span>
+            <span class="na">weight</span><span class="pi">:</span> <span class="s">5</span>
+        <span class="na">requestedToCapacityRatio</span><span class="pi">:</span>
+          <span class="na">shape</span><span class="pi">:</span>
+            <span class="pi">-</span> <span class="na">utilization</span><span class="pi">:</span> <span class="s">0</span>
+              <span class="na">score</span><span class="pi">:</span> <span class="s">0</span>
+            <span class="pi">-</span> <span class="na">utilization</span><span class="pi">:</span> <span class="s">100</span>
+              <span class="na">score</span><span class="pi">:</span> <span class="s">10</span>
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">shape</code>의 두 점을 선형 보간하여 점수를 계산한다. 위 예시는 사용률이 높을수록 점수가 높은 bin packing 동작이다. 반대로 설정하면 LeastAllocated와 유사하게 동작한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># LeastAllocated와 유사한 동작</span>
+<span class="na">shape</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">utilization</span><span class="pi">:</span> <span class="s">0</span>
+    <span class="na">score</span><span class="pi">:</span> <span class="s">10</span>
+  <span class="pi">-</span> <span class="na">utilization</span><span class="pi">:</span> <span class="s">100</span>
+    <span class="na">score</span><span class="pi">:</span> <span class="s">0</span>
+</code></pre></div></div>
+
+<p><strong>활용: 사용률-점수 곡선과 리소스별 가중치</strong></p>
+
+<p><code class="highlighter-rouge">RequestedToCapacityRatio</code>의 고유 기능은 <code class="highlighter-rouge">shape</code>로 사용률 구간별 점수를 정하는 것이다. 리소스별 가중치(<code class="highlighter-rouge">resources[].weight</code>)는 세 전략 모두에서 쓸 수 있고, 아래처럼 곡선과 함께 쓰면 효과가 분명해진다. 예를 들어 GPU 리소스에 높은 가중치를 주어, GPU를 최우선으로 bin packing하면서 CPU/Memory는 상대적으로 덜 중요하게 취급할 수 있다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">resources</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">nvidia.com/gpu</span>
+    <span class="na">weight</span><span class="pi">:</span> <span class="s">10</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">cpu</span>
+    <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">memory</span>
+    <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+</code></pre></div></div>
+
+<p><br /></p>
+
+<h2 id="리소스-단편화-문제">리소스 단편화 문제</h2>
+
+<h3 id="단편화란">단편화란</h3>
+
+<p>리소스 단편화(fragmentation)란 클러스터 전체로 보면 리소스 여유가 있지만, 개별 노드에서는 파드의 요구를 충족하지 못하는 상태를 말한다.</p>
+
+<p>예를 들어, 4-GPU 노드 3대가 있는 클러스터에서:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Node A: 4 GPU 중 2 GPU 사용 중 (2 여유)
+Node B: 4 GPU 중 2 GPU 사용 중 (2 여유)
+Node C: 4 GPU 중 2 GPU 사용 중 (2 여유)
+</code></pre></div></div>
+
+<p>클러스터 전체로는 6 GPU가 여유지만, <strong>4 GPU를 요청하는 파드</strong>는 스케줄링할 수 없다. 어떤 노드에도 4 GPU 여유가 없기 때문이다.</p>
+
+<h3 id="현재-상태-확인하기">현재 상태 확인하기</h3>
+
+<p>단편화가 실제로 일어나고 있는지는 노드별 할당 현황을 봐야 알 수 있다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 노드 하나의 할당 현황 상세</span>
+~<span class="nv">$ </span>kubectl describe node &lt;node&gt;
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 실행 결과 (발췌)
+Capacity:
+  cpu:                64
+  memory:             264120152Ki
+  nvidia.com/gpu:     4
+Allocatable:
+  cpu:                63500m
+  memory:             259925Mi
+  nvidia.com/gpu:     4
+Allocated resources:
+  Resource           Requests      Limits
+  --------           --------      ------
+  cpu                12500m (19%)  24 (37%)
+  memory             48Gi (18%)    96Gi (37%)
+  nvidia.com/gpu     2             2
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">Capacity</code>는 노드의 물리적 총량이고, <code class="highlighter-rouge">Allocatable</code>은 그중 파드에 할당할 수 있는 양이다. kubelet과 시스템 데몬을 위한 예약분(<code class="highlighter-rouge">--kube-reserved</code>, <code class="highlighter-rouge">--system-reserved</code>)이 빠져 있어 <code class="highlighter-rouge">Capacity</code>보다 작다. <strong>스케줄러의 점수 계산에 쓰이는 분모는 <code class="highlighter-rouge">Allocatable</code>이다.</strong></p>
+
+<p><code class="highlighter-rouge">Allocated resources</code>의 <code class="highlighter-rouge">Requests</code>가 이미 배치된 파드들의 <code class="highlighter-rouge">requests</code> 합이다. <code class="highlighter-rouge">Allocatable - Requests</code>가 그 노드의 실제 여유다. 위 노드는 GPU 4개 중 2개가 할당되어 2개 여유다.</p>
+
+<p>클러스터 전체의 GPU 분포를 한 번에 보려면 다음과 같이 확인한다.</p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 노드별 GPU 용량 한눈에 보기</span>
+~<span class="nv">$ </span>kubectl get nodes <span class="nt">-o</span> custom-columns<span class="o">=</span><span class="se">\</span>
+<span class="s1">'NAME:.metadata.name,GPU_ALLOC:.status.allocatable.nvidia\.com/gpu'</span>
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 실행 결과
+NAME       GPU_ALLOC
+node-1     4
+node-2     4
+node-3     4
+</code></pre></div></div>
+
+<p>노드별로 몇 개가 <strong>쓰이고 있는지</strong>는 <code class="highlighter-rouge">allocatable</code>에 나오지 않는다. <code class="highlighter-rouge">kubectl describe node</code>의 <code class="highlighter-rouge">Allocated resources</code>를 노드마다 확인하거나, 파드의 GPU 요청을 노드별로 합산해야 한다.</p>
+
+<h3 id="gpu-리소스에서-단편화가-심한-이유">GPU 리소스에서 단편화가 심한 이유</h3>
+
+<p>CPU나 Memory와 달리, GPU는 다음과 같은 특성 때문에 단편화에 취약하다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>특성</th>
+      <th>CPU/Memory</th>
+      <th>GPU</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>노드당 수량</td>
+      <td>수십~수백 코어, GB 단위</td>
+      <td>보통 2~8개</td>
+    </tr>
+    <tr>
+      <td>단위 크기</td>
+      <td>작음 (1 밀리코어, 1 MiB)</td>
+      <td>큼 (1 GPU 단위)</td>
+    </tr>
+    <tr>
+      <td>파드당 요청량</td>
+      <td>전체 대비 작은 비율</td>
+      <td>전체 대비 큰 비율 (1~8 GPU)</td>
+    </tr>
+    <tr>
+      <td>분할 가능성</td>
+      <td>자유롭게 분할</td>
+      <td>정수 단위만 허용</td>
+    </tr>
+    <tr>
+      <td>overcommit</td>
+      <td>가능 (request &lt; limit)</td>
+      <td><strong>불가</strong> (<a href="/dev/Dev-Kubernetes-NVIDIA-GPU-Mechanism/#extended-resource로서의-gpu">request == limit 강제</a>)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>GPU가 4개인 노드에서 GPU 1개짜리 파드 2개가 다른 노드에 분산 배치되면, GPU 4개짜리 파드는 어디에도 들어갈 수 없게 된다. <strong>기본 설정이 정확히 이 상황을 만든다</strong>. 기본 설정의 <code class="highlighter-rouge">NodeResourcesFit</code>은 cpu·memory만 점수에 넣으므로 GPU 사용량 자체는 보지 않는다. CPU·메모리 기준으로 여유 있는 노드를 고르는 <code class="highlighter-rouge">LeastAllocated</code>가 결과적으로 GPU 파드도 흩어 놓아, 모든 노드가 “부분 점유” 상태가 된다.</p>
+
+<h3 id="해결-mostallocated-또는-requestedtocapacityratio">해결: MostAllocated 또는 RequestedToCapacityRatio</h3>
+
+<p>GPU 단편화를 줄이려면, 스코어링 전략을 bin packing 방향으로 전환하여 GPU 파드를 가능한 한 적은 수의 노드에 집중시켜야 한다. <a href="#noderesourcesfit-스코어링-전략">위에서 다룬</a> 두 전략을 활용한다.</p>
+
+<p><strong>MostAllocated로 GPU를 집중시키는 설정</strong></p>
+
+<p><code class="highlighter-rouge">resources</code>에 <code class="highlighter-rouge">nvidia.com/gpu</code>를 추가하고 가중치를 CPU/Memory보다 높게 설정한다. 기본 프로필의 전략만 바꾸는 경우 전체 설정은 다음과 같다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kubescheduler.config.k8s.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">KubeSchedulerConfiguration</span>
+<span class="na">profiles</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">schedulerName</span><span class="pi">:</span> <span class="s">default-scheduler</span>
+    <span class="na">pluginConfig</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">NodeResourcesFit</span>
+        <span class="na">args</span><span class="pi">:</span>
+          <span class="na">scoringStrategy</span><span class="pi">:</span>
+            <span class="na">type</span><span class="pi">:</span> <span class="s">MostAllocated</span>
+            <span class="na">resources</span><span class="pi">:</span>
+              <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">nvidia.com/gpu</span>   <span class="c1"># GPU에 높은 가중치 → GPU bin packing 우선</span>
+                <span class="na">weight</span><span class="pi">:</span> <span class="s">5</span>
+              <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">cpu</span>
+                <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+              <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">memory</span>
+                <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+</code></pre></div></div>
+
+<p>이 설정은 <strong>클러스터 전체의 기본 배치 전략을 바꾼다.</strong> GPU를 쓰지 않는 일반 워크로드도 bin packing 방향으로 배치되므로, 일반 서비스까지 특정 노드에 몰릴 수 있다. GPU 워크로드에만 적용하려면 <a href="#다중-프로필">다중 프로필</a>로 분리하는 편이 적절하다.</p>
+
+<p><strong>RequestedToCapacityRatio로 더 세밀하게 제어</strong></p>
+
+<p>GPU 가중치를 CPU/Memory보다 크게(예: 10) 주고, <code class="highlighter-rouge">shape</code>를 사용률이 높을수록 점수가 높은 곡선으로 설정한다. 점수 계산에서 GPU가 지배적이 되어, GPU 사용률이 높은 노드를 강하게 선호한다. 사용률 구간별로 선호도를 다르게 두고 싶을 때 유리하다.</p>
+
+<p>핵심은 공통적으로 <strong>GPU 리소스의 가중치를 CPU/Memory보다 높게 설정</strong>하여, 점수 계산에서 GPU bin packing이 우선되도록 하는 것이다.</p>
+
+<h3 id="단편화-방지-설계-가이드">단편화 방지 설계 가이드</h3>
+
+<p>단편화를 방지하기 위한 설계 포인트를 정리한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>방법</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>bin packing 전략</td>
+      <td><code class="highlighter-rouge">MostAllocated</code> 또는 <code class="highlighter-rouge">RequestedToCapacityRatio</code>로 GPU를 집중 배치</td>
+    </tr>
+    <tr>
+      <td>노드 풀 분리</td>
+      <td>GPU 노드와 일반 노드를 <a href="/kubernetes/Kubernetes-Scheduling-03/#taints-and-tolerations">taint/toleration</a>으로 분리하여, GPU 노드에는 GPU 워크로드만 배치. GPU를 요청하지 않는 파드는 점수 계산에서 GPU를 보지 않으므로 GPU 노드를 피하지 않는다</td>
+    </tr>
+    <tr>
+      <td>다중 프로필</td>
+      <td>GPU 워크로드 전용 프로필에만 bin packing 적용, 일반 워크로드는 LeastAllocated 유지</td>
+    </tr>
+    <tr>
+      <td>별도 구현 스케줄러</td>
+      <td>Volcano 등 배치 워크로드용 스케줄러를 두 번째 스케줄러로 사용(binpack 플러그인). 참고로 Kueue는 스케줄러가 아니라 스케줄러 앞단의 워크로드 admission 컨트롤러다 (<a href="/kubernetes/Kubernetes-Scheduling-05/#volcano-vs-kueue-접근-방식의-차이">5편 - Volcano vs Kueue</a>)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이 표의 방법들은 Volcano를 빼면 모두 <strong>개별 파드 하나가</strong> 필요한 GPU를 한 노드에서 확보하게 만드는 쪽이다. 여러 파드가 <strong>동시에</strong> 확보되어야 작업이 시작되는 그룹 워크로드(분산 학습 등)는 문제 구조가 다르고, bin packing만으로는 해결되지 않는다. 그 경우의 스케줄링은 <a href="/kubernetes/Kubernetes-Scheduling-05/">5편</a>에서 다룬다. bin packing을 그룹 워크로드와 함께 쓸 때 어느 프로필에 설정해야 하는지도 그곳에서 다룬다.</p>
+
+<p>주의할 점이 하나 있다. 프로필은 배치 전략을 바꾸지만, 선점할 때 victim을 고르는 기준은 <code class="highlighter-rouge">PriorityClass</code>의 우선순위다(<a href="/kubernetes/Kubernetes-Scheduling-02/#선점">2편 - 선점</a>). 같은 프로세스 안에서는 다른 프로필로 배치된 파드도 victim이 될 수 있다. 프로필이 바꿀 수 있는 것은 선점을 할지 여부(<code class="highlighter-rouge">postFilter</code>에서 <code class="highlighter-rouge">DefaultPreemption</code> 비활성화)와 그 인자 정도다.</p>
+
+<p><br /></p>
+
+<h1 id="스케줄러-성능-튜닝">스케줄러 성능 튜닝</h1>
+
+<h2 id="percentageofnodestoscore">percentageOfNodesToScore</h2>
+
+<p>대규모 클러스터에서 스케줄링 지연을 줄이기 위한 파라미터다. <a href="/kubernetes/Kubernetes-Scheduling-02/#filter">2편 - Filter</a>에서 설명했듯, 스케줄러는 모든 노드를 평가하지 않고 충분한 수의 적합 노드를 찾으면 Score 단계로 넘어간다. 이 “충분한 수”를 결정하는 것이 <code class="highlighter-rouge">percentageOfNodesToScore</code>다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kubescheduler.config.k8s.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">KubeSchedulerConfiguration</span>
+<span class="na">percentageOfNodesToScore</span><span class="pi">:</span> <span class="s">50</span>
+</code></pre></div></div>
+
+<h3 id="기본값">기본값</h3>
+
+<p>명시하지 않으면 클러스터 규모에 따라 자동 계산된다. 계산식은 다음과 같다.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>비율(%) = 50 - (전체 노드 수 / 125)     # 하한 5%
+평가 노드 수 = max(전체 노드 수 * 비율, 100)
+</code></pre></div></div>
+
+<p>두 가지 하한이 동시에 걸린다. 비율은 5% 아래로 내려가지 않고, 평가 노드 수는 100개 아래로 내려가지 않는다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>전체 노드 수</th>
+      <th>계산된 비율</th>
+      <th>실제 평가 노드 수</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>100 노드 이하</td>
+      <td>—</td>
+      <td>전체 (100노드 하한에 걸려 사실상 전량 평가)</td>
+    </tr>
+    <tr>
+      <td>1,000 노드</td>
+      <td>약 42%</td>
+      <td>약 420</td>
+    </tr>
+    <tr>
+      <td>5,000 노드</td>
+      <td>약 10%</td>
+      <td>약 500</td>
+    </tr>
+    <tr>
+      <td>10,000 노드</td>
+      <td>5% (하한)</td>
+      <td>약 500</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>노드 100개 이하 클러스터에서는 하한 때문에 어차피 전체 노드를 평가하므로, 이 값을 설정할 필요가 없다.</p>
+
+<h3 id="트레이드오프">트레이드오프</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>값</th>
+      <th>스케줄링 속도</th>
+      <th>스케줄링 품질</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>높음 (100%)</td>
+      <td>느림</td>
+      <td>최적 (모든 노드 비교)</td>
+    </tr>
+    <tr>
+      <td>낮음 (10~30%)</td>
+      <td>빠름</td>
+      <td>차선 (일부 노드만 비교)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>공식 문서는 구체적인 권장값을 제시하지 않지만, <strong>10% 아래로 낮추는 것은 피하라</strong>고 명시한다. 스케줄러 throughput이 결정적으로 중요하고 노드 점수가 거의 중요하지 않은 경우가 아니라면, 배치 품질 손실이 커진다는 것이다.</p>
+
+<p>적정값은 노드 수, 파드 생성 빈도, 배치 제약의 강도에 따라 달라지므로 직접 측정해 정하는 편이 적절하다. 이 글에서 값을 측정해 검증한 범위는 아니다.</p>
+
+<h3 id="프로필별-설정-v126">프로필별 설정 (v1.26+)</h3>
+
+<p>v1.26부터는 글로벌 설정뿐만 아니라 프로필별로도 <code class="highlighter-rouge">percentageOfNodesToScore</code>를 설정할 수 있다. 프로필 블록 안에 같은 이름의 필드를 두면 글로벌 값을 덮어쓴다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kubescheduler.config.k8s.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">KubeSchedulerConfiguration</span>
+<span class="na">percentageOfNodesToScore</span><span class="pi">:</span> <span class="s">50</span>          <span class="c1"># 글로벌 기본값</span>
+<span class="na">profiles</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">schedulerName</span><span class="pi">:</span> <span class="s">default-scheduler</span>
+    <span class="c1"># 글로벌 값(50)을 그대로 사용</span>
+
+  <span class="pi">-</span> <span class="na">schedulerName</span><span class="pi">:</span> <span class="s">batch-scheduler</span>
+    <span class="na">percentageOfNodesToScore</span><span class="pi">:</span> <span class="s">10</span>      <span class="c1"># 이 프로필만 10%로 낮춰 처리량 우선</span>
+</code></pre></div></div>
+
+<p>배치 워크로드처럼 처리량이 배치 품질보다 중요한 프로필에 낮은 값을 주는 식으로 활용할 수 있다.</p>
+
+<p><br /></p>
+
+<h1 id="다중-프로필">다중 프로필</h1>
+
+<p><a href="/kubernetes/Kubernetes-Scheduling-01/#다중-정책-구성-방식">1편 - 다중 정책 구성 방식</a>에서 단일 kube-scheduler에서 여러 프로필을 운영할 수 있다고 했다. 여기서는 이를 활용한 구체적인 구성 예시를 다룬다.</p>
+
+<h2 id="워크로드-성격에-따른-프로필-분리">워크로드 성격에 따른 프로필 분리</h2>
+
+<p>일반 서비스와 GPU/배치 워크로드에 서로 다른 스코어링 전략을 적용하는 예시다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">kubescheduler.config.k8s.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">KubeSchedulerConfiguration</span>
+<span class="na">profiles</span><span class="pi">:</span>
+  <span class="c1"># 프로필 1: 일반 워크로드 (리소스 분산)</span>
+  <span class="pi">-</span> <span class="na">schedulerName</span><span class="pi">:</span> <span class="s">default-scheduler</span>
+    <span class="na">pluginConfig</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">NodeResourcesFit</span>
+        <span class="na">args</span><span class="pi">:</span>
+          <span class="na">scoringStrategy</span><span class="pi">:</span>
+            <span class="na">type</span><span class="pi">:</span> <span class="s">LeastAllocated</span>
+            <span class="na">resources</span><span class="pi">:</span>
+              <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">cpu</span>
+                <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+              <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">memory</span>
+                <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+
+  <span class="c1"># 프로필 2: GPU 워크로드 (bin packing)</span>
+  <span class="pi">-</span> <span class="na">schedulerName</span><span class="pi">:</span> <span class="s">gpu-binpack-scheduler</span>
+    <span class="na">pluginConfig</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">NodeResourcesFit</span>
+        <span class="na">args</span><span class="pi">:</span>
+          <span class="na">scoringStrategy</span><span class="pi">:</span>
+            <span class="na">type</span><span class="pi">:</span> <span class="s">MostAllocated</span>
+            <span class="na">resources</span><span class="pi">:</span>
+              <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">cpu</span>
+                <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+              <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">memory</span>
+                <span class="na">weight</span><span class="pi">:</span> <span class="s">1</span>
+              <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">nvidia.com/gpu</span>
+                <span class="na">weight</span><span class="pi">:</span> <span class="s">5</span>
+</code></pre></div></div>
+
+<p>파드 배포 시 <code class="highlighter-rouge">spec.schedulerName</code>으로 프로필을 선택한다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># 일반 서비스: default-scheduler 사용 (기본값)</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">apps/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Deployment</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">web-service</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">template</span><span class="pi">:</span>
+    <span class="na">spec</span><span class="pi">:</span>
+      <span class="na">containers</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">web</span>
+          <span class="na">image</span><span class="pi">:</span> <span class="s">nginx</span>
+          <span class="na">resources</span><span class="pi">:</span>
+            <span class="na">requests</span><span class="pi">:</span>
+              <span class="na">cpu</span><span class="pi">:</span> <span class="s">500m</span>
+              <span class="na">memory</span><span class="pi">:</span> <span class="s">256Mi</span>
+<span class="nn">---</span>
+<span class="c1"># GPU 워크로드: gpu-binpack-scheduler 사용</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">apps/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Deployment</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">ml-training</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">template</span><span class="pi">:</span>
+    <span class="na">spec</span><span class="pi">:</span>
+      <span class="na">schedulerName</span><span class="pi">:</span> <span class="s">gpu-binpack-scheduler</span>  <span class="c1"># 프로필 선택</span>
+      <span class="na">containers</span><span class="pi">:</span>
+        <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">trainer</span>
+          <span class="na">image</span><span class="pi">:</span> <span class="s">ml-trainer:latest</span>
+          <span class="na">resources</span><span class="pi">:</span>
+            <span class="na">requests</span><span class="pi">:</span>
+              <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">2</span>
+            <span class="na">limits</span><span class="pi">:</span>
+              <span class="s">nvidia.com/gpu</span><span class="pi">:</span> <span class="s">2</span>
+</code></pre></div></div>
+
+<h2 id="다중-프로필의-제약">다중 프로필의 제약</h2>
+
+<ul>
+  <li>모든 프로필이 <strong>동일한 <code class="highlighter-rouge">queueSort</code> 플러그인</strong>을 사용해야 한다. 스케줄러 내부적으로 Pending 파드 큐는 하나이기 때문이다. 서로 다른 <code class="highlighter-rouge">queueSort</code>를 지정하면 스케줄러가 기동 시 validation 오류로 거부한다.</li>
+  <li>프로필별로 <code class="highlighter-rouge">schedulerName</code>이 <strong>고유</strong>해야 한다. 같은 프로세스 안에서 중복되면 기동 시 거부된다.</li>
+  <li><code class="highlighter-rouge">schedulerName</code>을 지정하지 않은 파드는 kube-apiserver가 <code class="highlighter-rouge">default-scheduler</code>로 채우므로, 그 이름의 프로필이 처리한다(<a href="/kubernetes/Kubernetes-Scheduling-01/#schedulername-지정">1편 - schedulerName 지정</a>).</li>
+</ul>
+
+<h2 id="프로필과-event-추적">프로필과 Event 추적</h2>
+
+<p>다중 프로필 환경에서 “어떤 프로필이 이 파드를 처리했는가”를 확인하려면 Kubernetes Event의 <code class="highlighter-rouge">reportingController</code> 필드를 보면 된다. 스케줄러는 이벤트 종류에 따라 다른 값을 <code class="highlighter-rouge">reportingController</code>에 넣는다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>이벤트 종류</th>
+      <th><code class="highlighter-rouge">reportingController</code> 값</th>
+      <th>이유</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>파드 스케줄링</strong></td>
+      <td>해당 파드의 <code class="highlighter-rouge">spec.schedulerName</code></td>
+      <td>어떤 프로필이 처리했는지 추적</td>
+    </tr>
+    <tr>
+      <td><strong>Leader election</strong></td>
+      <td><code class="highlighter-rouge">profiles[0].schedulerName</code></td>
+      <td>프로세스 전체 대표값 필요 → 첫 번째 프로필 사용</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>파드 스케줄링 이벤트의 경우, 해당 파드의 <code class="highlighter-rouge">schedulerName</code>이 그대로 <code class="highlighter-rouge">reportingController</code>에 들어간다.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># schedulerName: gpu-scheduler인 Pod의 스케줄링 Event</span>
+<span class="na">apiVersion</span><span class="pi">:</span> <span class="s">events.k8s.io/v1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">Event</span>
+<span class="na">reportingController</span><span class="pi">:</span> <span class="s">gpu-scheduler</span>   <span class="c1"># Pod의 schedulerName이 그대로 들어감</span>
+<span class="na">reason</span><span class="pi">:</span> <span class="s">Scheduled</span>
+<span class="na">note</span><span class="pi">:</span> <span class="s2">"</span><span class="s">Successfully</span><span class="nv"> </span><span class="s">assigned</span><span class="nv"> </span><span class="s">default/my-pod</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">node-3"</span>
+</code></pre></div></div>
+
+<p>Leader election 이벤트는 프로세스 전체 단위의 동작이므로 특정 프로필에 귀속되지 않는다. 프로세스를 대표하는 별도 이름이 없기 때문에, 관례적으로 <code class="highlighter-rouge">profiles</code> 배열의 <strong>첫 번째</strong> 프로필 이름을 사용한다.</p>
+
+<p>디버깅 시 필드 선택자로 이벤트를 필터링하면, 어떤 프로필이 어떤 파드를 처리했는지 빠르게 확인할 수 있다. 여기서 주의할 점이 있다. <strong>필드 선택자의 이름은 <code class="highlighter-rouge">reportingController</code>가 아니라 <code class="highlighter-rouge">reportingComponent</code>다.</strong></p>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 필드 선택자 이름은 reportingComponent (core/v1 필드명을 따른다)</span>
+~<span class="nv">$ </span>kubectl get events <span class="nt">-A</span> <span class="nt">--field-selector</span> <span class="nv">reportingComponent</span><span class="o">=</span>gpu-binpack-scheduler
+</code></pre></div></div>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code># 실행 결과
+NAMESPACE   LAST SEEN   TYPE     REASON      OBJECT                        MESSAGE
+default     30s         Normal   Scheduled   pod/ml-training-7d4b8c-xk2p9  Successfully assigned default/ml-training-7d4b8c-xk2p9 to node-3
+</code></pre></div></div>
+
+<p><code class="highlighter-rouge">reportingController</code>로 필터하면 <code class="highlighter-rouge">field label not supported: reportingController</code> 에러가 난다. Event 오브젝트 안의 필드 이름(<code class="highlighter-rouge">reportingController</code>)과, API Server가 필드 선택자로 노출하는 이름(<code class="highlighter-rouge">reportingComponent</code>)이 다르기 때문이다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>이 글에서 다룬 핵심 내용을 정리한다.</p>
+
+<ol>
+  <li><strong>스케줄러 설정은 프로세스 → Configuration → 프로필 계층 구조를 따른다(<a href="/kubernetes/Kubernetes-Scheduling-01/#설정-계층-구조">1편</a>).</strong> 하나의 스케줄러 프로세스가 하나의 Configuration을 가지고, 그 안에 여러 Profile을 포함한다. <code class="highlighter-rouge">kube-scheduler</code>는 <code class="highlighter-rouge">--config</code> 플래그로 Configuration 파일을 전달받으며, 클러스터 유형에 따라 Static Pod, systemd 등 방식이 다르다.</li>
+  <li><strong>설정 파일을 고치는 것과 적용되는 것은 별개다.</strong> 스케줄러는 설정을 런타임에 다시 읽지 않으므로 프로세스를 재시작해야 하고, 설정 오류로 기동에 실패하면 신규 파드가 전부 Pending에 빠진다. 백업은 매니페스트 디렉토리 밖에 두고, HA 환경에서는 한 대씩 순차 적용한다.</li>
+  <li><strong><code class="highlighter-rouge">multiPoint</code>로 플러그인을 일괄 등록하고, <code class="highlighter-rouge">*</code> 패턴으로 순서를 재배치할 수 있다.</strong> <code class="highlighter-rouge">multiPoint</code>는 플러그인이 구현하는 모든 extension point에 자동 등록하며, 개별 extension point 설정이 <code class="highlighter-rouge">multiPoint</code>보다 우선한다. <code class="highlighter-rouge">*</code> disable 후 <code class="highlighter-rouge">enabled</code>로 재등록하면 플러그인 호출 순서를 완전히 제어할 수 있다.</li>
+  <li><strong><code class="highlighter-rouge">NodeResourcesFit</code>은 세 가지 스코어링 전략을 제공한다.</strong> <code class="highlighter-rouge">LeastAllocated</code>(기본)는 리소스를 분산, <code class="highlighter-rouge">MostAllocated</code>는 노드를 채우는 bin packing, <code class="highlighter-rouge">RequestedToCapacityRatio</code>는 리소스별 가중치와 사용률-점수 곡선을 커스텀으로 정의한다. 점수 공식의 분모는 항상 <code class="highlighter-rouge">allocatable</code>이다.</li>
+  <li><strong>GPU 리소스는 단편화에 취약하다.</strong> 노드당 수량이 적고 단위가 크기 때문에, <code class="highlighter-rouge">LeastAllocated</code> 전략에서 모든 노드가 부분 점유되어 큰 GPU 요청을 수용하지 못하는 문제가 발생한다. <code class="highlighter-rouge">MostAllocated</code>로 전환하거나, GPU 가중치를 높인 <code class="highlighter-rouge">RequestedToCapacityRatio</code>를 사용하여 bin packing을 적용한다. 다만 기본 프로필의 전략을 바꾸면 일반 워크로드까지 영향을 받으므로, 다중 프로필로 분리하는 편이 적절하다.</li>
+  <li><strong><code class="highlighter-rouge">percentageOfNodesToScore</code>로 대규모 클러스터의 스케줄링 속도를 개선할 수 있다.</strong> 기본값은 클러스터 규모에 따라 자동 계산되며 비율 5%·노드 수 100개의 두 하한이 걸린다. 100노드 이하에서는 따로 설정할 필요가 없고, 공식 문서는 10% 아래로 낮추는 것을 권하지 않는다.</li>
+  <li><strong>다중 프로필로 워크로드 성격에 맞는 스케줄링 정책을 적용할 수 있다.</strong> 일반 워크로드에는 <code class="highlighter-rouge">LeastAllocated</code>, GPU 워크로드에는 <code class="highlighter-rouge">MostAllocated</code>를 적용하는 식으로 프로필을 분리한다. 어떤 프로필이 처리했는지는 Event의 <code class="highlighter-rouge">reportingComponent</code> 필드 선택자로 확인한다.</li>
+</ol>
+
+<p><a href="/kubernetes/Kubernetes-Scheduling-05/">5편</a>에서는 파드 단위 스케줄링의 한계와 gang scheduling(PodGroup 스케줄링, Coscheduling, Volcano, Kueue)을, <a href="/kubernetes/Kubernetes-Scheduling-06/">6편</a>에서는 지금까지 한 줄로 지나간 Scheduling Framework 내부 동작(Extension Point 결정권, PreScore 역할, 기본 플러그인 해부)과 스케줄링 실패 진단을 다룬다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://kubernetes.io/docs/reference/scheduling/config/">Scheduler Configuration - Kubernetes 공식 문서</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/scheduling-eviction/resource-bin-packing/">Resource Bin Packing - Kubernetes 공식 문서</a></li>
+  <li><a href="https://kubernetes.io/docs/concepts/scheduling-eviction/scheduler-perf-tuning/">Scheduler Performance Tuning - Kubernetes 공식 문서</a></li>
+  <li><a href="https://kubernetes.io/docs/reference/config-api/kube-scheduler-config.v1/">kube-scheduler Configuration (v1) API Reference</a></li>
+  <li><a href="https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/">Reserve Compute Resources for System Daemons - Kubernetes 공식 문서</a></li>
+  <li><a href="https://developer.nvidia.com/blog/practical-tips-for-preventing-gpu-fragmentation-for-volcano-scheduler/">Practical Tips for Preventing GPU Fragmentation - NVIDIA Technical Blog</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+<br>
+<div class="page__backlinks">
+  <h4 class="page__backlinks-title"><i class="fas fa-link" aria-hidden="true"></i> 이 글을 참조하는 글</h4>
+  <ul class="page__backlinks-list">
+    
+    <li><a href="/kubernetes/Kubernetes-Scheduling-00/">[Kubernetes] 쿠버네티스 스케줄링 - 0. 스케줄링 일반 개념과 쿠버네티스</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Scheduling-01/">[Kubernetes] 쿠버네티스 스케줄링 - 1. 개념과 kube-scheduler 구조</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Scheduling-02/">[Kubernetes] 쿠버네티스 스케줄링 - 2. 프로세스와 선점</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Scheduling-03/">[Kubernetes] 쿠버네티스 스케줄링 - 3. 스케줄링 제어</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Scheduling-05/">[Kubernetes] 쿠버네티스 스케줄링 - 5. 파드 단위 스케줄링의 한계와 Gang Scheduling</a></li>
+    
+    <li><a href="/kubernetes/Kubernetes-Scheduling-06/">[Kubernetes] 쿠버네티스 스케줄링 - 6. Extension Point 심화와 스케줄링 실패 진단</a></li>
+    
+  </ul>
+</div>
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#bin-packing" class="page__taxonomy-item" rel="tag">Bin Packing</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#fragmentation" class="page__taxonomy-item" rel="tag">Fragmentation</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubeschedulerconfiguration" class="page__taxonomy-item" rel="tag">KubeSchedulerConfiguration</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#noderesourcesfit" class="page__taxonomy-item" rel="tag">NodeResourcesFit</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#scheduler" class="page__taxonomy-item" rel="tag">Scheduler</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#scheduling" class="page__taxonomy-item" rel="tag">Scheduling</a>
+    
+    </span>
+  </p>
+
+
+
+
+  <p class="page__taxonomy">
+  <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 분류: </strong>
+  <span itemprop="keywords"><a href="/categories/Kubernetes/#k8s-scheduling" class="page__taxonomy-item" rel="tag">Kubernetes › 스케줄링</a><a href="/categories/MLOps/#mlops-resource" class="page__taxonomy-item" rel="tag">MLOps › 자원 관리·스케줄링</a><span class="page__taxonomy-item page__nature">개념</span></span>
+</p>
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-10-15">October 15, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BKubernetes%5D+%EC%BF%A0%EB%B2%84%EB%84%A4%ED%8B%B0%EC%8A%A4+%EC%8A%A4%EC%BC%80%EC%A4%84%EB%A7%81+-+4.+%EC%8A%A4%EC%BC%80%EC%A4%84%EB%9F%AC+%EC%84%A4%EC%A0%95%EA%B3%BC+%EC%B5%9C%EC%A0%81%ED%99%94%20https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Scheduling-04%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Scheduling-04%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2Fkubernetes%2FKubernetes-Scheduling-04%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2Fkubernetes%2FKubernetes-Scheduling-04?color=green&label=hits&size=small" alt="hit count">
+      <nav class="pagination">
+    
+      <a href="/kubernetes/Kubernetes-Scheduling-03/" class="pagination--pager" title="[Kubernetes] 쿠버네티스 스케줄링 - 3. 스케줄링 제어
+">이전 편</a>
+    
+    
+      <a href="/kubernetes/Kubernetes-Scheduling-05/" class="pagination--pager" title="[Kubernetes] 쿠버네티스 스케줄링 - 5. 파드 단위 스케줄링의 한계와 Gang Scheduling
+">다음 편</a>
+    
+  </nav>
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//kubernetes/Kubernetes-Scheduling-04/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/kubernetes/Kubernetes-Scheduling-04"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+
+
+  </body>
+</html>

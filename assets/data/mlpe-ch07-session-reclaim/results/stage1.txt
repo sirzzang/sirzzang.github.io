@@ -1,0 +1,96 @@
+
+=== [15:23:42] 준비: 노드에 가짜 GPU 1장을 광고한다
+$ kubectl patch node/session-lab-control-plane --subresource=status --type=json -p [{"op":"add","path":"/status/capacity/nvidia.com~1gpu","value":"1"}]
+node/session-lab-control-plane patched (no change)
+allocatable nvidia.com/gpu = 1
+
+=== [15:23:43] 시나리오 1: 세션 A가 GPU를 잡으면 세션 B는 대기한다
+persistentvolumeclaim/session-a-home created
+deployment.apps/session-a created
+service/session-a created
+persistentvolumeclaim/session-b-home created
+deployment.apps/session-b created
+service/session-b created
+$ kubectl -n sessions get pods
+session-a-6fb4844bf5-c8cf7 1/1 Running
+session-b-59f8657697-nfcmf 0/1 Pending
+0/1 nodes are available: 1 Insufficient nvidia.com/gpu. preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.
+
+=== [15:23:54] 시나리오 2: A에 접속이 없고 GPU 지표가 0이면 회수되고 B가 뜬다
+metrics/session-a.json = {"gpu_util": 0, "fb_mib": 0, "sm_active": 0.0, "cpu_cores": 0.0}
+{"status":"expired","lastHeartbeat":0}
+$ python3 reclaim.py --idle-limit 90 
+session-a   connected=False idle=   103s state=unused            action=reclaim
+session-a   reclaimed
+session-b   not-running  skip
+회수부터 세션 B Ready까지 5초
+$ kubectl -n sessions get pods
+session-b-59f8657697-nfcmf 1/1 Running
+
+=== [15:25:34] 시나리오 3: A를 다시 올리면 GPU가 없어 대기한다. 사용률 100%지만 메모리가 빈 B(phantom)가 회수되면 A가 뜬다
+$ kubectl -n sessions scale deploy/session-a --replicas=1
+deployment.apps/session-a scaled
+$ kubectl -n sessions get pods
+session-a-6fb4844bf5-f52kt 0/1 Pending
+session-b-59f8657697-nfcmf 1/1 Running
+metrics/session-b.json = {"gpu_util": 100, "fb_mib": 0, "sm_active": null, "cpu_cores": 0.0}
+$ python3 reclaim.py --idle-limit 90 
+session-a   not-running  skip
+session-b   connected=False idle=   102s state=unused            action=reclaim
+session-b   reclaimed
+회수부터 세션 A Ready까지 2초
+$ kubectl -n sessions get pods
+session-a-6fb4844bf5-f52kt 1/1 Running
+$ cat /home/coder/keep.txt; cat /tmp/gone.txt
+keep
+cat: /tmp/gone.txt: No such file or directory
+
+=== [15:27:16] 시나리오 4a: 대기 세션이 없을 때 파드만 지우면 새 파드가 GPU를 다시 잡는다
+$ kubectl -n sessions get pods
+session-a-6fb4844bf5-f52kt 1/1 Running
+$ kubectl -n sessions delete pod -l app=session-a --wait=true
+pod "session-a-6fb4844bf5-f52kt" deleted from sessions namespace
+$ kubectl -n sessions get pods
+session-a-6fb4844bf5-hvc22 1/1 Running
+
+=== [15:27:20] 시나리오 4b: 대기 세션이 있을 때 파드만 지우면 누가 GPU를 받는가
+$ kubectl -n sessions scale deploy/session-b --replicas=1
+deployment.apps/session-b scaled
+$ kubectl -n sessions get pods
+session-a-6fb4844bf5-hvc22 1/1 Running
+session-b-59f8657697-dgq7b 0/1 Pending
+$ kubectl -n sessions delete pod -l app=session-a --wait=true
+pod "session-a-6fb4844bf5-hvc22" deleted from sessions namespace
+$ kubectl -n sessions get pods
+session-a-6fb4844bf5-dhrpr 0/1 Pending
+session-b-59f8657697-dgq7b 1/1 Running
+
+=== [15:27:57] 정리: B를 내리고 A만 남긴다
+$ kubectl -n sessions get pods
+session-a-6fb4844bf5-dhrpr 1/1 Running
+
+=== [15:27:58] 시나리오 5: 브라우저 접속만 열어 두면 지표가 0이어도 회수되지 않는다
+metrics/session-a.json = {"gpu_util": 0, "fb_mib": 0, "sm_active": 0.0, "cpu_cores": 0.0}
+{"status":"alive","lastHeartbeat":1793773679691}
+$ python3 reclaim.py --idle-limit 90 --dry-run
+session-a   connected=True  idle=    32s state=coding            action=keep
+{"status":"alive","lastHeartbeat":1793773740659}
+$ python3 reclaim.py --idle-limit 90 --dry-run
+session-a   connected=True  idle=    32s state=coding            action=keep
+{"status":"alive","lastHeartbeat":1793773800979}
+$ python3 reclaim.py --idle-limit 90 --dry-run
+session-a   connected=True  idle=    32s state=coding            action=keep
+{"status":"alive","lastHeartbeat":1793773860988}
+$ python3 reclaim.py --idle-limit 90 --dry-run
+session-a   connected=True  idle=    32s state=coding            action=keep
+
+=== [15:31:33] 시나리오 5 계속: 브라우저를 닫으면 heartbeat가 끊기고 기준 시간 뒤 회수된다
+{"status":"alive","lastHeartbeat":1793773920992}
+$ python3 reclaim.py --idle-limit 90 --dry-run
+session-a   connected=True  idle=    43s state=coding            action=keep
+{"status":"expired","lastHeartbeat":1793773920992}
+$ python3 reclaim.py --idle-limit 90 
+session-a   connected=False idle=   133s state=unused            action=reclaim
+session-a   reclaimed
+$ kubectl -n sessions get pods
+session-a-6fb4844bf5-dhrpr 1/1 Terminating

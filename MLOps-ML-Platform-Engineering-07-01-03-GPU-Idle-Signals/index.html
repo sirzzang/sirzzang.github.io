@@ -1,0 +1,964 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.18.1 by Michael Rose
+  Copyright 2013-2019 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="ko" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>[DCGM] 머신러닝 플랫폼 엔지니어링: Evidently와 Kubeflow Notebooks - 7.1.3. 유휴 판정 신호: 사용률, 메모리, 접속 - Eraser’s StudyLog</title>
+<meta name="description" content="GPU 한 장에 서로 다른 부하를 걸고 DCGM 지표를 재 보며, 신호마다 틀리는 방향을 알아 보자. ">
+
+
+  <meta name="author" content="Eraser">
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ko">
+<meta property="og:site_name" content="Eraser's StudyLog">
+<meta property="og:title" content="[DCGM] 머신러닝 플랫폼 엔지니어링: Evidently와 Kubeflow Notebooks - 7.1.3. 유휴 판정 신호: 사용률, 메모리, 접속">
+<meta property="og:url" content="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-07-01-03-GPU-Idle-Signals/">
+
+
+  <meta property="og:description" content="GPU 한 장에 서로 다른 부하를 걸고 DCGM 지표를 재 보며, 신호마다 틀리는 방향을 알아 보자. ">
+
+
+
+  <meta property="og:image" content="https://sirzzang.github.io//assets/images/blog-Dev.jpg">
+
+
+
+
+
+  <meta property="article:published_time" content="2026-11-04T00:00:00+09:00">
+
+
+
+  <meta property="article:modified_time" content="2026-11-05T00:00:00+09:00">
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://sirzzang.github.io//MLOps-ML-Platform-Engineering-07-01-03-GPU-Idle-Signals/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://sirzzang.github.io//"
+    
+  }
+</script>
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Eraser's StudyLog Feed">
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if IE]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+<script data-ad-client="ca-pub-1813896769045927" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+	
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <h2 class="screen-reader-text">Skip links</h2>
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          Eraser's StudyLog
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/categories/MLOps/" >MLOps</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Kubernetes/" >Kubernetes</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/CS/" >CS·Infra</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/AI/" >AI</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/Programming/" >Programming</a>
+            </li><li class="masthead__menu-item">
+              <a href="/series/" >Series</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/articles/" >Articles</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/" >About</a>
+            </li><li class="masthead__menu-item">
+              <a href="/categories/" >All Posts</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">토글 메뉴</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        <img src="/assets/images/blog-profile.jpg" alt="Eraser" itemprop="image">
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <h3 class="author__name" itemprop="name">Eraser</h3>
+    
+    
+  </div>
+
+  <div style="margin-top: 1em;"></div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">팔로우</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="mailto:sir950123@gmail.com" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+          
+        
+          
+            <li><a href="https://portfolio.sirzzang.org" rel="nofollow noopener noreferrer"><i class="fas fa-fw fa-briefcase" aria-hidden="true"></i> Portfolio</a></li>
+          
+        
+          
+            <li><a href="https://projectlog-eraser.tistory.com" rel="nofollow noopener noreferrer"><i class="fas fa-project-diagram" aria-hidden="true"></i> Projects</a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/sirzzang/" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i> LinkedIn</a></li>
+          
+        
+          
+            <li><a href="https://github.com/sirzzang" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="[DCGM] 머신러닝 플랫폼 엔지니어링: Evidently와 Kubeflow Notebooks - 7.1.3. 유휴 판정 신호: 사용률, 메모리, 접속">
+    <meta itemprop="description" content="GPU 한 장에 서로 다른 부하를 걸고 DCGM 지표를 재 보며, 신호마다 틀리는 방향을 알아 보자.">
+    <meta itemprop="datePublished" content="2026-11-04T00:00:00+09:00">
+    <meta itemprop="dateModified" content="2026-11-05T00:00:00+09:00">
+
+    <div class="page__inner-wrap">
+      
+        <header>
+		  
+          <h1 id="page-title" class="page__title" itemprop="headline">[DCGM] 머신러닝 플랫폼 엔지니어링: Evidently와 Kubeflow Notebooks - 7.1.3. 유휴 판정 신호: 사용률, 메모리, 접속
+</h1>
+          
+          <p class="page__meta">
+            
+            <span class="page__date"><i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i> <time datetime="2026-11-04T00:00:00+09:00">2026년 11월 04일</time></span>
+            
+            
+              <span class="page__meta-sep"> · </span>
+              <i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  8 분 소요
+
+
+            
+          </p>
+          
+          <p class="page__context"><a href="/categories/MLOps/#mlops-gpu">MLOps › GPU</a><span class="page__context-sep">·</span><a href="/categories/MLOps/#mlops-resource">MLOps › 자원 관리·스케줄링</a><span class="page__context-sep">·</span><span class="page__nature">스터디</span></p><p class="page__series"><a href="/series/#ml-platform-engineering-evidently-kubeflow-notebooks">시리즈 · 머신러닝 플랫폼 엔지니어링: Evidently와 Kubeflow Notebooks</a> (5 / 6)<span class="page__series-sep">·</span><a href="/MLOps-ML-Platform-Engineering-07-01-02-Coder-Session-Reclaim/" title="[Coder] 머신러닝 플랫폼 엔지니어링: Evidently와 Kubeflow Notebooks - 7.1.2. Coder로 시험한 세션 회수">← 이전 편</a><span class="page__series-sep">·</span><a href="/MLOps-ML-Platform-Engineering-07-01-04-Session-Reclaim-Policy/" title="[MLOps] 머신러닝 플랫폼 엔지니어링: Evidently와 Kubeflow Notebooks - 7.1.4. 세션 회수 정책: 데이터 보존, 판정 기준, 의도 표시">다음 편 →</a></p>
+        </header>
+      
+	  
+		
+	
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              
+                <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+                <ul class="toc__menu">
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#접속-신호의-한계">접속 신호의 한계</a></li>
+  <li><a href="#gpu-지표-측정">GPU 지표 측정</a>
+    <ul>
+      <li><a href="#측정-구성">측정 구성</a></li>
+      <li><a href="#측정-결과">측정 결과</a></li>
+      <li><a href="#사용률">사용률</a></li>
+      <li><a href="#gr_engine_active와-sm_active">GR_ENGINE_ACTIVE와 SM_ACTIVE</a></li>
+      <li><a href="#메모리와-전력">메모리와 전력</a></li>
+    </ul>
+  </li>
+  <li><a href="#판정에-쓸-때의-한계">판정에 쓸 때의 한계</a>
+    <ul>
+      <li><a href="#phantom-상태">phantom 상태</a></li>
+      <li><a href="#신호별-오판-방향">신호별 오판 방향</a></li>
+      <li><a href="#지표가-없는-기종">지표가 없는 기종</a></li>
+    </ul>
+  </li>
+  <li><a href="#정리">정리</a></li>
+  <li><a href="#참고-링크">참고 링크</a></li>
+</ul>
+
+              
+          </nav>
+          <!-- right-sidebar ads -->
+          <nav class="toc-custom">
+          </nav>
+          </aside>
+        <p><em><a href="https://www.linkedin.com/in/gasida99/">서종호(가시다)</a>님의 Machine Learning Platform Engineering Study 3주차 학습 내용을 기반으로 합니다.</em></p>
+
+<p><br /></p>
+
+<h1 id="tldr">TL;DR</h1>
+
+<ul>
+  <li>쓰지 않는 세션을 찾으려면 신호가 필요한데 신호마다 틀리는 방향이 다르다. 하나만 쓰면 쓰는 세션을 정지하거나 쓰지 않는 세션을 놓친다</li>
+  <li>AWS EC2 <code class="highlighter-rouge">g5.xlarge</code>의 A10G에 인공 부하 세 가지를 걸고 DCGM(NVIDIA의 GPU 관측 도구) 지표를 쟀다. 스레드 하나짜리 커널과 큰 행렬곱은 사용률이 똑같이 100%였고 커널을 실행하는 단위(SM)의 활동을 평균한 <code class="highlighter-rouge">SM_ACTIVE</code>로는 0.012와 0.984로 갈렸다</li>
+  <li>메모리만 잡은 프로세스는 사용률 0%에 메모리 19,376MiB였다. 사용률만 보면 쉬는 세션으로 보인다</li>
+  <li>phantom(프로세스가 없는데 사용률이 100%로 나오는 상태)은 메모리가 비어 있다. 메모리를 함께 보면 이 상태를 활동으로 세지 않을 수 있다</li>
+  <li>접속 신호는 서버에 연결이 남아 있다는 것만 알려 주므로 창만 열린 세션과 코드를 고치는 사람을 가르지 못한다</li>
+</ul>
+
+<p><br /></p>
+
+<h1 id="접속-신호의-한계">접속 신호의 한계</h1>
+
+<p>쓰지 않는 세션(사람이 SSH나 브라우저 IDE로 접속해 쓰는 GPU 개발 환경)을 정지해 GPU를 돌려받으려면 쓰지 않는다는 판정이 먼저 있어야 한다. <a href="/MLOps-ML-Platform-Engineering-07-01-01-GPU-Session-Reclaim/#접속-신호">7.1.1편</a>과 <a href="/MLOps-ML-Platform-Engineering-07-01-02-Coder-Session-Reclaim/#접속-기록">7.1.2편</a>에서 본 code-server의 heartbeat와 Coder의 <code class="highlighter-rouge">last_used_at</code>은 연결이 살아 있는지만 알려 줬다. 창을 열어 둔 채 자리를 비운 세션도 접속 중으로 보이고, 연결을 끊고 작업을 돌려 둔 세션은 쉬는 것으로 보인다. 그래서 접속 신호만으로는 세션이 쓰이는지 가르기 어렵고, 돌려받으려는 자원이 GPU이니 다음 후보는 GPU 지표다. <em>그러면 GPU 지표를 보면 될까.</em></p>
+
+<p>먼저 GPU 사용률이 0이면 정지하는 규칙을 생각해 볼 수 있다. 그런데 코드를 고치는 사람의 세션은 GPU가 대부분 0이라, 세션이 쓰이는 중이어도 GPU는 놀 수 있으므로 <strong>세션의 유휴와 GPU의 유휴는 나눠 봐야 한다.</strong> 반대로 사용률이 높으면 두는 규칙도 있는데, 사용률이 일의 양을 뜻하지 않는다는 것은 <a href="/kubernetes/Kubernetes-GenAI-on-K8s-10-02-GPU-Utilization-and-DCGM/#gpu-utilization의-함정--점유-시간--연산-가동률">GPU Utilization 글</a>에서 정의로 적은 적이 있다. 그 글에서 작은 커널이 쉬지 않고 돌면 사용률이 100%로 나온다고 썼다.</p>
+
+<blockquote>
+  <p><strong>참고: 커널(kernel)</strong> — GPU에서 실행되는 함수다. PyTorch 연산 하나가 커널 하나 이상으로 실행된다. <a href="/MLOps-ML-Platform-Engineering-07-01-01-GPU-Session-Reclaim/#kubeflow-컬링-코드와-비교">7.1.1편의 Jupyter 커널</a>과는 다른 말이다.</p>
+</blockquote>
+
+<p><a href="/MLOps-ML-Platform-Engineering-07-01-01-GPU-Session-Reclaim/#로컬-실험">7.1.1편</a>과 <a href="/MLOps-ML-Platform-Engineering-07-01-02-Coder-Session-Reclaim/#coder-회수-시험">7.1.2편</a>은 가짜 GPU로 시험했으니 이번에는 실제 GPU에 부하를 걸어 지표가 어떻게 나오는지 잰다. 1초 단위 값은 <a href="https://github.com/sirzzang/sirzzang.github.io/tree/master/assets/data/mlpe-ch07-session-reclaim/gpu">gpu 폴더</a>에 있다.</p>
+
+<p><br /></p>
+
+<h1 id="gpu-지표-측정">GPU 지표 측정</h1>
+
+<h2 id="측정-구성">측정 구성</h2>
+
+<p>지표는 NVIDIA의 GPU 관측 도구인 DCGM으로 읽었다. 쿠버네티스에서는 dcgm-exporter가 이 지표를 Prometheus로 내보내므로 운영 환경에서 보는 값과 같은 출처다. AWS EC2 <code class="highlighter-rouge">g5.xlarge</code>의 NVIDIA A10G 한 장에 부하를 120초씩 걸고 <code class="highlighter-rouge">dcgmi dmon</code>으로 1초마다 기록했다. 이 GPU는 커널을 실행하는 단위인 SM(Streaming Multiprocessor)이 80개이고 전력 상한은 300W이며, 드라이버는 580.126.09, DCGM은 4.7.1, PyTorch는 2.7.0이다. GPU 한 장에서 한 번 돌린 값이고 부하 순서는 고정이며, 값은 부하의 시작과 끝 5초를 뺀 평균이고 GPU 프로세스 수는 부하마다 한 번 읽었다.</p>
+
+<p>측정은 인스턴스 안에서 끝나게 했다. SSH와 포트를 열지 않고 부팅 때 도는 user-data 스크립트가 DCGM을 설치하고 부하를 차례로 건 뒤 기록을 압축해 콘솔 출력으로 내보내고, Mac에서는 <code class="highlighter-rouge">get-console-output</code>으로 결과를 받았다. 스크립트가 멈추더라도 2시간 뒤에 인스턴스가 스스로 없어지도록 <code class="highlighter-rouge">shutdown -h +120</code>과 종료 동작 <code class="highlighter-rouge">terminate</code>를 함께 걸었다.</p>
+
+<pre><code class="language-mermaid">flowchart TB
+  %% 인스턴스가 부팅 때 측정을 마치고 결과를 콘솔 출력으로 내보낸다
+  subgraph EC2[EC2 인스턴스]
+    U[user-data 스크립트] --&gt; D[DCGM 설치와 시작]
+    D --&gt; M[dcgmi dmon 1초 기록 시작]
+    M --&gt; L[유휴 60초, 부하 세 가지 120초씩, 유휴 60초]
+    L --&gt; R[기록을 압축해 콘솔 출력으로 내보냄]
+  end
+  R --&gt;|get-console-output| C[Mac에서 받아 해시 확인]
+  C --&gt; S[summarize.py로 구간별 평균]
+  C --&gt; E[인스턴스 종료]
+</code></pre>
+
+<center><sup>AI를 이용해 직접 그린 도식. 인스턴스가 부팅 때 DCGM 설치부터 부하와 기록까지 마치고 결과를 콘솔 출력으로 내보내는 흐름</sup></center>
+
+<p><code class="highlighter-rouge">dcgmi dmon</code>은 부하가 도는 내내 1초마다 기록하고 스크립트는 구간마다 시작과 끝 시각을 따로 남긴다. <code class="highlighter-rouge">summarize.py</code>는 이 시각으로 1초 기록을 구간별로 잘라 평균을 낸다. 결과를 받은 뒤에는 인스턴스를 바로 종료했다.</p>
+
+<details>
+  <summary><b>측정 환경과 명령</b></summary>
+
+  <p>서울 리전의 <code class="highlighter-rouge">g5.xlarge</code>를 AMI <code class="highlighter-rouge">Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.7 (Ubuntu 22.04)</code>로 띄웠다. 드라이버와 PyTorch는 AMI에 포함돼 있고 DCGM은 NVIDIA 저장소에서 설치했다. 측정이 끝나면 인스턴스가 스스로 종료되도록 걸어 두었다. 측정은 약 15분 걸렸다.</p>
+
+  <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># 인스턴스 시작 (발췌)</span>
+aws ec2 run-instances <span class="nt">--region</span> ap-northeast-2 <span class="se">\</span>
+  <span class="nt">--image-id</span> ami-05bfd36e7686b161f <span class="nt">--instance-type</span> g5.xlarge <span class="se">\</span>
+  <span class="nt">--instance-initiated-shutdown-behavior</span> terminate <span class="se">\</span>
+  <span class="nt">--user-data</span> file://userdata.sh
+
+<span class="c"># DCGM 설치와 시작</span>
+<span class="nb">sudo </span>apt-get install <span class="nt">-y</span> datacenter-gpu-manager-4-cuda12
+<span class="nb">sudo </span>systemctl start nvidia-dcgm
+
+<span class="c"># 사용률(203), 메모리(252), 전력(155), GR_ENGINE_ACTIVE(1001), SM_ACTIVE(1002)를 1초 간격으로 기록한다</span>
+dcgmi dmon <span class="nt">-i</span> 0 <span class="nt">-e</span> 203,252,155,1001,1002 <span class="nt">-d</span> 1000
+</code></pre></div>  </div>
+
+  <p>요약에 쓴 코드는 <a href="https://github.com/sirzzang/sirzzang.github.io/blob/master/assets/data/mlpe-ch07-session-reclaim/gpu/summarize.py">summarize.py</a>다.</p>
+
+</details>
+
+<p>부하는 지표의 차이를 보려고 만든 인공 부하이고 부하 스크립트는 공개 자료에 넣지 않았다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>부하</th>
+      <th>하는 일</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">held</code></td>
+      <td>메모리 약 20GB를 잡고 커널을 돌리지 않는다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">one_thread</code></td>
+      <td>스레드 하나짜리 커널을 쉬지 않고 돌린다. 사용률의 정의를 시험하려고 만든 극단값이다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">matmul</code></td>
+      <td>8192×8192 행렬곱을 쉬지 않고 돌린다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">dcgmi dmon</code>의 출력은 이런 모양이고 아래는 부하마다 시작 30초 뒤의 한 줄을 옮긴 것이다. 열은 차례로 사용률, 메모리, 전력, <code class="highlighter-rouge">GR_ENGINE_ACTIVE</code>, <code class="highlighter-rouge">SM_ACTIVE</code>다.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>#Entity         GPUTL             FBUSD             POWER             GRACT        SMACT
+ID                                                   W
+GPU 0           0                 19376             88.591            0.000        0.000
+GPU 0           100               302               89.978            1.000        0.012
+GPU 0           100               850               298.430           1.000        0.983
+</code></pre></div></div>
+
+<h2 id="측정-결과">측정 결과</h2>
+
+<p>아래 표에서 사용률은 %이고 두 지표는 0에서 1 사이의 비율이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>부하</th>
+      <th>사용률</th>
+      <th>메모리(MiB)</th>
+      <th>전력(W)</th>
+      <th><code class="highlighter-rouge">GR_ENGINE_ACTIVE</code></th>
+      <th><code class="highlighter-rouge">SM_ACTIVE</code></th>
+      <th>GPU 프로세스</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>없음</td>
+      <td>0%</td>
+      <td>0</td>
+      <td>24.3</td>
+      <td>0.000</td>
+      <td>0.000</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">held</code></td>
+      <td>0%</td>
+      <td>19,376</td>
+      <td>89.1</td>
+      <td>0.000</td>
+      <td>0.000</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">one_thread</code></td>
+      <td>100%</td>
+      <td>302</td>
+      <td>90.0</td>
+      <td>1.000</td>
+      <td>0.012</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">matmul</code></td>
+      <td>100%</td>
+      <td>850</td>
+      <td>299.2</td>
+      <td>1.000</td>
+      <td>0.984</td>
+      <td>1</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><code class="highlighter-rouge">one_thread</code>의 메모리 302MiB는 텐서를 거의 잡지 않아도 나오는 값이다. 프로세스가 GPU를 쓰려고 만드는 <strong>CUDA 컨텍스트(context)</strong>가 메모리를 쓰기 때문이다.</p>
+
+<h2 id="사용률">사용률</h2>
+
+<p><code class="highlighter-rouge">DCGM_FI_DEV_GPU_UTIL</code>로 읽는 <strong>사용률</strong>은 <code class="highlighter-rouge">nvidia-smi</code>의 GPU-Util과 같은 값이다. 최신 DCGM 헤더는 이 필드(203)를 deprecated로 표시하고 0~1 비율형인 <code class="highlighter-rouge">DCGM_FI_DEV_GPU_UTIL_RATIO</code>(1613)를 권하지만 둘은 같은 NVML 값을 읽는다. <a href="https://docs.nvidia.com/deploy/nvidia-smi/index.html">NVIDIA 문서</a>의 정의는 지난 샘플 구간 중 커널이 하나 이상 돈 시간의 비율이다. 스레드 하나짜리 커널과 큰 행렬곱이 같은 100%로 나온 것은 이 정의와 맞다. <strong>이 지표는 GPU가 얼마나 찼는지를 재지 않는다.</strong></p>
+
+<h2 id="gr_engine_active와-sm_active">GR_ENGINE_ACTIVE와 SM_ACTIVE</h2>
+
+<p>두 값은 이름에 <code class="highlighter-rouge">PROF</code>가 붙는 DCGM의 <strong>프로파일링 지표</strong>로, 사용률보다 GPU 내부에 가까운 값을 잰다. <a href="https://docs.nvidia.com/datacenter/dcgm/latest/user-guide/feature-overview.html">DCGM 문서</a>는 두 값을 이렇게 정의한다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>지표</th>
+      <th>정의</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="highlighter-rouge">DCGM_FI_PROF_GR_ENGINE_ACTIVE</code></td>
+      <td>그래픽이나 연산 엔진의 어느 부분이든 활성이었던 시간의 비율</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">DCGM_FI_PROF_SM_ACTIVE</code></td>
+      <td>SM(Streaming Multiprocessor)에 warp가 하나 이상 활성이었던 시간의 비율을 모든 SM에 대해 평균한 값. 메모리 요청을 기다리는 warp도 활성으로 센다</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>warp는 함께 실행되는 스레드 묶음이다. <code class="highlighter-rouge">GR_ENGINE_ACTIVE</code>는 엔진의 어디든 일하면 활성이라 스레드 하나로 1.000이 되니, 이름은 다르지만 이 측정에서는 사용률 이상의 정보를 주지 않았다. 반면 <code class="highlighter-rouge">SM_ACTIVE</code>는 SM마다의 값을 평균하므로 SM 몇 개만 일하면 값도 그만큼만 오른다. 그래서 <strong>스레드 하나짜리 커널에서 0.012였고 큰 행렬곱에서 0.984였다.</strong> 0.012는 SM 80개 중 한 개의 몫인 0.0125에 가깝다.</p>
+
+<p><a href="/dev/Dev-GPU-Phantom-Utilization/">Phantom GPU Utilization 글</a>에서는 <code class="highlighter-rouge">GR_ENGINE_ACTIVE</code>를 가설과 가장 가까운 지표로 적었지만, 이번 측정에서는 정상 부하에서도 1.000이어서 이 지표만으로는 가를 수 없다.</p>
+
+<p>DCGM 문서는 <code class="highlighter-rouge">SM_ACTIVE</code> 0.8 이상이 효과적인 사용의 필요조건이지만 충분조건은 아니라고 적는데, 이는 성능을 볼 때의 기준이고 세션 판정은 GPU에 일이 올라 있는지를 보는 일이라 기준이 다르다.</p>
+
+<h2 id="메모리와-전력">메모리와 전력</h2>
+
+<p>메모리는 지금 CUDA 컨텍스트가 열려 있는 세션을 가른다. <code class="highlighter-rouge">held</code>처럼 모델을 올려 둔 세션은 사용률이 0이어도 메모리가 남지만, 프로세스가 끝나면 메모리도 0으로 돌아가므로 일을 마친 세션과 시작 전 세션은 메모리로 구분되지 않는다. 메모리가 많다고 지금 쓰는 중인 것도 아니어서 <strong>올려 두고 자리를 뜬 세션과 올려 두고 결과를 보는 세션은 지표가 같다.</strong></p>
+
+<p>전력은 이 GPU에서 2분 동안 <code class="highlighter-rouge">held</code>가 유휴의 약 3.7배라, 연산이 없어도 프로세스가 GPU를 잡고 있는 동안에는 유휴보다 높았다. 그러나 <code class="highlighter-rouge">one_thread</code>도 90.0W로 <code class="highlighter-rouge">held</code>와 비슷해 전력으로는 둘을 가르지 못했고, <code class="highlighter-rouge">matmul</code>만 전력 상한 가까이 올랐다. 부하를 끝낸 뒤의 유휴 구간은 27.7W로 부하 전보다 조금 높았다.</p>
+
+<p><br /></p>
+
+<h1 id="판정에-쓸-때의-한계">판정에 쓸 때의 한계</h1>
+
+<p>측정한 지표를 판정에 쓰려면 지표가 상태와 어긋나는 경우, 신호마다 틀리는 방향, 지표가 나오지 않는 환경을 알아야 한다.</p>
+
+<h2 id="phantom-상태">phantom 상태</h2>
+
+<p>사용률이 실제 상태와 어긋나는 경우는 프로세스가 없을 때도 있다. <a href="/dev/Dev-GPU-Phantom-Utilization/">Phantom GPU Utilization 글</a>에서 다룬 상태로, 학습이 비정상 종료된 뒤 일부 GPU가 사용률 100%, 메모리 0MiB, 프로세스 없음으로 관측됐다. 사용률의 정의대로라면 프로세스가 없으니 돌 커널도 없어야 하는데, 원인은 그 글에서도 가설로 남겼다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th>정상 유휴</th>
+      <th>정상 사용</th>
+      <th>phantom</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>사용률</td>
+      <td>0%</td>
+      <td>커널이 돈 시간만큼</td>
+      <td>100%</td>
+    </tr>
+    <tr>
+      <td>메모리</td>
+      <td>거의 0</td>
+      <td>수백 MiB 이상</td>
+      <td>거의 0</td>
+    </tr>
+    <tr>
+      <td>GPU 프로세스</td>
+      <td>없음</td>
+      <td>있음</td>
+      <td>없음</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>이런 GPU가 세션에 배정되면 <strong>사용률로만 판정하는 규칙은 phantom이 풀리기 전까지 세션을 쓰는 중으로 본다.</strong> <a href="/dev/Dev-GPU-Phantom-Utilization/">그 글</a>에서는 <code class="highlighter-rouge">nvidia-smi dmon</code>의 <code class="highlighter-rouge">sm</code> 값도 100%였으니 다른 활동 지표로도 걸러지지 않는다. 그래서 <a href="https://github.com/sirzzang/sirzzang.github.io/blob/master/assets/data/mlpe-ch07-session-reclaim/decide.py">7.1.1편의 회수 프로그램</a>는 사용률이 높아도 메모리가 비어 있으면 연산으로 세지 않게 했다.</p>
+
+<p>메모리 기준을 쓸 때 조심할 점은 <a href="/dev/Dev-GPU-Phantom-Utilization/">그 글</a>에 적어 두었듯 메모리를 적게 쓰는 정상 워크로드를 phantom으로 잘못 볼 수 있다는 것이다. 이번 측정에서는 텐서를 거의 잡지 않아도 CUDA 컨텍스트만으로 302MiB였으니, 적어도 이 드라이버와 PyTorch 조합에서는 100MiB 기준이 컨텍스트가 열린 프로세스를 phantom으로 보지 않는다.</p>
+
+<h2 id="신호별-오판-방향">신호별 오판 방향</h2>
+
+<p>아래 표는 각 신호를 단독으로 쓸 때 틀리는 방향이다. <strong>왼쪽 오판은 쓰는 세션을 정지하고 오른쪽 오판은 쓰지 않는 세션을 놓친다.</strong> 측정으로 확인한 칸은 사용률, 메모리, <code class="highlighter-rouge">GR_ENGINE_ACTIVE</code>, 전력의 오른쪽 칸과 접속 칸이고, 나머지는 지표 정의에서 따라 나온 일반론이다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>신호</th>
+      <th>재는 것</th>
+      <th>쓰는 중인데 유휴로 판정</th>
+      <th>유휴인데 쓰는 중으로 판정</th>
+      <th>판정에서 맡는 일</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>사용률</td>
+      <td>커널이 돈 시간 비율</td>
+      <td>코드 편집, 데이터 로딩, 아주 짧은 커널</td>
+      <td>phantom, 일이 거의 없는 커널</td>
+      <td>프로파일링 지표가 없을 때의 대체 신호</td>
+    </tr>
+    <tr>
+      <td>메모리</td>
+      <td>GPU 메모리 사용량</td>
+      <td>아직 CPU 전처리 단계</td>
+      <td>모델을 올려 두고 자리를 뜸</td>
+      <td>CUDA 컨텍스트가 열려 있는지 가른다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">SM_ACTIVE</code></td>
+      <td>SM에 warp가 올라 있던 비율</td>
+      <td>SM을 아주 적게 쓰는 작업</td>
+      <td>warp만 떠서 대기하는 커널</td>
+      <td>GPU에 일이 올라 있는지 가른다</td>
+    </tr>
+    <tr>
+      <td><code class="highlighter-rouge">GR_ENGINE_ACTIVE</code></td>
+      <td>엔진이 활성인 시간 비율</td>
+      <td>GPU 연산이 없는 단계</td>
+      <td>일이 거의 없는 커널</td>
+      <td>사용률의 약점을 메우지 못한다</td>
+    </tr>
+    <tr>
+      <td>전력</td>
+      <td>소비 전력</td>
+      <td>기준을 높게 잡으면 일이 적은 작업</td>
+      <td>메모리만 잡은 프로세스, phantom</td>
+      <td>교차 확인. 단독으로 쓰지 않는다</td>
+    </tr>
+    <tr>
+      <td>GPU 프로세스</td>
+      <td>장치를 쓰는 프로세스</td>
+      <td>학습이 아직 시작 전</td>
+      <td>프로세스는 있는데 대기만 한다</td>
+      <td>phantom을 가른다. 측정은 호스트에서 했다</td>
+    </tr>
+    <tr>
+      <td>접속</td>
+      <td>SSH, IDE 연결</td>
+      <td>접속을 끊고 돌린 학습</td>
+      <td>창만 열린 세션</td>
+      <td>연결이 살아 있는지</td>
+    </tr>
+    <tr>
+      <td>CPU</td>
+      <td>컨테이너 CPU 사용량</td>
+      <td>GPU만 쓰는 작업, 입출력 대기 작업</td>
+      <td>백그라운드 데몬</td>
+      <td>GPU 없이 일하는 세션을 가른다</td>
+    </tr>
+    <tr>
+      <td>시간</td>
+      <td>시작 뒤 경과, 마지막 사용</td>
+      <td>기준이 짧으면 잠시 자리를 비운 사람</td>
+      <td>기준이 길면 그만큼 늦게 돌려받는다</td>
+      <td>판정의 기준 시각</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>왼쪽 오판은 다른 신호가 메운다.</strong> 접속을 끊고 돌린 학습은 접속으로는 유휴이지만 <code class="highlighter-rouge">SM_ACTIVE</code>가 높고, 코드를 고치는 사람은 GPU 지표로는 유휴이지만 접속이 살아 있다. 그러나 <strong>오른쪽 오판은 이렇게 메워지지 않는다.</strong> 창만 열린 세션은 접속 신호가 살아 있고 다른 신호로도 코드를 고치는 사람과 구분되지 않는다.</p>
+
+<h2 id="지표가-없는-기종">지표가 없는 기종</h2>
+
+<p><code class="highlighter-rouge">SM_ACTIVE</code>는 기종이나 설정에 따라 나오지 않을 수 있다. <a href="https://docs.nvidia.com/datacenter/dcgm/latest/user-guide/feature-overview.html">DCGM 문서</a>는 프로파일링 지표를 Volta 아키텍처 이후의 데이터센터 제품에서 지원한다고 적으므로 그 밖의 GPU에서는 나오지 않을 수 있다.</p>
+
+<p>지원 기종이라도 수집 설정을 봐야 한다. dcgm-exporter의 <a href="https://github.com/NVIDIA/dcgm-exporter/blob/main/etc/default-counters.csv">기본 카운터 파일</a>에서 <code class="highlighter-rouge">GR_ENGINE_ACTIVE</code>는 켜져 있고 <code class="highlighter-rouge">SM_ACTIVE</code>는 주석 처리되어 있다(2026년 11월 main 브랜치 기준). 같은 DCGM 문서는 프로파일링 지표 수집이 Nsight Systems, Nsight Compute와 충돌한다고 적으므로 프로파일러를 돌리는 세션에서는 값이 비는 구간이 생길 수 있다. 판정에 쓰기 전에 <strong>서버마다 실제로 나오는지</strong> <code class="highlighter-rouge">dcgmi profile --list</code>나 수집된 값으로 확인해야 한다.</p>
+
+<p>나오지 않는 기종에서는 다른 신호로 대신하게 되고 그만큼 가를 수 있는 범위가 줄어든다.</p>
+
+<p><br /></p>
+
+<h1 id="정리">정리</h1>
+
+<p>접속 신호가 연결까지만 알려 줘서 GPU 지표를 재 봤지만 <strong>지표만으로도 안 됐다.</strong> 사용률과 <code class="highlighter-rouge">GR_ENGINE_ACTIVE</code>는 일의 양을 말하지 않았고, <code class="highlighter-rouge">SM_ACTIVE</code>는 값이 갈렸지만 나오는 환경이 정해져 있다. 메모리는 컨텍스트가 열려 있다는 표시이고 접속은 연결이 남아 있다는 표시라, 판정은 신호를 묶어서 하게 된다.</p>
+
+<p><strong>신호를 묶어도 신호가 같은 상태는 가르지 못한다.</strong> 올려 두고 떠난 세션과 결과를 내일 볼 예정인 세션은 신호로는 같으니, 어떤 상태를 사용으로 볼지와 정지할 때 무엇을 지켜 줄지는 측정으로 정해지지 않는다. <a href="/MLOps-ML-Platform-Engineering-07-01-04-Session-Reclaim-Policy/">7.1.4편</a>에서 이 문제를 다룬다.</p>
+
+<p><br /></p>
+
+<h1 id="참고-링크">참고 링크</h1>
+
+<ul>
+  <li><a href="https://github.com/sirzzang/sirzzang.github.io/tree/master/assets/data/mlpe-ch07-session-reclaim/gpu">1초 단위 값</a></li>
+  <li><a href="https://docs.nvidia.com/datacenter/dcgm/latest/user-guide/feature-overview.html">DCGM Feature Overview: Profiling Metrics</a></li>
+  <li><a href="https://docs.nvidia.com/deploy/nvidia-smi/index.html">nvidia-smi 문서</a></li>
+  <li><a href="https://github.com/NVIDIA/dcgm-exporter">dcgm-exporter</a></li>
+</ul>
+
+<p><br /></p>
+
+        
+      </section>
+
+      
+
+
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> 태그: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/tags/#dcgm" class="page__taxonomy-item" rel="tag">DCGM</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#gpu" class="page__taxonomy-item" rel="tag">GPU</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#kubernetes" class="page__taxonomy-item" rel="tag">Kubernetes</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#machine-learning-platform-engineering-study-week-3" class="page__taxonomy-item" rel="tag">Machine-Learning-Platform-Engineering-Study-Week-3</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#machine-learning-platform-engineering-study" class="page__taxonomy-item" rel="tag">Machine-Learning-Platform-Engineering-Study</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#mlops" class="page__taxonomy-item" rel="tag">MLOps</a><span class="sep">, </span>
+    
+      
+      
+      <a href="/tags/#nvml" class="page__taxonomy-item" rel="tag">NVML</a>
+    
+    </span>
+  </p>
+
+
+
+
+  <p class="page__taxonomy">
+  <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> 분류: </strong>
+  <span itemprop="keywords"><a href="/categories/MLOps/#mlops-gpu" class="page__taxonomy-item" rel="tag">MLOps › GPU</a><a href="/categories/MLOps/#mlops-resource" class="page__taxonomy-item" rel="tag">MLOps › 자원 관리·스케줄링</a><span class="page__taxonomy-item page__nature">스터디</span></span>
+</p>
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> 업데이트:</strong> <time datetime="2026-11-05">November 5, 2026</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">공유하기</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=%5BDCGM%5D+%EB%A8%B8%EC%8B%A0%EB%9F%AC%EB%8B%9D+%ED%94%8C%EB%9E%AB%ED%8F%BC+%EC%97%94%EC%A7%80%EB%8B%88%EC%96%B4%EB%A7%81%3A+Evidently%EC%99%80+Kubeflow+Notebooks+-+7.1.3.+%EC%9C%A0%ED%9C%B4+%ED%8C%90%EC%A0%95+%EC%8B%A0%ED%98%B8%3A+%EC%82%AC%EC%9A%A9%EB%A5%A0%2C+%EB%A9%94%EB%AA%A8%EB%A6%AC%2C+%EC%A0%91%EC%86%8D%20https%3A%2F%2Fsirzzang.github.io%2F%2FMLOps-ML-Platform-Engineering-07-01-03-GPU-Idle-Signals%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fsirzzang.github.io%2F%2FMLOps-ML-Platform-Engineering-07-01-03-GPU-Idle-Signals%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fsirzzang.github.io%2F%2FMLOps-ML-Platform-Engineering-07-01-03-GPU-Idle-Signals%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="공유하기 LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+	  <br>
+	  <br>
+    
+    <img src="https://myhits.vercel.app/api/hit/https%3A%2F%2Fsirzzang.github.io%2FMLOps-ML-Platform-Engineering-07-01-03-GPU-Idle-Signals%2F?color=green&label=hits&size=small" alt="hit count">
+      <nav class="pagination">
+    
+      <a href="/MLOps-ML-Platform-Engineering-07-01-02-Coder-Session-Reclaim/" class="pagination--pager" title="[Coder] 머신러닝 플랫폼 엔지니어링: Evidently와 Kubeflow Notebooks - 7.1.2. Coder로 시험한 세션 회수
+">이전 편</a>
+    
+    
+      <a href="/MLOps-ML-Platform-Engineering-07-01-04-Session-Reclaim-Policy/" class="pagination--pager" title="[MLOps] 머신러닝 플랫폼 엔지니어링: Evidently와 Kubeflow Notebooks - 7.1.4. 세션 회수 정책: 데이터 보존, 판정 기준, 의도 표시
+">다음 편</a>
+    
+  </nav>
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">댓글남기기</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+
+    
+  </article>
+
+  
+  
+</div>
+
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="검색어를 입력하세요..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<!-- gads.sirzzang.com -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-1813896769045927"
+     data-ad-slot="4300544769"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>팔로우:</strong></li>
+    
+
+    
+
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> 피드</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2026 Eraser's StudyLog. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://kit.fontawesome.com/4eee35f757.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-167501441-1']);
+  
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://sirzzang.github.io//MLOps-ML-Platform-Engineering-07-01-03-GPU-Idle-Signals/";  /* Replace PAGE_URL with your page's canonical URL variable */
+      this.page.identifier = "/MLOps-ML-Platform-Engineering-07-01-03-GPU-Idle-Signals"; /* Replace PAGE_IDENTIFIER with your page's unique identifier variable */
+    };
+    (function() { /* DON'T EDIT BELOW THIS LINE */
+      var d = document, s = d.createElement('script');
+      s.src = 'https://sirzzang-github-io.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+
+
+  <!-- mermaid 블록이 있는 글에서만 클라이언트 사이드 렌더 스크립트 로드 -->
+  <script type="module" src="/assets/js/mermaid-init.js"></script>
+
+
+
+  </body>
+</html>
