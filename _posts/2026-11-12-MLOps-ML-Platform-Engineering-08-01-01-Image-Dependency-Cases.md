@@ -1,0 +1,324 @@
+---
+title: "[Docker] 머신러닝 플랫폼 엔지니어링: Kubeflow Pipelines와 학습 트러블슈팅 - 8.1.1. 컴포넌트 이미지와 의존성 사례"
+excerpt: "학습 이미지를 만들고 실행하며 겪은 장애를 Kubeflow Pipelines 컴포넌트와 대응시키며, 이미지 안에 실제로 무엇이 설치됐는지 확인하는 방법을 알아 보자."
+categories:
+  - mlops-pipeline
+  - mlops-training
+  - study
+toc: true
+header:
+  teaser: /assets/images/blog-Dev.jpg
+tags:
+  - MLOps
+  - Kubeflow-Pipelines
+  - Docker
+  - Python
+  - Dependency-Management
+  - Machine-Learning-Platform-Engineering-Study
+  - Machine-Learning-Platform-Engineering-Study-Week-4
+use_math: false
+last_modified_at: 2026-11-12
+---
+*[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Machine Learning Platform Engineering Study 4주차 학습 내용을 기반으로 합니다.*
+
+<br>
+
+# TL;DR
+
+- 학습 단계가 실행하는 코드와 라이브러리는 컨테이너 이미지 안에 있어서, 저장소의 소스나 요구 패키지 목록과 어긋나도 빌드는 대개 성공한다. Kubeflow Pipelines(KFP)에서 코드를 이미지에 담는 컨테이너화된 파이썬 컴포넌트도 파이프라인 정의에는 함수 소스가 없고 이미지 안의 코드를 실행한다([KFP 컴포넌트가 이미지를 쓰는 방식](#kfp-컴포넌트가-이미지를-쓰는-방식))
+- 브랜치 참조와 이미지 태그는 내용이 바뀌어도 이름이 그대로다. 빌드 캐시는 `@main` 문자열이 같다고 머지된 라이브러리를 다시 설치하지 않았고, 쿠버네티스는 `imagePullPolicy`를 비워 두면 `latest`가 아닌 태그에 `IfNotPresent`(노드에 같은 이름의 이미지가 있으면 다시 받지 않는 정책)를 기본값으로 넣어서, 같은 태그로 다시 올린 이미지가 노드마다 다르게 돌 수 있다([사례 1](#사례-1-브랜치-참조와-빌드-캐시))
+- pip 설치가 오류 없이 끝나도 결과는 기대와 달랐다. 베이스 이미지가 PyTorch의 의존성 메타데이터와 다르게 덮어쓴 GPU 통신 라이브러리 NCCL은 torchvision을 설치하자 메타데이터의 버전으로 되돌아갔고, 오래된 빌드 도구 setuptools는 빈 패키지를 만들고도 exit 0으로 끝났다([사례 4](#사례-4-의존성-메타데이터로-되돌아간-nccl), [사례 5](#사례-5-빌드-도구-버전과-빈-패키지))
+- pip는 운영체제의 공유 라이브러리를 설치하지 않아서 slim 베이스나 바뀐 Debian 배포판에서 같은 Dockerfile이 실패했다. 캐시가 적중한 빌드도 일회용 CI 러너에서는 수 GB 레이어를 매번 내려받았다([사례 8](#사례-8-slim-이미지에-없는-공유-라이브러리), [사례 9](#사례-9-libgl1-mesa-glx와-trixie), [사례 10](#사례-10-캐시-적중-뒤의-레이어-다운로드))
+- 이미지가 맞게 만들어졌는지는 빌드 성공이 아니라 이미지 안에 실제로 설치된 것으로 확인해야 한다. 그래서 빌드 안에서 import를 실행하고, 베이스가 보장하는 버전과 대조하고, 실행 기록에 실린 라이브러리 커밋을 남겼다. NCCL처럼 베이스가 일부러 덮어쓴 버전은 pip constraints로 묶을 수 없어 이 대조로 막는다([정리](#정리))
+
+<br>
+
+# 들어가며
+
+4주차 스터디 범위는 책 [머신러닝 플랫폼 엔지니어링](https://www.onlybook.co.kr/entry/mlops)의 7장부터 9.1절까지다. 7장은 컴포넌트 사이의 데이터 전달과 데이터 준비 파이프라인을, 8장은 학습·검증 컴포넌트를 다루고, 9.1절은 여러 단계가 PVC(PersistentVolumeClaim) 하나를 함께 쓰는 방법을 다룬다. 학습 플랫폼을 운영하며 겪은 장애를 이 범위에 비추어 보면, 이미지 태그나 데이터 경로, 지표 이름으로 가리킨 것과 그 아래의 실제 내용이 어긋난 경우가 많았다. 이 시리즈에서는 이것을 **이름과 내용의 어긋남**이라고 부르고, 네 편에 걸쳐 이 범위의 내용을 운영 사례와 실험에 대응시켜 본다.
+
+이 편은 그 가운데 학습 이미지와 의존성에서 생긴 어긋남을 다루고자 한다. 학습 단계는 컨테이너 이미지 안의 코드와 라이브러리로 돌고 저장소의 소스와 요구 패키지 목록은 그 이미지를 만드는 재료일 뿐이라서, 재료와 결과물이 어긋나도 빌드는 대개 성공으로 끝난다. 출발점이 되는 질문은 다음과 같다: *이미지 안에서 실제로 실행되는 코드와 라이브러리는 저장소의 소스와 같을까. 다르다면 언제 알아차릴 수 있을까.*
+
+나머지 편 가운데 [8.1.2편]({% post_url 2026-11-12-MLOps-ML-Platform-Engineering-08-01-02-Distributed-Validation-Cases %})은 분산 학습의 epoch별 검증을 다룬다. [9.1.1편]({% post_url 2026-11-12-MLOps-ML-Platform-Engineering-09-01-01-Data-Reference-Cache %})은 Kubeflow Pipelines(KFP)의 캐시가 데이터를 무엇으로 같다고 판단하는지 로컬 클러스터에서 실험하고, [9.1.2편]({% post_url 2026-11-12-MLOps-ML-Platform-Engineering-09-01-02-Data-Artifact-Cases %})은 데이터 참조와 산출물 저장 사례를 다룬다. 마지막 [9.1.3편]({% post_url 2026-11-12-MLOps-ML-Platform-Engineering-09-01-03-Troubleshooting-Retrospective %})은 네 편의 사례를 실패를 언제 드러내는가와 어디까지 흡수하는가의 두 질문으로 다시 묶는다.
+
+책 8장은 학습·검증 컴포넌트를 만들며 이미지를 두 지점에서 다룬다. 8.1.3절에 따르면 `@dsl.component`는 파이썬 패키지만 설치할 수 있다. `apt-get`이 필요한 시스템 라이브러리는 `@dsl.container_component`로 해결한다. 8.1.4절은 requirements.txt로 모든 의존성을 설치하는 습관이 의존성 지옥(dependency hell)에 빠지기 쉽다고 경고한다. 대신 미리 패키징된 베이스 이미지를 권한다. 스터디에서 공유된 실습 기록(원격 서버의 kind 클러스터, KFP 백엔드 2.4.1·SDK 2.9.0)에는 `target_image`를 쓴 결과도 있다. 7장 데이터 준비 컴포넌트를 이미지에 담아 다시 돌린 기록이라, 사례마다 KFP에서 같은 일이 어디서 생기는지 확인할 때 함께 봤고, KFP 소스를 따라가는 데는 AI의 도움을 받았다.
+
+<br>
+
+# 학습 플랫폼의 구성
+
+이 편의 이미지 사례와 [8.1.2편]({% post_url 2026-11-12-MLOps-ML-Platform-Engineering-08-01-02-Distributed-Validation-Cases %})·[9.1.2편]({% post_url 2026-11-12-MLOps-ML-Platform-Engineering-09-01-02-Data-Artifact-Cases %})의 운영 사례는 모두 회사에서 운영하는 같은 학습 플랫폼에서 일어났다. 베이스 이미지와 CI, 공유 스토리지가 사례마다 원인이나 대처로 나와서, 학습 하나가 이미지 빌드부터 산출물 저장까지 거치는 경로를 사례에 나오는 요소만 남겨 그려 봤다.
+
+학습 이미지는 학습 베이스 이미지 위에 학습 레포의 의존성과 코드를 얹어 만든다. 학습 베이스 이미지는 PyTorch와 NCCL(GPU 사이의 집합 통신을 맡는 NVIDIA 라이브러리) 같은 학습 스택을 담는다. 지켜야 할 버전 목록도 계약 파일로 함께 싣는다. 실험 파라미터와 결과를 실험 추적 도구 MLflow에 기록하는 일처럼 학습 코드가 공통으로 쓰는 기능은 플랫폼 라이브러리로 묶여 있다. 처음에는 이 라이브러리를 학습 이미지에 설치했지만, [브랜치 참조와 빌드 캐시](#사례-1-브랜치-참조와-빌드-캐시) 사례 뒤로는 init 컨테이너로 주입한다.
+
+제출 경로에서는 CI가 학습 이미지를 빌드해 레지스트리에 올린 뒤 학습을 제출한다. 빌드 안의 import 검사는 [빈 패키지 사례](#사례-5-빌드-도구-버전과-빈-패키지)를, 계약 대조는 [NCCL 사례](#사례-4-의존성-메타데이터로-되돌아간-nccl)를 겪으며 더한 것이다. 학습은 드라이버 프로세스가 이미지 안의 실행 설정을 읽어 시작하고, 분산 학습 잡은 rank(학습 프로세스 하나)마다 파드를 따로 띄운다. 학습 코드는 OpenMMLab의 학습 프레임워크 MMEngine 위에서 돌고, rank 사이의 통신은 NCCL이 맡는다.
+
+사례를 읽을 때는 누구의 코드인지를 나눠 둘 필요가 있다. 모델과 데이터 처리, 평가 지표 계산처럼 학습 레포에 있는 학습 코드는 ML 엔지니어의 것이고, 플랫폼 쪽은 학습 코드를 건드리지 않는 것을 원칙으로 한다. 플랫폼이 맡는 것은 학습을 감싸는 쪽이다. 학습을 띄우는 드라이버와 실행 래퍼, 그리고 학습 루프의 정해진 시점에 불려 지표를 MLflow에 기록하거나 체크포인트를 객체 저장소에 올리는 훅이 여기에 든다. 이 래퍼와 훅은 처음에 학습 레포 쪽에 있었는데, 플랫폼이 맡을 일이라 보고 플랫폼 라이브러리로 옮겨 왔다.
+
+학습 데이터는 tar 아카이브로 묶여 여러 노드가 함께 마운트하는 NFS 공유 스토리지에 있고, 학습 파드에는 읽기 전용으로 붙는다. 체크포인트와 지표는 S3 호환 객체 저장소와 MLflow에 남긴다.
+
+```mermaid
+flowchart TB
+    %% 학습 하나가 이미지 빌드부터 산출물 저장까지 거치는 경로(일반화)
+    subgraph job [분산 학습 잡]
+        r0["rank 0 파드<br/>MMEngine"] <-->|"NCCL"| r1["rank 1 파드<br/>MMEngine"]
+    end
+    base["학습 베이스 이미지<br/>PyTorch, NCCL, 계약 파일"] --> ci["CI<br/>학습 이미지 빌드<br/>import 검사, 계약 대조"]
+    repo["학습 레포<br/>의존성과 코드"] --> ci
+    ci --> reg["레지스트리"]
+    reg -->|"학습 이미지"| job
+    lib["플랫폼 라이브러리 이미지"] -->|"init 컨테이너로 주입"| job
+    nfs["NFS 공유 스토리지<br/>tar 아카이브"] -->|"읽기 전용 마운트"| job
+    job -->|"체크포인트"| s3["S3 호환 객체 저장소"]
+    job -->|"지표"| mlflow["MLflow"]
+```
+
+<center><sup>AI를 이용해 직접 그린 도식. CI가 빌드한 학습 이미지가 rank마다 파드를 띄우는 분산 학습 잡으로 실행되고, 데이터는 공유 스토리지에서 읽고 산출물은 객체 저장소와 MLflow에 남긴다</sup></center>
+
+KFP와 대응시키면 학습 이미지는 컴포넌트 이미지에, S3 호환 객체 저장소는 단계 출력을 올리는 아티팩트 저장소에 해당한다. 여러 학습 파드가 함께 마운트하는 공유 스토리지는 책 9.1절에서 여러 단계가 함께 붙이는 PVC와 같은 역할이다. 사례를 KFP에 대응시킬 때는 책 7장과 8장처럼 데이터 내려받기와 분할, 학습, 검증을 각각 단계로 나눈 파이프라인을 가정한다. 이런 단계 구성은 KFP가 제공하는 기능이 아니라 파이프라인을 짜는 쪽이 정하는 것이고, Argo Workflows 같은 다른 워크플로 엔진으로 짜도 단계마다 파드가 따로 뜨는 같은 모양이 된다. 그래서 이 시리즈에서 분할 단계나 검증 단계라고 하면 이렇게 나눈 파이프라인의 단계를 가리키고, 캐시 키나 launcher처럼 KFP의 동작에 기대는 내용에만 KFP를 붙인다.
+
+<br>
+
+# KFP 컴포넌트가 이미지를 쓰는 방식
+
+사례마다 KFP에서 같은 일이 어디서 생기는지 확인하려면 **컴포넌트가 이미지를 쓰는 방식**부터 알아야 했다. KFP에서 컴포넌트는 파이프라인의 단계 하나를 정의한 것이고, 파이썬 SDK에서는 파이프라인 작성용 모듈 `kfp.dsl`의 데코레이터로 만든다. 공식 문서는 만드는 방식을 셋으로 나누는데, 방식에 따라 실행할 코드가 컴파일된 파이프라인 정의(YAML)에 실리는지 이미지 안에 있는지가 갈린다([SDK 소스](https://github.com/kubeflow/pipelines/blob/2.17.3/sdk/python/kfp/dsl/component_factory.py#L782-L801)).
+
+| 방식                                                                                                                                                                             | 컴파일된 정의에 들어가는 것                                                                  | 실행할 때                                                      |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| [경량 파이썬 컴포넌트](https://www.kubeflow.org/docs/components/pipelines/user-guides/components/lightweight-python-components/)(`@dsl.component`에 `base_image`)             | 함수 소스 전체(2.15.0부터는 `additional_funcs`로 넘긴 함수와 임베드한 파일 포함), `packages_to_install`과 kfp(`kfp==<SDK 버전> --no-deps`)의 pip 설치 명령 | 파드가 뜰 때 pip 설치를 하고, 정의에 실린 함수 소스를 실행한다 |
+| [컨테이너화된 파이썬 컴포넌트](https://www.kubeflow.org/docs/components/pipelines/user-guides/components/containerized-python-components/)(`@dsl.component`에 `target_image`) | 이미지 이름, 함수 이름, `packages_to_install`의 pip 설치 명령                              | 이미지 안의 모듈에서 함수를 찾아 실행한다                      |
+| [컨테이너 컴포넌트](https://www.kubeflow.org/docs/components/pipelines/user-guides/components/container-components/)(`@dsl.container_component`)                                | `dsl.ContainerSpec`으로 직접 적은 이미지, 명령, 인자                                       | 지정한 이미지에서 그 명령을 그대로 실행한다                    |
+
+이 글에서는 셋을 줄여 경량 컴포넌트, 컨테이너화된 컴포넌트, 컨테이너 컴포넌트라고 부른다. 공유된 실습의 SDK 2.9.0에서 경량 컴포넌트는 함수 하나가 자기 안에서 완결돼야 해서 함수 밖의 import나 옆 모듈의 코드를 쓸 수 없다. SDK 2.15.0부터는 `additional_funcs`로 다른 함수를, `embedded_artifact_path`로 로컬 파일과 디렉터리를 정의에 함께 실을 수 있지만([SDK 소스](https://github.com/kubeflow/pipelines/blob/2.17.3/sdk/python/kfp/dsl/component_decorator.py#L74-L101)), import는 여전히 함수 안에 적어야 한다. 컨테이너화된 컴포넌트는 이 제약을 풀려고 SDK가 코드를 이미지로 묶는 방식이고, 컨테이너 컴포넌트는 파이썬 함수 없이 컨테이너 명령을 직접 적는 방식이다.
+
+> **참고**: Argo Workflows를 파이썬으로 쓸 때의 SDK인 [Hera](https://hera.readthedocs.io/en/stable/user-guides/script-constructors/)도 같은 세 갈래로 나뉜다. Argo의 템플릿 종류는 [Argo Workflows 글의 템플릿 구분]({% post_url 2026-06-09-Kubernetes-GenAI-on-K8s-11-04-Argo-Workflows %}#일을-하는-템플릿-vs-흐름을-짜는-템플릿)에서 정리했다.
+>
+> | KFP                   | Hera                                          | 실행할 코드가 있는 곳                                                                       |
+> | --------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------- |
+> | 경량 컴포넌트         | `@script`(기본 `InlineScriptConstructor`) | 함수 본문이 Workflow YAML의 `script.source`에 그대로 들어간다                             |
+> | 컨테이너화된 컴포넌트 | `@script(constructor="runner")`             | 코드와 Hera를 담아 직접 빌드한 이미지. YAML에는 실행할 함수의 `모듈:함수` 경로만 들어간다 |
+> | 컨테이너 컴포넌트     | `Container`                                 | 지정한 이미지와 명령                                                                        |
+>
+> 차이는 층에 있다. Hera는 Argo Workflow YAML을 바로 만들지만, KFP는 자기 형식의 파이프라인 정의를 만들고 백엔드가 실행할 때 이를 Argo Workflow로 바꾼다. 이때 태스크마다 아티팩트 전달, 계보 기록, 실행 캐시를 맡는 준비 단계를 끼워 넣는다([Argo Workflows 글의 KFP와의 관계]({% post_url 2026-06-09-Kubernetes-GenAI-on-K8s-11-04-Argo-Workflows %}#kubeflow-pipelines와의-레이어-관계)).
+
+`target_image`를 주면 SDK는 함수 소스를 정의에 넣지 않는다. 대신 함수 이름만 `python3 -m kfp.dsl.executor_main`에 넘기는 [명령](https://github.com/kubeflow/pipelines/blob/2.17.3/sdk/python/kfp/dsl/component_factory.py#L725-L734)을 만든다. 이미지는 `kfp component build`로 따로 만든다. 공유된 실습 기록에서 이 명령이 만든 Dockerfile은 컴포넌트에 지정한 `base_image`(`python:3.11`)에서 시작했다. 그 위에 컴포넌트들의 `packages_to_install`을 모은 `runtime-requirements.txt`와 kfp를 설치하고 디렉터리 전체를 `COPY`했다. 같은 실습에서는 `split_dataset` 컴포넌트에 압축 수준을 바꾸는 코드를 넣고 이미지를 다시 빌드했다. 바뀐 코드는 이미지 안의 소스에만 있었고, 컴파일된 파이프라인 정의에서는 그 문자열이 한 번도 나오지 않았다. **컨테이너화된 컴포넌트가 실제로 무엇을 실행하는지는 이미지를 열어 봐야 안다.**
+
+`packages_to_install`에 적은 패키지는 두 방식 모두 파드가 뜰 때 실행하는 pip 설치 명령이 된다. 경량 컴포넌트는 여기에 [kfp 자체의 설치](https://github.com/kubeflow/pipelines/blob/2.17.3/sdk/python/kfp/dsl/component_factory.py#L190-L211)(`kfp==<SDK 버전> --no-deps`)까지 붙어서, `packages_to_install`이 비어 있어도 파드가 뜰 때 패키지 저장소에 접속해야 한다. 컨테이너화된 컴포넌트는 패키지를 이미지에 미리 넣으니 실행 시점의 설치는 없을 것 같지만, SDK는 [kfp 설치만 빼고](https://github.com/kubeflow/pipelines/blob/2.17.3/sdk/python/kfp/dsl/component_factory.py#L155-L190) 사용자 패키지의 설치 명령은 그대로 남긴다. 공유된 실습 기록에서도 SDK 2.9.0으로 컴파일한 정의의 명령에 `pip install`이 그대로 들어 있었다.
+
+이렇게 남은 [설치 명령](https://github.com/kubeflow/pipelines/blob/2.17.3/sdk/python/kfp/dsl/component_factory.py#L128-L134)에는 `--upgrade`가 없어서, 목록의 패키지가 이미지에 있고 요구를 만족하면 pip는 그 버전을 [그대로 둔다](https://pip.pypa.io/en/stable/cli/pip_install/). 다만 새로 설치하는 패키지의 의존성이 이미지의 버전과 맞지 않으면 이미지에 있던 패키지도 바뀌는데, 뒤의 [NCCL 사례](#사례-4-의존성-메타데이터로-되돌아간-nccl)가 그 경우다. 이미지에 없거나 다른 버전으로 고정한 패키지는 파드가 뜰 때마다 받아 온다. `packages_to_install`과 이미지가 어긋나면 실행 시점의 설치 집합은 이미지와 달라진다.
+
+책은 `apt-get`이 필요한 학습 컴포넌트를 컨테이너 컴포넌트로 만든다. 이미지와 명령을 직접 정하므로 파이썬 패키지가 아닌 시스템 라이브러리도 명령 안에서 설치할 수 있어서다.
+
+<br>
+
+# 이미지 안의 내용과 소스의 어긋남
+
+세 사례 모두 학습이 실행한 코드가 저장소에서 보던 코드와 달랐는데, 빌드가 소스를 다시 읽지 않았거나 새로 빌드한 결과가 아직 배포되지 않아서였다.
+
+## 사례 1: 브랜치 참조와 빌드 캐시
+
+머지한 코드는 다음 빌드에 들어간다는 전제가 빌드 캐시에서 깨진 사례다. 플랫폼 라이브러리에 실험 파라미터 기록과 결과 디렉터리 업로드 기능을 머지한 뒤 학습을 제출했는데, 실행 기록(MLflow run)에는 둘 다 없었다. 빌드 로그에서 라이브러리 설치 단계는 `CACHED`였다. Docker의 빌드 엔진(BuildKit)은 캐시에서 가져온 단계를 `CACHED`로, 실제로 실행한 단계를 `DONE`과 걸린 시간으로 표시한다. 학습 이미지의 Dockerfile은 플랫폼 라이브러리를 저장소의 `main` 브랜치에서 바로 설치하고 있었다.
+
+```dockerfile
+# 학습 이미지 Dockerfile(일반화)
+RUN pip install "platform-lib @ git+https://<저장소>/platform-lib.git@main"
+```
+
+이미지는 Dockerfile 명령마다 생기는 파일시스템 변경분, 즉 [레이어]({% post_url 2026-02-28-CS-Container-Image %}#이미지-레이어)를 쌓은 것이다. 이 빌드는 직전 이미지를 `--cache-from`으로 지정해 그 레이어를 캐시로 썼다. Docker 빌드 캐시는 `RUN` 명령의 문자열과 부모 레이어가 같으면 그 단계를 다시 실행하지 않는다. 그런데 `@main`은 머지 전후로 같은 문자열이라 오래전에 받은 라이브러리가 이미지에 그대로 남았다. 당장은 `@main` 대신 커밋 SHA를 적어 `RUN` 문자열을 바꿨고, 다음 빌드에서 이 단계가 `DONE`으로 실행되며 기록에 두 기능이 나타났다.
+
+그다음에는 플랫폼 라이브러리를 학습 이미지에서 떼어 내 작은 이미지로 따로 만들었다. 학습 파드가 뜰 때 init 컨테이너(본 컨테이너보다 먼저 실행되고 끝나는 컨테이너)가 이 라이브러리를 공유 볼륨에 복사한다. 학습 컨테이너는 그 경로를 파이썬 경로에 더해 쓴다. 넣을 버전은 배포 차트 값에 이미지 다이제스트(이미지 내용의 해시, `이미지@sha256:...`)로 적었다. 라이브러리를 릴리스하면 이 값을 바꾸는 PR이 자동으로 열린다. 이러면 학습 이미지 빌드에 플랫폼 코드가 들어가지 않는 대신, 주입한 라이브러리의 의존성을 학습 이미지의 pip가 함께 해석하지 못한다. 그래서 주입 경로를 붙이는 순서를 정해야 했다. 학습 이미지에 이미 있는 패키지가 먼저 쓰이려면 주입 경로가 site-packages보다 뒤에 와야 하는데, `PYTHONPATH`에 넣은 경로는 [파이썬의 경로 초기화 순서](https://docs.python.org/3/library/sys_path_init.html)상 site-packages보다 앞에 온다. 그래서 배포 차트는 `PYTHONPATH`에 `sitecustomize.py` 하나만 든 부트 디렉터리를 넣었다. 파이썬은 시작할 때 [`sitecustomize` 모듈을 자동으로 import](https://docs.python.org/3/library/site.html)하는데, 이 파일이 라이브러리 경로를 `sys.path` 끝에 덧붙인다. 환경 변수라 드라이버와 워커, 하위 프로세스가 모두 같은 경로로 시작하고, 주입한 라이브러리는 이미지에 없는 것만 채울 뿐 이미지의 패키지를 가리지 않는다. 쿠버네티스의 [image 볼륨]({% post_url 2026-04-05-Kubernetes-Pod-Volume-03-Image-Volume-HostPath %}#image-볼륨)을 쓰면 복사 없이 이미지를 볼륨으로 붙일 수 있지만, 1.31~1.34에서는 피처 게이트를 켜야 한다.
+
+KFP에서는 같은 구조의 문제가 이미지 태그에서 생긴다. 공유된 실습에서는 컴포넌트 코드를 고쳐 이미지를 다시 빌드했는데, 노드에 이전 태그(`1.0.0`)의 이미지가 이미 있어서 태그를 `1.0.1`로 올려야 했다. [쿠버네티스 문서](https://kubernetes.io/docs/concepts/containers/images/)대로 `imagePullPolicy`를 지정하지 않으면 `latest`가 아닌 태그에는 `IfNotPresent`가 적용된다. 이 정책은 노드에 같은 태그의 이미지가 있으면 다시 받지 않는다. 같은 태그로 다시 올리면 이미 받은 노드는 옛 이미지를, 새로 받는 노드는 새 이미지를 돌린다. [9.1.1편의 KFP 실행 캐시 키]({% post_url 2026-11-12-MLOps-ML-Platform-Engineering-09-01-01-Data-Reference-Cache %}#kfp-실행-캐시의-키)에도 이미지는 태그 문자열로 들어가므로, 캐시를 켠 단계는 입력이 같으면 이미지를 다시 올려도 이전 결과를 재사용한다. 운영 중에 겪은 일은 아니지만 브랜치 참조와 같은 구조다. 코드를 바꿀 때마다 새 태그를 쓰는 것이 가장 단순하다. 같은 태그를 써야 한다면 kfp-kubernetes의 `set_image_pull_policy`로 그 단계에 `Always`를 지정할 수 있다. kfp-kubernetes 2.17.3은 SDK 2.17.3 이상을 요구하므로, 공유된 실습의 SDK 2.9.0에서는 같은 함수가 있는 1.x(예: 1.2.0)를 써야 한다.
+
+`@main`이나 버전을 적지 않은 `pip install`, `.../latest` 같은 URL은 내용이 바뀌어도 이름이 그대로다. 이런 이름을 `RUN` 명령에 쓰면 빌드 캐시는 문자열만 비교하므로 낡은 내용을 계속 돌려준다. 반면 커밋 SHA나 패키지 버전, 이미지 다이제스트는 내용이 바뀌면 이름도 바뀌어 캐시가 다시 계산된다. [바뀌지 않는 이름]({% post_url 2026-11-12-MLOps-ML-Platform-Engineering-09-01-01-Data-Reference-Cache %}#바뀌지-않는-이름)에서 데이터 경로에 버전을 넣으라는 것과 같은 처방이다.
+
+> **참고**: 이미지 태그를 커밋 SHA로 정해도 문자열로 다뤄야 한다. 커밋 SHA 앞 7자를 태그로 쓰는데, `1234e56`처럼 숫자·`e`·숫자로 된 태그가 배포 매니페스트 템플릿에 따옴표 없이 들어가자 렌더링한 YAML을 읽는 go-yaml 계열 파서가 지수 표기 숫자로 읽었고, 쿠버네티스 커스텀 리소스는 "value must be string"으로 거부했다. SHA에 따라 일부 커밋에서만 나는 문제였고(숫자로만 된 SHA는 정수로 읽힌다), 템플릿에서 태그 자리를 따옴표로 감싸 해결했다.
+
+## 사례 2: 레포를 복사하지 않은 우회 빌드
+
+레포에서 고친 설정이 이미지에도 들어 있다는 전제가 우회 빌드에서 깨졌다. 실험 설정 파일을 고치고 그 변경을 확인하려고 검증 학습을 제출했는데, 학습 드라이버 로그에 찍힌 설정 파일과 실험 이름이 기대와 달랐다. run 이름만 이번에 지정한 값이었다.
+
+```text
+Config:      .../configs/<옛 설정>.py      # 이번 검증용 설정이 아니다
+  experiment: <옛 설정에서 만든 이름>        # 바꾼 실험 이름이 반영되지 않았다
+  run name:   <이번에 지정한 이름>           # 이것만 반영됐다
+```
+
+그 무렵 패키지 저장소 장애로 정규 빌드가 의존성을 받지 못해 우회 Dockerfile을 쓰고 있었다. 장애 동안 바뀔 것은 라이브러리 버전뿐이라고 보고, 직전에 성공한 학습 이미지를 베이스로 플랫폼 라이브러리만 다시 설치하게 했다. 그런데 이 Dockerfile은 레포 내용을 `COPY`하지 않았다. 드라이버가 읽는 실행 설정 파일은 베이스로 쓴 이미지를 만든 1주일 전 상태 그대로 이미지 안에 남았다.
+
+같은 설정 파일을 세 경로가 따로 읽어서 값이 섞였다. 드라이버는 이미지 안의 옛 파일을 읽었다. 반면 배포 때 ConfigMap(설정 파일을 파드에 넣는 쿠버네티스 객체)으로 주입된 시작 스크립트는 최신이라 그 안의 run 이름만 반영됐다. 배포 매니페스트를 만드는 CI는 checkout한 레포를 읽어 새 값을 썼다.
+
+우회 Dockerfile에 `COPY . /app/`을 더해 해결했다. 필요한 파일만 골라 `COPY`하던 Dockerfile에서 실행 설정 파일이나 새 실험 디렉터리가 빠진 일도 있었다. 그때는 설정 파일이 없다는 검사에서 학습 시작 전에 멈췄다. 옛 파일이 남아 있는 쪽은 조용히 옛 값으로 돌아 찾기가 더 어렵다.
+
+KFP의 컨테이너화된 컴포넌트도 이미지 안의 소스가 실행되고 컴파일된 정의에는 소스가 없다. 코드를 바꾸고 이미지를 다시 빌드하지 않으면 정의만 봐서는 옛 코드가 도는 것을 알 수 없다. 공유된 실습 기록처럼 이미지 안의 소스를 직접 grep하는 것이 가장 확실한 확인이다. 우회 경로는 `COPY`로 고쳤지만 같은 설정을 세 경로가 따로 읽는 구조는 그대로 남아 있다.
+
+## 사례 3: 머지와 배포 사이
+
+init 컨테이너 구조는 빌드 캐시 문제를 없앴지만, 코드가 머지된 시점과 학습에 실리는 시점 사이에 새 틈을 만들었다. 라이브러리 변경을 머지한 직후 검증 학습을 제출했는데 실행 기록에 남은 라이브러리 커밋 태그가 머지 전 커밋이었다. 학습에 실리는 라이브러리는 배포 차트의 다이제스트 값으로 정해지는데, 머지가 자동으로 연 다이제스트 변경 PR이 아직 머지되지 않은 상태였다. 실린 라이브러리의 커밋을 MLflow run 태그(run에 붙이는 키-값 기록)로 남겨 둔 덕분에 바로 알아차렸다. PR을 머지해 다시 제출하자 새 커밋이 기록됐다. 태그가 없었다면 학습이 완주한 것만 보고 바뀐 코드를 검증했다고 판단했을 것이다.
+
+KFP에서도 같은 틈이 생기는데, 경량 컴포넌트는 함수 소스가 정의에 실리므로 코드를 머지해도 파이프라인을 다시 컴파일해 올리기 전까지는 옛 소스가 돈다. 컨테이너화된 컴포넌트는 정의가 이미지 태그만 가리키므로 [태그 재사용](#사례-1-브랜치-참조와-빌드-캐시) 문제가 겹친다. 어느 쪽이든 머지와 배포 사이의 공백은 구조상 남아서, 검증 학습을 제출하기 전에 배포 값이 반영됐는지 먼저 보고 실행 기록에 실린 버전을 함께 확인하게 됐다.
+
+<br>
+
+# 설치 순서와 의존성 해석
+
+네 사례 모두 pip 설치는 오류 없이 끝났지만 설치된 결과가 기대와 달랐다. 무엇이 설치될지는 pip가 읽는 패키지 메타데이터와 이미 설치된 패키지, 설치 옵션이 함께 정하기 때문이다.
+
+## 사례 4: 의존성 메타데이터로 되돌아간 NCCL
+
+베이스 이미지가 덮어쓴 버전은 그 위에 무엇을 설치해도 유지된다는 전제가 깨진 사례다. 학습 베이스 이미지 위에 학습 레포의 의존성을 설치하는 빌드에서 GPU 호환성 검사가 실패했는데, NCCL에 새 GPU 아키텍처(sm_120)용 기계어가 없었다. 출력의 SASS는 특정 GPU 아키텍처용으로 미리 컴파일된 기계어다([NCCL GPU 호환성 게이트 글의 SASS와 PTX]({% post_url 2026-04-30-Dev-NCCL-GPU-Compat-CI-Runtime-Gate %}#sass와-ptx)).
+
+```text
+# GPU 호환성 검사 출력(요약)
+SASS sm_50 sm_60 sm_61 sm_70 sm_80 sm_90 · Missing sm_120
+```
+
+베이스 이미지는 PyTorch 2.7.1을 설치한 뒤 별도 단계에서 NCCL을 2.29.7로 덮어쓴다. PyTorch가 고정한 2.26.2에는 sm_120용 기계어가 없어서다. 그런데 PyTorch 패키지의 메타데이터(`Requires-Dist`)에는 `nvidia-nccl-cu12==2.26.2`가 그대로 적혀 있다. `pip show torch`의 `Requires` 줄은 의존 패키지 이름만 보여 주고, 고정 버전은 메타데이터에서 볼 수 있다.
+
+torchvision처럼 PyTorch에 의존하는 패키지를 설치하면 pip는 요청받은 패키지의 의존성 그래프 전체를 각 패키지의 메타데이터로 맞춘다. torchvision 0.22.1은 `torch==2.7.1`을 요구하므로 이미 설치된 PyTorch도 이 그래프에 들어간다. 이때 설치된 NCCL 2.29.7은 PyTorch의 선언을 만족하지 않으니 pip는 2.26.2를 다시 설치한다. 베이스 이미지에서 torchvision 하나만 설치해 봐도 재현된다.
+
+```bash
+# 베이스 이미지에서 torchvision 만 설치해 본다(이미지 이름은 일반화)
+docker run --rm registry.example.com/myorg/<base-image>:<tag> bash -c \
+  'pip show nvidia-nccl-cu12 | grep ^Version; pip install -q torchvision==0.22.1; pip show nvidia-nccl-cu12 | grep ^Version'
+# 기대 출력: Version: 2.29.7 → Version: 2.26.2
+```
+
+같은 부류로 학습 레포의 requirements에 있던 `protobuf<3.20.0`이 베이스의 protobuf를 낮춘 일도 있었다. 이때는 분산 학습 프레임워크의 대시보드가 뜨지 못해 학습 잡이 클러스터에 연결하지 못한 채 재시도 끝에 실패했다.
+
+GPU 호환성 검사는 검사 도구를 [이미지 밖으로 옮겨]({% post_url 2026-04-30-Dev-NCCL-GPU-Compat-CI-Runtime-Gate %}#왜-검사-도구를-이미지-밖에-두는가) 어떤 베이스든 검사하게 했고, 여기에 두 장치를 더했다. 분산 학습 이미지는 빌드 단계에서 프레임워크의 헤드 프로세스를 띄워 대시보드가 응답하는지 확인한다. 베이스 이미지는 지켜야 할 버전 목록을 계약 파일로 함께 싣고, CI는 빌드한 이미지의 버전을 이 목록과 대조해 어긋나면 이미지를 올리지 않는다. 충돌을 푸는 순서도 계약 파일 머리에 적었는데, 해당 패키지만 `--no-deps`로 설치하고 안 되면 베이스 변경을 요청한다. 학습 이미지는 이와 별도로 constraints 파일로 버전을 묶는다.
+
+pip에서 버전을 묶는 표준 수단은 constraints 파일이다. constraints는 [pip 문서](https://pip.pypa.io/en/stable/user_guide/#constraints-files)의 설명대로 설치할 패키지를 늘리지 않고 설치되는 패키지의 버전만 묶는다. pip는 명령행 옵션을 [`PIP_<옵션 이름>` 환경 변수](https://pip.pypa.io/en/stable/topics/configuration/)로도 받는다. 그래서 Dockerfile에 `ENV PIP_CONSTRAINT=<파일 경로>`를 두면 이후의 모든 `pip install`이 그 파일을 따른다. pip 26.2 전에는 소스 빌드의 격리 환경에도 적용된다. 이렇게 버전을 묶어 두면 protobuf 사례처럼 조용히 낮아지는 대신 해석 실패(`ResolutionImpossible`)로 설치가 멈춘다. 이 사례의 학습 이미지도 검증을 마친 이미지의 `pip freeze`로 constraints 파일을 만들어 이 방식으로 건다.
+
+다만 NCCL처럼 메타데이터와 일부러 어긋나게 둔 버전은 constraints에 넣을 수 없다. 2.29.7을 넣으면 PyTorch를 해석에 넣는 설치가 모두 해석 실패로 멈추기 때문이다. 소비자가 같은 변수를 자기 값으로 덮어쓰면 베이스의 값이 사라지는 문제도 있다. 여러 파일을 공백으로 이어 붙일 수는 있지만 모든 소비자가 그 관례를 지켜야 한다. 그래서 베이스는 `PIP_CONSTRAINT`를 이미지에 두지 않고, 빌드한 이미지를 계약 파일과 대조한다.
+
+KFP에서는 이 되돌림이 파드가 뜰 때 일어날 수 있다. 책 8.1.4절은 베이스 이미지 위에 `packages_to_install`로 나머지를 설치하라고 권한다. 이 설치는 파드가 뜰 때마다 실행되므로 이미지 빌드 단계의 검사로는 잡을 수 없다. `ENV`로 정한 환경 변수는 [그 이미지로 띄운 컨테이너에서도 유지된다](https://docs.docker.com/reference/dockerfile/#env). 베이스 이미지에 `PIP_CONSTRAINT`를 두면 SDK가 만든 설치 명령도 그 파일을 따르므로, 되돌림은 해석 실패로 드러난다. 이때 경량 컴포넌트가 함께 설치하는 `kfp==<SDK 버전>`이 constraints의 kfp 버전과 다르면 그 설치도 해석 실패로 멈춘다. 둘 다 pip와 Dockerfile 문서로 따져 본 동작이고 KFP에서 시험하지는 않았다.
+
+**베이스가 메타데이터와 어긋나게 덮어쓴 버전은 이후 pip가 그 패키지를 의존성 계산에 넣는 순간 메타데이터대로 되돌아간다.** 덮어쓰기를 유지하는 동안에는 빌드 단계 검사와 계약 대조로 막고 있다.
+
+## 사례 5: 빌드 도구 버전과 빈 패키지
+
+pip가 `Successfully installed`로 끝나면 그 패키지를 쓸 수 있다는 전제가 깨진 사례다. CI의 모든 단계가 성공했는데 학습이 시작하자마자 `ModuleNotFoundError`로 실패했다. 빌드 로그를 다시 보니 플랫폼 라이브러리 대신 이름 없는 빈 패키지가 설치돼 있었다.
+
+```text
+# CI 빌드 로그
+Building wheel for UNKNOWN ... Created wheel for UNKNOWN: UNKNOWN-0.0.0-...whl size=961
+Successfully installed UNKNOWN-0.0.0
+```
+
+빌드에 쓰인 setuptools가 패키지 정보를 읽지 못한 탓이다. 이 패키지는 정보를 `pyproject.toml`의 `[project]` 표에 적는 방식(PEP 621)을 썼다. setuptools는 [61부터](https://setuptools.pypa.io/en/latest/history.html#v61-0-0) 이 방식을 실험 기능으로 지원했는데, 베이스 이미지의 setuptools는 59.6.0이었다. 그래서 정보를 하나도 읽지 못한 채 961바이트짜리 빈 wheel(빌드를 마친 파이썬 패키지 파일)을 만들었다. pip는 이것을 정상 설치로 보고 exit 0으로 끝났다.
+
+패키지는 `[build-system] requires`에 setuptools 68 이상을 선언해 두었다. pip는 기본으로 이 요구를 임시 환경에 따로 설치하고 그 안에서 패키지를 빌드하는데, 이를 [빌드 격리](https://pip.pypa.io/en/stable/reference/build-system/)라고 한다. 그런데 이 빌드는 `[build-system]`이 요구한 setuptools 대신 베이스의 59.6.0으로 돌았다. 격리 환경이 왜 적용되지 않았는지는 조사하지 않았다. 정보가 통째로 빠지면서 패키지가 요구하는 파이썬 버전(3.11 이상)도 확인되지 않았다. 베이스의 파이썬은 3.10이라, 정보가 제대로 읽혔다면 pip가 설치를 거부했을 것이다.
+
+이미지의 setuptools를 68 이상으로 올리고 설치에 `--no-build-isolation`을 붙여, 격리 환경 대신 올린 setuptools로 빌드하게 했다. 격리 없이 빌드하면 빌드에 필요한 패키지를 이미지에 직접 설치해 두어야 한다. 또 설치 직후 `import`를 실행하는 줄을 빌드에 넣어 빈 패키지면 빌드가 실패하게 했고, 요구 파이썬 버전은 3.10으로 낮췄다.
+
+KFP에서는 `packages_to_install`에 이런 패키지를 적으면 같은 일이 파드가 뜰 때 일어난다. SDK가 만드는 명령은 pip 설치가 exit 0으로 끝나는 대로 [`&&`로 함수 실행에 넘어가므로](https://github.com/kubeflow/pipelines/blob/2.17.3/sdk/python/kfp/dsl/component_factory.py#L137-L142), 빈 패키지는 함수가 import할 때에야 드러난다. `Successfully installed`는 pip가 설치를 마쳤다는 표시일 뿐이다. 설치된 패키지를 쓸 수 있는지는 빌드 안에서 import를 한 번 실행해 보는 것이 가장 간단한 확인이었다.
+
+## 사례 6: `--no-deps` 설치와 새 의존성
+
+의존성을 빼고 설치해도 필요한 모듈은 이미지에 이미 있다는 전제가 처음부터 다시 빌드한 이미지에서 깨졌다. 공용 유틸 패키지의 새 버전으로 학습 이미지를 처음부터 다시 빌드하자, 빌드 검증 단계의 import가 `ModuleNotFoundError: No module named 'xmltodict'`로 실패했다. 기존 이미지들은 문제없이 돌고 있었다.
+
+이 유틸 패키지는 의존성을 버전 고정 없이 선언하고 있었다. 그 가운데 베이스에 없는 것이 최신판으로 들어오면 그 하위 요구가 베이스 학습 스택의 고정 버전을 바꿀 수 있었다. 그래서 `--no-deps`로 의존성 없이 설치하는 것을 정책으로 두었다. 그런데 유틸의 새 버전이 다른 모듈을 새로 import하기 시작했고, 그 모듈이 쓰는 `xmltodict`도 이 정책 때문에 함께 빠졌다. 기존 이미지들에는 예전에 의존성까지 설치한 레이어가 남아 있어서, 처음부터 다시 빌드한 이미지에서야 드러났다.
+
+`xmltodict`를 명시적으로 설치해 해결하고 `--no-deps` 정책은 유지했다. 지금은 학습 코드와 유틸의 import에 필요한 패키지를 목록으로 먼저 설치하고, 그 버전은 [NCCL 사례의 constraints 파일](#사례-4-의존성-메타데이터로-되돌아간-nccl)이 정한다.
+
+보통은 의존성까지 설치하고 버전은 constraints로 묶는다. 그러면 버전 고정 없이 선언된 의존성도 constraints에 적힌 버전으로 설치되고, 새로 생긴 의존성도 빠지지 않는다. `--no-deps`를 유지한다면 빌드에 [`pip check`](https://pip.pypa.io/en/stable/cli/pip_check/)를 넣는 방법이 있다. 설치된 패키지가 선언한 의존성 가운데 빠지거나 버전이 맞지 않는 것을 보고하고 exit 1로 끝나는 명령이다. 새 모듈을 import하지 않는 경로에서도 누락이 드러나지만 일부러 뺀 의존성도 함께 보고되며, 이 빌드에는 아직 넣지 않았다.
+
+KFP의 경량 컴포넌트도 함수가 import하는 패키지가 `packages_to_install`에 없으면 같은 `ModuleNotFoundError`가 난다. 오류는 파드에서 함수가 그 줄을 실행할 때 나고, 컴파일과 업로드는 이 누락을 보지 않는다. 유틸이 새 의존성을 더할 때마다 같은 실패가 다시 날 수 있는데, 빌드 검증의 import는 학습을 시작할 때 불리는 모듈만 확인한다. 평가 함수 안에서 처음 불리는 모듈의 의존성은 버전이 올라가도 빌드에서 드러나지 않았다. 학습이 첫 epoch를 다 돈 뒤 지표 계산에서야 실패한 일도 있었다([8.1.2편의 첫 epoch 뒤에 드러난 라이브러리 버전]({% post_url 2026-11-12-MLOps-ML-Platform-Engineering-08-01-02-Distributed-Validation-Cases %}#사례-3-첫-epoch-뒤에-드러난-라이브러리-버전)).
+
+## 사례 7: 베이스를 나누며 바뀐 설치 집합
+
+베이스 이미지의 구조만 바꾸면 그 위에 설치되는 버전은 그대로라는 전제가 깨진 사례다. 학습 베이스 이미지를 멀티스테이지 빌드로 나눴더니 그 위에 만든 이미지의 numpy가 기존의 1.x가 아니라 2.x 최신으로 설치됐다. 멀티스테이지 빌드는 한 Dockerfile 안에 빌드용 단계와 실행용 단계를 두고, 빌드용 단계에서 만든 결과만 실행용 단계로 복사하는 방식이다. 기존 이미지는 여러 라이브러리의 버전 제약이 함께 걸려 numpy가 1.x로 내려가 있었는데, 나눈 이미지에는 그 라이브러리들이 없어 제약도 없었다.
+
+버전 비교는 학습 코드까지 얹은 최종 학습 이미지에서 했다. 학습 코드의 의존성 설치가 마지막에 실행되므로 설치 결과를 정할 수 있는 곳이 그 단계뿐이어서다. 최종 이미지의 `pip freeze`를 기존 이미지와 비교하고, 결과에 영향을 주는 패키지는 기존 버전을 constraints에 적어 고정했다.
+
+KFP에서는 여러 컴포넌트를 한 이미지에 담을 때 같은 일이 생긴다. 공유된 실습에서는 7장 데이터 준비 파이프라인의 컴포넌트 여섯 개에 같은 `target_image`를 지정했다. 그러자 `kfp component build`는 여섯 컴포넌트의 `packages_to_install`을 합친 이미지 하나를 만들었다. 합친 목록에 `pyarrow`와 `fastparquet`가 함께 들어가 분할 컴포넌트에도 두 parquet 엔진이 모두 설치됐다. pandas의 `to_parquet`는 엔진을 지정하지 않으면 `pyarrow`를 먼저 고른다. 그래서 `fastparquet`만 있던 경량 컴포넌트 버전과 결과 파일의 인덱스 열 이름과 위치가 달라졌다. 분할 단계의 실행 시간도 경량 버전의 4배였다. 이미지 하나에 여러 컴포넌트를 담으면 빌드와 배포는 단순해지지만, 각 컴포넌트가 따로 쓰던 패키지가 서로의 기본 동작을 바꿀 수 있다. 동작을 정하는 인자를 `to_parquet(engine='pyarrow')`처럼 코드에 적어 두면 설치 집합이 바뀌어도 고르는 엔진은 같다. pandas 3.1부터는 `fastparquet` 엔진이 deprecated라 적는 값도 `pyarrow`가 맞다. [8.1.2편]({% post_url 2026-11-12-MLOps-ML-Platform-Engineering-08-01-02-Distributed-Validation-Cases %}#사례-3-첫-epoch-뒤에-드러난-라이브러리-버전)에는 학습과 검증 단계의 이미지가 달라 Ultralytics 버전이 갈린 공유된 실습의 관찰이 있다.
+
+설치 집합이 바뀌면 코드가 같아도 동작이 바뀌고, 패키지를 하나 빼거나 더하는 변경도 다른 패키지의 해석 결과를 바꾼다. 이미지 구조를 바꿀 때는 최종 이미지의 설치 목록을 함께 비교한다.
+
+<br>
+
+# 베이스 이미지의 시스템 라이브러리
+
+파이썬 패키지 가운데에는 import할 때 운영체제의 [공유 라이브러리]({% post_url 2026-05-13-CS-Linux-Shared-Library %})를 찾는 것이 있다. pip는 이런 시스템 라이브러리를 설치하지 않아서 같은 패키지도 베이스 이미지에 따라 import에서 실패한다.
+
+## 사례 8: slim 이미지에 없는 공유 라이브러리
+
+pip로 설치한 패키지는 베이스를 바꿔도 import된다는 전제가 slim 이미지에서 깨졌다. 학습 베이스 이미지를 멀티스테이지 빌드로 바꾸면서 실행용 단계를 필수 패키지만 남긴 slim 이미지로 바꿨다. 그러자 이미지 검증 단계에서 영상 처리 라이브러리를 import할 때 `ImportError: libxcb.so.1`이 났다. 빌드용 단계에서는 C++ 확장을 컴파일하다 `Python.h: No such file`이 났다. 이 라이브러리가 의존하는 OpenCV는 import할 때 그래픽·X11 계열 공유 라이브러리를 찾는데 slim 이미지에는 그것이 없었다. 빌드용 단계에는 파이썬 헤더를 담은 `python3-dev`가 없었다.
+
+실행용 이미지에 `libgl1`, `libglib2.0-0`, `libxcb1` 등을, 빌드용에 `python3-dev`를 apt로 추가했다. import를 하나씩 실행하며 빠진 라이브러리를 찾는 대신, 설치된 파이썬 패키지 안의 `.so` 파일에 `ldd`를 돌려 `not found`인 라이브러리를 한 번에 모으는 방법도 있다.
+
+KFP의 경량 컴포넌트도 `packages_to_install`로는 pip 패키지만 설치한다. 베이스 이미지를 slim으로 바꾸면 함수가 그 패키지를 import할 때 파드에서 같은 `ImportError`가 난다. 책 8.1.3절은 이 문제를 `@dsl.container_component` 안의 `apt-get`으로 푼다.
+
+> **참고**: 같은 작업에서 멀티스테이지 Dockerfile의 함정도 하나 만났다. 베이스 태그를 받는 `ARG BASE_TAG`를 빌드용 단계 뒤에 선언했더니, 실행용 단계의 `FROM ...:${BASE_TAG}`에서 값이 치환되지 않아 `invalid reference format`으로 실패했다. `FROM` 줄에서 쓰는 `ARG`는 첫 `FROM` 앞에 선언해야 하고, 단계 안의 명령에서도 쓰려면 그 단계에서 값 없이 다시 선언한다([Dockerfile 문서](https://docs.docker.com/reference/dockerfile/#understand-how-arg-and-from-interact)). 선언 위치를 옮겨 해결했다.
+
+## 사례 9: `libgl1-mesa-glx`와 trixie
+
+같은 Dockerfile은 같은 이미지를 만든다는 전제가 베이스 태그가 가리키는 배포판이 바뀌면서 깨졌다. 공유된 실습 기록에서 책의 학습 컴포넌트는 ContainerSpec 안에서 `apt-get install`을 실행하다 실패했다. 오류는 `Package 'libgl1-mesa-glx' has no installation candidate`였다.
+
+slim 이미지에서 OpenCV(`cv2`)를 import하면 흔히 `ImportError: libGL.so.1: cannot open shared object file`이 난다. 이 오류의 표준 처방이 `apt-get install libgl1-mesa-glx`라서 YOLO나 OpenCV를 쓰는 학습 Dockerfile에 이 줄이 자주 보인다. 그런데 [Debian 패키지 목록](https://packages.debian.org/search?keywords=libgl1-mesa-glx&searchon=names&suite=all&section=all)에서 `libgl1-mesa-glx`는 Debian 11(bullseye)과 12(bookworm)에서 다른 패키지를 끌어오기만 하는 전환용 패키지였고, 그 전인 10(buster)부터 이미 그랬다([buster의 mesa 패키지 정의](https://sources.debian.org/src/mesa/18.3.6-2+deb10u1/debian/control/)). 2025년 8월에 나온 Debian 13(trixie)에는 아예 없고, 책의 컴포넌트가 쓰는 `python:3.11-slim`은 Debian 13 기반이었다.
+
+공유된 실습에서는 `libgl1`로 바꿔 해결했다. OpenCV를 직접 설치한다면 GUI 기능을 뺀 `opencv-python-headless`로 이 의존성을 없앨 수 있다. 다만 ultralytics처럼 `opencv-python`을 의존성으로 선언한 패키지를 함께 설치하면 GUI판이 다시 들어온다. 책의 컴포넌트도 headless판과 ultralytics를 함께 설치하면서 apt로 libGL을 설치한다.
+
+책의 `@dsl.container_component`는 파드가 뜰 때마다 `apt-get`을 실행한다. 베이스 태그가 가리키는 배포판이 바뀌면 컴포넌트 코드를 건드리지 않아도 실행 시점에 깨진다. 시스템 라이브러리를 미리 설치한 이미지를 만들어 쓰면 이 실패가 이미지 빌드 시점으로 옮겨 간다. **베이스 이미지 태그를 고정하지 않으면 베이스의 운영체제 배포판이 바뀌는 시점에 같은 Dockerfile이 깨진다.** 배포판까지 정해 주는 태그나 다이제스트로 베이스를 가리켜야 이 변화를 직접 고를 수 있다.
+
+<br>
+
+# 빌드와 전송 비용
+
+이미지가 수 GB가 되면 빌드와 배포 시간의 대부분이 레이어를 옮기는 데 쓰인다.
+
+## 사례 10: 캐시 적중 뒤의 레이어 다운로드
+
+빌드 캐시가 적중하면 빌드가 빨라진다는 전제가 일회용 CI 러너에서 깨졌다. 빌드 캐시를 켜 두었는데도 코드를 바꾼 빌드가 수십 분 걸려서 레이어별로 보니, 시스템 패키지 설치와 오래 걸리는 소스 컴파일 단계는 `CACHED`였다. 시간은 그 바로 다음의 `WORKDIR` 단계에 몰려 있었고 이 단계의 로그는 수 GB짜리 레이어를 내려받는 기록이었다. 코드를 복사하는 `COPY` 단계는 몇 초 만에 끝났다.
+
+`--cache-from`으로 캐시가 적중하면 그 단계를 다시 실행하지 않아도 된다. 하지만 캐시를 벗어난 단계부터는 실제로 실행해야 하고, 실행하려면 그 아래 부모 레이어들의 파일시스템이 빌드하는 머신에 있어야 한다. CI 러너는 작업마다 새로 뜨는 일회용이라 로컬 레이어 저장소가 매번 비어 있었고, 그래서 부모 레이어를 레지스트리에서 매번 통째로 내려받았다. 레지스트리 전송이 느려 이 다운로드가 빌드의 대부분을 차지했다. Dockerfile 순서를 바꿔도 코드가 바뀌면 `COPY`부터는 캐시를 벗어나므로 이 다운로드는 그대로다.
+
+이 사례를 계기로 이미지 빌드와 전송이 반복해서 막힌 원인을 모아 보니 네 가지였다. 레지스트리와 패키지 저장소의 느린 전송 경로, 매번 비어 있는 일회용 러너, 새 GPU 아키텍처용 사전 빌드 패키지가 없는 라이브러리, 의존성 해석 실패다. 일회용 러너 때문에 느린 전송이 빌드마다 반복됐다. 사전 빌드 패키지가 없는 라이브러리는 CUDA 확장을 소스로 컴파일해야 해서 처음 빌드할 때 한 시간 가까이 걸렸다. 의존성 해석 실패는 전송과 관계없이 가장 자주 재발했고, 고쳐서 다시 빌드할 때마다 앞의 전송과 컴파일 시간이 그만큼 다시 들었다.
+
+캐시 설정은 정상으로 동작해 무엇보다 컴파일 단계를 다시 실행하지 않게 해 주었지만, 전송 비용은 캐시 설정으로 줄지 않았다. 일회용 러너에서 이 비용을 줄이는 일반적인 방법은 러너의 레이어 저장소를 유지하거나 클러스터 안에 레지스트리 캐시를 두는 것이다. 이번에는 둘 다 적용하지 않았다. 사전 빌드 패키지가 없는 라이브러리는 한 번 컴파일한 wheel을 패키지 저장소에 올려 두면 다음 빌드부터는 설치만 하면 된다.
+
+Dockerfile 쪽에도 수단이 있다. [`COPY --link`](https://docs.docker.com/reference/dockerfile/#copy---link)로 복사한 파일은 이전 레이어와 독립된 레이어가 되어, 이전 레이어가 바뀌어도 무효화되지 않고 `--cache-from`으로 재사용된다. 다만 이 사례처럼 `COPY` 뒤에 `pip install`을 실행하는 단계가 있으면 그 단계가 부모 파일시스템을 필요로 하므로 다운로드는 남는다. 이 빌드가 쓴 인라인 캐시(`BUILDKIT_INLINE_CACHE=1`)는 캐시 정보를 이미지에 함께 싣는 방식이다. 캐시 내보내기 모드를 받지 않아 결과 이미지에 들어가는 레이어만 캐시하므로 멀티스테이지 빌드에는 잘 맞지 않는다. 빌드용 단계의 레이어까지 캐시하려면 `--cache-to type=registry,ref=<캐시 이미지>,mode=max`로 중간 단계의 레이어를 모두 내보내야 한다. 이때 기본 docker 드라이버에서는 containerd 이미지 저장소를 켜야 [이 방식](https://docs.docker.com/build/cache/backends/)을 쓸 수 있다.
+
+KFP에서도 이미지 크기가 곧 전송 시간인데, 공유된 실습 기록에서 컴포넌트 여섯 개의 패키지를 합친 이미지는 2.51GB였다. `kfp component build`가 만드는 [Dockerfile](https://github.com/kubeflow/pipelines/blob/2.17.3/sdk/python/kfp/cli/component.py#L42-L51)은 패키지를 설치한 뒤 마지막에 `COPY . .`로 소스를 넣는다. 노드는 이미 가진 레이어를 다시 받지 않으므로, 같은 머신에서 빌드 캐시가 적중하면 컴포넌트 코드만 고칠 때 마지막 `COPY` 레이어만 새로 받는다. 반면 `packages_to_install`을 바꾸거나 캐시 없는 곳에서 다시 빌드하면 패키지 설치 레이어부터 다시 만들어져 그만큼을 다시 받는다. **캐시 적중은 단계 실행을 건너뛸 뿐이고, 다음 단계가 부모 파일시스템을 필요로 하면 그 레이어 전송은 남는다.**
+
+<br>
+
+# 정리
+
+| 사례                             | 겉으로 보인 것                               | 대처                                                               | KFP에서                                                                         |
+| -------------------------------- | -------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| 브랜치 참조와 빌드 캐시          | 머지한 기능이 실행 기록에 없음               | 커밋 SHA로 고정, 라이브러리를 init 컨테이너로 주입                 | 같은 태그 재사용과 `IfNotPresent`, 태그 문자열로 된 캐시 키                   |
+| 레포를 복사하지 않은 우회 빌드   | 일부 설정만 옛 값                            | `COPY` 추가                                                      | 컨테이너화된 컴포넌트는 정의에 소스가 없음                                      |
+| 머지와 배포 사이                 | 실행 기록의 라이브러리 커밋이 옛것           | 실린 라이브러리 커밋을 run 태그로 기록                             | 경량 컴포넌트는 정의를 다시 컴파일·업로드해야 반영                             |
+| NCCL 되돌림, protobuf 핀         | GPU 기계어 누락, 대시보드 기동 실패          | 빌드 단계 검사, 베이스 계약 대조, 학습 이미지의 `PIP_CONSTRAINT` | `packages_to_install`은 파드가 뜰 때 설치, 이미지의 `PIP_CONSTRAINT`도 적용 |
+| 빈 패키지                        | CI 성공, 학습 즉시 실패                      | setuptools 상향, 빌드 안에서 import                                | pip가 exit 0이면 함수 실행으로 넘어감                                           |
+| `--no-deps`와 새 import        | 처음부터 다시 빌드할 때만 실패               | 새 의존성 명시 설치, `pip check`(제안)                           | import하는 패키지가 `packages_to_install`에 없으면 실행 중 실패               |
+| 바뀐 설치 집합                   | numpy 메이저 버전 변경                       | 최종 이미지 `pip freeze` 비교, constraints로 고정                | 한 `target_image`에 합친 패키지가 parquet 엔진을 바꿈                         |
+| slim 베이스, `libgl1-mesa-glx` | `ImportError: libxcb.so.1`, 설치 후보 없음 | apt 추가, `libgl1`로 교체                                        | `@dsl.container_component`의 `apt-get`이 실행 시점에 깨짐                   |
+| 캐시 적중인데 느린 빌드          | 빌드 대부분이 레이어 다운로드                | 러너 캐시 유지, 클러스터 안 레지스트리 캐시(제안)                  | 캐시가 적중하면 마지막 `COPY` 레이어만 다시 받음                              |
+
+운영하던 학습 이미지의 장애를 책 8장이 이미지를 다루는 두 절에 비추어 보니, 빌드 성공 표시는 이미지 안에 무엇이 들어갔는지 알려 주지 않았다. 차이는 학습이 그 코드를 부를 때에야 드러났다. 그 시점을 빌드나 학습 시작으로 당긴 것은 import 한 줄, 베이스 계약과의 대조, 실행 기록의 커밋 태그 같은 작은 확인이었다. `@main` 같은 브랜치 참조와 다시 올린 이미지 태그, 배포판이 바뀐 베이스 태그는 모두 이름과 내용의 어긋남이 생긴 곳이었다. 빌드 캐시와 노드의 이미지 재사용은 이름만 비교하므로 이 어긋남을 스스로 알아채지 못한다. 그래서 학습 이미지를 운영하는 쪽에서 확인할 것은 빌드 성공 여부가 아니라 이 학습에 무엇이 실렸는지다. 이미지와 라이브러리를 내용이 바뀌면 함께 바뀌는 커밋 SHA나 다이제스트로 가리켜야 캐시와 노드도 이름만 보고 맞게 동작한다.
+
+네 편의 사례를 실패를 언제 드러내는가와 실패가 났을 때 플랫폼이 어디까지 흡수하는가의 두 질문으로 다시 묶은 내용은 [9.1.3편]({% post_url 2026-11-12-MLOps-ML-Platform-Engineering-09-01-03-Troubleshooting-Retrospective %})에서 다룬다.
+
+<br>
+
+# 참고 링크
+
+- [8.1.2편: 분산 학습의 epoch별 검증 장애 사례]({% post_url 2026-11-12-MLOps-ML-Platform-Engineering-08-01-02-Distributed-Validation-Cases %})
+- [9.1.1편: 이름으로 가리킨 데이터와 캐시]({% post_url 2026-11-12-MLOps-ML-Platform-Engineering-09-01-01-Data-Reference-Cache %})
+- [9.1.2편: 학습 데이터 참조와 산출물 저장의 장애 사례]({% post_url 2026-11-12-MLOps-ML-Platform-Engineering-09-01-02-Data-Artifact-Cases %})
+- [Kubeflow Pipelines SDK: 컴포넌트 이미지와 명령 생성(2.17.3)](https://github.com/kubeflow/pipelines/blob/2.17.3/sdk/python/kfp/dsl/component_factory.py#L782-L801)
+- [Kubeflow Pipelines SDK: packages_to_install 설치 명령(2.17.3)](https://github.com/kubeflow/pipelines/blob/2.17.3/sdk/python/kfp/dsl/component_factory.py#L128-L190)
+- [Kubeflow Pipelines SDK: kfp component build의 Dockerfile(2.17.3)](https://github.com/kubeflow/pipelines/blob/2.17.3/sdk/python/kfp/cli/component.py#L42-L51)
+- [쿠버네티스: 이미지 pull 정책](https://kubernetes.io/docs/concepts/containers/images/)
+- [Python: sys.path 초기화 순서](https://docs.python.org/3/library/sys_path_init.html)
+- [pip: constraints 파일](https://pip.pypa.io/en/stable/user_guide/#constraints-files), [환경 변수 설정](https://pip.pypa.io/en/stable/topics/configuration/), [pip check](https://pip.pypa.io/en/stable/cli/pip_check/), [빌드 격리](https://pip.pypa.io/en/stable/reference/build-system/)
+- [PEP 621: Storing project metadata in pyproject.toml](https://peps.python.org/pep-0621/)
+- [setuptools 61.0.0 변경 기록](https://setuptools.pypa.io/en/latest/history.html#v61-0-0)
+- [Dockerfile 레퍼런스: COPY --link, ARG와 FROM](https://docs.docker.com/reference/dockerfile/)
+- [Docker 빌드 캐시 저장소](https://docs.docker.com/build/cache/backends/)
+- [Debian 패키지 검색: libgl1-mesa-glx](https://packages.debian.org/search?keywords=libgl1-mesa-glx&searchon=names&suite=all&section=all)
+
+<br>

@@ -1,0 +1,50 @@
+# 공유 스토리지 흉내: 노드의 /shared(= 호스트 SHARED_DIR)를 정적 PV로 잡고, 같은 디렉터리를 HTTP로도 내보낸다.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: shared-data
+spec:
+  capacity: {storage: 1Gi}
+  accessModes: [ReadWriteMany]
+  storageClassName: manual          # 동적 프로비저너가 끼어들지 않게 이름을 따로 둔다
+  persistentVolumeReclaimPolicy: Retain
+  hostPath: {path: /shared}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shared-data
+  namespace: kubeflow               # KFP standalone은 파이프라인을 kubeflow 네임스페이스에서 돌린다
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: manual
+  volumeName: shared-data
+  resources: {requests: {storage: 1Gi}}
+---
+# 책 7.3.1의 "URL에서 내려받기"를 흉내 내는 데이터 서버. 호스트에서 파일을 바꾸면 응답도 바뀐다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-server
+  namespace: kubeflow
+spec:
+  selector: {matchLabels: {app: data-server}}
+  template:
+    metadata: {labels: {app: data-server}}
+    spec:
+      containers:
+      - name: http
+        image: mlpe-w4/py:1
+        command: [python, -m, http.server, "8000", --directory, /shared]
+        volumeMounts: [{name: shared, mountPath: /shared, readOnly: true}]
+      # kubeflow 네임스페이스는 Pod Security baseline 을 강제해 파드에 hostPath 를 직접 붙일 수 없다 → PVC 로 붙인다
+      volumes: [{name: shared, persistentVolumeClaim: {claimName: shared-data, readOnly: true}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-server
+  namespace: kubeflow
+spec:
+  selector: {app: data-server}
+  ports: [{port: 8000}]
