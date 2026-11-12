@@ -18,7 +18,7 @@ tags:
   - Machine-Learning-Platform-Engineering-Study
   - Machine-Learning-Platform-Engineering-Study-Week-2
 use_math: false
-last_modified_at: 2026-10-30
+last_modified_at: 2026-11-12
 ---
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Machine Learning Platform Engineering Study 2주차 학습 내용을 기반으로 합니다.*
 
@@ -154,7 +154,7 @@ KFP 문서와 매니페스트를 기준으로 역할을 나누면 다음과 같�
 | `ml-pipeline-persistenceagent`                                                 | Workflow 상태를 API 서버에 보고한다                                                                         |
 | `ml-pipeline-scheduledworkflow`                                                | 반복 실행(Recurring Run)을 관리한다                                                                         |
 | `metadata-grpc-deployment`, `metadata-envoy-deployment`, `metadata-writer` | ML Metadata(MLMD) 저장소와 그 앞의 gRPC-web 프록시, 실행 정보를 MLMD에 기록하는 writer                      |
-| `cache-server`, `cache-deployer-deployment`                                  | 같은 입력의 컴포넌트 실행 결과를 재사용하는 실행 캐시                                                       |
+| `cache-server`, `cache-deployer-deployment`                                  | v1 파이프라인의 실행 캐시를 맡는 웹훅과, 그 웹훅의 인증서·등록을 만드는 배포기. v2 파이프라인의 캐시는 단계마다 driver가 처리한다 |
 | `ml-pipeline-viewer-crd`, `ml-pipeline-visualizationserver`                  | 산출물 뷰어와 시각화 서버                                                                                   |
 | `mysql`                                                                        | 파이프라인·run·MLMD 메타데이터 저장소                                                                     |
 | `seaweedfs`                                                                    | 파이프라인 패키지와 실행 산출물을 담는 S3 호환 객체 저장소                                                  |
@@ -652,7 +652,7 @@ kubectl -n kubeflow logs example-97pbc-system-container-impl-3178399942 -c main 
 # 7 + 10 = 17
 ```
 
-같은 인자로 두 번 제출했을 때는 두 번째 run에 실행 파드가 생기지 않았다. Workflow의 노드 상태에 `executor Skipped`만 남고 driver 파드 세 개만 돌았는데, cache-server가 같은 컴포넌트와 같은 입력의 이전 결과를 재사용했기 때문이다. 실행 캐시는 KFP의 기본 동작이고, 결과를 다시 계산하게 하려면 입력을 바꾸거나 캐시를 끈다. 위 출력은 인자를 바꿔 제출한 run이다.
+같은 인자로 두 번 제출했을 때는 두 번째 run에 실행 파드가 생기지 않았다. Workflow의 노드 상태에 `executor Skipped`만 남고 driver 파드 세 개만 돌았는데, 각 단계의 driver가 같은 파이프라인 안에서 같은 컴포넌트와 같은 입력으로 성공한 이전 실행을 ml-pipeline API 서버에서 찾아 그 결과를 재사용했기 때문이다. 함께 설치되는 `cache-server`는 v1 파이프라인용이라 v2 파드는 건너뛴다. 실행 캐시는 KFP의 기본 동작이고, 결과를 다시 계산하게 하려면 입력을 바꾸거나 캐시를 끈다. 위 출력은 인자를 바꿔 제출한 run이다.
 
 Workflow에는 산출물을 어디에 쓸지가 들어 있다. 2단계 설치 매니페스트의 ConfigMap이 정한 값이다. Argo Workflow의 아티팩트 저장소를 객체 저장소로 직접 설정해 본 기록은 [Argo Workflow Artifact 글]({% post_url 2024-07-26-Dev-Kubernetes-Argo-Workflow-Artifact %})에 있다.
 

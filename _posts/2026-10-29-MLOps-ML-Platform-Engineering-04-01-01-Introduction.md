@@ -18,7 +18,7 @@ tags:
   - Machine-Learning-Platform-Engineering-Study
   - Machine-Learning-Platform-Engineering-Study-Week-2
 use_math: false
-last_modified_at: 2026-11-04
+last_modified_at: 2026-11-12
 ---
 *[서종호(가시다)](https://www.linkedin.com/in/gasida99/)님의 Machine Learning Platform Engineering Study 2주차 학습 내용을 기반으로 합니다.*
 
@@ -255,7 +255,7 @@ Feast는 2주차에서 가장 결이 다른 도구다. 100일 챌린지에서 Fe
 
 KFP에는 학습 트리거 구간의 검증 스텝을 둘 수 있다. 5장 실습은 데이터 읽기, 피처 조회, 추론, 쓰기를 컴포넌트로 나눠 잇는 추론 파이프라인이지만, 같은 구조를 학습 파이프라인 앞에 두고 검증 스텝 하나를 더 넣으면 "통과하지 못하면 학습하지 않는다"가 코드가 된다. 다만 운영 조건이 둘 붙는다.
 
-하나는 캐시다. KFP는 같은 컴포넌트에 같은 입력이면 이전 결과를 재사용한다. [4.1.2편의 검증]({% post_url 2026-10-29-MLOps-ML-Platform-Engineering-04-01-02-Lab-Environment %}#검증-파이프라인-한-번-실행과-저장소-확인)에서 같은 인자로 두 번 제출했을 때 두 번째 run에는 실행 파드가 생기지 않았다. 입력 명세는 그대로인데 원본 데이터만 바뀐 데이터 수집·검증 단계는 캐시를 꺼야 한다.
+하나는 캐시다. KFP는 같은 이름의 파이프라인 안에서 같은 컴포넌트에 같은 입력이면 이전 결과를 재사용한다. [4.1.2편의 검증]({% post_url 2026-10-29-MLOps-ML-Platform-Engineering-04-01-02-Lab-Environment %}#검증-파이프라인-한-번-실행과-저장소-확인)에서 같은 인자로 두 번 제출했을 때 두 번째 run에는 실행 파드가 생기지 않았다. 입력 명세는 그대로인데 원본 데이터만 바뀐 데이터 수집·검증 단계는 캐시를 꺼야 한다.
 
 다른 하나는 무게다. 100일 챌린지 때 KFP를 보며 "Kubeflow가 굉장히 무거운데, 그 무게가 기능이 아니라 조립에서 온다"는 생각을 한 적이 있다. 실제 KFP 고유 로직은 API 서버 하나이고 나머지는 Argo Workflows, ML Metadata, MySQL과 그 접착제다. KFP가 Argo 위에 DSL과 아티팩트 추적, 메타데이터 저장소를 얹은 층이라는 관계는 [GenAI on K8s 11.4]({% post_url 2026-06-09-Kubernetes-GenAI-on-K8s-11-04-Argo-Workflows %}#kubeflow-pipelines와의-레이어-관계)에서 정리했다. 이번에 kind에 올린 standalone도 [Deployment 14개]({% post_url 2026-10-29-MLOps-ML-Platform-Engineering-04-01-02-Lab-Environment %}#kubeflow-pipelines-standalone-해부)였다. 이미 Argo Workflows를 운영하는 조직이라면 KFP 대신 Argo의 아카이브와 MLflow 조합이 더 가볍다는 것이 당시 판단이었고, 지금도 크게 다르지 않다. 파이프라인과 run이 CRD가 아니라 API 서버의 DB 레코드라는 점도 운영에 영향을 준다. 파이프라인 등록은 GitOps가 아니라 CI가 API를 호출하는 명령형 배포가 된다. 선언형 도구가 ML 워크로드의 어느 영역까지 맞는지는 [MLOps와 GitOps]({% post_url 2026-04-27-Articles-GitOps-And-Training-Task %})에서 학습 Job을 Argo CD에 올려 보며 고민한 적이 있다.
 
