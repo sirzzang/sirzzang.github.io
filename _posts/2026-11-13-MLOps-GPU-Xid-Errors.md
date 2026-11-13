@@ -23,7 +23,7 @@ last_modified_at: 2026-11-13
 
 # TL;DR
 
-- Xid는 NVIDIA 드라이버가 GPU에서 감지한 오류 사건에 붙이는 번호로, 커널 로그에 `NVRM: Xid (PCI:<주소>): <번호>, …` 한 줄로 찍힌다. 번호마다 원인과 필요한 조치가 달라서, Xid가 찍혔다는 사실만으로는 GPU가 고장 났는지조차 판단할 수 없다.
+- Xid는 NVIDIA 드라이버가 GPU에서 감지한 오류 사건에 붙이는 번호로, 커널 로그에 `NVRM: Xid (PCI:<주소>): <번호>, …` 한 줄로 찍힌다. 번호마다 원인과 필요한 조치가 다르다.
 - 이 글에서는 Xid를 하드웨어 장애, 앱 오류, 상세, 기록, 지시의 다섯 가지 성격으로 나눠 읽는다. 실제 고장을 뜻하는 것은 하드웨어 장애 Xid이고, 63은 드라이버가 한 조치의 기록, 171은 앞 Xid의 위치 정보, 154는 드라이버가 요구하는 복구 조치다([Xid의 성격](#xid의-성격-분류)).
 - 하드웨어 장애 Xid는 고장 난 위치에 따라 PCIe 링크(79), GPU 안의 펌웨어 프로세서인 GSP와 FSP(119, 120, 143), 메모리(48과 ECC 계열), NVLink로 나뉜다. Meta의 Llama 3 학습 기록에서는 예정에 없던 학습 중단의 원인 가운데 GPU 문제가 가장 컸다. NCSA Delta 시스템의 GPU 오류를 분석한 논문은 GSP를 가장 취약한 GPU 하드웨어 부품으로 꼽았는데, GSP 오류의 99% 이상이 그 GPU를 쓰던 잡의 실패로 이어졌기 때문이다.
 - 앱 오류 Xid(13, 31, 43, 45 등)는 GPU가 정상인 채 프로세스만 종료된 경우라, Kubernetes에 GPU를 광고하는 NVIDIA device plugin은 이들을 헬스 체크에서 기본으로 뺀다. 그런데 그 무시 목록에 든 109는 NVIDIA 카탈로그가 GPU 리셋을 즉시 조치로 안내하는 Xid라서, 무시 목록은 카탈로그의 조치 열과 비교한 뒤 써야 한다([109](#device-plugin의-무시-목록과-xid-109)).
@@ -51,7 +51,7 @@ NVRM: Xid (PCI:0000:21:00): 154, GPU recovery action changed from 0x0 (None) to 
 - `79`가 Xid 번호이고, 쉼표 뒤의 문장은 번호마다 형식이 다른 상세 메시지다
 - `pid=XXX, name=nvidia-smi`는 Xid가 기록될 때 그 GPU에 접근하던 프로세스다. 위 줄은 `nvidia-smi`가 GPU를 조회하다가 링크 단절이 드러났다는 뜻이지, `nvidia-smi`가 원인이라는 뜻은 아니다
 
-Xid를 찾을 때는 `sudo journalctl -k | grep 'NVRM: Xid'`처럼 권한을 올려서 본다. `journalctl`은 root나 `adm`, `systemd-journal` 같은 그룹에 속하지 않은 사용자에게 시스템 저널을 보여 주지 않고, 그런 계정으로 `journalctl -k`를 치면 다른 사용자와 시스템의 메시지가 보이지 않는다는 Hint 문구만 내고 커널 메시지는 0건으로 나온다. 실제로 일반 권한으로 Xid를 찾았을 때도 0건이 나온 적이 있었는데, 그건 Xid가 없어서가 아니라 커널 메시지를 볼 권한이 없어서였다.
+Xid를 찾을 때는 `sudo journalctl -k | grep 'NVRM: Xid'`처럼 권한을 올려서 본다. `journalctl`은 root나 `adm`, `systemd-journal` 같은 그룹에 속하지 않은 사용자에게 시스템 저널을 보여 주지 않고, 그런 계정으로 `journalctl -k`를 치면 다른 사용자와 시스템의 메시지가 보이지 않는다는 Hint 문구만 내고 커널 메시지는 0건으로 나온다. 운영하는 클러스터에서도 일반 권한으로 Xid를 찾다가 0건이 나온 적이 있는데, Xid가 없어서가 아니라 커널 메시지를 볼 권한이 없어서였다.
 
 ## Xid가 전달되는 경로
 
@@ -113,10 +113,10 @@ NVRM: Xid (PCI:0000:55:00): 154, GPU recovery action changed from 0x0 (None) to 
 | `0x3` | Drain P2P            | 이 GPU와의 GPU 간 직접 통신(P2P)을 먼저 멈춘 뒤 다시 판단한다 |
 | `0x4` | Drain and Reset      | 새 작업을 막고 기존 작업이 빠진 뒤 리셋한다                   |
 
-직접 본 154는 앞 Xid에 따라 코드가 달랐고, 같은 Xid 79 뒤에서도 사건마다 달랐다. 79는 GPU가 PCIe 버스에서 떨어진 사건으로, [PCIe 링크 단절 절](#pcie-링크-단절-xid-79)에서 자세히 다룬다.
+운영하는 클러스터에서 찍힌 154는 앞 Xid에 따라 코드가 달랐고, 같은 Xid 79 뒤에서도 사건마다 달랐다. 79는 GPU가 PCIe 버스에서 떨어진 사건으로, [PCIe 링크 단절 절](#pcie-링크-단절-xid-79)에서 자세히 다룬다.
 
 ```text
-# 직접 본 Xid 154 (pid는 익명화, 119 메시지는 일부 생략)
+# 운영하는 클러스터에서 찍힌 Xid 154 (pid는 익명화, 119 메시지는 일부 생략)
 # ① 메모리 DBE(48) 뒤: 같은 GPU에 0x4
 NVRM: Xid (PCI:0000:55:00): 48, An uncorrectable double bit error (DBE) has been detected on GPU in the framebuffer at physAddr 0xe9b9107e0 partition 3, subpartition 0.
 NVRM: Xid (PCI:0000:55:00): 154, GPU recovery action changed from 0x0 (None) to 0x4 (Drain and Reset)
@@ -142,11 +142,11 @@ NVRM: Xid (PCI:0000:3d:00): 154, GPU recovery action changed from 0x1 (GPU Reset
 
 ## Xid를 사건으로 묶는 기준
 
-Xid를 읽는 것과 별개로, 장애가 몇 번 났는지나 같은 카드에서 재발했는지를 따지려면 Xid 줄을 사건으로 묶어야 한다. 재발 횟수는 카드 점검이나 교체를 요청할지 정하는 근거가 되는데, 줄을 그대로 세면 수가 부풀려진다. 앞의 DBE처럼 한 사건이 성격이 다른 Xid를 여러 줄 남기고, 위 ④처럼 노드 단위 조치는 GPU마다 154 줄을 남기며, 리셋으로 돌아오지 않은 카드에서는 [120과 143](#gpu-펌웨어-xid-119-120-143)이 십여 초 간격으로 계속 반복되기도 했기 때문이다. 묶는 기준은 세 가지다.
+Xid를 읽는 것과 별개로, 장애가 몇 번 났는지나 같은 카드에서 재발했는지를 따지려면 Xid 줄을 사건으로 묶어야 한다. 재발 횟수는 카드 점검이나 교체를 요청할지 정하는 근거가 되는데, 줄을 그대로 세면 수가 부풀려진다. 앞의 DBE처럼 한 사건이 성격이 다른 Xid를 여러 줄 남기고, 위 ④처럼 노드 단위 조치는 GPU마다 154 줄을 남기며, 리셋으로 돌아오지 않은 카드는 [뒤의 143 사례](#gpu-펌웨어-xid-119-120-143)처럼 같은 Xid를 십여 초 간격으로 계속 남기기도 하기 때문이다. 묶는 기준은 세 가지다.
 
 - 사건을 여는 것은 하드웨어 장애나 앱 오류 Xid다. 상세(171, 172)와 기록(63)은 같은 GPU에서 앞에 찍힌 그 Xid에 붙이고, 지시(154)는 ④처럼 다른 GPU의 PCI 주소로도 찍히므로 같은 시각 같은 노드의 Xid에 붙인다. 카탈로그도 171과 172를 48의 보충으로, 154를 다른 Xid에 대한 정보로, 다른 Xid와 함께 찍힌 45를 그 Xid를 따르는 것으로 적는다
 - 같은 카드에서 복구 조치(GPU 리셋, 재부팅, 전원 사이클) 전까지 반복되는 Xid는 한 사건이다. GPU가 복구되지 않은 같은 상태에서 찍힌 줄이기 때문이다. 복구한 뒤 같은 카드에서 다시 나면 새 사건, 곧 재발로 센다
-- 카드는 PCI 주소가 아니라 GPU UUID로 식별한다. PCI 주소는 슬롯을 가리켜서 카드를 다른 슬롯이나 노드로 옮기면 이력이 끊기기 때문이다. 운영하는 클러스터의 장애 원장도 사건마다 UUID와 PCI 주소를 함께 남기고, 같은 카드의 재발은 UUID로, 같은 슬롯의 재발은 PCI 주소로 센다([GPU 노드 생애주기 글의 복구 절]({% post_url 2026-10-18-MLOps-GPU-Node-Lifecycle-Auto-Isolation %}#복구-증거-수집과-판정))
+- 카드는 PCI 주소가 아니라 GPU UUID로 식별한다. PCI 주소는 슬롯을 가리켜서 카드를 다른 슬롯이나 노드로 옮기면 이력이 끊기기 때문이다. 운영하는 클러스터의 [장애 원장]({% post_url 2026-10-18-MLOps-GPU-Node-Lifecycle-Auto-Isolation %}#복구-증거-수집과-판정)도 사건마다 UUID와 PCI 주소를 함께 남기고, 같은 카드의 재발은 UUID로, 같은 슬롯의 재발은 PCI 주소로 센다
 
 앱 오류는 묶는 단위가 다르다. 13 → 43은 GPU가 아니라 그 위의 프로세스가 끝난 사건이라, GPU 여러 장을 쓰는 잡이 실패하면 GPU마다 13 → 43이 찍혀도 잡 하나의 실패로 묶는다. [뒤의 NCCL 사례](#13과-43-커널-코드-오류와-채널-정리)에서도 GPU 두 장 사이 통신 시험 하나가 실패하면서 두 GPU 모두에 13 → 43이 찍혔다. 반대로 [내부 무응답](#레지스터-읽기-오류와-d-상태-프로세스)의 `Possible bad register read`처럼 PCI 주소가 없는 줄은 GPU를 특정할 수 없어서 노드 단위로 묶을 수밖에 없다.
 
@@ -154,7 +154,7 @@ Xid를 읽는 것과 별개로, 장애가 몇 번 났는지나 같은 카드에�
 
 # 하드웨어 장애 Xid
 
-GPU 하드웨어 장애가 드문 사건이 아니라는 것은 대규모 학습 기록에서 확인할 수 있다. Meta는 Llama 3 405B를 최대 16K장의 H100으로 사전 학습했는데, 사전 학습 중 54일 구간에서 예정에 없던 학습 중단이 419건 있었고 약 78%가 하드웨어 문제로 확인됐으며 GPU 문제가 58.7%로 가장 큰 범주였다([The Llama 3 Herd of Models](https://arxiv.org/abs/2407.21783) 3.3.4절). 그 중단 원인 표가 GPU 범주를 GPU 자체 고장, HBM3 메모리, SRAM, GPU System Processor처럼 고장 난 위치로 나누듯이, 하드웨어 장애 Xid도 고장 난 위치로 나눠 보면 각 번호가 무엇을 가리키는지 잡기 쉽다.
+GPU 하드웨어 장애가 드문 사건이 아니라는 것은 대규모 학습 기록에서 확인할 수 있다. Meta가 공개한 [Llama 3 보고서](https://arxiv.org/abs/2407.21783)의 3.3.4절을 보면, Llama 3 405B를 최대 16K장의 H100으로 사전 학습하는 동안 54일 구간에서 예정에 없던 학습 중단이 419건 있었다. 그중 약 78%가 하드웨어 문제로 확인됐고, GPU 문제가 58.7%로 가장 큰 범주였다. 그 중단 원인 표가 GPU 범주를 GPU 자체 고장, HBM3 메모리, SRAM, GPU System Processor처럼 고장 난 위치로 나누듯이, 하드웨어 장애 Xid도 고장 난 위치로 나눠 보면 각 번호가 무엇을 가리키는지 잡기 쉽다.
 
 ## PCIe 링크 단절: Xid 79
 
@@ -178,19 +178,90 @@ flowchart LR
     PRI -.- F2
 ```
 
-이 글에서는 앞의 경우를 **링크 단절**, 뒤의 경우를 **내부 무응답**이라고 부른다. 링크 단절에서는 PCIe 요청이 완료되지 않아 루트 컴플렉스가 규약대로 모든 비트를 1로 채워 돌려준다. 드라이버는 32비트 레지스터를 읽은 값이 `0xFFFFFFFF`이면 GPU 식별 레지스터(`NV_PMC_BOOT_0`)를 다시 읽어 GPU가 아직 붙어 있는지 확인하고, 그 값도 무효면 GPU를 잃은 것으로 처리한다([`gpu_access.c`, 580.95.05](https://github.com/NVIDIA/open-gpu-kernel-modules/blob/580.95.05/src/nvidia/src/kernel/gpu/gpu_access.c#L1732-L1758)). 이때 부르는 `osHandleGpuLost`가 `GPU has fallen off the bus.` 메시지와 함께 Xid 79를 남긴다([`osinit.c`, 580.95.05](https://github.com/NVIDIA/open-gpu-kernel-modules/blob/580.95.05/src/nvidia/arch/nvalloc/unix/src/osinit.c#L340-L366)). 같은 이유로 `lspci`도 그 GPU를 `rev ff`로 보여 주고, 장치마다 ID와 BAR 같은 설정 레지스터를 담는 PCI 설정 공간도 전부 `ff`로 읽는다.
+이 글에서는 앞의 경우를 **링크 단절**, 뒤의 경우를 **내부 무응답**이라고 부른다. 링크 단절에서는 PCIe 요청이 완료되지 않아 루트 컴플렉스가 규약대로 모든 비트를 1로 채워 돌려준다. 580.95.05 드라이버 소스를 보면, 드라이버는 32비트 레지스터를 읽은 값이 `0xFFFFFFFF`이면 GPU 식별 레지스터(`NV_PMC_BOOT_0`)를 다시 읽어 GPU가 아직 붙어 있는지 확인하고, 그 값도 무효면 GPU를 잃은 것으로 처리한다. 이때 부르는 `osHandleGpuLost`가 `GPU has fallen off the bus.` 메시지와 함께 Xid 79를 남긴다. 같은 이유로 `lspci`도 그 GPU를 `rev ff`로 보여 주고, 장치마다 ID와 BAR 같은 설정 레지스터를 담는 PCI 설정 공간도 전부 `ff`로 읽는다.
 
-카탈로그의 즉시 조치는 `RESTART_BM`(노드 재시작)이다. 설정 공간까지 `ff`로 읽히던 GPU에는 실제로 GPU 리셋(`nvidia-smi -r`)이 되지 않았고, 전원을 껐다 켠 뒤에야 다시 보였다. 다만 드라이버의 154는 79마다 같지 않아서, [154 절의 예시](#지시-xid-154와-복구-조치-코드)처럼 떨어진 GPU에만 `0x1`(GPU Reset Required)이 찍힌 경우와 노드의 GPU 전부에 `0x2`(Node Reboot Required)가 찍힌 경우가 모두 있었다. `0x1`이 찍힌 GPU는 두 달 뒤 확인했을 때 설정 공간이 `ff`가 아니라 정상 값으로 응답했는데, 그 사이 리셋도 재부팅도 하지 않아 `0x1`대로 리셋으로 돌아오는지는 확인하지 못했다.
+<details markdown="1">
+<summary><b>드라이버 소스로 따라가기</b></summary>
 
-79는 "링크에서 사라졌다"는 사건이지 GPU가 고장 났다는 판정은 아니다. 카탈로그도 원인을 PCIe 링크 하드웨어 고장이 많고 GPU 하드웨어나 드라이버 문제일 수도 있다고 적는데, 링크가 끊기는 지점은 GPU 다이, 카드 전원부, 전원 커넥터, 라이저, 슬롯 어디든 될 수 있다. 전원을 다시 넣은 뒤 같은 카드가 정상 처리량을 낸 적이 있는데, 그때 확정할 수 있었던 것은 "링크가 한 번 끊겼다"까지였다. 상위 루트 포트의 `lspci -vvv` 출력에서 AER(Advanced Error Reporting) 상태에 Surprise Down 오류(`UESta: SDES+`)가 남아 있으면 링크가 예고 없이 끊겼다는 물리 계층 쪽 증거가 된다.
+드라이버 소스는 AI의 도움을 받아 따라갔다. [`gpu_access.c`의 32비트 읽기 코드](https://github.com/NVIDIA/open-gpu-kernel-modules/blob/580.95.05/src/nvidia/src/kernel/gpu/gpu_access.c#L1732-L1759)는 읽은 값을 두 번 검사한다. 모든 비트가 1이면 GPU 식별 레지스터를 다시 읽어 링크 단절인지 확인하고, 상위 12비트(주석의 upper 3 nibbles)가 `0xBAD`이면 [내부 무응답](#레지스터-읽기-오류와-d-상태-프로세스)을 처리하는 함수로 넘긴다.
+
+```c
+// open-gpu-kernel-modules 580.95.05, src/nvidia/src/kernel/gpu/gpu_access.c 발췌
+case 32:
+    {
+        pValue32 = ((NvU32 *) pValue);
+        if (*pValue32 == (NvU32) (~0))
+        {
+            //
+            // The result looks suspicious, let's check if the GPU is still attached.
+            //
+            NvU32 testValue = osGpuReadReg032(pGpu, NV_PMC_BOOT_0);
+            if (testValue == GPU_REG_VALUE_INVALID)
+            {
+                osHandleGpuLost(pGpu);
+                *pValue32 = osGpuReadReg032(pGpu, addr);
+            }
+        }
+
+        value = *((NvU32 *)pValue);
+
+        //
+        // HW will return 0xbad in the upper 3 nibbles
+        // when there is a possible issue.
+        //
+        if ((value & GPU_READ_PRI_ERROR_MASK) == GPU_READ_PRI_ERROR_CODE)
+        {
+            gpuHandleSanityCheckRegReadError_HAL(pGpu, addr, value);
+        }
+        break;
+    }
+```
+
+[`osinit.c`의 `osHandleGpuLost`](https://github.com/NVIDIA/open-gpu-kernel-modules/blob/580.95.05/src/nvidia/arch/nvalloc/unix/src/osinit.c#L340-L365)는 식별 레지스터를 한 번 더 읽어 드라이버가 저장해 둔 값과 다르면 오류를 남긴다. 이때 쓰는 오류 코드 `ROBUST_CHANNEL_GPU_HAS_FALLEN_OFF_THE_BUS`가 [`nverror.h`](https://github.com/NVIDIA/open-gpu-kernel-modules/blob/580.95.05/src/common/sdk/nvidia/inc/nverror.h#L85)에서 79로 정의된 Xid 79다.
+
+```c
+// open-gpu-kernel-modules 580.95.05, src/nvidia/arch/nvalloc/unix/src/osinit.c 발췌
+NV_STATUS
+osHandleGpuLost
+(
+    OBJGPU *pGpu
+)
+{
+    nv_state_t *nv = NV_GET_NV_STATE(pGpu);
+    nv_priv_t *nvp = NV_GET_NV_PRIV(nv);
+    NvU32 pmc_boot_0;
+
+    // Determine if we've already run the handler
+    if (!pGpu->getProperty(pGpu, PDB_PROP_GPU_IS_CONNECTED))
+    {
+        return NV_OK;
+    }
+
+    pmc_boot_0 = NV_PRIV_REG_RD32(nv->regs->map_u, NV_PMC_BOOT_0);
+    if (pmc_boot_0 != nvp->pmc_boot_0)
+    {
+        //
+        // This doesn't support PEX Reset and Recovery yet.
+        // This will help to prevent accessing registers of a GPU
+        // which has fallen off the bus.
+        //
+        nvErrorLog_va((void *)pGpu, ROBUST_CHANNEL_GPU_HAS_FALLEN_OFF_THE_BUS,
+                      "GPU has fallen off the bus.");
+```
+
+</details>
+
+카탈로그의 즉시 조치는 `RESTART_BM`(노드 재시작)이다. 운영하는 클러스터에서 9월 10일 RTX 5090 노드의 [GPU 하나가 버스에서 떨어졌을 때]({% post_url 2026-10-18-MLOps-GPU-Node-Lifecycle-Auto-Isolation %}#xid-79와-자동-격리의-계기)도, 설정 공간까지 `ff`로 읽히던 그 GPU에 `nvidia-smi -r`을 실행했지만 리셋되지 않았고 전원을 완전히 껐다 켠 뒤에야 다시 인식됐다. 다만 드라이버의 154는 79마다 같지 않아서, [154 절의 예시](#지시-xid-154와-복구-조치-코드)처럼 떨어진 GPU에만 `0x1`(GPU Reset Required)이 찍힌 경우와 노드의 GPU 전부에 `0x2`(Node Reboot Required)가 찍힌 경우가 모두 있었다. 그 예시 ③에서 `0x1`이 찍힌 GPU(`21:00`)는 두 달 뒤 확인했을 때 설정 공간이 `ff`가 아니라 정상 값으로 응답했는데, 그 사이 리셋도 재부팅도 하지 않아 `0x1`대로 리셋으로 돌아오는지는 확인하지 못했다.
+
+79는 "링크에서 사라졌다"는 사건이지 GPU가 고장 났다는 판정은 아니다. 카탈로그도 원인을 PCIe 링크 하드웨어 고장이 많고 GPU 하드웨어나 드라이버 문제일 수도 있다고 적는데, 링크가 끊기는 지점은 GPU 다이, 카드 전원부, 전원 커넥터, 라이저, 슬롯 어디든 될 수 있다. 상위 루트 포트의 `lspci -vvv` 출력에서 AER(Advanced Error Reporting) 상태에 Surprise Down 오류(`UESta: SDES+`)가 남아 있으면 링크가 예고 없이 끊겼다는 물리 계층 쪽 증거가 되지만, 이 기록이 끊긴 지점까지 알려 주지는 않는다. 앞의 9월 10일 사건에서도 루트 포트에 Surprise Down이 남았지만 카드, 슬롯, 라이저 중 어디인지는 가리지 못했고, 전원 사이클 뒤에는 같은 카드가 부하 검증에서 정상 처리량을 냈다. 그래서 그 사건에서 확정할 수 있었던 것은 "링크가 한 번 끊겼다"까지였다.
 
 PCIe 품질과 엮인 Xid는 79만 있는 것은 아니다. Xid 32(Invalid or corrupted push buffer stream)는 드라이버가 GPU로 보내는 명령 스트림이 손상된 경우인데, 카탈로그는 대부분 PCIe 품질 문제이고 사용자 행동이 원인이 아니라고 적는다. Xid 167(PCIe fatal timeout)은 카탈로그가 H100, B100, GB200에 해당한다고 표시한다.
 
 ## GPU 펌웨어: Xid 119, 120, 143
 
-GSP(GPU System Processor)는 드라이버가 CPU에서 하던 GPU 초기화와 관리 작업을 넘겨받아 GPU 안에서 실행하는 프로세서다. 이 프로세서가 실행하는 펌웨어는 드라이버와 함께 배포되고, Turing 이후 GPU에서는 기본으로 쓴다([NVIDIA 드라이버 README, GSP 장](https://download.nvidia.com/XFree86/Linux-x86_64/580.95.05/README/gsp.html)). 드라이버는 GSP에 RPC로 요청을 보내고 응답을 받아 GPU를 다루기 때문에, GSP가 응답하지 않으면 드라이버가 GPU에 내리는 관리 요청도 처리되지 않는다.
+GSP(GPU System Processor)는 드라이버가 CPU에서 하던 GPU 초기화와 관리 작업을 넘겨받아 GPU 안에서 실행하는 프로세서다. NVIDIA 드라이버 [README의 GSP 장](https://download.nvidia.com/XFree86/Linux-x86_64/580.95.05/README/gsp.html)에 따르면, 이 프로세서가 실행하는 펌웨어는 드라이버와 함께 배포되고 Turing 이후 GPU에서는 기본으로 쓴다. 드라이버는 GSP에 RPC로 요청을 보내고 응답을 받아 GPU를 다루기 때문에, **GSP가 응답하지 않으면 드라이버가 GPU에 내리는 관리 요청도 처리되지 않는다**.
 
-Xid 119(GSP RPC Timeout)는 드라이버가 GSP에 보낸 요청의 응답을 기다리다 시간이 초과된 경우이고, Xid 120(GSP Error)은 GSP 쪽 코드가 오류를 낸 경우다. 카탈로그는 두 Xid에 같은 조치를 안내해서, 즉시 조치는 `RESET_GPU`(리셋이나 전원 사이클)이고 재발하면 GPU 디버그 가이드를 따라 소프트웨어를 조사하라고 적는다. 119의 상세 메시지에는 기다린 시간과 응답을 받지 못한 RPC 함수가 함께 찍힌다.
+Xid 119(GSP RPC Timeout)는 드라이버가 GSP에 보낸 요청의 응답을 기다리다 시간이 초과된 경우이고, Xid 120(GSP Error)은 GSP 쪽 코드가 오류를 낸 경우다. 카탈로그는 두 Xid에 같은 조치를 안내해서, 즉시 조치는 `RESET_GPU`(리셋이나 전원 사이클)이고 재발하면 GPU 디버그 가이드를 따라 소프트웨어를 조사하라고 적는다. 119의 상세 메시지에는 기다린 시간과 응답을 받지 못한 RPC 함수가 함께 찍힌다. 운영하는 클러스터의 서빙 노드에서 vLLM이 쓰던 GPU에 찍힌 119는 다음과 같았다.
 
 ```text
 # Xid 119: GSP가 RPC에 응답하지 않음 (pid는 익명화, 일부 생략)
@@ -199,28 +270,79 @@ NVRM: Xid (PCI:0000:63:00): 119, pid=XXX, name=VLLM::Worker, Timeout after 45s �
 NVRM: Xid (PCI:0000:63:00): 154, GPU recovery action changed from 0x0 (None) to 0x1 (GPU Reset Required)
 ```
 
-이 사건에서는 119가 연달아 찍힌 뒤 154가 `0x1`로 바뀌었고, 전원을 다시 넣자 카드를 바꾸지 않고 돌아왔다. 반면 120 뒤에 Xid 143이 반복해서 찍힌 카드는 리셋으로 돌아오지 않았다. Xid 143(GPU Initialization Error)은 GPU 초기화가 실패했다는 Xid인데, 그 카드의 상세 메시지는 다음과 같았다.
+119가 연달아 찍힌 뒤 154가 `0x1`로 바뀌었고, 전원을 다시 넣자 카드를 바꾸지 않고 돌아왔다. 반면 다른 노드의 RTX 5090 카드 한 장은 리셋으로도 돌아오지 않았다. 이 카드는 120 뒤에 Xid 143을 십여 초 간격으로 반복해서 남겼다. Xid 143(GPU Initialization Error)은 GPU 초기화가 실패했다는 Xid인데, 그 카드의 상세 메시지는 다음과 같았다.
 
 ```text
 # Xid 143: 초기화 중 FSP 부팅 완료 대기 실패
 NVRM: Xid (PCI:0000:2a:00): 143, Error status 0x65 while polling for FSP boot complete, 0x13, 0x56, 0x0, 0x0, 0x2
 ```
 
-이 카드는 RTX 5090(GB202)이었는데, 드라이버 소스에서 GB202용 구현을 보면 이 메시지는 GPU의 보안 부팅(secure boot)을 맡는 내부 프로세서 FSP가 부팅 완료를 알리기를 최소 5초 동안 기다리다 실패하면 GPU를 리셋 대상으로 표시하고 남기는 줄이다([`kern_fsp_gb202.c`, 580.95.05](https://github.com/NVIDIA/open-gpu-kernel-modules/blob/580.95.05/src/nvidia/src/kernel/gpu/fsp/arch/blackwell/kern_fsp_gb202.c#L59-L98)). Hopper용 구현도 대기 시간만 최소 4초로 다르고 같은 메시지를 남긴다. 앞의 `0x65`는 드라이버 상태 코드 `NV_ERR_TIMEOUT`이니([`nvstatuscodes.h`](https://github.com/NVIDIA/open-gpu-kernel-modules/blob/580.95.05/src/common/sdk/nvidia/inc/nvstatuscodes.h#L130)), 이 카드는 초기화 중 보안 부팅이 끝나기를 기다리다 시간 초과로 멈춘 것이다.
+RTX 5090의 칩은 GB202인데, 드라이버 소스에서 GB202용 구현을 보면 이 메시지는 GPU의 보안 부팅(secure boot)을 맡는 내부 프로세서 FSP가 부팅 완료를 알리기를 최소 5초 동안 기다리다 실패하면 GPU를 리셋 대상으로 표시하고 남기는 줄이다. Hopper용 구현도 대기 시간만 최소 4초로 다르고 같은 메시지를 남긴다. 앞의 `0x65`는 드라이버 상태 코드 `NV_ERR_TIMEOUT`이니, 이 카드는 초기화 중 보안 부팅이 끝나기를 기다리다 시간 초과로 멈춘 것이다.
 
-GSP가 취약한 부품이라는 점은 공개 연구에서도 확인된다. NCSA의 Delta는 A40, A100, H100 GPU 1,168장을 갖춘 AI·HPC 시스템인데, 이 시스템의 2.5년치 GPU 오류를 분석한 논문은 GPU 하드웨어 부품 가운데 GSP를 가장 취약한 부품으로 꼽았다([Characterizing GPU Resilience and Impact on AI/HPC Systems](https://arxiv.org/abs/2503.11901) v2). GSP 오류는 99% 이상이 GPU를 오류 상태로 만들었고, 그 GPU를 쓰던 사용자 잡은 실패했다. 같은 논문에서 GPU 메모리는 MTBE(mean time between errors) 기준으로 GPU 하드웨어 부품보다 30배 넘게 안정적이었다. 앞의 Llama 3 중단 원인 표에도 GPU System Processor가 17건(4.1%)으로 따로 올라 있다.
+<details markdown="1">
+<summary><b>드라이버 소스로 따라가기</b></summary>
+
+[`kern_fsp_gb202.c`의 `kfspWaitForSecureBoot_GB202`](https://github.com/NVIDIA/open-gpu-kernel-modules/blob/580.95.05/src/nvidia/src/kernel/gpu/fsp/arch/blackwell/kern_fsp_gb202.c#L59-L98)는 FSP의 부팅 완료를 최소 5초(`5000000`마이크로초) 기다린다. 실패하면 GPU를 리셋 대상으로 표시하고, Xid 143(`GPU_INIT_ERROR`)으로 상태 코드와 레지스터 값 다섯 개를 남긴다. 상태 코드 `0x65`는 [`nvstatuscodes.h`](https://github.com/NVIDIA/open-gpu-kernel-modules/blob/580.95.05/src/common/sdk/nvidia/inc/nvstatuscodes.h#L130)에 `NV_ERR_TIMEOUT`으로 정의돼 있다.
+
+```c
+// open-gpu-kernel-modules 580.95.05, src/nvidia/src/kernel/gpu/fsp/arch/blackwell/kern_fsp_gb202.c 발췌
+NV_STATUS
+kfspWaitForSecureBoot_GB202
+(
+    OBJGPU    *pGpu,
+    KernelFsp *pKernelFsp
+)
+{
+    NV_STATUS status  = NV_OK;
+    RMTIMEOUT timeout;
+
+    //
+    // Polling for FSP boot complete
+    // FBFalcon training during devinit alone takes 2 seconds, up to 3 on HBM3,
+    // but the default threadstate timeout on windows is 1800 ms. Increase to 4 seconds
+    // for this wait to match MODS GetGFWBootTimeoutMs.
+    // For flags, we must not use the GPU TMR since it is inaccessible.
+    // Increase to 5 seconds for WS SKUs especially needed for SKU's with larger VRAM.
+    //
+    gpuSetTimeout(pGpu, NV_MAX(gpuScaleTimeout(pGpu, 5000000), pGpu->timeoutData.defaultus),
+                  &timeout, GPU_TIMEOUT_FLAGS_OSTIMER | GPU_TIMEOUT_FLAGS_BYPASS_THREAD_STATE);
+
+    status = gpuTimeoutCondWait(pGpu, _kfspWaitBootCond_GB202, NULL, &timeout);
+
+    if (status != NV_OK)
+    {
+        NV_ASSERT_OK(gpuMarkDeviceForReset(pGpu));
+        NV_ERROR_LOG((void*) pGpu, GPU_INIT_ERROR, "Error status 0x%x while polling for FSP boot complete, "
+                     "0x%x, 0x%x, 0x%x, 0x%x, 0x%x",
+                     status,
+                     GPU_REG_RD32(pGpu, NV_THERM_I2CS_SCRATCH_FSP_BOOT_COMPLETE),
+                     GPU_REG_RD32(pGpu, NV_PFSP_FALCON_COMMON_SCRATCH_GROUP_2(0)),
+                     GPU_REG_RD32(pGpu, NV_PFSP_FALCON_COMMON_SCRATCH_GROUP_2(1)),
+                     GPU_REG_RD32(pGpu, NV_PFSP_FALCON_COMMON_SCRATCH_GROUP_2(2)),
+                     GPU_REG_RD32(pGpu, NV_PFSP_FALCON_COMMON_SCRATCH_GROUP_2(3)));
+
+        kfspDumpDebugState_HAL(pGpu, pKernelFsp);
+    }
+
+    return status;
+}
+```
+
+</details>
+
+GSP가 취약한 부품이라는 점은 공개 연구에서도 확인된다. NCSA의 Delta는 A40, A100, H100 GPU 1,168장을 갖춘 AI·HPC 시스템인데, 이 시스템의 2.5년치 GPU 오류를 분석한 [논문](https://arxiv.org/abs/2503.11901v2)은 GPU 하드웨어 부품 가운데 GSP를 가장 취약한 부품으로 꼽았다. 논문에 따르면 GSP 오류는 99% 이상이 GPU를 오류 상태로 만들었고, 그 GPU를 쓰던 사용자 잡은 실패했다. 같은 논문에서 GPU 메모리는 MTBE(mean time between errors) 기준으로 GPU 하드웨어 부품보다 30배 넘게 안정적이었다. 앞의 Llama 3 중단 원인 표에도 GPU System Processor가 17건(4.1%)으로 따로 올라 있다.
 
 ## 메모리: Xid 48과 ECC 계열
 
 메모리 쪽 Xid는 ECC(Error Correcting Code)가 오류를 잡아낸 결과로 찍힌다. ECC가 1비트 오류는 고치고 2비트 오류는 검출만 하는 원리, GPU에서 SRAM과 DRAM 카운터가 나뉘는 이유는 [GPU ECC 글]({% post_url 2026-06-01-CS-GPU-ECC-Memory-Integrity %})에서 정리했고, 여기서는 그 결과가 어떤 Xid로 이어지는지만 본다.
 
-정정할 수 없는 2비트 오류(DBE)가 나면 Xid 48이 찍히고, 그 오류가 DRAM인지 SRAM인지를 Xid 171과 172가 상세로 덧붙인다. Ampere 이후 GPU는 고장 난 메모리 행을 예비 행으로 바꾸는 row remapping으로 대응하는데, 바꾸기로 기록한 것이 Xid 63이고 기록에 실패하면 Xid 64다. NVIDIA 문서는 row remapping이 GPU 리셋 뒤에야 적용된다고 적으므로([Row Remapping](https://docs.nvidia.com/deploy/a100-gpu-mem-error-mgmt/row-remapping.html)), 63이 찍혔다는 것은 고장 난 행이 아직 쓰이고 있으니 리셋이 필요하다는 뜻이기도 하다. 그래서 이 조합 뒤의 154가 `0x4`(Drain and Reset)가 된다. 정정할 수 없는 오류인데 행 교체도 페이지 격리도 하지 못한 경우는 Xid 140(ECC Unrecovered Error)으로, 즉시 조치가 `RESET_GPU`다.
+정정할 수 없는 2비트 오류(DBE)가 나면 Xid 48이 찍히고, 그 오류가 DRAM인지 SRAM인지를 Xid 171과 172가 상세로 덧붙인다. Ampere 이후 GPU는 고장 난 메모리 행을 예비 행으로 바꾸는 row remapping으로 대응하는데, 바꾸기로 기록한 것이 Xid 63이고 기록에 실패하면 Xid 64다. NVIDIA의 [row remapping 문서](https://docs.nvidia.com/deploy/a100-gpu-mem-error-mgmt/row-remapping.html)는 행 교체가 GPU 리셋 뒤에야 적용된다고 적으므로, 63이 찍혔다는 것은 고장 난 행이 아직 쓰이고 있으니 리셋이 필요하다는 뜻이기도 하다. 그래서 이 조합 뒤의 154가 `0x4`(Drain and Reset)가 된다. 정정할 수 없는 오류인데 행 교체도 페이지 격리도 하지 못한 경우는 Xid 140(ECC Unrecovered Error)으로, 즉시 조치가 `RESET_GPU`다.
 
-Ampere 이후에는 정정할 수 없는 오류의 영향을 그 오류를 만난 앱으로 한정하는 error containment가 들어가서([Error Containment](https://docs.nvidia.com/deploy/a100-gpu-mem-error-mgmt/error-containment.html)), 오류가 한 앱에 갇혔는지에 따라 Xid가 갈린다. Xid 94(Contained memory error)는 오류를 만난 앱만 다시 시작하면 되고 다른 앱은 영향이 없는 경우로, 카탈로그는 GPU 리셋을 편할 때 하라고 적는다. Xid 95(Uncontained memory error)는 여러 앱에 영향을 줘서 GPU를 리셋해야 앱을 다시 띄울 수 있는 경우다. 둘 다 정리 단계의 Xid 45가 함께 찍힌다.
+Ampere 이후에는 정정할 수 없는 오류의 영향을 그 오류를 만난 앱으로 한정하는 [error containment](https://docs.nvidia.com/deploy/a100-gpu-mem-error-mgmt/error-containment.html)가 들어가서, 오류가 한 앱에 갇혔는지에 따라 Xid가 갈린다. Xid 94(Contained memory error)는 오류를 만난 앱만 다시 시작하면 되고 다른 앱은 영향이 없는 경우로, 카탈로그는 GPU 리셋을 편할 때 하라고 적는다. Xid 95(Uncontained memory error)는 여러 앱에 영향을 줘서 GPU를 리셋해야 앱을 다시 띄울 수 있는 경우다. 둘 다 정리 단계의 Xid 45가 함께 찍힌다.
 
-1비트 오류(SBE)는 ECC가 고쳐서 돌려주기 때문에 건마다 Xid를 남기지 않고 카운터에만 쌓인다. `nvidia-smi -q -d ECC`의 Correctable 칸과 DCGM의 `DCGM_FI_DEV_ECC_SBE_VOL_TOTAL`, `DCGM_FI_DEV_ECC_SBE_AGG_TOTAL`이 그 카운터이고, SBE 비율이 높아지면 Xid 92(High single-bit ECC error rate)가 찍힌다. 92의 즉시 조치는 `IGNORE`, 조사 조치는 `CONTACT_SUPPORT`라서 당장 멈출 일은 아니지만 추세를 봐야 한다는 뜻이다. SBE가 같은 위치에서 반복되면 DBE의 전조일 수 있는데, Turing 이전 GPU의 page retirement는 실제로 같은 주소에서 SBE가 두 번 나면 그 페이지를 퇴역시켜 DBE가 나기 전에 막으려 했다([Dynamic Page Retirement](https://docs.nvidia.com/deploy/dynamic-page-retirement/implementation.html)). Ampere 이후의 row remapping도 정정 가능한 오류로 행을 바꾸는 경로가 있지만, 문서는 정정 가능한 오류로 인한 교체가 나중에 정정 불가 오류로 인한 교체로 대체될 수 있다고만 적고 어떤 조건에서 교체하는지는 밝히지 않는다.
+1비트 오류(SBE)는 ECC가 고쳐서 돌려주기 때문에 건마다 Xid를 남기지 않고 카운터에만 쌓인다. `nvidia-smi -q -d ECC`의 Correctable 칸과 DCGM의 `DCGM_FI_DEV_ECC_SBE_VOL_TOTAL`, `DCGM_FI_DEV_ECC_SBE_AGG_TOTAL`이 그 카운터이고, SBE 비율이 높아지면 Xid 92(High single-bit ECC error rate)가 찍힌다. 92의 즉시 조치는 `IGNORE`, 조사 조치는 `CONTACT_SUPPORT`라서 당장 멈출 일은 아니지만 추세를 봐야 한다는 뜻이다. SBE가 같은 위치에서 반복되면 DBE의 전조일 수 있는데, Turing 이전 GPU의 [page retirement](https://docs.nvidia.com/deploy/dynamic-page-retirement/implementation.html)는 같은 주소에서 SBE가 두 번 나면 그 페이지를 퇴역시켜 DBE가 나기 전에 막으려 했다. Ampere 이후의 row remapping도 정정 가능한 오류로 행을 바꾸는 경로가 있지만, 문서는 정정 가능한 오류로 인한 교체가 나중에 정정 불가 오류로 인한 교체로 대체될 수 있다고만 적고 어떤 조건에서 교체하는지는 밝히지 않는다.
 
-이 모든 신호는 ECC를 지원하고 켜 둔 GPU에서만 나온다. RTX 5090 같은 GeForce 카드는 `nvidia-smi`가 ECC를 `N/A`로 보여 주고([GPU ECC 글의 미지원 노드 절]({% post_url 2026-06-01-CS-GPU-ECC-Memory-Integrity %}#지원하지-않는-노드-rtx-5090)), 드라이버가 SBE도 DBE도 보고하지 않는다. 그래서 그런 카드에서 비트가 뒤집히면 Xid 없이 지나가거나, 앱 오류나 잘못된 결과로만 드러난다. ECC가 있는 HBM3에서도 Llama 3 중단 원인 표에는 HBM3 메모리가 72건(17.2%), 검출되지 않은 데이터 손상(Silent Data Corruption)이 6건(1.4%) 올라 있다.
+이 모든 신호는 ECC를 지원하고 켜 둔 GPU에서만 나온다. RTX 5090 같은 GeForce 카드는 [GPU ECC 글]({% post_url 2026-06-01-CS-GPU-ECC-Memory-Integrity %}#지원하지-않는-노드-rtx-5090)에서 확인한 것처럼 `nvidia-smi`가 ECC를 `N/A`로 보여 주고, 드라이버가 SBE도 DBE도 보고하지 않는다. 그래서 그런 카드에서 비트가 뒤집히면 Xid 없이 지나가거나, 앱 오류나 잘못된 결과로만 드러난다. ECC가 있는 HBM3에서도 Llama 3 중단 원인 표에는 HBM3 메모리가 72건(17.2%), 검출되지 않은 데이터 손상(Silent Data Corruption)이 6건(1.4%) 올라 있다.
 
 ## NVLink: 장비 구성이 정하는 Xid
 
@@ -267,7 +389,7 @@ NVRM: Xid (PCI:0000:3d:00): 43, pid=XXX, name=python3, channel 0x00000002
 
 ## device plugin의 무시 목록과 Xid 109
 
-앱 오류 Xid는 GPU가 정상이라는 전제 위에 있어서, 이를 헬스 체크에서 빼는 것이 일반적이다. NVIDIA device plugin은 Xid 이벤트를 받으면 해당 GPU를 unhealthy로 표시해 Kubernetes가 그 GPU를 더 배정하지 않게 하는데, 소스에는 "Application errors: the GPU should still be healthy"라는 주석과 함께 기본으로 무시하는 Xid 목록이 들어 있다([`health.go`, v0.18.1](https://github.com/NVIDIA/k8s-device-plugin/blob/v0.18.1/internal/rm/health.go#L233-L240)).
+앱 오류 Xid는 GPU가 정상이라는 전제 위에 있어서, 이를 헬스 체크에서 빼는 것이 일반적이다. NVIDIA device plugin은 Xid 이벤트를 받으면 해당 GPU를 unhealthy로 표시해 Kubernetes가 그 GPU를 더 배정하지 않게 하는데, [소스](https://github.com/NVIDIA/k8s-device-plugin/blob/v0.18.1/internal/rm/health.go#L233-L240)에는 "Application errors: the GPU should still be healthy"라는 주석과 함께 기본으로 무시하는 Xid 목록이 들어 있다.
 
 ```go
 // NVIDIA k8s-device-plugin v0.18.1, internal/rm/health.go 발췌
@@ -284,17 +406,17 @@ ignoredXids := []uint64{
 
 그런데 이 목록의 109(Context Switch Timeout Error)는 카탈로그에서 즉시 조치가 `RESET_GPU`, 조사 조치가 `CONTACT_SUPPORT`다. device plugin은 109가 찍혀도 GPU가 정상이라고 보고 계속 광고하지만, 카탈로그 기준으로는 리셋해야 다시 쓸 수 있는 상태다. device plugin은 `DP_DISABLE_HEALTHCHECKS`로 무시할 Xid를 더하고 `DP_ENABLE_HEALTHCHECKS`로 특정 Xid를 다시 켤 수 있게 해 두었으니, 기본 목록을 그대로 둘지는 109처럼 두 기준이 갈리는 Xid를 하나씩 확인한 뒤 정할 일이다.
 
-같은 목록을 경보 규칙으로 옮길 때도 마찬가지다. 운영하는 클러스터의 Xid 경보 식도 device plugin과 같은 목록을 빼는데([GPU 노드 생애주기 글의 감지 절]({% post_url 2026-10-18-MLOps-GPU-Node-Lifecycle-Auto-Isolation %}#감지-gpu-경보와-xid-게이지-판정식)), 그렇게 하면 109도 함께 빠진다. 게다가 DCGM의 Xid 지표는 마지막 값만 담는 게이지라서, 하드웨어 Xid 뒤에 무시 목록의 45가 찍히면 마지막 값이 45로 덮여 하드웨어 Xid를 놓칠 수 있다.
+같은 목록을 경보 규칙으로 옮길 때도 마찬가지다. 운영하는 클러스터의 [Xid 경보 식]({% post_url 2026-10-18-MLOps-GPU-Node-Lifecycle-Auto-Isolation %}#감지-gpu-경보와-xid-게이지-판정식)도 device plugin과 같은 목록을 빼는데, 그렇게 하면 109도 함께 빠진다. 게다가 DCGM의 Xid 지표는 마지막 값만 담는 게이지라서, 하드웨어 Xid 뒤에 무시 목록의 45가 찍히면 마지막 값이 45로 덮여 하드웨어 Xid를 놓칠 수 있다.
 
 <br>
 
 # Xid로 잡히지 않는 GPU 문제
 
-Xid는 드라이버가 오류 사건으로 분류해 번호를 붙인 것만 남는다. 그래서 드라이버가 사건으로 분류하지 않는 오류나 드라이버 바깥에서 생긴 문제는 Xid 경보에 걸리지 않고, 실제로 Xid가 한 줄도 남지 않은 GPU 문제도 겪었다.
+Xid는 드라이버가 오류 사건으로 분류해 번호를 붙인 것만 남는다. 그래서 드라이버가 사건으로 분류하지 않는 오류나 드라이버 바깥에서 생긴 문제는 Xid 경보에 걸리지 않고, 운영하는 클러스터에서도 Xid가 한 줄도 남지 않은 GPU 문제를 겪었다.
 
 ## 레지스터 읽기 오류와 D 상태 프로세스
 
-[Xid 79 절의 도식](#pcie-링크-단절-xid-79)에서 내부 무응답으로 부른 경로가 여기에 해당한다. PCIe 링크와 GPU의 PCIe 인터페이스는 응답하는데 그 안쪽 유닛이 내부 레지스터 버스(PRI) 요청에 응답하지 않으면, GPU는 상위 12비트가 `0xBAD`인 값을 데이터로 돌려준다. 드라이버는 읽은 값의 상위 12비트가 `0xBAD`이면 오류 처리 함수를 부르는데([`gpu_access.c`, 580.95.05](https://github.com/NVIDIA/open-gpu-kernel-modules/blob/580.95.05/src/nvidia/src/kernel/gpu/gpu_access.c#L1748-L1757)), 이 경로는 Xid 번호를 남기지 않는다.
+[Xid 79 절의 도식](#pcie-링크-단절-xid-79)에서 내부 무응답으로 부른 경로가 여기에 해당한다. PCIe 링크와 GPU의 PCIe 인터페이스는 응답하는데 그 안쪽 유닛이 내부 레지스터 버스(PRI) 요청에 응답하지 않으면, GPU는 상위 12비트가 `0xBAD`인 값을 데이터로 돌려준다. 드라이버는 링크 단절을 검사하는 바로 그 레지스터 읽기 코드에서, 읽은 값의 상위 12비트가 `0xBAD`이면 오류 처리 함수를 부른다. 이 경로는 Xid 번호를 남기지 않는다.
 
 ```text
 # 내부 무응답: Xid 번호도 PCI 주소도 없는 줄
@@ -386,6 +508,6 @@ Xid 번호의 뜻은 카탈로그에서 바로 찾을 수 있지만, 장애 알�
 - [NVIDIA open-gpu-kernel-modules (580.95.05)](https://github.com/NVIDIA/open-gpu-kernel-modules/tree/580.95.05)
 - [NVIDIA k8s-device-plugin `internal/rm/health.go` (v0.18.1)](https://github.com/NVIDIA/k8s-device-plugin/blob/v0.18.1/internal/rm/health.go)
 - [The Llama 3 Herd of Models (arXiv 2407.21783)](https://arxiv.org/abs/2407.21783)
-- [Characterizing GPU Resilience and Impact on AI/HPC Systems (arXiv 2503.11901)](https://arxiv.org/abs/2503.11901)
+- [Characterizing GPU Resilience and Impact on AI/HPC Systems (arXiv 2503.11901v2)](https://arxiv.org/abs/2503.11901v2)
 
 <br>
